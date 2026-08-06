@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brainstorm Keepsake — TUI Backend Admin</title>
+<style>
+  :root{
+    --bg: #0b0f14;
+    --bg-alt: #0e1420;
+    --panel: #121924;
+    --panel-2: #0f1620;
+    --border: #223041;
+    --border-soft: #1a2531;
+    --text: #dbe4ec;
+    --text-dim: #94a7b8;
+    --text-faint: #5c7085;
+    --accent-cyan: #45c6e8;
+    --accent-green: #52d68a;
+    --accent-purple: #b18cf5;
+    --accent-amber: #f0a94e;
+    --accent-red: #f2685f;
+    --accent-gold: #f5cf5c;
+    --shadow: 0 10px 30px rgba(0,0,0,0.35);
+    --radius: 10px;
+    --mono: ui-monospace, "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg: #eef1f5;
+      --bg-alt: #e6eaf0;
+      --panel: #ffffff;
+      --panel-2: #f6f8fa;
+      --border: #cdd6e0;
+      --border-soft: #dde3ea;
+      --text: #1c2531;
+      --text-dim: #4d5c6c;
+      --text-faint: #7c8ba0;
+      --accent-cyan: #0891b2;
+      --accent-green: #158a52;
+      --accent-purple: #6f42c1;
+      --accent-amber: #b3690e;
+      --accent-red: #c8372c;
+      --accent-gold: #92700a;
+      --shadow: 0 10px 24px rgba(30,40,60,0.10);
+    }
+  }
+
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior: auto; }
+    *{ animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
+
+  body{
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, var(--bg-alt), transparent 60%),
+      radial-gradient(1200px 700px at 110% 10%, var(--bg-alt), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap{ max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  ::selection{ background: var(--accent-cyan); color: #04141a; }
+
+  /* ---------- scrollbars (progressive enhancement) ---------- */
+  .scrollx::-webkit-scrollbar{ height: 8px; }
+  .scrollx::-webkit-scrollbar-thumb{ background: var(--border); border-radius: 6px; }
+  .scrollx::-webkit-scrollbar-track{ background: transparent; }
+
+  code, .mono{ font-family: var(--mono); }
+
+  /* ============ NAV ============ */
+  .sitenav{
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .sitenav-inner{
+    max-width: 1120px; margin: 0 auto; padding: 10px 20px;
+    display: flex; gap: 6px; align-items: center;
+    overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .sitenav-brand{
+    color: var(--accent-green); font-weight: 600; white-space: nowrap; padding-right: 10px;
+    border-right: 1px solid var(--border-soft); margin-right: 4px;
+  }
+  .sitenav a{
+    color: var(--text-dim); text-decoration: none; white-space: nowrap;
+    padding: 5px 10px; border-radius: 6px; border: 1px solid transparent;
+  }
+  .sitenav a:hover{ color: var(--text); border-color: var(--border); background: var(--panel-2); }
+
+  /* ============ HERO ============ */
+  .hero{ padding: 56px 0 20px; }
+  .term-window{
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .term-titlebar{
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: var(--panel-2); border-bottom: 1px solid var(--border-soft);
+  }
+  .dot{ width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .dot.r{ background: var(--accent-red); } .dot.y{ background: var(--accent-amber); } .dot.g{ background: var(--accent-green); }
+  .term-titlebar span.path{ margin-left: 10px; color: var(--text-faint); font-family: var(--mono); font-size: 12px; }
+  .term-body{ padding: 22px 24px 26px; font-family: var(--mono); font-size: 13.5px; color: var(--text-dim); }
+  .term-body .line{ white-space: pre-wrap; }
+  .term-body .prompt{ color: var(--accent-green); }
+  .term-body .key{ color: var(--accent-cyan); }
+  .term-body .val{ color: var(--text); }
+  .cursor{ display:inline-block; width: 8px; height: 1em; background: var(--accent-green); vertical-align: text-bottom; animation: blink 1.1s step-end infinite; }
+  @keyframes blink{ 50%{ opacity: 0; } }
+
+  .hero h1{
+    font-size: clamp(28px, 4.4vw, 46px); margin: 30px 0 8px; letter-spacing: -0.02em; line-height: 1.15;
+  }
+  .hero .subtitle{ color: var(--text-dim); font-size: clamp(15px, 1.9vw, 18px); max-width: 66ch; }
+  .hero .eyebrow{
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent-cyan); margin-bottom: 10px; display: block;
+  }
+
+  /* ============ SECTION SHELL ============ */
+  .act{ padding: 70px 0; border-top: 1px solid var(--border-soft); }
+  .act:first-of-type{ border-top: none; }
+  .act-header{ margin-bottom: 34px; max-width: 74ch; }
+  .act-eyebrow{
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--act-accent, var(--accent-cyan)); margin: 0 0 10px;
+  }
+  .act-title{ font-size: clamp(24px, 3.2vw, 32px); margin: 0 0 10px; letter-spacing: -0.01em; }
+  .act-sub{ color: var(--text-dim); font-size: 15.5px; margin: 0; }
+
+  .fade-in{ opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  .fade-in.in-view{ opacity: 1; transform: translateY(0); }
+
+  /* ============ ACT I — ROLE PLAY ============ */
+  #act1{ --act-accent: var(--accent-cyan); }
+  .persona-grid{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  @media (max-width: 720px){ .persona-grid{ grid-template-columns: 1fr; } }
+  .persona-card{
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--p-color);
+    border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow);
+  }
+  .persona-card .tag{
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; color: var(--p-color);
+    text-transform: uppercase; margin-bottom: 4px; display: block;
+  }
+  .persona-card h3{ margin: 0 0 4px; font-size: 18px; }
+  .persona-card .role-desc{ color: var(--text-faint); font-size: 13px; margin: 0 0 14px; font-style: italic; }
+  .persona-card ul{ list-style: none; margin: 0; padding: 0; }
+  .persona-card li{
+    font-size: 14px; color: var(--text-dim); padding: 7px 0 7px 20px; position: relative;
+    border-top: 1px dashed var(--border-soft);
+  }
+  .persona-card li:first-child{ border-top: none; }
+  .persona-card li::before{ content: "›"; position: absolute; left: 0; color: var(--p-color); font-family: var(--mono); font-weight: 700; }
+  .persona-card.pc-daily{ --p-color: var(--accent-cyan); }
+  .persona-card.pc-newhire{ --p-color: var(--accent-green); }
+  .persona-card.pc-lead{ --p-color: var(--accent-purple); }
+  .persona-card.pc-peer{ --p-color: var(--accent-amber); }
+
+  /* ============ ACT II — MORPHOLOGICAL ============ */
+  #act2{ --act-accent: var(--accent-green); }
+  .scrollx{ overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  table.matrix{ border-collapse: collapse; width: 100%; min-width: 880px; background: var(--panel); }
+  table.matrix th, table.matrix td{ padding: 14px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-soft); }
+  table.matrix thead th{
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-faint); background: var(--panel-2); border-bottom: 1px solid var(--border);
+  }
+  table.matrix tbody th{
+    font-family: var(--mono); font-size: 12.5px; color: var(--accent-green); white-space: nowrap;
+    background: var(--panel-2); position: sticky; left: 0;
+    border-right: 1px solid var(--border); min-width: 150px;
+  }
+  table.matrix td .axis-label{ display: block; color: var(--text); font-family: var(--sans); font-size: 13.5px; margin-top: 2px; }
+  .opt-chip{
+    display: block; font-size: 13.5px; color: var(--text-dim); padding: 8px 0;
+    border-top: 1px dashed var(--border-soft);
+  }
+  .opt-chip:first-child{ border-top: none; padding-top: 0; }
+  .badge{
+    display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+    padding: 2px 7px; border-radius: 20px; margin-left: 8px; text-transform: uppercase; vertical-align: middle;
+  }
+  .badge.decided{ background: color-mix(in srgb, var(--accent-green) 20%, transparent); color: var(--accent-green); border: 1px solid color-mix(in srgb, var(--accent-green) 45%, transparent); }
+  .badge.forward{ background: color-mix(in srgb, var(--accent-gold) 20%, transparent); color: var(--accent-gold); border: 1px solid color-mix(in srgb, var(--accent-gold) 45%, transparent); }
+  .decided-row td{ background: color-mix(in srgb, var(--accent-green) 6%, transparent); }
+  .matrix-note{
+    margin-top: 16px; font-family: var(--mono); font-size: 12.5px; color: var(--text-faint);
+    padding: 12px 16px; border: 1px dashed var(--border); border-radius: 8px; background: var(--panel-2);
+  }
+  .matrix-note .cmt{ color: var(--accent-amber); }
+
+  /* ============ ACT III — DISNEY ============ */
+  #act3{ --act-accent: var(--accent-purple); }
+  .rooms{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 860px){ .rooms{ grid-template-columns: 1fr; } }
+  .room{
+    border-radius: var(--radius); padding: 22px 20px 24px; box-shadow: var(--shadow);
+    border: 1px solid var(--border); position: relative; overflow: hidden;
+  }
+  .room h3{ margin: 0 0 3px; font-size: 17px; font-family: var(--mono); letter-spacing: 0.02em; }
+  .room .room-caption{ font-size: 12.5px; margin: 0 0 16px; opacity: 0.8; }
+  .room ul{ margin: 0; padding-left: 18px; }
+  .room li{ font-size: 13.8px; margin-bottom: 10px; }
+  .room-dreamer{
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent-purple) 14%, var(--panel)), var(--panel));
+    border-color: color-mix(in srgb, var(--accent-purple) 40%, var(--border));
+  }
+  .room-dreamer h3{ color: var(--accent-purple); }
+  .room-dreamer::before{
+    content: "✨"; position: absolute; top: 14px; right: 16px; font-size: 20px; opacity: 0.65;
+  }
+  .room-realist{
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent-cyan) 10%, var(--panel)), var(--panel));
+    border-color: color-mix(in srgb, var(--accent-cyan) 35%, var(--border));
+  }
+  .room-realist h3{ color: var(--accent-cyan); }
+  .room-realist::before{ content: "📐"; position: absolute; top: 14px; right: 16px; font-size: 20px; opacity: 0.65; }
+  .room-critic{
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent-red) 14%, var(--panel)), var(--panel));
+    border-color: color-mix(in srgb, var(--accent-red) 40%, var(--border));
+  }
+  .room-critic h3{ color: var(--accent-red); }
+  .room-critic::before{ content: "⚠"; position: absolute; top: 14px; right: 16px; font-size: 20px; opacity: 0.65; }
+  .room-flow{
+    display:flex; align-items:center; justify-content:center; gap: 10px; margin: 22px 0 6px;
+    font-family: var(--mono); font-size: 12px; color: var(--text-faint); letter-spacing: 0.04em;
+  }
+  .room-flow .arrow{ color: var(--accent-purple); }
+
+  /* ============ ACT IV — JTBD ============ */
+  #act4{ --act-accent: var(--accent-gold); }
+  .jobs-grid{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 22px; }
+  @media (max-width: 860px){ .jobs-grid{ grid-template-columns: 1fr; } }
+  .job-card{
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px 22px; box-shadow: var(--shadow); position: relative;
+  }
+  .job-num{
+    font-family: var(--mono); font-size: 34px; font-weight: 700; color: color-mix(in srgb, var(--accent-gold) 55%, var(--text-faint));
+    opacity: 0.5; line-height: 1; margin-bottom: 10px;
+  }
+  .job-card h3{ margin: 0 0 8px; font-size: 16.5px; }
+  .job-card p{ margin: 0; font-size: 13.8px; color: var(--text-dim); }
+  .job-well-done{
+    margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-soft);
+    font-size: 12.8px; color: var(--accent-gold);
+  }
+  .jtbd-footer{
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 8px;
+  }
+  @media (max-width: 720px){ .jtbd-footer{ grid-template-columns: 1fr; } }
+  .jtbd-note{
+    background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: var(--radius);
+    padding: 16px 18px; font-size: 13.5px; color: var(--text-dim);
+  }
+  .jtbd-note strong{ display: block; font-family: var(--mono); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 6px; }
+  .strike{ text-decoration: line-through; color: var(--text-faint); }
+
+  /* ============ GUARDRAILS ============ */
+  .guardrails{
+    padding: 64px 0; position: relative;
+    background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--accent-amber) 10%, transparent) 0 14px, transparent 14px 28px);
+  }
+  .guardrails-inner{
+    background: var(--panel); border: 2px solid color-mix(in srgb, var(--accent-red) 55%, var(--border));
+    border-radius: 14px; box-shadow: var(--shadow); padding: 32px 30px 36px;
+  }
+  .guardrails-title{
+    font-family: var(--mono); font-size: clamp(20px, 2.6vw, 26px); margin: 0 0 6px;
+    color: var(--accent-red); display: flex; align-items: center; gap: 10px;
+  }
+  .guardrails-sub{ color: var(--text-dim); margin: 0 0 28px; font-size: 14.5px; max-width: 70ch; }
+  .guard-groups{ display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  @media (max-width: 800px){ .guard-groups{ grid-template-columns: 1fr; } }
+  .guard-group h4{
+    font-family: var(--mono); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-faint); margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-soft);
+  }
+  .guard-item{
+    display: flex; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--border-soft);
+  }
+  .guard-item:first-child{ border-top: none; }
+  .guard-item .g-id{
+    font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--accent-red);
+    background: color-mix(in srgb, var(--accent-red) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent-red) 40%, transparent);
+    border-radius: 6px; padding: 2px 7px; height: fit-content; white-space: nowrap;
+  }
+  .guard-group.sec .guard-item .g-id{
+    color: var(--accent-purple); background: color-mix(in srgb, var(--accent-purple) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-purple) 40%, transparent);
+  }
+  .guard-item p{ margin: 0; font-size: 13.6px; color: var(--text-dim); }
+
+  /* ============ SYNTHESIS / FINALE ============ */
+  .finale{ padding: 80px 0 90px; }
+  .finale-header{ text-align: center; max-width: 66ch; margin: 0 auto 46px; }
+  .finale-eyebrow{
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--accent-gold); margin-bottom: 12px;
+  }
+  .finale-title{ font-size: clamp(26px, 3.6vw, 36px); margin: 0 0 12px; }
+  .finale-sub{ color: var(--text-dim); font-size: 15px; }
+
+  .hub{ display: flex; flex-direction: column; align-items: center; margin-bottom: 60px; }
+  .hub-core{
+    max-width: 560px; text-align: center; background: var(--panel);
+    border: 1.5px solid var(--accent-gold); border-radius: 14px; padding: 26px 30px;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-gold) 8%, transparent), var(--shadow);
+  }
+  .hub-core .hc-label{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--accent-gold); text-transform: uppercase; margin-bottom: 8px; }
+  .hub-core h3{ margin: 0; font-size: clamp(18px, 2.4vw, 22px); line-height: 1.3; }
+  .hub-line{ width: 2px; height: 34px; background: linear-gradient(var(--accent-gold), var(--border)); }
+  .hub-outcomes{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; width: 100%; max-width: 980px; }
+  @media (max-width: 860px){ .hub-outcomes{ grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 480px){ .hub-outcomes{ grid-template-columns: 1fr; } }
+  .hub-outcome{ position: relative; padding-top: 20px; text-align: center; }
+  .hub-outcome::before{
+    content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 2px; height: 20px; background: var(--border);
+  }
+  .hub-outcome .ho-card{
+    background: var(--panel); border: 1px solid var(--border); border-top: 2px solid var(--o-color);
+    border-radius: 10px; padding: 16px 14px; height: 100%; box-shadow: var(--shadow);
+  }
+  .hub-outcome .ho-icon{ font-size: 18px; margin-bottom: 6px; display: block; }
+  .hub-outcome h4{ margin: 0 0 6px; font-size: 13.5px; color: var(--o-color); }
+  .hub-outcome p{ margin: 0; font-size: 12px; color: var(--text-dim); }
+  .hub-outcome:nth-child(1){ --o-color: var(--accent-purple); }
+  .hub-outcome:nth-child(2){ --o-color: var(--accent-cyan); }
+  .hub-outcome:nth-child(3){ --o-color: var(--accent-green); }
+  .hub-outcome:nth-child(4){ --o-color: var(--accent-red); }
+
+  .pipeline-block{
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px 26px 30px; box-shadow: var(--shadow); margin-bottom: 40px;
+  }
+  .pipeline-block .pb-label{
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent-green); margin-bottom: 4px;
+  }
+  .pipeline-block h3{ margin: 0 0 20px; font-size: 17px; }
+  .pipeline-scroll{ overflow-x: auto; padding-bottom: 6px; }
+  .pipeline{ display: flex; align-items: center; gap: 0; min-width: 720px; }
+  .p-step{
+    font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; white-space: nowrap; color: var(--text);
+  }
+  .p-arrow{ color: var(--text-faint); padding: 0 10px; font-family: var(--mono); }
+  .p-fail{
+    margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .p-fail .fail-arrow{ color: var(--accent-red); }
+  .p-fail .p-step.fail{ border-color: color-mix(in srgb, var(--accent-red) 50%, var(--border)); color: var(--accent-red); background: color-mix(in srgb, var(--accent-red) 10%, var(--panel-2)); }
+  .pipeline-tag{
+    margin-top: 18px; font-size: 12.8px; color: var(--text-faint); font-style: italic;
+  }
+
+  .decisions{
+    background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 14px;
+    padding: 26px 26px 22px;
+  }
+  .decisions .d-label{
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-faint); margin-bottom: 14px;
+  }
+  .decisions ul{ list-style: none; margin: 0; padding: 0; }
+  .decisions li{
+    display: flex; gap: 10px; padding: 10px 0; border-top: 1px dashed var(--border-soft); font-size: 14px;
+  }
+  .decisions li:first-child{ border-top: none; }
+  .decisions .check{ color: var(--accent-green); font-family: var(--mono); font-weight: 700; }
+
+  /* ============ FOOTER ============ */
+  footer{
+    padding: 40px 0 60px; text-align: center; font-family: var(--mono); font-size: 12px; color: var(--text-faint);
+  }
+  footer .fprompt{ color: var(--accent-green); }
+</style>
+</head>
+<body>
+
+<nav class="sitenav">
+  <div class="sitenav-inner">
+    <span class="sitenav-brand">tui-back-admin.log</span>
+    <a href="#act1">I · Role Play</a>
+    <a href="#act2">II · Morphological</a>
+    <a href="#act3">III · Disney</a>
+    <a href="#act4">IV · JTBD</a>
+    <a href="#guardrails">⚠ Guardrails</a>
+    <a href="#finale">✨ Synthesis</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="term-window">
+      <div class="term-titlebar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="path">~/brainstorm/tui-back-admin-2026-08-06 — cat session.yaml</span>
+      </div>
+      <div class="term-body">
+<div class="line"><span class="prompt">$</span> cat session.yaml</div>
+<div class="line"><span class="key">topic:</span> <span class="val">TUI to administer the NestJS microservices backend (gateway, shared-types, docker)</span></div>
+<div class="line"><span class="key">goal:</span> <span class="val">deepen the idea — language/tech choice, breakdown into reusable modules/scripts, design of the "workspace" concept</span></div>
+<div class="line"><span class="key">mode:</span> <span class="val">facilitator</span></div>
+<div class="line"><span class="key">techniques:</span> <span class="val">4 — Role Playing, Morphological Analysis, Disney Method, Job to Be Done</span></div>
+<div class="line"><span class="key">status:</span> <span class="val">complete</span></div>
+<div class="line"><span class="key">updated:</span> <span class="val">2026-08-06T17:48</span></div>
+<div class="line"><span class="prompt">$</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+
+    <span class="eyebrow">Brainstorming keepsake</span>
+    <h1>A dev builds a cockpit for their own backend.</h1>
+    <p class="subtitle">One evening, four techniques, one recurring question: how do you stop babysitting a fleet of NestJS microservices by hand — the repos, the logs, the branches, the migrations, the constant workspace-switching — without losing trust in the tool that's supposed to help. This page retraces the session, in order, exactly as it unfolded.</p>
+  </header>
+
+  <!-- ================= ACT I — ROLE PLAYING ================= -->
+  <section class="act fade-in" id="act1">
+    <div class="act-header">
+      <p class="act-eyebrow">🎭 Act I — Role Playing</p>
+      <h2 class="act-title">Four voices, one tool</h2>
+      <p class="act-sub">Before any architecture, the session put four people in front of the same imagined tool and let each of them react from their own vantage point.</p>
+    </div>
+
+    <div class="persona-grid">
+      <article class="persona-card pc-daily">
+        <span class="tag">[daily-user] — the everyday dev</span>
+        <h3>The one who lives in it, every day</h3>
+        <p class="role-desc">Wants the tool to disappear into muscle memory: fast, contextual, always where they left off.</p>
+        <ul>
+          <li>The tool should know the current workspace at startup — context persists between sessions.</li>
+          <li>Batch-update every repo in a workspace to the latest shared "dev" version, migrations run automatically.</li>
+          <li>Then choose to selectively propagate that update to one or more other active workspaces.</li>
+          <li>Show errors (migration, update) right inside the tool — never force a step outside it.</li>
+          <li>Microservices in the workspace launch automatically when it's opened.</li>
+          <li>Service status at two levels: per-repo detail, and a global dashboard.</li>
+          <li>Switching workspace instantly resumes the in-progress coding session — branch and context intact.</li>
+          <li>Search and fire a gateway route directly from the tool.</li>
+          <li>Remember routes already used in this workspace — contextual history, per workspace.</li>
+          <li>Keep the body/params used per request, reusable in one click.</li>
+          <li>After sending a request, see the logs immediately — single view or global dashboard.</li>
+          <li>Fast loop: error spotted in logs → fix shared-types → propagate to every micro in the workspace, one action.</li>
+        </ul>
+      </article>
+
+      <article class="persona-card pc-newhire">
+        <span class="tag">[new-hire] — onboarding day one</span>
+        <h3>The one who's never seen this stack</h3>
+        <p class="role-desc">Wants a tool that never leaves them stranded, and teaches the stack while it sets it up.</p>
+        <ul>
+          <li>Guided, step-by-step install that never fails silently.</li>
+          <li>Built-in, accessible help — for the tool AND for the whole stack, not just its own UI.</li>
+          <li>If a micro repo isn't found: offer to either point to its existing location, or install it automatically.</li>
+          <li>On install failure: maximum guidance for known errors (a solutions library) — and for unknown ones, surface every useful log so they can self-debug, or hand it to a senior.</li>
+          <li>By the end of setup, the environment is 100% ready to code — or at least to explore the stack immediately.</li>
+        </ul>
+      </article>
+
+      <article class="persona-card pc-lead">
+        <span class="tag">[tech-lead] — owns the guardrails</span>
+        <h3>The one who thinks in years, not sessions</h3>
+        <p class="role-desc">Wants the tool to keep working as the stack evolves — and to never overstep what it's allowed to touch.</p>
+        <ul>
+          <li>Design it to evolve easily: the stack keeps changing, so the architecture must be modular and adaptable, never frozen.</li>
+          <li>Security boundary: the tool administers only the dev's local repo copies — never a remote environment.</li>
+          <li>Security boundary: no commit or push without the dev's explicit consent — never a silent git action.</li>
+          <li><strong>Correction mid-session:</strong> the tool must never commit or push to <code>development</code>, preprod, or prod — only to feature/fix/refactor branches of the current work.</li>
+          <li>It may only <em>read</em> shared branches (development/preprod/prod), to sync or update dev branches from them.</li>
+          <li>A workspace must never register a shared branch as "its own" — only dev branches proper to each concerned micro.</li>
+        </ul>
+      </article>
+
+      <article class="persona-card pc-peer">
+        <span class="tag">[colleague] — working in parallel</span>
+        <h3>The one sitting three desks over</h3>
+        <p class="role-desc">Wants to know: if we both use this at once, what breaks?</p>
+        <ul>
+          <li>Each dev works on their own machine, with their own local instance of the tool and their own Dockers.</li>
+          <li>The only possible collision between colleagues is at the <strong>git</strong> level — never Docker, ports, or local resources.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= ACT II — MORPHOLOGICAL ANALYSIS ================= -->
+  <section class="act fade-in" id="act2">
+    <div class="act-header">
+      <p class="act-eyebrow">🧩 Act II — Morphological Analysis</p>
+      <h2 class="act-title">Five axes, options laid side by side</h2>
+      <p class="act-sub">The four voices converged into five independent design axes. Each was cranked for options — some settled into decisions on the spot, others stayed open for later.</p>
+    </div>
+
+    <div class="scrollx">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th style="min-width:150px;">Axis</th>
+            <th>Options generated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Axis 1<span class="axis-label" style="color:var(--text-faint); font-family:var(--sans); font-size:11px;">Language / tech</span></th>
+            <td>
+              <span class="opt-chip">Go + Bubbletea</span>
+              <span class="opt-chip">Python + Textual</span>
+              <span class="opt-chip">Node.js / TypeScript — same stack as the backend, understood by every dev</span>
+              <span class="opt-chip">A minimal TUI (gum / fzf / dialog) that just orchestrates independent CLI scripts, each runnable standalone <span class="badge forward">↳ seeds the synthesis</span></span>
+            </td>
+          </tr>
+          <tr class="decided-row">
+            <th>Axis 2<span class="axis-label" style="color:var(--text-faint); font-family:var(--sans); font-size:11px;">Workspace config storage</span></th>
+            <td>
+              <span class="opt-chip">Stays local — no network/cloud sync <span class="badge decided">Decided</span></span>
+              <span class="opt-chip">Multiple small files rather than one big file <span class="badge decided">Decided</span></span>
+              <span class="opt-chip">Single SQLite store — no text/SQLite mix, since this data was never meant to be hand-edited <span class="badge decided">Decided</span></span>
+            </td>
+          </tr>
+          <tr>
+            <th>Axis 3<span class="axis-label" style="color:var(--text-faint); font-family:var(--sans); font-size:11px;">UI/UX organization</span></th>
+            <td>
+              <span class="opt-chip">Multi-pane layout, k9s / lazygit style: a workspace-and-repos sidebar + a contextual central panel, plus a universal command palette (Ctrl+K) with fuzzy search to jump anywhere — including finding a gateway route</span>
+            </td>
+          </tr>
+          <tr>
+            <th>Axis 4<span class="axis-label" style="color:var(--text-faint); font-family:var(--sans); font-size:11px;">External scriptability</span></th>
+            <td>
+              <span class="opt-chip">Every action = a script with detailed, precise parameters — called and auto-filled by the TUI, but also directly runnable by hand for combinations the UI never anticipated <span class="badge forward">↳ becomes the session's synthesis</span></span>
+              <span class="opt-chip">Use cases named on the spot: a colleague repurposing a script for a different need; a future automation or CI chaining several together</span>
+            </td>
+          </tr>
+          <tr>
+            <th>Axis 5<span class="axis-label" style="color:var(--text-faint); font-family:var(--sans); font-size:11px;">Long-term evolvability</span></th>
+            <td>
+              <span class="opt-chip">Everything configurable and modular, to absorb a new micro or a process change (e.g. branch naming convention, shared-types evolution)</span>
+              <span class="opt-chip">A per-repo manifest (<code>repo.yaml</code>) describing its own conventions — migration, branch naming, restart, healthcheck — so the TUI stays generic: adding a micro just means adding its manifest</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="matrix-note"><span class="cmt">// open question left on the table —</span> is log streaming, and interception of system signals, genuinely less smooth in TypeScript than in Go/Rust — and how much would that actually matter for daily TUI use?</p>
+  </section>
+
+  <!-- ================= ACT III — DISNEY METHOD ================= -->
+  <section class="act fade-in" id="act3">
+    <div class="act-header">
+      <p class="act-eyebrow">🏰 Act III — Disney Method</p>
+      <h2 class="act-title">Three rooms, one door at a time</h2>
+      <p class="act-sub">Dream without limits, then get concrete, then tear it apart. Each room only sees what the previous one left behind.</p>
+    </div>
+
+    <div class="rooms">
+      <div class="room room-dreamer">
+        <h3>The Dreamer</h3>
+        <p class="room-caption">No constraints. What would the tool do if it could do anything?</p>
+        <ul>
+          <li>The tool handles <strong>everything</strong> outside pure code: the full local git workflow, local Docker management, updates, migrations — and smooths the entire stack install for a new dev.</li>
+          <li>It's connected to an AI assistant (Claude-like) that anticipates and fixes errors directly, for a calmer dev experience.</li>
+          <li>The AI formalizes and automates the git workflow on the dev's behalf.</li>
+          <li>The AI serves up views and actions already "clean" and adapted to the moment's context — the dev never has to build them.</li>
+        </ul>
+      </div>
+
+      <div class="room room-realist">
+        <h3>The Realist</h3>
+        <p class="room-caption">Okay — what would it actually take to build that?</p>
+        <ul>
+          <li>The "action = standalone script" idea from Axis 4 is exactly what makes AI integration realistic: an AI can execute a script far more reliably than it can operate an interactive TUI.</li>
+          <li>Shared-types propagation becomes a single triggerable action (shortcut or command): ask for the target version, apply it to every micro in the workspace.</li>
+        </ul>
+        <div class="room-flow">
+          <span>package.json</span><span class="arrow">→</span><span>npm i</span><span class="arrow">→</span><span>restart docker</span><span class="arrow">→</span><span>health_check</span>
+        </div>
+        <ul>
+          <li>On failure, show that micro's Docker logs directly — no manual digging.</li>
+        </ul>
+      </div>
+
+      <div class="room room-critic">
+        <h3>The Critic</h3>
+        <p class="room-caption">Where does this fall apart?</p>
+        <ul>
+          <li><strong>Major critique:</strong> for automated actions to succeed, the tool alone has to resolve a huge number of minor problems — one unhandled edge case fails the whole action. New failure modes keep appearing; robustness is never "finished".</li>
+          <li><strong>AI-executor risk:</strong> a poorly-bounded AI could saturate CPU by restarting micros in an infinite loop, or destroy work in progress if misconfigured. Strict guardrails — rate-limiting, confirmation, limited scope — are required before any AI auto-execution.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACT IV — JOB TO BE DONE ================= -->
+  <section class="act fade-in" id="act4">
+    <div class="act-header">
+      <p class="act-eyebrow">🎯 Act IV — Job to Be Done</p>
+      <h2 class="act-title">What does the dev actually hire this tool to do?</h2>
+      <p class="act-sub">Strip away the feature list and three jobs remain — plain, unglamorous, and exactly what's eating the day.</p>
+    </div>
+
+    <div class="jobs-grid">
+      <div class="job-card">
+        <div class="job-num">01</div>
+        <h3>Search &amp; aggregate logs</h3>
+        <p>Find and assemble the log screens — search and aggregation across multiple sources at once, instead of tab-hopping between terminals.</p>
+        <div class="job-well-done">"Done well" = see one micro's logs in isolation, in seconds, AND get a dashboard aggregating several micro logs on a single interface.</div>
+      </div>
+      <div class="job-card">
+        <div class="job-num">02</div>
+        <h3>Own the tedious repo lifecycle</h3>
+        <p>Handle the "annoying" parts of repo life — updates, migrations, conflicts — on the dev's behalf, instead of the dev doing it by hand every time.</p>
+      </div>
+      <div class="job-card">
+        <div class="job-num">03</div>
+        <h3>Switch workspaces, frictionless</h3>
+        <p>Move between two work sessions (workspaces) without friction — and without the dread of what might get lost in the process.</p>
+      </div>
+    </div>
+
+    <div class="jtbd-footer">
+      <div class="jtbd-note">
+        <strong>Deep motivation</strong>
+        Not survival — comfort and efficiency. All three jobs are about reclaiming time from actions that are repetitive and simply not fun.
+      </div>
+      <div class="jtbd-note">
+        <strong>Today's "competitor"</strong>
+        <span class="strike">A polished internal tool</span> — really just a handful of personal, hacked-together scripts, and everything else done by hand.
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GUARDRAILS ================= -->
+  <section class="guardrails fade-in" id="guardrails">
+    <div class="wrap">
+      <div class="guardrails-inner">
+        <h2 class="guardrails-title">⚠ Non-negotiables</h2>
+        <p class="guardrails-sub">Every idea in this session answers to two short lists. Break one of these, and the tool isn't the solution anymore — it's the new problem.</p>
+
+        <div class="guard-groups">
+          <div class="guard-group trust">
+            <h4>Trust deal-breakers</h4>
+            <div class="guard-item"><span class="g-id">DB-1</span><p>Losing uncommitted changes on a workspace switch destroys trust instantly — auto stash/save per workspace is non-negotiable.</p></div>
+            <div class="guard-item"><span class="g-id">DB-2</span><p>Slowness sends the dev straight back to their bash scripts.</p></div>
+            <div class="guard-item"><span class="g-id">DB-3</span><p>Confusing or hard navigation gets the tool abandoned.</p></div>
+            <div class="guard-item"><span class="g-id">DB-4</span><p>Showing an error isn't enough if fixing it means re-running logs by hand — an integrated resolution loop is required, not just a mirror of the logs.</p></div>
+            <div class="guard-item"><span class="g-id">DB-5</span><p>An incomplete view that forces a check elsewhere breaks the tool's promise of being the single source of truth.</p></div>
+          </div>
+
+          <div class="guard-group sec">
+            <h4>Git security boundaries</h4>
+            <div class="guard-item"><span class="g-id">SEC-1</span><p>The tool administers only the dev's local repo copies — never a remote environment.</p></div>
+            <div class="guard-item"><span class="g-id">SEC-2</span><p>No commit or push without the dev's explicit consent — never a silent git action.</p></div>
+            <div class="guard-item"><span class="g-id">SEC-3</span><p>Push, at most, to feature/dev branches — never to <code>development</code>, preprod, or prod. Common branches may only be read, to sync dev branches from them.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FINALE — SYNTHESIS ================= -->
+  <section class="finale fade-in" id="finale">
+    <div class="finale-header">
+      <p class="finale-eyebrow">✨ Finale — The Synthesis</p>
+      <h2 class="finale-title">One idea, quietly doing four jobs at once</h2>
+      <p class="finale-sub">Traced back through all four techniques, one architectural choice keeps resurfacing — and one workflow becomes the first proof it actually works.</p>
+    </div>
+
+    <div class="hub">
+      <div class="hub-core">
+        <div class="hc-label">Central architectural idea</div>
+        <h3>Every action is a standalone script.</h3>
+      </div>
+      <div class="hub-line"></div>
+      <div class="hub-outcomes">
+        <div class="hub-outcome">
+          <div class="ho-card">
+            <span class="ho-icon">🤖</span>
+            <h4>AI-executable</h4>
+            <p>An AI can run a well-scoped script far more reliably than it can drive an interactive TUI — this is what the Disney "Realist" room hinges on.</p>
+          </div>
+        </div>
+        <div class="hub-outcome">
+          <div class="ho-card">
+            <span class="ho-icon">🔌</span>
+            <h4>Externally scriptable</h4>
+            <p>Axis 4's answer, directly: usable by hand, repurposed by a colleague, or chained by a future CI.</p>
+          </div>
+        </div>
+        <div class="hub-outcome">
+          <div class="ho-card">
+            <span class="ho-icon">🧭</span>
+            <h4>Guided onboarding</h4>
+            <p>The new hire's step-by-step install is just this same idea, run once, in order, with nothing hidden.</p>
+          </div>
+        </div>
+        <div class="hub-outcome">
+          <div class="ho-card">
+            <span class="ho-icon">🔒</span>
+            <h4>A vector for guardrails</h4>
+            <p>Because each action is a discrete, auditable unit, the security boundaries and safety limits have somewhere concrete to attach.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-block">
+      <div class="pb-label">First concrete implementation of Deal-breaker #4</div>
+      <h3>The shared-types propagation flow</h3>
+      <div class="pipeline-scroll">
+        <div class="pipeline">
+          <span class="p-step">edit package.json</span><span class="p-arrow">→</span>
+          <span class="p-step">npm i</span><span class="p-arrow">→</span>
+          <span class="p-step">restart micro's docker</span><span class="p-arrow">→</span>
+          <span class="p-step">health_check</span>
+        </div>
+      </div>
+      <div class="p-fail">
+        <span class="fail-arrow">⤷ on failure</span>
+        <span class="p-step fail">show that micro's docker logs, right here</span>
+      </div>
+      <p class="pipeline-tag">Born in the Disney "Realist" room — this is the pattern to reproduce for every future automated action.</p>
+    </div>
+
+    <div class="decisions">
+      <div class="d-label">Directions retained for future convergence</div>
+      <ul>
+        <li><span class="check">✔</span><span>"Action = standalone script" as the architectural cornerstone.</span></li>
+        <li><span class="check">✔</span><span>Workspace storage: local, multi-file, single SQLite store.</span></li>
+        <li><span class="check">✔</span><span>Per-repo manifest as the mechanism for long-term evolvability.</span></li>
+        <li><span class="check">✔</span><span>The 5 trust deal-breakers and 3 git security boundaries stand as non-negotiable acceptance criteria.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span class="fprompt">$</span> session --status complete · updated 2026-08-06T17:48 · 4 techniques run<br>
+    keepsake generated from the session's .memlog.md
+  </footer>
+</div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var items = document.querySelectorAll('.fade-in');
+  if (reduce || !('IntersectionObserver' in window)) {
+    items.forEach(function(el){ el.classList.add('in-view'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in-view');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+  items.forEach(function(el){ io.observe(el); });
+})();
+</script>
+
+</body>
+</html>
