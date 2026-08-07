@@ -1,6 +1,8 @@
 # Brainstorm Intent: TUI Admin Tool for NestJS Microservices Backend
 
-Source: full traceability in `_bmad-output/brainstorming/brainstorm-tui-back-admin-2026-08-06/.memlog.md` (French, raw session log). This document is the distilled, English intent input for downstream product-brief/PRD work. **No prioritization or MVP-scoping pass has happened yet** — see "Next Step" at the end.
+Source: full traceability in `_bmad-output/brainstorming/brainstorm-tui-back-admin-2026-08-06/.memlog.md` (French, raw session log). This document is the distilled, English intent input for downstream product-brief/PRD work.
+
+**Convergence has happened.** The session ran divergent exploration (Role Playing, Morphological Analysis, Disney Method, JTBD) followed by an explicit convergence phase (Affinity Clustering into 7 themes, then MoSCoW prioritization). The scoping outcome is captured below in "Convergence Outcome (MoSCoW)" — this is no longer an open-ended exploration; it is ready to feed a product brief / PRD.
 
 ## Core Problem / Opportunity
 
@@ -20,7 +22,7 @@ Underlying motivation for all three: save time on repetitive, unrewarding chores
 
 ## Non-Negotiable Trust Deal-Breakers (hard acceptance criteria)
 
-Any of these breaks user trust and causes tool abandonment — treat as constraints, not nice-to-haves:
+Any of these breaks user trust and causes tool abandonment — treat as constraints, not nice-to-haves. As confirmed in convergence, these apply as **cross-cutting quality bars to every Must-scope item** (see below), not as a separately-prioritized feature:
 
 1. **No data loss on workspace switch.** Losing uncommitted changes when switching EDT is unacceptable — automatic stash/save per EDT is mandatory.
 2. **No slowness.** If the tool is slow, developers fall back to bash scripts.
@@ -67,40 +69,46 @@ The existing generated Swagger UI is too cluttered to be useful day-to-day. Need
 - The tool remembers routes already used within an EDT (contextual history per workspace), including the body/params used per request, reusable in one click.
 - After sending a request, immediate visibility into logs (individual or global dashboard view) — closing the loop between "call a route" and "see what happened."
 
-## Technical Directions — Morphological Analysis (5 Axes)
+## Architecture Principle: Generic Core vs. Company-Specific Modules
 
-The session explored 5 axes. Some reached explicit decisions; most remain **open options** for a future convergence pass.
+**This is a late but critical precision from the session — it governs how every feature above must be implemented, not just what gets built.**
 
-**Axis 1 — TUI language/tech: NOT DECIDED.** Options on the table, no preference locked in:
-- Go + Bubbletea
-- Python + Textual
-- Node.js/TypeScript (matches backend stack, familiar to all devs)
-- Minimalist TUI (gum/fzf/dialog) orchestrating independent standalone CLI scripts, each runnable alone
-- Open question flagged for verification: is log streaming / OS signal interception meaningfully less smooth in TS vs Go/Rust, and how much would that affect daily use?
+The tool is being built for the author's company backend, but must stay easily extensible to any other microservices backend. Anything specific to the company's own architecture (e.g., the gateway routing logic, the shared-types propagation logic) must be a configurable/pluggable module — never baked into the generic core.
 
-**Axis 2 — EDT config storage: DECIDED.**
-- Stays local only, no network/cloud sync.
-- Multiple files rather than one large file.
-- Single storage mechanism: SQLite (no mixing text files + SQLite), since this data is not meant to be hand-edited.
+**Decision heuristic**, to be applied to every candidate feature: *"Is this intrinsic to microservices architecture in general, or specific to my company's architecture?"*
+- Generic → belongs in the core.
+- Company-specific → belongs in a module.
 
-**Axis 3 — UI/UX organization: NOT DECIDED**, one option explored:
-- Multi-pane layout à la k9s/lazygit (EDT/repo sidebar + contextual central panel) plus a universal command palette (Ctrl+K) with fuzzy search to jump anywhere, including finding a gateway route.
+**Connection insight**: the per-repo `repo.yaml` manifest (from the technical-foundations axis, see below) is the natural place to declare which company-specific modules are active for a given repo. This is not a new mechanism — it's the "action = standalone script" pattern applied to portability: the manifest just declares which pluggable, script-based modules apply.
 
-**Axis 4 — External accessibility/scriptability of actions: DECIDED (converges with the core architectural direction).**
-- Each action is a script with detailed/precise parameters, invoked/filled automatically by the TUI but also directly runnable by hand.
+## Convergence Outcome (MoSCoW)
 
-**Axis 5 — Long-term evolvability: DIRECTION PROPOSED, not fully decided.**
-- Everything configurable/modular, to absorb a new micro-service or a process change (e.g., branch naming convention, shared-types workflow evolution) without core rework.
-- Proposed direction: a per-repo manifest file (`repo.yaml`) describing that repo's own conventions (migration, branch naming, restart, health check) — the TUI stays generic; adding a micro-service means adding its manifest.
+The memlog's raw ideas were grouped via Affinity Clustering into 7 themes, then prioritized via MoSCoW with explicit user verdicts. This is the scoping result:
 
-## AI-Integration Ambition (future consideration, not committed)
+### Must (first real buildable version)
 
-Aspirational direction raised in the session: connect the tool to an AI assistant (e.g., Claude) that anticipates/fixes errors, formalizes/automates the local git workflow, and surfaces context-appropriate views/actions without the developer building them manually. The "action = standalone script" architecture is explicitly what would make this realistic.
+- **Theme 1 — "Action = standalone script"** as the architectural cornerstone (core).
+- **Theme 2 — EDT** (context/switch/persistence).
+- **Theme 3 — Repo lifecycle management**: the generic parts (group update, migration execution) live in the core; shared-types propagation is a company-specific module.
+- **Theme 4 — Observability**: generic log aggregation lives in the core (required mechanically by deal-breaker #5, complete-view); the gateway route explorer is a company-specific module.
+- **Theme 6 — Technical foundations**: TUI language/tech choice; EDT storage in local multi-file SQLite (already decided); UI/UX organization; and the `repo.yaml` manifest format — including declaring which company-specific modules are active per repo.
 
-**Identified risk, not yet mitigated:** a poorly-bounded AI executor could loop-restart micro-services and saturate CPU, or destroy in-progress work if misconfigured. Strict guardrails (rate-limiting, confirmation prompts, limited scope) are required before any autonomous AI execution — this is a noted constraint on the *future* feature, not a specified solution.
+All Must items are constrained non-negotiably by the 5 trust deal-breakers and the 3 git security boundaries, applied as cross-cutting quality bars — not as a separately-prioritized theme.
 
-There is also an open, unresolved concern (Critic pass): fully automated actions require the tool to silently resolve a large number of minor failure modes, or the whole action fails; new failure cases surface continuously, so "robustness" for automated actions is never fully finished. This is a standing risk to account for when scoping automation depth.
+### Could
 
-## Next Step (explicitly not done in this session)
+- **Theme 5 — Onboarding & guided installation only** (step-by-step wizard, known-error solution base). Explicitly: the 5 deal-breakers themselves are NOT part of this "Could" — they stay non-negotiable regardless of feature priority.
 
-This session was a **divergent exploration only** — no prioritization or MVP-scoping pass occurred. The memlog's closing synthesis names four directions as retained for a *future* convergence pass (architecture = standalone scripts as cornerstone; local multi-file SQLite EDT storage; per-repo manifest for evolvability; the 5 deal-breakers + 3 git security boundaries as non-negotiable acceptance criteria), but does not rank features, define an MVP, or resolve the open axes (1, 3, 5). A downstream convergence/prioritization session is required before this becomes a scoped plan.
+### Won't (this time)
+
+- **Theme 7 — AI copilot ambition**: an AI assistant (e.g., Claude) anticipating/fixing errors and automating the local git workflow. Deferred, but note:
+  - The Must-scope (standalone scripts + strict git security boundaries) is already the groundwork that would make this safe to build later.
+  - Standing constraint carried forward from the Critic pass: a poorly-bounded AI executor could loop-restart services (CPU saturation) or destroy in-progress work if misconfigured — this risk is not yet mitigated and must be addressed before any future autonomous AI execution.
+
+### Open technical question, now a selection criterion
+
+Whether log streaming / OS signal interception is meaningfully less smooth in TypeScript than in Go/Rust is no longer a side curiosity — it is a **direct selection criterion for the Must-have technical-foundations axis (language/tech choice)**, via deal-breaker #2 (no slowness). Worth resolving early.
+
+## Ready for Next Step
+
+This intent doc is now scoped (core problem, JTBD, deal-breakers, security boundaries, standalone-script architecture, generic-core/company-module split, and MoSCoW-prioritized Must/Could/Won't) and ready to feed directly into `bmad-product-brief` or `bmad-prd` for MVP definition.
