@@ -49,7 +49,7 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: in-progress
-  1-1-project-scaffolding-hexagonal-skeleton: ready-for-dev
+  1-1-project-scaffolding-hexagonal-skeleton: review
   1-2-xdg-state-layout-resolution: backlog
   1-3-script-output-envelope-cli-entrypoint-contract: backlog
   1-4-manifest-schema-loader-validation: backlog
