@@ -8,6 +8,9 @@
     "node": ">=24"
   },
   "main": "index.js",
+  "bin": {
+    "tui-back": "./src/bin/tui-back.mjs"
+  },
   "directories": {
     "doc": "docs"
   },
@@ -19,6 +22,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/node": "^24.13.3",
     "dependency-cruiser": "^18.2.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
