@@ -1,0 +1,640 @@
+<title>tui-back — Visual Direction Concepts</title>
+<style>
+/*
+  ============================================================
+  EXACT TOKEN VALUES — copy/paste reference for Max
+  ============================================================
+
+  DIRECTION 1 — "Hearth" (warm / organic)
+    background : #2a2118
+    surface    : #332819
+    border     : #6b5138
+    text       : #f3e6d3
+    text-dim   : #b3987d
+    accent     : #d97a42
+    success    : #97ab55
+    error      : #d1483f
+    warning    : #e0b23c
+    info       : #7c9a92
+
+  DIRECTION 2 — "Atelier" (refined / jewel-tone)
+    background : #1c1b1f
+    surface    : #232228
+    border     : #3a3844
+    text       : #eae7e1
+    text-dim   : #8f8b98
+    accent     : #c9a13b
+    success    : #3f9d6e
+    error      : #c1495e
+    warning    : #cf9a3e
+    info       : #4f80a8
+
+  DIRECTION 3 — "Phosphor CRT" (retro-terminal)
+    background : #08110b
+    surface    : #0c170f
+    border     : #1d3d24
+    text       : #8fffa1
+    text-dim   : #4d8a5b
+    accent     : #33ff66
+    success    : #33ff66
+    error      : #ffb020
+    warning    : #ffcf5c
+    info       : #b9ffca
+
+  DIRECTION 4 — "Control Room" (cool / modern)
+    background : #0d1620
+    surface    : #142230
+    border     : #2b4358
+    text       : #dbe8f2
+    text-dim   : #7891a6
+    accent     : #4fc3f7
+    success    : #45c9a5
+    error      : #ef6a5a
+    warning    : #f0b429
+    info       : #4fc3f7
+
+  DIRECTION 5 — "Arcade" (playful / vivid)
+    background : #17131f
+    surface    : #1f1a2c
+    border     : #423a5c
+    text       : #f5f1fb
+    text-dim   : #9a8fb8
+    accent     : #ff6ec7
+    success    : #4ce6a0
+    error      : #ff5d78
+    warning    : #ffd23f
+    info       : #5ef1e0
+  ============================================================
+*/
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 32px 80px;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.page-header { max-width: 980px; margin: 0 auto 48px; }
+.page-header h1 { font-size: 1.9rem; margin: 0 0 8px; }
+.page-header p { line-height: 1.55; color: #444; margin: 0 0 10px; }
+.page-header .a11y-note {
+  background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+  padding: 12px 16px; font-size: 0.9rem; color: #333; margin-top: 16px;
+}
+
+.direction {
+  max-width: 1180px; margin: 0 auto 72px;
+  padding-top: 40px; border-top: 1px solid #ddd;
+}
+.direction:first-of-type { border-top: none; }
+
+.direction-head { margin-bottom: 14px; }
+.direction-head .kicker {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: #888; font-weight: 600; margin-bottom: 4px;
+}
+.direction-head h2 { font-size: 1.5rem; margin: 0 0 4px; }
+.direction-head .register { font-style: italic; color: #555; margin: 0 0 10px; font-size: 0.95rem; }
+.direction-head .rationale { max-width: 820px; color: #333; line-height: 1.55; margin: 0; font-size: 0.93rem; }
+
+.tokens { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 26px; }
+.token-chip {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 11px 5px 7px; border-radius: 20px;
+  font-size: 0.74rem; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  background: #fff; border: 1px solid #ddd; color: #333;
+}
+.swatch { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); flex-shrink: 0; }
+
+.mockups { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+@media (max-width: 980px) { .mockups { grid-template-columns: 1fr; } }
+
+.mockup-label { font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px; font-weight: 600; }
+
+/* ---- terminal shell (shared) ---- */
+.term {
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", "Fira Code", Consolas, monospace;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0,0,0,.28);
+  font-size: 13px;
+  position: relative;
+}
+.term-chrome {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.term-title { margin-left: 6px; font-size: .72rem; color: var(--text-dim); }
+
+.app-topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; background: var(--bg); font-size: .84rem; border-bottom: 1px solid var(--border);
+  gap: 10px; flex-wrap: wrap;
+}
+.app-tabs {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  padding: 7px 14px 10px; background: var(--bg); font-size: .8rem; border-bottom: 1px solid var(--border);
+}
+.tab { color: var(--text-dim); padding: 2px 3px; }
+.tab.active { color: var(--bg); background: var(--accent); padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+
+.app-body { padding: 16px; line-height: 1.7; font-size: .85rem; }
+.app-body.split { display: grid; grid-template-columns: 1fr 1.5fr; padding: 0; }
+.pane { padding: 15px; }
+.pane.left { border-right: 1px solid var(--border); }
+.pane .pane-title { color: var(--text-dim); margin: 0 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+.svc-row { margin: 0 0 8px; padding-left: 12px; border-left: 3px solid transparent; }
+.svc-row.selected { border-left-color: var(--accent); background: rgba(255,255,255,.03); }
+.svc-row .meta { color: var(--text-dim); }
+
+.line { display: flex; justify-content: space-between; align-items: center; margin: 0; }
+.action-row { margin: 6px 0; padding: 5px 0 5px 12px; border-left: 3px solid transparent; }
+.action-row.selected { border-left-color: var(--accent); background: rgba(255,255,255,.03); }
+.action-row .k { color: var(--text-dim); }
+
+.wink { font-style: italic; color: var(--text-dim); padding-left: 22px; margin: 2px 0 12px; font-size: .82em; }
+.summary { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 10px; color: var(--warning); }
+
+.app-footer {
+  padding: 7px 14px; font-size: .72rem; color: var(--text-dim);
+  border-top: 1px solid var(--border); background: var(--bg);
+}
+
+/* ---- per-direction structural styling (border language) ---- */
+section.dir1 .term { border-radius: 16px; }
+section.dir1 .term-chrome { border-radius: 16px 16px 0 0; }
+
+section.dir2 .term { border-radius: 3px; border-width: 1px; }
+
+section.dir3 .term { border-radius: 2px; box-shadow: 0 0 32px rgba(51,255,102,.14), 0 10px 28px rgba(0,0,0,.45); }
+section.dir3 .term::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,.16) 3px);
+}
+section.dir3 .term, section.dir3 .term * { text-shadow: 0 0 5px rgba(51,255,102,.3); }
+section.dir3 .tab.active { text-shadow: none; }
+
+section.dir4 .term { border-radius: 4px; border-width: 3px; border-style: double; }
+
+section.dir5 .term { border-radius: 7px; border-width: 3px; font-weight: 500; }
+section.dir5 .term-chrome, section.dir5 .app-topbar, section.dir5 .app-tabs, section.dir5 .app-footer { font-weight: 600; }
+</style>
+
+<div class="page-header">
+  <h1>tui-back — 5 visual directions</h1>
+  <p>Same fixed layout (top bar with EDT + zone tabs, two-pane content, footer keybinding hints) and same copy in every direction — only the palette, glyph/border language, density and accent texture change. Each direction is rendered twice: the <strong>Dashboard</strong> hero screen and the <strong>Update</strong> run-in-progress screen, so the personality reads consistently across both.</p>
+  <div class="a11y-note">
+    <strong>Accessibility note:</strong> every status keeps its glyph + color pairing (● up / ○ down / ✔ success / ✖ error / ⚠ warning) — color is never the sole differentiator. Where a direction could tempt a pure red/green pair, the palette instead shifts lightness and/or hue (olive-green vs brick-red, emerald vs ruby-magenta, phosphor-green vs amber, teal vs coral, mint vs pink-red) so the success/error contrast survives red-green color-blindness simulation, not just default vision.
+  </div>
+</div>
+
+<!-- ================= DIRECTION 1 ================= -->
+<section class="direction dir1" style="--bg:#2a2118;--surface:#332819;--border:#6b5138;--text:#f3e6d3;--text-dim:#b3987d;--accent:#d97a42;--success:#97ab55;--error:#d1483f;--warning:#e0b23c;--info:#7c9a92;">
+  <div class="direction-head">
+    <div class="kicker">Direction 1 — Warm / Organic</div>
+    <h2>Hearth</h2>
+    <p class="register">Register: a cozy craft-desk lamp, not a server room.</p>
+    <p class="rationale">Warm neutrals and softly rounded panels make the tool feel hand-built and welcoming rather than clinical — directly answering Max's "not bare-utilitarian" brief. A single confident terracotta accent marks selection/action so the eye never has to guess what's interactive, keeping it scannable even with the softer palette. Low-saturation warm tones are easy on the eyes across an all-day session.</p>
+  </div>
+  <div class="tokens">
+    <span class="token-chip"><span class="swatch" style="background:#2a2118"></span>bg #2a2118</span>
+    <span class="token-chip"><span class="swatch" style="background:#332819"></span>surface #332819</span>
+    <span class="token-chip"><span class="swatch" style="background:#6b5138"></span>border #6b5138</span>
+    <span class="token-chip"><span class="swatch" style="background:#f3e6d3"></span>text #f3e6d3</span>
+    <span class="token-chip"><span class="swatch" style="background:#b3987d"></span>text-dim #b3987d</span>
+    <span class="token-chip"><span class="swatch" style="background:#d97a42"></span>accent #d97a42</span>
+    <span class="token-chip"><span class="swatch" style="background:#97ab55"></span>success #97ab55</span>
+    <span class="token-chip"><span class="swatch" style="background:#d1483f"></span>error #d1483f</span>
+    <span class="token-chip"><span class="swatch" style="background:#e0b23c"></span>warning #e0b23c</span>
+    <span class="token-chip"><span class="swatch" style="background:#7c9a92"></span>info #7c9a92</span>
+  </div>
+
+  <div class="mockups">
+    <div>
+      <p class="mockup-label">Dashboard</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab active">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body">
+          <p style="margin:0 0 14px">Dernier EDT actif : <strong>checkout-flash-sale</strong> (2 services)</p>
+          <p style="margin:0 0 14px"><span style="color:var(--success)">●</span> api-gateway&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--success)">●</span> micro-users</p>
+          <p style="margin:0 0 22px;color:var(--text-dim)">Dernière update : hier 18:42</p>
+          <div class="action-row selected">
+            <div class="line"><span style="color:var(--accent)">▸ Entrer dans checkout-flash-sale</span><span class="k">[enter]</span></div>
+          </div>
+          <div class="action-row">
+            <div class="line"><span>▸ Choisir un autre EDT / en créer un</span><span class="k">[e]</span></div>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="mockup-label">Update — run in progress</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab active">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body split">
+          <div class="pane left">
+            <p class="pane-title">Services (4)</p>
+            <div class="svc-row selected"><span style="color:var(--accent)">›</span> api-gateway <span class="meta">main ↑0 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-users <span class="meta">main ↑2 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-orders <span class="meta">main ↑0 ↓1</span> <span style="color:var(--error)">○ down</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-payments <span class="meta">develop ↑1 ↓0</span> <span style="color:var(--success)">● up</span></div>
+          </div>
+          <div class="pane right">
+            <p class="pane-title">Update — checkout-flash-sale</p>
+            <p style="margin:0 0 12px"><span style="color:var(--info)">⣾</span> api-gateway &nbsp;<span style="color:var(--text-dim)">pull...</span></p>
+            <p style="margin:0"><span style="color:var(--success)">✔</span> micro-users &nbsp;migrations ok, container restarted</p>
+            <p class="wink">comme sur des roulettes</p>
+            <p style="margin:0"><span style="color:var(--error)">✖</span> micro-orders &nbsp;migration 0042_add_refund_table a échoué</p>
+            <p class="wink">les autres s'en sortent très bien, eux</p>
+            <p class="summary">Résumé : 1/3 terminé, 1 échec, 0 skip</p>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DIRECTION 2 ================= -->
+<section class="direction dir2" style="--bg:#1c1b1f;--surface:#232228;--border:#3a3844;--text:#eae7e1;--text-dim:#8f8b98;--accent:#c9a13b;--success:#3f9d6e;--error:#c1495e;--warning:#cf9a3e;--info:#4f80a8;">
+  <div class="direction-head">
+    <div class="kicker">Direction 2 — Refined / Jewel-Tone</div>
+    <h2>Atelier</h2>
+    <p class="register">Register: a premium craftsman's toolbench.</p>
+    <p class="rationale">Deep charcoal with one confident amber-gold accent signals a tool built with intention — the same register as k9s or lazygit, tools Max already trusts daily. Crisp, square panel corners keep everything precise and instantly scannable; the personality comes from restraint and one well-chosen jewel tone rather than decoration, matching "beautiful but not fussy."</p>
+  </div>
+  <div class="tokens">
+    <span class="token-chip"><span class="swatch" style="background:#1c1b1f"></span>bg #1c1b1f</span>
+    <span class="token-chip"><span class="swatch" style="background:#232228"></span>surface #232228</span>
+    <span class="token-chip"><span class="swatch" style="background:#3a3844"></span>border #3a3844</span>
+    <span class="token-chip"><span class="swatch" style="background:#eae7e1"></span>text #eae7e1</span>
+    <span class="token-chip"><span class="swatch" style="background:#8f8b98"></span>text-dim #8f8b98</span>
+    <span class="token-chip"><span class="swatch" style="background:#c9a13b"></span>accent #c9a13b</span>
+    <span class="token-chip"><span class="swatch" style="background:#3f9d6e"></span>success #3f9d6e</span>
+    <span class="token-chip"><span class="swatch" style="background:#c1495e"></span>error #c1495e</span>
+    <span class="token-chip"><span class="swatch" style="background:#cf9a3e"></span>warning #cf9a3e</span>
+    <span class="token-chip"><span class="swatch" style="background:#4f80a8"></span>info #4f80a8</span>
+  </div>
+
+  <div class="mockups">
+    <div>
+      <p class="mockup-label">Dashboard</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab active">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body">
+          <p style="margin:0 0 14px">Dernier EDT actif : <strong>checkout-flash-sale</strong> (2 services)</p>
+          <p style="margin:0 0 14px"><span style="color:var(--success)">●</span> api-gateway&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--success)">●</span> micro-users</p>
+          <p style="margin:0 0 22px;color:var(--text-dim)">Dernière update : hier 18:42</p>
+          <div class="action-row selected">
+            <div class="line"><span style="color:var(--accent)">▸ Entrer dans checkout-flash-sale</span><span class="k">[enter]</span></div>
+          </div>
+          <div class="action-row">
+            <div class="line"><span>▸ Choisir un autre EDT / en créer un</span><span class="k">[e]</span></div>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="mockup-label">Update — run in progress</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab active">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body split">
+          <div class="pane left">
+            <p class="pane-title">Services (4)</p>
+            <div class="svc-row selected"><span style="color:var(--accent)">›</span> api-gateway <span class="meta">main ↑0 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-users <span class="meta">main ↑2 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-orders <span class="meta">main ↑0 ↓1</span> <span style="color:var(--error)">○ down</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-payments <span class="meta">develop ↑1 ↓0</span> <span style="color:var(--success)">● up</span></div>
+          </div>
+          <div class="pane right">
+            <p class="pane-title">Update — checkout-flash-sale</p>
+            <p style="margin:0 0 12px"><span style="color:var(--info)">⣾</span> api-gateway &nbsp;<span style="color:var(--text-dim)">pull...</span></p>
+            <p style="margin:0"><span style="color:var(--success)">✔</span> micro-users &nbsp;migrations ok, container restarted</p>
+            <p class="wink">comme sur des roulettes</p>
+            <p style="margin:0"><span style="color:var(--error)">✖</span> micro-orders &nbsp;migration 0042_add_refund_table a échoué</p>
+            <p class="wink">les autres s'en sortent très bien, eux</p>
+            <p class="summary">Résumé : 1/3 terminé, 1 échec, 0 skip</p>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DIRECTION 3 ================= -->
+<section class="direction dir3" style="--bg:#08110b;--surface:#0c170f;--border:#1d3d24;--text:#8fffa1;--text-dim:#4d8a5b;--accent:#33ff66;--success:#33ff66;--error:#ffb020;--warning:#ffcf5c;--info:#b9ffca;">
+  <div class="direction-head">
+    <div class="kicker">Direction 3 — Retro-Terminal / Phosphor</div>
+    <h2>Phosphor CRT</h2>
+    <p class="register">Register: a late-night hacker session on a green CRT.</p>
+    <p class="rationale">Leans hard into the CLI heritage Max already loves — a near-black screen lit by a single phosphor-green family reads as pure craft-nostalgia, not laziness. Because almost everything shares one hue, the deliberate amber break for errors is unmistakable at a glance, so the monochrome mood never costs scan speed. The subtle glow/scanline texture is the "welcoming" ingredient here: warmth through atmosphere rather than color variety.</p>
+  </div>
+  <div class="tokens">
+    <span class="token-chip"><span class="swatch" style="background:#08110b"></span>bg #08110b</span>
+    <span class="token-chip"><span class="swatch" style="background:#0c170f"></span>surface #0c170f</span>
+    <span class="token-chip"><span class="swatch" style="background:#1d3d24"></span>border #1d3d24</span>
+    <span class="token-chip"><span class="swatch" style="background:#8fffa1"></span>text #8fffa1</span>
+    <span class="token-chip"><span class="swatch" style="background:#4d8a5b"></span>text-dim #4d8a5b</span>
+    <span class="token-chip"><span class="swatch" style="background:#33ff66"></span>accent #33ff66</span>
+    <span class="token-chip"><span class="swatch" style="background:#33ff66"></span>success #33ff66</span>
+    <span class="token-chip"><span class="swatch" style="background:#ffb020"></span>error #ffb020</span>
+    <span class="token-chip"><span class="swatch" style="background:#ffcf5c"></span>warning #ffcf5c</span>
+    <span class="token-chip"><span class="swatch" style="background:#b9ffca"></span>info #b9ffca</span>
+  </div>
+
+  <div class="mockups">
+    <div>
+      <p class="mockup-label">Dashboard</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab active">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body">
+          <p style="margin:0 0 14px">Dernier EDT actif : <strong>checkout-flash-sale</strong> (2 services)</p>
+          <p style="margin:0 0 14px"><span style="color:var(--success)">●</span> api-gateway&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--success)">●</span> micro-users</p>
+          <p style="margin:0 0 22px;color:var(--text-dim)">Dernière update : hier 18:42</p>
+          <div class="action-row selected">
+            <div class="line"><span style="color:var(--accent)">▸ Entrer dans checkout-flash-sale</span><span class="k">[enter]</span></div>
+          </div>
+          <div class="action-row">
+            <div class="line"><span>▸ Choisir un autre EDT / en créer un</span><span class="k">[e]</span></div>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="mockup-label">Update — run in progress</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab active">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body split">
+          <div class="pane left">
+            <p class="pane-title">Services (4)</p>
+            <div class="svc-row selected"><span style="color:var(--accent)">›</span> api-gateway <span class="meta">main ↑0 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-users <span class="meta">main ↑2 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-orders <span class="meta">main ↑0 ↓1</span> <span style="color:var(--error)">○ down</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-payments <span class="meta">develop ↑1 ↓0</span> <span style="color:var(--success)">● up</span></div>
+          </div>
+          <div class="pane right">
+            <p class="pane-title">Update — checkout-flash-sale</p>
+            <p style="margin:0 0 12px"><span style="color:var(--info)">⣾</span> api-gateway &nbsp;<span style="color:var(--text-dim)">pull...</span></p>
+            <p style="margin:0"><span style="color:var(--success)">✔</span> micro-users &nbsp;migrations ok, container restarted</p>
+            <p class="wink">comme sur des roulettes</p>
+            <p style="margin:0"><span style="color:var(--error)">✖</span> micro-orders &nbsp;migration 0042_add_refund_table a échoué</p>
+            <p class="wink">les autres s'en sortent très bien, eux</p>
+            <p class="summary">Résumé : 1/3 terminé, 1 échec, 0 skip</p>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DIRECTION 4 ================= -->
+<section class="direction dir4" style="--bg:#0d1620;--surface:#142230;--border:#2b4358;--text:#dbe8f2;--text-dim:#7891a6;--accent:#4fc3f7;--success:#45c9a5;--error:#ef6a5a;--warning:#f0b429;--info:#4fc3f7;">
+  <div class="direction-head">
+    <div class="kicker">Direction 4 — Cool / Modern</div>
+    <h2>Control Room</h2>
+    <p class="register">Register: a calm, precise ops-monitoring console.</p>
+    <p class="rationale">Deep navy and one cyan accent read as a monitoring instrument built for watching ten services at once — the same register as Grafana or k9s dashboards. Double-line panel borders add structural gravitas without adding clutter, and the cool palette stays calm rather than alarming across long sessions, which matters when Max is staring at this for hours a day.</p>
+  </div>
+  <div class="tokens">
+    <span class="token-chip"><span class="swatch" style="background:#0d1620"></span>bg #0d1620</span>
+    <span class="token-chip"><span class="swatch" style="background:#142230"></span>surface #142230</span>
+    <span class="token-chip"><span class="swatch" style="background:#2b4358"></span>border #2b4358</span>
+    <span class="token-chip"><span class="swatch" style="background:#dbe8f2"></span>text #dbe8f2</span>
+    <span class="token-chip"><span class="swatch" style="background:#7891a6"></span>text-dim #7891a6</span>
+    <span class="token-chip"><span class="swatch" style="background:#4fc3f7"></span>accent #4fc3f7</span>
+    <span class="token-chip"><span class="swatch" style="background:#45c9a5"></span>success #45c9a5</span>
+    <span class="token-chip"><span class="swatch" style="background:#ef6a5a"></span>error #ef6a5a</span>
+    <span class="token-chip"><span class="swatch" style="background:#f0b429"></span>warning #f0b429</span>
+    <span class="token-chip"><span class="swatch" style="background:#4fc3f7"></span>info #4fc3f7</span>
+  </div>
+
+  <div class="mockups">
+    <div>
+      <p class="mockup-label">Dashboard</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab active">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body">
+          <p style="margin:0 0 14px">Dernier EDT actif : <strong>checkout-flash-sale</strong> (2 services)</p>
+          <p style="margin:0 0 14px"><span style="color:var(--success)">●</span> api-gateway&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--success)">●</span> micro-users</p>
+          <p style="margin:0 0 22px;color:var(--text-dim)">Dernière update : hier 18:42</p>
+          <div class="action-row selected">
+            <div class="line"><span style="color:var(--accent)">▸ Entrer dans checkout-flash-sale</span><span class="k">[enter]</span></div>
+          </div>
+          <div class="action-row">
+            <div class="line"><span>▸ Choisir un autre EDT / en créer un</span><span class="k">[e]</span></div>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="mockup-label">Update — run in progress</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab active">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body split">
+          <div class="pane left">
+            <p class="pane-title">Services (4)</p>
+            <div class="svc-row selected"><span style="color:var(--accent)">›</span> api-gateway <span class="meta">main ↑0 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-users <span class="meta">main ↑2 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-orders <span class="meta">main ↑0 ↓1</span> <span style="color:var(--error)">○ down</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-payments <span class="meta">develop ↑1 ↓0</span> <span style="color:var(--success)">● up</span></div>
+          </div>
+          <div class="pane right">
+            <p class="pane-title">Update — checkout-flash-sale</p>
+            <p style="margin:0 0 12px"><span style="color:var(--info)">⣾</span> api-gateway &nbsp;<span style="color:var(--text-dim)">pull...</span></p>
+            <p style="margin:0"><span style="color:var(--success)">✔</span> micro-users &nbsp;migrations ok, container restarted</p>
+            <p class="wink">comme sur des roulettes</p>
+            <p style="margin:0"><span style="color:var(--error)">✖</span> micro-orders &nbsp;migration 0042_add_refund_table a échoué</p>
+            <p class="wink">les autres s'en sortent très bien, eux</p>
+            <p class="summary">Résumé : 1/3 terminé, 1 échec, 0 skip</p>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DIRECTION 5 ================= -->
+<section class="direction dir5" style="--bg:#17131f;--surface:#1f1a2c;--border:#423a5c;--text:#f5f1fb;--text-dim:#9a8fb8;--accent:#ff6ec7;--success:#4ce6a0;--error:#ff5d78;--warning:#ffd23f;--info:#5ef1e0;">
+  <div class="direction-head">
+    <div class="kicker">Direction 5 — Playful / Vivid</div>
+    <h2>Arcade</h2>
+    <p class="register">Register: the most personality-forward option — a daily companion with a wink.</p>
+    <p class="rationale">A dark base keeps hours-long reading comfortable while three punchy accents (magenta, cyan, yellow) are reserved for status and selection, so vividness never competes with legibility. This is the direction that most literally embodies the dry-message-plus-dim-wink-line voice: bold glyphs and saturated color give the "comme sur des roulettes" asides somewhere to land visually. Thick square borders keep it grounded and scannable despite the color count.</p>
+  </div>
+  <div class="tokens">
+    <span class="token-chip"><span class="swatch" style="background:#17131f"></span>bg #17131f</span>
+    <span class="token-chip"><span class="swatch" style="background:#1f1a2c"></span>surface #1f1a2c</span>
+    <span class="token-chip"><span class="swatch" style="background:#423a5c"></span>border #423a5c</span>
+    <span class="token-chip"><span class="swatch" style="background:#f5f1fb"></span>text #f5f1fb</span>
+    <span class="token-chip"><span class="swatch" style="background:#9a8fb8"></span>text-dim #9a8fb8</span>
+    <span class="token-chip"><span class="swatch" style="background:#ff6ec7"></span>accent #ff6ec7</span>
+    <span class="token-chip"><span class="swatch" style="background:#4ce6a0"></span>success #4ce6a0</span>
+    <span class="token-chip"><span class="swatch" style="background:#ff5d78"></span>error #ff5d78</span>
+    <span class="token-chip"><span class="swatch" style="background:#ffd23f"></span>warning #ffd23f</span>
+    <span class="token-chip"><span class="swatch" style="background:#5ef1e0"></span>info #5ef1e0</span>
+  </div>
+
+  <div class="mockups">
+    <div>
+      <p class="mockup-label">Dashboard</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab active">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body">
+          <p style="margin:0 0 14px">Dernier EDT actif : <strong>checkout-flash-sale</strong> (2 services)</p>
+          <p style="margin:0 0 14px"><span style="color:var(--success)">●</span> api-gateway&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--success)">●</span> micro-users</p>
+          <p style="margin:0 0 22px;color:var(--text-dim)">Dernière update : hier 18:42</p>
+          <div class="action-row selected">
+            <div class="line"><span style="color:var(--accent)">▸ Entrer dans checkout-flash-sale</span><span class="k">[enter]</span></div>
+          </div>
+          <div class="action-row">
+            <div class="line"><span>▸ Choisir un autre EDT / en créer un</span><span class="k">[e]</span></div>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="mockup-label">Update — run in progress</p>
+      <div class="term">
+        <div class="term-chrome">
+          <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+          <span class="term-title">tui-back — zsh</span>
+        </div>
+        <div class="app-topbar">
+          <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+          <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+        </div>
+        <div class="app-tabs">
+          <span class="tab">⌂ Dashboard</span><span class="tab">📁 EDTs</span><span class="tab active">🔄 Update</span><span class="tab">🩺 Logs</span><span class="tab">🧭 Routes</span><span class="tab">📦 shared-types</span>
+        </div>
+        <div class="app-body split">
+          <div class="pane left">
+            <p class="pane-title">Services (4)</p>
+            <div class="svc-row selected"><span style="color:var(--accent)">›</span> api-gateway <span class="meta">main ↑0 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-users <span class="meta">main ↑2 ↓0</span> <span style="color:var(--success)">● up</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-orders <span class="meta">main ↑0 ↓1</span> <span style="color:var(--error)">○ down</span></div>
+            <div class="svc-row">&nbsp;&nbsp;micro-payments <span class="meta">develop ↑1 ↓0</span> <span style="color:var(--success)">● up</span></div>
+          </div>
+          <div class="pane right">
+            <p class="pane-title">Update — checkout-flash-sale</p>
+            <p style="margin:0 0 12px"><span style="color:var(--info)">⣾</span> api-gateway &nbsp;<span style="color:var(--text-dim)">pull...</span></p>
+            <p style="margin:0"><span style="color:var(--success)">✔</span> micro-users &nbsp;migrations ok, container restarted</p>
+            <p class="wink">comme sur des roulettes</p>
+            <p style="margin:0"><span style="color:var(--error)">✖</span> micro-orders &nbsp;migration 0042_add_refund_table a échoué</p>
+            <p class="wink">les autres s'en sortent très bien, eux</p>
+            <p class="summary">Résumé : 1/3 terminé, 1 échec, 0 skip</p>
+          </div>
+        </div>
+        <div class="app-footer">[j/k] move  [enter] open  [space] select  [g] dashboard  [q] quit  ^W resize</div>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tui-back — Key Screen: Routes — Response + Correlated Logs</title>
+<style>
+/*
+  Governs: DESIGN.md Components.list-row / detail-pane / checkbox-list-item /
+  status-badge, Colors (status-color pairing), Typography.label.
+  EXPERIENCE.md Component Patterns > list-row / detail-pane / checkbox-list-item,
+  State Patterns > Routes > "Fired / response" and > "Unlearned affected-service
+  set", Governing principles > Trust — Single Source of Truth (the reason response
+  + logs sit in one pane, not two screens), Key Flow UJ-2 step 4 and its Edge case.
+  PRD FR-22 (response + correlated aggregated logs together, in the same place;
+  first-fire default candidate set, adjustable, saved against the route).
+
+  Terminal-rendering approach reused from .working/design-directions.html's
+  Direction 2 ("Atelier") list/detail shell, corrected `d` mnemonic in the
+  zone-tab bar; no prior Routes mockup existed in that file, so the split-pane
+  structure is carried over from its Update mockup, the only list/detail
+  precedent available.
+*/
+
+:root {
+  --bg: #1c1b1f;
+  --surface: #232228;
+  --surface-selected: #28262c;
+  --border: #3a3844;
+  --text: #eae7e1;
+  --text-dim: #8f8b98;
+  --accent: #c9a13b;
+  --success: #3f9d6e;
+  --error: #c1495e;
+  --warning: #cf9a3e;
+  --info: #4f80a8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 32px 80px;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.page-header { max-width: 1180px; margin: 0 auto 32px; }
+.page-header h1 { font-size: 1.5rem; margin: 0 0 6px; }
+.page-header p { line-height: 1.5; color: #444; margin: 0; font-size: 0.92rem; }
+.page-header .note { margin-top: 8px; font-size: .85rem; color: #666; }
+
+.states { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+@media (max-width: 980px) { .states { grid-template-columns: 1fr; } }
+
+.state-label {
+  font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: .06em;
+  margin: 0 0 8px; font-weight: 600;
+}
+
+.term {
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", "Fira Code", Consolas, monospace;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0,0,0,.28);
+  font-size: 13px;
+}
+.term-chrome {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.term-title { margin-left: 6px; font-size: .72rem; color: var(--text-dim); }
+
+.app-topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 2ch; background: var(--bg); font-size: .84rem; border-bottom: 1px solid var(--border);
+  gap: 10px; flex-wrap: wrap;
+}
+.app-tabs {
+  display: flex; gap: 0; flex-wrap: wrap;
+  padding: 7px 2ch 10px; background: var(--bg); font-size: .8rem; border-bottom: 1px solid var(--border);
+}
+.tab { color: var(--text-dim); padding: 2px 1ch; margin-right: 4px; }
+.tab.active { color: var(--bg); background: var(--accent); font-weight: 700; }
+
+.app-body { display: grid; grid-template-columns: 1fr 1.6fr; padding: 0; font-size: .82rem; }
+.pane { padding: 2ch; }
+.pane.left { border-right: 1px solid var(--border); }
+.pane-title {
+  color: var(--text-dim); margin: 0 0 10px; font-size: .74rem;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+}
+
+.route-row { margin: 0 0 8px; padding: 2px 0 2px 1ch; border-left: 1ch solid transparent; line-height: 1.5; }
+.route-row.selected { border-left-color: var(--accent); background: var(--surface-selected); }
+.route-row .marker { color: var(--accent); margin-right: 0.5ch; }
+.route-row .method { color: var(--info); }
+.route-row .svc { display: block; color: var(--text-dim); padding-left: 1.5ch; font-size: .92em; }
+
+.section-label {
+  color: var(--text-dim); font-size: .74rem; text-transform: uppercase;
+  letter-spacing: .05em; font-weight: 600; margin: 0 0 0.6em;
+}
+.divider { border-top: 1px solid var(--border); margin: 1.2em 0; }
+
+.status-line { margin: 0 0 0.8em; }
+.status-code.success { color: var(--success); font-weight: 700; }
+.json-body {
+  margin: 0 0 0.2em; padding: 1ch 1.5ch; background: var(--bg);
+  border: 1px solid var(--border); color: var(--text); line-height: 1.6;
+  white-space: pre; font-size: .92em; overflow-x: auto;
+}
+
+.log-line { margin: 0 0 0.4em; color: var(--text); line-height: 1.6; }
+.log-line .ts { color: var(--text-dim); }
+.log-line .svc-tag { color: var(--info); }
+
+.checkbox-item { margin: 0 0 6px; padding: 2px 0 2px 1ch; border-left: 1ch solid transparent; }
+.checkbox-item.selected { border-left-color: var(--accent); background: var(--surface-selected); }
+.checkbox-item .box.checked { color: var(--accent); }
+.checkbox-item .box { color: var(--text); margin-right: 0.6ch; }
+.checkbox-item .meta { color: var(--text-dim); }
+
+.app-footer {
+  padding: 7px 2ch; font-size: .72rem; color: var(--text-dim);
+  border-top: 1px solid var(--border); background: var(--bg);
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>tui-back — Key Screen: Routes — Response + Correlated Logs</h1>
+  <p>Left: response and correlated aggregated logs together in one detail pane, divided by a hairline and section labels — the spine's clearest single-source-of-truth instance (FR-22, Key Flow UJ-2 step 4). Right: the "Unlearned affected-service set" state on a route's first fire (State Patterns &gt; Routes, UJ-2's Edge case).</p>
+  <p class="note">Judgment call: the right state reuses <code>checkbox-list-item</code> for the adjustable candidate-service list — Component Patterns doesn't name this exact use among its three listed cases (EDT member selection / log-view filter / saved-request batch actions), but the mechanic (toggle members of a proposed set with Space, confirm with Enter) is identical, so this is treated as an application of the existing pattern rather than a new one.</p>
+</div>
+
+<div class="states">
+
+  <!-- ============ STATE A: fired / response + correlated logs ============ -->
+  <div>
+    <p class="state-label">State — Fired / response</p>
+    <div class="term">
+      <div class="term-chrome">
+        <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+        <span class="term-title">tui-back — zsh</span>
+      </div>
+      <div class="app-topbar">
+        <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+        <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+      </div>
+      <div class="app-tabs">
+        <span class="tab">[d] Dashboard</span><span class="tab">[e] EDTs</span><span class="tab">[u] Update</span><span class="tab">[l] Logs</span><span class="tab active">[r] Routes</span><span class="tab">[s] shared-types</span>
+      </div>
+      <div class="app-body">
+        <div class="pane left">
+          <p class="pane-title">Routes (5)</p>
+          <div class="route-row"><span class="method">GET</span> /api/users/:id<span class="svc">api-gateway</span></div>
+          <div class="route-row selected"><span class="marker">›</span><span class="method">POST</span> /api/orders/checkout<span class="svc">api-gateway</span></div>
+          <div class="route-row"><span class="method">GET</span> /api/orders/:id<span class="svc">api-gateway</span></div>
+          <div class="route-row"><span class="method">POST</span> /api/users<span class="svc">micro-users</span></div>
+          <div class="route-row"><span class="method">GET</span> /api/users<span class="svc">micro-users</span></div>
+        </div>
+        <div class="pane right">
+          <p class="pane-title">POST /api/orders/checkout</p>
+
+          <p class="section-label">Réponse</p>
+          <p class="status-line"><span class="status-code success">201 Created</span>&nbsp;&nbsp;<span style="color:var(--text-dim)">42ms</span></p>
+<pre class="json-body">{
+  "orderId": "ord_8f21c3",
+  "status": "confirmed",
+  "total": 129.90
+}</pre>
+
+          <div class="divider"></div>
+
+          <p class="section-label">Logs corrélés (fenêtre ~5s, services concernés)</p>
+          <p class="log-line"><span class="ts">14:32:07.114</span> <span class="svc-tag">api-gateway</span>&nbsp;&nbsp;POST /orders/checkout → 201 (42ms)</p>
+          <p class="log-line"><span class="ts">14:32:07.128</span> <span class="svc-tag">micro-users</span>&nbsp;&nbsp;GET /users/8f21c3 → 200 (11ms)</p>
+          <p class="log-line"><span class="ts">14:32:07.151</span> <span class="svc-tag">api-gateway</span>&nbsp;&nbsp;order ord_8f21c3 confirmed</p>
+        </div>
+      </div>
+      <div class="app-footer">[j/k] move&nbsp;&nbsp;[enter] tirer&nbsp;&nbsp;[/] filter&nbsp;&nbsp;[q] quit&nbsp;&nbsp;^W resize</div>
+    </div>
+  </div>
+
+  <!-- ============ STATE B: unlearned affected-service set ============ -->
+  <div>
+    <p class="state-label">State — Unlearned affected-service set (first fire)</p>
+    <div class="term">
+      <div class="term-chrome">
+        <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+        <span class="term-title">tui-back — zsh</span>
+      </div>
+      <div class="app-topbar">
+        <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+        <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+      </div>
+      <div class="app-tabs">
+        <span class="tab">[d] Dashboard</span><span class="tab">[e] EDTs</span><span class="tab">[u] Update</span><span class="tab">[l] Logs</span><span class="tab active">[r] Routes</span><span class="tab">[s] shared-types</span>
+      </div>
+      <div class="app-body">
+        <div class="pane left">
+          <p class="pane-title">Routes (5)</p>
+          <div class="route-row"><span class="method">GET</span> /api/users/:id<span class="svc">api-gateway</span></div>
+          <div class="route-row selected"><span class="marker">›</span><span class="method">POST</span> /api/orders/refund<span class="svc">api-gateway</span></div>
+          <div class="route-row"><span class="method">GET</span> /api/orders/:id<span class="svc">api-gateway</span></div>
+          <div class="route-row"><span class="method">POST</span> /api/users<span class="svc">micro-users</span></div>
+          <div class="route-row"><span class="method">GET</span> /api/users<span class="svc">micro-users</span></div>
+        </div>
+        <div class="pane right">
+          <p class="pane-title">POST /api/orders/refund</p>
+          <p style="margin:0 0 1em">Premier tir de cette route — services concernés proposés par défaut à partir des membres de l'EDT actif. Ajustable ci-dessous ; le choix sera mémorisé pour les prochains tirs.</p>
+
+          <p class="section-label">Services concernés (proposition)</p>
+          <div class="checkbox-item selected"><span class="box checked">[x]</span>api-gateway <span class="meta">membre de l'EDT</span></div>
+          <div class="checkbox-item"><span class="box checked">[x]</span>micro-users <span class="meta">membre de l'EDT</span></div>
+          <div class="checkbox-item"><span class="box">[ ]</span>micro-orders <span class="meta">hors EDT</span></div>
+          <div class="checkbox-item"><span class="box">[ ]</span>micro-payments <span class="meta">hors EDT</span></div>
+        </div>
+      </div>
+      <div class="app-footer">[space] cocher/décocher&nbsp;&nbsp;[enter] confirmer et tirer&nbsp;&nbsp;[esc] annuler</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

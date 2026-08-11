@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tui-back — Key Screen: Dashboard</title>
+<style>
+/*
+  Governs: DESIGN.md Colors (Atelier token set), Layout & Spacing > "Launch banner",
+  Components.zone-tab / list-row / footer-hint, Typography.label.
+  EXPERIENCE.md Information Architecture (six zones, `d` mnemonic — corrected from the
+  stale `g` seen in .working/design-directions.html), Navigation model (top bar +
+  zone-tab bar + footer), State Patterns > Dashboard ("Populated" and
+  "No EDT yet (first run)" rows), Key Flow UJ-1 step 1.
+  PRD: Dashboard zone description (Information Architecture table), UJ-1 step 1.
+
+  Terminal-rendering approach (bordered floating-window frame, monospace content,
+  light page chrome outside) reused from .working/design-directions.html's Direction 2
+  ("Atelier") mockup — but corrected here per DESIGN.md's later fixes: accentBar is a
+  1ch colored glyph column (not a CSS border-left), modal/launch-banner specifics per
+  the finalized spine, and the zone-tab bar uses the corrected `d` mnemonic instead of
+  the stale `g`.
+*/
+
+:root {
+  --bg: #1c1b1f;
+  --surface: #232228;
+  --surface-selected: #28262c;
+  --border: #3a3844;
+  --text: #eae7e1;
+  --text-dim: #8f8b98;
+  --accent: #c9a13b;
+  --success: #3f9d6e;
+  --error: #c1495e;
+  --warning: #cf9a3e;
+  --info: #4f80a8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 32px 80px;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.page-header { max-width: 1180px; margin: 0 auto 32px; }
+.page-header h1 { font-size: 1.5rem; margin: 0 0 6px; }
+.page-header p { line-height: 1.5; color: #444; margin: 0; font-size: 0.92rem; }
+
+.states { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+@media (max-width: 980px) { .states { grid-template-columns: 1fr; } }
+
+.state-label {
+  font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: .06em;
+  margin: 0 0 8px; font-weight: 600;
+}
+
+/* ---- terminal shell ---- */
+.term {
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", "Fira Code", Consolas, monospace;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0,0,0,.28);
+  font-size: 13px;
+}
+.term-chrome {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.term-title { margin-left: 6px; font-size: .72rem; color: var(--text-dim); }
+
+.app-topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 2ch; background: var(--bg); font-size: .84rem; border-bottom: 1px solid var(--border);
+  gap: 10px; flex-wrap: wrap;
+}
+.app-tabs {
+  display: flex; gap: 0; flex-wrap: wrap;
+  padding: 7px 2ch 10px; background: var(--bg); font-size: .8rem; border-bottom: 1px solid var(--border);
+}
+.tab { color: var(--text-dim); padding: 2px 1ch; margin-right: 4px; }
+.tab.active { color: var(--bg); background: var(--accent); font-weight: 700; }
+
+.app-body { padding: 0; line-height: 1.7; font-size: .85rem; background: var(--surface); }
+.pane-inner { padding: 2ch; }
+
+.banner {
+  margin: 0;
+  padding: 1.2em 2ch 0.4em;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  line-height: 1.15;
+  white-space: pre;
+  text-align: left;
+}
+
+.dash-line { margin: 0 0 0.9em; }
+.dash-line.meta { color: var(--text-dim); margin-bottom: 1.4em; }
+.status-glyph.up { color: var(--success); }
+.status-glyph.down { color: var(--error); }
+
+.action-row { margin: 0.3em 0; padding: 4px 0 4px 2ch; border-left: 1ch solid transparent; }
+.action-row .accent-bar { display: inline-block; width: 1ch; }
+.action-row.selected { border-left: 1ch solid var(--accent); background: var(--surface-selected); }
+.action-row .marker { color: var(--accent); margin-right: 0.5ch; }
+.action-row .k { color: var(--text-dim); float: right; }
+.action-row .label { color: var(--text); }
+.action-row.selected .label { color: var(--accent); }
+
+.empty-state { padding: 2ch; }
+.empty-state p { margin: 0 0 1.2em; }
+
+.app-footer {
+  padding: 7px 2ch; font-size: .72rem; color: var(--text-dim);
+  border-top: 1px solid var(--border); background: var(--bg);
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>tui-back — Key Screen: Dashboard</h1>
+  <p>Left: the populated Dashboard at launch, banner shown once above the summary (EXPERIENCE.md State Patterns &gt; Dashboard &gt; "Populated"; Key Flow UJ-1 step 1). Right: the "No EDT yet (first run)" state (State Patterns &gt; Dashboard &gt; "No EDT yet"). Zone-tab bar carries the corrected <code>d</code> mnemonic in both.</p>
+</div>
+
+<div class="states">
+
+  <!-- ============ STATE A: Populated, with launch banner ============ -->
+  <div>
+    <p class="state-label">State — Populated (post-launch banner)</p>
+    <div class="term">
+      <div class="term-chrome">
+        <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+        <span class="term-title">tui-back — zsh</span>
+      </div>
+      <div class="app-topbar">
+        <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> checkout-flash-sale</span>
+        <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+      </div>
+      <div class="app-tabs">
+        <span class="tab active">[d] Dashboard</span><span class="tab">[e] EDTs</span><span class="tab">[u] Update</span><span class="tab">[l] Logs</span><span class="tab">[r] Routes</span><span class="tab">[s] shared-types</span>
+      </div>
+      <div class="app-body">
+<pre class="banner">▀█▀ █░█ █    █▄▄ ▄▀█ █▀▀ █▄▀
+░█░ █▄█ █ ▄▄ █▄█ █▀█ █▄▄ █░█</pre>
+        <div class="pane-inner" style="padding-top:0.4em">
+          <p class="dash-line">Dernier EDT actif : <strong>checkout-flash-sale</strong> (2 services)</p>
+          <p class="dash-line"><span class="status-glyph up">●</span> api-gateway&nbsp;&nbsp;&nbsp;&nbsp;<span class="status-glyph up">●</span> micro-users</p>
+          <p class="dash-line meta">Dernière update : hier 18:42</p>
+
+          <div class="action-row selected">
+            <span class="k">[enter]</span>
+            <span class="marker">▸</span><span class="label">Entrer dans checkout-flash-sale</span>
+          </div>
+          <div class="action-row">
+            <span class="k">[e]</span>
+            <span class="marker" style="color:var(--text-dim)">▸</span><span class="label">Choisir un autre EDT / en créer un</span>
+          </div>
+        </div>
+      </div>
+      <div class="app-footer">[j/k] move&nbsp;&nbsp;[enter] open&nbsp;&nbsp;[e] autre EDT&nbsp;&nbsp;[q] quit&nbsp;&nbsp;^W resize</div>
+    </div>
+  </div>
+
+  <!-- ============ STATE B: No EDT yet (first run) ============ -->
+  <div>
+    <p class="state-label">State — No EDT yet (first run)</p>
+    <div class="term">
+      <div class="term-chrome">
+        <span class="dot" style="background:var(--error)"></span><span class="dot" style="background:var(--warning)"></span><span class="dot" style="background:var(--success)"></span>
+        <span class="term-title">tui-back — zsh</span>
+      </div>
+      <div class="app-topbar">
+        <span><strong>tui-back</strong>&nbsp;&nbsp;<span style="color:var(--text-dim)">EDT ·</span> —</span>
+        <span style="color:var(--text-dim)">[/] filter&nbsp;&nbsp;[:] cmd</span>
+      </div>
+      <div class="app-tabs">
+        <span class="tab active">[d] Dashboard</span><span class="tab">[e] EDTs</span><span class="tab">[u] Update</span><span class="tab">[l] Logs</span><span class="tab">[r] Routes</span><span class="tab">[s] shared-types</span>
+      </div>
+      <div class="app-body">
+<pre class="banner">▀█▀ █░█ █    █▄▄ ▄▀█ █▀▀ █▄▀
+░█░ █▄█ █ ▄▄ █▄█ █▀█ █▄▄ █░█</pre>
+        <div class="empty-state" style="padding-top:0.4em">
+          <p>Aucun EDT pour l'instant.</p>
+          <div class="action-row selected">
+            <span class="k">[e]</span>
+            <span class="marker">▸</span><span class="label">Créer un premier EDT</span>
+          </div>
+        </div>
+      </div>
+      <div class="app-footer">[e] créer un EDT&nbsp;&nbsp;[q] quit</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
