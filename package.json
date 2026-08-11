@@ -16,7 +16,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "depcheck": "depcruise \"src/**/*.ts\" \"src/**/*.mjs\" --config .dependency-cruiser.cjs"
   },
   "keywords": [],
   "author": "",
