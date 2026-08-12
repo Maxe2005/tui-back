@@ -4,7 +4,7 @@ baseline_commit: f7a4068a6fd2eddc8a07c40ea554548907063af9
 
 # Story 1.4: Manifest Schema, Loader & Validation
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -24,20 +24,20 @@ so that an unmanaged repo is never accidentally touched.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Branch for this story (no AC — repo convention, `CLAUDE.md`)
-  - [ ] From `epic-1-foundation-navigation-shell`, create `story-1-4-manifest-schema-loader-validation`
-  - [ ] Do all work for this story on that branch; do not commit directly to the epic branch
-  - [ ] Verify against the current epic-branch HEAD (`f7a4068`, baseline_commit above) so the diff is exactly this story's work
+- [x] Task 1: Branch for this story (no AC — repo convention, `CLAUDE.md`)
+  - [x] From `epic-1-foundation-navigation-shell`, create `story-1-4-manifest-schema-loader-validation`
+  - [x] Do all work for this story on that branch; do not commit directly to the epic branch
+  - [x] Verify against the current epic-branch HEAD (`f7a4068`, baseline_commit above) so the diff is exactly this story's work
 
-- [ ] Task 2: Add runtime dependencies `zod@4.4.3` and `yaml@2.9.0` (no AC — Stack-table pins; prerequisite for every later task)
-  - [ ] `npm install --save-exact zod@4.4.3 yaml@2.9.0` — these land in `package.json` **`dependencies`** (the first runtime deps in the repo; everything so far is `devDependencies`)
-  - [ ] Pin exactly, no caret: `"zod": "4.4.3"`, `"yaml": "2.9.0"` — matches the Spine Stack table
-  - [ ] Do **not** use `yaml@next` (the `v3.0.0-1` prerelease); 2.9.0 is the latest stable and the pinned choice
-  - [ ] Confirm `node_modules/zod` and `node_modules/yaml` resolve under NodeNext before writing code (quick `import` smoke check or rely on Task 8's typecheck)
+- [x] Task 2: Add runtime dependencies `zod@4.4.3` and `yaml@2.9.0` (no AC — Stack-table pins; prerequisite for every later task)
+  - [x] `npm install --save-exact zod@4.4.3 yaml@2.9.0` — these land in `package.json` **`dependencies`** (the first runtime deps in the repo; everything so far is `devDependencies`)
+  - [x] Pin exactly, no caret: `"zod": "4.4.3"`, `"yaml": "2.9.0"` — matches the Spine Stack table
+  - [x] Do **not** use `yaml@next` (the `v3.0.0-1` prerelease); 2.9.0 is the latest stable and the pinned choice
+  - [x] Confirm `node_modules/zod` and `node_modules/yaml` resolve under NodeNext before writing code (quick `import` smoke check or rely on Task 8's typecheck)
 
-- [ ] Task 3: Define the core `Manifest` type and `ManifestPort` interface (AC: 1 — "exposes the identity/modules to core")
-  - [ ] New file `src/core/ports/manifest.ts` — **first file under `core/ports/`** (Spine tree lists `ManifestPort` there)
-  - [ ] Content shape:
+- [x] Task 3: Define the core `Manifest` type and `ManifestPort` interface (AC: 1 — "exposes the identity/modules to core")
+  - [x] New file `src/core/ports/manifest.ts` — **first file under `core/ports/`** (Spine tree lists `ManifestPort` there)
+  - [x] Content shape:
     ```ts
     import type { Result } from '../result.js';
 
@@ -53,15 +53,15 @@ so that an unmanaged repo is never accidentally touched.
       load(repoPath: string): Promise<Result<Manifest>>;
     }
     ```
-  - [ ] `sharedBranch` is a non-optional `string` on the core type: the loader applies the `development` default **at load time** (AC4), so every value core ever sees is concrete — no `sharedBranch?: string` leaking the "may be absent" ambiguity into core
-  - [ ] `modules` is `Record<string, Record<string, unknown>>` — module id → **config object**. A module's config is always an object (`{}` when config-less, **never a bare boolean**) — invariant from the AD-4 review (see Dev Notes; the schema in Task 4 enforces it)
-  - [ ] NodeNext relative import with `.js` extension (`../result.js`, not `../result`); imports are the first statements in the file (Story 1.3's depcheck landmine convention)
-  - [ ] Zero imports from `adapters/` — this file is the AD-1 boundary (depcheck enforces; Task 7 round-trips it)
-  - [ ] Do **not** add a barrel re-export in `src/core/index.ts` — no consumer yet (Story 1.2/1.3 precedent: barrels only once a consumer exists)
+  - [x] `sharedBranch` is a non-optional `string` on the core type: the loader applies the `development` default **at load time** (AC4), so every value core ever sees is concrete — no `sharedBranch?: string` leaking the "may be absent" ambiguity into core
+  - [x] `modules` is `Record<string, Record<string, unknown>>` — module id → **config object**. A module's config is always an object (`{}` when config-less, **never a bare boolean**) — invariant from the AD-4 review (see Dev Notes; the schema in Task 4 enforces it)
+  - [x] NodeNext relative import with `.js` extension (`../result.js`, not `../result`); imports are the first statements in the file (Story 1.3's depcheck landmine convention)
+  - [x] Zero imports from `adapters/` — this file is the AD-1 boundary (depcheck enforces; Task 7 round-trips it)
+  - [x] Do **not** add a barrel re-export in `src/core/index.ts` — no consumer yet (Story 1.2/1.3 precedent: barrels only once a consumer exists)
 
-- [ ] Task 4: Build the zod manifest schema (AC: 1, 4, 5)
-  - [ ] New file `src/adapters/driven/manifest/schema.ts`; `import { z } from 'zod'` first
-  - [ ] Schema (verified against `zod@4.4.3` in a sandbox on 2026-08-12 — see Dev Notes "Verified behaviors"):
+- [x] Task 4: Build the zod manifest schema (AC: 1, 4, 5)
+  - [x] New file `src/adapters/driven/manifest/schema.ts`; `import { z } from 'zod'` first
+  - [x] Schema (verified against `zod@4.4.3` in a sandbox on 2026-08-12 — see Dev Notes "Verified behaviors"):
     ```ts
     import { z } from 'zod';
 
@@ -75,20 +75,20 @@ so that an unmanaged repo is never accidentally touched.
       modules: z.record(z.string(), moduleConfigSchema),
     });
     ```
-  - [ ] Required fields: `service`, `container`, `migrationCommand` (non-empty via `min(1)`), `modules` (may be `{}`). Only `sharedBranch` is optional-with-default (AD-4)
-  - [ ] No `schemaVersion` field — the architecture decided v1 has none (single author, no migration need). Do not invent one
-  - [ ] zod v4 API rules that WILL bite if you carry v3 habits (all verified):
+  - [x] Required fields: `service`, `container`, `migrationCommand` (non-empty via `min(1)`), `modules` (may be `{}`). Only `sharedBranch` is optional-with-default (AD-4)
+  - [x] No `schemaVersion` field — the architecture decided v1 has none (single author, no migration need). Do not invent one
+  - [x] zod v4 API rules that WILL bite if you carry v3 habits (all verified):
     - `z.record` takes **two** args (`z.record(keySchema, valueSchema)`) — the one-arg form is removed, not deprecated
     - Error detail lives on `error.issues` — `error.errors` was removed in v4
     - If you add custom error text later, the option key is `error`, not `message`
     - `.default('development')` on an optional string **does** apply for a missing key (verified)
     - `z.string().min(1)` still works in v4
-  - [ ] Enforce the "config object, never bare boolean" invariant (review Finding 6): a `modules` entry like `shared-types-consumer: true` must fail validation with a clear path (verified: issue at `modules.shared-types-consumer`, "expected record, received boolean"). `moduleConfigSchema = z.record(z.string(), z.unknown())` gives exactly this — do not loosen it to `z.unknown()` directly
+  - [x] Enforce the "config object, never bare boolean" invariant (review Finding 6): a `modules` entry like `shared-types-consumer: true` must fail validation with a clear path (verified: issue at `modules.shared-types-consumer`, "expected record, received boolean"). `moduleConfigSchema = z.record(z.string(), z.unknown())` gives exactly this — do not loosen it to `z.unknown()` directly
 
-- [ ] Task 5: Build the manifest loader (AC: 1, 2, 3, 4, 5)
-  - [ ] New file `src/adapters/driven/manifest/index.ts`; imports first
-  - [ ] `export async function loadManifest(repoPath: string): Promise<Result<Manifest>>` — implements the `ManifestPort.load` contract (Story 1.5's `list-repos`/`scan` will call this; no class wrapper needed, match the codebase's functional style)
-  - [ ] Logic, in order:
+- [x] Task 5: Build the manifest loader (AC: 1, 2, 3, 4, 5)
+  - [x] New file `src/adapters/driven/manifest/index.ts`; imports first
+  - [x] `export async function loadManifest(repoPath: string): Promise<Result<Manifest>>` — implements the `ManifestPort.load` contract (Story 1.5's `list-repos`/`scan` will call this; no class wrapper needed, match the codebase's functional style)
+  - [x] Logic, in order:
     1. `readFile(join(repoPath, '.tui-back.yaml'), 'utf8')` from `node:fs/promises`
        - `ENOENT` → `err('manifest-not-found', ...)` — **the unmanaged primitive**. This is what Story 1.5's "unmanaged dirs are silently skipped" keys off. No crash, no special-casing of repo names
        - Any other fs error (EACCES, EISDIR, …) → `err('manifest-read-error', ...)` including the fs error text
@@ -96,13 +96,13 @@ so that an unmanaged repo is never accidentally touched.
     3. `manifestSchema.safeParse(parsed)` — never `.parse()` (no throwing)
        - `!success` → `err('manifest-validation-failed', message, { issues })` where `message` **names the failing field(s)** (AC2) — e.g. `Invalid .tui-back.yaml: migrationCommand — Invalid input: expected string, received undefined`, built from `error.issues[0].path.join('.')` + `.message`, and `details.issues` carries the full list. Never a raw zod object or a generic crash escaping
        - `success` → `ok(parsed.data)` — `sharedBranch` is already `'development'`-defaulted (AC4); the object satisfies core's `Manifest` (AC1)
-  - [ ] All error codes kebab-case (Story 1.3 precedent, now in the Spine Consistency Conventions): `manifest-not-found`, `manifest-read-error`, `manifest-invalid-yaml`, `manifest-validation-failed`
-  - [ ] AC3 "no special-case code": nothing in this story (loader or core) may hardcode or branch on specific repo/service ids — "unmanaged" is purely the absence of `.tui-back.yaml` → `manifest-not-found`
-  - [ ] The loader never writes YAML — the tool only reads manifests; repo developers author them by hand
+  - [x] All error codes kebab-case (Story 1.3 precedent, now in the Spine Consistency Conventions): `manifest-not-found`, `manifest-read-error`, `manifest-invalid-yaml`, `manifest-validation-failed`
+  - [x] AC3 "no special-case code": nothing in this story (loader or core) may hardcode or branch on specific repo/service ids — "unmanaged" is purely the absence of `.tui-back.yaml` → `manifest-not-found`
+  - [x] The loader never writes YAML — the tool only reads manifests; repo developers author them by hand
 
-- [ ] Task 6: Integration tests, real temp dirs (AC: 1–5; AD-13: driven adapter vs real system)
-  - [ ] New file `src/adapters/driven/manifest/index.test.ts`; use `mkdtemp(join(tmpdir(), 'tui-back-manifest-'))`, write real `.tui-back.yaml` files with `node:fs/promises`, clean up in `afterEach`/`afterAll` (Story 1.2's temp-dir precedent). Do **not** mock `node:fs`
-  - [ ] Cover, with RED-first each time:
+- [x] Task 6: Integration tests, real temp dirs (AC: 1–5; AD-13: driven adapter vs real system)
+  - [x] New file `src/adapters/driven/manifest/index.test.ts`; use `mkdtemp(join(tmpdir(), 'tui-back-manifest-'))`, write real `.tui-back.yaml` files with `node:fs/promises`, clean up in `afterEach`/`afterAll` (Story 1.2's temp-dir precedent). Do **not** mock `node:fs`
+  - [x] Cover, with RED-first each time:
     - AC1: valid manifest → `ok`; `service`/`container`/`migrationCommand`/`sharedBranch`/`modules` all present with exact values
     - AC2: omit `migrationCommand` → `err('manifest-validation-failed')`, message names `migrationCommand`, `details.issues` present, **no throw**
     - AC3: empty dir (no `.tui-back.yaml`) → `err('manifest-not-found')`, no throw
@@ -113,22 +113,22 @@ so that an unmanaged repo is never accidentally touched.
     - Empty file (`''`) → `manifest-validation-failed` (verified: `parse('')` returns `null`; zod reports it cleanly), no crash
     - Explicit `sharedBranch: preprod` → preserved, NOT defaulted (default applies only when absent)
     - `repoPath` pointing at a plain file (or otherwise unreadable) → controlled error (`manifest-read-error` or an fs-derived error code), never a throw — this locks the `not-found` vs `read-error` distinction Story 1.5 depends on
-  - [ ] Pure error-path tests can additionally assert `loadManifest` returns a `Result` that is `ok:false` — i.e. `expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } })`
+  - [x] Pure error-path tests can additionally assert `loadManifest` returns a `Result` that is `ok:false` — i.e. `expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } })`
 
-- [ ] Task 7: Depcheck — new files scanned + AD-1 boundary still enforced (no AC — project-wide gates from Story 1.1)
-  - [ ] `npm run depcheck` — clean; confirm the module/dependency count grew by exactly the new files (`core/ports/manifest.ts`, `adapters/driven/manifest/schema.ts`, `adapters/driven/manifest/index.ts`)
-  - [ ] Round-trip (Stories 1.1/1.2/1.3 precedent): temporarily add a deliberate `core → adapters` import to `src/core/ports/manifest.ts` (e.g. `import '../adapters/driven/manifest/index.js'`), run depcheck, confirm it fails with `no-core-to-adapters`, remove it, re-run clean
-  - [ ] Imports-first in every new file (Story 1.3's depcheck/acorn landmine convention). Our files use zod's generic functions but don't *define* local generic-union helpers, so the landmine shouldn't trigger — the convention still must hold
+- [x] Task 7: Depcheck — new files scanned + AD-1 boundary still enforced (no AC — project-wide gates from Story 1.1)
+  - [x] `npm run depcheck` — clean; confirm the module/dependency count grew by exactly the new files (`core/ports/manifest.ts`, `adapters/driven/manifest/schema.ts`, `adapters/driven/manifest/index.ts`)
+  - [x] Round-trip (Stories 1.1/1.2/1.3 precedent): temporarily add a deliberate `core → adapters` import to `src/core/ports/manifest.ts` (e.g. `import '../adapters/driven/manifest/index.js'`), run depcheck, confirm it fails with `no-core-to-adapters`, remove it, re-run clean
+  - [x] Imports-first in every new file (Story 1.3's depcheck/acorn landmine convention). Our files use zod's generic functions but don't *define* local generic-union helpers, so the landmine shouldn't trigger — the convention still must hold
 
-- [ ] Task 8: Verify quality gates and finalize (no dedicated AC — project-wide gates)
-  - [ ] `npm run typecheck` — clean. This is the first story to import third-party types into `src/`; if zod/yaml types don't resolve under NodeNext, fix before proceeding (both ship ESM-compatible declarations; verified installable)
-  - [ ] `npm test` — all green, including the new manifest suite and all prior suites (no regressions)
-  - [ ] `npm run depcheck` — clean (final)
-  - [ ] Order: `npm test && npm run typecheck && npm run depcheck`
+- [x] Task 8: Verify quality gates and finalize (no dedicated AC — project-wide gates)
+  - [x] `npm run typecheck` — clean. This is the first story to import third-party types into `src/`; if zod/yaml types don't resolve under NodeNext, fix before proceeding (both ship ESM-compatible declarations; verified installable)
+  - [x] `npm test` — all green, including the new manifest suite and all prior suites (no regressions)
+  - [x] `npm run depcheck` — clean (final)
+  - [x] Order: `npm test && npm run typecheck && npm run depcheck`
 
-- [ ] Task 9: Commit atomically (no AC — repo convention from `CLAUDE.md`)
-  - [ ] Separate commits for: story docs + sprint-status (Task 1), deps (Task 2), core `ManifestPort` (Task 3), schema (Task 4), loader (Task 5), tests (Task 6), depcheck verification/deferred notes if any (Task 7) — each a Conventional Commit in English with `(story 1.4)` in the subject, body explaining *why*
-  - [ ] Do not merge into the epic branch — that happens only after code review, via `git merge --no-ff` (Story 1.3 precedent)
+- [x] Task 9: Commit atomically (no AC — repo convention from `CLAUDE.md`)
+  - [x] Separate commits for: story docs + sprint-status (Task 1), deps (Task 2), core `ManifestPort` (Task 3), schema (Task 4), loader (Task 5), tests (Task 6), depcheck verification/deferred notes if any (Task 7) — each a Conventional Commit in English with `(story 1.4)` in the subject, body explaining *why*
+  - [x] Do not merge into the epic branch — that happens only after code review, via `git merge --no-ff` (Story 1.3 precedent)
 
 ## Dev Notes
 
@@ -198,22 +198,36 @@ so that an unmanaged repo is never accidentally touched.
 
 ### Agent Model Used
 
-(dev agent fills in)
+deepseek-v4-flash-free (opencode) implementing via bmad-dev-story.
 
 ### Debug Log References
 
-(dev agent fills in)
+- depcheck AD-1 round-trip: injected `import '../adapters/driven/manifest/index.js'` into `src/core/ports/manifest.ts` → `no-core-to-adapters` (1 violation), removed → clean (43 modules, 44 dependencies).
+- First run of the Finding-6 bare-boolean test failed on an assertion that read `details` as the issues array directly; `details` wraps `{ issues: [...] }` — fixed in `index.test.ts` (cast to `{ issues: ... }`), all 9 manifest tests pass.
 
 ### Completion Notes List
 
-(dev agent fills in)
+- ✅ Added first runtime dependencies: `zod@4.4.3`, `yaml@2.9.0` pinned exact (no caret) in `package.json` `dependencies`, matching the Spine Stack table.
+- ✅ Defined core `Manifest` + `ManifestPort` in `src/core/ports/manifest.ts` (first file under `core/ports/`); `sharedBranch` non-optional on core type, default applied at load time (AC4); zero adapter imports (AD-1).
+- ✅ Built zod schema in `src/adapters/driven/manifest/schema.ts` enforcing required non-empty `service`/`container`/`migrationCommand`, optional-with-default `sharedBranch`, and the config-object (never bare boolean) `modules` invariant (Finding 6).
+- ✅ Built `loadManifest` in `src/adapters/driven/manifest/index.ts` with the four-code failure contract: `manifest-not-found` (unmanaged primitive, AC3), `manifest-read-error`, `manifest-invalid-yaml`, `manifest-validation-failed` naming the failing field (AC2); never throws.
+- ✅ 9 integration tests in `src/adapters/driven/manifest/index.test.ts` against real temp dirs covering AC1–AC5, Finding-6 invariant, invalid YAML, empty file, explicit sharedBranch preservation, and the not-found vs read-error distinction. RED-first confirmed on the bare-boolean path.
+- ✅ All gates green: `npm test` (46 tests), `npm run typecheck`, `npm run depcheck` (43 modules). AD-1 boundary round-trip re-verified.
+- ✅ 7 atomic conventional commits with `(story 1.4)` in subject; no merge into epic branch (reserved for post-review `--no-ff`).
 
 ### File List
 
-(dev agent fills in)
+- `package.json` — new `dependencies`: `yaml` 2.9.0, `zod` 4.4.3 (pinned exact).
+- `package-lock.json` — updated for the two new runtime deps.
+- `src/core/ports/manifest.ts` — NEW: `Manifest` type + `ManifestPort` interface.
+- `src/adapters/driven/manifest/schema.ts` — NEW: zod `manifestSchema` + `moduleConfigSchema`.
+- `src/adapters/driven/manifest/index.ts` — NEW: `loadManifest` (implements `ManifestPort.load`).
+- `src/adapters/driven/manifest/index.test.ts` — NEW: integration tests, real temp dirs.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — story 1.4 status ready-for-dev → in-progress → review.
 
 ## Change Log
 
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-08-12 | Created story 1.4 from epics.md ACs + AD-4/AD-5 + the AD-4 review finding (modules config-object invariant) + version-verification correction (yaml 2.9.0). Pre-verified zod@4.4.3/yaml@2.9.0 runtime behaviors in a sandbox so the schema/loader spec is exact. Status backlog → ready-for-dev. | create-story workflow |
+| 2026-08-12 | Implemented story 1.4: added zod@4.4.3 + yaml@2.9.0 deps, core Manifest/ManifestPort, zod schema, loadManifest loader, and 9 temp-dir integration tests. All gates green (test/typecheck/depcheck). Status ready-for-dev → in-progress → review. | dev-story |
