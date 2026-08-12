@@ -64,13 +64,13 @@ so that a script run by hand and the same action triggered from the TUI are prov
   - [x] This is **not** a new FR-mapped feature — no FR names a CLI self-check. It exists solely so this story has one real, shipped subcommand to prove the AD-2/AD-3 contract end-to-end (Task 7's black-box test needs a real subcommand to invoke as a child process; Story 1.5's `register`/`list-repos` is explicitly "the first real action demonstrating a Must-scope action's standalone, idempotent, shell-invocable nature" per epics.md — `ping` must not be confused with that). Keep it deliberately trivial: no I/O, no ports, nothing for later stories to depend on or migrate away from
   - [x] Pure — no `fs`/`process`/I/O of any kind, consistent with AD-1's `core/` constraint
 
-- [ ] Task 5: Build the CLI envelope renderer (AC: 2, 3)
-  - [ ] New file `src/adapters/driving/cli/envelope.ts`
-  - [ ] `export function renderResult(result: Result<unknown>, isTTY: boolean): { output: string; exitCode: 0 | 1 }`
-  - [ ] Non-TTY branch: `output` is `JSON.stringify(result) + '\n'` — exactly one line, no pretty-printing, no extra output before/after it. This is literally AD-3's envelope: `{"ok":true,"data":{...}}` or `{"ok":false,"error":{"code":"...","message":"...","details":{...}}}`
-  - [ ] TTY branch: human-readable text. Keep this intentionally simple and generic for this story — e.g. success: `JSON.stringify(result.data, null, 2)` (or `'OK\n'` if `data` is an empty object); failure: `` `Error: ${result.error.message} (code: ${result.error.code})\n` ``, plus a pretty-printed `details` block if present. A richer, per-command human format (e.g. a table for Story 1.5's `list-repos`) is an acceptable future refinement — don't over-build this now, and don't let per-command formatting leak into this shared function's contract
-  - [ ] `exitCode` is `0` when `result.ok`, `1` otherwise — nowhere else in this story computes an exit code (single source of truth for AC3's "no other exit code is ever used")
-  - [ ] Unit tests `src/adapters/driving/cli/envelope.test.ts`: non-TTY success → exact single-line JSON string, exit 0; non-TTY failure → exact single-line JSON string (including `details` when present, omitting the key when absent), exit 1; TTY success/failure → human-readable text (assert it's *not* raw JSON and *does* contain the message/data), correct exit codes
+- [x] Task 5: Build the CLI envelope renderer (AC: 2, 3)
+  - [x] New file `src/adapters/driving/cli/envelope.ts`
+  - [x] `export function renderResult(result: Result<unknown>, isTTY: boolean): { output: string; exitCode: 0 | 1 }`
+  - [x] Non-TTY branch: `output` is `JSON.stringify(result) + '\n'` — exactly one line, no pretty-printing, no extra output before/after it. This is literally AD-3's envelope: `{"ok":true,"data":{...}}` or `{"ok":false,"error":{"code":"...","message":"...","details":{...}}}`
+  - [x] TTY branch: human-readable text. Keep this intentionally simple and generic for this story — e.g. success: `JSON.stringify(result.data, null, 2)` (or `'OK\n'` if `data` is an empty object); failure: `` `Error: ${result.error.message} (code: ${result.error.code})\n` ``, plus a pretty-printed `details` block if present. A richer, per-command human format (e.g. a table for Story 1.5's `list-repos`) is an acceptable future refinement — don't over-build this now, and don't let per-command formatting leak into this shared function's contract
+  - [x] `exitCode` is `0` when `result.ok`, `1` otherwise — nowhere else in this story computes an exit code (single source of truth for AC3's "no other exit code is ever used")
+  - [x] Unit tests `src/adapters/driving/cli/envelope.test.ts`: non-TTY success → exact single-line JSON string, exit 0; non-TTY failure → exact single-line JSON string (including `details` when present, omitting the key when absent), exit 1; TTY success/failure → human-readable text (assert it's *not* raw JSON and *does* contain the message/data), correct exit codes
 
 - [ ] Task 6: Build the CLI subcommand dispatcher (AC: 2, 3, 4)
   - [ ] New file `src/adapters/driving/cli/dispatch.ts`
