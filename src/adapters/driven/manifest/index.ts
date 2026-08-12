@@ -32,11 +32,11 @@ export async function loadManifest(repoPath: string): Promise<Result<Manifest>> 
   const result = manifestSchema.safeParse(parsed);
   if (!result.success) {
     const first = result.error.issues[0];
-    const field = first ? first.path.join('.') : '<unknown>';
+    const field = first ? (first.path.length > 0 ? first.path.join('.') : '(root)') : '<unknown>';
     const reason = first ? first.message : 'unknown validation error';
     return err(
       'manifest-validation-failed',
-      `Invalid .tui-back.yaml: ${field} — ${reason}`,
+      `Invalid .tui-back.yaml in ${repoPath}: ${field} — ${reason}`,
       { issues: result.error.issues },
     );
   }

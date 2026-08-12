@@ -135,6 +135,7 @@ describe('loadManifest', () => {
       const issues = (result.error.details as { issues: { path: string[] }[] }).issues;
       expect(issues).toHaveLength(1);
       expect(issues[0].path.join('.')).toBe('modules.shared-types-consumer');
+      expect(result.error.message).toContain('modules.shared-types-consumer');
     }
   });
 
@@ -164,6 +165,121 @@ describe('loadManifest', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('manifest-read-error');
+    }
+  });
+
+  it('rejects unknown top-level keys (strict decision, 2026-08-12)', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'migrationCommand: migrate',
+        'shared_branch: preprod',
+        'modules: {}',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('shared_branch'),
+      },
+    });
+  });
+
+  it('reports a manifest missing the modules key as a validation failure', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+  });
+
+  it('rejects an empty sharedBranch instead of defaulting it', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'migrationCommand: migrate',
+        'sharedBranch: ""',
+        'modules: {}',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('sharedBranch'),
+      },
+    });
+  });
+
+  it('rejects whitespace-only required fields', async () => {
+    const repo = await tempRepo(
+      ['service: "   "', 'container: route-explorer', 'migrationCommand: migrate', 'modules: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('service'),
+      },
+    });
+  });
+
+  it('names the root for a non-object document, no blank field', async () => {
+    const repo = await tempRepo('- a\n- b\n');
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('(root)');
+    }
+  });
+
+  it('names a field when multiple required fields are missing', async () => {
+    const repo = await tempRepo('modules: {}\n');
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('service'),
+      },
+    });
+  });
+
+  it('rejects a non-object module config (array)', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'migrationCommand: migrate',
+        'modules:',
+        '  shared-types-consumer: [a, b]',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+    if (!result.ok) {
+      const issues = (result.error.details as { issues: { path: string[] }[] }).issues;
+      expect(issues[0].path.join('.')).toBe('modules.shared-types-consumer');
     }
   });
 });

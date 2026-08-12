@@ -4,7 +4,7 @@ baseline_commit: f7a4068a6fd2eddc8a07c40ea554548907063af9
 
 # Story 1.4: Manifest Schema, Loader & Validation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -231,3 +231,19 @@ deepseek-v4-flash-free (opencode) implementing via bmad-dev-story.
 | --- | --- | --- |
 | 2026-08-12 | Created story 1.4 from epics.md ACs + AD-4/AD-5 + the AD-4 review finding (modules config-object invariant) + version-verification correction (yaml 2.9.0). Pre-verified zod@4.4.3/yaml@2.9.0 runtime behaviors in a sandbox so the schema/loader spec is exact. Status backlog → ready-for-dev. | create-story workflow |
 | 2026-08-12 | Implemented story 1.4: added zod@4.4.3 + yaml@2.9.0 deps, core Manifest/ManifestPort, zod schema, loadManifest loader, and 9 temp-dir integration tests. All gates green (test/typecheck/depcheck). Status ready-for-dev → in-progress → review. | dev-story |
+
+### Review Findings
+
+- [x] [Review][Patch] Unknown manifest keys silently stripped by `z.object` (strip default) — a typo like `shared_branch: preprod` validates "successfully" and falls back to `development`, silently misconfiguring the tool. **Decision (2026-08-12): strict** — add `.strict()` to reject unknown keys [src/adapters/driven/manifest/schema.ts:8]
+- [x] [Review][Patch] `sharedBranch` accepts an empty string (no `.min(1)`, unlike the other three string fields) [src/adapters/driven/manifest/schema.ts:12]
+- [x] [Review][Patch] Whitespace-only values pass `min(1)` on `service`/`container`/`migrationCommand` — e.g. `service: "   "` validates; use `.trim().min(1)` [src/adapters/driven/manifest/schema.ts:9-11]
+- [x] [Review][Patch] Blank field name in the validation message for whole-document failures — `path: []` (empty file → `parse('')` → `null`; root array/scalar) renders `Invalid .tui-back.yaml:  — …`; the `<unknown>` fallback only guards an empty `issues` array, not an empty path [src/adapters/driven/manifest/index.ts:35]
+- [x] [Review][Patch] `manifest-validation-failed` message omits the file path while `manifest-read-error`/`manifest-invalid-yaml` include it — one failure mode is context-poor [src/adapters/driven/manifest/index.ts:37-41]
+- [x] [Review][Patch] Missing test coverage: `modules` key entirely absent, `sharedBranch: ""`, whitespace-only values, root-level array/scalar, multiple simultaneously missing fields, non-object module configs (null/array) [src/adapters/driven/manifest/index.test.ts]
+- [x] [Review][Patch] Finding-6 test asserts the issue path only via `details.issues`, never via the message — a regression to `path.at(-1)`/`path[0]` as the message's field source ships green with every test passing [src/adapters/driven/manifest/index.test.ts:117-139]
+- [x] [Review][Defer] No type-level link between the zod schema and core `Manifest` (no `satisfies`/`z.ZodType<Manifest>`) [src/adapters/driven/manifest/schema.ts] — deferred, pre-existing
+- [x] [Review][Defer] Bare `modules:` (YAML null) fails validation; only an explicit `modules: {}` expresses an empty map [src/adapters/driven/manifest/schema.ts:13] — deferred, pre-existing
+- [x] [Review][Defer] No example/sample `.tui-back.yaml` shipped, though repo developers author manifests by hand [—] — deferred, pre-existing
+- [x] [Review][Defer] `manifest-not-found` conflates "no manifest" with "repoPath doesn't exist" (both ENOENT) — Story 1.5's silent skip would also swallow mistyped paths [src/adapters/driven/manifest/index.ts:17] — deferred, pre-existing
+- [x] [Review][Defer] `repoPath` not validated — an empty/relative path resolves against the process CWD (`join`) [src/adapters/driven/manifest/index.ts:15] — deferred, pre-existing
+- [x] [Review][Defer] Read-error test not portable: Linux surfaces ENOTDIR (→ `manifest-read-error`), Windows typically ENOENT (→ `manifest-not-found`) — test would fail on non-Linux CI [src/adapters/driven/manifest/index.test.ts:157-168] — deferred, pre-existing

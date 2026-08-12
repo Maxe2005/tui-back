@@ -5,10 +5,12 @@ import { z } from 'zod';
 
 export const moduleConfigSchema = z.record(z.string(), z.unknown());
 
-export const manifestSchema = z.object({
-  service: z.string().min(1),
-  container: z.string().min(1),
-  migrationCommand: z.string().min(1),
-  sharedBranch: z.string().optional().default('development'),
-  modules: z.record(z.string(), moduleConfigSchema),
-});
+export const manifestSchema = z
+  .object({
+    service: z.string().trim().min(1),
+    container: z.string().trim().min(1),
+    migrationCommand: z.string().trim().min(1),
+    sharedBranch: z.string().min(1).optional().default('development'),
+    modules: z.record(z.string(), moduleConfigSchema),
+  })
+  .strict();
