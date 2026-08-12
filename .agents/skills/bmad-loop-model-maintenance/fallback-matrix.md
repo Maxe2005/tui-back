@@ -16,8 +16,8 @@ move to the next entry in that stage's chain.
 
 | Priority | Model | Status (verified 2026-08-12) |
 |---|---|---|
-| 1 (current) | `opencode/deepseek-v4-flash-free` | **Works.** Best available code model here (SWE ~79%, S+). Free Zen, fast, reliable. Risks: 200k ctx cap, "limited time" free period. |
-| 2 | `nvidia/nvidia/nemotron-3-super-120b-a12b` | **Works.** NVIDIA current-gen, 1M ctx. The stability fallback when the free Zen model goes away. |
+| 1 (current) | `nvidia/nvidia/nemotron-3-super-120b-a12b` | **Works.** NVIDIA current-gen, 1M ctx. Promoted to current 2026-08-12 after `deepseek-v4-flash-free` sustained 429 rate-limits during compaction stalled a run (11 failures / ~35 min). |
+| 2 | `opencode/deepseek-v4-flash-free` | **Works** at low volume, but **rate-limits (429) under heavy compaction** on the free Zen tier — 2026-08-12 it stalled a run in `dev-running`. Only fall back here for light/dev-adjacent work; probe before a long run. Risks: 200k ctx cap, "limited time" free period. |
 | 3 | `nvidia/minimaxai/minimax-m3` | **Works.** S+ agentic, 1M ctx. |
 | 4 | `nvidia/openai/gpt-oss-120b` | **Works.** OpenAI open-weights, solid coder. |
 
