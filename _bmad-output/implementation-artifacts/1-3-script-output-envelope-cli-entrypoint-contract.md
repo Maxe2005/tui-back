@@ -72,21 +72,21 @@ so that a script run by hand and the same action triggered from the TUI are prov
   - [x] `exitCode` is `0` when `result.ok`, `1` otherwise — nowhere else in this story computes an exit code (single source of truth for AC3's "no other exit code is ever used")
   - [x] Unit tests `src/adapters/driving/cli/envelope.test.ts`: non-TTY success → exact single-line JSON string, exit 0; non-TTY failure → exact single-line JSON string (including `details` when present, omitting the key when absent), exit 1; TTY success/failure → human-readable text (assert it's *not* raw JSON and *does* contain the message/data), correct exit codes
 
-- [ ] Task 6: Build the CLI subcommand dispatcher (AC: 2, 3, 4)
-  - [ ] New file `src/adapters/driving/cli/dispatch.ts`
-  - [ ] `export interface Subcommand { name: string; run: (args: string[]) => Promise<Result<unknown>>; }` — `run` is always async (even `ping`'s trivial body) so the dispatcher's type never has to special-case sync vs. async once real use-cases (git/docker/fs-backed, Story 1.4+) land
-  - [ ] `export async function runCli(argv: string[], subcommands: Subcommand[], isTTY: boolean): Promise<{ output: string; exitCode: 0 | 1 }>`
-    - [ ] `argv[0]` is the subcommand name, `argv.slice(1)` are its args
-    - [ ] Missing subcommand name (empty `argv`) and unknown subcommand name are the **same code path** — both produce `err('unknown-subcommand', ...)` listing the registered subcommand names, e.g. `` `Unknown subcommand: "${name}". Available: ${subcommands.map(s => s.name).join(', ')}` `` — routed through the *same* `renderResult()` from Task 5, not a separate ad-hoc "usage help" formatter. This keeps AC4 provably the same contract as every other subcommand outcome, per the story's own "one output contract" premise, rather than a second divergent output path
-    - [ ] A matched subcommand's `run(args)` is called inside a `try/catch`; any thrown error (a bug, not an expected failure) is caught and converted to `err('internal-error', String(error))` — **never let an exception escape uncaught**. An uncaught exception would let Node's default handler print a raw stack trace and bypass the envelope entirely, breaking AC2/AC3's guarantee that stdout is always either human text or a single JSON line and the exit code is always 0/1
-    - [ ] Whatever `Result` is produced (subcommand success/failure, unknown-subcommand, or caught exception) is passed through `renderResult(result, isTTY)` from Task 5 — one call site, no duplication
-  - [ ] Pure function — `argv`, `subcommands`, `isTTY` are all parameters, no direct `process.argv`/`process.stdout.isTTY` reads inside (same injectable-dependency pattern Story 1.2 used for `resolveXdgPaths`)
-  - [ ] Unit tests `src/adapters/driving/cli/dispatch.test.ts`, using small in-memory fake `Subcommand[]` fixtures (no real process spawn — that's Task 7's job):
-    - [ ] Known subcommand, success → `renderResult`'s non-TTY/TTY output for the returned `Result`, exit 0
-    - [ ] Known subcommand, its `run()` returns `err(...)` → failure envelope, exit 1
-    - [ ] Known subcommand, its `run()` throws → `internal-error` failure envelope, exit 1, no exception propagates out of `runCli`
-    - [ ] Unknown subcommand name → `unknown-subcommand` failure envelope (message lists the fake registry's names), exit 1
-    - [ ] Empty `argv` → same `unknown-subcommand` path, exit 1
+- [x] Task 6: Build the CLI subcommand dispatcher (AC: 2, 3, 4)
+  - [x] New file `src/adapters/driving/cli/dispatch.ts`
+  - [x] `export interface Subcommand { name: string; run: (args: string[]) => Promise<Result<unknown>>; }` — `run` is always async (even `ping`'s trivial body) so the dispatcher's type never has to special-case sync vs. async once real use-cases (git/docker/fs-backed, Story 1.4+) land
+  - [x] `export async function runCli(argv: string[], subcommands: Subcommand[], isTTY: boolean): Promise<{ output: string; exitCode: 0 | 1 }>`
+    - [x] `argv[0]` is the subcommand name, `argv.slice(1)` are its args
+    - [x] Missing subcommand name (empty `argv`) and unknown subcommand name are the **same code path** — both produce `err('unknown-subcommand', ...)` listing the registered subcommand names, e.g. `` `Unknown subcommand: "${name}". Available: ${subcommands.map(s => s.name).join(', ')}` `` — routed through the *same* `renderResult()` from Task 5, not a separate ad-hoc "usage help" formatter. This keeps AC4 provably the same contract as every other subcommand outcome, per the story's own "one output contract" premise, rather than a second divergent output path
+    - [x] A matched subcommand's `run(args)` is called inside a `try/catch`; any thrown error (a bug, not an expected failure) is caught and converted to `err('internal-error', String(error))` — **never let an exception escape uncaught**. An uncaught exception would let Node's default handler print a raw stack trace and bypass the envelope entirely, breaking AC2/AC3's guarantee that stdout is always either human text or a single JSON line and the exit code is always 0/1
+    - [x] Whatever `Result` is produced (subcommand success/failure, unknown-subcommand, or caught exception) is passed through `renderResult(result, isTTY)` from Task 5 — one call site, no duplication
+  - [x] Pure function — `argv`, `subcommands`, `isTTY` are all parameters, no direct `process.argv`/`process.stdout.isTTY` reads inside (same injectable-dependency pattern Story 1.2 used for `resolveXdgPaths`)
+  - [x] Unit tests `src/adapters/driving/cli/dispatch.test.ts`, using small in-memory fake `Subcommand[]` fixtures (no real process spawn — that's Task 7's job):
+    - [x] Known subcommand, success → `renderResult`'s non-TTY/TTY output for the returned `Result`, exit 0
+    - [x] Known subcommand, its `run()` returns `err(...)` → failure envelope, exit 1
+    - [x] Known subcommand, its `run()` throws → `internal-error` failure envelope, exit 1, no exception propagates out of `runCli`
+    - [x] Unknown subcommand name → `unknown-subcommand` failure envelope (message lists the fake registry's names), exit 1
+    - [x] Empty `argv` → same `unknown-subcommand` path, exit 1
 
 - [ ] Task 7: Wire the umbrella binary (AC: 3, 5)
   - [ ] Rewrite `src/bin/main.ts` as a thin composition root:
