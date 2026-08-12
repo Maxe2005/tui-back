@@ -4,7 +4,10 @@ import * as path from 'node:path';
 
 // node:fs's ESM namespace can't be spied on directly with vi.spyOn ("Module namespace is
 // not configurable in ESM"), so mock the module itself, keeping real behavior for every
-// export but wrapping the three fs calls this module cares about so we can assert on them.
+// export but wrapping the fs calls that would indicate a filesystem touch — both the writes
+// this module cares about and the reads it must also avoid — so we can assert on them.
+// Wrapping the read side too means a future edit that reaches for e.g. readFileSync/statSync
+// can't silently break resolveXdgPaths()'s "pure, side-effect-free" contract (AC4) unnoticed.
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
@@ -12,6 +15,10 @@ vi.mock('node:fs', async (importOriginal) => {
     mkdirSync: vi.fn(actual.mkdirSync),
     existsSync: vi.fn(actual.existsSync),
     writeFileSync: vi.fn(actual.writeFileSync),
+    readFileSync: vi.fn(actual.readFileSync),
+    statSync: vi.fn(actual.statSync),
+    accessSync: vi.fn(actual.accessSync),
+    readdirSync: vi.fn(actual.readdirSync),
   };
 });
 
@@ -101,6 +108,22 @@ describe('resolveXdgPaths', () => {
     expect(fs.mkdirSync).not.toHaveBeenCalled();
     expect(fs.existsSync).not.toHaveBeenCalled();
     expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(fs.statSync).not.toHaveBeenCalled();
+    expect(fs.accessSync).not.toHaveBeenCalled();
+    expect(fs.readdirSync).not.toHaveBeenCalled();
+  });
+
+  it('resolves configDir/dataDir/stateDir from their defaults when only XDG_CONFIG_HOME is overridden', () => {
+    const fakeHome = '/home/fake-user';
+    const fakeConfig = path.join(os.tmpdir(), 'only-config-override');
+
+    const result = resolveXdgPaths({ XDG_CONFIG_HOME: fakeConfig }, fakeHome);
+
+    expect(result.configDir).toBe(path.join(fakeConfig, 'tui-back'));
+    expect(result.dataDir).toBe(path.join(fakeHome, '.local', 'share', 'tui-back'));
+    expect(result.stateDir).toBe(path.join(fakeHome, '.local', 'state', 'tui-back'));
+    expect(result.cacheDir).toBe(path.join(fakeHome, '.cache', 'tui-back'));
   });
 });
 
