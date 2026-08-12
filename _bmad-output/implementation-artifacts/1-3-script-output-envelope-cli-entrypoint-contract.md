@@ -4,7 +4,7 @@ baseline_commit: cdcccff8b498eb1c28627f944d8053bd8698b533
 
 # Story 1.3: Script Output Envelope & CLI Entrypoint Contract
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -22,13 +22,13 @@ so that a script run by hand and the same action triggered from the TUI are prov
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Branch for this story (no AC — repo convention, `CLAUDE.md`)
-  - [ ] From `epic-1-foundation-navigation-shell`, create `story-1-3-script-output-envelope-cli-entrypoint-contract`
-  - [ ] Do all work for this story on that branch; do not commit directly to the epic branch
+- [x] Task 1: Branch for this story (no AC — repo convention, `CLAUDE.md`)
+  - [x] From `epic-1-foundation-navigation-shell`, create `story-1-3-script-output-envelope-cli-entrypoint-contract`
+  - [x] Do all work for this story on that branch; do not commit directly to the epic branch
 
-- [ ] Task 2: Define the core `Result` envelope type & helpers (AC: 1)
-  - [ ] New file `src/core/result.ts` (core root, sibling to `src/core/index.ts` — no `core/ports/` port is appropriate here: this is a cross-cutting shape every future use-case returns, not something a driven adapter implements)
-  - [ ] Export:
+- [x] Task 2: Define the core `Result` envelope type & helpers (AC: 1)
+  - [x] New file `src/core/result.ts` (core root, sibling to `src/core/index.ts` — no `core/ports/` port is appropriate here: this is a cross-cutting shape every future use-case returns, not something a driven adapter implements)
+  - [x] Export:
     ```ts
     export interface ResultError {
       code: string;
@@ -48,16 +48,16 @@ so that a script run by hand and the same action triggered from the TUI are prov
       return { ok: false, error: details === undefined ? { code, message } : { code, message, details } };
     }
     ```
-  - [ ] `error.code` values are kebab-case strings (e.g. `unknown-subcommand`, `internal-error`) — this story sets that precedent; every later use-case's error codes should follow it (no casing convention for error codes exists yet in the Architecture Spine's Consistency Conventions table)
-  - [ ] Naming: kebab-case file (`result.ts`), `PascalCase` types (`Result`, `ResultError`), `camelCase` functions (`ok`, `err`)
-  - [ ] Unit tests `src/core/result.test.ts`: `ok(data)` returns `{ok:true, data}`; `err(code, message)` returns `{ok:false, error:{code, message}}` with no `details` key present when omitted (not `details: undefined`); `err(code, message, details)` includes `details`
+  - [x] `error.code` values are kebab-case strings (e.g. `unknown-subcommand`, `internal-error`) — this story sets that precedent; every later use-case's error codes should follow it (no casing convention for error codes exists yet in the Architecture Spine's Consistency Conventions table)
+  - [x] Naming: kebab-case file (`result.ts`), `PascalCase` types (`Result`, `ResultError`), `camelCase` functions (`ok`, `err`)
+  - [x] Unit tests `src/core/result.test.ts`: `ok(data)` returns `{ok:true, data}`; `err(code, message)` returns `{ok:false, error:{code, message}}` with no `details` key present when omitted (not `details: undefined`); `err(code, message, details)` includes `details`
 
-- [ ] Task 3: Verify `depcheck` still correctly scans/enforces once this story's generic-union-type + generic-function TS syntax lands — **do this immediately after Task 2, before writing Tasks 4–6** (carries forward the open watch-item from `deferred-work.md`'s Story 1.1 entry: *"Track as soon as a future story adds real TS syntax to `core/` or `adapters/` — verify `depcheck` still catches boundary violations in that file before merging"* — this is that story, and `Result<T>`'s generic union type alias plus `ok<T>()`'s generic function are the first of their kind in this codebase)
-  - [ ] Reproduce and confirm (already verified once during this story's creation — re-verify against your actual files, don't skip): `npm run depcheck`'s module count includes `src/core/result.ts` after Task 2 (compare against the current clean-baseline count from `npm run depcheck`'s output, e.g. "14 modules, 11 dependencies cruised" before this story's files exist)
-  - [ ] **Known landmine, confirmed by direct reproduction:** a file containing a generic function whose return type references a locally-defined generic *union* type alias (e.g. `function ok<T>(data: T): Result<T> { return { ok: true, data }; }`, with `Result<T>` a union) **silently drops all of that file's own import statements from the dependency graph — but only when those imports are not the first statements in the file.** Confirmed: the same content with imports placed at the top of the file parses and is tracked correctly; interface-only, type-alias-only, or generic-function-only files (each alone) are also unaffected regardless of import position — it's specifically this combination. Root cause not identified beyond "acorn-fallback TS-stripping mis-tracks position on this exact combination"; not worth digging further given the mitigation is trivial.
-  - [ ] **Mitigation (mandatory for this story, and going forward): always place `import` statements at the very top of every `.ts` file, before any type/interface/function declaration.** This isn't a new rule — every existing file in this codebase already does this — but Task 4/5's dispatcher and renderer modules are exactly the shape that can trigger the landmine (generic-returning functions + imports) if that convention slips, so call it out explicitly rather than relying on habit alone
-  - [ ] After writing Tasks 4–6's real files, do one final check: temporarily add a deliberate `core → adapters` import to one of this story's new `core/` files, run `npm run depcheck`, confirm it fails with `no-core-to-adapters`, then remove it — the same round-trip verification Story 1.1/1.2 used, now specifically against a file containing this story's generic syntax
-  - [ ] Document the finding in `deferred-work.md` under a new dated entry (not blocking — the mitigation is "keep doing what every file already does" — but worth recording so a future story doesn't rediscover it the hard way)
+- [x] Task 3: Verify `depcheck` still correctly scans/enforces once this story's generic-union-type + generic-function TS syntax lands — **do this immediately after Task 2, before writing Tasks 4–6** (carries forward the open watch-item from `deferred-work.md`'s Story 1.1 entry: *"Track as soon as a future story adds real TS syntax to `core/` or `adapters/` — verify `depcheck` still catches boundary violations in that file before merging"* — this is that story, and `Result<T>`'s generic union type alias plus `ok<T>()`'s generic function are the first of their kind in this codebase)
+  - [x] Reproduce and confirm (already verified once during this story's creation — re-verify against your actual files, don't skip): `npm run depcheck`'s module count includes `src/core/result.ts` after Task 2 (compare against the current clean-baseline count from `npm run depcheck`'s output, e.g. "14 modules, 11 dependencies cruised" before this story's files exist)
+  - [x] **Known landmine, confirmed by direct reproduction:** a file containing a generic function whose return type references a locally-defined generic *union* type alias (e.g. `function ok<T>(data: T): Result<T> { return { ok: true, data }; }`, with `Result<T>` a union) **silently drops all of that file's own import statements from the dependency graph — but only when those imports are not the first statements in the file.** Confirmed: the same content with imports placed at the top of the file parses and is tracked correctly; interface-only, type-alias-only, or generic-function-only files (each alone) are also unaffected regardless of import position — it's specifically this combination. Root cause not identified beyond "acorn-fallback TS-stripping mis-tracks position on this exact combination"; not worth digging further given the mitigation is trivial.
+  - [x] **Mitigation (mandatory for this story, and going forward): always place `import` statements at the very top of every `.ts` file, before any type/interface/function declaration.** This isn't a new rule — every existing file in this codebase already does this — but Task 4/5's dispatcher and renderer modules are exactly the shape that can trigger the landmine (generic-returning functions + imports) if that convention slips, so call it out explicitly rather than relying on habit alone
+  - [x] After writing Tasks 4–6's real files, do one final check: temporarily add a deliberate `core → adapters` import to one of this story's new `core/` files, run `npm run depcheck`, confirm it fails with `no-core-to-adapters`, then remove it — the same round-trip verification Story 1.1/1.2 used, now specifically against a file containing this story's generic syntax
+  - [x] Document the finding in `deferred-work.md` under a new dated entry (not blocking — the mitigation is "keep doing what every file already does" — but worth recording so a future story doesn't rediscover it the hard way)
 
 - [ ] Task 4: Build a minimal proof-of-mechanism core use-case (AC: 1; needed to exercise AC 2–5 end-to-end)
   - [ ] New file `src/core/ping.ts`: `export async function ping(): Promise<Result<{ message: string }>> { return ok({ message: 'pong' }); }`

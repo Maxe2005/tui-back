@@ -51,7 +51,7 @@ development_status:
   epic-1: in-progress
   1-1-project-scaffolding-hexagonal-skeleton: done
   1-2-xdg-state-layout-resolution: done
-  1-3-script-output-envelope-cli-entrypoint-contract: ready-for-dev
+  1-3-script-output-envelope-cli-entrypoint-contract: in-progress
   1-4-manifest-schema-loader-validation: backlog
   1-5-explicit-repo-registry: backlog
   1-6-static-module-registry: backlog
