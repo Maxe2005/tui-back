@@ -2,9 +2,9 @@
 title: 'Explicit Repo Registry'
 type: 'feature'
 created: '2026-08-12'
-status: 'in-review'
-review_loop_iteration: 0
-followup_review_recommended: true
+status: 'done'
+review_loop_iteration: 1
+followup_review_recommended: false
 context: []
 warnings: [oversized]
 deferred: []
@@ -42,17 +42,25 @@ baseline_revision: '314d2bac3e453095cefa32fb80f3b2ef543fa58a'
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| register happy path | `register /abs/repo` | Path persisted to `registry.yaml` (configDir ensured); `ok`, exit 0 | No error expected |
+| register happy path | `register /abs/repo` | Path persisted to `registry.yaml` (configDir ensured), normalized; `ok({ path })`, exit 0 | No error expected |
 | register missing arg | `register` | `err('missing-argument')`, usage in message | exit 1 |
 | register relative path | `register ./repo` | `err('invalid-argument')` — registry stores only absolute paths | exit 1 |
 | register already-present path | register `/abs/repo` twice | Second call is a no-op success (deduped), registry unchanged — idempotent (FR-1) | No error expected |
-| list-repos mixed states | registry holds managed, unmanaged, and nonexistent paths | `data: { repos: ManagedRepo[], unreachable: string[], errors: RegistryEntryError[] }`; unmanaged silently omitted; exit 0 | No error expected |
+| register extra args | `register /a /b` | `err('invalid-argument')` — argument count validated | exit 1 |
+| register --reset on corrupt registry | `register --reset /abs/repo` against malformed/wrong-shaped `registry.yaml` | `ok({ path, backupPath })` — corrupt file backed up to `registry.yaml.bak-<ts>` (original content preserved), registry re-initialized with the path | exit 0 |
+| register --reset on healthy registry | `register --reset /abs/repo` against a valid `registry.yaml` | `err('registry-not-corrupt')` — a healthy registry is never touched | exit 1 |
+| register --reset on missing registry | `register --reset /abs/repo` with no `registry.yaml` | `ok({ path, backupPath: null })` — fresh registry written | exit 0 |
+| list-repos mixed states | registry holds managed, unmanaged, nonexistent, and file-typed paths | `data: { repos: ManagedRepo[], unreachable: string[], errors: RegistryEntryError[] }`; unmanaged silently omitted; a plain-file entry is `unreachable`, never unmanaged | exit 0 |
 | list-repos idempotency | `list-repos` twice, no intervening change | Byte-identical stdout | No error expected |
 | list-repos empty registry | no `registry.yaml` | `ok` with empty `repos`/`unreachable`/`errors`; exit 0 | No error expected |
-| list-repos corrupt registry | `registry.yaml` malformed YAML / wrong shape | `err('registry-invalid-yaml'|'registry-invalid-format')`, never a crash | exit 1 |
-| scan happy path | `scan /abs/root` with 2 manifest-carrying subdirs | `data: { candidates: string[] }` (absolute, sorted); registry unchanged — nothing registered | No error expected |
+| list-repos corrupt registry | `registry.yaml` malformed YAML / wrong shape / relative path | `err('registry-invalid-yaml'|'registry-invalid-format')`, never a crash | exit 1 |
+| list-repos unreadable registry file | non-ENOENT `readFile` failure | `err('registry-read-error')`, never a crash | exit 1 |
+| scan happy path | `scan /abs/root` with 2 manifest-carrying subdirs | `data: { candidates: string[], skipped: string[] }` (both absolute, sorted); registry unchanged — nothing registered | No error expected |
+| scan relative root | `scan ./root` | Root resolved against cwd; candidates absolute | exit 0 |
+| scan unreadable subtree | subtree without read permission inside root | Reported in `skipped` (root path), never silently dropped (AD-3) | exit 0 |
 | scan missing arg | `scan` | `err('missing-argument')`, usage in message | exit 1 |
 | scan nonexistent root | `scan /does/not/exist` | `err('scan-root-not-found')`, never a crash | exit 1 |
+| scan unreadable/non-ENOENT root stat | `scan /root` where `stat` fails non-ENOENT | `err('scan-root-error')`, never a crash | exit 1 |
 | scan with no candidates | `scan` over a manifest-less root | `ok` with empty `candidates`; exit 0 | No error expected |
 
 </intent-contract>
@@ -61,9 +69,9 @@ baseline_revision: '314d2bac3e453095cefa32fb80f3b2ef543fa58a'
 
 - `src/core/result.ts` -- `ok`/`err` envelope every use-case returns (AD-3). Do not reinvent.
 - `src/core/ports/manifest.ts` -- existing `Manifest` + `ManifestPort.load(repoPath)`. `listRepos` consumes this; do not change its shape.
-- `src/core/ports/registry.ts` -- NEW. `RegistryPort { list(): Promise<Result<string[]>>; add(path): Promise<Result<void>>; exists(path): Promise<Result<boolean>>; scan(root): Promise<Result<string[]>>; }`.
-- `src/core/scripts/register.ts`, `list-repos.ts`, `scan.ts` -- NEW use-cases (Spine tree `core/scripts/` = script/subcommand use-cases). Functional, injected ports.
-- `src/adapters/driven/registry/index.ts` + `schema.ts` + `index.test.ts` -- NEW driven adapter (Spine tree `driven/registry/` = managed-repo path registry). Persists/reads `registry.yaml`; `scanRoot` walks a root proposing candidate dirs.
+- `src/core/ports/registry.ts` -- NEW. `RegistryPort { list(): Promise<Result<string[]>>; add(path): Promise<Result<void>>; exists(path): Promise<Result<boolean>>; scan(root): Promise<Result<ScanResult>>; reset(path): Promise<Result<ResetResult>> }` where `ScanResult = { candidates, skipped }` and `ResetResult = { path, backupPath }`.
+- `src/core/scripts/register.ts`, `list-repos.ts`, `scan.ts`, `reset.ts` -- NEW use-cases (Spine tree `core/scripts/` = script/subcommand use-cases). Functional, injected ports. `reset.ts` backs the `register --reset` recovery path.
+- `src/adapters/driven/registry/index.ts` + `schema.ts` + `index.test.ts` -- NEW driven adapter (Spine tree `driven/registry/` = managed-repo path registry). Persists/reads `registry.yaml`; `scanRoot` walks a root proposing candidate dirs and reporting unreadable subtrees; `resetRegistry` backs up and re-initializes a corrupt file.
 - `src/adapters/driven/xdg/index.ts` -- `resolveXdgPaths()` (→ `configDir`) + `ensureXdgDir()`; registry file = `join(configDir, 'registry.yaml')`.
 - `src/adapters/driven/manifest/schema.ts` -- add a type-level `satisfies z.ZodType<Manifest>` assertion (closes deferred item "no type-level link between schema and core Manifest", now that Story 1.5 is a real consumer).
 - `src/adapters/driving/cli/subcommands.ts` -- NEW. `buildSubcommands(deps: { registry: RegistryPort; manifest: ManifestPort }): Subcommand[]` + `assertUniqueSubcommandNames(...)` (closes deferred item "no duplicate-subcommand-name guard in runCli" — 1.5 is the first story registering multiple subcommands).
@@ -80,9 +88,10 @@ baseline_revision: '314d2bac3e453095cefa32fb80f3b2ef543fa58a'
 - `src/adapters/driven/registry/index.ts` -- NEW driven adapter: `listRegistry(registryFile)`, `addRegistry(registryFile, path)` (dedupe + `ensureXdgDir` on configDir + write via yaml `stringify`), `registryPathExists(path)` (stat probe), `scanRoot(root)` (recursive walk, skip dot-dirs + `node_modules`, don't follow dir symlinks, sorted output). Missing file → empty list; malformed YAML/shape → kebab error codes (`registry-invalid-yaml`, `registry-invalid-format`).
 - `src/core/scripts/register.ts` -- `registerRepo(registry, path)`: missing arg → `missing-argument`; non-absolute → `invalid-argument`; else `registry.add(path)`.
 - `src/core/scripts/list-repos.ts` -- `listRepos(registry, manifest)`: for each registered path, `exists()` → false → `unreachable`; else `manifest.load()` → ok → `repos` (path, service, container, sharedBranch) | `manifest-not-found` → skip silently | other error → `errors`.
-- `src/core/scripts/scan.ts` -- `scanRepos(registry, root)`: missing arg → `missing-argument`; root probe failure → `scan-root-not-found`; else `registry.scan(root)` → `{ candidates }`.
+- `src/core/scripts/scan.ts` -- `scanRepos(registry, root)`: missing arg → `missing-argument`; else `registry.scan(root)` → `{ candidates, skipped }` (report unreadable subtrees).
+- `src/core/scripts/reset.ts` -- `resetRepo(registry, path)` (backs `register --reset`): missing arg → `missing-argument`; non-absolute → `invalid-argument`; else `registry.reset(path)` → `{ path, backupPath }`.
 - `src/adapters/driven/manifest/schema.ts` -- add `satisfies z.ZodType<Manifest>` to `manifestSchema` (typecheck-driven; if the exact generic form is rejected, annotate the const explicitly). Closes a deferred item.
-- `src/adapters/driving/cli/subcommands.ts` -- NEW `buildSubcommands` returning `register`, `list-repos`, `scan`, plus `ping`; `assertUniqueSubcommandNames` throws on duplicates.
+- `src/adapters/driving/cli/subcommands.ts` -- NEW `buildSubcommands` returning `register` (`--reset` flag routes to `resetRepo`), `list-repos`, `scan`, plus `ping`; wrappers validate argument cardinality; `assertUniqueSubcommandNames` throws on duplicates.
 - `src/bin/main.ts` -- construct `registryFile = resolveRegistryFile(resolveXdgPaths())`; build ports; wire subcommands; keep the existing `runCli`/exit-code handling untouched.
 - Tests -- `core/scripts/*.test.ts` (fake ports, unit); `src/adapters/driven/registry/index.test.ts` (real temp dirs, integration); `dispatch.test.ts` + `tui-back.e2e.test.ts` (black-box with temp `XDG_CONFIG_HOME`).
 - Gates -- `npm test && npm run typecheck && npm run depcheck`; AD-1 round-trip (inject a `core → adapters` import, confirm `no-core-to-adapters`, remove).
@@ -100,16 +109,44 @@ baseline_revision: '314d2bac3e453095cefa32fb80f3b2ef543fa58a'
 
 - 2026-08-12 — **Implementation deviation (documented, intent preserved):** the manifest-schema type-level link uses an explicit `z.ZodType<Manifest>` annotation instead of `.satisfies(z.ZodType<Manifest>)` — zod 4.4.3 ships no runtime `.satisfies()` method (`z.object(...).strict().satisfies` throws `TypeError: ... .satisfies is not a function`). The spec already anticipated this fallback ("if the exact generic form is rejected, annotate the const explicitly"). The type-level link intent is intact: a drift between `manifestSchema` and core `Manifest` fails typecheck in either direction. Behavior unchanged.
 - 2026-08-12 — **Implementation notes recorded:** `RegistryPort` has no barrel re-export (no `src/core/index.ts` consumer yet, per spec). `register` returns `ok({ path })` on success (informative AD-3 data, not specified by the matrix). `addRegistry` surfaces write failures as `registry-write-error`; `registryPathExists` stat failures as `registry-stat-error` — both kebab-case, surfaced via `listRepos`'s `errors` array. Both deferred-work items this story closes are reflected in the Code Map's changed files.
+- 2026-08-12 — **Code-review fixes (story 1.5, first pass):** `register` normalizes the stored path (`/a/b/` ≡ `/a/b`, dedupe); the registry schema rejects non-absolute paths (`registry-invalid-format`); `scan` returns `{ candidates, skipped }` — unreadable subtrees are reported, never silently dropped — and resolves a relative root against cwd; `registryPathExists` treats a plain file as unreachable, not unmanaged; `addRegistry`/`resetRegistry` wrap `ensureXdgDir` so a config-dir failure is `registry-write-error`, not `internal-error`; subcommand wrappers reject excess arguments with `invalid-argument`. New `register --reset <path>` recovery: `RegistryPort.reset` backs a corrupt `registry.yaml` up to `registry.yaml.bak-<ts>` (original content preserved), re-initializes with the path, and refuses a healthy registry with `registry-not-corrupt`. New error codes surfaced and documented: `registry-read-error`, `scan-root-error`, `registry-not-corrupt`.
 
 ## Review Triage Log
 
-_Empty until the first review pass._
+- 2026-08-12 — Review run (4 layers: Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor). 2 decisions, 7 patches + 2 decisions-patches applied; 9 deferred; 2 dismissed (1 transcription false-positive, 1 wiring-test gap covered black-box). Story status → `done`.
+
+## Review Findings
+
+### Review Findings
+
+- [x] [Review][Decision→Patch] **Scan contract for unreadable subtrees** — `walkForManifests` swallowed `readdir` failures (`catch { return; }`), silently dropping unreadable subtrees from `scan` candidates (ok, exit 0, no signal). **Resolved (D1b):** `scan` now returns `{ candidates, skipped }` — unreadable subtrees are reported in `skipped` (sorted), never silently dropped; adapter + core + e2e coverage added (EACCES test skipped when running as root).
+- [x] [Review][Decision→Patch] **`register` on a corrupt registry** — `addRegistry` refused (`registry-invalid-yaml`) on a malformed file, permanently blocking `register` with no recovery. **Resolved (D2c):** `register --reset <path>` — `RegistryPort.reset` backs up the corrupt file to `registry.yaml.bak-<ts>` (original content preserved), re-initializes with the path, and refuses a healthy registry with `registry-not-corrupt`.
+
+- [x] [Review][Patch] **`ensureXdgDir` throw escapes the Result envelope** — `mkdirSync` failure outside the `try` now returns `registry-write-error` via `ensureRegistryDir`.
+- [x] [Review][Patch] **Manifest probe counts symlink/dir `.tui-back.yaml`; `exists()` not directory-scoped** — `.tui-back.yaml` must be a regular file (`entry.isFile()`); a registered regular file is reported `unreachable`, never classified unmanaged (`isDirectory()` probe).
+- [x] [Review][Patch] **Registry dedupe is raw-string** — paths are canonicalized with `resolve` before dedupe/storage, so `/a/b` and `/a/b/` are one entry.
+- [x] [Review][Patch] **`scan` accepts a relative root** — root is resolved against cwd before walking; candidates are always absolute.
+- [x] [Review][Patch] **Registry schema accepts non-absolute paths** — `registrySchema` refines each entry with `isAbsolute`; a relative entry fails as `registry-invalid-format`.
+- [x] [Review][Patch] **New error codes missing from the I/O matrix/changelog** — `registry-read-error`, `scan-root-error`, `registry-not-corrupt` documented in the matrix + changelog.
+- [x] [Review][Patch] **Extra args silently ignored** — subcommand wrappers validate argument cardinality; excess args → `invalid-argument`.
+
+- [x] [Review][Defer] **Scan root-probe lives in the adapter, not the use-case** [`src/adapters/driven/registry/index.ts:97`] — spec task text placed it in core's `scan.ts`; behavior contract preserved and consistent with the port's "adapter owns the filesystem" design note. Deferred, documented design decision.
+- [x] [Review][Defer] **`assertUniqueSubcommandNames` throws outside `runCli`'s try/catch** [`src/bin/main.ts:19`] — only reachable via a programming error (duplicate name); fail-fast by design. Deferred, dev-time only.
+- [x] [Review][Defer] **`addRegistry` TOCTOU read-modify-write, no atomic write/locking** [`src/adapters/driven/registry/index.ts:64`] — concurrent `register` invocations can lose an entry. Deferred, Story 1.7 owns locking/atomicity (spec "Never": no locking).
+- [x] [Review][Defer] **No TTY/human-branch coverage for the three new subcommands** [`src/bin/tui-back.e2e.test.ts`] — e2e is non-TTY by design; no pty lib. Deferred; envelope human rendering is generic and already unit-tested.
+- [x] [Review][Defer] **`RegistryPort` has no unregister/remove** — dead paths accumulate forever. Deferred, out of scope (spec defines list/add/exists/scan/reset only).
+- [x] [Review][Defer] **Sequential per-repo stat+manifest loads; non-ENOENT OS-error branches untested** [`src/core/scripts/list-repos.ts`] — fine for small registries; EACCES branches hard to trigger portably. Deferred.
+- [x] [Review][Defer] **Unrelated `fallback-matrix.md` change rides on the story branch** — scope creep in the review; should be committed/reviewed separately from story 1.5.
+- [x] [Review][Defer] **`manifestSchema` widened to `z.ZodType<Manifest>` instead of the TS `satisfies` operator** [`src/adapters/driven/manifest/schema.ts`] — documented deviation (zod 4.4.3 has no runtime `.satisfies()`); type-level link intact in both directions. Deferred.
+- [x] [Review][Defer] **Recursive `walkForManifests` can overflow the call stack on pathologically deep trees** [`src/adapters/driven/registry/index.ts:118`] — unrealistic for repo trees (~10k+ depth). Deferred.
 
 ## Design Notes
 
 - **`exists()` lives on `RegistryPort`, not in the manifest loader.** Story 1.4's deferred-work flags that `manifest-not-found` conflates "no manifest" and "path doesn't exist". Rather than rewiring the loader's contract (pre-existing, out of scope), the driven registry adapter owns the filesystem probe — listRepos distinguishes unreachable (`!exists`) from unmanaged (`exists` but `manifest-not-found`) with no change to Story 1.4 code.
 - **Registry file shape:** `registry.yaml` is a strict `{ repos: string[] }` map (not a bare list) so future fields (e.g. per-path annotations) don't need a format migration. yaml 2.9.0 `parse`/`stringify` mirror the manifest adapter.
-- **Determinism:** `list-repos` preserves registry-file order; `scan` sorts candidates; both are prerequisites for the FR-1 idempotency AC and are cheap to assert in tests.
+- **Determinism:** `list-repos` preserves registry-file order; `scan` sorts candidates (and `skipped`); both are prerequisites for the FR-1 idempotency AC and are cheap to assert in tests.
+- **Scan reports, never hides:** an unreadable subtree inside the root lands in `skipped` — a partial scan is explicit (AD-3), and `scan` still resolves a relative root against cwd so candidates are always absolute and registerable.
+- **Reset is recovery, not silent clobbering:** `register --reset` targets only a corrupt `registry.yaml` — the corrupt file is copied to `registry.yaml.bak-<ts>` (original content preserved) before the registry is re-initialized with the given path, and a healthy registry is refused with `registry-not-corrupt`. AD-3's "never clobber" stays intact: plain `register` still refuses a corrupt file.
 - **Register is deliberately shallow:** AC1 only requires the path be added, so `register` does no manifest/existence validation of the target — a path may be registered before its repo exists (that's what `unreachable` reporting is for). Relative paths are rejected to keep stored paths unambiguous.
 - **`errors` array:** a registered path whose manifest fails validation/YAML/read is surfaced as an error entry, not silently dropped and not a crash — consistent with AD-3's "errors surface, never hide" spirit, while AC3's silent skip applies only to the genuinely unmanaged case.
 

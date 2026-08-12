@@ -10,7 +10,8 @@ function fakeRegistry(overrides: Partial<RegistryPort> = {}): RegistryPort {
     list: async () => ok([]),
     add: vi.fn(async () => ok(undefined)),
     exists: async () => ok(false),
-    scan: async () => ok([]),
+    scan: async () => ok({ candidates: [], skipped: [] }),
+    reset: async () => ok({ path: '/x', backupPath: null }),
     ...overrides,
   };
 }
@@ -41,6 +42,15 @@ describe('registerRepo', () => {
     const registry = fakeRegistry();
 
     const result = await registerRepo(registry, '/abs/repo');
+
+    expect(registry.add).toHaveBeenCalledWith('/abs/repo');
+    expect(result).toEqual({ ok: true, data: { path: '/abs/repo' } });
+  });
+
+  it('normalizes a trailing-slash path before storing (FR-1 dedupe)', async () => {
+    const registry = fakeRegistry();
+
+    const result = await registerRepo(registry, '/abs/repo/');
 
     expect(registry.add).toHaveBeenCalledWith('/abs/repo');
     expect(result).toEqual({ ok: true, data: { path: '/abs/repo' } });

@@ -2,8 +2,9 @@
 // into the managed-repo registry. Deliberately shallow: no manifest/existence check of
 // the target (a path may be registered before its repo exists; that's what list-repos'
 // unreachable reporting is for). Relative paths are rejected so stored paths stay
-// unambiguous. registry.add does the dedupe (FR-1 idempotency).
-import { isAbsolute } from 'node:path';
+// unambiguous; the path is canonicalized before storage so `/a/b/` and `/a/b` dedupe to one
+// entry. registry.add does the dedupe (FR-1 idempotency).
+import { isAbsolute, resolve } from 'node:path';
 import { err, ok, type Result } from '../result.js';
 import type { RegistryPort } from '../ports/registry.js';
 
@@ -18,9 +19,10 @@ export async function registerRepo(
     return err('invalid-argument', `Path must be absolute: ${path}`);
   }
 
-  const added = await registry.add(path);
+  const canonical = resolve(path);
+  const added = await registry.add(canonical);
   if (!added.ok) {
     return added;
   }
-  return ok({ path });
+  return ok({ path: canonical });
 }

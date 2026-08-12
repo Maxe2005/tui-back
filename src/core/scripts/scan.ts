@@ -1,12 +1,11 @@
 // core/scripts/scan: the scan use-case (AD-2) — propose candidate manifest-carrying
 // directories under a root. Proposes only, never auto-registers (AD-6); the driven
-// registry adapter owns the walk and the root-existence probe (scan-root-not-found).
+// registry adapter owns the walk, the root-existence probe (scan-root-not-found), and the
+// reporting of unreadable subtrees (`skipped`) so a partial scan is never silent.
 import { err, ok, type Result } from '../result.js';
-import type { RegistryPort } from '../ports/registry.js';
+import type { RegistryPort, ScanResult } from '../ports/registry.js';
 
-export interface ScanData {
-  candidates: string[];
-}
+export type ScanData = ScanResult;
 
 export async function scanRepos(
   registry: RegistryPort,
@@ -20,5 +19,5 @@ export async function scanRepos(
   if (!scanned.ok) {
     return scanned;
   }
-  return ok({ candidates: scanned.data });
+  return ok(scanned.data);
 }

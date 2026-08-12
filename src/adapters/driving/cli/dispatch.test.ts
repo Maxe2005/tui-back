@@ -114,7 +114,8 @@ describe('subcommand registry guards', () => {
       list: async () => ok([]),
       add: async () => ok(undefined),
       exists: async () => ok(false),
-      scan: async () => ok([]),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: '/p', backupPath: null }),
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
 
@@ -122,5 +123,59 @@ describe('subcommand registry guards', () => {
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual(['register', 'list-repos', 'scan', 'ping']);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
+  });
+
+  it('register --reset routes to the reset use-case, rejecting extra arguments', async () => {
+    const reset = vi.fn(async () => ok({ path: '/p', backupPath: '/c/registry.yaml.bak-1' }));
+    const registry: RegistryPort = {
+      list: async () => ok([]),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset,
+    };
+    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
+
+    const subcommands = buildSubcommands({ registry, manifest });
+    const register = subcommands.find((subcommand) => subcommand.name === 'register');
+    if (!register) throw new Error('expected register subcommand');
+
+    const recovered = await register.run(['--reset', '/p']);
+    expect(recovered).toEqual({
+      ok: true,
+      data: { path: '/p', backupPath: '/c/registry.yaml.bak-1' },
+    });
+    expect(reset).toHaveBeenCalledWith('/p');
+
+    const extra = await register.run(['--reset', '/p', '/extra']);
+    expect(extra).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const extraArg = await register.run(['/p', '/q']);
+    expect(extraArg).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('list-repos, scan, and ping reject excess arguments with invalid-argument', async () => {
+    const registry: RegistryPort = {
+      list: async () => ok([]),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: '/p', backupPath: null }),
+    };
+    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
+
+    const subcommands = buildSubcommands({ registry, manifest });
+
+    const excessArgs: Record<string, string[]> = {
+      'list-repos': ['extra'],
+      scan: ['a', 'b'],
+      ping: ['extra'],
+    };
+    for (const [name, args] of Object.entries(excessArgs)) {
+      const subcommand = subcommands.find((candidate) => candidate.name === name);
+      if (!subcommand) throw new Error(`expected subcommand ${name}`);
+      const result = await subcommand.run(args);
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
   });
 });

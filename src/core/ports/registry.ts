@@ -8,5 +8,16 @@ export interface RegistryPort {
   list(): Promise<Result<string[]>>;
   add(path: string): Promise<Result<void>>;
   exists(path: string): Promise<Result<boolean>>;
-  scan(root: string): Promise<Result<string[]>>;
+  scan(root: string): Promise<Result<ScanResult>>;
+  reset(path: string): Promise<Result<ResetResult>>;
+}
+
+export interface ScanResult {
+  candidates: string[];
+  skipped: string[];
+}
+
+export interface ResetResult {
+  path: string;
+  backupPath: string | null;
 }
