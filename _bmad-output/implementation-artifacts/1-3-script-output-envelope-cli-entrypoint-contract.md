@@ -59,10 +59,10 @@ so that a script run by hand and the same action triggered from the TUI are prov
   - [x] After writing Tasks 4–6's real files, do one final check: temporarily add a deliberate `core → adapters` import to one of this story's new `core/` files, run `npm run depcheck`, confirm it fails with `no-core-to-adapters`, then remove it — the same round-trip verification Story 1.1/1.2 used, now specifically against a file containing this story's generic syntax
   - [x] Document the finding in `deferred-work.md` under a new dated entry (not blocking — the mitigation is "keep doing what every file already does" — but worth recording so a future story doesn't rediscover it the hard way)
 
-- [ ] Task 4: Build a minimal proof-of-mechanism core use-case (AC: 1; needed to exercise AC 2–5 end-to-end)
-  - [ ] New file `src/core/ping.ts`: `export async function ping(): Promise<Result<{ message: string }>> { return ok({ message: 'pong' }); }`
-  - [ ] This is **not** a new FR-mapped feature — no FR names a CLI self-check. It exists solely so this story has one real, shipped subcommand to prove the AD-2/AD-3 contract end-to-end (Task 7's black-box test needs a real subcommand to invoke as a child process; Story 1.5's `register`/`list-repos` is explicitly "the first real action demonstrating a Must-scope action's standalone, idempotent, shell-invocable nature" per epics.md — `ping` must not be confused with that). Keep it deliberately trivial: no I/O, no ports, nothing for later stories to depend on or migrate away from
-  - [ ] Pure — no `fs`/`process`/I/O of any kind, consistent with AD-1's `core/` constraint
+- [x] Task 4: Build a minimal proof-of-mechanism core use-case (AC: 1; needed to exercise AC 2–5 end-to-end)
+  - [x] New file `src/core/ping.ts`: `export async function ping(): Promise<Result<{ message: string }>> { return ok({ message: 'pong' }); }`
+  - [x] This is **not** a new FR-mapped feature — no FR names a CLI self-check. It exists solely so this story has one real, shipped subcommand to prove the AD-2/AD-3 contract end-to-end (Task 7's black-box test needs a real subcommand to invoke as a child process; Story 1.5's `register`/`list-repos` is explicitly "the first real action demonstrating a Must-scope action's standalone, idempotent, shell-invocable nature" per epics.md — `ping` must not be confused with that). Keep it deliberately trivial: no I/O, no ports, nothing for later stories to depend on or migrate away from
+  - [x] Pure — no `fs`/`process`/I/O of any kind, consistent with AD-1's `core/` constraint
 
 - [ ] Task 5: Build the CLI envelope renderer (AC: 2, 3)
   - [ ] New file `src/adapters/driving/cli/envelope.ts`
