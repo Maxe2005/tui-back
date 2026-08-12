@@ -86,3 +86,62 @@ describe('.dependency-cruiser.cjs no-core-to-adapters rule', () => {
     expect(result.summary.violations).toEqual([]);
   });
 });
+
+// Regression test for the acorn-fallback landmine found during dev of story-1-3 (see
+// deferred-work.md, "Investigated during dev of story-1-3..."): a file containing a generic
+// function whose return type references a locally-defined generic *union* type alias (this
+// codebase's `Result<T>`/`ok<T>()` shape, first introduced by `src/core/result.ts`) silently
+// drops all of that file's own `import` statements from dependency-cruiser's dependency graph
+// — but only when those imports are not the first statements in the file. This codebase's
+// "imports always go first" convention avoids it; these tests lock in that current behavior
+// so a future dependency-cruiser/TypeScript upgrade that silently changes it (in either
+// direction) doesn't go unnoticed.
+describe('.dependency-cruiser.cjs vs. the generic-function-returning-generic-union-type landmine', () => {
+  let fixtureRoot: string;
+
+  afterEach(() => {
+    if (fixtureRoot) {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  const genericResultShape = `export interface ResultError { code: string; message: string; }
+export type Result<T> = { ok: true; data: T } | { ok: false; error: ResultError };
+export function ok<T>(data: T): Result<T> { return { ok: true, data }; }
+`;
+
+  it('still catches a core -> adapters violation when imports are placed first (this codebase\'s convention)', async () => {
+    fixtureRoot = makeFixture();
+    writeFileSync(join(fixtureRoot, 'src', 'adapters', 'thing.ts'), 'export const thing = 1;\n');
+    writeFileSync(
+      join(fixtureRoot, 'src', 'core', 'violator.ts'),
+      `import { thing } from '../adapters/thing.js';\n\n${genericResultShape}export const x = thing;\n`,
+    );
+
+    const result = await cruiseFixture(fixtureRoot);
+
+    expect(result.summary.violations).toEqual([
+      expect.objectContaining({
+        from: 'src/core/violator.ts',
+        to: '../adapters/thing.js',
+        rule: expect.objectContaining({ name: 'no-core-to-adapters' }),
+      }),
+    ]);
+  });
+
+  it('documents the known gap: misses the same violation when the import trails the generic declarations', async () => {
+    fixtureRoot = makeFixture();
+    writeFileSync(join(fixtureRoot, 'src', 'adapters', 'thing.ts'), 'export const thing = 1;\n');
+    writeFileSync(
+      join(fixtureRoot, 'src', 'core', 'violator.ts'),
+      `${genericResultShape}import { thing } from '../adapters/thing.js';\nexport const x = thing;\n`,
+    );
+
+    const result = await cruiseFixture(fixtureRoot);
+
+    // If this ever starts finding the violation, dependency-cruiser/acorn-fallback has fixed
+    // the landmine upstream — the "imports first" mitigation can be relaxed, and this test
+    // (plus the deferred-work.md entry) should be updated to reflect that.
+    expect(result.summary.violations).toEqual([]);
+  });
+});

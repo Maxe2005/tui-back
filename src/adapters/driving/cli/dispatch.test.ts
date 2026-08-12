@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
 import { runCli, type Subcommand } from './dispatch.js';
 
@@ -59,6 +59,30 @@ describe('runCli', () => {
 
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('unknown-subcommand');
+    expect(exitCode).toBe(1);
+  });
+
+  it('logs a thrown error to stderr instead of discarding it', async () => {
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runCli(['throws'], fakeSubcommands, false);
+
+      expect(stderr).toHaveBeenCalledWith(new Error('boom'));
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it('converts a rendering failure into an internal-error envelope instead of letting it escape', async () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const unrenderable: Subcommand[] = [{ name: 'unrenderable', run: async () => ok(circular) }];
+
+    const { output, exitCode } = await runCli(['unrenderable'], unrenderable, false);
+    const parsed = JSON.parse(output);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('internal-error');
     expect(exitCode).toBe(1);
   });
 });

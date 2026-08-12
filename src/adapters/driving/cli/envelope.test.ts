@@ -50,4 +50,22 @@ describe('renderResult — TTY (human-readable text)', () => {
     expect(output).toContain('boom');
     expect(output).toContain('fixture');
   });
+
+  it('renders a primitive success payload instead of discarding it as OK', () => {
+    expect(renderResult(ok('pong'), true).output).toBe('"pong"\n');
+    expect(renderResult(ok(42), true).output).toBe('42\n');
+    expect(renderResult(ok(false), true).output).toBe('false\n');
+  });
+
+  it('renders a non-empty array success payload instead of discarding it as OK', () => {
+    const { output } = renderResult(ok(['a', 'b']), true);
+
+    expect(output).toBe('[\n  "a",\n  "b"\n]\n');
+  });
+
+  it('still renders OK for a genuinely empty object payload', () => {
+    const { output } = renderResult(ok({}), true);
+
+    expect(output).toBe('OK\n');
+  });
 });
