@@ -4,7 +4,7 @@ baseline_commit: b47baa8638c26f30341bc2e79f45f602e66f3cdd
 
 # Story 1.2: XDG State Layout Resolution
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -33,39 +33,39 @@ so that they never collide with a bespoke directory layout.
   - [x] If still broken: pick a pragmatic path and document the choice in Dev Notes — e.g. keep this module's public type as a plain interface but confirm acorn actually parses `interface` declarations (it may; acorn chokes on `type` aliases/generics/enums more reliably than on `interface`), or restructure to avoid the syntax acorn can't handle. Do not silently ship a `depcheck` that has stopped scanning files — if no clean fix exists, log a fresh, explicit deferred-work/review item stating exactly what `depcheck` can and cannot catch after this story
   - [x] This is a blocking investigation, not optional polish — a `depcheck` that silently stops working defeats AC5 of Story 1.1 for every story from here on
 
-- [ ] Task 3: Implement pure XDG path resolution (AC: 1, 2)
-  - [ ] New file `src/adapters/driven/xdg/index.ts` — lives in `adapters/driven/`, **not** `core/`: the architecture's `core/` tree entry explicitly requires "zero import of ... fs" (AD-1), and resolving `os.homedir()`/`process.env` plus the directory-creation in Task 4 are adapter-layer infrastructure, not a core concern. No `core/ports/` port is required for this story — nothing in `core/` consumes these paths yet
-  - [ ] Export a `resolveXdgPaths()` function returning `{ configDir, dataDir, stateDir, cacheDir }` (all absolute paths, each namespaced under `tui-back`, e.g. `$XDG_CONFIG_HOME/tui-back`)
-  - [ ] Make it a **pure, side-effect-free** function: no `fs` calls, only `node:path`/`node:os`/`node:process`. Accept `env: NodeJS.ProcessEnv = process.env` and `homedir: string = os.homedir()` as optional parameters — this is what makes it testable without mutating real `process.env` or the real `$HOME` (matches AD-13's "no real ... touching real state" testing posture for adapters)
-  - [ ] Env-var handling, per the XDG Base Directory Specification v0.8 (not spelled out in epics.md's ACs, but required for correct behavior and likely to be review-flagged if skipped): treat an XDG env var as "not set" — i.e. fall through to the default — when it is unset, empty, **or not an absolute path** (the spec: "If an implementation encounters a relative path in any of these variables, it should consider the path invalid and ignore it")
-  - [ ] Defaults (used whenever the corresponding env var is absent/empty/relative): `XDG_CONFIG_HOME` → `<home>/.config`, `XDG_DATA_HOME` → `<home>/.local/share`, `XDG_STATE_HOME` → `<home>/.local/state`, `XDG_CACHE_HOME` → `<home>/.cache` (this last default isn't stated in the epics AC2 text — it's a decision made in this story, sourced from the spec, since AC2 only enumerates config/data/state; see References)
-  - [ ] Naming: kebab-case file/dir (`xdg/index.ts`), `PascalCase` for the returned-shape type (e.g. `XdgPaths`), `camelCase` for the function (`resolveXdgPaths`)
+- [x] Task 3: Implement pure XDG path resolution (AC: 1, 2)
+  - [x] New file `src/adapters/driven/xdg/index.ts` — lives in `adapters/driven/`, **not** `core/`: the architecture's `core/` tree entry explicitly requires "zero import of ... fs" (AD-1), and resolving `os.homedir()`/`process.env` plus the directory-creation in Task 4 are adapter-layer infrastructure, not a core concern. No `core/ports/` port is required for this story — nothing in `core/` consumes these paths yet
+  - [x] Export a `resolveXdgPaths()` function returning `{ configDir, dataDir, stateDir, cacheDir }` (all absolute paths, each namespaced under `tui-back`, e.g. `$XDG_CONFIG_HOME/tui-back`)
+  - [x] Make it a **pure, side-effect-free** function: no `fs` calls, only `node:path`/`node:os`/`node:process`. Accept `env: NodeJS.ProcessEnv = process.env` and `homedir: string = os.homedir()` as optional parameters — this is what makes it testable without mutating real `process.env` or the real `$HOME` (matches AD-13's "no real ... touching real state" testing posture for adapters)
+  - [x] Env-var handling, per the XDG Base Directory Specification v0.8 (not spelled out in epics.md's ACs, but required for correct behavior and likely to be review-flagged if skipped): treat an XDG env var as "not set" — i.e. fall through to the default — when it is unset, empty, **or not an absolute path** (the spec: "If an implementation encounters a relative path in any of these variables, it should consider the path invalid and ignore it")
+  - [x] Defaults (used whenever the corresponding env var is absent/empty/relative): `XDG_CONFIG_HOME` → `<home>/.config`, `XDG_DATA_HOME` → `<home>/.local/share`, `XDG_STATE_HOME` → `<home>/.local/state`, `XDG_CACHE_HOME` → `<home>/.cache` (this last default isn't stated in the epics AC2 text — it's a decision made in this story, sourced from the spec, since AC2 only enumerates config/data/state; see References)
+  - [x] Naming: kebab-case file/dir (`xdg/index.ts`), `PascalCase` for the returned-shape type (e.g. `XdgPaths`), `camelCase` for the function (`resolveXdgPaths`)
 
-- [ ] Task 4: Implement on-demand directory creation (AC: 3)
-  - [ ] Export `ensureXdgDir(dirPath: string): void` from the same module — creates the directory (and any missing parents) if it doesn't exist yet, using `fs.mkdirSync(dirPath, { recursive: true })`. `recursive: true` already no-ops safely if the directory exists, so no separate existence check is needed
-  - [ ] This function is deliberately **not** called automatically by `resolveXdgPaths()` — AC3 says creation happens "when a component needs to create a file", i.e. on demand by whichever future adapter (persistence, registry, manifest — Stories 1.4/1.5+) is about to write. This story only has to prove the primitive works; it has no file-writing consumer yet
-  - [ ] Do not call `ensureXdgDir` anywhere for the cache directory in this story (see Task 5 / AC4)
+- [x] Task 4: Implement on-demand directory creation (AC: 3)
+  - [x] Export `ensureXdgDir(dirPath: string): void` from the same module — creates the directory (and any missing parents) if it doesn't exist yet, using `fs.mkdirSync(dirPath, { recursive: true })`. `recursive: true` already no-ops safely if the directory exists, so no separate existence check is needed
+  - [x] This function is deliberately **not** called automatically by `resolveXdgPaths()` — AC3 says creation happens "when a component needs to create a file", i.e. on demand by whichever future adapter (persistence, registry, manifest — Stories 1.4/1.5+) is about to write. This story only has to prove the primitive works; it has no file-writing consumer yet
+  - [x] Do not call `ensureXdgDir` anywhere for the cache directory in this story (see Task 5 / AC4)
 
-- [ ] Task 5: Prove AC4's "resolvable but untouched" cache path (AC: 4)
-  - [ ] No dedicated cache-writing code exists anywhere in this story (matches the architecture doc's own Deferred note: `XDG_CACHE_HOME` is "left unused until one emerges") — the only obligation is that `resolveXdgPaths().cacheDir` returns a correct path and that nothing in this module's code path touches the filesystem for it
-  - [ ] Cover this with a test (see Task 6) that spies/mocks `fs.mkdirSync`/`fs.existsSync` around a `resolveXdgPaths()` call and asserts zero filesystem calls — demonstrating the resolution stays pure and cache is never eagerly created
+- [x] Task 5: Prove AC4's "resolvable but untouched" cache path (AC: 4)
+  - [x] No dedicated cache-writing code exists anywhere in this story (matches the architecture doc's own Deferred note: `XDG_CACHE_HOME` is "left unused until one emerges") — the only obligation is that `resolveXdgPaths().cacheDir` returns a correct path and that nothing in this module's code path touches the filesystem for it
+  - [x] Cover this with a test (see Task 6) that spies/mocks `fs.mkdirSync`/`fs.existsSync` around a `resolveXdgPaths()` call and asserts zero filesystem calls — demonstrating the resolution stays pure and cache is never eagerly created
 
-- [ ] Task 6: Unit tests (AC: 1, 2, 3, 4)
-  - [ ] New file `src/adapters/driven/xdg/index.test.ts`, colocated per project convention, Vitest (`describe`/`it`/`expect`)
-  - [ ] AC1: call `resolveXdgPaths()` with an injected `env` object where `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME` are set to distinct fake absolute paths (e.g. under `os.tmpdir()`) — assert each returned dir equals `<fake>/tui-back`
-  - [ ] AC2: call with an `env` object where those three vars are absent, and an injected fake `homedir` — assert the returned dirs equal `<fake-home>/.config/tui-back`, `<fake-home>/.local/share/tui-back`, `<fake-home>/.local/state/tui-back`
-  - [ ] Edge cases (spec compliance, not literal in the epics ACs but required — see Task 3): env var set to `''` → falls back to default; env var set to a relative path (e.g. `foo/bar`) → falls back to default
-  - [ ] AC3: call `ensureXdgDir()` against a path under a fresh unique temp directory (`fs.mkdtempSync(path.join(os.tmpdir(), ...))`) that does not exist yet — assert `fs.existsSync(dir)` is true afterward; call it a second time on the same path — assert it does not throw (idempotent); clean up the temp dir after each test
-  - [ ] AC4: per Task 5, assert `resolveXdgPaths()` performs zero `fs` calls (mock/spy `node:fs`'s `mkdirSync`/`existsSync`/`writeFileSync` and assert none were invoked) while still returning a `cacheDir` value that follows the same `<base>/tui-back` shape as the other three
+- [x] Task 6: Unit tests (AC: 1, 2, 3, 4)
+  - [x] New file `src/adapters/driven/xdg/index.test.ts`, colocated per project convention, Vitest (`describe`/`it`/`expect`)
+  - [x] AC1: call `resolveXdgPaths()` with an injected `env` object where `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME` are set to distinct fake absolute paths (e.g. under `os.tmpdir()`) — assert each returned dir equals `<fake>/tui-back`
+  - [x] AC2: call with an `env` object where those three vars are absent, and an injected fake `homedir` — assert the returned dirs equal `<fake-home>/.config/tui-back`, `<fake-home>/.local/share/tui-back`, `<fake-home>/.local/state/tui-back`
+  - [x] Edge cases (spec compliance, not literal in the epics ACs but required — see Task 3): env var set to `''` → falls back to default; env var set to a relative path (e.g. `foo/bar`) → falls back to default
+  - [x] AC3: call `ensureXdgDir()` against a path under a fresh unique temp directory (`fs.mkdtempSync(path.join(os.tmpdir(), ...))`) that does not exist yet — assert `fs.existsSync(dir)` is true afterward; call it a second time on the same path — assert it does not throw (idempotent); clean up the temp dir after each test
+  - [x] AC4: per Task 5, assert `resolveXdgPaths()` performs zero `fs` calls (mock/spy `node:fs`'s `mkdirSync`/`existsSync`/`writeFileSync` and assert none were invoked) while still returning a `cacheDir` value that follows the same `<base>/tui-back` shape as the other three
 
-- [ ] Task 7: Verify quality gates and finalize (no dedicated AC — project-wide gates from Story 1.1)
-  - [ ] `npm run typecheck` — clean
-  - [ ] `npm run depcheck` — clean, and re-confirm (per Task 2's investigation) that it is actually scanning the new file, not silently skipping it
-  - [ ] `npm test` — all green, including the new suite
-  - [ ] Optional, not required by any AC: re-export the new module from `src/adapters/driven/index.ts`'s barrel for discoverability by later stories — skip if it adds noise without a consumer yet
+- [x] Task 7: Verify quality gates and finalize (no dedicated AC — project-wide gates from Story 1.1)
+  - [x] `npm run typecheck` — clean
+  - [x] `npm run depcheck` — clean, and re-confirm (per Task 2's investigation) that it is actually scanning the new file, not silently skipping it
+  - [x] `npm test` — all green, including the new suite
+  - [x] Optional, not required by any AC: re-export the new module from `src/adapters/driven/index.ts`'s barrel for discoverability by later stories — skip if it adds noise without a consumer yet (decision: **skipped** — no consumer exists yet, matches the task's own guidance)
 
-- [ ] Task 8: Commit atomically (no AC — repo convention from `CLAUDE.md`)
-  - [ ] Separate commits for: the Story 1.1 branch/merge housekeeping (Task 1, if not already done in a prior session), the dependency-cruiser/TS7 investigation outcome if it required a config or code change (Task 2), the path-resolution implementation (Tasks 3–5), and the test suite (Task 6) — each a Conventional Commit in English with `(story 1.2)` in the subject, body explaining *why*
+- [x] Task 8: Commit atomically (no AC — repo convention from `CLAUDE.md`)
+  - [x] Separate commits for: the Story 1.1 branch/merge housekeeping (Task 1, if not already done in a prior session), the dependency-cruiser/TS7 investigation outcome if it required a config or code change (Task 2), the path-resolution implementation (Tasks 3–5), and the test suite (Task 6) — each a Conventional Commit in English with `(story 1.2)` in the subject, body explaining *why*
 
 ## Dev Notes
 
@@ -122,4 +122,23 @@ so that they never collide with a bespoke directory layout.
 
 ### Completion Notes List
 
+- Task 1: Story 1.1's review-fix changes were already committed and merged (`e4160a3`, `b3341c7`) and `story-1-2-xdg-state-layout-resolution` was already branched from `epic-1-foundation-navigation-shell` before this session started; verified via `git log`/`git branch`, no action needed.
+- Task 2: Investigated the dependency-cruiser/TypeScript 7 gap carried over from Story 1.1. Confirmed `interface`/typed-signature syntax parses fine through depcruise's fallback path. Found a more serious, previously-unexercised gap: this project's mandatory NodeNext-style relative imports (`./foo.js` resolving to `./foo.ts`) are recorded as edges but flagged `couldNotResolve`, so the `no-core-to-adapters` rule can't fire on them — confirmed with a deliberate real violation. No dependency-cruiser config option or newer release fixes this. Logged as a new deferred-work item; doesn't block this story since `xdg/` doesn't cross the core/adapters boundary.
+- Tasks 3–5: Implemented `resolveXdgPaths()` (pure, injectable `env`/`homedir`, XDG-spec-compliant fallback for unset/empty/relative env vars) and `ensureXdgDir()` (idempotent `mkdirSync` with `recursive: true`) in `src/adapters/driven/xdg/index.ts`. `resolveXdgPaths()` never touches `fs`; `cacheDir` is resolved but nothing writes to it, satisfying AC4.
+- Task 6: Added `src/adapters/driven/xdg/index.test.ts` (Vitest) — 7 tests covering AC1 (explicit env vars), AC2 (defaults), empty/relative-path edge cases, AC4 (zero `fs` calls, using a `vi.mock('node:fs', ...)` wrapper since ESM namespaces can't be `vi.spyOn`'d directly), and AC3 (real temp-directory creation + idempotency for `ensureXdgDir`). Confirmed RED (missing module) before implementing, then GREEN after.
+- Task 7: `npm run typecheck`, `npm run depcheck` (14 modules cruised, up from 8 — confirmed the new files are actually scanned, not silently dropped), and `npm test` (2 files, 8 tests) all pass. Skipped the optional barrel re-export from `src/adapters/driven/index.ts` — no consumer yet.
+- Task 8: Committed in 4 atomic commits — Task 2's investigation write-up, the `resolveXdgPaths`/`ensureXdgDir` implementation, the test suite, and this story-file completion update.
+
 ### File List
+
+- `src/adapters/driven/xdg/index.ts` (new)
+- `src/adapters/driven/xdg/index.test.ts` (new)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new item documenting the depcheck NodeNext-resolution gap)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
+- `_bmad-output/implementation-artifacts/1-2-xdg-state-layout-resolution.md` (this file)
+
+## Change Log
+
+| Date | Change | Author |
+| --- | --- | --- |
+| 2026-08-12 | Investigated and documented the dependency-cruiser NodeNext-resolution gap (deferred, non-blocking for this story). Implemented `resolveXdgPaths()`/`ensureXdgDir()` in `src/adapters/driven/xdg/index.ts` with full unit-test coverage. All 4 ACs verified; story moved to review. | Claude Sonnet 5 (dev agent) |
