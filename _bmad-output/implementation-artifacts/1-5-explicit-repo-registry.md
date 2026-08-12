@@ -2,7 +2,7 @@
 title: 'Explicit Repo Registry'
 type: 'feature'
 created: '2026-08-12'
-status: 'complete'
+status: 'in-review'
 review_loop_iteration: 0
 followup_review_recommended: true
 context: []
