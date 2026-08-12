@@ -2,9 +2,9 @@
 title: 'Explicit Repo Registry'
 type: 'feature'
 created: '2026-08-12'
-status: 'in-progress'
+status: 'complete'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: []
 warnings: [oversized]
 deferred: []
@@ -98,7 +98,8 @@ baseline_revision: '314d2bac3e453095cefa32fb80f3b2ef543fa58a'
 
 ## Spec Change Log
 
-_Empty until the first review loopback._
+- 2026-08-12 — **Implementation deviation (documented, intent preserved):** the manifest-schema type-level link uses an explicit `z.ZodType<Manifest>` annotation instead of `.satisfies(z.ZodType<Manifest>)` — zod 4.4.3 ships no runtime `.satisfies()` method (`z.object(...).strict().satisfies` throws `TypeError: ... .satisfies is not a function`). The spec already anticipated this fallback ("if the exact generic form is rejected, annotate the const explicitly"). The type-level link intent is intact: a drift between `manifestSchema` and core `Manifest` fails typecheck in either direction. Behavior unchanged.
+- 2026-08-12 — **Implementation notes recorded:** `RegistryPort` has no barrel re-export (no `src/core/index.ts` consumer yet, per spec). `register` returns `ok({ path })` on success (informative AD-3 data, not specified by the matrix). `addRegistry` surfaces write failures as `registry-write-error`; `registryPathExists` stat failures as `registry-stat-error` — both kebab-case, surfaced via `listRepos`'s `errors` array. Both deferred-work items this story closes are reflected in the Code Map's changed files.
 
 ## Review Triage Log
 
