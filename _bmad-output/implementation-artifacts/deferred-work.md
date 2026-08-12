@@ -1,5 +1,14 @@
 # Deferred Work
 
+## Deferred from: code review of story-1-4-manifest-schema-loader-validation (2026-08-12)
+
+- No type-level link between the zod `manifestSchema` and core `Manifest` (`src/adapters/driven/manifest/schema.ts`) — no `satisfies`/`z.ZodType<Manifest>` assertion, so a drift between the schema and the core type (e.g. core gains a field the schema lacks) compiles cleanly. The `return ok(result.data)` boundary in `src/adapters/driven/manifest/index.ts:44` catches incompatible drift, but only one direction. **Track:** assert `manifestSchema` against `Manifest` once a real core consumer exists (Story 1.5+).
+- Bare `modules:` (YAML null) fails validation — only an explicit `modules: {}` expresses an empty map (`src/adapters/driven/manifest/schema.ts:13`). Story says modules "may be `{}`"; accepting null would need a coercion decision. **Track:** decide whether to accept `modules:` as empty when authoring docs land.
+- No example/sample `.tui-back.yaml` shipped, though the product premise is repo developers hand-authoring manifests. Not required by any AC. **Track:** ship an `examples/` file or authoring note (also covers the unquoted-scalar YAML 1.2 gotcha — `service: 123` parses to a number).
+- `manifest-not-found` conflates "no manifest" with "repoPath doesn't exist" (both ENOENT, `src/adapters/driven/manifest/index.ts:17`) — Story 1.5's silent skip of unmanaged dirs would also silently swallow a nonexistent/mistyped path. Not reachable today (no scan consumer). **Track:** revisit when Story 1.5's scan decides which paths to feed the loader.
+- `repoPath` is not validated (`src/adapters/driven/manifest/index.ts:15`) — an empty/relative path resolves against the process CWD via `join`. No production caller yet (tests only). **Track:** revisit with Story 1.5's first real caller.
+- Read-error test is not portable (`src/adapters/driven/manifest/index.test.ts:157-168`): a plain-file repoPath surfaces ENOTDIR on Linux (→ `manifest-read-error`) but typically ENOENT on Windows (→ `manifest-not-found`), so the test would fail on non-Linux CI. **Track:** if Windows CI ever enters scope, loosen the assertion or drive the error deterministically.
+
 ## Deferred from: code review of story-1-3-script-output-envelope-cli-entrypoint-contract (2026-08-12)
 
 - No duplicate-subcommand-name guard in `runCli` (`src/adapters/driving/cli/dispatch.ts:19`) — `subcommands.find(candidate => candidate.name === name)` silently lets the first match win if a future registry (`main.ts`) ever contains two entries with the same `name`; nothing warns or fails. Not reachable today (only `ping` is registered). **Track:** revisit once Story 1.4+ registers a second subcommand by hand — either add a startup assertion (no duplicate names) or a unit test on the production registry.
