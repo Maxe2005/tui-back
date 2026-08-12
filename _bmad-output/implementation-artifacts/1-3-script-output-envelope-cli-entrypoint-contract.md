@@ -88,8 +88,8 @@ so that a script run by hand and the same action triggered from the TUI are prov
     - [x] Unknown subcommand name → `unknown-subcommand` failure envelope (message lists the fake registry's names), exit 1
     - [x] Empty `argv` → same `unknown-subcommand` path, exit 1
 
-- [ ] Task 7: Wire the umbrella binary (AC: 3, 5)
-  - [ ] Rewrite `src/bin/main.ts` as a thin composition root:
+- [x] Task 7: Wire the umbrella binary (AC: 3, 5)
+  - [x] Rewrite `src/bin/main.ts` as a thin composition root:
     ```ts
     import { ping } from '../core/ping.js';
     import { runCli, type Subcommand } from '../adapters/driving/cli/dispatch.js';
@@ -104,10 +104,10 @@ so that a script run by hand and the same action triggered from the TUI are prov
     process.stdout.write(output);
     process.exitCode = exitCode;
     ```
-  - [ ] `process.stdout.isTTY` is `true` or `undefined` — compare with `=== true`, don't rely on truthiness, so `undefined` (non-TTY) is unambiguous
-  - [ ] No `process.exit()` call — matches Story 1.1's review-fixed guidance: setting `process.exitCode` and letting the script end naturally lets Node drain stdout before exiting, which matters for the non-TTY JSON-line path
-  - [ ] `src/bin/tui-back.mjs` needs **no changes** — it already just does `await import('./main.ts')` regardless of what `main.ts` contains
-  - [ ] Confirm `package.json`'s `bin` field still has exactly one entry (`{ "tui-back": "./src/bin/tui-back.mjs" }`) — adding `ping` did not add a new binary; it's a subcommand inside the one umbrella entry (AD-2, AC5)
+  - [x] `process.stdout.isTTY` is `true` or `undefined` — compare with `=== true`, don't rely on truthiness, so `undefined` (non-TTY) is unambiguous
+  - [x] No `process.exit()` call — matches Story 1.1's review-fixed guidance: setting `process.exitCode` and letting the script end naturally lets Node drain stdout before exiting, which matters for the non-TTY JSON-line path
+  - [x] `src/bin/tui-back.mjs` needs **no changes** — it already just does `await import('./main.ts')` regardless of what `main.ts` contains
+  - [x] Confirm `package.json`'s `bin` field still has exactly one entry (`{ "tui-back": "./src/bin/tui-back.mjs" }`) — adding `ping` did not add a new binary; it's a subcommand inside the one umbrella entry (AD-2, AC5)
 
 - [ ] Task 8: Black-box CLI tests per AD-13 (AC: 1, 2, 3, 4, 5)
   - [ ] New file `src/bin/tui-back.e2e.test.ts`, colocated with the binary. Use `node:child_process`'s `spawnSync` (not `execFileSync` — `spawnSync` returns `{status, stdout, stderr}` without throwing on a non-zero exit code, which is needed to assert AC4's exit-1 path cleanly)
