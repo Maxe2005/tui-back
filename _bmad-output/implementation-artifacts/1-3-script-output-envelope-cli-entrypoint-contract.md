@@ -4,7 +4,7 @@ baseline_commit: cdcccff8b498eb1c28627f944d8053bd8698b533
 
 # Story 1.3: Script Output Envelope & CLI Entrypoint Contract
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -118,14 +118,14 @@ so that a script run by hand and the same action triggered from the TUI are prov
   - [x] **Do not attempt to simulate a real TTY here.** No pty library is in the Stack table (`typescript`, `zod`, `ulid`, `vitest`, `tsx`, etc. — nothing terminal-emulation-related), and adding one for this alone would be a HALT-worthy new-dependency decision this story doesn't need. AC2's TTY/human-text branch is already covered directly by Task 5's `renderResult(result, true)` unit tests — that's the intended coverage split, not a gap
   - [x] Optional but cheap: a small assertion (here or in a trivial standalone test) that `package.json`'s `bin` object has exactly one key — locks in AC5's "no per-action separate executable" as a regression guard, similar in spirit to Story 1.2's depcruise regression fixture
 
-- [ ] Task 9: Verify quality gates and finalize (no dedicated AC — project-wide gates from Story 1.1)
-  - [ ] `npm run typecheck` — clean
-  - [ ] `npm run depcheck` — clean; confirm the module/dependency count grew by the number of new files and re-confirm Task 3's round-trip violation check passed
-  - [ ] `npm test` — all green, including the new suites (`result.test.ts`, `envelope.test.ts`, `dispatch.test.ts`, `tui-back.e2e.test.ts`)
-  - [ ] Manual sanity check (mirrors Story 1.1's `npm link` verification): `npm link`, then `tui-back ping` from any directory in an actual terminal — confirm human-readable output (TTY branch, not JSON); `tui-back ping | cat` — confirm exactly one JSON line
+- [x] Task 9: Verify quality gates and finalize (no dedicated AC — project-wide gates from Story 1.1)
+  - [x] `npm run typecheck` — clean
+  - [x] `npm run depcheck` — clean; confirm the module/dependency count grew by the number of new files and re-confirm Task 3's round-trip violation check passed
+  - [x] `npm test` — all green, including the new suites (`result.test.ts`, `envelope.test.ts`, `dispatch.test.ts`, `tui-back.e2e.test.ts`)
+  - [x] Manual sanity check (mirrors Story 1.1's `npm link` verification): `npm link`, then `tui-back ping` from any directory in an actual terminal — confirm human-readable output (TTY branch, not JSON); `tui-back ping | cat` — confirm exactly one JSON line
 
-- [ ] Task 10: Commit atomically (no AC — repo convention from `CLAUDE.md`)
-  - [ ] Separate commits for: the `Result` envelope type + tests (Task 2), the depcheck landmine investigation/`deferred-work.md` update (Task 3, if it produces a diff), the `ping` use-case (Task 4), the envelope renderer + tests (Task 5), the dispatcher + tests (Task 6), the umbrella binary wiring (Task 7), the black-box e2e tests (Task 8) — each a Conventional Commit in English with `(story 1.3)` in the subject, body explaining *why*
+- [x] Task 10: Commit atomically (no AC — repo convention from `CLAUDE.md`)
+  - [x] Separate commits for: the `Result` envelope type + tests (Task 2), the depcheck landmine investigation/`deferred-work.md` update (Task 3, if it produces a diff), the `ping` use-case (Task 4), the envelope renderer + tests (Task 5), the dispatcher + tests (Task 6), the umbrella binary wiring (Task 7), the black-box e2e tests (Task 8) — each a Conventional Commit in English with `(story 1.3)` in the subject, body explaining *why*
 
 ## Dev Notes
 
@@ -182,8 +182,44 @@ so that a script run by hand and the same action triggered from the TUI are prov
 
 ### Agent Model Used
 
+Claude Sonnet 5 (claude-sonnet-5)
+
 ### Debug Log References
+
+- Task 3 investigation (depcheck/acorn-fallback landmine): reproduced with throwaway probe files under `src/core/probe_tmp/` (removed after investigation, never committed). Isolated the exact trigger via binary search across a dozen file-content variants: a generic function whose return type references a locally-defined generic *union* type alias (e.g. `function ok<T>(data: T): Result<T> { return { ok: true, data }; }`) silently drops that file's own `import` statements from dependency-cruiser's dependency graph, but only when those imports are placed after the function/type declarations rather than at the top of the file. `interface`-only, `type`-alias-only, and generic-function-only files were each individually confirmed unaffected regardless of import position. Confirmed the mitigation (imports first) round-trips correctly: a deliberate `core → adapters` import added to the top of `result.ts` was caught by `no-core-to-adapters`; removed afterward. Full write-up logged in `deferred-work.md`.
 
 ### Completion Notes List
 
+- Task 1: Branched `story-1-3-script-output-envelope-cli-entrypoint-contract` from `epic-1-foundation-navigation-shell`; committed the story-creation artifacts (story file, sprint-status) onto it.
+- Task 2: Implemented `Result<T>`/`ResultError`/`ok()`/`err()` in `src/core/result.ts`. `err()`'s `details` param stays entirely absent from the returned object when omitted (verified via `toEqual`, not `details: undefined`). 3 unit tests, RED confirmed (missing module) before implementing, then GREEN.
+- Task 3: Investigated and confirmed a real, narrow `depcheck`/acorn-fallback gap (see Debug Log). Not blocking — the mitigation (imports always first) is already this codebase's universal convention. Round-tripped a deliberate boundary violation in `result.ts` to confirm the `no-core-to-adapters` rule still fires. Closed out the stale, overly-broad Story 1.1 TS7 deferred-work item and replaced it with this narrower, accurate finding.
+- Task 4: Added `src/core/ping.ts` — a deliberately inert use-case (not FR-mapped) proving the AD-2/AD-3 mechanism end-to-end. 1 unit test, RED confirmed then GREEN.
+- Task 5: Implemented `renderResult()` in `src/adapters/driving/cli/envelope.ts` — non-TTY branch emits exactly one `JSON.stringify(result)` line; TTY branch emits generic human-readable text (pretty-printed `data`/`Error: message (code)` + `details`). 6 unit tests covering both branches × success/failure, RED then GREEN.
+- Task 6: Implemented `runCli()` in `src/adapters/driving/cli/dispatch.ts` — unknown/missing subcommand and a caught exception both route through `err()`/`renderResult()`, never a divergent formatter and never an uncaught exception. 5 unit tests using in-memory fake subcommands, RED then GREEN.
+- Task 7: Rewrote `src/bin/main.ts` as the composition root wiring `ping` into the dispatcher. Manually verified via `node src/bin/tui-back.mjs`: `ping` → exit 0 success envelope; `bogus`/no-args → exit 1 unknown-subcommand envelope. `package.json`'s `bin` field confirmed unchanged (single entry).
+- Task 8: Added `src/bin/tui-back.e2e.test.ts` — black-box tests per AD-13, spawning the real binary via `node:child_process`'s `spawnSync` (no `npm link` needed). Covers `ping` success, unknown subcommand, and empty-argv failure paths, plus a regression assertion that `package.json`'s `bin` object has exactly one key. TTY/human-text rendering deliberately left to `envelope.test.ts`'s direct unit tests — no pty library in the Stack table.
+- Task 9: All quality gates green — `npm run typecheck`, `npm run depcheck` (33 modules/31 dependencies cruised, up from the 14/11 baseline), `npm test` (8 files, 30 tests). Manual `npm link` sanity check: `tui-back ping | cat` → single JSON line; `tui-back ping` under a real pty (via `script -qec`) → pretty-printed human text, confirming the TTY/non-TTY branch split works outside the test suite too. Unlinked afterward.
+- Task 10: Committed in 8 atomic commits — story spec, `Result<T>` type, Task 1/2/3 tracking + depcheck landmine doc, `ping`, envelope renderer, dispatcher, `main.ts` wiring, black-box tests.
+- All 5 acceptance criteria verified: AC1 (`ok`/`err` envelope shape, `result.test.ts`), AC2 (TTY vs. non-TTY rendering, `envelope.test.ts` + real-pty manual check), AC3 (exit 0/1 only, every test asserting `exitCode`/`status`), AC4 (unknown/missing subcommand → usage message + exit 1, no crash, `dispatch.test.ts` + `tui-back.e2e.test.ts`), AC5 (single `bin` entry, asserted in `tui-back.e2e.test.ts`).
+
 ### File List
+
+- `src/core/result.ts` (new)
+- `src/core/result.test.ts` (new)
+- `src/core/ping.ts` (new)
+- `src/core/ping.test.ts` (new)
+- `src/adapters/driving/cli/envelope.ts` (new)
+- `src/adapters/driving/cli/envelope.test.ts` (new)
+- `src/adapters/driving/cli/dispatch.ts` (new)
+- `src/adapters/driving/cli/dispatch.test.ts` (new)
+- `src/bin/main.ts` (rewritten — from Story 1.1's placeholder to the real composition root)
+- `src/bin/tui-back.e2e.test.ts` (new)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new Task 3 investigation entry, closed out the stale Story 1.1 TS7 item)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
+- `_bmad-output/implementation-artifacts/1-3-script-output-envelope-cli-entrypoint-contract.md` (this file)
+
+## Change Log
+
+| Date | Change | Author |
+| --- | --- | --- |
+| 2026-08-12 | Implemented the core `Result<T>` envelope (`ok`/`err`), the CLI envelope renderer and subcommand dispatcher, a `ping` proof-of-mechanism use-case, and wired `main.ts` as the umbrella binary's composition root. Investigated and documented a narrow `depcheck`/acorn-fallback parsing gap (generic-function-return-type + trailing import), mitigated by the codebase's existing imports-first convention — no code/config change required. All 5 ACs verified via unit tests, black-box child-process tests (AD-13), and a manual real-pty sanity check. Story moved to review. | Claude Sonnet 5 (dev agent) |
