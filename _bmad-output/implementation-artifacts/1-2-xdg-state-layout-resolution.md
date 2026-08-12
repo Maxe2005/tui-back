@@ -21,17 +21,17 @@ so that they never collide with a bespoke directory layout.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Close out Story 1.1 and branch for this story (no AC — repo convention, `CLAUDE.md`)
-  - [ ] Check `git status` on `story-1-1-project-scaffolding-hexagonal-skeleton`: the review-fix changes (`.dependency-cruiser.cjs`, `package.json`, `package-lock.json`, `src/bin/main.ts`, story doc, `sprint-status.yaml`, new `deferred-work.md`) are uncommitted as of this story's creation — commit them (e.g. `fix(scaffold): address code review findings (story 1.1)`), then merge `story-1-1-project-scaffolding-hexagonal-skeleton` into `epic-1-foundation-navigation-shell` with `git merge --no-ff`
-  - [ ] From `epic-1-foundation-navigation-shell`, create `story-1-2-xdg-state-layout-resolution`
-  - [ ] Do all work for this story on that branch; do not commit directly to the epic branch
+- [x] Task 1: Close out Story 1.1 and branch for this story (no AC — repo convention, `CLAUDE.md`)
+  - [x] Check `git status` on `story-1-1-project-scaffolding-hexagonal-skeleton`: the review-fix changes (`.dependency-cruiser.cjs`, `package.json`, `package-lock.json`, `src/bin/main.ts`, story doc, `sprint-status.yaml`, new `deferred-work.md`) are uncommitted as of this story's creation — commit them (e.g. `fix(scaffold): address code review findings (story 1.1)`), then merge `story-1-1-project-scaffolding-hexagonal-skeleton` into `epic-1-foundation-navigation-shell` with `git merge --no-ff`
+  - [x] From `epic-1-foundation-navigation-shell`, create `story-1-2-xdg-state-layout-resolution`
+  - [x] Do all work for this story on that branch; do not commit directly to the epic branch
 
-- [ ] Task 2: Resolve the dependency-cruiser / TypeScript 7 parsing gap **before** writing real TS syntax (carries over from Story 1.1's deferred-work item 1 — read `_bmad-output/implementation-artifacts/deferred-work.md` item 1 first)
-  - [ ] `dependency-cruiser@18.2.0`'s bundled TS extraction is hard-gated to `typescript >=2.0.0 <7.0.0` (`node_modules/dependency-cruiser/src/meta.cjs`); with `typescript@7.0.2` pinned, `npm run depcheck` only "worked" in Story 1.1 because zero files contained real TS-only syntax. This story is the first to need one (an `XdgPaths` type) — verify what actually happens before relying on it
-  - [ ] Reproduce: add a throwaway `interface Probe { x: string }` (or the real `XdgPaths` type from Task 3) to a `.ts` file under `src/`, run `npm run depcheck`, observe whether it (a) crashes with a parse error, (b) silently drops the file from the graph (false-clean pass — the Story 1.1 failure mode), or (c) parses fine
-  - [ ] Check whether a newer `dependency-cruiser` release lifts the `typescript@7` gate (`npm view dependency-cruiser versions` / changelog) before falling back to a workaround
-  - [ ] If still broken: pick a pragmatic path and document the choice in Dev Notes — e.g. keep this module's public type as a plain interface but confirm acorn actually parses `interface` declarations (it may; acorn chokes on `type` aliases/generics/enums more reliably than on `interface`), or restructure to avoid the syntax acorn can't handle. Do not silently ship a `depcheck` that has stopped scanning files — if no clean fix exists, log a fresh, explicit deferred-work/review item stating exactly what `depcheck` can and cannot catch after this story
-  - [ ] This is a blocking investigation, not optional polish — a `depcheck` that silently stops working defeats AC5 of Story 1.1 for every story from here on
+- [x] Task 2: Resolve the dependency-cruiser / TypeScript 7 parsing gap **before** writing real TS syntax (carries over from Story 1.1's deferred-work item 1 — read `_bmad-output/implementation-artifacts/deferred-work.md` item 1 first)
+  - [x] `dependency-cruiser@18.2.0`'s bundled TS extraction is hard-gated to `typescript >=2.0.0 <7.0.0` (`node_modules/dependency-cruiser/src/meta.cjs`); with `typescript@7.0.2` pinned, `npm run depcheck` only "worked" in Story 1.1 because zero files contained real TS-only syntax. This story is the first to need one (an `XdgPaths` type) — verify what actually happens before relying on it
+  - [x] Reproduce: add a throwaway `interface Probe { x: string }` (or the real `XdgPaths` type from Task 3) to a `.ts` file under `src/`, run `npm run depcheck`, observe whether it (a) crashes with a parse error, (b) silently drops the file from the graph (false-clean pass — the Story 1.1 failure mode), or (c) parses fine
+  - [x] Check whether a newer `dependency-cruiser` release lifts the `typescript@7` gate (`npm view dependency-cruiser versions` / changelog) before falling back to a workaround
+  - [x] If still broken: pick a pragmatic path and document the choice in Dev Notes — e.g. keep this module's public type as a plain interface but confirm acorn actually parses `interface` declarations (it may; acorn chokes on `type` aliases/generics/enums more reliably than on `interface`), or restructure to avoid the syntax acorn can't handle. Do not silently ship a `depcheck` that has stopped scanning files — if no clean fix exists, log a fresh, explicit deferred-work/review item stating exactly what `depcheck` can and cannot catch after this story
+  - [x] This is a blocking investigation, not optional polish — a `depcheck` that silently stops working defeats AC5 of Story 1.1 for every story from here on
 
 - [ ] Task 3: Implement pure XDG path resolution (AC: 1, 2)
   - [ ] New file `src/adapters/driven/xdg/index.ts` — lives in `adapters/driven/`, **not** `core/`: the architecture's `core/` tree entry explicitly requires "zero import of ... fs" (AD-1), and resolving `os.homedir()`/`process.env` plus the directory-creation in Task 4 are adapter-layer infrastructure, not a core concern. No `core/ports/` port is required for this story — nothing in `core/` consumes these paths yet
@@ -117,6 +117,8 @@ so that they never collide with a bespoke directory layout.
 ### Agent Model Used
 
 ### Debug Log References
+
+- Task 2 investigation (dependency-cruiser/TS7 gap): reproduced with throwaway probe files under `src/core/probe_tmp/` and `src/adapters/driven/probe_consumer_tmp.ts` (removed after investigation, never committed). Confirmed `interface`/typed-signature syntax parses fine via depcruise's fallback path; confirmed the *real* gap is that NodeNext-style relative `./foo.js` imports (resolving to `./foo.ts`) are recorded as edges but flagged `couldNotResolve: true`, so the `no-core-to-adapters` rule never fires on them. `npm view dependency-cruiser versions` confirms `18.2.0` is latest (no fix available). `options.tsConfig` doesn't fix resolution (only adds a `missing-typescript-transpiler` warning); `options.enhancedResolveOptions.extensionAlias` is rejected by the config schema. Full write-up logged as a new deferred-work item (see `deferred-work.md`, "Deferred from: dev of story-1-2..."). This story's own `xdg/` module does not cross the core/adapters boundary, so the gap doesn't block this story — it's a forward-looking risk for the first story that adds a real cross-folder relative import.
 
 ### Completion Notes List
 
