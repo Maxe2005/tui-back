@@ -4,7 +4,7 @@ baseline_commit: 046cd668561072a05ac4709d33f37d85a5464d5a
 
 # Story 1.1: Project Scaffolding & Hexagonal Skeleton
 
-Status: review
+Status: done
 
 ## Story
 
@@ -84,6 +84,24 @@ so that every subsequent story has a consistent place to add code and can be run
 - [x] Task 8: Commit atomically (no AC — repo convention from `CLAUDE.md`)
   - [x] Separate commits for: toolchain/tsconfig; folder skeleton; CLI entrypoint; test harness; boundary rule — each a `feat(...)`/`chore(...)` Conventional Commit, English, with `(story 1.1)` in the subject line, body explaining *why* not just what
 
+### Review Findings
+
+- [x] [Review][Defer] `depcheck`'s AD-1 boundary rule will silently stop being "structurally enforced" (AC5) the moment real TypeScript syntax lands — dependency-cruiser@18.2.0 (latest available; no newer release lifts this) hard-gates its native TS support to `typescript >=2.0.0 <7.0.0` (`node_modules/dependency-cruiser/src/meta.cjs:14`), so with the Architecture-pinned `typescript@7.0.2`, extraction falls back to the bundled acorn parser, which cannot parse TS-only syntax (`interface`, `type`, generics, enums, `import type`). It only "works" today because the three placeholder files have zero TS syntax — confirmed by an isolated reproduction. The next story that adds a real interface/type to `src/core` or `src/adapters` will either crash `depcheck` or silently drop that file from the graph, defeating AC5. — deferred: blocked by the tool, no compatible version available; track a follow-up as soon as a story adds real TS syntax to `core/` or `adapters/`. [.dependency-cruiser.cjs, package.json:20]
+
+- [x] [Review][Patch] Toolchain versions committed as floating semver ranges (`^7.0.2`, `^4.23.12`, `^4.1.10`), contradicting this story's own Dev Notes ("Architecture-pinned exact versions... don't let npm float them to a newer minor/major") — use exact pins (`npm install --save-exact` or hand-edit to drop the `^`). [package.json:26-30]
+- [x] [Review][Patch] `.dependency-cruiser.cjs` has no `node_modules` exclusion, so `depcheck` traverses the full transitive dependency graph of every scanned file (verified: 44 modules/89 dependencies cruised from 6 tiny source files) — add `options.doNotFollow: { path: 'node_modules' }` per the standard `depcruise init` template. [.dependency-cruiser.cjs]
+- [x] [Review][Patch] The `no-core-to-adapters` rule's `from`/`to` paths (`^src/core`, `^src/adapters`) are unanchored prefix regexes that would also match a future sibling folder like `src/core-utils` or `src/adapters-legacy` — anchor them (e.g. `^src/core/` or an exact-segment match). [.dependency-cruiser.cjs:7-8]
+- [x] [Review][Patch] `depcheck` script glob only covers `src/**/*.ts` and `src/**/*.mjs` — the driving TUI adapter will need `.tsx` (per its own header comment referencing Ink/React), and boundary violations there would go unscanned — add a `.tsx` branch to the glob. [package.json:20]
+- [x] [Review][Patch] `src/bin/main.ts` calls `process.exit(0)` immediately after `process.stdout.write(...)`, which does not guarantee the write is flushed before the process terminates when stdout is a pipe/non-TTY — drop the explicit `exit()` (let the script end naturally) or set `process.exitCode = 0` instead. [src/bin/main.ts:2-3]
+- [x] [Review][Patch] `package.json` still carries un-cleaned `npm init` boilerplate: `"main": "index.js"` (file doesn't exist — this is a `bin`-only CLI), `"directories": { "doc": "docs" }` (no `docs/` dir exists), and empty `"description"`/`"author"` — remove or fill in. [package.json:5,10,14-16,22-23]
+- [x] [Review][Patch] The `sprint-status.yaml` status flip is part of this diff but is missing from this story's own File List below — add it for an accurate change inventory. [_bmad-output/implementation-artifacts/1-1-project-scaffolding-hexagonal-skeleton.md — File List]
+- [x] [Review][Defer] No `README.md` documenting the install → link → run → test → depcheck workflow — deferred, not required by any AC as written; useful follow-up for onboarding.
+- [x] [Review][Defer] `src/bin/tui-back.mjs` has no `try/catch` around `await import('./main.ts')`, so a future throwing `main.ts` would surface a raw stack trace instead of a controlled error — deferred, `main.ts` cannot currently throw; revisit once real subcommand dispatch lands. [src/bin/tui-back.mjs:4]
+- [x] [Review][Defer] `package.json` declares `"license": "ISC"` but no `LICENSE` file exists — deferred, package is `private: true` and unpublished, so low priority; needs a licensing decision if that changes.
+- [x] [Review][Defer] `"engines": { "node": ">=24" }` is advisory only — no `.npmrc` `engine-strict` or CI check enforces it, so `npm install` on an older Node warns rather than fails — deferred, AC1 only requires the happy path on Node 24 to work, not enforcement.
+- [x] [Review][Defer] The AD-1 boundary rule only covers `core → adapters`; nothing stops `src/bin` from importing `src/adapters/driven` directly, or `adapters/driven` ↔ `adapters/driving` from importing each other — deferred, out of AC5's literal scope (core→adapters only); worth hardening once those edges have real code.
+- [x] [Review][Defer] No automated test exercises `src/bin/tui-back.mjs` end-to-end (`npm test` doesn't invoke the CLI binary) — deferred, AC3 only requires manual `npm link` verification as written; a smoke test would catch future regressions (e.g. lost executable bit).
+
 ## Dev Notes
 
 **Architecture context (`ARCHITECTURE-SPINE.md`):**
@@ -155,6 +173,8 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `src/bin/main.ts` (created)
 - `src/bin/tui-back.mjs` (created)
 - `src/core/index.test.ts` (created)
+- `.dependency-cruiser.cjs` (created)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story 1.1 status set to `review`)
 - `.dependency-cruiser.cjs` (created)
 
 ## Change Log
