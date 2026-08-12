@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
+import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../core/ports/registry.js';
 import { runCli, type Subcommand } from './dispatch.js';
+import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
 
 const fakeSubcommands: Subcommand[] = [
   { name: 'ping', run: async () => ok({ message: 'pong' }) },
@@ -84,5 +87,40 @@ describe('runCli', () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('internal-error');
     expect(exitCode).toBe(1);
+  });
+});
+
+describe('subcommand registry guards', () => {
+  it('assertUniqueSubcommandNames throws when two subcommands share a name', () => {
+    const duplicated: Subcommand[] = [
+      { name: 'ping', run: async () => ok({}) },
+      { name: 'ping', run: async () => ok({}) },
+    ];
+
+    expect(() => assertUniqueSubcommandNames(duplicated)).toThrow('Duplicate subcommand name: ping');
+  });
+
+  it('assertUniqueSubcommandNames accepts a collision-free registry', () => {
+    const clean: Subcommand[] = [
+      { name: 'register', run: async () => ok({}) },
+      { name: 'scan', run: async () => ok({}) },
+    ];
+
+    expect(() => assertUniqueSubcommandNames(clean)).not.toThrow();
+  });
+
+  it('buildSubcommands wires register/list-repos/scan/ping without name collisions', () => {
+    const registry: RegistryPort = {
+      list: async () => ok([]),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok([]),
+    };
+    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
+
+    const subcommands = buildSubcommands({ registry, manifest });
+
+    expect(subcommands.map((subcommand) => subcommand.name)).toEqual(['register', 'list-repos', 'scan', 'ping']);
+    expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
 });
