@@ -4,7 +4,7 @@ baseline_commit: b47baa8638c26f30341bc2e79f45f602e66f3cdd
 
 # Story 1.2: XDG State Layout Resolution
 
-Status: review
+Status: done
 
 ## Story
 
@@ -66,6 +66,12 @@ so that they never collide with a bespoke directory layout.
 
 - [x] Task 8: Commit atomically (no AC — repo convention from `CLAUDE.md`)
   - [x] Separate commits for: the Story 1.1 branch/merge housekeeping (Task 1, if not already done in a prior session), the dependency-cruiser/TS7 investigation outcome if it required a config or code change (Task 2), the path-resolution implementation (Tasks 3–5), and the test suite (Task 6) — each a Conventional Commit in English with `(story 1.2)` in the subject, body explaining *why*
+
+### Review Findings
+
+- [x] [Review][Patch] `deferred-work.md`'s conclusion that no `dependency-cruiser` config option resolves the NodeNext-import boundary-enforcement gap is incorrect — a working fix exists (decision: apply now). Task 2's investigation (documented in this diff's `deferred-work.md` entry) concludes `no-core-to-adapters` can never fire on this project's required NodeNext-style relative imports (`./foo.js`→`./foo.ts`) because dependency-cruiser flags unresolved cross-boundary imports `couldNotResolve: true`, and the rule's `to: { path: '^src/adapters(/|$)' }` only matches a *resolved* path — and states no config option fixes this. Independently reproduced with a real, deliberate `src/core → src/adapters` boundary violation via a NodeNext-style import: dependency-cruiser records the raw *unresolved* specifier text in `resolved` (e.g. `../adapters/driven/xdg/index.js`), so loosening the rule's `to.path` regex from `^src/adapters(/|$)` to `adapters(/|$)` (dropping the `^src/` anchor) makes the exact same violation correctly fire (`severity: error`) where the current config reports "✔ no dependency violations found". Net effect: Story 1.1's AC5 ("structurally enforced" boundary) has had zero automated enforcement for the only import style this codebase's `tsconfig.json` permits, since Story 1.1 closed. **Decision:** apply the one-line `.dependency-cruiser.cjs` `to.path` regex fix, correct `deferred-work.md`'s conclusion, and add a regression fixture that locks in the rule catching an unresolved cross-boundary import; also consolidate `deferred-work.md`'s now-duplicated TS7/acorn background between the Story 1.1 item and this new item so the ledger stays scannable. [.dependency-cruiser.cjs, _bmad-output/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] AC4's "zero fs calls" test only spies on `mkdirSync`/`existsSync`/`writeFileSync`, not the full `node:fs` surface (`readFileSync`, `statSync`, `accessSync`, `readdirSync`, etc.) — a future edit that adds any of those to `resolveXdgPaths()` would silently break the documented "pure, side-effect-free" contract without failing this test. Extend the `vi.mock('node:fs', ...)` wrapper to spy the fuller set of read/write fs calls (or spy every function-valued export generically) and assert none were invoked. [src/adapters/driven/xdg/index.test.ts:23-30]
+- [x] [Review][Patch] No test covers a mixed XDG env-var configuration — all four current `resolveXdgPaths` scenarios set all four vars identically (all-absolute, or all-absent/empty/relative). A per-variable bug (e.g. `dataBase` accidentally reading `env.XDG_STATE_HOME`) would go uncaught by every existing test. Add one case with a single var set (e.g. only `XDG_CONFIG_HOME`) and the rest absent, asserting that dir uses the override while the other three fall back to their defaults. [src/adapters/driven/xdg/index.test.ts]
 
 ## Dev Notes
 
@@ -132,8 +138,10 @@ so that they never collide with a bespoke directory layout.
 ### File List
 
 - `src/adapters/driven/xdg/index.ts` (new)
-- `src/adapters/driven/xdg/index.test.ts` (new)
-- `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new item documenting the depcheck NodeNext-resolution gap)
+- `src/adapters/driven/xdg/index.test.ts` (new, extended during code review — see Change Log)
+- `.dependency-cruiser.cjs` (modified during code review — `no-core-to-adapters` rule fix)
+- `dependency-cruiser.config.test.ts` (new during code review — regression fixture for the rule fix)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new item documenting the depcheck NodeNext-resolution gap, then corrected/resolved during code review)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
 - `_bmad-output/implementation-artifacts/1-2-xdg-state-layout-resolution.md` (this file)
 
@@ -142,3 +150,4 @@ so that they never collide with a bespoke directory layout.
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-08-12 | Investigated and documented the dependency-cruiser NodeNext-resolution gap (deferred, non-blocking for this story). Implemented `resolveXdgPaths()`/`ensureXdgDir()` in `src/adapters/driven/xdg/index.ts` with full unit-test coverage. All 4 ACs verified; story moved to review. | Claude Sonnet 5 (dev agent) |
+| 2026-08-12 | Code review (Blind Hunter + Edge Case Hunter + Acceptance Auditor): 0 AC violations. 1 decision-needed finding resolved (apply-now) and 2 patch findings applied — (1) found and fixed the actual bug the Task 2 investigation missed: `.dependency-cruiser.cjs`'s `no-core-to-adapters` rule now catches NodeNext-style unresolved cross-boundary imports (`to.path` regex un-anchored from `^src/adapters(/|$)` to `adapters(/|$)`), backed by a new regression fixture `dependency-cruiser.config.test.ts`; corrected `deferred-work.md`'s now-inaccurate "unfixable" conclusion; (2) extended `index.test.ts`'s AC4 purity test to cover the full read/write `node:fs` surface, and added a mixed-XDG-env-var test case. All gates green (`npm test`: 11/11, `npm run typecheck`, `npm run depcheck`). Story moved to done. | Claude Sonnet 5 (code review) |
