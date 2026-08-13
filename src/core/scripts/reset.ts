@@ -7,9 +7,13 @@
 import { isAbsolute, resolve } from 'node:path';
 import { err, ok, type Result } from '../result.js';
 import type { RegistryPort, ResetResult } from '../ports/registry.js';
+import type { LockPort } from '../ports/lock.js';
+import { withActionLock } from '../locking.js';
 
 export async function resetRepo(
   registry: RegistryPort,
+  lock: LockPort,
+  resourceKey: string,
   path: string | undefined,
 ): Promise<Result<ResetResult>> {
   if (path === undefined) {
@@ -19,7 +23,7 @@ export async function resetRepo(
     return err('invalid-argument', `Path must be absolute: ${path}`);
   }
 
-  const reset = await registry.reset(resolve(path));
+  const reset = await withActionLock(lock, resourceKey, () => registry.reset(resolve(path)));
   if (!reset.ok) {
     return reset;
   }

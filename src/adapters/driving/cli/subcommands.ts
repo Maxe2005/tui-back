@@ -8,30 +8,36 @@ import { err } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { LockPort } from '../../../core/ports/lock.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
 import { scanRepos } from '../../../core/scripts/scan.js';
 import type { Subcommand } from './dispatch.js';
 
-export function buildSubcommands(deps: { registry: RegistryPort; manifest: ManifestPort }): Subcommand[] {
+export function buildSubcommands(deps: {
+  registry: RegistryPort;
+  manifest: ManifestPort;
+  lock: LockPort;
+  registryResourceKey: string;
+}): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
       name: 'register',
       run: async (args) => {
         if (args.length === 0) {
-          return registerRepo(deps.registry, undefined);
+          return registerRepo(deps.registry, deps.lock, deps.registryResourceKey, undefined);
         }
         if (args[0] === '--reset') {
           if (args.length > 2) {
             return err('invalid-argument', 'Usage: tui-back register --reset <path>');
           }
-          return resetRepo(deps.registry, args[1]);
+          return resetRepo(deps.registry, deps.lock, deps.registryResourceKey, args[1]);
         }
         if (args.length > 1) {
           return err('invalid-argument', 'Usage: tui-back register <path>');
         }
-        return registerRepo(deps.registry, args[0]);
+        return registerRepo(deps.registry, deps.lock, deps.registryResourceKey, args[0]);
       },
     },
     {
