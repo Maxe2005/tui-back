@@ -10,8 +10,8 @@ import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acquireLock, createLockPort, releaseLock } from './index.js';
-import { lockPathFor } from './helpers.js';
+import { acquireLock, createLockPort, reclaim, releaseLock } from './index.js';
+import { lockPathFor, sanitizeResourceKey } from './helpers.js';
 
 const tmpDirs: string[] = [];
 
@@ -110,6 +110,28 @@ describe('createLockPort / acquireLock (mkdir advisory lock)', () => {
     const lockDir = await makeLockDir();
     const result = await acquireLock(lockDir, '', process.pid, SHORT);
     expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('rejects a whitespace-only resource key', async () => {
+    const lockDir = await makeLockDir();
+    const result = await acquireLock(lockDir, '   ', process.pid, SHORT);
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('surfaces a lock-acquire-error when the lock dir cannot be created (parent is a file)', async () => {
+    const parentFile = join(await makeLockDir(), 'not-a-dir');
+    await writeFile(parentFile, 'i am a file', 'utf8');
+    const lockDir = join(parentFile, 'locks');
+
+    const result = await acquireLock(lockDir, '/abs/registry.yaml', process.pid, SHORT);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'lock-acquire-error' } });
+  });
+
+  it('truncates an over-long resource key and keeps the full-key hash suffix', () => {
+    const long = 'k'.repeat(300);
+    const safe = sanitizeResourceKey(long);
+    expect(safe).toBe(`${'k'.repeat(200)}-${createHash('sha256').update(long).digest('hex').slice(0, 8)}`);
   });
 
   it('reclaims a stale lock whose recorded pid is no longer alive', async () => {
@@ -276,6 +298,41 @@ describe('createLockPort / acquireLock (mkdir advisory lock)', () => {
     },
     20_000,
   );
+
+  it('reclaim leaves a stale lock dir whose owner is a live process intact (ok)', async () => {
+    const lockDir = await makeLockDir();
+    const lockPath = lockPathFor(lockDir, '/abs/registry.yaml');
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, timestamp: Date.now() }), 'utf8');
+
+    const result = await reclaim(lockPath, process.pid);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    await expect(readFile(join(lockPath, 'owner.json'), 'utf8')).resolves.toContain('"pid"');
+  });
+
+  it('reclaim removes a stale lock dir whose owner pid is dead', async () => {
+    const lockDir = await makeLockDir();
+    const lockPath = lockPathFor(lockDir, '/abs/registry.yaml');
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: 99999999, timestamp: Date.now() }), 'utf8');
+
+    const result = await reclaim(lockPath, process.pid);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    await expect(readFile(lockPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('reclaim leaves no break marker behind after a successful reclaim', async () => {
+    const lockDir = await makeLockDir();
+    const lockPath = lockPathFor(lockDir, '/abs/registry.yaml');
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: 99999999, timestamp: Date.now() }), 'utf8');
+
+    await reclaim(lockPath, process.pid);
+
+    await expect(readFile(`${lockPath}.break`)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 
   it('releaseLock on a nonexistent lock is a benign success (idempotent release)', async () => {
     const lockDir = await makeLockDir();

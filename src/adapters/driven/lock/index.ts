@@ -26,8 +26,17 @@ const OWNER_FILE = 'owner.json';
 
 // An orphan lock dir (no valid owner metadata) is only reclaimable once it is older than
 // this threshold: a winner that just claimed the dir is finalizing its owner write within
-// milliseconds, so a young orphan must be treated as live (wait) rather than reclaimed.
-const ORPHAN_STALE_AGE_MS = 10_000;
+// milliseconds, so a young orphan must be treated as live (wait) rather than reclaimed. Kept
+// below the default acquire timeout (5000ms) so a freshly-crashed holder's orphan is
+// reclaimable within a single acquire, while still ≫ the sub-ms owner write.
+const ORPHAN_STALE_AGE_MS = 2_000;
+
+// Reclaims among concurrent waiters are serialized through an atomic mkdir "break" marker
+// (same strategy as the advisory-lock `.break` pattern): only the waiter that wins the marker
+// removes the stale lock dir, and it re-verifies the owner is still dead immediately before
+// removing, so a live re-acquired lock is never deleted. The marker records its owning pid so
+// a waiter that crashed mid-reclaim can't wedge every future reclaim forever (self-healing).
+const RECLAIM_BREAK_SUFFIX = '.break';
 
 export function createLockPort(lockDir: string, options: LockOptions = {}): LockPort {
   const retryDelayMs = options.retryDelayMs ?? 50;
@@ -50,7 +59,7 @@ export async function acquireLock(
   holderPid: number = process.pid,
   options: Required<LockOptions> = { retryDelayMs: 50, timeoutMs: 5000 },
 ): Promise<Result<LockHandle>> {
-  if (resourceKey.length === 0) {
+  if (resourceKey.trim().length === 0) {
     return err('invalid-argument', 'Resource key must not be empty');
   }
 
@@ -76,14 +85,17 @@ export async function acquireLock(
     }
 
     if (await isStale(lockPath)) {
-      await reclaim(lockPath);
+      const reclaimed = await reclaim(lockPath, holderPid);
+      if (!reclaimed.ok) {
+        return reclaimed;
+      }
       continue;
     }
 
     if (Date.now() >= deadline) {
       return err(
         'action-in-progress',
-        `Action already in progress on resource "${resourceKey}" (lock held by pid ${await ownerPid(lockPath)})`,
+        `Action already in progress on resource "${resourceKey}" (lock held by pid ${(await ownerPid(lockPath)) ?? 'unknown'})`,
       );
     }
 
@@ -119,8 +131,12 @@ async function isStale(lockPath: string): Promise<boolean> {
   const raw = await readFile(join(lockPath, OWNER_FILE), 'utf8').catch(() => null);
   if (raw !== null) {
     try {
-      const pid = (JSON.parse(raw) as { pid: number }).pid;
-      return !isPidAlive(pid);
+      const pid = (JSON.parse(raw) as { pid?: unknown }).pid;
+      if (typeof pid === 'number' && Number.isInteger(pid)) {
+        return !isPidAlive(pid);
+      }
+      // Owner metadata that parses but carries no usable pid (e.g. `{}` or
+      // `{"timestamp":...}`) is not proof of a dead holder — fall through to the age check.
     } catch {
       // corrupt owner metadata — fall through to the age check
     }
@@ -148,22 +164,91 @@ async function ownerPid(lockPath: string): Promise<number | null> {
   }
 }
 
-async function reclaim(lockPath: string): Promise<Result<void>> {
-  // Verify before removing: between this waiter's staleness check and now, a third process
-  // may have reclaimed the dead holder's dir and re-acquired it as a live holder. Removing
-  // blindly would delete a live holder's lock and let two writers proceed concurrently —
-  // the exact race this lock exists to prevent.
-  const currentOwner = await ownerPid(lockPath);
-  if (currentOwner !== null && isPidAlive(currentOwner)) {
-    return ok(undefined);
-  }
+function breakPathOf(lockPath: string): string {
+  return `${lockPath}${RECLAIM_BREAK_SUFFIX}`;
+}
+
+/**
+ * Serialized reclaim of a stale lock dir. A caller enters only after `isStale` returned true.
+ * The reclaim itself is serialized through an atomic mkdir break marker (see RECLAIM_BREAK_SUFFIX)
+ * so that among concurrent waiters exactly one removes the stale dir, and it re-verifies the
+ * owner is still dead immediately before removing — closing the check-then-act window where a
+ * blindly-removing waiter could delete a live re-acquired lock and let two writers proceed.
+ * Exported for deterministic tests of the live-owner guard branch.
+ */
+export async function reclaim(lockPath: string, holderPid: number): Promise<Result<void>> {
+  const breakPath = breakPathOf(lockPath);
+
   try {
+    await mkdir(breakPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EEXIST') {
+      if (await breakIsStale(breakPath)) {
+        // The previous reclaim's owner is gone (crashed mid-reclaim); clear the marker and
+        // retry once so a dead breaker can't wedge every future reclaim forever.
+        await rm(breakPath, { recursive: true, force: true }).catch(() => undefined);
+        try {
+          await mkdir(breakPath);
+        } catch (retryError) {
+          if ((retryError as NodeJS.ErrnoException).code === 'EEXIST') {
+            return ok(undefined);
+          }
+          const detail = retryError instanceof Error ? retryError.message : String(retryError);
+          return err('lock-acquire-error', `Failed to start reclaim at ${breakPath}: ${detail}`);
+        }
+      } else {
+        // Another waiter is actively reclaiming; their rm + release is imminent, so just wait.
+        return ok(undefined);
+      }
+    } else {
+      const detail = error instanceof Error ? error.message : String(error);
+      return err('lock-acquire-error', `Failed to start reclaim at ${breakPath}: ${detail}`);
+    }
+  }
+
+  try {
+    await writeFile(join(breakPath, OWNER_FILE), JSON.stringify({ pid: holderPid, timestamp: Date.now() }), 'utf8');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return err('lock-acquire-error', `Failed to record reclaim at ${breakPath}: ${detail}`);
+  }
+
+  try {
+    // Re-verify after winning the marker: between this waiter's staleness read and the marker
+    // acquire, a fresh holder may have reclaimed and re-acquired the lock. Removing a live
+    // holder's dir would let two writers proceed — the race this serialized reclaim prevents.
+    const currentOwner = await ownerPid(lockPath);
+    if (currentOwner !== null && isPidAlive(currentOwner)) {
+      return ok(undefined);
+    }
     await rm(lockPath, { recursive: true, force: true });
     return ok(undefined);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return err('lock-acquire-error', `Failed to reclaim stale lock at ${lockPath}: ${detail}`);
+  } finally {
+    await rm(breakPath, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+async function breakIsStale(breakPath: string): Promise<boolean> {
+  const raw = await readFile(join(breakPath, OWNER_FILE), 'utf8').catch(() => null);
+  if (raw !== null) {
+    try {
+      const pid = (JSON.parse(raw) as { pid?: unknown }).pid;
+      if (typeof pid === 'number' && Number.isInteger(pid)) {
+        return !isPidAlive(pid);
+      }
+    } catch {
+      // fall through to the age check
+    }
+  }
+  const dirStat = await stat(breakPath).catch(() => null);
+  if (dirStat === null) {
+    return true;
+  }
+  return Date.now() - dirStat.mtimeMs > ORPHAN_STALE_AGE_MS;
 }
 
 export async function releaseLock(lockPath: string): Promise<Result<void>> {
