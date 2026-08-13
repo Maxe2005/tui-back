@@ -241,12 +241,55 @@ describe('tui-back list-repos (black-box)', () => {
             service: 'route-explorer',
             container: 'route-explorer',
             sharedBranch: 'development',
+            moduleIds: [],
           },
         ],
         unreachable: [gone],
         errors: [],
       },
     });
+  });
+
+  it('surfaces moduleIds in the JSON envelope for a module-free managed repo (AC4)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(true);
+    const env = { XDG_CONFIG_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['list-repos'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.repos).toHaveLength(1);
+    expect(parsed.data.repos[0].moduleIds).toEqual([]);
+  });
+
+  it('surfaces a manifest with a non-empty modules map as an unknown-module error (AC3)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(false);
+    const env = { XDG_CONFIG_HOME: xdg };
+    await writeFile(
+      join(repo, '.tui-back.yaml'),
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'migrationCommand: npm run migration:run',
+        'sharedBranch: development',
+        'modules:',
+        '  route-explorer: {}',
+        '',
+      ].join('\n'),
+    );
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['list-repos'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.errors).toHaveLength(1);
+    expect(parsed.data.errors[0].code).toBe('unknown-module');
   });
 
   it('with no registry.yaml returns empty repos/unreachable/errors and exits 0', async () => {

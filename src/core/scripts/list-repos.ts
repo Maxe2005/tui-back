@@ -13,6 +13,7 @@ export interface ManagedRepo {
   service: string;
   container: string;
   sharedBranch: string;
+  moduleIds: string[];
 }
 
 export interface RegistryEntryError {
@@ -58,6 +59,7 @@ export async function listRepos(
         service: loaded.data.service,
         container: loaded.data.container,
         sharedBranch: loaded.data.sharedBranch,
+        moduleIds: Object.keys(loaded.data.modules ?? {}).sort(),
       });
     } else if (loaded.error.code === 'manifest-not-found') {
       // genuinely unmanaged — silently skipped (AC3)

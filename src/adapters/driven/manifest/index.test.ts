@@ -45,7 +45,9 @@ describe('loadManifest', () => {
       ].join('\n'),
     );
 
-    const result = await loadManifest(repo);
+    const result = await loadManifest(repo, {
+      knownModuleIds: new Set(['route-explorer', 'shared-types-consumer']),
+    });
 
     expect(result).toEqual({
       ok: true,
@@ -280,6 +282,67 @@ describe('loadManifest', () => {
     if (!result.ok) {
       const issues = (result.error.details as { issues: { path: string[] }[] }).issues;
       expect(issues[0].path.join('.')).toBe('modules.shared-types-consumer');
+    }
+  });
+
+  it('loads an empty modules map against the empty production registry (AC2 baseline)', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({ ok: true, data: { modules: {} } });
+  });
+
+  it('fails with unknown-module naming the id and repo path for an unknown id (AC3)', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  route-explorer: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('route-explorer');
+      expect(result.error.message).toContain(repo);
+    }
+  });
+
+  it('loads a known module id when the registry is injected (AC2 via D1 seam)', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  route-explorer: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo, { knownModuleIds: new Set(['route-explorer']) });
+
+    expect(result).toMatchObject({ ok: true, data: { modules: { 'route-explorer': {} } } });
+  });
+
+  it('fails naming the first unknown id in sorted order for multiple unknown ids', async () => {
+    const repo = await tempRepo(
+      ['service: s', 'container: c', 'migrationCommand: migrate', 'modules:', '  z-mod: {}', '  a-mod: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('"a-mod"');
+      expect(result.error.message).not.toContain('"z-mod"');
+    }
+  });
+
+  it('fails with unknown-module when only one of several ids is unknown', async () => {
+    const repo = await tempRepo(
+      ['service: s', 'container: c', 'migrationCommand: migrate', 'modules:', '  known-mod: {}', '  unknown-x: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo, { knownModuleIds: new Set(['known-mod']) });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('unknown-x');
     }
   });
 });

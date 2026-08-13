@@ -71,6 +71,7 @@ describe('listRepos', () => {
             service: `svc-${managed}`,
             container: `ctr-${managed}`,
             sharedBranch: 'development',
+            moduleIds: [],
           },
         ],
         unreachable: [gone],
@@ -92,6 +93,53 @@ describe('listRepos', () => {
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.repos.map((r) => r.path)).toEqual(paths);
   });
+
+  it('fills moduleIds in sorted ascending order from the manifest modules keys (AC4)', async () => {
+    const path = '/m/mod';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'svc',
+          container: 'ctr',
+          migrationCommand: 'migrate',
+          sharedBranch: 'development',
+          modules: { zebra: {}, alpha: {} },
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        repos: [{ path, service: 'svc', container: 'ctr', sharedBranch: 'development', moduleIds: ['alpha', 'zebra'] }],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
+  it('sets moduleIds to the empty array for a module-free repo (AC4 baseline)', async () => {
+    const path = '/m/plain';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'svc',
+          container: 'ctr',
+          migrationCommand: 'migrate',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.repos[0].moduleIds).toEqual([]);
+  });
+
 
   it('surfaces a failing manifest as an errors entry, not a crash and not a silent skip', async () => {
     const bad = '/m/bad';
