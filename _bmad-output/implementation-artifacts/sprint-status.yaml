@@ -55,7 +55,7 @@ development_status:
   1-4-manifest-schema-loader-validation: done
   1-5-explicit-repo-registry: done
   1-6-static-module-registry: done
-  1-7-single-instance-enforcement-per-resource-action-lock: backlog
+  1-7-single-instance-enforcement-per-resource-action-lock: review
   1-8-atelier-design-tokens-theme-module: backlog
   1-9-read-focused-display-components: backlog
   1-10-interactive-feedback-components: backlog
