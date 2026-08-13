@@ -44,9 +44,20 @@ async function runCliAsync(args: string[], env: NodeJS.ProcessEnv = {}): Promise
       stdio: ['ignore', 'pipe', 'inherit'],
     });
     let stdout = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`tui-back child process timed out: ${['node', scriptPath, ...args].join(' ')}`));
+    }, 10_000);
+    timer.unref();
     child.stdout.on('data', (chunk) => (stdout += chunk));
-    child.on('error', reject);
-    child.on('close', (code) => resolve({ status: code, stdout }));
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ status: code, stdout });
+    });
   });
 }
 
@@ -75,8 +86,9 @@ afterEach(async () => {
 });
 
 describe('tui-back CLI (black-box)', () => {
-  it('ping succeeds with the AD-3 envelope on stdout and exits 0', () => {
-    const { status, stdout } = runCli(['ping']);
+  it('ping succeeds with the AD-3 envelope on stdout and exits 0', async () => {
+    const xdg = await makeTempDir();
+    const { status, stdout } = runCli(['ping'], { XDG_STATE_HOME: xdg });
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { message: 'pong' } });
@@ -138,8 +150,9 @@ describe('tui-back register (black-box)', () => {
     expect(listA.stdout).toBe(listB.stdout);
   });
 
-  it('register with no path fails with missing-argument and exits 1', () => {
-    const { status, stdout } = runCli(['register']);
+  it('register with no path fails with missing-argument and exits 1', async () => {
+    const xdg = await makeTempDir();
+    const { status, stdout } = runCli(['register'], { XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());
@@ -158,8 +171,9 @@ describe('tui-back register (black-box)', () => {
     expect(parsed.error.code).toBe('invalid-argument');
   });
 
-  it('register rejects excess arguments with invalid-argument and exits 1', () => {
-    const { status, stdout } = runCli(['register', '/a', '/b']);
+  it('register rejects excess arguments with invalid-argument and exits 1', async () => {
+    const xdg = await makeTempDir();
+    const { status, stdout } = runCli(['register', '/a', '/b'], { XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());
@@ -242,8 +256,9 @@ describe('tui-back register --reset (black-box)', () => {
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { path: repo, backupPath: null } });
   });
 
-  it('rejects a missing path after --reset with missing-argument and exits 1', () => {
-    const { status, stdout } = runCli(['register', '--reset']);
+  it('rejects a missing path after --reset with missing-argument and exits 1', async () => {
+    const xdg = await makeTempDir();
+    const { status, stdout } = runCli(['register', '--reset'], { XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());

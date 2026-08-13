@@ -1,5 +1,5 @@
 import type { Result } from './result.js';
-import type { LockPort } from './ports/lock.js';
+import type { LockHandle, LockPort } from './ports/lock.js';
 
 /**
  * Runs `work` while holding a short-lived per-resource advisory lock (AD-9). Useful for
@@ -12,14 +12,20 @@ import type { LockPort } from './ports/lock.js';
  *   or lock-acquire-error code) and `work` is never invoked.
  * - a `work` failure propagates unchanged; release is still attempted.
  * - a release failure is a non-fatal diagnostic and is absorbed — it never masks the work
- *   result, whether the work succeeded or failed.
+ *   result, whether the work succeeded or failed. The helper always resolves, never throws.
  */
 export async function withActionLock<R>(
   lock: LockPort,
   resourceKey: string,
   work: () => Promise<Result<R>>,
 ): Promise<Result<R>> {
-  const acquired = await lock.acquire(resourceKey);
+  let acquired: Result<LockHandle>;
+  try {
+    acquired = await lock.acquire(resourceKey);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: { code: 'internal-error', message: detail } };
+  }
   if (!acquired.ok) {
     return acquired;
   }
@@ -31,7 +37,12 @@ export async function withActionLock<R>(
     const detail = error instanceof Error ? error.message : String(error);
     result = { ok: false, error: { code: 'internal-error', message: detail } };
   } finally {
-    await acquired.data.release();
+    try {
+      await acquired.data.release();
+    } catch (error) {
+      // release rejection (a non-adapter port) is absorbed like any release error — it must
+      // never escape and never mask the work result above.
+    }
   }
 
   return result;

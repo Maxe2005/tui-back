@@ -33,13 +33,21 @@ interface FakeLock {
   releases: Array<ReturnType<typeof vi.fn<() => Promise<Result<void>>>>>;
 }
 
-function fakeLock(acquireResult?: ReturnType<typeof ok<string>> | ReturnType<typeof err>): FakeLock {
+function fakeLock(
+  acquireResult?: ReturnType<typeof ok<string>> | ReturnType<typeof err>,
+  releaseImpl?: () => Promise<Result<void>>,
+): FakeLock {
   const releases: Array<ReturnType<typeof vi.fn<() => Promise<Result<void>>>>> = [];
   const acquire = vi.fn(async (_resourceKey: string) => {
     if (acquireResult !== undefined) {
       return acquireResult;
     }
-    const release = vi.fn(async () => ok(undefined));
+    const release = vi.fn(async () => {
+      if (releaseImpl !== undefined) {
+        return releaseImpl();
+      }
+      return ok(undefined);
+    });
     releases.push(release);
     const handle: LockHandle = { release };
     return ok(handle);
@@ -135,5 +143,18 @@ describe('registerRepo', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'action-in-progress' } });
     expect(registry.add).not.toHaveBeenCalled();
     expect(lock.releases).toHaveLength(0);
+  });
+
+  it('absorbs a rejecting release without masking the work result', async () => {
+    const registry = fakeRegistry();
+    const lock = fakeLock(undefined, async () => {
+      throw new Error('release blew up');
+    });
+
+    const result = await registerRepo(registry.port, lock.port, RESOURCE_KEY, '/abs/repo');
+
+    expect(result).toEqual({ ok: true, data: { path: '/abs/repo' } });
+    expect(registry.add).toHaveBeenCalledWith('/abs/repo');
+    expect(lock.releases).toHaveLength(1);
   });
 });

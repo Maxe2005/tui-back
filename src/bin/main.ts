@@ -13,7 +13,7 @@ import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
-import { ensureXdgDir, resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 
 const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
@@ -21,11 +21,12 @@ const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
 
 // Per-resource advisory lock directory lives under XDG_STATE_HOME/tui-back/locks (AD-7's
-// transient-state tier). The registry file path is the resource key state-mutating use-cases
-// (register/reset) lock on, so concurrent CLI runs are serialized instead of racing the
-// registry read-modify-write.
+// transient-state tier). The lock dir is created lazily inside the lock adapter on first
+// acquire (only register/reset acquire), so read-only commands never write state and an
+// unwritable state dir surfaces as a Result error rather than a startup crash. The registry
+// file path is the resource key state-mutating use-cases (register/reset) lock on, so
+// concurrent CLI runs are serialized instead of racing the registry read-modify-write.
 const lockDir = join(xdg.stateDir, 'locks');
-ensureXdgDir(lockDir);
 const lock = createLockPort(lockDir);
 const subcommands = buildSubcommands({ registry, manifest, lock, registryResourceKey: registryFile });
 
