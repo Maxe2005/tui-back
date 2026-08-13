@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 1-6-static-module-registry.md (2026-08-13)
+
+- **TTY/human rendering of a `ListReposData` payload carrying `moduleIds` never tested** (`src/adapters/driving/cli/envelope.ts`): the envelope's `renderHuman` passes `ManagedRepo` through a generic pretty-printer; `envelope.test.ts` only exercises the TTY branch with generic payloads (never a `ListReposData` object containing `moduleIds`), the e2e is JSON-only (no pty lib), and the core unit test checks the unrendered data. The generic renderer makes a regression unlikely. **Track:** add an envelope render test with a `moduleIds`-carrying payload once a pty/format test lands, or accept generic pretty-print.
+- **AC4 non-empty `moduleIds` never e2e-tested** (`src/bin/tui-back.e2e.test.ts`): because the production registry is empty by design (D1), any real manifest with a `modules` key fails as `unknown-module`, so the e2e can only observe `moduleIds: []`. The non-empty, sorted `moduleIds` path is verified only at core unit level. Intentional and documented. **Track:** add a populated-`moduleIds` e2e case once Epics 4/6 register a real module implementation.
+
 ## Deferred from: code review of 1-5-explicit-repo-registry.md (2026-08-12)
 
 - **Scan root-probe lives in the adapter, not the use-case** (`src/adapters/driven/registry/index.ts:97`): spec task text assigned the root probe to core's `scan.ts`, but it's implemented in the driven adapter's `scanRoot`. Behavior contract preserved and consistent with the RegistryPort design note ("adapter owns the filesystem"); literal task split drifted. **Track:** keep as-is or amend the spec text to match.

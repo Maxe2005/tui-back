@@ -54,7 +54,7 @@ development_status:
   1-3-script-output-envelope-cli-entrypoint-contract: done
   1-4-manifest-schema-loader-validation: done
   1-5-explicit-repo-registry: done
-  1-6-static-module-registry: review
+  1-6-static-module-registry: done
   1-7-single-instance-enforcement-per-resource-action-lock: backlog
   1-8-atelier-design-tokens-theme-module: backlog
   1-9-read-focused-display-components: backlog

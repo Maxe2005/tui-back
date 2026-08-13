@@ -2,7 +2,7 @@
 title: 'Static Module Registry'
 type: 'feature'
 created: '2026-08-13'
-status: 'review'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: true
 context: [1-5-explicit-repo-registry, 1-4-manifest-schema-loader-validation]
@@ -155,4 +155,13 @@ baseline_commit: '4a5bf43dacac7191623efa1d516a921cadd0533d'
 
 ### Change Log
 
-- 2026-08-13 — Implemented story 1.6 Static Module Registry; mark for review. Added compiled-in static module registry (AD-5), manifest-level module-id validation surfacing a distinct `unknown-module` error, and `moduleIds` on `list-repos` managed repos.
+- 2026-08-13 — Implemented story 1.6 Static Module Registry; mark for review. Added compiled-in static module registry (AD-5), manifest-level module-id validation surfacing a distinct `unknown-module` error, and `moduleIds` on `list-repos` managed repos. New error code surfaced and documented in the I/O matrix (rows 5-6): `unknown-module` — a manifest names a module id not in the compiled-in registry; loader returns `err('unknown-module', 'Unknown module id "<id>" in <repoPath>')`, never silently ignored.
+
+### Review Findings
+
+- [x] [Review][Patch] `resolveModule` returns inherited prototype members (`toString`, `constructor`, …) instead of `undefined` for a non-own id, so it falsely reports a non-module as resolved — missing own-property guard [src/adapters/driven/modules/module-registry.ts:26] — fixed with `hasOwnProperty` guard + regression test
+- [x] [Review][Patch] `validateModules` returns unknown ids in insertion order (test asserts `['a','b']`), inconsistent with the schema's sorted FR-1 determinism — sort its output [src/adapters/driven/modules/module-registry.ts:33] — fixed with `.sort()` + updated/added tests
+- [x] [Review][Patch] `list-repos` computes `moduleIds` with `Object.keys(loaded.data.modules)` assuming `modules` is always present on an `ok` manifest — guard non-object/undefined for the core port boundary [src/core/scripts/list-repos.ts:62] — fixed with `?? {}`
+- [x] [Review][Patch] new kebab-case `unknown-module` error code not documented in the story I/O/error matrix (Story 1.5 precedent) [src/adapters/driven/manifest/index.ts:52] — fixed: documented in the I/O matrix + Change Log
+- [x] [Review][Defer] TTY/human rendering of a `ListReposData` payload carrying `moduleIds` never tested — generic renderer makes regression unlikely [src/adapters/driving/cli/envelope.ts] — deferred, verification gap only
+- [x] [Review][Defer] AC4 non-empty `moduleIds` never e2e-tested — intentional, production registry empty by design (needs Epics 4/6) [src/bin/tui-back.e2e.test.ts] — deferred, documented

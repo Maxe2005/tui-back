@@ -27,12 +27,14 @@ export function resolveModule(
   registry: Readonly<Record<ModuleId, ModuleImplementation>>,
   id: string,
 ): ModuleImplementation | undefined {
-  return registry[id];
+  return Object.prototype.hasOwnProperty.call(registry, id) ? registry[id] : undefined;
 }
 
 export function validateModules(
   modules: Record<string, unknown>,
   registry: Readonly<Record<ModuleId, ModuleImplementation>> = moduleRegistry,
 ): string[] {
-  return Object.keys(modules).filter((id) => !Object.prototype.hasOwnProperty.call(registry, id));
+  return Object.keys(modules)
+    .sort()
+    .filter((id) => !Object.prototype.hasOwnProperty.call(registry, id));
 }

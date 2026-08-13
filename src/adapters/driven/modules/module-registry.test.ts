@@ -35,7 +35,11 @@ describe('validateModules (AC2/AC3 via injected registry, D1)', () => {
     expect(validateModules({ a: {}, b: {} })).toEqual(['a', 'b']);
   });
 
-  it('returns only the unknown keys against a populated registry, in key order', () => {
+  it('returns unknown keys in sorted ascending order (FR-1), regardless of insertion order', () => {
+    expect(validateModules({ z: {}, a: {}, m: {} })).toEqual(['a', 'm', 'z']);
+  });
+
+  it('returns only the unknown keys against a populated registry, sorted', () => {
     expect(validateModules({ 'route-explorer': {}, 'shared-types-consumer': {} }, populated)).toEqual([
       'shared-types-consumer',
     ]);
@@ -59,5 +63,12 @@ describe('resolveModule (D1)', () => {
 
   it('returns undefined for any id against the empty production registry', () => {
     expect(resolveModule(moduleRegistry, 'anything')).toBeUndefined();
+  });
+
+  it('returns undefined for inherited prototype members, never mistaking them for modules', () => {
+    const registry: Record<string, string> = { known: 'impl' };
+    expect(resolveModule(registry, 'toString')).toBeUndefined();
+    expect(resolveModule(registry, 'constructor')).toBeUndefined();
+    expect(resolveModule(registry, 'hasOwnProperty')).toBeUndefined();
   });
 });
