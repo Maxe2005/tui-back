@@ -7,16 +7,27 @@
 // No explicit process.exit() here: calling it right after stdout.write() does not
 // guarantee the write is flushed when stdout is a pipe/non-TTY. Setting exitCode and
 // letting the script end naturally lets Node drain stdout before exiting.
+import { join } from 'node:path';
 import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
+import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
-import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { ensureXdgDir, resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 
-const registryFile = resolveRegistryFile(resolveXdgPaths());
+const xdg = resolveXdgPaths();
+const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
-const subcommands = buildSubcommands({ registry, manifest });
+
+// Per-resource advisory lock directory lives under XDG_STATE_HOME/tui-back/locks (AD-7's
+// transient-state tier). The registry file path is the resource key state-mutating use-cases
+// (register/reset) lock on, so concurrent CLI runs are serialized instead of racing the
+// registry read-modify-write.
+const lockDir = join(xdg.stateDir, 'locks');
+ensureXdgDir(lockDir);
+const lock = createLockPort(lockDir);
+const subcommands = buildSubcommands({ registry, manifest, lock, registryResourceKey: registryFile });
 
 const { output, exitCode } = await runCli(
   process.argv.slice(2),

@@ -2,8 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { LockPort } from '../../../core/ports/lock.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
+
+function fakeLock(): LockPort {
+  return {
+    acquire: async (resourceKey) => ok({ release: async () => ok(undefined) }),
+  };
+}
 
 const fakeSubcommands: Subcommand[] = [
   { name: 'ping', run: async () => ok({ message: 'pong' }) },
@@ -119,7 +126,7 @@ describe('subcommand registry guards', () => {
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
 
-    const subcommands = buildSubcommands({ registry, manifest });
+    const subcommands = buildSubcommands({ registry, manifest, lock: fakeLock(), registryResourceKey: '/cfg/registry.yaml' });
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual(['register', 'list-repos', 'scan', 'ping']);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
@@ -136,7 +143,7 @@ describe('subcommand registry guards', () => {
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
 
-    const subcommands = buildSubcommands({ registry, manifest });
+    const subcommands = buildSubcommands({ registry, manifest, lock: fakeLock(), registryResourceKey: '/cfg/registry.yaml' });
     const register = subcommands.find((subcommand) => subcommand.name === 'register');
     if (!register) throw new Error('expected register subcommand');
 
@@ -164,7 +171,7 @@ describe('subcommand registry guards', () => {
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
 
-    const subcommands = buildSubcommands({ registry, manifest });
+    const subcommands = buildSubcommands({ registry, manifest, lock: fakeLock(), registryResourceKey: '/cfg/registry.yaml' });
 
     const excessArgs: Record<string, string[]> = {
       'list-repos': ['extra'],

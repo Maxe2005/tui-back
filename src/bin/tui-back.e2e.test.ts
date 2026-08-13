@@ -14,7 +14,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
@@ -34,6 +34,19 @@ function runCli(args: string[], env: NodeJS.ProcessEnv = {}, cwd?: string) {
     encoding: 'utf8',
     env: { ...process.env, ...env },
     cwd,
+  });
+}
+
+async function runCliAsync(args: string[], env: NodeJS.ProcessEnv = {}): Promise<{ status: number | null; stdout: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [scriptPath, ...args], {
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'inherit'],
+    });
+    let stdout = '';
+    child.stdout.on('data', (chunk) => (stdout += chunk));
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ status: code, stdout }));
   });
 }
 
@@ -99,7 +112,7 @@ describe('tui-back register (black-box)', () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);
 
-    const { status, stdout } = runCli(['register', repo], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['register', repo], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { path: repo } });
@@ -109,7 +122,7 @@ describe('tui-back register (black-box)', () => {
   it('register twice is a deduped no-op and list-repos twice is byte-identical (FR-1)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(true);
-    const env = { XDG_CONFIG_HOME: xdg };
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
 
     const first = runCli(['register', repo], env);
     const second = runCli(['register', repo], env);
@@ -137,7 +150,7 @@ describe('tui-back register (black-box)', () => {
   it('register rejects a relative path with invalid-argument and exits 1', async () => {
     const xdg = await makeTempDir();
 
-    const { status, stdout } = runCli(['register', './relative'], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['register', './relative'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());
@@ -155,11 +168,33 @@ describe('tui-back register (black-box)', () => {
   });
 });
 
+describe('tui-back register concurrency (black-box)', () => {
+  it('two racing register subprocesses are serialized — both paths survive, no lost update', async () => {
+    const xdg = await makeTempDir();
+    const repoA = await makeRepo(false);
+    const repoB = await makeRepo(false);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const [a, b] = await Promise.all([runCliAsync(['register', repoA], env), runCliAsync(['register', repoB], env)]);
+
+    expect(a.status).toBe(0);
+    expect(b.status).toBe(0);
+
+    const parsedA = JSON.parse(a.stdout.trim());
+    const parsedB = JSON.parse(b.stdout.trim());
+    expect(parsedA).toEqual({ ok: true, data: { path: repoA } });
+    expect(parsedB).toEqual({ ok: true, data: { path: repoB } });
+
+    const registry = parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'));
+    expect([...(registry.repos as string[])].sort()).toEqual([repoA, repoB].sort());
+  });
+});
+
 describe('tui-back register --reset (black-box)', () => {
   it('backs up a corrupt registry, re-initializes it, and list-repos works again', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(true);
-    const env = { XDG_CONFIG_HOME: xdg };
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     await mkdir(join(xdg, 'tui-back'), { recursive: true });
     const registryFile = join(xdg, 'tui-back', 'registry.yaml');
     const corrupt = 'a: [unclosed';
@@ -186,7 +221,7 @@ describe('tui-back register --reset (black-box)', () => {
   it('refuses a healthy registry with registry-not-corrupt and exits 1', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);
-    const env = { XDG_CONFIG_HOME: xdg };
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     expect(runCli(['register', repo], env).status).toBe(0);
 
     const { status, stdout } = runCli(['register', '--reset', repo], env);
@@ -201,7 +236,7 @@ describe('tui-back register --reset (black-box)', () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);
 
-    const { status, stdout } = runCli(['register', '--reset', repo], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['register', '--reset', repo], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { path: repo, backupPath: null } });
@@ -223,7 +258,7 @@ describe('tui-back list-repos (black-box)', () => {
     const managed = await makeRepo(true);
     const unmanaged = await makeRepo(false);
     const gone = join(xdg, 'gone-repo');
-    const env = { XDG_CONFIG_HOME: xdg };
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
 
     for (const repo of [managed, unmanaged, gone]) {
       expect(runCli(['register', repo], env).status).toBe(0);
@@ -253,7 +288,7 @@ describe('tui-back list-repos (black-box)', () => {
   it('surfaces moduleIds in the JSON envelope for a module-free managed repo (AC4)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(true);
-    const env = { XDG_CONFIG_HOME: xdg };
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     expect(runCli(['register', repo], env).status).toBe(0);
 
     const { status, stdout } = runCli(['list-repos'], env);
@@ -268,7 +303,7 @@ describe('tui-back list-repos (black-box)', () => {
   it('surfaces a manifest with a non-empty modules map as an unknown-module error (AC3)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);
-    const env = { XDG_CONFIG_HOME: xdg };
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     await writeFile(
       join(repo, '.tui-back.yaml'),
       [
@@ -295,7 +330,7 @@ describe('tui-back list-repos (black-box)', () => {
   it('with no registry.yaml returns empty repos/unreachable/errors and exits 0', async () => {
     const xdg = await makeTempDir();
 
-    const { status, stdout } = runCli(['list-repos'], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['list-repos'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { repos: [], unreachable: [], errors: [] } });
@@ -306,7 +341,7 @@ describe('tui-back list-repos (black-box)', () => {
     await mkdir(join(xdg, 'tui-back'), { recursive: true });
     await writeFile(join(xdg, 'tui-back', 'registry.yaml'), 'a: [unclosed');
 
-    const { status, stdout } = runCli(['list-repos'], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['list-repos'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());
@@ -319,7 +354,7 @@ describe('tui-back list-repos (black-box)', () => {
     await mkdir(join(xdg, 'tui-back'), { recursive: true });
     await writeFile(join(xdg, 'tui-back', 'registry.yaml'), 'repositories: []\n');
 
-    const { status, stdout } = runCli(['list-repos'], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['list-repos'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());
@@ -341,7 +376,7 @@ describe('tui-back scan (black-box)', () => {
     await mkdir(join(repoA, 'node_modules', 'dep'), { recursive: true });
     await writeFile(join(repoA, 'node_modules', 'dep', '.tui-back.yaml'), manifestYaml);
 
-    const { status, stdout } = runCli(['scan', root], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['scan', root], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { candidates: [repoA, repoB], skipped: [] } });
@@ -355,7 +390,7 @@ describe('tui-back scan (black-box)', () => {
     await mkdir(repo, { recursive: true });
     await writeFile(join(repo, '.tui-back.yaml'), manifestYaml);
 
-    const { status, stdout } = runCli(['scan', './workspace'], { XDG_CONFIG_HOME: xdg }, xdg);
+    const { status, stdout } = runCli(['scan', './workspace'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg }, xdg);
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { candidates: [repo], skipped: [] } });
@@ -366,7 +401,7 @@ describe('tui-back scan (black-box)', () => {
     const root = join(xdg, 'empty-workspace');
     await mkdir(root, { recursive: true });
 
-    const { status, stdout } = runCli(['scan', root], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['scan', root], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { candidates: [], skipped: [] } });
@@ -384,7 +419,7 @@ describe('tui-back scan (black-box)', () => {
   it('with a nonexistent root fails scan-root-not-found and exits 1', async () => {
     const xdg = await makeTempDir();
 
-    const { status, stdout } = runCli(['scan', join(xdg, 'does-not-exist')], { XDG_CONFIG_HOME: xdg });
+    const { status, stdout } = runCli(['scan', join(xdg, 'does-not-exist')], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
 
     expect(status).toBe(1);
     const parsed = JSON.parse(stdout.trim());
