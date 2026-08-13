@@ -36,9 +36,13 @@ interface FakeLock {
 function fakeLock(
   acquireResult?: ReturnType<typeof ok<string>> | ReturnType<typeof err>,
   releaseImpl?: () => Promise<Result<void>>,
+  acquireThrows?: Error,
 ): FakeLock {
   const releases: Array<ReturnType<typeof vi.fn<() => Promise<Result<void>>>>> = [];
   const acquire = vi.fn(async (_resourceKey: string) => {
+    if (acquireThrows !== undefined) {
+      throw acquireThrows;
+    }
     if (acquireResult !== undefined) {
       return acquireResult;
     }
@@ -150,6 +154,41 @@ describe('registerRepo', () => {
     const lock = fakeLock(undefined, async () => {
       throw new Error('release blew up');
     });
+
+    const result = await registerRepo(registry.port, lock.port, RESOURCE_KEY, '/abs/repo');
+
+    expect(result).toEqual({ ok: true, data: { path: '/abs/repo' } });
+    expect(registry.add).toHaveBeenCalledWith('/abs/repo');
+    expect(lock.releases).toHaveLength(1);
+  });
+
+  it('maps a rejecting lock.acquire to internal-error and never calls add or release', async () => {
+    const registry = fakeRegistry();
+    const lock = fakeLock(undefined, undefined, new Error('adapter blew up'));
+
+    const result = await registerRepo(registry.port, lock.port, RESOURCE_KEY, '/abs/repo');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'internal-error' } });
+    expect(registry.add).not.toHaveBeenCalled();
+    expect(lock.releases).toHaveLength(0);
+  });
+
+  it('maps a throwing work to internal-error and still releases the lock', async () => {
+    const registry = fakeRegistry({ add: async () => {
+      throw new Error('registry adapter threw');
+    } });
+    const lock = fakeLock();
+
+    const result = await registerRepo(registry.port, lock.port, RESOURCE_KEY, '/abs/repo');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'internal-error' } });
+    expect(lock.acquire).toHaveBeenCalledWith(RESOURCE_KEY);
+    expect(lock.releases).toHaveLength(1);
+  });
+
+  it('absorbs a release that resolves with an error Result without masking the work result', async () => {
+    const registry = fakeRegistry();
+    const lock = fakeLock(undefined, async () => err('lock-release-error', 'rm failed'));
 
     const result = await registerRepo(registry.port, lock.port, RESOURCE_KEY, '/abs/repo');
 
