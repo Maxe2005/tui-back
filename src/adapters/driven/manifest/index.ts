@@ -7,9 +7,18 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { Manifest } from '../../../core/ports/manifest.js';
-import { manifestSchema } from './schema.js';
+import { createManifestSchema, manifestSchema } from './schema.js';
 
-export async function loadManifest(repoPath: string): Promise<Result<Manifest>> {
+const UNKNOWN_MODULE_ISSUE = /^Unknown module id "/;
+
+export interface LoadManifestOptions {
+  knownModuleIds?: ReadonlySet<string>;
+}
+
+export async function loadManifest(
+  repoPath: string,
+  options: LoadManifestOptions = {},
+): Promise<Result<Manifest>> {
   let content: string;
   try {
     content = await readFile(join(repoPath, '.tui-back.yaml'), 'utf8');
@@ -29,8 +38,22 @@ export async function loadManifest(repoPath: string): Promise<Result<Manifest>> 
     return err('manifest-invalid-yaml', `Invalid YAML in ${join(repoPath, '.tui-back.yaml')}: ${detail}`);
   }
 
-  const result = manifestSchema.safeParse(parsed);
+  const schema = options.knownModuleIds ? createManifestSchema(options.knownModuleIds) : manifestSchema;
+  const result = schema.safeParse(parsed);
   if (!result.success) {
+    // Story 1.6 (AD-5): a manifest naming a module id the tool does not know must fail loudly,
+    // naming the offending id AND the repo path it came from. The schema flags the id (it has
+    // no repoPath); the loader owns repoPath and assigns the distinct kebab-case code.
+    const moduleIssue = result.error.issues.find(
+      (issue) => issue.path[0] === 'modules' && UNKNOWN_MODULE_ISSUE.test(issue.message),
+    );
+    if (moduleIssue) {
+      const id = moduleIssue.path[1] as string;
+      return err('unknown-module', `Unknown module id "${id}" in ${repoPath}`, {
+        issues: result.error.issues,
+      });
+    }
+
     const first = result.error.issues[0];
     const field = first ? (first.path.length > 0 ? first.path.join('.') : '(root)') : '<unknown>';
     const reason = first ? first.message : 'unknown validation error';
