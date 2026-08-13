@@ -11,7 +11,7 @@
 // so the child process never touches the real config dir (registry.yaml writes are scoped
 // to the fixture).
 import { describe, expect, it, afterEach } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -92,6 +92,8 @@ describe('tui-back CLI (black-box)', () => {
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { message: 'pong' } });
+    // read-only commands must not create state: the lock dir must not exist after ping
+    await expect(access(join(xdg, 'tui-back', 'locks'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('an unknown subcommand fails with the AD-3 envelope and exits 1, without crashing', () => {
