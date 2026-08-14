@@ -1,12 +1,15 @@
 export const colors = {
   background: '#1c1b1f',
   surface: '#232228',
+  // Current-selection fill only — never used on its own without the accent
+  // border, never for anything but the current selection (DESIGN.md §Colors).
   'surface-selected': '#28262c',
   border: '#3a3844',
   text: '#eae7e1',
   'text-dim': '#8f8b98',
   // Reserved for active-selection and primary-action affordances only —
-  // never a status color (DESIGN.md §Colors, Do/Don't table).
+  // never a status color (DESIGN.md §Colors, Do/Don't table). Text set on an
+  // accent fill reads colors.background (near-black on amber), not colors.text.
   accent: '#c9a13b',
   success: '#3f9d6e',
   error: '#c1495e',
@@ -14,6 +17,10 @@ export const colors = {
   info: '#4f80a8',
 } as const;
 
+// Character-cell units: '0'–'3', glyph-gap, indent and pane-padding-x are
+// column widths in `ch`; section-gap is one blank ROW between logical groups
+// and chrome-row is one chrome ROW — row counts, not `ch` (DESIGN.md
+// §Layout & Spacing).
 export const spacing = {
   '0': 0,
   '1': 1,
@@ -32,15 +39,20 @@ export const typography = {
     family:
       'ui-monospace, Cascadia Code, SF Mono, Fira Code, Consolas, monospace',
   },
-  label: { weight: 600, letterSpacing: '0.05em' },
+  // Uppercase, tracked-out pane-title/section-label, set in colors.text-dim.
+  // A terminal has no letter-spacing and no semi-bold, so Ink renders this
+  // role at regular weight — it is explicitly NOT bold; only the active
+  // zone-tab is ever bold (DESIGN.md §Typography, Do/Don't).
+  label: { bold: false },
   'dim-wink': { italic: true },
-  'active-tab': { weight: 700 },
+  'active-tab': { bold: true },
 } as const;
 
 // Atelier is square-cornered by deliberate choice; every panel, modal, badge,
 // and row renders at 0px — never round. This is the visual half of "precise
-// and instantly scannable" (DESIGN.md §Shapes).
-export const rounded = { sm: 0, md: 0, lg: 0 } as const;
+// and instantly scannable" (DESIGN.md §Shapes). DEFAULT is the token
+// DESIGN.md references for every surface (modal-dialog.corner, §Shapes).
+export const rounded = { sm: 0, md: 0, lg: 0, DEFAULT: 0 } as const;
 
 // Accent (#c9a13b) is reserved exclusively for active-selection and
 // primary-action affordances (active zone-tab, selected-row accent bar,

@@ -8,7 +8,9 @@ spacing, or radius in a component.
 
 - `theme.ts` — the token module: `colors`, `spacing`, `typography`, `rounded`.
   Values are byte-for-byte from `DESIGN.md` frontmatter; `DESIGN.md` wins on
-  conflict with any other file.
+  conflict with any other file. In `spacing`, `section-gap` is one blank row
+  between logical groups and `chrome-row` is one chrome row — row counts, not
+  `ch` column units.
 - `theme.test.ts` — locks every token to its exact value.
 
 ## Rules for component stories (1.9–1.12)
@@ -26,3 +28,9 @@ spacing, or radius in a component.
 3. **TUI only.** These tokens drive the TUI driving adapter. Do not pull them
    into CLI text output (`dispatch.ts`/`envelope.ts`), which keeps its own
    rendering.
+4. **Text on accent reads `colors.background`.** Any text set on an
+   `theme.colors.accent` fill (the active zone-tab) uses `theme.colors.background`
+   — near-black on amber, never `text` (DESIGN.md §Typography, active-tab).
+5. **`surface-selected` only ever marks the current selection.** It never
+   appears on its own — always paired with the accent selection bar, never for
+   anything but the selected row (DESIGN.md §Colors).

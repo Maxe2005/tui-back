@@ -56,22 +56,21 @@ describe('theme spacing', () => {
 
 describe('theme typography', () => {
   it('uses a single monospace family stack (DESIGN.md §Typography)', () => {
-    expect(typography.base.family).toContain('monospace');
+    expect(typography.base.family).toBe(
+      'ui-monospace, Cascadia Code, SF Mono, Fira Code, Consolas, monospace',
+    );
   });
 
   it('defines the label, dim-wink, and active-tab rendering roles', () => {
-    expect(typography.label.weight).toBe(600);
-    expect(typography.label.letterSpacing).toBe('0.05em');
+    expect(typography.label.bold).toBe(false);
     expect(typography['dim-wink'].italic).toBe(true);
-    expect(typography['active-tab'].weight).toBe(700);
+    expect(typography['active-tab'].bold).toBe(true);
   });
 });
 
 describe('theme rounded', () => {
   it('renders every corner at 0px — no rounding anywhere (AC3)', () => {
-    expect(rounded.sm).toBe(0);
-    expect(rounded.md).toBe(0);
-    expect(rounded.lg).toBe(0);
+    expect(Object.values(rounded).every((value) => value === 0)).toBe(true);
   });
 });
 
