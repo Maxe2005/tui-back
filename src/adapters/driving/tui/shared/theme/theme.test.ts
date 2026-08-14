@@ -81,4 +81,14 @@ describe('theme aggregate', () => {
     expect(theme.typography).toBe(typography);
     expect(theme.rounded).toBe(rounded);
   });
+
+  it('is deeply frozen so consumers cannot mutate the token vocabulary at runtime', () => {
+    expect(Object.isFrozen(colors)).toBe(true);
+    expect(Object.isFrozen(spacing)).toBe(true);
+    expect(Object.isFrozen(typography)).toBe(true);
+    expect(Object.isFrozen(rounded)).toBe(true);
+    expect(Object.isFrozen(theme)).toBe(true);
+    expect(Object.isFrozen(typography.base)).toBe(true);
+    expect(Object.isFrozen(typography.label)).toBe(true);
+  });
 });
