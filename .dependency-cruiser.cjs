@@ -14,6 +14,17 @@ module.exports = {
       from: { path: '^src/core(/|$)' },
       to: { path: 'adapters(/|$)' },
     },
+    {
+      name: 'no-tui-leak-outside-driving-tui',
+      comment:
+        'The Atelier theme and every future TUI/shared component are TUI-only (AD-3): ' +
+        'nothing outside the TUI driving adapter may import them. CLI text output ' +
+        '(dispatch.ts/envelope.ts) keeps its own rendering; the same NodeNext raw-specifier ' +
+        'caveat as no-core-to-adapters applies, so to.path is unanchored.',
+      severity: 'error',
+      from: { pathNot: '^src/adapters/driving/tui(/|$)' },
+      to: { path: 'tui(/|$)' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
