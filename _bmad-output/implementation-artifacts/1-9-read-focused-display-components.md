@@ -2,10 +2,11 @@
 title: 'Read-Focused Display Components'
 type: 'feature'
 created: '2026-08-14'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: true
 context: [1-8-atelier-design-tokens-theme-module]
+baseline_commit: '83e7758'
 warnings: []
 deferred: []
 ---
@@ -158,6 +159,19 @@ From `_bmad-output/planning-artifacts/epics.md#Story-1.9` (lines 390-414), verba
 - AC4 (trailing metadata in text-dim) → `ListRow` `meta` prop consuming `colors['text-dim']` + test.
 - AC5 (detail-pane uppercase label title + outcome-colored summary-line) → `DetailPane` + `SUMMARY_LINE_COLORS` + tests.
 
+### Review Findings
+
+**patch:**
+
+- [x] [Review][Decision→Patch] Selected `list-row` shifts the label right by 1ch — base rows reserve a 1ch transparent accent-bar column (`' '`), while selected rows add the `›` marker on top (bar + marker = 2ch before the label), so the label x-position moves on selection. **Resolved (user decision 2026-08-14):** reserve a fixed 2ch selection column — marker renders `' '` when unselected so labels stay aligned. [`src/adapters/driving/tui/shared/components/list-row.tsx:25-26,39-40`]
+
+- [x] [Review][Patch] AC5 summary-line top-rule is not render-asserted — `detail-pane.test.tsx` asserts only the summary text (`toContain('Résumé : 2/2')`); the outcome-colored border rule (the AC5 headliner) could disappear and every DetailPane test stays green. Add a render assertion that the rule renders (e.g. Ink box-drawing char and/or tone ANSI color present). [`src/adapters/driving/tui/shared/components/detail-pane.test.tsx:31-41`]
+- [x] [Review][Patch] Ink styling application layer is unpinned at the render boundary — selected surface-selected fill / accent `▌` bar (AC2), meta `text-dim` distinctness (AC4), per-state badge colors (AC1: only the `done` state is smoke-rendered), nested indent, and the `▌`-absence / `no-summary` inverse cases are never asserted in Ink output. The pure-maps layer is well covered; only the thin JSX application layer could regress silently. [`list-row.test.tsx`, `status-badge.test.tsx`, `detail-pane.test.tsx`]
+- [x] [Review][Patch] "Deeply frozen" test pins only 2 of the 4 nested typography roles — `theme.ts` freezes `base`/`label`/`dim-wink`/`active-tab`, but `theme.test.ts` asserts only `base` and `label`; removing `Object.freeze` on `dim-wink`/`active-tab` passes the test despite the deep-freeze claim. Add the two missing `Object.isFrozen` assertions. [`src/adapters/driving/tui/shared/theme/theme.test.ts:85-93`]
+- [x] [Review][Patch] `STATUS_BADGES` / `SUMMARY_LINE_COLORS` are runtime-mutable — `as const` is compile-time only; a consumer could mutate them, undercutting the story's own `Object.freeze` posture for the token vocabulary. Wrap both maps in `Object.freeze` (and mirror in the tests if asserted). [`src/adapters/driving/tui/shared/components/status-badge.tsx:13-21`, `src/adapters/driving/tui/shared/components/detail-pane.tsx:7-11`]
+- [x] [Review][Patch] `theme.test.ts` ends without a trailing newline (cosmetic; every other file in the change has one). [`src/adapters/driving/tui/shared/theme/theme.test.ts:94`]
+- [x] [Review][Patch] `renderToString` has no error/cleanup path — if `render()` throws, the Ink instance is never unmounted and Ink's process hooks (stdin/signal) leak; wrap the render/unmount in `try/finally` so `unmount()` always runs. [`src/adapters/driving/tui/shared/components/render-to-string.ts:13-20`]
+
 ## Dev Notes
 
 - **First story to install Ink/React — do not skip the install.** `ink@7.1.1` requires Node ≥22 and React ≥19.2.0 (`ARCHITECTURE-SPINE.md:181`); the project runs Node ≥24 and pins React `19.2.8` — no conflict. `@types/react@^19.2.18` is the current stable types package (verified 2026-07-30); the repo's devDeps use caret ranges, runtime deps use exact pins — follow that split.
@@ -212,6 +226,7 @@ opencode / deepseek-v4-flash-free (story creation session, 2026-08-14).
 - Empirically verified during creation: depcruise on a realistic `.tsx` scratch component (ink + `./theme.js` imports, union type, `as const` map, JSX) → "3 modules, 2 dependencies cruised", both imports extracted, no violations. This is the evidence the boundary rules survive `.tsx`.
 - Verified ink@7.1.1 `render.d.ts` (RenderOptions `interactive`/`waitUntilRenderFlush`/`waitUntilExit`/`unmount`) and `styles.d.ts` (per-side `borderTop`… + `borderTopColor`). Verified `@types/react` 19.2.18 stable.
 - Depcruise TS range check: `supportedTranspilers.typescript = ">=2.0.0 <7.0.0"` — project's TS 7.0.2 excluded, hence acorn-loose path for `.tsx`.
+- Re-verified during implementation (commit `2d5ab29`): depcruise JSON output on the three `.tsx` components extracts `ink`, `../theme/theme.js`, and `react` — both imports per file present, no boundary violations (112 modules / 172 dependencies cruised). A throwaway `src/adapters/driving/cli/__leak_check__.ts` importing the components barrel correctly trips `no-tui-leak-outside-driving-tui` (1 error), then removed.
 
 ### Completion Notes List
 
@@ -220,16 +235,36 @@ opencode / deepseek-v4-flash-free (story creation session, 2026-08-14).
 - Story target: three read-focused presentational components (`status-badge`, `list-row`, `detail-pane`) under `tui/shared/components/`; first story to install Ink 7.1.1 / React 19.2.8 / `@types/react` and to add `.tsx` + `"jsx": "react-jsx"` to the repo.
 - Picks up three 1-8 deferred items (Object.freeze + barrel test import + glyph-vocabulary tokenization).
 - Key verified technical facts embedded: depcruise acorn-loose extracts `.tsx` imports; Ink 7.1.1 render() non-interactive helper; Ink per-side border props for the summary-line top-rule.
+- **Implementation complete on 2026-08-14** on branch `story-1-9-read-focused-display-components` (3 commits, `(story 1.9)` subjects): theme token freeze (`ff72284`), Ink/React install + `"jsx": "react-jsx"` + render-to-string helper + ink smoke (`0951203`), three components + tests + barrels (`2d5ab29`).
+- AC1 (status-badge): `STATUS_BADGES` covers all 7 states, every entry glyph+color, exact pairings locked, selection/action accent-only; render smoke proves mounting. Imported via the theme barrel `theme/index.js` (1.8 deferred barrel item).
+- AC2/AC3/AC4 (list-row): pure `resolveRowLayout` locks unselected (transparent bar), selected (surface-selected + `▌` accent + `›` marker), nested (indent by `spacing.indent`), meta (`text-dim`); render smokes assert label/`›`/`▌` presence.
+- AC5 (detail-pane): uppercase label title, body, outcome-colored summary-line top-rule via Ink per-side border props (`borderStyle="single"`, only `borderTopColor` set to tone); `SUMMARY_LINE_COLORS` locked to theme values.
+- Object.freeze applied to `colors`/`spacing`/`typography`(+nested roles)/`rounded`/`theme` aggregate; `Object.isFrozen` assertions added (1.8 deferred freeze item).
+- Components barrel `index.ts` added; imported by `status-badge.test.tsx` (barrel coverage).
+- Gates green: `npm test` 201 passed (21 files), `npm run typecheck` clean, `npm run depcheck` clean (112 modules). Boundary round-trip done: `no-tui-leak-outside-driving-tui` fires on deliberate violation and is clean after removal.
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/1-9-read-focused-display-components.md` (this file)
-- (planned) `src/adapters/driving/tui/shared/components/{status-badge,list-row,detail-pane}.tsx`
-- (planned) `src/adapters/driving/tui/shared/components/{status-badge,list-row,detail-pane}.test.ts`
-- (planned) `src/adapters/driving/tui/shared/components/index.ts`
-- (planned update) `package.json`, `tsconfig.json`, `src/adapters/driving/tui/shared/theme/theme.ts` (+ `theme.test.ts` for Object.freeze/isFrozen)
+- `src/adapters/driving/tui/shared/components/status-badge.tsx`
+- `src/adapters/driving/tui/shared/components/status-badge.test.tsx`
+- `src/adapters/driving/tui/shared/components/list-row.tsx`
+- `src/adapters/driving/tui/shared/components/list-row.test.tsx`
+- `src/adapters/driving/tui/shared/components/detail-pane.tsx`
+- `src/adapters/driving/tui/shared/components/detail-pane.test.tsx`
+- `src/adapters/driving/tui/shared/components/index.ts`
+- `src/adapters/driving/tui/shared/components/render-to-string.ts` (test-only Ink render helper)
+- `src/adapters/driving/tui/shared/components/ink-smoke.test.tsx` (install smoke)
+- `package.json` (added `ink` 7.1.1, `react` 19.2.8, `@types/react` ^19.2.18)
+- `package-lock.json`
+- `tsconfig.json` (added `"jsx": "react-jsx"`)
+- `src/adapters/driving/tui/shared/theme/theme.ts` (Object.freeze on token groups)
+- `src/adapters/driving/tui/shared/theme/theme.test.ts` (Object.isFrozen assertions)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (status → review)
 </intent-contract>
 
 ## Change Log
 
 - 2026-08-14 — Story created (status `ready-for-dev`).
+- 2026-08-14 — Implementation complete, status → `review`. Three read-focused components built on branch `story-1-9-read-focused-display-components`; all ACs covered by tests; Ink 7.1.1 / React 19.2.8 installed; theme tokens frozen; boundary round-trip verified.
+- 2026-08-14 — Code review iteration 1: AC1–AC5 met. 1 decision resolved (fixed 2ch selection column so labels stay aligned on selection), 7 patches applied (AC5 top-rule + Ink-styling render assertions, all-state badge smokes, `dim-wink`/`active-tab` freeze assertions, `Object.freeze` on `STATUS_BADGES`/`SUMMARY_LINE_COLORS`, trailing newline, `renderToString` cleanup), 8 dismissed. Gates: 211 tests / typecheck / depcheck clean. Status `review` → `done`.
