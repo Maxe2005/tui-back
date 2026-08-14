@@ -4,11 +4,11 @@ import { colors } from '../theme/theme.js';
 
 export type SummaryTone = 'success' | 'warning' | 'error';
 
-export const SUMMARY_LINE_COLORS = {
+export const SUMMARY_LINE_COLORS = Object.freeze({
   success: colors.success,
   warning: colors.warning,
   error: colors.error,
-} as const;
+} as const);
 
 export function DetailPane({
   title,

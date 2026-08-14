@@ -16,7 +16,12 @@ export async function renderToString(node: ReactNode): Promise<string> {
     exitOnCtrlC: false,
     patchConsole: false,
   });
-  instance.unmount();
-  await instance.waitUntilExit();
-  return output;
+  try {
+    instance.unmount();
+    await instance.waitUntilExit();
+    return output;
+  } catch (error) {
+    instance.unmount();
+    throw error;
+  }
 }

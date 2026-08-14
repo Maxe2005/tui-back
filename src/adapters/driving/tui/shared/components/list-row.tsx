@@ -23,7 +23,7 @@ export function resolveRowLayout(
   const { selected = false, nested = false } = props;
   return {
     barGlyph: selected ? '▌' : ' ',
-    marker: selected ? '›' : '',
+    marker: selected ? '›' : ' ',
     background: selected ? colors['surface-selected'] : colors.surface,
     labelColor: colors.text,
     metaColor: colors['text-dim'],
@@ -37,7 +37,7 @@ export function ListRow(props: ListRowProps) {
   return (
     <Box paddingLeft={layout.paddingLeft} backgroundColor={layout.background}>
       <Text color={colors.accent}>{layout.barGlyph}</Text>
-      {layout.marker ? <Text color={colors.accent}>{layout.marker}</Text> : null}
+      <Text color={colors.accent}>{layout.marker}</Text>
       <Text color={layout.labelColor}>{label}</Text>
       {meta ? <Text color={layout.metaColor}> {meta}</Text> : null}
     </Box>

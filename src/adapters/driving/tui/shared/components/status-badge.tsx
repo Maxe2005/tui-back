@@ -10,7 +10,7 @@ export type StatusBadgeState =
   | 'selection'
   | 'action';
 
-export const STATUS_BADGES = {
+export const STATUS_BADGES = Object.freeze({
   up: { glyph: '●', color: colors.success },
   down: { glyph: '○', color: colors.error },
   done: { glyph: '✔', color: colors.success },
@@ -18,7 +18,7 @@ export const STATUS_BADGES = {
   'in-progress': { glyph: '⣾', color: colors.info },
   selection: { glyph: '›', color: colors.accent },
   action: { glyph: '▸', color: colors.accent },
-} as const;
+} as const);
 
 export function StatusBadge({ state }: { state: StatusBadgeState }) {
   const { glyph, color } = STATUS_BADGES[state];

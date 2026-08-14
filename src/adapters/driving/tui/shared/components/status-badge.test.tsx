@@ -25,6 +25,10 @@ describe('STATUS_BADGES', () => {
     }
   });
 
+  it('is frozen at runtime so consumers cannot mutate the vocabulary', () => {
+    expect(Object.isFrozen(STATUS_BADGES)).toBe(true);
+  });
+
   it('locks the seven exact glyph/color pairings from DESIGN.md (AC1)', () => {
     const { colors } = theme;
     expect(STATUS_BADGES.up).toEqual({ glyph: '●', color: colors.success });
@@ -55,8 +59,16 @@ describe('STATUS_BADGES', () => {
 });
 
 describe('StatusBadge', () => {
-  it('renders the done glyph via Ink (AC1)', async () => {
-    const output = await renderToString(<StatusBadge state="done" />);
-    expect(output).toContain('✔');
+  it.each([
+    ['up', '●'],
+    ['down', '○'],
+    ['done', '✔'],
+    ['failed', '✖'],
+    ['in-progress', '⣾'],
+    ['selection', '›'],
+    ['action', '▸'],
+  ] as const)('renders the %s glyph via Ink (AC1)', async (state, glyph) => {
+    const output = await renderToString(<StatusBadge state={state} />);
+    expect(output).toContain(glyph);
   });
 });

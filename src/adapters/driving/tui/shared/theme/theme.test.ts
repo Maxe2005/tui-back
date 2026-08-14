@@ -90,5 +90,7 @@ describe('theme aggregate', () => {
     expect(Object.isFrozen(theme)).toBe(true);
     expect(Object.isFrozen(typography.base)).toBe(true);
     expect(Object.isFrozen(typography.label)).toBe(true);
+    expect(Object.isFrozen(typography['dim-wink'])).toBe(true);
+    expect(Object.isFrozen(typography['active-tab'])).toBe(true);
   });
 });

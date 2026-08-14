@@ -11,6 +11,10 @@ describe('SUMMARY_LINE_COLORS', () => {
       error: colors.error,
     });
   });
+
+  it('is frozen at runtime so consumers cannot mutate the mapping', () => {
+    expect(Object.isFrozen(SUMMARY_LINE_COLORS)).toBe(true);
+  });
 });
 
 describe('DetailPane', () => {
@@ -38,5 +42,13 @@ describe('DetailPane', () => {
       </DetailPane>,
     );
     expect(output).toContain('Résumé : 2/2');
+    expect(output).toContain('─');
+  });
+
+  it('does not render a summary-line rule without a run outcome (AC5)', async () => {
+    const output = await renderToString(
+      <DetailPane title="Update">body</DetailPane>,
+    );
+    expect(output).not.toContain('─');
   });
 });

@@ -7,7 +7,7 @@ describe('resolveRowLayout', () => {
   it('resolves the unselected base row: transparent accent-bar column (AC2)', () => {
     expect(resolveRowLayout({ label: 'api-gateway' })).toEqual({
       barGlyph: ' ',
-      marker: '',
+      marker: ' ',
       background: colors.surface,
       labelColor: colors.text,
       metaColor: colors['text-dim'],
@@ -29,7 +29,7 @@ describe('resolveRowLayout', () => {
   it('indents nested rows by the theme indent token (AC3)', () => {
     expect(resolveRowLayout({ label: 'micro-users', nested: true })).toEqual({
       barGlyph: ' ',
-      marker: '',
+      marker: ' ',
       background: colors.surface,
       labelColor: colors.text,
       metaColor: colors['text-dim'],
@@ -53,6 +53,11 @@ describe('ListRow', () => {
     expect(output).toContain('▌');
   });
 
+  it('renders a nested row (AC3)', async () => {
+    const output = await renderToString(<ListRow label="micro-users" nested />);
+    expect(output).toContain('micro-users');
+  });
+
   it('renders the trailing metadata distinctly from the label (AC4)', async () => {
     const output = await renderToString(
       <ListRow label="api-gateway" meta="main ↑0 ↓0" />,
@@ -61,8 +66,9 @@ describe('ListRow', () => {
     expect(output).toContain('main ↑0 ↓0');
   });
 
-  it('does not render a marker when unselected (AC2)', async () => {
+  it('does not render a marker or accent bar when unselected (AC2)', async () => {
     const output = await renderToString(<ListRow label="api-gateway" />);
     expect(output).not.toContain('›');
+    expect(output).not.toContain('▌');
   });
 });
