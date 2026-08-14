@@ -1,5 +1,13 @@
 # Deferred Work
 
+## Deferred from: code review of 1-8-atelier-design-tokens-theme-module (2026-08-14)
+
+- **No runtime immutability** (`src/adapters/driving/tui/shared/theme/theme.ts`): `as const` is compile-time only, so a Story 1.9+ component could mutate `theme.colors.accent` (or an aggregate) at runtime and no test would catch it, undermining the "single source of truth" invariant. **Track:** add `Object.freeze` on each token group + an `Object.isFrozen(theme)` assertion when the first consumer lands (Story 1.9+).
+- **Barrel `theme/index.ts` untested as the public entrypoint** (`src/adapters/driving/tui/shared/theme/index.ts`): tests import the deep `./theme.js` path, so a broken barrel (e.g. wrong export name) ships undetected; the advertised entrypoint is never exercised. **Track:** import from `./index.js` in at least one test once consumers exist.
+- **Glyph vocabulary absent from the theme** (`src/adapters/driving/tui/shared/theme/theme.ts`): status-badge glyphs (`● ○ ✔ ✖ ⣾ › ▸`) are the non-color half of the "never color alone" rule (DESIGN.md:64,160), but only colors are tokenized. Out of the story's color/spacing/typography/rounded scope. **Track:** tokenize glyphs (or point to a glyph set) in the Story 1.9 status-badge.
+- **`sprint-status.yaml` duplicates `generated`/`last_updated` in header comment and body** (`_bmad-output/implementation-artifacts/sprint-status.yaml:1-2,43-44`): the two have already drifted once historically (comment 2026-08-11 vs body 2026-08-13 before this change); this change keeps them in sync but the duplication is a live inconsistency risk. Pre-existing. **Track:** have the generator/validator assert comment block == body block.
+- **Future-component guards are doc/test-level only** (`src/adapters/driving/tui/shared/README.md`): no lint or usage test rejects a hardcoded nonzero radius or accent-as-status in a Story 1.9+ component; enforcement lives in the README rules. **Track:** add a depcruise/usage guard when component stories (1.9–1.12) land.
+
 ## Deferred from: code review of 1-7-single-instance-enforcement-per-resource-action-lock.md (2026-08-13)
 
 - **PID reuse defeats staleness detection; the recorded `timestamp` is never consulted** (`src/adapters/driven/lock/index.ts:90-104,79`): `isPidAlive` only asks whether *some* process owns the pid, so a recycled pid makes a stale lock look live forever; the owner `timestamp` is written but unused, so no age fallback exists. The age-based reclaim (patch in this review) mitigates orphan/corrupt-owner cases; the residual OS pid-recycle window is a platform reality. **Track:** revisit if the lock ever guards long-lived resources (Epic 2+), where stale-lock cost rises.

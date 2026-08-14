@@ -2,7 +2,7 @@
 title: 'Atelier Design Tokens & Theme Module'
 type: 'feature'
 created: '2026-08-13'
-status: 'review'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: [1-7-single-instance-enforcement-per-resource-action-lock, 1-6-static-module-registry]
@@ -68,8 +68,8 @@ The accent-convention and 0px-corners ACs are captured as documentation + a code
 - `src/adapters/driving/tui/shared/theme/theme.ts` -- **NEW**. The Atelier token module. Single source of truth. Structure:
   - `export const colors = { background: '#1c1b1f', surface: '#232228', 'surface-selected': '#28262c', border: '#3a3844', text: '#eae7e1', 'text-dim': '#8f8b98', accent: '#c9a13b', success: '#3f9d6e', error: '#c1495e', warning: '#cf9a3e', info: '#4f80a8' } as const;`
   - `export const spacing = { '0': 0, '1': 1, '2': 2, '3': 3, 'glyph-gap': 1, indent: 2, 'pane-padding-x': 2, 'row-gap': 0, 'section-gap': 1, 'chrome-row': 1 } as const;` (character-cell units; `section-gap`/`chrome-row` are row counts — document their meaning).
-  - `export const typography = { base: { family: "ui-monospace, Cascadia Code, SF Mono, Fira Code, Consolas, monospace" }, label: { weight: 600, letterSpacing: '0.05em' }, 'dim-wink': { italic: true }, 'active-tab': { weight: 700 } } as const;`
-  - `export const rounded = { sm: 0, md: 0, lg: 0 } as const;` — **every value 0** (square corners). Add a doc comment: "Atelier is square-cornered by deliberate choice; every panel/modal/badge/row renders at 0px — never round."
+  - `export const typography = { base: { family: "ui-monospace, Cascadia Code, SF Mono, Fira Code, Consolas, monospace" }, label: { bold: false }, 'dim-wink': { italic: true }, 'active-tab': { bold: true } } as const;` *(`bold` booleans are Ink-consumable — Ink has no numeric weight or letter-spacing; deviation from the original `weight`/`letterSpacing` literals is a deliberate review resolution.)*
+  - `export const rounded = { sm: 0, md: 0, lg: 0, DEFAULT: 0 } as const;` — **every value 0** (square corners); `DEFAULT` is the token DESIGN.md references for every surface. Add a doc comment: "Atelier is square-cornered by deliberate choice; every panel/modal/badge/row renders at 0px — never round."
   - `export const theme = { colors, spacing, typography, rounded } as const;`
   - On `colors.accent` (and/or a `README.md` note), document the convention: reserved for active-selection/primary-action only, never a status color (`DESIGN.md` §Colors).
   - Imports: none required (pure constants) — but if any are added, keep them first (acorn landmine). No `Result`, no fs, no Ink.
@@ -95,6 +95,26 @@ The accent-convention and 0px-corners ACs are captured as documentation + a code
 - AC2 — Given the theme module, When queried for spacing, Then it exposes the character-cell scale (0/1/2/3ch, glyph-gap, indent, pane-padding-x, row-gap, section-gap) as named constants. *(Implemented: `spacing` map, including `chrome-row` per DESIGN.md even though AC2 omits it — it is in the authoritative source.)*
 - AC3 — Given any component rendering a panel, modal, badge, or row, When it applies a corner radius, Then it renders at 0px — no rounding anywhere. *(Implemented: `rounded` scale all-0 + doc comment + test; component stories 1.9/1.10 must consume `theme.rounded`, never hardcode a nonzero radius.)*
 - AC4 — Given the accent token, When documented, Then its usage convention (active-selection/primary-action only, never a status color) is captured for later epics to follow. *(Implemented: doc comment on `colors.accent` + README note + test asserting accent is not a status color.)*
+
+### Review Findings
+
+**patch (all resolved & applied):**
+
+- [x] [Review][Decision→Patch] `rounded.DEFAULT` (0px) missing from the scale — DESIGN.md defines `rounded.sm/md/lg/DEFAULT` all 0px, and `modal-dialog.corner` (DESIGN.md:82), §Shapes (152) and the Do/Don't table (193) reference `{rounded.DEFAULT}`. **Resolved:** added `DEFAULT: 0` to `rounded` (option 1). [`theme.ts:43`]
+- [x] [Review][Decision→Patch] Typography tokens not renderable as-is by Ink — `label.weight` 600 / `active-tab.weight` 700 and `letterSpacing: '0.05em'` have no Ink counterpart (`<Text>` exposes only boolean `bold`, no letter-spacing). **Resolved:** switched to boolean `bold` (`label.bold = false`, `active-tab.bold = true`), dropped `letterSpacing` (option 2 — deviates from the original Code Map literal, deliberate). [`theme.ts:35-37`]
+- [x] [Review][Decision→Patch] DESIGN.md pairing rules not captured — active zone-tab text must be `colors.background` on the accent fill (DESIGN.md:129,157) and `surface-selected` is never used on its own without the accent border (DESIGN.md:112). **Resolved:** doc notes added in `theme.ts` + README rules 4 & 5 (option 1). [`theme.ts:4`]
+- [x] [Review][Decision→Patch] No dependency-cruiser boundary keeps `tui/shared` TUI-only — nothing stops `driving/cli` (or any adapter) from importing `tui/shared`, so the AD-3 "TUI tokens must not leak into CLI output" rule is doc-level only. **Resolved:** added the `no-tui-leak-outside-driving-tui` rule, round-trip verified (option 1). [`.dependency-cruiser.cjs`]
+- [x] [Review][Patch] `section-gap`/`chrome-row` row-count semantics undocumented — spec Code Map instructs "`section-gap`/`chrome-row` are row counts — document their meaning" (story:70). Fixed: spacing block comment + README note. [`theme.ts:26-27`]
+- [x] [Review][Patch] Typography not exact-locked despite README "locks every token to its exact value" claim — `family` test asserted only `toContain('monospace')`. Fixed: exact `toBe` on the full family stack. [`theme.test.ts:59`]
+- [x] [Review][Patch] AC3 enforced only on `sm/md/lg`, not the whole scale — a future radius token (e.g. `xl: 4`) passed current assertions. Fixed: `Object.values(rounded).every(v => v === 0)`. [`theme.test.ts:70-76`]
+
+**defer:**
+
+- [x] [Review][Defer] No runtime immutability — `as const` is compile-time only; a future component could mutate `theme.colors.accent` and no test would catch it. Add `Object.freeze` + `Object.isFrozen` test when the first consumer lands. [`theme.ts`] — deferred, pre-existing
+- [x] [Review][Defer] Barrel `theme/index.ts` untested as public entrypoint — tests import deep `./theme.js`, so a broken barrel (wrong export name) ships undetected. [`theme/index.ts`] — deferred, pre-existing
+- [x] [Review][Defer] Glyph vocabulary absent from the theme — status-badge glyphs (●○✔✖⣾›▸) are the non-color half of the "never color alone" rule but only colors are tokenized; out of the story's color/spacing/typography/rounded scope. [`theme.ts`] — deferred, pre-existing
+- [x] [Review][Defer] `sprint-status.yaml` duplicates `generated`/`last_updated` in header comment and body — the two have already drifted once historically; this change keeps them in sync but the duplication is a live inconsistency risk. Pre-existing. [`sprint-status.yaml:1-2,43-44`] — deferred, pre-existing
+- [x] [Review][Defer] Future-component guards are doc/test-level only — no lint/usage test rejects a nonzero hardcoded radius or accent-as-status in a Story 1.9+ component; enforcement lives in the README rules. [`shared/README.md`] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -163,3 +183,4 @@ opencode / deepseek-v4-flash-free (story implementation session, 2026-08-14).
 ## Change Log
 
 - 2026-08-14 — Implemented story 1.8: added the Atelier token module under `src/adapters/driving/tui/shared/theme/` with exact-value unit tests, the square-corners (0px) rule, and the accent-usage convention documentation. Status `ready-for-dev` → `in-progress` → `review`.
+- 2026-08-14 — Code review iteration 1: AC1–AC4 met; 4 decisions resolved (added `rounded.DEFAULT`, Ink-consumable `bold` booleans replacing `weight`/`letterSpacing`, DESIGN.md pairing-rule docs, depcruise `no-tui-leak-outside-driving-tui` rule), 3 patches applied (row-count spacing doc, exact family lock, whole-scale 0px assertion), 5 items deferred to `deferred-work.md`, 4 dismissed. Status `review` → `done`.
