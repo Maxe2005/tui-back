@@ -57,7 +57,7 @@ development_status:
   1-6-static-module-registry: done
   1-7-single-instance-enforcement-per-resource-action-lock: done
   1-8-atelier-design-tokens-theme-module: done
-  1-9-read-focused-display-components: ready-for-dev
+  1-9-read-focused-display-components: in-progress
   1-10-interactive-feedback-components: backlog
   1-11-permanent-app-shell: backlog
   1-12-launch-banner-keybinding-help-screen: backlog
