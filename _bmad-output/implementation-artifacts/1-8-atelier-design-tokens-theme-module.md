@@ -2,7 +2,7 @@
 title: 'Atelier Design Tokens & Theme Module'
 type: 'feature'
 created: '2026-08-13'
-status: 'ready-for-dev'
+status: 'review'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: [1-7-single-instance-enforcement-per-resource-action-lock, 1-6-static-module-registry]
@@ -134,18 +134,32 @@ The accent-convention and 0px-corners ACs are captured as documentation + a code
 
 ### Agent Model Used
 
-_To be filled by the dev agent on completion (e.g. model name/version)._
+opencode / deepseek-v4-flash-free (story implementation session, 2026-08-14).
 
 ### Debug Log References
 
-_To be filled during implementation._
+- RED: `theme.test.ts` failed on import — module did not exist (expected).
+- GREEN: 8/8 theme assertions pass after adding `theme.ts`.
+- typecheck: one TS2345 on the status-set `.has()` guard due to `as const` literal narrowing — fixed by widening the set to `ReadonlySet<string>`.
+- depcheck: 94 modules, 144 dependencies; AD-1 round-trip verified (a deliberate `src/core` → `adapters` import fires `no-core-to-adapters`).
 
 ### Completion Notes List
 
 - Story 1.8 created by `bmad-create-story` (ultimate context engine) on 2026-08-13; status `ready-for-dev`.
 - Story 1.8 confirmed as the first backlog story (1-1..1-7 done); epic-1 already `in-progress`.
+- Implemented `src/adapters/driving/tui/shared/theme/theme.ts` — pure `as const` token module (`colors`/`spacing`/`typography`/`rounded` + `theme` aggregate), values byte-for-byte from `DESIGN.md` frontmatter, no fs/Ink/Result/`error.code`. `rounded` is all-0 with the square-corner doc comment; `colors.accent` carries the "never a status color" doc comment.
+- Added thin barrel `theme/index.ts` and `shared/README.md` capturing the accent convention + 0px rule for stories 1.9–1.12.
+- `theme.test.ts`: 8 tests lock every color hex, the full spacing scale (incl. `chrome-row`), typography roles (monospace family, label/dim-wink/active-tab), 0px corners (AC3), and accent ∉ status set (AC4).
+- Gates: `npm test` 183 pass, `npm run typecheck` clean, `npm run depcheck` clean; AD-1 boundary rule confirmed still firing. No changes outside `src/adapters/driving/tui/`; no package.json change (Ink/React deferred to 1.9).
 
 ### File List
 
 - `_bmad-output/implementation-artifacts/1-8-atelier-design-tokens-theme-module.md` (this file)
-- (dev) `src/adapters/driving/tui/shared/theme/theme.ts`, `theme.test.ts`, `index.ts`, `shared/README.md`
+- `src/adapters/driving/tui/shared/theme/theme.ts` (new)
+- `src/adapters/driving/tui/shared/theme/theme.test.ts` (new)
+- `src/adapters/driving/tui/shared/theme/index.ts` (new)
+- `src/adapters/driving/tui/shared/README.md` (new)
+
+## Change Log
+
+- 2026-08-14 — Implemented story 1.8: added the Atelier token module under `src/adapters/driving/tui/shared/theme/` with exact-value unit tests, the square-corners (0px) rule, and the accent-usage convention documentation. Status `ready-for-dev` → `in-progress` → `review`.

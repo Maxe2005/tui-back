@@ -56,7 +56,7 @@ development_status:
   1-5-explicit-repo-registry: done
   1-6-static-module-registry: done
   1-7-single-instance-enforcement-per-resource-action-lock: done
-  1-8-atelier-design-tokens-theme-module: in-progress
+  1-8-atelier-design-tokens-theme-module: review
   1-9-read-focused-display-components: backlog
   1-10-interactive-feedback-components: backlog
   1-11-permanent-app-shell: backlog
