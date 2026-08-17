@@ -447,3 +447,71 @@ describe('tui-back scan (black-box)', () => {
     expect(parsed.error.code).toBe('scan-root-not-found');
   });
 });
+
+describe('tui-back --help (black-box)', () => {
+  it('lists every registered command, including edt, exit 0', () => {
+    const { status, stdout } = runCli(['--help']);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edt']);
+  });
+});
+
+describe('tui-back edt create (black-box)', () => {
+  it('creates the EDT skeleton (state.json, manifest, db) and registers it (AC1/AC2)', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['edt', 'create'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    const ulid: string = parsed.data;
+    expect(ulid).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/); // Crockford base32 ULID shape
+
+    const edtDir = join(xdg, 'tui-back', 'edts', ulid);
+    expect(JSON.parse(await readFile(join(edtDir, 'state.json'), 'utf8'))).toMatchObject({ ulid, status: 'active' });
+    const manifest = parse(await readFile(join(edtDir, '.tui-back.yaml'), 'utf8'));
+    expect(manifest).toEqual({
+      service: `edt-${ulid}`,
+      container: `edt-${ulid}`,
+      migrationCommand: 'true',
+      modules: {},
+    });
+    await expect(access(join(xdg, 'tui-back', 'edts', `${ulid}.db`))).resolves.toBeUndefined();
+
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts).toEqual([
+      expect.objectContaining({ ulid, branch: `edt-${ulid}`, status: 'active' }),
+    ]);
+  });
+
+  it('two racing edt create subprocesses each get their own ulid, both registered', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const [a, b] = await Promise.all([runCliAsync(['edt', 'create'], env), runCliAsync(['edt', 'create'], env)]);
+
+    expect(a.status).toBe(0);
+    expect(b.status).toBe(0);
+    const ulidA = JSON.parse(a.stdout.trim()).data;
+    const ulidB = JSON.parse(b.stdout.trim()).data;
+    expect(ulidA).not.toBe(ulidB);
+
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect((edtRegistry.edts as Array<{ ulid: string }>).map((e) => e.ulid).sort()).toEqual([ulidA, ulidB].sort());
+  });
+
+  it('rejects an unknown edt action with invalid-argument and exits 1', () => {
+    const { status, stdout } = runCli(['edt', 'bogus']);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+  });
+});
