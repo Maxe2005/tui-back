@@ -30,10 +30,13 @@ describe('resolveZoneTabState', () => {
     });
   });
 
-  it('shows a glyph+counter badge in status color when a background event is pending (AC3)', () => {
+  it('shows a glyph+counter badge in the zone status color when a background event is pending (AC3)', () => {
     const zone = ZONES[4];
     const state = resolveZoneTabState(zone, 'dashboard', 3);
-    expect(state.badge).toEqual({ text: '●3', color: colors.error });
+    expect(state.badge).toEqual({
+      text: '●3',
+      color: colors[zone.statusColor],
+    });
     expect(state.active).toBe(false);
   });
 

@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink';
+import type { AppStore } from '../../store/app-store.js';
 import { useAppStore } from '../../store/app-store.js';
 import { ZONES, type ZoneId } from '../../zones/zones.js';
 import { colors, spacing } from '../theme/theme.js';
@@ -8,12 +9,15 @@ import { ListRow } from './list-row.js';
 
 export type ZonePlaceholderProps = {
   zoneId: ZoneId;
+  useStore?: AppStore;
 };
 
-export function ZonePlaceholder({ zoneId }: ZonePlaceholderProps) {
+export function ZonePlaceholder({
+  zoneId,
+  useStore = useAppStore,
+}: ZonePlaceholderProps) {
   const zone = ZONES.find((candidate) => candidate.id === zoneId);
-  const ratio = useAppStore((state) => state.splitterRatios[zoneId]);
-  const setRatio = useAppStore((state) => state.setSplitterRatio);
+  const ratio = useStore((state) => state.splitterRatios[zoneId]);
   if (!zone) {
     return null;
   }
@@ -21,7 +25,6 @@ export function ZonePlaceholder({ zoneId }: ZonePlaceholderProps) {
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       <ListDetailSplit
         ratio={ratio}
-        onResize={(next) => setRatio(zoneId, next)}
         list={
           <Box
             flexDirection="column"

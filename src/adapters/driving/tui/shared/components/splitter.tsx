@@ -4,7 +4,7 @@ import { colors } from '../theme/theme.js';
 export type SplitterProps = {
   orientation: 'horizontal' | 'vertical';
   size: number;
-  onResize: (newSize: number) => void;
+  onResize?: (newSize: number) => void;
 };
 
 export function Splitter(props: SplitterProps) {

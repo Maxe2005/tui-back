@@ -7,7 +7,7 @@ baseline_commit: dadcefff358ec5b712f6405d516a48320bb51bf2
 **Story ID:** 1.11  
 **Story Key:** 1-11-permanent-app-shell  
 **Epic:** 1 - Foundation: Standalone-Script Core, Manifest & Navigation Shell  
-**Status:** review  
+**Status:** done  
 **Last Updated:** 2026-08-17
 
 ---
@@ -258,8 +258,8 @@ The following insights were extracted from the git history relevant to this stor
 
 - 2026-08-17 — Implemented the permanent app shell (story 1.11): top bar, six-zone tab bar with pending-event `●n` badges cleared on visit, footer, resizable ~2:3 list/detail split, exactly one Zustand cross-zone store (AD-10), and a placeholder screen mounted at every zone tab. Status → review.
 
-**Status:** review  
-**Completion Note:** Permanent app shell implemented — top bar, six-zone tab bar with pending-event badges, footer, resizable list/detail split (~2:3), exactly one Zustand cross-zone store (AD-10), and a placeholder screen mounted at every zone tab. All ACs satisfied; full suite green (254 tests), typecheck and depcheck clean.
+**Status:** done  
+**Completion Note:** Permanent app shell implemented — top bar, six-zone tab bar with pending-event badges, footer, resizable list/detail split (~2:3), exactly one Zustand cross-zone store (AD-10), and a placeholder screen mounted at every zone tab. All ACs satisfied; full suite green (257 tests), typecheck and depcheck clean.
 
 **Next Steps for Developer:**
 
@@ -267,3 +267,27 @@ The following insights were extracted from the git history relevant to this stor
 2. Run `code-review` to auto-mark story as done
 3. Confirm the launch banner + `?` keybinding help screen as Story 1.12
 4. Wire the canonical zone-navigation keybindings (`d/e/u/l/r/s`) as Story 1.13
+
+---
+
+### Review Findings
+
+**Patch:**
+
+- [x] [Review][Patch] Add per-zone status color to `Zone` metadata and use it for the AC3 badge (replaces hardcoded `colors.error`) [src/adapters/driving/tui/shared/components/zone-tab-bar.tsx:26, src/adapters/driving/tui/zones/zones.ts]
+- [x] [Review][Patch] Narrow the "resizable" claim: remove the misleading `onResize` prop wiring and keep a static ~2:3 divider [src/adapters/driving/tui/shared/components/list-detail-split.tsx:24,30]
+- [x] [Review][Patch] Store injection half-done: `ZonePlaceholder` reads the module-global `useAppStore` while `AppShell` accepts an injected store [src/adapters/driving/tui/shared/components/zone-placeholder.tsx:15-16]
+- [x] [Review][Patch] `DEFAULT_LIST_RATIO` duplicated across two modules [src/adapters/driving/tui/store/app-store.ts:4, src/adapters/driving/tui/shared/components/list-detail-split.tsx:5]
+- [x] [Review][Patch] Zone ids hand-enumerated in `emptyEvents()`/`emptyRatios()` — derive from `ZONES` [src/adapters/driving/tui/store/app-store.ts:21-41]
+- [x] [Review][Patch] `setSplitterRatio` stores un-clamped ratios; clamp at the store boundary [src/adapters/driving/tui/store/app-store.ts:64-67]
+- [x] [Review][Patch] New files lack a trailing newline (`\ No newline at end of file` on every added file)
+- [x] [Review][Patch] `clearZoneEvents` is dead API — only its own test exercises it [src/adapters/driving/tui/store/app-store.ts:59-62]
+- [x] [Review][Patch] `resolveSplitFlex` does not guard non-finite ratios (NaN/Infinity pass through) [src/adapters/driving/tui/shared/components/list-detail-split.tsx:7-13]
+- [x] [Review][Patch] Inconsistent label casing: `shared-types` lowercase vs Title Case elsewhere [src/adapters/driving/tui/zones/zones.ts:21]
+- [x] [Review][Patch] Active-tab bold hardcoded instead of the `typography['active-tab']` token [src/adapters/driving/tui/shared/components/zone-tab-bar.tsx:23]
+- [x] [Review][Patch] Rendered tab-bar styling unobservable by tests — Ink `renderToString` emits no ANSI, so AC2/AC3 styling is unguarded [src/adapters/driving/tui/shared/components/zone-tab-bar.tsx:43-53]
+
+**Deferred:**
+
+- [x] [Review][Defer] AppShell never mounted in a runnable entry point — deferred to Story 1.12 (launch banner / TUI entry point), which wires the mount. — deferred to Story 1.12
+- [x] [Review][Defer] AD-13 spec wording contradicts task T2: "TUI gets smoke-tests via Ink's `render()` only" vs the store unit-tested directly without Ink — reconciled in favor of T2 (diff follows the task line). — deferred, spec wording

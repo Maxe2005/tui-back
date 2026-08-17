@@ -1,12 +1,9 @@
 import { Box } from 'ink';
-import type { UseBoundStore, StoreApi } from 'zustand';
 import { Footer } from './shared/components/footer.js';
 import { TopBar } from './shared/components/top-bar.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
-import { useAppStore, type AppState } from './store/app-store.js';
+import { useAppStore, type AppStore } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
-
-export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
 export function AppShell({
   useStore = useAppStore,
@@ -21,7 +18,7 @@ export function AppShell({
     <Box flexDirection="column">
       <TopBar activeEdt={activeEdt} />
       <ZoneTabBar activeZone={activeZone} events={zoneEvents} />
-      <ZoneScreen />
+      <ZoneScreen useStore={useStore} />
       <Footer />
     </Box>
   );

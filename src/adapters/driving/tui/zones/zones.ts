@@ -6,21 +6,55 @@ export type ZoneId =
   | 'routes'
   | 'shared-types';
 
+export type StatusColorKey = 'success' | 'error' | 'warning' | 'info';
+
 export type Zone = {
   id: ZoneId;
   mnemonic: string;
   label: string;
+  statusColor: StatusColorKey;
 };
 
 export const ZONES: readonly Zone[] = [
-  { id: 'dashboard', mnemonic: 'd', label: 'Dashboard' },
-  { id: 'edts', mnemonic: 'e', label: 'EDTs' },
-  { id: 'update', mnemonic: 'u', label: 'Update' },
-  { id: 'logs', mnemonic: 'l', label: 'Logs' },
-  { id: 'routes', mnemonic: 'r', label: 'Routes' },
-  { id: 'shared-types', mnemonic: 's', label: 'shared-types' },
+  {
+    id: 'dashboard',
+    mnemonic: 'd',
+    label: 'Dashboard',
+    statusColor: 'info',
+  },
+  {
+    id: 'edts',
+    mnemonic: 'e',
+    label: 'EDTs',
+    statusColor: 'info',
+  },
+  {
+    id: 'update',
+    mnemonic: 'u',
+    label: 'Update',
+    statusColor: 'warning',
+  },
+  {
+    id: 'logs',
+    mnemonic: 'l',
+    label: 'Logs',
+    statusColor: 'info',
+  },
+  {
+    id: 'routes',
+    mnemonic: 'r',
+    label: 'Routes',
+    statusColor: 'info',
+  },
+  {
+    id: 'shared-types',
+    mnemonic: 's',
+    label: 'Shared types',
+    statusColor: 'info',
+  },
 ];
 
 export function isZoneId(value: string): value is ZoneId {
   return ZONES.some((zone) => zone.id === value);
 }
+

@@ -32,3 +32,4 @@ describe('zones metadata', () => {
     expect(isZoneId('bogus')).toBe(false);
   });
 });
+

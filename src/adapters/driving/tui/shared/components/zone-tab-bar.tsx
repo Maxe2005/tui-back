@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { ZONES, type Zone, type ZoneId } from '../../zones/zones.js';
-import { colors, spacing } from '../theme/theme.js';
+import { colors, spacing, typography } from '../theme/theme.js';
 
 export type ZoneTabState = {
   active: boolean;
@@ -20,10 +20,10 @@ export function resolveZoneTabState(
     active,
     labelColor: active ? colors.background : colors['text-dim'],
     backgroundColor: active ? colors.accent : colors.background,
-    bold: active,
+    bold: active ? typography['active-tab'].bold : typography.label.bold,
     badge:
       !active && eventCount > 0
-        ? { text: `●${eventCount}`, color: colors.error }
+        ? { text: `●${eventCount}`, color: colors[zone.statusColor] }
         : null,
   };
 }

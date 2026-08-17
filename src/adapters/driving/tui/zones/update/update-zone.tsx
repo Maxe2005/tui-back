@@ -1,5 +1,6 @@
+import type { AppStore } from '../../store/app-store.js';
 import { ZonePlaceholder } from '../../shared/components/index.js';
 
-export function UpdateZone() {
-  return <ZonePlaceholder zoneId="update" />;
+export function UpdateZone({ useStore }: { useStore?: AppStore }) {
+  return <ZonePlaceholder zoneId="update" useStore={useStore} />;
 }

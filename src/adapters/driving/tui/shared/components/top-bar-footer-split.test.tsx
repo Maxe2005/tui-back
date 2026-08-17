@@ -48,6 +48,12 @@ describe('resolveSplitFlex', () => {
     expect(resolveSplitFlex(0).list).toBe(0.2);
     expect(resolveSplitFlex(1).list).toBe(0.8);
   });
+
+  it('falls back to the default ratio for non-finite input', () => {
+    expect(resolveSplitFlex(Number.NaN).list).toBeCloseTo(DEFAULT_LIST_RATIO);
+    expect(resolveSplitFlex(Infinity).list).toBeCloseTo(DEFAULT_LIST_RATIO);
+    expect(resolveSplitFlex(-Infinity).list).toBeCloseTo(DEFAULT_LIST_RATIO);
+  });
 });
 
 describe('ListDetailSplit', () => {
@@ -55,7 +61,6 @@ describe('ListDetailSplit', () => {
     const output = await renderToString(
       <ListDetailSplit
         ratio={DEFAULT_LIST_RATIO}
-        onResize={() => {}}
         list={<Text>list pane</Text>}
         detail={<Text>detail pane</Text>}
       />,
