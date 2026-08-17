@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
@@ -13,10 +14,11 @@ function fakeLock(): LockPort {
 }
 
 const fakeSubcommands: Subcommand[] = [
-  { name: 'ping', run: async () => ok({ message: 'pong' }) },
-  { name: 'fail', run: async () => err('fixture-failure', 'it failed on purpose') },
+  { name: 'ping', usage: 'tui-back ping', run: async () => ok({ message: 'pong' }) },
+  { name: 'fail', usage: 'tui-back fail', run: async () => err('fixture-failure', 'it failed on purpose') },
   {
     name: 'throws',
+    usage: 'tui-back throws',
     run: async () => {
       throw new Error('boom');
     },
@@ -72,6 +74,28 @@ describe('runCli', () => {
     expect(exitCode).toBe(1);
   });
 
+  it('--help lists every registered subcommand and its usage, exit 0', async () => {
+    const { output, exitCode } = await runCli(['--help'], fakeSubcommands, false);
+    const parsed = JSON.parse(output);
+
+    expect(exitCode).toBe(0);
+    expect(parsed).toEqual({
+      ok: true,
+      data: {
+        usage: 'tui-back <command> [args]',
+        commands: fakeSubcommands.map((subcommand) => ({ name: subcommand.name, usage: subcommand.usage })),
+      },
+    });
+  });
+
+  it('-h is the same as --help, exit 0', async () => {
+    const { output, exitCode } = await runCli(['-h'], fakeSubcommands, false);
+    const parsed = JSON.parse(output);
+
+    expect(exitCode).toBe(0);
+    expect(parsed.ok).toBe(true);
+  });
+
   it('logs a thrown error to stderr instead of discarding it', async () => {
     const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -86,7 +110,7 @@ describe('runCli', () => {
   it('converts a rendering failure into an internal-error envelope instead of letting it escape', async () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    const unrenderable: Subcommand[] = [{ name: 'unrenderable', run: async () => ok(circular) }];
+    const unrenderable: Subcommand[] = [{ name: 'unrenderable', usage: 'tui-back unrenderable', run: async () => ok(circular) }];
 
     const { output, exitCode } = await runCli(['unrenderable'], unrenderable, false);
     const parsed = JSON.parse(output);
@@ -100,8 +124,8 @@ describe('runCli', () => {
 describe('subcommand registry guards', () => {
   it('assertUniqueSubcommandNames throws when two subcommands share a name', () => {
     const duplicated: Subcommand[] = [
-      { name: 'ping', run: async () => ok({}) },
-      { name: 'ping', run: async () => ok({}) },
+      { name: 'ping', usage: 'tui-back ping', run: async () => ok({}) },
+      { name: 'ping', usage: 'tui-back ping', run: async () => ok({}) },
     ];
 
     expect(() => assertUniqueSubcommandNames(duplicated)).toThrow('Duplicate subcommand name: ping');
@@ -109,14 +133,18 @@ describe('subcommand registry guards', () => {
 
   it('assertUniqueSubcommandNames accepts a collision-free registry', () => {
     const clean: Subcommand[] = [
-      { name: 'register', run: async () => ok({}) },
-      { name: 'scan', run: async () => ok({}) },
+      { name: 'register', usage: 'tui-back register <path>', run: async () => ok({}) },
+      { name: 'scan', usage: 'tui-back scan <root>', run: async () => ok({}) },
     ];
 
     expect(() => assertUniqueSubcommandNames(clean)).not.toThrow();
   });
 
-  it('buildSubcommands wires register/list-repos/scan/ping without name collisions', () => {
+  function fakeEdtRegistry(): EdtRegistryPort {
+    return { add: async () => ok(undefined) };
+  }
+
+  function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
     const registry: RegistryPort = {
       list: async () => ok([]),
       add: async () => ok(undefined),
@@ -126,10 +154,44 @@ describe('subcommand registry guards', () => {
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
 
-    const subcommands = buildSubcommands({ registry, manifest, lock: fakeLock(), registryResourceKey: '/cfg/registry.yaml' });
+    return buildSubcommands({
+      registry,
+      manifest,
+      lock: fakeLock(),
+      registryResourceKey: '/cfg/registry.yaml',
+      edtsBaseDir: '/data/edts',
+      edtRegistry: fakeEdtRegistry(),
+      edtRegistryResourceKey: '/cfg/edts.yaml',
+      ...overrides,
+    });
+  }
 
-    expect(subcommands.map((subcommand) => subcommand.name)).toEqual(['register', 'list-repos', 'scan', 'ping']);
+  it('buildSubcommands wires register/list-repos/scan/ping/edt without name collisions', () => {
+    const subcommands = buildTestSubcommands();
+
+    expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
+      'register',
+      'list-repos',
+      'scan',
+      'ping',
+      'edt',
+    ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
+  });
+
+  it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {
+    const subcommands = buildTestSubcommands();
+    const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+    if (!edt) throw new Error('expected edt subcommand');
+
+    const unknown = await edt.run(['bogus']);
+    expect(unknown).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const noAction = await edt.run([]);
+    expect(noAction).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const excess = await edt.run(['create', 'extra']);
+    expect(excess).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
   });
 
   it('register --reset routes to the reset use-case, rejecting extra arguments', async () => {
@@ -143,7 +205,7 @@ describe('subcommand registry guards', () => {
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
 
-    const subcommands = buildSubcommands({ registry, manifest, lock: fakeLock(), registryResourceKey: '/cfg/registry.yaml' });
+    const subcommands = buildTestSubcommands({ registry, manifest });
     const register = subcommands.find((subcommand) => subcommand.name === 'register');
     if (!register) throw new Error('expected register subcommand');
 
@@ -162,16 +224,7 @@ describe('subcommand registry guards', () => {
   });
 
   it('list-repos, scan, and ping reject excess arguments with invalid-argument', async () => {
-    const registry: RegistryPort = {
-      list: async () => ok([]),
-      add: async () => ok(undefined),
-      exists: async () => ok(false),
-      scan: async () => ok({ candidates: [], skipped: [] }),
-      reset: async () => ok({ path: '/p', backupPath: null }),
-    };
-    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
-
-    const subcommands = buildSubcommands({ registry, manifest, lock: fakeLock(), registryResourceKey: '/cfg/registry.yaml' });
+    const subcommands = buildTestSubcommands();
 
     const excessArgs: Record<string, string[]> = {
       'list-repos': ['extra'],

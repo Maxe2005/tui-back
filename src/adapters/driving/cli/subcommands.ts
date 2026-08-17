@@ -6,8 +6,10 @@
 // invalid-argument error instead of a silently ignored one.
 import { err } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
+import { createEdt } from '../../../core/edt/create.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -20,10 +22,14 @@ export function buildSubcommands(deps: {
   manifest: ManifestPort;
   lock: LockPort;
   registryResourceKey: string;
+  edtsBaseDir: string;
+  edtRegistry: EdtRegistryPort;
+  edtRegistryResourceKey: string;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
       name: 'register',
+      usage: 'tui-back register [--reset] <path>',
       run: async (args) => {
         if (args.length === 0) {
           return registerRepo(deps.registry, deps.lock, deps.registryResourceKey, undefined);
@@ -42,6 +48,7 @@ export function buildSubcommands(deps: {
     },
     {
       name: 'list-repos',
+      usage: 'tui-back list-repos',
       run: async (args) =>
         args.length === 0
           ? listRepos(deps.registry, deps.manifest)
@@ -49,6 +56,7 @@ export function buildSubcommands(deps: {
     },
     {
       name: 'scan',
+      usage: 'tui-back scan <root>',
       run: async (args) => {
         if (args.length === 0) {
           return scanRepos(deps.registry, undefined);
@@ -61,7 +69,28 @@ export function buildSubcommands(deps: {
     },
     {
       name: 'ping',
+      usage: 'tui-back ping',
       run: async (args) => (args.length === 0 ? ping() : err('invalid-argument', 'Usage: tui-back ping')),
+    },
+    {
+      name: 'edt',
+      usage: 'tui-back edt create',
+      run: async (args) => {
+        if (args[0] !== 'create') {
+          const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
+          return err('invalid-argument', `Unknown edt action: ${label}. Usage: tui-back edt create`);
+        }
+        if (args.length > 1) {
+          return err('invalid-argument', 'Usage: tui-back edt create');
+        }
+        return createEdt({
+          edtsBaseDir: deps.edtsBaseDir,
+          manifest: deps.manifest,
+          edtRegistry: deps.edtRegistry,
+          lock: deps.lock,
+          edtRegistryResourceKey: deps.edtRegistryResourceKey,
+        });
+      },
     },
   ];
   assertUniqueSubcommandNames(subcommands);

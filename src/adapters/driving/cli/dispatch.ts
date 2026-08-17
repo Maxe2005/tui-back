@@ -1,13 +1,27 @@
 // adapters/driving/cli/dispatch: resolves argv to a registered subcommand and always
 // produces a rendered {output, exitCode} — never lets an exception escape uncaught, and
-// treats "no subcommand"/"unknown subcommand" as just another Result, routed through the
-// same renderResult() as every other outcome (AD-3's "one output contract").
-import { err, type Result } from '../../../core/result.js';
+// treats "no subcommand"/"unknown subcommand"/"--help" as just another Result, routed
+// through the same renderResult() as every other outcome (AD-3's "one output contract").
+import { ok, err, type Result } from '../../../core/result.js';
 import { renderResult, type RenderedResult } from './envelope.js';
 
 export interface Subcommand {
   name: string;
+  /** One-line usage string shown by `--help`, e.g. "tui-back register <path>". */
+  usage: string;
   run: (args: string[]) => Promise<Result<unknown>>;
+}
+
+export interface HelpData {
+  usage: string;
+  commands: Array<{ name: string; usage: string }>;
+}
+
+function buildHelp(subcommands: Subcommand[]): HelpData {
+  return {
+    usage: 'tui-back <command> [args]',
+    commands: subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
+  };
 }
 
 export async function runCli(
@@ -16,6 +30,11 @@ export async function runCli(
   isTTY: boolean,
 ): Promise<RenderedResult> {
   const [name, ...args] = argv;
+
+  if (name === '--help' || name === '-h') {
+    return renderResult(ok(buildHelp(subcommands)), isTTY);
+  }
+
   const subcommand = subcommands.find((candidate) => candidate.name === name);
 
   if (!subcommand) {
