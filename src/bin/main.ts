@@ -10,6 +10,9 @@
 import { join } from 'node:path';
 import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
+import { createEdt } from '../core/edt/create.js';
+import { ok, err, type Result } from '../core/result.js';
+import { renderResult, type RenderedResult } from '../adapters/driving/cli/envelope.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
@@ -19,6 +22,7 @@ const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
+const edtsBaseDir = join(xdg.dataDir, 'edts');
 
 // Per-resource advisory lock directory lives under XDG_STATE_HOME/tui-back/locks (AD-7's
 // transient-state tier). The lock dir is created lazily inside the lock adapter on first
@@ -30,10 +34,15 @@ const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
 const subcommands = buildSubcommands({ registry, manifest, lock, registryResourceKey: registryFile });
 
-const { output, exitCode } = await runCli(
-  process.argv.slice(2),
-  subcommands,
-  process.stdout.isTTY === true,
-);
+const [cmd, ...args] = process.argv.slice(2);
+
+async function handleEdtCreate(): Promise<RenderedResult> {
+  const result: Result<string> = createEdt({ edtsBaseDir });
+  return renderResult(result, process.stdout.isTTY === true);
+}
+
+const { output, exitCode } = cmd === 'edt' && args[0] === 'create'
+  ? await handleEdtCreate()
+  : await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);
 process.stdout.write(output);
 process.exitCode = exitCode;
