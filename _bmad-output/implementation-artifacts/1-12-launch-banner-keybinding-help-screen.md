@@ -158,62 +158,78 @@ Monochrome in `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard's 
 
 ## Tasks / Subtasks
 
-- [ ] **T1 — Compiled-in keybinding reference data (`keybindings/keybindings.ts`)** (AC2)
-  - [ ] New `src/adapters/driving/tui/keybindings/keybindings.ts`: a `const` array (e.g. `KEYBINDINGS: readonly Keybinding[]`) with exactly the 12 rows from the "Keybinding Reference Data" table above (`{ keys: string; description: string }`), in the documented order. Mirror the compiled-in-data pattern of `zones/zones.ts`.
-  - [ ] `keybindings.test.ts`: asserts exact count, order, and descriptions (locks the contract so a later story can't silently drop a binding); asserts no duplicate `keys` values. Import via the folder's `index.ts` if a barrel exists, otherwise directly — prefer exercising the public entrypoint (barrel) per 1.11 review feedback.
+- [x] **T1 — Compiled-in keybinding reference data (`keybindings/keybindings.ts`)** (AC2)
+  - [x] New `src/adapters/driving/tui/keybindings/keybindings.ts`: a `const` array (e.g. `KEYBINDINGS: readonly Keybinding[]`) with exactly the 12 rows from the "Keybinding Reference Data" table above (`{ keys: string; description: string }`), in the documented order. Mirror the compiled-in-data pattern of `zones/zones.ts`.
+  - [x] `keybindings.test.ts`: asserts exact count, order, and descriptions (locks the contract so a later story can't silently drop a binding); asserts no duplicate `keys` values. Import via the folder's `index.ts` if a barrel exists, otherwise directly — prefer exercising the public entrypoint (barrel) per 1.11 review feedback.
 
-- [ ] **T2 — Store: help-open state + banner-shown flag (`store/app-store.ts`)** (AC1, AC2, AC3, AD-10)
-  - [ ] Add `helpOpen: boolean` with `openHelp()` / `closeHelp()` actions (cross-zone app-level state — the modal overlays every zone).
-  - [ ] Add `launchBannerShown: boolean` with `markLaunchBannerShown()` — in-memory only (per-launch, **not** persisted to `state.json`; AD-7 persistence of transient UI state is a later story).
-  - [ ] Unit-test the store directly (no Ink render, AD-13): open/close help; banner flag flips once and stays set.
+- [x] **T2 — Store: help-open state + banner-shown flag (`store/app-store.ts`)** (AC1, AC2, AC3, AD-10)
+  - [x] Add `helpOpen: boolean` with `openHelp()` / `closeHelp()` actions (cross-zone app-level state — the modal overlays every zone).
+  - [x] Add `launchBannerShown: boolean` with `markLaunchBannerShown()` — in-memory only (per-launch, **not** persisted to `state.json`; AD-7 persistence of transient UI state is a later story).
+  - [x] Unit-test the store directly (no Ink render, AD-13): open/close help; banner flag flips once and stays set.
 
-- [ ] **T3 — Launch banner component (`zones/dashboard/launch-banner.tsx`)** (AC1, UX-DR14)
-  - [ ] Renders the two-line ASCII art from "Launch Banner Art" above, monochrome `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard content (no motion, no gradient — a static `<Text>`, not the `spinner`).
-  - [ ] Dashboard zone (`dashboard-zone.tsx`) renders it only while `!launchBannerShown` and calls `markLaunchBannerShown()` on first render; subsequent renders show the placeholder content only.
-  - [ ] Smoke test via `renderToString`: banner text appears on first Dashboard render and is absent once the store flag is set (mirror 1.11's AC3 badge-clear test pattern).
+- [x] **T3 — Launch banner component (`zones/dashboard/launch-banner.tsx`)** (AC1, UX-DR14)
+  - [x] Renders the two-line ASCII art from "Launch Banner Art" above, monochrome `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard content (no motion, no gradient — a static `<Text>`, not the `spinner`).
+  - [x] Dashboard zone (`dashboard-zone.tsx`) renders it only while `!launchBannerShown` and calls `markLaunchBannerShown()` on first render; subsequent renders show the placeholder content only.
+  - [x] Smoke test via `renderToString`: banner text appears on first Dashboard render and is absent once the store flag is set (mirror 1.11's AC3 badge-clear test pattern).
 
-- [ ] **T4 — Help modal (`shared/components/keybinding-help.tsx`) + scroll window logic** (AC2, AC3, UX-DR15)
-  - [ ] Extend `ModalDialog` minimally to accept `children?: ReactNode` (and, if needed, `maxHeight?: number | string`) while keeping `title`/`onConfirm`/`onCancel`/`open` backward-compatible so 1.10's tests still pass.
-  - [ ] New `KeybindingHelp` component: renders a `ModalDialog` (title e.g. `KEYBINDINGS`), content = the `KEYBINDINGS` list rendered as `[keys] description` rows in `{colors.text}`, keys in `{colors.text-dim}` (or accent — see README rules; keys are data, not a status), bounded by `maxHeight` on the list container.
-  - [ ] Read-only: **no confirm action**. `onConfirm` is a no-op/omitted; `Esc` or `?` closes it.
-  - [ ] Extract a pure scroll-window function (e.g. `resolveHelpWindow(items, scrollOffset, visibleLines) => { visible, scrollOffset }` and `clampHelpOffset(offset, maxOffset)`) — guard non-finite/negative values. The component holds `scrollOffset` in `useState`, resets to `0` when `open` becomes true.
-  - [ ] `useInput` in `KeybindingHelp` handles `j` (scroll down) / `k` (scroll up) — guarded to act only while `open` (hooks must be called unconditionally, guard inside). Under `renderToString` the hook is inert; the behavior is covered by the pure-function tests + a render test asserting the visible slice changes when offset is driven through the component's `useState` is not possible — so assert the pure function and the prop-driven slice instead.
-  - [ ] Barrel-export `KeybindingHelp` from `shared/components/index.ts`.
+- [x] **T4 — Help modal (`shared/components/keybinding-help.tsx`) + scroll window logic** (AC2, AC3, UX-DR15)
+  - [x] Extend `ModalDialog` minimally to accept `children?: ReactNode` (and, if needed, `maxHeight?: number | string`) while keeping `title`/`onConfirm`/`onCancel`/`open` backward-compatible so 1.10's tests still pass.
+  - [x] New `KeybindingHelp` component: renders a `ModalDialog` (title e.g. `KEYBINDINGS`), content = the `KEYBINDINGS` list rendered as `[keys] description` rows in `{colors.text}`, keys in `{colors.text-dim}` (or accent — see README rules; keys are data, not a status), bounded by `maxHeight` on the list container.
+  - [x] Read-only: **no confirm action**. `onConfirm` is a no-op/omitted; `Esc` or `?` closes it.
+  - [x] Extract a pure scroll-window function (e.g. `resolveHelpWindow(items, scrollOffset, visibleLines) => { visible, scrollOffset }` and `clampHelpOffset(offset, maxOffset)`) — guard non-finite/negative values. The component holds `scrollOffset` in `useState`, resets to `0` when `open` becomes true.
+  - [x] `useInput` in `KeybindingHelp` handles `j` (scroll down) / `k` (scroll up) — guarded to act only while `open` (hooks must be called unconditionally, guard inside). Under `renderToString` the hook is inert; the behavior is covered by the pure-function tests + a render test asserting the visible slice changes when offset is driven through the component's `useState` is not possible — so assert the pure function and the prop-driven slice instead.
+  - [x] Barrel-export `KeybindingHelp` from `shared/components/index.ts`.
 
-- [ ] **T5 — App-level `?` wiring (`app-shell.tsx`)** (AC2, AC3)
-  - [ ] In `AppShell`, add a `useInput` handler over the injected store: when `helpOpen` → `Esc` or `?` calls `closeHelp()`; when closed → `?` calls `openHelp()`. Extract the decision as pure helpers (e.g. `shouldOpenHelp(input)` / `shouldCloseHelp(input, key)`) and unit-test them, since `useInput` is inert in tests.
-  - [ ] Render `<KeybindingHelp ... />` (driven by store `helpOpen`) over the content so it appears from any zone. Use the injected `useStore`, never the module-global, when a store is injected (1.11 review fix pattern).
-  - [ ] `app-shell.test.tsx`: render with a fresh store, `openHelp()` → modal content visible; `closeHelp()` → gone; banner flag prevents banner on second Dashboard render (AC1 regression guard).
+- [x] **T5 — App-level `?` wiring (`app-shell.tsx`)** (AC2, AC3)
+  - [x] In `AppShell`, add a `useInput` handler over the injected store: when `helpOpen` → `Esc` or `?` calls `closeHelp()`; when closed → `?` calls `openHelp()`. Extract the decision as pure helpers (e.g. `shouldOpenHelp(input)` / `shouldCloseHelp(input, key)`) and unit-test them, since `useInput` is inert in tests.
+  - [x] Render `<KeybindingHelp ... />` (driven by store `helpOpen`) over the content so it appears from any zone. Use the injected `useStore`, never the module-global, when a store is injected (1.11 review fix pattern).
+  - [x] `app-shell.test.tsx`: render with a fresh store, `openHelp()` → modal content visible; `closeHelp()` → gone; banner flag prevents banner on second Dashboard render (AC1 regression guard).
 
-- [ ] **T6 — Footer hint for `?` (`shared/components/footer.tsx`)** (UX-DR7, AC2)
-  - [ ] Add `[?] help` to `DEFAULT_FOOTER_HINTS` (before `[q] quit`), keeping the existing `[j/k] move  [enter] open  [space] select  [d] dashboard  [q] quit  ^W resize` entries. Update the footer test if it asserts the exact default list.
+- [x] **T6 — Footer hint for `?` (`shared/components/footer.tsx`)** (UX-DR7, AC2)
+  - [x] Add `[?] help` to `DEFAULT_FOOTER_HINTS` (before `[q] quit`), keeping the existing `[j/k] move  [enter] open  [space] select  [d] dashboard  [q] quit  ^W resize` entries. Update the footer test if it asserts the exact default list.
 
-- [ ] **T7 — TUI entry point (composition root) (`src/bin/tui.ts` + `src/bin/tui-back-tui.mjs`)** (AC1 — "Given the app starts", AD-2, deferred-work #1 from 1.11)
-  - [ ] New `src/bin/tui.ts`: composition root that builds the app store (`createAppStore()`) and calls `render(<AppShell useStore={store} />, { exitOnCtrlC: true })`. No AD-3 envelope on this path — it is interactive-only.
-  - [ ] New `src/bin/tui-back-tui.mjs`: identical bootstrap shape to `tui-back.mjs` (`#!/usr/bin/env node`, `import { register } from 'tsx/esm/api'; register(); await import('./tui.ts')`).
-  - [ ] `package.json`: add `"tui-back-tui": "./src/bin/tui-back-tui.mjs"` to `bin`.
-  - [ ] Note in the story/commit body: single-TUI process enforcement (AD-9 mechanism 1) and `q`-quit are explicitly deferred (Story 1.13 / Epic 2), so the entry point needs no lock and no quit wiring.
+- [x] **T7 — TUI entry point (composition root) (`src/bin/tui.ts` + `src/bin/tui-back-tui.mjs`)** (AC1 — "Given the app starts", AD-2, deferred-work #1 from 1.11)
+  - [x] New `src/bin/tui.ts`: composition root that builds the app store (`createAppStore()`) and calls `render(<AppShell useStore={store} />, { exitOnCtrlC: true })`. No AD-3 envelope on this path — it is interactive-only.
+  - [x] New `src/bin/tui-back-tui.mjs`: identical bootstrap shape to `tui-back.mjs` (`#!/usr/bin/env node`, `import { register } from 'tsx/esm/api'; register(); await import('./tui.ts')`).
+  - [x] `package.json`: add `"tui-back-tui": "./src/bin/tui-back-tui.mjs"` to `bin`.
+  - [x] Note in the story/commit body: single-TUI process enforcement (AD-9 mechanism 1) and `q`-quit are explicitly deferred (Story 1.13 / Epic 2), so the entry point needs no lock and no quit wiring.
 
-- [ ] **T8 — Docs & conventions (`shared/README.md`, barrel)** (completion hygiene)
-  - [ ] Append a Story 1.12 bullet to `shared/README.md` documenting the launch banner + help-modal rules (keys list location, read-only modal rule, `?`/`Esc`/`j`/`k` scope vs Story 1.13's full contract).
-  - [ ] Keep the `shared/components/index.ts` barrel in sync; ensure every new file ends with a newline.
-  - [ ] Add `src/adapters/driving/tui/keybindings/` to any path globs if the depcruise config enumerates TUI subfolders (check `.dependency-cruiser.cjs`; if it uses `src/adapters/driving/tui/**`, nothing to do).
+- [x] **T8 — Docs & conventions (`shared/README.md`, barrel)** (completion hygiene)
+  - [x] Append a Story 1.12 bullet to `shared/README.md` documenting the launch banner + help-modal rules (keys list location, read-only modal rule, `?`/`Esc`/`j`/`k` scope vs Story 1.13's full contract).
+  - [x] Keep the `shared/components/index.ts` barrel in sync; ensure every new file ends with a newline.
+  - [x] Add `src/adapters/driving/tui/keybindings/` to any path globs if the depcruise config enumerates TUI subfolders (check `.dependency-cruiser.cjs`; if it uses `src/adapters/driving/tui/**`, nothing to do).
 
 ---
 
 ### Dev Agent Record
 
-**Agent Model Used:** deepseek-v4-flash-free (opencode) — story context authoring only.
+**Agent Model Used:** deepseek-v4-flash-free (opencode) — implementation.
 
-**Debug Log References:** n/a (no implementation yet).
+**Debug Log References:**
 
-**Completion Notes List:** n/a.
+- The story's 1.11 "useInput is inert under renderToString" note is **inaccurate for Ink 7.1.1**: `useInput` calls `setRawMode(true)` in its mount effect, which throws "Raw mode is not supported" when stdin is not a TTY. `render-to-string.ts` now supplies a fake TTY stdin (`isTTY: true` + no-op `setRawMode`/`ref`/`unref`) so interactive hooks mount inertly in tests. Reordered `waitUntilExit()` before `unmount()` to avoid the pre-existing `beforeExit` listener leak (MaxListenersExceededWarning).
+- The story's T3 text said `dashboard-zone.tsx` should call `markLaunchBannerShown()` on first render; that self-marking effect fires during the `renderToString` flush and hides the banner before the output is captured, breaking the very smoke test the story prescribes ("banner text appears on first Dashboard render"). Per the story's own AC3 badge-clear pattern (drive the store externally, keep the component a pure read), the mark-once effect lives in `AppShell`'s mount instead; `DashboardZone` stays a pure read of `launchBannerShown`.
+- `src/bin/tui.ts` uses `createElement(AppShell, ...)` instead of JSX because esbuild's TS loader (via tsx) cannot parse JSX in a `.ts` file and the story pins the `.ts` filename.
+- `.dependency-cruiser.cjs` `no-tui-leak-outside-driving-tui` rule gained an exception for `src/bin/tui.ts` — the composition root is the sanctioned AD-2 TUI entry point, not a leak.
+
+**Completion Notes List:**
+
+- T1: `KEYBINDINGS` compiled-in (12 rows, canonical order) + barrel + contract-locking test.
+- T2: store `helpOpen`/`openHelp`/`closeHelp` + `launchBannerShown`/`markLaunchBannerShown`, unit-tested directly (AD-13).
+- T3: `LaunchBanner` (static two-line ASCII, `colors.text-dim` on `colors.surface`), pure `DashboardZone` gate, smoke test (banner on first render, absent once flag set).
+- T4: `ModalDialog` extended with optional `children`/`maxHeight` (backward-compatible, 1.10 tests untouched); `KeybindingHelp` modal (read-only, no confirm), pure `resolveHelpWindow`/`clampHelpOffset`, `j`/`k` scrolling reset on open; barrel-exported.
+- T5: `AppShell` `useInput` wiring via pure `shouldOpenHelp`/`shouldCloseHelp`; `KeybindingHelp` rendered over content from the injected store; mark-once banner effect; tests.
+- T6: `[?] help` added to `DEFAULT_FOOTER_HINTS` before `[q] quit`; footer test updated (the default row now wraps at 80 cols, so it asserts hint fragments + ordering, not the exact joined string).
+- T7: `src/bin/tui.ts` + `src/bin/tui-back-tui.mjs` + `package.json` bin entry; e2e bin assertion updated to two entries; verified under a real pty (`script`) — banner shows once, `[?] help` in footer.
+- T8: `shared/README.md` Story 1.12 bullet; barrel synced; EOF newlines enforced; depcruise globs already cover `keybindings/` via `src/**/*.ts`.
+- Single-TUI process enforcement (AD-9) and `q`-quit remain explicitly deferred to Story 1.13 / Epic 2 (no lock, no quit wiring in the entry point).
 
 **File List:**
 
-*New (planned):*
+*New:*
 - `src/adapters/driving/tui/keybindings/keybindings.ts`
 - `src/adapters/driving/tui/keybindings/keybindings.test.ts`
+- `src/adapters/driving/tui/keybindings/index.ts`
 - `src/adapters/driving/tui/zones/dashboard/launch-banner.tsx`
 - `src/adapters/driving/tui/zones/dashboard/launch-banner.test.tsx`
 - `src/adapters/driving/tui/shared/components/keybinding-help.tsx`
@@ -221,15 +237,19 @@ Monochrome in `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard's 
 - `src/bin/tui.ts`
 - `src/bin/tui-back-tui.mjs`
 
-*Modified (planned):*
-- `src/adapters/driving/tui/store/app-store.ts` (+ `app-store.test.ts`)
+*Modified:*
+- `src/adapters/driving/tui/store/app-store.ts` + `app-store.test.ts`
 - `src/adapters/driving/tui/shared/components/modal-dialog.tsx`
 - `src/adapters/driving/tui/shared/components/index.ts`
-- `src/adapters/driving/tui/shared/components/footer.tsx` (+ footer test if it asserts the default hints)
+- `src/adapters/driving/tui/shared/components/footer.tsx`
+- `src/adapters/driving/tui/shared/components/top-bar-footer-split.test.tsx` (footer hint assertions)
+- `src/adapters/driving/tui/shared/components/render-to-string.ts` (fake TTY stdin + listener-leak reorder)
 - `src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx`
-- `src/adapters/driving/tui/app-shell.tsx` (+ `app-shell.test.tsx`)
+- `src/adapters/driving/tui/app-shell.tsx` + `app-shell.test.tsx`
 - `src/adapters/driving/tui/shared/README.md`
-- `package.json` / `package-lock.json` (bin entry; no new dependency)
+- `src/bin/tui-back.e2e.test.ts` (bin entry count now two)
+- `package.json` / `package-lock.json` (bin entry)
+- `.dependency-cruiser.cjs` (TUI entry-point exception)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ---
@@ -237,9 +257,10 @@ Monochrome in `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard's 
 ### Change Log
 
 - 2026-08-17 — Story 1.12 context created (launch banner + keybinding-help screen + TUI entry point).
+- 2026-08-17 — Story 1.12 implemented T1–T8 (launch banner, keybinding-help modal, `?`/`Esc`/`j`/`k` wiring, TUI composition root); all 276 tests + typecheck + depcruise green.
 
-**Status:** ready-for-dev  
-**Completion Note:** Ultimate context engine analysis completed — comprehensive developer guide created.
+**Status:** review  
+**Completion Note:** Story 1.12 fully implemented and validated; ready for code review.
 
 **Next Steps for Developer:**
 
