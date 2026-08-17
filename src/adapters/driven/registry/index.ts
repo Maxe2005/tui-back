@@ -52,6 +52,10 @@ export async function listRegistry(registryFile: string): Promise<Result<string[
   }
 
   let parsed: unknown;
+  const trimmed = content.trim();
+  if (trimmed === '') {
+    return ok([]);
+  }
   try {
     parsed = parse(content);
   } catch (error) {
@@ -129,7 +133,7 @@ export async function resetRegistry(registryFile: string, path: string): Promise
     return err('registry-not-corrupt', `Registry file ${registryFile} is valid — nothing to reset. Use "register" to add a path.`);
   }
 
-  const backupPath = `${registryFile}.bak-${Date.now()}`;
+  const backupPath = `${registryFile}.bak-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   try {
     await copyFile(registryFile, backupPath);
   } catch (error) {

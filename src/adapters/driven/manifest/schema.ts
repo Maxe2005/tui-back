@@ -35,9 +35,6 @@ export function createManifestSchema(known: ReadonlySet<string>): z.ZodType<Mani
       // so we skip those keys here and never double-report them.
       for (const id of Object.keys(modules).sort()) {
         const config = modules[id];
-        if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-          continue;
-        }
         if (!known.has(id)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
