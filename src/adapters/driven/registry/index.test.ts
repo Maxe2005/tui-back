@@ -152,14 +152,14 @@ describe('listRegistry', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'registry-invalid-format' } });
   });
 
-  it('reports an empty registry file as a clean format failure, not a crash', async () => {
+  it('returns ok([]) for an empty registry file (no repos registered yet)', async () => {
     const root = await tempRoot();
     const file = join(root, 'registry.yaml');
     await writeFile(file, '');
 
     const result = await listRegistry(file);
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'registry-invalid-format' } });
+    expect(result).toMatchObject({ ok: true, data: [] });
   });
 });
 

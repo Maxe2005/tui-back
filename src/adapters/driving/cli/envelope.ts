@@ -27,9 +27,11 @@ function renderHuman(result: Result<unknown>): string {
       typeof result.data === 'object' &&
       !Array.isArray(result.data) &&
       Object.keys(result.data).length === 0;
-    // Non-object/primitive data (string/number/boolean) and arrays are JSON.stringify'd like
-    // everything else — only a genuinely empty object gets the 'OK' nicety. Previously any
-    // non-object data collapsed into this same 'OK' branch, silently discarding it.
+    // null and primitive data (string/number/boolean) are JSON.stringify'd;
+    // only a genuinely empty object gets the 'OK' nicety.
+    if (result.data === null) {
+      return `null\n`;
+    }
     return isEmptyObject ? 'OK\n' : `${JSON.stringify(result.data, null, 2)}\n`;
   }
 

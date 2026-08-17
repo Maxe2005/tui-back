@@ -36,7 +36,7 @@ export async function runCli(
     result = err('internal-error', String(error));
   }
 
-  // renderResult (specifically JSON.stringify inside it) can itself throw — e.g. a circular
+// renderResult (specifically JSON.stringify inside it) can itself throw — e.g. a circular
   // reference or a BigInt inside a use-case's returned data. That must never escape as an
   // uncaught exception (AD-3's whole point), so it gets the same try/catch treatment as
   // subcommand.run above, one level up.
@@ -44,6 +44,7 @@ export async function runCli(
     return renderResult(result, isTTY);
   } catch (error) {
     console.error(error);
-    return renderResult(err('internal-error', `Failed to render result: ${String(error)}`), isTTY);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return renderResult(err('internal-error', `Failed to render result: ${errorMsg}`), isTTY);
   }
 }
