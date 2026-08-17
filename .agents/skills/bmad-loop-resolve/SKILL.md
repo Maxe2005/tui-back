@@ -31,7 +31,7 @@ These environment variables are set:
 {
   "story_key": "6-4-cli-list-command",
   "run_id": "20260613-111429-6a14",
-  "spec_file": "/abs/path/to/_bmad-output/implementation-artifacts/spec-<story>.md",
+  "spec_file": "/abs/path/to/_bmad-output/implementation-artifacts/epic-1/1-<story>.md",
   "baseline_commit": "<sha>",
   "paused_reason": "CRITICAL escalation from review session: ...",
   "escalations": [
