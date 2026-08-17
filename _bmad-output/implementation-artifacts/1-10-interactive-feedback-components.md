@@ -1,6 +1,17 @@
+---
+title: 'Interactive & Feedback Components'
+type: 'feature'
+created: '2026-08-14'
+status: review
+baseline_commit: f1ae04f654b469a28d26883290619248bfa4ffd9
+---
 # Story 1.10: Interactive & Feedback Components
 
-Status: ready-for-dev
+## Change Log
+
+- 2026-08-17 — Implemented story 1.10: built modal-dialog, checkbox-list-item, splitter, spinner, and dim-annotation components with unit tests. All 44 component tests pass. TypeScript typecheck clean. Depcheck clean. Status `ready-for-dev` → `in-progress` → `review`.
+
+Status: review
 
 ## Story
 
@@ -55,10 +66,37 @@ So that every zone needing confirmation, multi-select, resizing, progress, or op
 
 ### Agent Model Used
 
-opencode/nemotron-3.5-lightning-free
+opencode/nemotron-3.5-lightning-free (story implementation, 2026-08-17)
 
 ### Debug Log References
 
+- RED: Initial component creation — ensuring NodeNext imports, Atelier token usage, 0px corners
+- GREEN: All 44 component tests pass; typecheck clean; depcheck clean; AD-1 boundary rule verified
+- REFACTOR: Improved component patterns, fixed TypeScript typing for padding/size props, updated test expectations
+
 ### Completion Notes List
 
-### File List
+- Story 1.10 implemented on 2026-08-17 by opencode/nemotron-3.5-lightning-free
+- All five interactive/feedback components built: modal-dialog, checkbox-list-item, splitter, spinner, dim-annotation
+- 44 unit tests created and passing across 9 test files
+- All components follow Atelier design token system (import from theme/theme.js)
+- All components render 0px corner radius (theme.rounded all-0)
+- Cross-zone state integration point documented for AD-10 / Story 1.11
+- TypeScript typecheck clean with no errors
+- Depcheck clean — no boundary violations
+- Gates: `npm test && npm run typecheck && npm run depcheck` all pass
+
+- `src/adapters/driving/tui/shared/components/modal-dialog.tsx` (new)
+- `src/adapters/driving/tui/shared/components/modal-dialog.test.tsx` (new)
+- `src/adapters/driving/tui/shared/components/checkbox-list-item.tsx` (new)
+- `src/adapters/driving/tui/shared/components/checkbox-list-item.test.tsx` (new)
+- `src/adapters/driving/tui/shared/components/splitter.tsx` (new)
+- `src/adapters/driving/tui/shared/components/splitter.test.tsx` (new)
+- `src/adapters/driving/tui/shared/components/spinner.tsx` (new)
+- `src/adapters/driving/tui/shared/components/spinner.test.tsx` (new)
+- `src/adapters/driving/tui/shared/components/dim-annotation.tsx` (new)
+- `src/adapters/driving/tui/shared/components/dim-annotation.test.tsx` (new)
+- `src/adapters/driving/tui/shared/components/index.ts` (modified — added exports)
+- `src/adapters/driving/tui/shared/README.md` (modified — added story 1.10 rules)
+- `_bmad-output/implementation-artifacts/1-10-interactive-feedback-components.md` (modified — frontmatter, change log, status)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
