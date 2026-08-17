@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { AppShell, shouldCloseHelp, shouldOpenHelp } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
+import { AppShell, shouldCloseHelp, shouldOpenHelp, shouldQuit, shouldSwitchZone, shouldOpenCommand, shouldOpenFilter } from './app-shell.js';
+import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from './store/app-store.js';
 import { ZONES } from './zones/zones.js';
 import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
 import { renderToString } from './shared/components/render-to-string.js';
@@ -21,9 +21,11 @@ describe('help-open decision helpers (AC2, AC3)', () => {
 });
 
 describe('AppShell', () => {
+  const onQuit = () => {};
+
   it('shows the top bar, six-zone tab bar, and footer simultaneously (AC1)', async () => {
     const store = createAppStore();
-    let output = await renderToString(<AppShell useStore={store} />);
+    let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).toContain('tui-back');
     for (const zone of ZONES) {
       expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
@@ -34,11 +36,11 @@ describe('AppShell', () => {
   it('shows a glyph+counter badge while the developer is elsewhere and clears it once the zone is visited (AC3)', async () => {
     const store = createAppStore();
     store.getState().addZoneEvent('logs');
-    let output = await renderToString(<AppShell useStore={store} />);
+    let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).toContain('●1');
 
     store.getState().setActiveZone('logs');
-    output = await renderToString(<AppShell useStore={store} />);
+    output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('●1');
   });
 
@@ -46,7 +48,7 @@ describe('AppShell', () => {
     const store = createAppStore();
     for (const zone of ZONES) {
       store.getState().setActiveZone(zone.id);
-      const output = await renderToString(<AppShell useStore={store} />);
+      const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
       expect(output).toContain('list pane');
       expect(output).toContain('detail pane');
@@ -55,34 +57,34 @@ describe('AppShell', () => {
 
   it('opens the keybinding-help modal from the store and hides it again (AC2, AC3)', async () => {
     const store = createAppStore();
-    let output = await renderToString(<AppShell useStore={store} />);
+    let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('KEYBINDINGS');
 
     store.getState().openHelp();
-    output = await renderToString(<AppShell useStore={store} />);
+    output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).toContain('KEYBINDINGS');
     expect(output).toContain('[?]');
     expect(output).toContain('Open the keybinding-help screen');
 
     store.getState().closeHelp();
-    output = await renderToString(<AppShell useStore={store} />);
+    output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('KEYBINDINGS');
   });
 
   it('shows the launch banner on the first Dashboard visit only (AC1)', async () => {
     const store = createAppStore();
-    let output = await renderToString(<AppShell useStore={store} />);
+    let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
       expect(output).toContain(line);
     }
     expect(store.getState().launchBannerShown).toBe(false);
 
     store.getState().setActiveZone('logs');
-    await renderToString(<AppShell useStore={store} />);
+    await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(store.getState().launchBannerShown).toBe(true);
 
     store.getState().setActiveZone('dashboard');
-    const output2 = await renderToString(<AppShell useStore={store} />);
+    const output2 = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
       expect(output2).not.toContain(line);
     }
@@ -91,9 +93,54 @@ describe('AppShell', () => {
   it('prevents the launch banner from reappearing once the store flag is set (AC1 regression guard)', async () => {
     const store = createAppStore();
     store.getState().markLaunchBannerShown();
-    const output = await renderToString(<AppShell useStore={store} />);
+    const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
       expect(output).not.toContain(line);
     }
+  });
+
+  describe('pure key dispatch helpers', () => {
+    it('shouldSwitchZone maps mnemonics to ZoneId and returns null for unknown', () => {
+      expect(shouldSwitchZone('d')).toBe('dashboard');
+      expect(shouldSwitchZone('e')).toBe('edts');
+      expect(shouldSwitchZone('u')).toBe('update');
+      expect(shouldSwitchZone('l')).toBe('logs');
+      expect(shouldSwitchZone('r')).toBe('routes');
+      expect(shouldSwitchZone('s')).toBe('shared-types');
+      expect(shouldSwitchZone('x')).toBeNull();
+    });
+
+    it('shouldOpenFilter returns true for /', () => {
+      expect(shouldOpenFilter('/')).toBe(true);
+      expect(shouldOpenFilter('j')).toBe(false);
+    });
+
+    it('shouldOpenCommand returns true for :', () => {
+      expect(shouldOpenCommand(':')).toBe(true);
+      expect(shouldOpenCommand('j')).toBe(false);
+    });
+
+it('shouldQuit returns true for q', () => {
+const minimalState: AppState = {
+        activeZone: 'dashboard',
+        setActiveZone: () => {},
+        zoneEvents: {} as ZoneEvents,
+        addZoneEvent: () => {},
+        splitterRatios: {} as ZoneRatios,
+        setSplitterRatio: () => {},
+        activeEdt: null,
+        setActiveEdt: () => {},
+        helpOpen: false,
+        openHelp: () => {},
+        closeHelp: () => {},
+        launchBannerShown: false,
+        markLaunchBannerShown: () => {},
+        runInProgress: false,
+        setRunInProgress: () => {},
+      };
+      expect(shouldQuit('q', {}, minimalState)).toBe(true);
+      expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
+      expect(shouldQuit('j', {}, minimalState)).toBe(false);
+    });
   });
 });

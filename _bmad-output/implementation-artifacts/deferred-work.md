@@ -84,3 +84,7 @@ _Iteration 2 (branch vs epic-1, 2026-08-13):_
 - `"engines": { "node": ">=24" }` is advisory only — no `.npmrc` `engine-strict` or CI check enforces it, so `npm install` on an older Node warns rather than fails. AC1 only requires the happy path on Node 24 to work, not enforcement.
 - The AD-1 boundary rule (`.dependency-cruiser.cjs`) only covers `core → adapters`; nothing stops `src/bin` from importing `src/adapters/driven` directly, or `adapters/driven` ↔ `adapters/driving` from importing each other. Out of AC5's literal scope (core→adapters only); worth hardening once those edges have real code.
 - No automated test exercises `src/bin/tui-back.mjs` end-to-end (`npm test` doesn't invoke the CLI binary). AC3 only requires manual `npm link` verification as written; a smoke test would catch future regressions (e.g. lost executable bit).
+
+## Deferred from: code review of story-1-13-canonical-keybinding-contract-zone-navigation (2026-08-17)
+- **F6**: Story 1-10 status transition — status changed from review→done without proper review loopback, pre-existing workflow issue (not a code defect).
+Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews.

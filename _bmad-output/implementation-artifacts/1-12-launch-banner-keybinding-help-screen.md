@@ -7,7 +7,7 @@ baseline_commit: 2553832
 **Story ID:** 1.12  
 **Story Key:** 1-12-launch-banner-keybinding-help-screen  
 **Epic:** 1 - Foundation: Standalone-Script Core, Manifest & Navigation Shell  
-**Status:** ready-for-dev  
+**Status:** done 
 **Last Updated:** 2026-08-17
 
 ---
