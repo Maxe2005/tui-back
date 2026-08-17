@@ -2,7 +2,7 @@
 title: 'Interactive & Feedback Components'
 type: 'feature'
 created: '2026-08-14'
-status: review
+status: done
 baseline_commit: f1ae04f654b469a28d26883290619248bfa4ffd9
 ---
 # Story 1.10: Interactive & Feedback Components
@@ -11,7 +11,7 @@ baseline_commit: f1ae04f654b469a28d26883290619248bfa4ffd9
 
 - 2026-08-17 — Implemented story 1.10: built modal-dialog, checkbox-list-item, splitter, spinner, and dim-annotation components with unit tests. All 44 component tests pass. TypeScript typecheck clean. Depcheck clean. Status `ready-for-dev` → `in-progress` → `review`.
 
-Status: review
+Status: done
 
 ## Story
 

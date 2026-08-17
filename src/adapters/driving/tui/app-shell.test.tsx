@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { AppShell, shouldCloseHelp, shouldOpenHelp } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
+import { AppShell, shouldCloseHelp, shouldOpenHelp, shouldQuit, shouldSwitchZone, shouldOpenCommand, shouldOpenFilter } from './app-shell.js';
+import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from './store/app-store.js';
 import { ZONES } from './zones/zones.js';
 import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
 import { renderToString } from './shared/components/render-to-string.js';
@@ -95,5 +95,49 @@ describe('AppShell', () => {
     for (const line of BANNER_LINES) {
       expect(output).not.toContain(line);
     }
+  });
+
+  describe('pure key dispatch helpers', () => {
+    it('shouldSwitchZone maps mnemonics to ZoneId and returns null for unknown', () => {
+      expect(shouldSwitchZone('d')).toBe('dashboard');
+      expect(shouldSwitchZone('e')).toBe('edts');
+      expect(shouldSwitchZone('u')).toBe('update');
+      expect(shouldSwitchZone('l')).toBe('logs');
+      expect(shouldSwitchZone('r')).toBe('routes');
+      expect(shouldSwitchZone('s')).toBe('shared-types');
+      expect(shouldSwitchZone('x')).toBeNull();
+    });
+
+    it('shouldOpenFilter returns true for /', () => {
+      expect(shouldOpenFilter('/')).toBe(true);
+      expect(shouldOpenFilter('j')).toBe(false);
+    });
+
+    it('shouldOpenCommand returns true for :', () => {
+      expect(shouldOpenCommand(':')).toBe(true);
+      expect(shouldOpenCommand('j')).toBe(false);
+    });
+
+it('shouldQuit returns true for q', () => {
+const minimalState: AppState = {
+        activeZone: 'dashboard',
+        setActiveZone: () => {},
+        zoneEvents: {} as ZoneEvents,
+        addZoneEvent: () => {},
+        splitterRatios: {} as ZoneRatios,
+        setSplitterRatio: () => {},
+        activeEdt: null,
+        setActiveEdt: () => {},
+        helpOpen: false,
+        openHelp: () => {},
+        closeHelp: () => {},
+        launchBannerShown: false,
+        markLaunchBannerShown: () => {},
+        runInProgress: false,
+      };
+      expect(shouldQuit('q', {}, minimalState)).toBe(true);
+      expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
+      expect(shouldQuit('j', {}, minimalState)).toBe(false);
+    });
   });
 });

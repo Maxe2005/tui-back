@@ -61,7 +61,7 @@ development_status:
   1-10-interactive-feedback-components: done
   1-11-permanent-app-shell: done
   1-12-launch-banner-keybinding-help-screen: done
-  1-13-canonical-keybinding-contract-zone-navigation: backlog
+  1-13-canonical-keybinding-contract-zone-navigation: review
   epic-1-retrospective: optional
 
   epic-2: backlog

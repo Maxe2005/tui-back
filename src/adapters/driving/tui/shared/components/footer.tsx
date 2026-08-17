@@ -3,9 +3,10 @@ import { colors, spacing } from '../theme/theme.js';
 
 export const DEFAULT_FOOTER_HINTS = [
   '[j/k] move',
-  '[enter] open',
-  '[space] select',
-  '[d] dashboard',
+  '[g/G] top/bottom',
+  '[d/e/u/l/r/s] zone',
+  '[/] filter',
+  '[:] cmd',
   '[?] help',
   '[q] quit',
   '^W resize',
