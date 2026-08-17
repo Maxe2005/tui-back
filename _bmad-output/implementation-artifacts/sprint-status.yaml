@@ -62,7 +62,7 @@ development_status:
   1-11-permanent-app-shell: done
   1-12-launch-banner-keybinding-help-screen: done
   1-13-canonical-keybinding-contract-zone-navigation: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-create-an-edt: backlog
