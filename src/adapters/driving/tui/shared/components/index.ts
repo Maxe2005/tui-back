@@ -18,3 +18,15 @@ export { Spinner } from './spinner.js';
 export type { SpinnerProps } from './spinner.js';
 export { DimAnnotation } from './dim-annotation.js';
 export type { DimAnnotationProps } from './dim-annotation.js';
+export { TopBar } from './top-bar.js';
+export { Footer, DEFAULT_FOOTER_HINTS } from './footer.js';
+export { ZoneTabBar, resolveZoneTabState } from './zone-tab-bar.js';
+export type { ZoneTabState } from './zone-tab-bar.js';
+export {
+  ListDetailSplit,
+  resolveSplitFlex,
+  DEFAULT_LIST_RATIO,
+} from './list-detail-split.js';
+export { ZonePlaceholder } from './zone-placeholder.js';
+export type { ZonePlaceholderProps } from './zone-placeholder.js';
+

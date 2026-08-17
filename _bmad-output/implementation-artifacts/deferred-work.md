@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 1-11-permanent-app-shell.md (2026-08-17)
+
+- **AppShell never mounted in a runnable entry point** (`src/adapters/driving/tui/app-shell.tsx:11`): referenced only by `app-shell.test.tsx`; `src/bin/main.ts` mounts only the CLI dispatch path, so AC1 ("Given the app is running") and AD-2 are unmet end-to-end. **Track:** wire the TUI entry point (composition root) in Story 1.12 (launch banner / entry point).
+- **AD-13 wording contradicts task T2** (`_bmad-output/implementation-artifacts/1-11-permanent-app-shell.md`): the Technical Requirements say "TUI gets smoke-tests via Ink's `render()` only", yet `app-store.test.ts` unit-tests the Zustand store directly with no Ink render; the story's own task T2 explicitly endorses this, so the diff follows the task line and AD-13's wording should be reconciled. **Track:** amend AD-13 (or the story requirement) when the architecture doc next gets edited.
+
 ## Deferred from: code review of 1-8-atelier-design-tokens-theme-module (2026-08-14)
 
 - **No runtime immutability** (`src/adapters/driving/tui/shared/theme/theme.ts`): `as const` is compile-time only, so a Story 1.9+ component could mutate `theme.colors.accent` (or an aggregate) at runtime and no test would catch it, undermining the "single source of truth" invariant. **Track:** add `Object.freeze` on each token group + an `Object.isFrozen(theme)` assertion when the first consumer lands (Story 1.9+).
