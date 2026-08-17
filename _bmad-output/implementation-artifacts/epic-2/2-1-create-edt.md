@@ -4,7 +4,7 @@ baseline_commit: 67e1bb87f6971ab8e140aafd0c427589db7c00c2
 
 # Story 2.1: Create an EDT
 
-Status: pending
+Status: done
 
 ## Story
 
