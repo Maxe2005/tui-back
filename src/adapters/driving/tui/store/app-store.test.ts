@@ -67,5 +67,23 @@ describe('app store', () => {
     store.getState().setActiveEdt(null);
     expect(store.getState().activeEdt).toBeNull();
   });
+
+  it('opens and closes the cross-zone help modal (AD-10)', () => {
+    const store = createAppStore();
+    expect(store.getState().helpOpen).toBe(false);
+    store.getState().openHelp();
+    expect(store.getState().helpOpen).toBe(true);
+    store.getState().closeHelp();
+    expect(store.getState().helpOpen).toBe(false);
+  });
+
+  it('marks the launch banner shown once, in-memory only, and it stays set (AC1)', () => {
+    const store = createAppStore();
+    expect(store.getState().launchBannerShown).toBe(false);
+    store.getState().markLaunchBannerShown();
+    expect(store.getState().launchBannerShown).toBe(true);
+    store.getState().markLaunchBannerShown();
+    expect(store.getState().launchBannerShown).toBe(true);
+  });
 });
 

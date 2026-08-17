@@ -9,6 +9,12 @@ export type { SummaryTone } from './detail-pane.js';
 export { SUMMARY_LINE_COLORS } from './detail-pane.js';
 export { ModalDialog } from './modal-dialog.js';
 export type { ModalDialogProps } from './modal-dialog.js';
+export {
+  KeybindingHelp,
+  clampHelpOffset,
+  resolveHelpWindow,
+  DEFAULT_HELP_VISIBLE_LINES,
+} from './keybinding-help.js';
 export { CheckboxListItem } from './checkbox-list-item.js';
 export type { CheckboxListItemProps, ResolvedCheckboxItem } from './checkbox-list-item.js';
 export { resolveCheckboxItemLayout } from './checkbox-list-item.js';

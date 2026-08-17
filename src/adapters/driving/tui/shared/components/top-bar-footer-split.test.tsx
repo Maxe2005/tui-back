@@ -27,7 +27,17 @@ describe('TopBar', () => {
 describe('Footer', () => {
   it('renders contextual keybinding hints on the permanent bottom row (AC1)', async () => {
     const output = await renderToString(<Footer />);
-    expect(output).toContain(DEFAULT_FOOTER_HINTS.join('  '));
+    expect(output).toContain('[?] help');
+    expect(output).toContain('[q] quit');
+    expect(output).toContain('resize');
+  });
+
+  it('advertises [?] help ahead of [q] quit in the default hints (UX-DR7)', () => {
+    const helpIndex = DEFAULT_FOOTER_HINTS.indexOf('[?] help');
+    const quitIndex = DEFAULT_FOOTER_HINTS.indexOf('[q] quit');
+    expect(helpIndex).toBeGreaterThanOrEqual(0);
+    expect(quitIndex).toBeGreaterThanOrEqual(0);
+    expect(helpIndex).toBeLessThan(quitIndex);
   });
 
   it('accepts zone-specific hints', async () => {

@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: code review of 1-12-launch-banner-keybinding-help-screen (2026-08-17)
+
+- **Help-modal scroll counts keybinding items, not wrapped visual lines** (`src/adapters/driving/tui/shared/components/keybinding-help.tsx`): wide rows (e.g. `Ctrl+W` ~84 chars) wrap inside the modal, so one `j`/`k` press can jump multiple visual lines, and the modal height is unbounded on short terminals. Deferred: the story explicitly scoped scroll as a pure-function, prop-driven slice with no pixel measurement. **Track:** a terminal-dimension-aware scroll window if/when the TUI measures height.
+- **Help modal and launch banner clip/wrap on unusually short/narrow terminals** (`src/adapters/driving/tui/zones/dashboard/launch-banner.tsx`, `src/adapters/driving/tui/shared/components/keybinding-help.tsx`): terminal < ~26 cols wraps the 24-glyph banner; terminal < ~14 rows clips the 10-row modal. Deferred: pre-existing edge case; no terminal-dimension measurement exists in the TUI yet. **Track:** revisit when Ink terminal-dimension hooks land in the TUI.
+- **`ModalDialog` `onConfirm`/`onCancel` are inert for the help instance** (`src/adapters/driving/tui/shared/components/keybinding-help.tsx`, `src/adapters/driving/tui/shared/components/modal-dialog.tsx`): closing is driven by AppShell's `useInput`; a standalone `KeybindingHelp` (outside `AppShell`) would never close on `Esc`/`?`. Deferred: pre-existing ModalDialog contract (1.10) with no internal `useInput`; works in the shipped app because AppShell owns key handling. **Track:** wire Esc/`?` into `KeybindingHelp` itself if it ever renders outside AppShell.
+
 ## Deferred from: code review of 1-11-permanent-app-shell.md (2026-08-17)
 
 - **AppShell never mounted in a runnable entry point** (`src/adapters/driving/tui/app-shell.tsx:11`): referenced only by `app-shell.test.tsx`; `src/bin/main.ts` mounts only the CLI dispatch path, so AC1 ("Given the app is running") and AD-2 are unmet end-to-end. **Track:** wire the TUI entry point (composition root) in Story 1.12 (launch banner / entry point).

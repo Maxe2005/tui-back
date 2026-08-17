@@ -20,6 +20,11 @@ export type AppState = {
   setSplitterRatio: (zone: ZoneId, ratio: number) => void;
   activeEdt: string | null;
   setActiveEdt: (edt: string | null) => void;
+  helpOpen: boolean;
+  openHelp: () => void;
+  closeHelp: () => void;
+  launchBannerShown: boolean;
+  markLaunchBannerShown: () => void;
 };
 
 function emptyEvents(): ZoneEvents {
@@ -58,6 +63,11 @@ export function createAppStore() {
       })),
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
+    helpOpen: false,
+    openHelp: () => set({ helpOpen: true }),
+    closeHelp: () => set({ helpOpen: false }),
+    launchBannerShown: false,
+    markLaunchBannerShown: () => set({ launchBannerShown: true }),
   }));
 }
 
