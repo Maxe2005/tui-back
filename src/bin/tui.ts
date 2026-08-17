@@ -15,22 +15,32 @@ if (!process.stdin.isTTY) {
   process.exit(1);
 }
 
-const lock = await acquireTuiLock();
-if (!lock) {
-  process.stderr.write('Another TUI instance is already running\n');
+let lock: { release: () => Promise<void> } | null = null;
+try {
+  lock = await acquireTuiLock();
+  if (!lock) {
+    process.stderr.write('Another TUI instance is already running\n');
+    process.exit(1);
+  }
+} catch (error) {
+  process.stderr.write('Failed to acquire TUI lock\n');
   process.exit(1);
 }
 
 const store = createAppStore();
 const onQuit = async () => {
-  await lock.release();
+  if (lock) {
+    await lock.release();
+  }
   process.exit(0);
 };
 
 try {
   render(createElement(AppShell, { useStore: store, onQuit }), { exitOnCtrlC: true });
 } catch (error) {
-  await lock.release();
+  if (lock) {
+    await lock.release();
+  }
   console.error(error);
   process.exit(1);
 }

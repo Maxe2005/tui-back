@@ -101,6 +101,18 @@ context:
 - Footer renders full canonical hint row in documented order
 - All tests pass: `npm test && npm run typecheck && npm run depcheck`
 
+## Review Findings
+
+**Patch findings (unchecked — require code fixes):**
+- [ ] [Review][Patch] F1: Lock error not caught in bin/tui.ts — acquireTuiLock() throw not caught; process crashes without error message
+- [ ] [Review][Patch] F2: onQuit optional prop risk — if undefined and q pressed, lock not released and process exit blocked
+- [ ] [Review][Patch] F3: fd leak in single-instance.ts — writeFileSync throw between openSync and closeSync leaves lock file inconsistent
+- [ ] [Review][Patch] F7: runInProgress field no guards — added without type-safe accessors or guards in app-store.ts
+- [ ] [Review][Patch] F9: Lock leak on render error — lock acquired before try; release() only in catch/onQuit — potential leak on render error
+
+**Defer findings (checked — pre-existing, not actioned now):**
+- [x] [Review][Defer] F6: Story 1-10 status transition — status changed review→done without proper review loopback, pre-existing workflow issue
+
 ## Spec Change Log
 *empty until first review loopback*
 

@@ -22,8 +22,11 @@ export async function acquireTuiLock(): Promise<{ release: () => Promise<void> }
       pid: process.pid,
       timestamp: new Date().toISOString(),
     };
-    writeFileSync(fd, JSON.stringify(content), 'utf8');
-    closeSync(fd);
+    try {
+      writeFileSync(fd, JSON.stringify(content), 'utf8');
+    } finally {
+      closeSync(fd);
+    }
 
     return {
       release: async () => {

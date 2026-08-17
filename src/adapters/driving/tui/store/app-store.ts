@@ -26,6 +26,7 @@ export type AppState = {
   launchBannerShown: boolean;
   markLaunchBannerShown: () => void;
   runInProgress: boolean;
+  setRunInProgress: (value: boolean) => void;
 };
 
 function emptyEvents(): ZoneEvents {
@@ -70,6 +71,7 @@ export function createAppStore() {
     launchBannerShown: false,
     markLaunchBannerShown: () => set({ launchBannerShown: true }),
     runInProgress: false,
+    setRunInProgress: (value: boolean) => set({ runInProgress: value }),
   }));
 }
 

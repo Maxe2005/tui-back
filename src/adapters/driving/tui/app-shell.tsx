@@ -55,10 +55,10 @@ export function shouldQuit(input: string, _key: { escape?: boolean }, state: App
 
 export function AppShell({
   useStore = useAppStore,
-  onQuit,
+  onQuit, // provided by composition root (bin/tui.ts); always present
 }: {
   useStore?: AppStore;
-  onQuit?: () => void;
+  onQuit: () => void;
 }) {
   const activeZone = useStore((state) => state.activeZone);
   const activeEdt = useStore((state) => state.activeEdt);
@@ -101,7 +101,7 @@ export function AppShell({
       }
 
       if (shouldQuit(input, key, state)) {
-        onQuit?.();
+        onQuit();
         return;
       }
     }

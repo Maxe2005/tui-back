@@ -1,0 +1,7 @@
+Read `.agents/skills/bmad-code-review/review-prompts/verification-gap.md` completely and follow it as your review instructions.
+
+Review content:
+
+$(cat /tmp/review_diff.txt)
+
+Do not invoke any skill. If the instruction file is unreadable, report that exact failure and stop. Return only the review result.
