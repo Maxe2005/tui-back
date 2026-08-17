@@ -31,6 +31,20 @@ export function resolveHelpWindow<T>(
   };
 }
 
+export function resolveHelpScroll(
+  input: string,
+  offset: number,
+  visibleLines: number,
+): number {
+  if (input === 'j') {
+    return resolveHelpWindow(KEYBINDINGS, offset + 1, visibleLines).scrollOffset;
+  }
+  if (input === 'k') {
+    return resolveHelpWindow(KEYBINDINGS, offset - 1, visibleLines).scrollOffset;
+  }
+  return offset;
+}
+
 export function KeybindingHelp({
   useStore = useAppStore,
   visibleLines = DEFAULT_HELP_VISIBLE_LINES,
@@ -50,15 +64,7 @@ export function KeybindingHelp({
 
   useInput((input, _key) => {
     if (!helpOpen) return;
-    if (input === 'j') {
-      setScrollOffset((offset) =>
-        resolveHelpWindow(KEYBINDINGS, offset + 1, visibleLines).scrollOffset,
-      );
-    } else if (input === 'k') {
-      setScrollOffset((offset) =>
-        resolveHelpWindow(KEYBINDINGS, offset - 1, visibleLines).scrollOffset,
-      );
-    }
+    setScrollOffset((offset) => resolveHelpScroll(input, offset, visibleLines));
   });
 
   const { visible } = resolveHelpWindow(

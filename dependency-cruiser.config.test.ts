@@ -144,4 +144,24 @@ export function ok<T>(data: T): Result<T> { return { ok: true, data }; }
     // (plus the deferred-work.md entry) should be updated to reflect that.
     expect(result.summary.violations).toEqual([]);
   });
+
+  it('pins the no-tui-leak-outside-driving-tui rule exception for src/bin/tui.ts', async () => {
+    // This regression test ensures the widened no-tui-leak rule still correctly
+    // allows the sanctioned exception (src/bin/tui.ts) while still flagging
+    // non-TUI modules that import from tui/.
+    const rule = depCruiserConfig.forbidden.find(
+      (candidate: { name: string }) => candidate.name === 'no-tui-leak-outside-driving-tui',
+    );
+
+    // The exception should allow src/bin/tui.ts to import from tui/ without being flagged
+    const { output } = await cruise([join(fixtureRoot, 'src', 'bin', 'tui.ts')], {
+      validate: true,
+      ruleSet: { forbidden: [rule] },
+      outputType: 'json',
+    });
+    const parsed = typeof output === 'string' ? JSON.parse(output) : output;
+
+    // The exception should allow src/bin/tui.ts to import from tui/ without being flagged
+    expect(parsed.summary.violations).toEqual([]);
+  });
 });

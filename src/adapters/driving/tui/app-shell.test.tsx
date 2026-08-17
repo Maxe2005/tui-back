@@ -22,7 +22,8 @@ describe('help-open decision helpers (AC2, AC3)', () => {
 
 describe('AppShell', () => {
   it('shows the top bar, six-zone tab bar, and footer simultaneously (AC1)', async () => {
-    const output = await renderToString(<AppShell />);
+    const store = createAppStore();
+    let output = await renderToString(<AppShell useStore={store} />);
     expect(output).toContain('tui-back');
     for (const zone of ZONES) {
       expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
@@ -66,6 +67,25 @@ describe('AppShell', () => {
     store.getState().closeHelp();
     output = await renderToString(<AppShell useStore={store} />);
     expect(output).not.toContain('KEYBINDINGS');
+  });
+
+  it('shows the launch banner on the first Dashboard visit only (AC1)', async () => {
+    const store = createAppStore();
+    let output = await renderToString(<AppShell useStore={store} />);
+    for (const line of BANNER_LINES) {
+      expect(output).toContain(line);
+    }
+    expect(store.getState().launchBannerShown).toBe(false);
+
+    store.getState().setActiveZone('logs');
+    await renderToString(<AppShell useStore={store} />);
+    expect(store.getState().launchBannerShown).toBe(true);
+
+    store.getState().setActiveZone('dashboard');
+    const output2 = await renderToString(<AppShell useStore={store} />);
+    for (const line of BANNER_LINES) {
+      expect(output2).not.toContain(line);
+    }
   });
 
   it('prevents the launch banner from reappearing once the store flag is set (AC1 regression guard)', async () => {

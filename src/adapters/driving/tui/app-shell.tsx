@@ -18,6 +18,22 @@ export function shouldCloseHelp(
   return input === '?' || key.escape === true;
 }
 
+export function resolveHelpDispatch(
+  input: string,
+  key: { escape?: boolean },
+  helpOpen: boolean,
+  openHelp: () => void,
+  closeHelp: () => void,
+): void {
+  if (helpOpen) {
+    if (shouldCloseHelp(input, key)) {
+      closeHelp();
+    }
+  } else if (shouldOpenHelp(input)) {
+    openHelp();
+  }
+}
+
 export function AppShell({
   useStore = useAppStore,
 }: {
@@ -29,20 +45,20 @@ export function AppShell({
   const ZoneScreen = getZoneScreen(activeZone);
 
   useEffect(() => {
-    if (!useStore.getState().launchBannerShown) {
+    if (activeZone !== 'dashboard' && !useStore.getState().launchBannerShown) {
       useStore.getState().markLaunchBannerShown();
     }
-  }, [useStore]);
+  }, [activeZone, useStore]);
 
   useInput((input, key) => {
     const state = useStore.getState();
-    if (state.helpOpen) {
-      if (shouldCloseHelp(input, key)) {
-        state.closeHelp();
-      }
-    } else if (shouldOpenHelp(input)) {
-      state.openHelp();
-    }
+    resolveHelpDispatch(
+      input,
+      key,
+      state.helpOpen,
+      state.openHelp,
+      state.closeHelp,
+    );
   });
 
   return (
