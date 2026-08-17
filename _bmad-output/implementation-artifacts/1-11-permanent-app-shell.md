@@ -1,10 +1,14 @@
+---
+baseline_commit: dadcefff358ec5b712f6405d516a48320bb51bf2
+---
+
 # Story 1.11: Permanent App Shell
 
 **Story ID:** 1.11  
 **Story Key:** 1-11-permanent-app-shell  
 **Epic:** 1 - Foundation: Standalone-Script Core, Manifest & Navigation Shell  
-**Status:** ready-for-dev  
-**Last Updated:** 2026-08-14
+**Status:** review  
+**Last Updated:** 2026-08-17
 
 ---
 
@@ -182,17 +186,84 @@ The following insights were extracted from the git history relevant to this stor
 
 ---
 
-### Story Completion Status
+## Tasks/Subtasks
 
-**Status:** ready-for-dev  
-**Completion Note:** Ultimate context engine analysis completed - comprehensive developer guide created
+- [x] **T1 — Zone metadata & compiled screen registry (AC6):** `zones/zones.ts` defines the six zones with mnemonic+label (`d/e/u/l/r/s`); `zones/index.ts` maps every zone id to its placeholder screen.
+- [x] **T2 — Cross-zone Zustand store scaffold (AC5, AD-10):** `store/app-store.ts` is the one store (active zone, per-zone pending-event counts, per-zone splitter ratios, active EDT placeholder); no zone keeps a duplicate copy. Unit-tested directly without Ink (AD-13).
+- [x] **T3 — Chrome row components (AC1):** `top-bar`, `zone-tab-bar`, `footer` render on `theme.colors.background` and are always present in the shell.
+- [x] **T4 — Active/inactive tab treatment (AC2):** active tab = accent fill + bold background-colored text; every other tab = text-dim on background (pure `resolveZoneTabState`).
+- [x] **T5 — Pending-event badge, cleared on visit (AC3):** `zoneEvents` in the store; `●n` badge in status color on non-active tabs; `setActiveZone` clears the visited zone's count.
+- [x] **T6 — Resizable list/detail split (AC4):** `list-detail-split` renders list pane + `Splitter` divider + detail pane, default ~2:3 (2/5 list share), clamped to keep both panes usable.
+- [x] **T7 — Placeholder screens at every tab (AC6):** `zone-placeholder` (shared) drives the list/detail split from the store; six thin zone screens mount it via `app-shell`.
+
+---
+
+### Dev Agent Record
+
+**Debug Log:**
+
+- 2026-08-17 — Marked story `in-progress`, recorded `baseline_commit: dadcefff…` (YAML frontmatter), updated `sprint-status.yaml`.
+- 2026-08-17 — Installed `zustand@5.0.14` as an exact-pinned runtime dependency (in the story's fixed stack; absent from `package.json` previously).
+- 2026-08-17 — First `ListDetailSplit` test failed: Ink requires bare strings to be wrapped in `<Text>`; fixed the test to pass `<Text>` children (the component contract is `ReactNode`).
+- 2026-08-17 — All six zone screens + shell render and assert cleanly through Ink `render()` smoke tests; store tested directly, no Ink render (AD-13).
+
+**Implementation Plan (as executed):**
+
+1. Zones metadata as compiled-in data (`zones/zones.ts`) + screen registry (`zones/index.ts`) — mirrors AD-15's 1:1 zone→capability mapping and AD-5's no-dynamic-loading rule.
+2. One Zustand store (`store/app-store.ts`) as the single cross-zone state source (AD-10): active zone, pending background-event counts, per-zone splitter ratios, and the `activeEdt` placeholder (hydrated from `state.json` in a later story).
+3. Chrome components (`top-bar`, `zone-tab-bar`, `footer`) on `colors.background`; active tab treatment resolved by the pure `resolveZoneTabState` (accent fill, bold, background-colored text) with a `●n` status-color badge for pending events.
+4. `list-detail-split` (shared) providing the ~2:3 list/detail split around the existing `Splitter` divider.
+5. `app-shell` composing chrome + the active zone's screen; `ZonePlaceholder` shared by all six zone screens so no per-zone copy of the layout exists (AD-15).
+
+**Completion Notes:**
+
+- ✅ All 6 ACs satisfied: simultaneous chrome (AC1), accent/bold active tab vs text-dim others (AC2), pending-event badge cleared on visit (AC3), list/detail split ~2:3 (AC4), exactly one Zustand store with placeholder fields (AC5), six placeholder screens mounted and reachable (AC6).
+- ✅ Full suite green: 254 tests (31 files), `npm run typecheck` clean, `npm run depcheck` clean (no core→adapters, no TUI leak outside the driving adapter).
+- ✅ Conventions honored: NodeNext `.js` relative imports, imports-first (depcruise acorn-fallback landmine), kebab-case files, tokens from `theme.ts` only, square corners, accent never used as a status color, no story/epic refs in source comments.
+- ⏳ Deferred (out of this story's ACs): single-TUI process lock (AD-9 mechanism 1), `state.json` hydration/resync of `activeEdt` and per-zone splitter ratios (AD-7/AD-10), zone-navigation keybindings (Story 1.13), launch banner + `?` help (Story 1.12).
+
+### File List
+
+**Added:**
+
+- `src/adapters/driving/tui/app-shell.tsx`
+- `src/adapters/driving/tui/app-shell.test.tsx`
+- `src/adapters/driving/tui/store/app-store.ts`
+- `src/adapters/driving/tui/store/app-store.test.ts`
+- `src/adapters/driving/tui/zones/zones.ts`
+- `src/adapters/driving/tui/zones/zones.test.ts`
+- `src/adapters/driving/tui/zones/index.ts`
+- `src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx`
+- `src/adapters/driving/tui/zones/edts/edts-zone.tsx`
+- `src/adapters/driving/tui/zones/update/update-zone.tsx`
+- `src/adapters/driving/tui/zones/logs/logs-zone.tsx`
+- `src/adapters/driving/tui/zones/routes/routes-zone.tsx`
+- `src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx`
+- `src/adapters/driving/tui/shared/components/top-bar.tsx`
+- `src/adapters/driving/tui/shared/components/zone-tab-bar.tsx`
+- `src/adapters/driving/tui/shared/components/zone-tab-bar.test.tsx`
+- `src/adapters/driving/tui/shared/components/footer.tsx`
+- `src/adapters/driving/tui/shared/components/list-detail-split.tsx`
+- `src/adapters/driving/tui/shared/components/top-bar-footer-split.test.tsx`
+- `src/adapters/driving/tui/shared/components/zone-placeholder.tsx`
+
+**Modified:**
+
+- `src/adapters/driving/tui/shared/components/index.ts` (barrel exports for the new components)
+- `src/adapters/driving/tui/shared/README.md` (Story 1.11 shell/store rules)
+- `package.json` / `package-lock.json` (add `zustand@5.0.14`, exact-pinned)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (story → in-progress → review)
+
+### Change Log
+
+- 2026-08-17 — Implemented the permanent app shell (story 1.11): top bar, six-zone tab bar with pending-event `●n` badges cleared on visit, footer, resizable ~2:3 list/detail split, exactly one Zustand cross-zone store (AD-10), and a placeholder screen mounted at every zone tab. Status → review.
+
+**Status:** review  
+**Completion Note:** Permanent app shell implemented — top bar, six-zone tab bar with pending-event badges, footer, resizable list/detail split (~2:3), exactly one Zustand cross-zone store (AD-10), and a placeholder screen mounted at every zone tab. All ACs satisfied; full suite green (254 tests), typecheck and depcheck clean.
 
 **Next Steps for Developer:**
 
 1. Review this story file for all guardrails and requirements
-2. Implement the permanent app shell with top bar, zone-tab bar, footer, and resizable list/detail layout
-3. Ensure all AD-1 through AD-15 compliance checklist is satisfied
-4. Run `npm test` to verify core unit tests pass
-5. Run `npm run typecheck` to verify TypeScript correctness
-6. Run `npm run depcheck` to verify AD-1 boundary (core → adapters only)
-7. When implementation is complete, run `code-review` to auto-mark story as done
+2. Run `code-review` to auto-mark story as done
+3. Confirm the launch banner + `?` keybinding help screen as Story 1.12
+4. Wire the canonical zone-navigation keybindings (`d/e/u/l/r/s`) as Story 1.13
