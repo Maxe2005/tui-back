@@ -1,5 +1,9 @@
 # Deferred Work
 
+## Deferred from: code review of 2-1-create-edt (2026-08-17)
+
+- **AC3/Task 3 (git branch `edt-<ulid>` creation + AD-8 branch-scope safety gate) deferred to story 2.2** (`src/core/edt/create.ts`): `createEdt` takes no repo/service selection parameter today, so there is no target repo to branch. The user confirmed EDT creation's real branch semantics are per-service (point to an existing branch, or create either a branch dedicated to one service or one shared across the selected services) — a decision that needs the service-selection context story 2.2 ("create dev branches at edt creation") owns, not 2.1. **Track:** implement the `adapters/driven/git` `GitPort` + AD-8 safety gate as part of 2.2, exercised through the per-service branch selection flow described above; re-verify AC3 against the 2.2 story text once written (this story's own AC3 wording may need amending to match).
+
 ## Deferred from: code review of 1-12-launch-banner-keybinding-help-screen (2026-08-17)
 
 - **Help-modal scroll counts keybinding items, not wrapped visual lines** (`src/adapters/driving/tui/shared/components/keybinding-help.tsx`): wide rows (e.g. `Ctrl+W` ~84 chars) wrap inside the modal, so one `j`/`k` press can jump multiple visual lines, and the modal height is unbounded on short terminals. Deferred: the story explicitly scoped scroll as a pure-function, prop-driven slice with no pixel measurement. **Track:** a terminal-dimension-aware scroll window if/when the TUI measures height.
