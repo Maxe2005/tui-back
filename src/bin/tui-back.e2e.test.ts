@@ -115,9 +115,12 @@ describe('tui-back CLI (black-box)', () => {
     expect(parsed.error.code).toBe('unknown-subcommand');
   });
 
-  it("package.json's bin field has exactly one entry — no per-action executable (AD-2)", async () => {
+  it("package.json's bin field exposes the umbrella CLI and the interactive TUI entry point (AD-2)", async () => {
     const pkg = await import('../../package.json', { with: { type: 'json' } });
-    expect(Object.keys(pkg.default.bin)).toEqual(['tui-back']);
+    expect(Object.keys(pkg.default.bin).sort()).toEqual([
+      'tui-back',
+      'tui-back-tui',
+    ]);
   });
 });
 

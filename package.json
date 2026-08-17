@@ -7,7 +7,8 @@
     "node": ">=24"
   },
   "bin": {
-    "tui-back": "./src/bin/tui-back.mjs"
+    "tui-back": "./src/bin/tui-back.mjs",
+    "tui-back-tui": "./src/bin/tui-back-tui.mjs"
   },
   "scripts": {
     "test": "vitest run",

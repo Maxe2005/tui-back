@@ -6,6 +6,7 @@ export const DEFAULT_FOOTER_HINTS = [
   '[enter] open',
   '[space] select',
   '[d] dashboard',
+  '[?] help',
   '[q] quit',
   '^W resize',
 ];
