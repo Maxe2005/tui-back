@@ -70,20 +70,20 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/ports/state.ts` -- add `StatePort` -- AD-10 contract
-- [ ] `src/adapters/driven/state/index.ts` + `.test.ts` -- implement + unit test
-- [ ] `src/core/ports/lock.ts` -- add `peek`
-- [ ] `src/adapters/driven/lock/index.ts` + `index.test.ts` -- implement `peek` + tests (held/free/stale-holder)
-- [ ] `src/core/ports/edt-registry.ts` -- add `setStatus`
-- [ ] `src/adapters/driven/edt-registry/index.ts` + `index.test.ts` -- implement + test
-- [ ] `src/core/ports/git.ts` -- extend `GitPort`
-- [ ] `src/adapters/driven/git/index.ts` + `index.test.ts` -- implement new methods + cross-EDT gate + tests
-- [ ] `src/core/edt/switch.ts` + `switch.test.ts` -- use-case + unit tests covering the I/O matrix
-- [ ] `src/adapters/driving/cli/subcommands.ts` -- `edt switch` wiring
-- [ ] `src/bin/main.ts` -- composition-root wiring
-- [ ] `src/bin/tui-back.e2e.test.ts` -- e2e case(s) for switch
-- [ ] `_bmad-output/implementation-artifacts/deferred-work.md` -- log TUI-wiring deferral; resolve AD-8 entry
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip `2-4` to `in-progress` then `review`
+- [x] `src/core/ports/state.ts` -- add `StatePort` -- AD-10 contract
+- [x] `src/adapters/driven/state/index.ts` + `.test.ts` -- implement + unit test
+- [x] `src/core/ports/lock.ts` -- add `peek`
+- [x] `src/adapters/driven/lock/index.ts` + `index.test.ts` -- implement `peek` + tests (held/free/stale-holder)
+- [x] `src/core/ports/edt-registry.ts` -- add `setStatus`
+- [x] `src/adapters/driven/edt-registry/index.ts` + `index.test.ts` -- implement + test
+- [x] `src/core/ports/git.ts` -- extend `GitPort`
+- [x] `src/adapters/driven/git/index.ts` + `index.test.ts` -- implement new methods + cross-EDT gate + tests
+- [x] `src/core/edt/switch.ts` + `switch.test.ts` -- use-case + unit tests covering the I/O matrix
+- [x] `src/adapters/driving/cli/subcommands.ts` -- `edt switch` wiring
+- [x] `src/bin/main.ts` -- composition-root wiring
+- [x] `src/bin/tui-back.e2e.test.ts` -- e2e case(s) for switch
+- [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- log TUI-wiring deferral; resolve AD-8 entry
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip `2-4` to `in-progress` then `review`
 
 **Acceptance Criteria:**
 - Given the target topic doesn't match any registered EDT, when switch runs, then it fails upfront (`edt-not-found`) with no repo touched.
