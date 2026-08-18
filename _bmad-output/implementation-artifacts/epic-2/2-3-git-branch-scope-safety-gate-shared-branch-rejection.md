@@ -2,7 +2,7 @@
 title: 'Git Branch-Scope Safety Gate & Shared-Branch Rejection'
 type: 'feature'
 created: '2026-08-18'
-status: 'done'
+status: 'in-review'
 baseline_commit: b7a45ffbbd876683fd2aac1d01e7b819bb32e538
 review_loop_iteration: 0
 context:
@@ -46,7 +46,7 @@ context:
 - `src/core/edt/create.test.ts` -- update the fallback test (~363-378) to assert `failed`/excluded; add the table's cases.
 - `src/adapters/driven/git/index.test.ts` -- `assertAllowedBranch` cases (`SHARED_BRANCHES`, manifest `sharedBranch`, passing ordinary branch), reusing existing fixtures.
 - `src/bin/tui-back.e2e.test.ts` -- one e2e case: repo on `development`, no `--create-branches` → `failed`; `edts.yaml` excludes that member.
-- `_bmad-output/implementation-artifacts/deferred-work.md` -- mark the fallback entry (line 5) resolved; `sprint-status.yaml` -- flip `2-3` to `in-progress` then `done`.
+- `_bmad-output/implementation-artifacts/deferred-work.md` -- mark the fallback entry (line 5) resolved; `sprint-status.yaml` -- flip `2-3` to `in-progress` then `review` (code review gates `done`, per the workflow's step-04).
 
 ## Tasks & Acceptance
 
@@ -58,7 +58,7 @@ context:
 - [x] `src/adapters/driven/git/index.test.ts` -- unit-test `assertAllowedBranch`.
 - [x] `src/bin/tui-back.e2e.test.ts` -- e2e case for disabled+shared.
 - [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- mark fallback item resolved.
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip 2.3 to `in-progress` then `done`.
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip 2.3 to `in-progress` then `review` (code review gates `done`).
 
 **Acceptance Criteria:**
 - Given any git write path, when the target is shared/protected, then the adapter-level gate rejects it before any `git` invocation (AD-8).
