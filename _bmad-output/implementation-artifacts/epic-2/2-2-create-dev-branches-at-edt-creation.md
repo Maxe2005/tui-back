@@ -2,7 +2,7 @@
 title: 'Create Dev Branches at EDT Creation'
 type: 'feature'
 created: '2026-08-18'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 9a1cdeb503bfb97928435c1443aac36daee9b075
 review_loop_iteration: 0
 context:
@@ -71,18 +71,18 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/ports/git.ts` -- add `GitPort` interface -- core contract for the new adapter.
-- [ ] `src/adapters/driven/git/index.ts` -- `createGitPort(manifest)` with shared-branch gate + existence/base checks + `git branch`/`git rev-parse` via spawnSync -- AD-8 seed, single git touchpoint.
-- [ ] `src/core/ports/edt-registry.ts` -- topic+members entry shape, `list()` -- per-service branch storage feeds Story 2.6.
-- [ ] `src/adapters/driven/edt-registry/schema.ts` -- entry schema: `{ulid, topic, createdAt, status, members}` -- strict shape for edts.yaml.
-- [ ] `src/adapters/driven/edt-registry/index.ts` -- expose `list()`, write new entry shape -- adapter keeps filesystem ownership.
-- [ ] `src/core/edt/create.ts` -- topic/member/branch-options params; uniqueness + membership + zero-member validation before writes; per-service branch loop with isolation; registry write under lock -- core use-case.
-- [ ] `src/adapters/driving/cli/subcommands.ts` -- `edt create` flag parsing and validation -- CLI parity for the use-case.
-- [ ] `src/bin/main.ts` -- wire `createGitPort` into `buildSubcommands` deps -- composition root.
-- [ ] `src/core/edt/create.test.ts` -- unit tests of every I/O-matrix row with fake ports -- AD-13 core layer.
-- [ ] `src/adapters/driven/git/index.test.ts` -- real-git integration tests (create, collision, base-missing, shared-branch rejection, currentBranch) -- AD-13 driven layer.
-- [ ] `src/bin/tui-back.e2e.test.ts` -- update skeleton/racing tests to new schema; add git-backed branch-creation e2e cases -- black-box parity.
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip story 2.2 to `in-progress` then `done` -- status tracking.
+- [x] `src/core/ports/git.ts` -- add `GitPort` interface -- core contract for the new adapter.
+- [x] `src/adapters/driven/git/index.ts` -- `createGitPort(manifest)` with shared-branch gate + existence/base checks + `git branch`/`git rev-parse` via spawnSync -- AD-8 seed, single git touchpoint.
+- [x] `src/core/ports/edt-registry.ts` -- topic+members entry shape, `list()` -- per-service branch storage feeds Story 2.6.
+- [x] `src/adapters/driven/edt-registry/schema.ts` -- entry schema: `{ulid, topic, createdAt, status, members}` -- strict shape for edts.yaml.
+- [x] `src/adapters/driven/edt-registry/index.ts` -- expose `list()`, write new entry shape -- adapter keeps filesystem ownership.
+- [x] `src/core/edt/create.ts` -- topic/member/branch-options params; uniqueness + membership + zero-member validation before writes; per-service branch loop with isolation; registry write under lock -- core use-case.
+- [x] `src/adapters/driving/cli/subcommands.ts` -- `edt create` flag parsing and validation -- CLI parity for the use-case.
+- [x] `src/bin/main.ts` -- wire `createGitPort` into `buildSubcommands` deps -- composition root.
+- [x] `src/core/edt/create.test.ts` -- unit tests of every I/O-matrix row with fake ports -- AD-13 core layer.
+- [x] `src/adapters/driven/git/index.test.ts` -- real-git integration tests (create, collision, base-missing, shared-branch rejection, currentBranch) -- AD-13 driven layer.
+- [x] `src/bin/tui-back.e2e.test.ts` -- update skeleton/racing tests to new schema; add git-backed branch-creation e2e cases -- black-box parity.
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip story 2.2 to `in-progress` then `done` -- status tracking.
 
 **Acceptance Criteria:**
 - Given branch-creation enabled, when a developer creates an EDT with a topic, ≥1 member, a base branch (default `development`) and a naming mode, then a working branch is created in each selected member accordingly — grouped = one identical name everywhere, individual = one name per member — and registered as that member's EDT branch (feeds Story 2.6).
