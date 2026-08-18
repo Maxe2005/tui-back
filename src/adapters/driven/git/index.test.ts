@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { loadManifest } from '../manifest/index.js';
-import { createBranch, createGitPort, currentBranch, deleteBranch } from './index.js';
+import { assertAllowedBranch, createBranch, createGitPort, currentBranch, deleteBranch } from './index.js';
 
 const tmpDirs: string[] = [];
 
@@ -73,6 +73,42 @@ function branchExists(dir: string, branch: string): boolean {
 // The adapter resolves the shared-branch set through the real manifest loader, so the full
 // manifest → gate → git stack is exercised against the repo's actual .tui-back.yaml.
 const manifest: ManifestPort = { load: loadManifest };
+
+describe('assertAllowedBranch', () => {
+  it('rejects every built-in shared branch without any git invocation', async () => {
+    const repo = await makeDirWithManifestOnly();
+
+    for (const shared of ['development', 'preprod', 'prod']) {
+      const result = await assertAllowedBranch(manifest, repo, shared);
+      expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    }
+  });
+
+  it('rejects a branch name equal to the repo manifest sharedBranch', async () => {
+    const repo = await makeGitRepo('staging');
+
+    const result = await assertAllowedBranch(manifest, repo, 'staging');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+  });
+
+  it('passes an ordinary branch name (not in the shared set)', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await assertAllowedBranch(manifest, repo, 'feat/ordinary');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+  });
+
+  it('propagates a manifest load failure from the gate (sharedBranch cannot be resolved)', async () => {
+    const repo = await makeGitRepo();
+    await rm(join(repo, '.tui-back.yaml'), { force: true });
+
+    const result = await assertAllowedBranch(manifest, repo, 'feat/x');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+});
 
 describe('createBranch', () => {
   it('creates a branch ref from the base without checking it out', async () => {
@@ -289,10 +325,15 @@ describe('deleteBranch', () => {
 });
 
 describe('createGitPort', () => {
-  it('wires all three methods behind the factory pattern', async () => {
+  it('wires all four methods behind the factory pattern', async () => {
     const repo = await makeGitRepo();
     const port = createGitPort(manifest);
 
+    expect(await port.assertAllowedBranch(repo, 'development')).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected' },
+    });
+    expect(await port.assertAllowedBranch(repo, 'feat/ordinary')).toEqual({ ok: true, data: undefined });
     expect(await port.currentBranch(repo)).toEqual({ ok: true, data: 'development' });
     expect(await port.createBranch(repo, 'feat/port', 'development')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/port')).toBe(true);
