@@ -156,6 +156,7 @@ describe('subcommand registry guards', () => {
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
     const git: GitPort = {
       createBranch: async () => ok(undefined),
+      deleteBranch: async () => ok(undefined),
       currentBranch: async () => ok('development'),
     };
 

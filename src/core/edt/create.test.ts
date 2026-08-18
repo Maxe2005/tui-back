@@ -6,7 +6,7 @@
 // per-resource lock. createEdt still performs its own real EDT-dir/db writes (pre-existing
 // Story 2.1 behavior), so edtsBaseDir points at a per-test temp dir.
 import { describe, expect, it, vi, afterEach, type Mock } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ok, err } from '../result.js';
@@ -82,6 +82,7 @@ function fakeLock(): LockPort {
 function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
   return {
     createBranch: vi.fn(async () => ok(undefined)),
+    deleteBranch: vi.fn(async () => ok(undefined)),
     currentBranch: vi.fn(async () => ok('development')),
     ...overrides,
   };
@@ -416,5 +417,58 @@ describe('createEdt — registry write under lock (AD-9)', () => {
     const result = await createEdt(params);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
+    // The EDT dir and db must not survive the failed creation.
+    expect(await readdir(params.edtsBaseDir)).toEqual([]);
+  });
+
+  it('rolls back the created branches when the registry write fails (branch rollback, review)', async () => {
+    const edtRegistry = fakeEdtRegistry({ add: async () => err('edt-registry-write-error', 'disk full') });
+    const git = fakeGit();
+    const params = await makeParams({ edtRegistry, git, branchOptions: GROUPED });
+
+    const result = await createEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
+    // Every branch that was created in this run is deleted again, in the same order.
+    expect(calls(git.deleteBranch)).toEqual([
+      ['/repo/a', 'feat/x'],
+      ['/repo/b', 'feat/x'],
+    ]);
+    // Only created branches are rolled back — failed/existing members are left alone.
+    expect(calls(git.createBranch)).toHaveLength(2);
+    expect(await readdir(params.edtsBaseDir)).toEqual([]);
+  });
+
+  it('does not delete branches when the registry write succeeds', async () => {
+    const params = await makeParams({ branchOptions: GROUPED });
+
+    const result = await createEdt(params);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(calls(params.git.deleteBranch)).toHaveLength(0);
+  });
+
+  it('re-checks topic uniqueness inside the lock and rejects a same-topic entry added meanwhile (race, review)', async () => {
+    // Simulates the authoritative in-lock check: the pre-lock fast-fail saw an empty
+    // registry, but by the time the lock is held another run has registered the topic.
+    const edtRegistry = fakeEdtRegistry({
+      list: vi
+        .fn()
+        .mockResolvedValueOnce(ok([])) // pre-lock fast-fail
+        .mockResolvedValueOnce(ok([entry('other-ulid', 'demo')])), // in-lock re-check
+    });
+    const git = fakeGit();
+    const params = await makeParams({ edtRegistry, git, branchOptions: GROUPED });
+
+    const result = await createEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-topic-exists' } });
+    expect(calls(edtRegistry.add)).toHaveLength(0);
+    // The branches this run created are rolled back even though the lock was held.
+    expect(calls(git.deleteBranch)).toEqual([
+      ['/repo/a', 'feat/x'],
+      ['/repo/b', 'feat/x'],
+    ]);
+    expect(await readdir(params.edtsBaseDir)).toEqual([]);
   });
 });

@@ -8,5 +8,8 @@ import type { Result } from '../result.js';
 
 export interface GitPort {
   createBranch(repoPath: string, branchName: string, baseBranch: string): Promise<Result<void>>;
+  // Deletes a branch ref that this tool created (rollback path: a failed EDT creation must
+  // not leave orphaned branch refs behind). Shares createBranch's shared-branch gate.
+  deleteBranch(repoPath: string, branchName: string): Promise<Result<void>>;
   currentBranch(repoPath: string): Promise<Result<string>>;
 }

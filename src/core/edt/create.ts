@@ -215,19 +215,45 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   // others and never fails EDT creation.
   const results: CreateEdtMemberResult[] = [];
   const memberEntries: EdtMember[] = [];
+  // Branches successfully created in this run, tracked for rollback: if the registry write
+  // below fails, the EDT dir/db is cleaned up and these refs are deleted so a failed
+  // creation leaves no trace in the member repos.
+  const createdBranches: Array<{ repoPath: string; branchName: string }> = [];
   for (const member of members) {
     const resolved = await resolveMemberBranch(git, manifest, member, branchOptions);
     results.push({ service: resolved.service, outcome: resolved.outcome, ...(resolved.detail !== undefined ? { detail: resolved.detail } : {}) });
     memberEntries.push({ service: resolved.service, repoPath: member, branch: resolved.branch });
+    if (resolved.outcome === 'created') {
+      createdBranches.push({ repoPath: member, branchName: branchOptions.names[member] });
+    }
   }
 
   // Record the EDT in the EDT registry (AD-6/Task 2), under the same advisory-lock pattern
-  // register/reset already use for their own registry writes (AD-9).
-  const registeredEntry = await withActionLock(lock, edtRegistryResourceKey, () =>
-    edtRegistry.add({ ulid, topic, createdAt: new Date().toISOString(), status: 'active', members: memberEntries }),
-  );
+  // register/reset already use for their own registry writes (AD-9). The topic-uniqueness
+  // check runs again inside the locked section: the pre-lock fast-fail above covers the
+  // sequential case, but two racing `edt create --topic demo` runs would both pass it — the
+  // lock serializes the read-modify-write, so the authoritative check must happen under it.
+  const registeredEntry = await withActionLock(lock, edtRegistryResourceKey, async () => {
+    const current = await edtRegistry.list();
+    if (!current.ok) {
+      return current;
+    }
+    if (current.data.some((entry) => entry.topic === topic)) {
+      return err('edt-topic-exists', `An EDT with topic "${topic}" already exists`);
+    }
+    return edtRegistry.add({ ulid, topic, createdAt: new Date().toISOString(), status: 'active', members: memberEntries });
+  });
   if (!registeredEntry.ok) {
     rollback();
+    for (const { repoPath, branchName } of createdBranches) {
+      const deleted = await git.deleteBranch(repoPath, branchName);
+      if (!deleted.ok) {
+        console.error(
+          `Failed to delete branch ${branchName} in ${repoPath} after a failed EDT creation:`,
+          deleted.error.message,
+        );
+      }
+    }
     return registeredEntry;
   }
 
