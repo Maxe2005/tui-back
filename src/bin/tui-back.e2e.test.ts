@@ -511,6 +511,10 @@ describe('tui-back edt create (black-box)', () => {
   it('creates the EDT skeleton (state.json, manifest, db) and registers topic + member branch (AC1/AC2)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
+    // makeGitRepo() leaves the repo on `development` (shared); check out an ordinary branch
+    // so this skeleton/registration test isn't itself exercising story 2.3's gate (that has
+    // its own dedicated case below).
+    expect(runGit(repo, ['checkout', '-b', 'feature-x']).status).toBe(0);
     const env = createEnv(xdg);
     await registerRepos([repo], env);
 
@@ -544,7 +548,7 @@ describe('tui-back edt create (black-box)', () => {
         ulid: data.ulid,
         topic: 'demo',
         status: 'active',
-        members: [{ service: 'route-explorer', repoPath: repo, branch: 'development' }],
+        members: [{ service: 'route-explorer', repoPath: repo, branch: 'feature-x' }],
       }),
     ]);
   });
@@ -639,9 +643,11 @@ describe('tui-back edt create (black-box)', () => {
     });
     expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'created' });
 
+    // repo A's branch creation failed, so it is excluded from members entirely (story 2.3)
+    // — only repo B, which succeeded, is registered.
     const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
-    expect(edtRegistry.edts[0].members).toHaveLength(2);
-    expect(edtRegistry.edts[0].members[1].branch).toBe('feat/x');
+    expect(edtRegistry.edts[0].members).toHaveLength(1);
+    expect(edtRegistry.edts[0].members[0]).toMatchObject({ repoPath: repoB, branch: 'feat/x' });
   });
 
   it('a name collision fails that member only (branch-exists); the other proceeds (matrix)', async () => {
@@ -692,6 +698,35 @@ describe('tui-back edt create (black-box)', () => {
     ]);
     // `prod` does not exist in the fixture and stays absent — the gate fired before git.
     expect(branchExists(repo, 'prod')).toBe(false);
+  });
+
+  it('rejects a member whose current branch is shared when branch-creation is disabled (story 2.3, FR-7)', async () => {
+    const xdg = await makeTempDir();
+    // makeGitRepo() leaves the repo on `development` (its default base branch) with no
+    // other branch created — its current branch is the shared branch itself.
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo],
+      env,
+    );
+
+    expect(status).toBe(0); // EDT creation still succeeds, with zero registered members
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results).toEqual([
+      expect.objectContaining({
+        service: 'route-explorer',
+        outcome: 'failed',
+        detail: expect.objectContaining({ code: 'shared-branch-rejected' }),
+      }),
+    ]);
+
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts).toEqual([
+      expect.objectContaining({ ulid: data.ulid, topic: 'demo', members: [] }),
+    ]);
   });
 
   it('rejects a duplicate topic with edt-topic-exists before any write (AC2)', async () => {
