@@ -3,6 +3,7 @@ import { ok, err } from '../../../core/result.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
@@ -141,7 +142,7 @@ describe('subcommand registry guards', () => {
   });
 
   function fakeEdtRegistry(): EdtRegistryPort {
-    return { add: async () => ok(undefined) };
+    return { add: async () => ok(undefined), list: async () => ok([]) };
   }
 
   function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
@@ -153,6 +154,11 @@ describe('subcommand registry guards', () => {
       reset: async () => ok({ path: '/p', backupPath: null }),
     };
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
+    const git: GitPort = {
+      createBranch: async () => ok(undefined),
+      deleteBranch: async () => ok(undefined),
+      currentBranch: async () => ok('development'),
+    };
 
     return buildSubcommands({
       registry,
@@ -162,6 +168,7 @@ describe('subcommand registry guards', () => {
       edtsBaseDir: '/data/edts',
       edtRegistry: fakeEdtRegistry(),
       edtRegistryResourceKey: '/cfg/edts.yaml',
+      git,
       ...overrides,
     });
   }

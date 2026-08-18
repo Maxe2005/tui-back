@@ -30,13 +30,13 @@ function makeFixture(): string {
 
 // dependency-cruiser matches `from`/`to` path patterns against each module's path as reported
 // relative to cwd, so the fixture must be cruised from within its own root.
-async function cruiseFixture(root: string) {
+async function cruiseFixture(root: string, forbidden: unknown[] = [rule]) {
   const previousCwd = process.cwd();
   process.chdir(root);
   try {
     const { output } = await cruise(['src/**/*.ts'], {
       validate: true,
-      ruleSet: { forbidden: [rule] },
+      ruleSet: { forbidden },
       outputType: 'json',
     });
     return typeof output === 'string' ? JSON.parse(output) : output;
@@ -149,19 +149,35 @@ export function ok<T>(data: T): Result<T> { return { ok: true, data }; }
     // This regression test ensures the widened no-tui-leak rule still correctly
     // allows the sanctioned exception (src/bin/tui.ts) while still flagging
     // non-TUI modules that import from tui/.
-    const rule = depCruiserConfig.forbidden.find(
+    const tuiRule = depCruiserConfig.forbidden.find(
       (candidate: { name: string }) => candidate.name === 'no-tui-leak-outside-driving-tui',
     );
 
-    // The exception should allow src/bin/tui.ts to import from tui/ without being flagged
-    const { output } = await cruise([join(fixtureRoot, 'src', 'bin', 'tui.ts')], {
-      validate: true,
-      ruleSet: { forbidden: [rule] },
-      outputType: 'json',
-    });
-    const parsed = typeof output === 'string' ? JSON.parse(output) : output;
+    fixtureRoot = makeFixture();
+    mkdirSync(join(fixtureRoot, 'src', 'bin'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'src', 'tui'), { recursive: true });
+    writeFileSync(join(fixtureRoot, 'src', 'tui', 'view.ts'), 'export const view = 1;\n');
+    // The sanctioned exception: the AD-2 TUI composition root may import from tui/.
+    writeFileSync(
+      join(fixtureRoot, 'src', 'bin', 'tui.ts'),
+      "import { view } from '../tui/view.js';\nexport const x = view;\n",
+    );
+    // A non-TUI module under src/bin must still be flagged for the same import.
+    writeFileSync(
+      join(fixtureRoot, 'src', 'bin', 'other.ts'),
+      "import { view } from '../tui/view.js';\nexport const y = view;\n",
+    );
 
-    // The exception should allow src/bin/tui.ts to import from tui/ without being flagged
-    expect(parsed.summary.violations).toEqual([]);
+    const parsed = await cruiseFixture(fixtureRoot, [tuiRule]);
+
+    expect(
+      parsed.summary.violations.filter((v: { from: string }) => v.from === 'src/bin/tui.ts'),
+    ).toEqual([]);
+    expect(parsed.summary.violations).toEqual([
+      expect.objectContaining({
+        from: 'src/bin/other.ts',
+        rule: expect.objectContaining({ name: 'no-tui-leak-outside-driving-tui' }),
+      }),
+    ]);
   });
 });

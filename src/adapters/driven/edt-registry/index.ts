@@ -18,6 +18,7 @@ export function resolveEdtRegistryFile(xdg: XdgPaths): string {
 export function createEdtRegistryPort(edtRegistryFile: string): EdtRegistryPort {
   return {
     add: (entry) => addEdtRegistryEntry(edtRegistryFile, entry),
+    list: () => listEdtRegistry(edtRegistryFile),
   };
 }
 

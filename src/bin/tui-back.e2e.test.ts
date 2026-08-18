@@ -11,7 +11,7 @@
 // so the child process never touches the real config dir (registry.yaml writes are scoped
 // to the fixture).
 import { describe, expect, it, afterEach } from 'vitest';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -74,6 +74,35 @@ async function makeRepo(withManifest: boolean): Promise<string> {
     await writeFile(join(dir, '.tui-back.yaml'), manifestYaml);
   }
   return dir;
+}
+
+// The edt create e2e cases need repos the tool can actually branch against: a real git repo
+// (git init with an initial commit on `development`, the default base branch) that also
+// carries a manifest. No checkout/working-tree state beyond the initial commit is needed —
+// branch creation only creates refs.
+function runGit(dir: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
+  return spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+}
+
+async function makeGitRepo(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'tui-back-e2e-git-'));
+  tmpDirs.push(dir);
+  await writeFile(join(dir, '.tui-back.yaml'), manifestYaml);
+  const init = runGit(dir, ['init', '-b', 'development']);
+  if (init.status !== 0) {
+    throw new Error(`git init failed: ${init.stderr}`);
+  }
+  runGit(dir, ['config', 'user.email', 'e2e@tui-back.test']);
+  runGit(dir, ['config', 'user.name', 'tui-back e2e']);
+  const commit = runGit(dir, ['commit', '--allow-empty', '-m', 'initial']);
+  if (commit.status !== 0) {
+    throw new Error(`git commit failed: ${commit.stderr}`);
+  }
+  return dir;
+}
+
+function branchExists(dir: string, branch: string): boolean {
+  return runGit(dir, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
 }
 
 afterEach(async () => {
@@ -461,45 +490,432 @@ describe('tui-back --help (black-box)', () => {
 });
 
 describe('tui-back edt create (black-box)', () => {
-  it('creates the EDT skeleton (state.json, manifest, db) and registers it (AC1/AC2)', async () => {
-    const xdg = await makeTempDir();
-    const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
-    const { status, stdout } = runCli(['edt', 'create'], env);
+  function createEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
+    for (const repo of repos) {
+      expect(runCli(['register', repo], env).status).toBe(0);
+    }
+  }
+
+  // A rejection "before any write" must leave no EDT dir/db and no edts.yaml behind.
+  async function expectNoEdtState(xdg: string): Promise<void> {
+    await expect(access(join(xdg, 'tui-back', 'edts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(join(xdg, 'tui-back', 'edts.yaml'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }
+
+  it('creates the EDT skeleton (state.json, manifest, db) and registers topic + member branch (AC1/AC2)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(['edt', 'create', '--topic', 'demo', '--member', repo], env);
 
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
-    const ulid: string = parsed.data;
-    expect(ulid).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/); // Crockford base32 ULID shape
+    const data = parsed.data;
+    expect(data.topic).toBe('demo');
+    expect(data.ulid).toMatch(ULID_RE);
+    expect(data.results).toEqual([{ service: 'route-explorer', outcome: 'existing-branch' }]);
 
-    const edtDir = join(xdg, 'tui-back', 'edts', ulid);
-    expect(JSON.parse(await readFile(join(edtDir, 'state.json'), 'utf8'))).toMatchObject({ ulid, status: 'active' });
+    const edtDir = join(xdg, 'tui-back', 'edts', data.ulid);
+    expect(JSON.parse(await readFile(join(edtDir, 'state.json'), 'utf8'))).toMatchObject({
+      ulid: data.ulid,
+      status: 'active',
+    });
     const manifest = parse(await readFile(join(edtDir, '.tui-back.yaml'), 'utf8'));
     expect(manifest).toEqual({
-      service: `edt-${ulid}`,
-      container: `edt-${ulid}`,
+      service: `edt-${data.ulid}`,
+      container: `edt-${data.ulid}`,
       migrationCommand: 'true',
       modules: {},
     });
-    await expect(access(join(xdg, 'tui-back', 'edts', `${ulid}.db`))).resolves.toBeUndefined();
+    await expect(access(join(xdg, 'tui-back', 'edts', `${data.ulid}.db`))).resolves.toBeUndefined();
 
     const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
     expect(edtRegistry.edts).toEqual([
-      expect.objectContaining({ ulid, branch: `edt-${ulid}`, status: 'active' }),
+      expect.objectContaining({
+        ulid: data.ulid,
+        topic: 'demo',
+        status: 'active',
+        members: [{ service: 'route-explorer', repoPath: repo, branch: 'development' }],
+      }),
     ]);
+  });
+
+  it('creates one shared branch in every member from the base (grouped mode, AC1)', async () => {
+    const xdg = await makeTempDir();
+    const repoA = await makeGitRepo();
+    const repoB = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repoA, repoB], env);
+
+    const { status, stdout } = runCli(
+      [
+        'edt', 'create', '--topic', 'demo', '--member', repoA, '--member', repoB,
+        '--create-branches', '--branch-name', 'feat/demo', '--base', 'development',
+      ],
+      env,
+    );
+
+    expect(status).toBe(0);
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results).toEqual([
+      { service: 'route-explorer', outcome: 'created' },
+      { service: 'route-explorer', outcome: 'created' },
+    ]);
+    expect(branchExists(repoA, 'feat/demo')).toBe(true);
+    expect(branchExists(repoB, 'feat/demo')).toBe(true);
+
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts[0].members).toEqual([
+      { service: 'route-explorer', repoPath: repoA, branch: 'feat/demo' },
+      { service: 'route-explorer', repoPath: repoB, branch: 'feat/demo' },
+    ]);
+  });
+
+  it('creates one branch per member by path=name pairs (individual mode, AC1)', async () => {
+    const xdg = await makeTempDir();
+    const repoA = await makeGitRepo();
+    const repoB = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repoA, repoB], env);
+
+    const { status, stdout } = runCli(
+      [
+        'edt', 'create', '--topic', 'demo', '--member', repoA, '--member', repoB,
+        '--create-branches', '--branch-mode', 'individual',
+        '--branch-name', `${repoA}=feat/a`, '--branch-name', `${repoB}=feat/b`,
+      ],
+      env,
+    );
+
+    expect(status).toBe(0);
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results).toEqual([
+      { service: 'route-explorer', outcome: 'created' },
+      { service: 'route-explorer', outcome: 'created' },
+    ]);
+    expect(branchExists(repoA, 'feat/a')).toBe(true);
+    expect(branchExists(repoB, 'feat/b')).toBe(true);
+    expect(branchExists(repoA, 'feat/b')).toBe(false);
+
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts[0].members).toEqual([
+      { service: 'route-explorer', repoPath: repoA, branch: 'feat/a' },
+      { service: 'route-explorer', repoPath: repoB, branch: 'feat/b' },
+    ]);
+  });
+
+  it('a missing base branch fails that member only; the other member and the EDT succeed (AC3)', async () => {
+    const xdg = await makeTempDir();
+    const repoA = await makeGitRepo();
+    const repoB = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repoA, repoB], env);
+    // Matrix row: the base is missing in repo A only — repo B carries it.
+    expect(runGit(repoB, ['branch', 'nope']).status).toBe(0);
+
+    const { status, stdout } = runCli(
+      [
+        'edt', 'create', '--topic', 'demo', '--member', repoA, '--member', repoB,
+        '--create-branches', '--branch-name', 'feat/x', '--base', 'nope',
+      ],
+      env,
+    );
+
+    expect(status).toBe(0);
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results[0]).toMatchObject({
+      service: 'route-explorer',
+      outcome: 'failed',
+      detail: { code: 'base-branch-missing' },
+    });
+    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'created' });
+
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts[0].members).toHaveLength(2);
+    expect(edtRegistry.edts[0].members[1].branch).toBe('feat/x');
+  });
+
+  it('a name collision fails that member only (branch-exists); the other proceeds (matrix)', async () => {
+    const xdg = await makeTempDir();
+    const repoA = await makeGitRepo();
+    const repoB = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repoA, repoB], env);
+    expect(runGit(repoA, ['branch', 'feat/x']).status).toBe(0);
+
+    const { status, stdout } = runCli(
+      [
+        'edt', 'create', '--topic', 'demo', '--member', repoA, '--member', repoB,
+        '--create-branches', '--branch-name', 'feat/x',
+      ],
+      env,
+    );
+
+    expect(status).toBe(0);
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results[0]).toMatchObject({
+      service: 'route-explorer',
+      outcome: 'failed',
+      detail: { code: 'branch-exists' },
+    });
+    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'created' });
+  });
+
+  it('rejects a shared-branch target before any git invocation (shared-branch-rejected, FR-7)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'prod'],
+      env,
+    );
+
+    expect(status).toBe(0); // EDT creation still succeeds
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results).toEqual([
+      expect.objectContaining({
+        service: 'route-explorer',
+        outcome: 'failed',
+        detail: expect.objectContaining({ code: 'shared-branch-rejected' }),
+      }),
+    ]);
+    // `prod` does not exist in the fixture and stays absent — the gate fired before git.
+    expect(branchExists(repo, 'prod')).toBe(false);
+  });
+
+  it('rejects a duplicate topic with edt-topic-exists before any write (AC2)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+    expect(runCli(['edt', 'create', '--topic', 'demo', '--member', repo], env).status).toBe(0);
+
+    const registryBefore = await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8');
+    const ulidsBefore = await readdir(join(xdg, 'tui-back', 'edts'));
+
+    const second = runCli(['edt', 'create', '--topic', 'demo', '--member', repo], env);
+
+    expect(second.status).toBe(1);
+    const parsed = JSON.parse(second.stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('edt-topic-exists');
+    // No new EDT dir/db and no registry change — the rejection happened before any write.
+    expect(await readdir(join(xdg, 'tui-back', 'edts'))).toEqual(ulidsBefore);
+    expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(registryBefore);
+  });
+
+  it('rejects zero members with invalid-member before any write (AC3)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const { status, stdout } = runCli(['edt', 'create', '--topic', 'demo'], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-member');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an unregistered member with invalid-member before any write (matrix)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const { status, stdout } = runCli(['edt', 'create', '--topic', 'demo', '--member', '/not/registered'], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-member');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects duplicate --member values with invalid-argument (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--member', repo],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an empty --member value with invalid-argument (review)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const { status, stdout } = runCli(['edt', 'create', '--topic', 'demo', '--member', ''], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an empty grouped --branch-name with invalid-argument before touching git (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', ''],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects a missing --topic with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(['edt', 'create', '--member', repo], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an invalid --branch-mode value with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-mode', 'per-member'],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects --branch-name without --create-branches with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--branch-name', 'feat/x'],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects two grouped --branch-name values with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/a', '--branch-name', 'feat/b'],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an individual --branch-name naming a non-member with invalid-argument (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-mode', 'individual', '--branch-name', `${join(xdg, 'not-a-member')}=feat/x`],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('two racing same-topic edt create subprocesses: exactly one registers, the other fails with edt-topic-exists (race, review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const [a, b] = await Promise.all([
+      runCliAsync(['edt', 'create', '--topic', 'demo', '--member', repo], env),
+      runCliAsync(['edt', 'create', '--topic', 'demo', '--member', repo], env),
+    ]);
+
+    const okRun = [a, b].find((r) => r.status === 0);
+    const failRun = [a, b].find((r) => r.status !== 0);
+    expect(okRun).toBeDefined();
+    expect(failRun).toBeDefined();
+    const failParsed = JSON.parse(failRun!.stdout.trim());
+    expect(failParsed.ok).toBe(false);
+    expect(failParsed.error.code).toBe('edt-topic-exists');
+
+    // Exactly one entry, from the winning run.
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts).toHaveLength(1);
   });
 
   it('two racing edt create subprocesses each get their own ulid, both registered', async () => {
     const xdg = await makeTempDir();
-    const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
 
-    const [a, b] = await Promise.all([runCliAsync(['edt', 'create'], env), runCliAsync(['edt', 'create'], env)]);
+    const [a, b] = await Promise.all([
+      runCliAsync(['edt', 'create', '--topic', 'alpha', '--member', repo], env),
+      runCliAsync(['edt', 'create', '--topic', 'beta', '--member', repo], env),
+    ]);
 
     expect(a.status).toBe(0);
     expect(b.status).toBe(0);
-    const ulidA = JSON.parse(a.stdout.trim()).data;
-    const ulidB = JSON.parse(b.stdout.trim()).data;
+    const ulidA = JSON.parse(a.stdout.trim()).data.ulid;
+    const ulidB = JSON.parse(b.stdout.trim()).data.ulid;
     expect(ulidA).not.toBe(ulidB);
 
     const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
