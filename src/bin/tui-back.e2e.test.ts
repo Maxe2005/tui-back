@@ -11,7 +11,7 @@
 // so the child process never touches the real config dir (registry.yaml writes are scoped
 // to the fixture).
 import { describe, expect, it, afterEach } from 'vitest';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -502,6 +502,12 @@ describe('tui-back edt create (black-box)', () => {
     }
   }
 
+  // A rejection "before any write" must leave no EDT dir/db and no edts.yaml behind.
+  async function expectNoEdtState(xdg: string): Promise<void> {
+    await expect(access(join(xdg, 'tui-back', 'edts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(join(xdg, 'tui-back', 'edts.yaml'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }
+
   it('creates the EDT skeleton (state.json, manifest, db) and registers topic + member branch (AC1/AC2)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
@@ -695,12 +701,18 @@ describe('tui-back edt create (black-box)', () => {
     await registerRepos([repo], env);
     expect(runCli(['edt', 'create', '--topic', 'demo', '--member', repo], env).status).toBe(0);
 
+    const registryBefore = await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8');
+    const ulidsBefore = await readdir(join(xdg, 'tui-back', 'edts'));
+
     const second = runCli(['edt', 'create', '--topic', 'demo', '--member', repo], env);
 
     expect(second.status).toBe(1);
     const parsed = JSON.parse(second.stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('edt-topic-exists');
+    // No new EDT dir/db and no registry change — the rejection happened before any write.
+    expect(await readdir(join(xdg, 'tui-back', 'edts'))).toEqual(ulidsBefore);
+    expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(registryBefore);
   });
 
   it('rejects zero members with invalid-member before any write (AC3)', async () => {
@@ -713,6 +725,7 @@ describe('tui-back edt create (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('invalid-member');
+    await expectNoEdtState(xdg);
   });
 
   it('rejects an unregistered member with invalid-member before any write (matrix)', async () => {
@@ -725,6 +738,167 @@ describe('tui-back edt create (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('invalid-member');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects duplicate --member values with invalid-argument (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--member', repo],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an empty --member value with invalid-argument (review)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const { status, stdout } = runCli(['edt', 'create', '--topic', 'demo', '--member', ''], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an empty grouped --branch-name with invalid-argument before touching git (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', ''],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects a missing --topic with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(['edt', 'create', '--member', repo], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an invalid --branch-mode value with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-mode', 'per-member'],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects --branch-name without --create-branches with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--branch-name', 'feat/x'],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects two grouped --branch-name values with invalid-argument and exits 1 (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/a', '--branch-name', 'feat/b'],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('rejects an individual --branch-name naming a non-member with invalid-argument (review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const { status, stdout } = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-mode', 'individual', '--branch-name', `${join(xdg, 'not-a-member')}=feat/x`],
+      env,
+    );
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    await expectNoEdtState(xdg);
+  });
+
+  it('two racing same-topic edt create subprocesses: exactly one registers, the other fails with edt-topic-exists (race, review)', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = createEnv(xdg);
+    await registerRepos([repo], env);
+
+    const [a, b] = await Promise.all([
+      runCliAsync(['edt', 'create', '--topic', 'demo', '--member', repo], env),
+      runCliAsync(['edt', 'create', '--topic', 'demo', '--member', repo], env),
+    ]);
+
+    const okRun = [a, b].find((r) => r.status === 0);
+    const failRun = [a, b].find((r) => r.status !== 0);
+    expect(okRun).toBeDefined();
+    expect(failRun).toBeDefined();
+    const failParsed = JSON.parse(failRun!.stdout.trim());
+    expect(failParsed.ok).toBe(false);
+    expect(failParsed.error.code).toBe('edt-topic-exists');
+
+    // Exactly one entry, from the winning run.
+    const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+    expect(edtRegistry.edts).toHaveLength(1);
   });
 
   it('two racing edt create subprocesses each get their own ulid, both registered', async () => {
