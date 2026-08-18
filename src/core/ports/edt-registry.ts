@@ -26,4 +26,9 @@ export interface EdtRegistryEntry {
 export interface EdtRegistryPort {
   add(entry: EdtRegistryEntry): Promise<Result<void>>;
   list(): Promise<Result<EdtRegistryEntry[]>>;
+  // Story 2.4: updates one entry's status field in place (read/find/replace/write). Used by
+  // switchActiveEdt to flip the outgoing EDT to 'inactive' (or 'interrupted' under --force
+  // past a held lock) and the target EDT to 'active'. Fails with edt-not-found if ulid isn't
+  // registered.
+  setStatus(ulid: string, status: string): Promise<Result<void>>;
 }

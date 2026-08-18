@@ -19,6 +19,7 @@ export function createEdtRegistryPort(edtRegistryFile: string): EdtRegistryPort 
   return {
     add: (entry) => addEdtRegistryEntry(edtRegistryFile, entry),
     list: () => listEdtRegistry(edtRegistryFile),
+    setStatus: (ulid, status) => setEdtStatus(edtRegistryFile, ulid, status),
   };
 }
 
@@ -86,6 +87,36 @@ async function addEdtRegistryEntry(edtRegistryFile: string, entry: EdtRegistryEn
 
   try {
     await writeFile(edtRegistryFile, stringify({ edts: [...listed.data, entry] }), 'utf8');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return err('edt-registry-write-error', `Failed to write EDT registry file ${edtRegistryFile}: ${detail}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.4: read/find/replace/write, mirroring addEdtRegistryEntry's shape above. Used to
+// flip an EDT's status (active/inactive/interrupted) during a switch.
+async function setEdtStatus(edtRegistryFile: string, ulid: string, status: string): Promise<Result<void>> {
+  const ensured = await ensureEdtRegistryDir(edtRegistryFile);
+  if (!ensured.ok) {
+    return ensured;
+  }
+
+  const listed = await listEdtRegistry(edtRegistryFile);
+  if (!listed.ok) {
+    return listed;
+  }
+
+  const index = listed.data.findIndex((candidate) => candidate.ulid === ulid);
+  if (index === -1) {
+    return err('edt-not-found', `No EDT registered with ulid ${ulid}`);
+  }
+
+  const updated = [...listed.data];
+  updated[index] = { ...updated[index], status };
+
+  try {
+    await writeFile(edtRegistryFile, stringify({ edts: updated }), 'utf8');
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return err('edt-registry-write-error', `Failed to write EDT registry file ${edtRegistryFile}: ${detail}`);

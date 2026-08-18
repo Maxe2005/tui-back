@@ -69,6 +69,7 @@ function fakeEdtRegistry(overrides: Partial<EdtRegistryPort> = {}): EdtRegistryP
   return {
     list: async () => ok([]),
     add: vi.fn(async () => ok(undefined)),
+    setStatus: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -76,6 +77,7 @@ function fakeEdtRegistry(overrides: Partial<EdtRegistryPort> = {}): EdtRegistryP
 function fakeLock(): LockPort {
   return {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
+    peek: vi.fn(async () => ok({ locked: false })),
   };
 }
 
@@ -91,6 +93,12 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     createBranch: vi.fn(async () => ok(undefined)),
     deleteBranch: vi.fn(async () => ok(undefined)),
     currentBranch: vi.fn(async () => ok('development')),
+    checkout: vi.fn(async () => ok(undefined)),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    stashSave: vi.fn(async () => ok(undefined)),
+    restoreStash: vi.fn(async () => ok(undefined)),
+    branchExistsLocally: vi.fn(async () => ok(true)),
+    fetch: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }

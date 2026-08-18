@@ -45,7 +45,30 @@ export function createLockPort(lockDir: string, options: LockOptions = {}): Lock
 
   return {
     acquire: (resourceKey) => acquireLock(lockDir, resourceKey, holderPid, { retryDelayMs, timeoutMs }),
+    peek: (resourceKey) => peekLock(lockDir, resourceKey),
   };
+}
+
+/**
+ * Non-blocking, stat-only liveness check (story 2.4): no mkdir, no retry/wait, no reclaim —
+ * a pure read. Reuses isStale()'s exact staleness rule (dead recorded pid, or a missing/
+ * corrupt owner file old enough that a finalizing winner is out of the question) so peek()
+ * and acquire() agree on what counts as "still held" without duplicating that logic.
+ * Exported separately (mirroring acquireLock) so tests can drive it directly.
+ */
+export async function peekLock(lockDir: string, resourceKey: string): Promise<Result<{ locked: boolean }>> {
+  if (resourceKey.trim().length === 0) {
+    return err('invalid-argument', 'Resource key must not be empty');
+  }
+
+  const lockPath = lockPathFor(lockDir, resourceKey);
+  const dirStat = await stat(lockPath).catch(() => null);
+  if (dirStat === null) {
+    return ok({ locked: false });
+  }
+
+  const stale = await isStale(lockPath);
+  return ok({ locked: !stale });
 }
 
 /**
