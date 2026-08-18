@@ -12,6 +12,7 @@ import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
+import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
@@ -20,6 +21,7 @@ const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
+const git = createGitPort({ load: loadManifest });
 const edtsBaseDir = join(xdg.dataDir, 'edts');
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile);
@@ -41,6 +43,7 @@ const subcommands = buildSubcommands({
   edtsBaseDir,
   edtRegistry,
   edtRegistryResourceKey: edtRegistryFile,
+  git,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);
