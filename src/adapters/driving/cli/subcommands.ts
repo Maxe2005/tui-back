@@ -135,6 +135,9 @@ async function runEdtCreate(
         if (value === undefined) {
           return err('invalid-argument', `Missing value for --member. Usage: ${EDT_CREATE_USAGE}`);
         }
+        if (value.trim() === '') {
+          return err('invalid-argument', `Empty --member value is not allowed. Usage: ${EDT_CREATE_USAGE}`);
+        }
         rawMembers.push(value);
         i += 1;
         break;
@@ -174,15 +177,24 @@ async function runEdtCreate(
   }
 
   if (topic === undefined) {
-    return err('missing-argument', `Missing --topic. Usage: ${EDT_CREATE_USAGE}`);
+    return err('invalid-argument', `Missing --topic. Usage: ${EDT_CREATE_USAGE}`);
   }
   if (rawMembers.length === 0) {
     return err('invalid-member', `At least one --member is required. Usage: ${EDT_CREATE_USAGE}`);
   }
 
   // Members are canonicalized (resolve) the same way the registry stores registered paths
-  // and the branch-name keys must match them 1:1.
+  // and the branch-name keys must match them 1:1. Duplicate values are rejected rather than
+  // deduped: two identical --member flags mean a typo, and silently dropping one would
+  // silently change which repos were selected.
   const members = rawMembers.map((member) => resolve(member));
+  const seenMembers = new Set<string>();
+  for (const member of members) {
+    if (seenMembers.has(member)) {
+      return err('invalid-argument', `Duplicate --member: ${member}`);
+    }
+    seenMembers.add(member);
+  }
   if (!createBranches && sawBranchFlag) {
     return err('invalid-argument', '--base/--branch-mode/--branch-name require --create-branches');
   }
@@ -192,6 +204,9 @@ async function runEdtCreate(
     if (branchMode === 'grouped') {
       if (branchNames.length !== 1) {
         return err('invalid-argument', `Grouped branch mode needs exactly one --branch-name. Usage: ${EDT_CREATE_USAGE}`);
+      }
+      if (branchNames[0].trim() === '') {
+        return err('invalid-argument', '--branch-name must not be empty');
       }
       for (const member of members) {
         names[member] = branchNames[0];
@@ -210,7 +225,7 @@ async function runEdtCreate(
         }
         const path = resolve(raw.slice(0, eq));
         const name = raw.slice(eq + 1);
-        if (name === '') {
+        if (name.trim() === '') {
           return err('invalid-argument', `--branch-name "${raw}" has an empty branch name`);
         }
         if (!members.includes(path)) {
