@@ -15,16 +15,23 @@ import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
+import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 
 const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
-const git = createGitPort({ load: loadManifest });
 const edtsBaseDir = join(xdg.dataDir, 'edts');
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile);
+// Story 2.4: the git adapter is wired with the EdtRegistryPort so assertAllowedBranch can
+// resolve AD-8's cross-EDT half (a branch already registered as a *different* EDT's own
+// branch for a repo) when a call site passes an edtId — switchActiveEdt is the first such
+// call site; create.ts's existing (no-edtId) calls are unaffected.
+const git = createGitPort({ load: loadManifest }, edtRegistry);
+const stateFile = resolveStateFile(xdg);
+const state = createStatePort(stateFile);
 
 // Per-resource advisory lock directory lives under XDG_STATE_HOME/tui-back/locks (AD-7's
 // transient-state tier). The lock dir is created lazily inside the lock adapter on first
@@ -44,6 +51,7 @@ const subcommands = buildSubcommands({
   edtRegistry,
   edtRegistryResourceKey: edtRegistryFile,
   git,
+  state,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);

@@ -8,11 +8,13 @@ import { resolve } from 'node:path';
 import { err, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
+import { switchActiveEdt } from '../../../core/edt/switch.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
+import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
@@ -22,6 +24,8 @@ import type { Subcommand } from './dispatch.js';
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
   '[--base <branch>] [--branch-mode grouped|individual] [--branch-name <name>|<path>=<name>]';
+const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force]';
+const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}`;
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -32,6 +36,7 @@ export function buildSubcommands(deps: {
   edtRegistry: EdtRegistryPort;
   edtRegistryResourceKey: string;
   git: GitPort;
+  state: StatePort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -81,13 +86,16 @@ export function buildSubcommands(deps: {
     },
     {
       name: 'edt',
-      usage: EDT_CREATE_USAGE,
+      usage: EDT_USAGE,
       run: async (args) => {
-        if (args[0] !== 'create') {
-          const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
-          return err('invalid-argument', `Unknown edt action: ${label}. Usage: ${EDT_CREATE_USAGE}`);
+        if (args[0] === 'create') {
+          return runEdtCreate(deps, args.slice(1));
         }
-        return runEdtCreate(deps, args.slice(1));
+        if (args[0] === 'switch') {
+          return runEdtSwitch(deps, args.slice(1));
+        }
+        const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
+        return err('invalid-argument', `Unknown edt action: ${label}. Usage:\n${EDT_USAGE}`);
       },
     },
   ];
@@ -250,6 +258,62 @@ async function runEdtCreate(
     topic,
     members,
     branchOptions: { create: createBranches, base, mode: branchMode, names },
+  });
+}
+
+// Hand-rolled flag parsing for `edt switch` (same style as runEdtCreate): the wrapper owns
+// flag syntax (unknown options, missing value, --to given at most once); the use-case owns
+// the semantic validations (topic resolution, no-op idempotency, the lock-peek gate).
+async function runEdtSwitch(
+  deps: {
+    edtRegistry: EdtRegistryPort;
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    git: GitPort;
+    lock: LockPort;
+    state: StatePort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let topic: string | undefined;
+  let force = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    switch (flag) {
+      case '--to': {
+        const value = args[i + 1];
+        if (value === undefined) {
+          return err('invalid-argument', `Missing value for --to. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        if (topic !== undefined) {
+          return err('invalid-argument', `--to may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        topic = value;
+        i += 1;
+        break;
+      }
+      case '--force':
+        force = true;
+        break;
+      default:
+        return err('invalid-argument', `Unknown edt switch option: "${flag}". Usage: ${EDT_SWITCH_USAGE}`);
+    }
+  }
+
+  if (topic === undefined) {
+    return err('invalid-argument', `Missing --to. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+
+  return switchActiveEdt({
+    edtRegistry: deps.edtRegistry,
+    registry: deps.registry,
+    manifest: deps.manifest,
+    git: deps.git,
+    lock: deps.lock,
+    state: deps.state,
+    topic,
+    force,
   });
 }
 
