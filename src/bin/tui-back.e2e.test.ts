@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { lockPathFor } from '../adapters/driven/lock/helpers.js';
 
 const scriptPath = fileURLToPath(new URL('./tui-back.mjs', import.meta.url));
 const manifestYaml = [
@@ -964,5 +965,207 @@ describe('tui-back edt create (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('invalid-argument');
+  });
+});
+
+describe('tui-back edt switch (black-box)', () => {
+  function createEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
+    for (const repo of repos) {
+      expect(runCli(['register', repo], env).status).toBe(0);
+    }
+  }
+
+  // makeGitRepo() (module-level) leaves .tui-back.yaml untracked (written before `git init`,
+  // never added), so a fresh repo is never actually clean — irrelevant to edt-create's own
+  // tests, but it would make every repo here look "dirty" from the moment it's registered,
+  // confounding this describe's dirty/clean assertions. This variant commits everything
+  // first for a truly clean starting point.
+  async function makeCleanGitRepo(): Promise<string> {
+    const dir = await makeGitRepo();
+    runGit(dir, ['add', '.tui-back.yaml']);
+    const commit = runGit(dir, ['commit', '-m', 'add manifest']);
+    if (commit.status !== 0) {
+      throw new Error(`git commit failed: ${commit.stderr}`);
+    }
+    return dir;
+  }
+
+  async function readEdtsYaml(xdg: string): Promise<{ edts: Array<{ ulid: string; topic: string; status: string }> }> {
+    return parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+  }
+
+  async function readStateJson(xdg: string): Promise<{ activeEdt: string | null }> {
+    return JSON.parse(await readFile(join(xdg, 'tui-back', 'state.json'), 'utf8'));
+  }
+
+  it('fails upfront with edt-not-found for an unregistered topic, touching no repo (AC)', async () => {
+    const xdg = await makeTempDir();
+    const { status, stdout } = runCli(['edt', 'switch', '--to', 'no-such-topic'], createEnv(xdg));
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('edt-not-found');
+    await expect(access(join(xdg, 'tui-back', 'state.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it(
+    'round-trips uncommitted work across a switch: outgoing member is stashed onto the shared branch, ' +
+      'target member checks into its own branch, state.json + edts.yaml both reflect the new active EDT (manual-check scenario, AC)',
+    async () => {
+      const xdg = await makeTempDir();
+      const env = createEnv(xdg);
+      const r1 = await makeCleanGitRepo();
+      const r2 = await makeCleanGitRepo();
+      await registerRepos([r1, r2], env);
+
+      const createA = runCli(
+        ['edt', 'create', '--topic', 'a', '--member', r1, '--create-branches', '--branch-name', 'feat/r1'],
+        env,
+      );
+      expect(createA.status).toBe(0);
+      const ulidA = JSON.parse(createA.stdout.trim()).data.ulid;
+
+      const createB = runCli(
+        ['edt', 'create', '--topic', 'b', '--member', r2, '--create-branches', '--branch-name', 'feat/r2'],
+        env,
+      );
+      expect(createB.status).toBe(0);
+      const ulidB = JSON.parse(createB.stdout.trim()).data.ulid;
+
+      // First-ever switch: no outgoing EDT yet. r1 (a's member) moves onto its own branch;
+      // r2 (not a member of a) stays on the shared branch (already there).
+      const switchToA = runCli(['edt', 'switch', '--to', 'a'], env);
+      expect(switchToA.status).toBe(0);
+      expect(JSON.parse(switchToA.stdout.trim()).data).toMatchObject({
+        ulid: ulidA,
+        // r1 (a's member) checks into feat/r1; r2 (registered, but not a's member) is forced
+        // onto the shared branch too — it just happens to already be there.
+        results: [
+          { service: 'route-explorer', outcome: 'switched' },
+          { service: 'route-explorer', outcome: 'switched' },
+        ],
+        wasInterrupted: false,
+      });
+      expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r1');
+      expect((await readStateJson(xdg)).activeEdt).toBe(ulidA);
+
+      // Dirty r1's working tree while "a" is active and r1 sits on feat/r1.
+      await writeFile(join(r1, 'wip.txt'), 'uncommitted work');
+
+      // Switch a -> b: r1 is not a member of b, so it must be preserved (stashed) then reset
+      // onto the shared branch; r2 (b's member) checks into its own branch.
+      const switchToB = runCli(['edt', 'switch', '--to', 'b'], env);
+
+      expect(switchToB.status).toBe(0);
+      const dataB = JSON.parse(switchToB.stdout.trim()).data;
+      expect(dataB).toMatchObject({
+        ulid: ulidB,
+        results: [
+          { service: 'route-explorer', outcome: 'switched' },
+          { service: 'route-explorer', outcome: 'switched' },
+        ],
+        wasInterrupted: false,
+      });
+
+      // r1: reset to the shared branch, working tree clean, uncommitted work preserved in a
+      // message-tagged stash (not lost).
+      expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+      expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toBe('');
+      const r1Stash = runGit(r1, ['stash', 'list']).stdout;
+      expect(r1Stash).toContain(`tui-back:${ulidA}`);
+
+      // r2: checked into its own branch (b's).
+      expect(runGit(r2, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r2');
+
+      // state.json + edts.yaml both reflect exactly one active EDT (AD-10).
+      expect((await readStateJson(xdg)).activeEdt).toBe(ulidB);
+      const edtsAfterB = await readEdtsYaml(xdg);
+      expect(edtsAfterB.edts.find((e) => e.ulid === ulidA)?.status).toBe('inactive');
+      expect(edtsAfterB.edts.find((e) => e.ulid === ulidB)?.status).toBe('active');
+
+      // Switching to the already-active EDT is a no-op success (FR-1).
+      const noop = runCli(['edt', 'switch', '--to', 'b'], env);
+      expect(noop.status).toBe(0);
+      expect(JSON.parse(noop.stdout.trim()).data).toEqual({
+        ulid: ulidB,
+        topic: 'b',
+        results: [],
+        wasInterrupted: false,
+      });
+    },
+  );
+
+  it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error (AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const repo = await makeCleanGitRepo();
+    await registerRepos([repo], env);
+
+    const created = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
+      env,
+    );
+    expect(created.status).toBe(0);
+    // Simulate the branch having gone missing locally after registration (e.g. manually
+    // deleted) — the registry still records it as this member's own branch.
+    expect(runGit(repo, ['branch', '-D', 'feat/demo']).status).toBe(0);
+
+    const switched = runCli(['edt', 'switch', '--to', 'demo'], env);
+
+    expect(switched.status).toBe(0);
+    const data = JSON.parse(switched.stdout.trim()).data;
+    expect(data.results).toEqual([
+      expect.objectContaining({ service: 'route-explorer', outcome: 'failed' }),
+    ]);
+    // state.json is still updated despite the per-repo failure (independent of repo outcomes).
+    expect((await readStateJson(xdg)).activeEdt).toBe(data.ulid);
+  });
+
+  it('blocks by default on a held outgoing lock; --force proceeds and marks it interrupted; returning reports wasInterrupted (AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const r1 = await makeCleanGitRepo();
+    const r2 = await makeCleanGitRepo();
+    await registerRepos([r1, r2], env);
+
+    const createA = runCli(['edt', 'create', '--topic', 'a', '--member', r1], env);
+    expect(createA.status).toBe(0);
+    const ulidA = JSON.parse(createA.stdout.trim()).data.ulid;
+    const createB = runCli(['edt', 'create', '--topic', 'b', '--member', r2], env);
+    expect(createB.status).toBe(0);
+
+    expect(runCli(['edt', 'switch', '--to', 'a'], env).status).toBe(0);
+
+    // Simulate an in-progress action holding edt:<ulidA>'s lock (this story only reserves the
+    // convention — nothing acquires it yet, so the held lock is constructed directly here).
+    const lockDir = join(xdg, 'tui-back', 'locks');
+    const lockPath = lockPathFor(lockDir, `edt:${ulidA}`);
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, timestamp: Date.now() }), 'utf8');
+
+    const blocked = runCli(['edt', 'switch', '--to', 'b'], env);
+    expect(blocked.status).toBe(1);
+    const blockedParsed = JSON.parse(blocked.stdout.trim());
+    expect(blockedParsed.ok).toBe(false);
+    expect(blockedParsed.error.code).toBe('switch-blocked-action-in-progress');
+    expect((await readStateJson(xdg)).activeEdt).toBe(ulidA);
+
+    const forced = runCli(['edt', 'switch', '--to', 'b', '--force'], env);
+    expect(forced.status).toBe(0);
+    expect((await readStateJson(xdg)).activeEdt).not.toBe(ulidA);
+    const edtsAfterForce = await readEdtsYaml(xdg);
+    expect(edtsAfterForce.edts.find((e) => e.ulid === ulidA)?.status).toBe('interrupted');
+
+    const backToA = runCli(['edt', 'switch', '--to', 'a'], env);
+    expect(backToA.status).toBe(0);
+    const backToAData = JSON.parse(backToA.stdout.trim()).data;
+    expect(backToAData.wasInterrupted).toBe(true);
+    const edtsAfterReturn = await readEdtsYaml(xdg);
+    expect(edtsAfterReturn.edts.find((e) => e.ulid === ulidA)?.status).toBe('active');
   });
 });
