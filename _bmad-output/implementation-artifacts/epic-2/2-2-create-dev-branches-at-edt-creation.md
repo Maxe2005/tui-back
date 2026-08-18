@@ -2,7 +2,7 @@
 title: 'Create Dev Branches at EDT Creation'
 type: 'feature'
 created: '2026-08-18'
-status: 'in-review'
+status: 'done'
 baseline_commit: 9a1cdeb503bfb97928435c1443aac36daee9b075
 review_loop_iteration: 0
 context:
