@@ -47,7 +47,7 @@ export async function assertAllowedBranch(
   if (isSharedBranch(branchName, loaded.data.sharedBranch)) {
     return err(
       'shared-branch-rejected',
-      `Branch "${branchName}" is a shared/protected branch and cannot be an EDT's own branch (repo ${repoPath})`,
+      `Branch "${branchName}" is a shared/protected branch (repo ${repoPath})`,
     );
   }
 
@@ -89,10 +89,10 @@ export async function createBranch(
 }
 
 // Deletes a branch ref (rollback path — story 2.2 review: a failed EDT creation must not
-// leave orphaned branch refs in member repos). Same shared-branch gate as createBranch:
-// a shared/protected target is rejected before any `git` invocation, and a repo whose
-// manifest cannot load gets no git write at all. A missing branch is a no-op success
-// (idempotent rollback).
+// leave orphaned branch refs in member repos). Delegates to assertAllowedBranch first, same
+// as createBranch: a shared/protected target is rejected before any `git` invocation, and a
+// repo whose manifest cannot load gets no git write at all. A missing branch is a no-op
+// success (idempotent rollback).
 export async function deleteBranch(
   manifest: ManifestPort,
   repoPath: string,

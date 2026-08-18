@@ -234,8 +234,9 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
     results.push({ service: resolved.service, outcome: resolved.outcome, ...(resolved.detail !== undefined ? { detail: resolved.detail } : {}) });
     // A failed member is never registered as a member — closes the gap where a "best
     // effort" fallback branch (e.g. the repo's current branch) could itself be shared
-    // (story 2.3, AD-8).
-    if (resolved.outcome !== 'failed') {
+    // (story 2.3, AD-8). `branch` is only set for non-failed outcomes (see
+    // ResolvedMemberBranch), so this doubles as the type-narrowing check.
+    if (resolved.branch !== undefined) {
       memberEntries.push({ service: resolved.service, repoPath: member, branch: resolved.branch });
     }
     if (resolved.outcome === 'created') {
@@ -279,7 +280,9 @@ interface ResolvedMemberBranch {
   service: string;
   outcome: CreateEdtMemberResult['outcome'];
   detail?: CreateEdtMemberResult['detail'];
-  branch: string;
+  // Set only when outcome !== 'failed': a failed member is never registered as an EDT
+  // member (story 2.3), so there is nothing to compute a fallback value for.
+  branch?: string;
 }
 
 async function resolveMemberBranch(
@@ -290,30 +293,19 @@ async function resolveMemberBranch(
 ): Promise<ResolvedMemberBranch> {
   const loaded = await manifest.load(member);
   const service = loaded.ok ? loaded.data.service : member;
-  const sharedBranchFallback = loaded.ok ? loaded.data.sharedBranch : 'development';
 
   // A member whose manifest cannot load has no identifiable service identity, and both
   // branch paths need the manifest (the git adapter resolves the shared-branch gate from
-  // it). Report it as a per-service failure without aborting the batch.
+  // it). Report it as a per-service failure without aborting the batch; a failed member is
+  // never registered (story 2.3), so no branch needs to be read here.
   if (!loaded.ok) {
-    const current = await git.currentBranch(member);
-    return {
-      service,
-      outcome: 'failed',
-      detail: { code: loaded.error.code, message: loaded.error.message },
-      branch: current.ok ? current.data : sharedBranchFallback,
-    };
+    return { service, outcome: 'failed', detail: { code: loaded.error.code, message: loaded.error.message } };
   }
 
   if (!options.create) {
     const current = await git.currentBranch(member);
     if (!current.ok) {
-      return {
-        service,
-        outcome: 'failed',
-        detail: { code: current.error.code, message: current.error.message },
-        branch: sharedBranchFallback,
-      };
+      return { service, outcome: 'failed', detail: { code: current.error.code, message: current.error.message } };
     }
 
     // Story 2.3: the existing current branch is never checked by git.createBranch (there is
@@ -321,12 +313,7 @@ async function resolveMemberBranch(
     // being reused as the member's own EDT branch (AD-8, FR-7).
     const allowed = await git.assertAllowedBranch(member, current.data);
     if (!allowed.ok) {
-      return {
-        service,
-        outcome: 'failed',
-        detail: { code: allowed.error.code, message: allowed.error.message },
-        branch: current.data,
-      };
+      return { service, outcome: 'failed', detail: { code: allowed.error.code, message: allowed.error.message } };
     }
 
     return { service, outcome: 'existing-branch', branch: current.data };
@@ -337,14 +324,8 @@ async function resolveMemberBranch(
     return { service, outcome: 'created', branch: options.names[member] };
   }
 
-  // The branch could not be created; the member still joins the EDT, so its registered
-  // branch falls back to the branch it is actually on (its current branch, or the manifest
-  // sharedBranch if even that read fails).
-  const current = await git.currentBranch(member);
-  return {
-    service,
-    outcome: 'failed',
-    detail: { code: created.error.code, message: created.error.message },
-    branch: current.ok ? current.data : sharedBranchFallback,
-  };
+  // The branch could not be created. A failed member is never registered as an EDT member
+  // any more (story 2.3), so there is no fallback branch to compute — unlike pre-2.3, this
+  // no longer reads the member's current branch as a "best effort" substitute.
+  return { service, outcome: 'failed', detail: { code: created.error.code, message: created.error.message } };
 }

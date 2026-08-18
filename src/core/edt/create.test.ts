@@ -261,6 +261,32 @@ describe('createEdt — branch creation disabled', () => {
     ]);
   });
 
+  it('excludes a member when assertAllowedBranch fails for a reason other than shared-branch-rejected (matrix edge case)', async () => {
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('feature-x')),
+      assertAllowedBranch: vi.fn(async (path: string) =>
+        path === '/repo/a' ? err('manifest-not-found', 'manifest vanished between reads') : ok(undefined),
+      ),
+    });
+    const params = await makeParams({ git });
+
+    const result = await createEdt(params);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-/repo/a', outcome: 'failed', detail: { code: 'manifest-not-found' } },
+          { service: 'svc-/repo/b', outcome: 'existing-branch' },
+        ],
+      },
+    });
+    const added = calls(params.edtRegistry.add);
+    expect((added[0][0] as EdtRegistryEntry).members).toEqual([
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feature-x' },
+    ]);
+  });
+
   it('trims the topic before storing it', async () => {
     const params = await makeParams({
       topic: '  demo  ',
