@@ -79,8 +79,15 @@ function fakeLock(): LockPort {
   };
 }
 
+const SHARED_BRANCHES = ['development', 'preprod', 'prod'];
+
 function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
   return {
+    assertAllowedBranch: vi.fn(async (_repoPath: string, branchName: string) =>
+      SHARED_BRANCHES.includes(branchName)
+        ? err('shared-branch-rejected', `Branch "${branchName}" is a shared/protected branch`)
+        : ok(undefined),
+    ),
     createBranch: vi.fn(async () => ok(undefined)),
     deleteBranch: vi.fn(async () => ok(undefined)),
     currentBranch: vi.fn(async () => ok('development')),
@@ -191,9 +198,9 @@ describe('createEdt — validation before any write', () => {
 });
 
 describe('createEdt — branch creation disabled', () => {
-  it('records each member current branch with outcome existing-branch (AC2)', async () => {
+  it('records each member current branch with outcome existing-branch when it is not shared (regression)', async () => {
     const git = fakeGit({
-      currentBranch: vi.fn(async (path: string) => ok(path === '/repo/a' ? 'main' : 'development')),
+      currentBranch: vi.fn(async (path: string) => ok(path === '/repo/a' ? 'main' : 'feature-x')),
     });
     const params = await makeParams({ git });
 
@@ -217,15 +224,48 @@ describe('createEdt — branch creation disabled', () => {
     expect(entryWritten.topic).toBe('demo');
     expect(entryWritten.members).toEqual([
       { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'main' },
-      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'development' },
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feature-x' },
     ]);
     if (result.ok) {
       expect(result.data.ulid).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     }
   });
 
+  it('rejects and excludes a member whose current branch is shared, without any git write (story 2.3 matrix)', async () => {
+    const git = fakeGit({
+      currentBranch: vi.fn(async (path: string) => ok(path === '/repo/a' ? 'development' : 'feature-x')),
+    });
+    const params = await makeParams({ git });
+
+    const result = await createEdt(params);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-/repo/a', outcome: 'failed', detail: { code: 'shared-branch-rejected' } },
+          { service: 'svc-/repo/b', outcome: 'existing-branch' },
+        ],
+      },
+    });
+    expect(calls(params.git.createBranch)).toHaveLength(0);
+    expect(calls(params.git.assertAllowedBranch)).toEqual([
+      ['/repo/a', 'development'],
+      ['/repo/b', 'feature-x'],
+    ]);
+
+    const added = calls(params.edtRegistry.add);
+    expect(added).toHaveLength(1);
+    expect((added[0][0] as EdtRegistryEntry).members).toEqual([
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feature-x' },
+    ]);
+  });
+
   it('trims the topic before storing it', async () => {
-    const params = await makeParams({ topic: '  demo  ' });
+    const params = await makeParams({
+      topic: '  demo  ',
+      git: fakeGit({ currentBranch: vi.fn(async () => ok('feature-x')) }),
+    });
 
     const result = await createEdt(params);
 
@@ -316,16 +356,16 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
         ],
       },
     });
-    // A still joins the EDT, its branch falling back to its current branch.
+    // A does not join the EDT: a failed member is never registered (story 2.3), even
+    // though its current branch could have been read as a fallback.
     const added = calls(params.edtRegistry.add);
     expect(added).toHaveLength(1);
     expect((added[0][0] as EdtRegistryEntry).members).toEqual([
-      { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'development' },
       { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/x' },
     ]);
   });
 
-  it('reports base-branch-missing per member and still records a branch', async () => {
+  it('reports base-branch-missing per member without aborting the batch or EDT creation', async () => {
     const git = fakeGit({
       createBranch: vi.fn(async () => err('base-branch-missing', 'base nope missing')),
     });
@@ -339,9 +379,11 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
       { service: 'svc-/repo/b', outcome: 'failed', detail: { code: 'base-branch-missing', message: 'base nope missing' } },
     ]);
     expect(calls(params.edtRegistry.add)).toHaveLength(1);
+    // Both members failed, so both are excluded — a zero-member EDT is still created.
+    expect((calls(params.edtRegistry.add)[0][0] as EdtRegistryEntry).members).toEqual([]);
   });
 
-  it('propagates shared-branch-rejected as a per-member failure (FR-7, AD-8 seed)', async () => {
+  it('propagates shared-branch-rejected as a per-member failure, excluding it from members (FR-7, AD-8)', async () => {
     const git = fakeGit({
       createBranch: vi.fn(async () => err('shared-branch-rejected', 'shared branch')),
     });
@@ -358,9 +400,10 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
         ],
       },
     });
+    expect((calls(params.edtRegistry.add)[0][0] as EdtRegistryEntry).members).toEqual([]);
   });
 
-  it('falls back to the manifest sharedBranch when the current-branch read also fails', async () => {
+  it('excludes a member when createBranch fails and the fallback current-branch read also fails', async () => {
     const git = fakeGit({
       createBranch: vi.fn(async () => err('git-create-branch-error', 'boom')),
       currentBranch: vi.fn(async () => err('git-current-branch-error', 'not a repo')),
@@ -371,11 +414,25 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
 
     if (!result.ok) throw new Error('expected ok');
     const added = calls(params.edtRegistry.add);
-    expect((added[0][0] as EdtRegistryEntry).members[0]).toEqual({
-      service: 'svc-/repo/a',
-      repoPath: '/repo/a',
-      branch: 'development',
+    expect((added[0][0] as EdtRegistryEntry).members.find((m) => m.service === 'svc-/repo/a')).toBeUndefined();
+  });
+
+  it('excludes a member when createBranch fails and the fallback current branch is shared (story 2.3 matrix)', async () => {
+    const git = fakeGit({
+      createBranch: vi.fn(async () => err('base-branch-missing', 'base missing')),
+      currentBranch: vi.fn(async () => ok('development')),
     });
+    const params = await makeParams({ git, branchOptions: GROUPED });
+
+    const result = await createEdt(params);
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.results).toEqual([
+      { service: 'svc-/repo/a', outcome: 'failed', detail: { code: 'base-branch-missing', message: 'base missing' } },
+      { service: 'svc-/repo/b', outcome: 'failed', detail: { code: 'base-branch-missing', message: 'base missing' } },
+    ]);
+    const added = calls(params.edtRegistry.add);
+    expect((added[0][0] as EdtRegistryEntry).members).toEqual([]);
   });
 
   it('reports a member whose manifest fails to load as a per-service failure', async () => {
@@ -384,7 +441,8 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
         path === '/repo/a' ? err('manifest-not-found', 'no manifest') : ok(manifestFor(path)),
       ),
     });
-    const params = await makeParams({ manifest });
+    const git = fakeGit({ currentBranch: vi.fn(async () => ok('feature-x')) });
+    const params = await makeParams({ manifest, git });
 
     const result = await createEdt(params);
 

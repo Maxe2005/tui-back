@@ -20,8 +20,8 @@
 //       node:fs / node:path and the `ulid`/`better-sqlite3` packages are plain runtime deps,
 //       not adapters, so importing them here doesn't cross the boundary.
 // AD-8: git writes go through the caller-supplied GitPort only; the driven git adapter owns
-//       the shared-branch gate (story 2.2's seed; the full per-EDT self-resolving gate is
-//       story 2.3). createEdt itself never shells out to git.
+//       the shared-branch gate (assertAllowedBranch). createEdt itself never shells out to
+//       git.
 //
 // Story 2.2 semantics (from the story spec):
 //   - topic + zero-member + duplicate-topic + unregistered-member rejections all happen
@@ -32,9 +32,19 @@
 //     set created | existing-branch | failed.
 //   - Branch creation never checks out the created branch (git branch <name> <base> creates
 //     a ref; moving the working tree onto it is Story 2.4's protected-switch).
-//   - Each member records its branch for this EDT: the created branch on success, otherwise
-//     the member's current branch (falling back to the member's manifest sharedBranch when
-//     even that read fails) — feeding Story 2.6's per-EDT divergence view.
+//
+// Story 2.3 semantics (git branch-scope safety gate, FR-7/AD-8):
+//   - The branch-creation-disabled path's existing current branch is not exempt from the
+//     shared-branch gate: it is checked via git.assertAllowedBranch before being reused as
+//     the member's own EDT branch, same as a newly created branch already is via
+//     git.createBranch.
+//   - A member whose outcome is `failed` — for any reason (shared-branch rejection, a
+//     git/manifest read error, a branch-creation failure) — is excluded from the registered
+//     `members` entirely; there is no "best effort" fallback branch recorded for a failed
+//     member any more, closing the gap where a fallback could itself be a shared branch.
+//     The member still gets a `failed` row in `results`, so the failure is never silently
+//     dropped, and the batch stays per-member isolated (one failure never blocks another
+//     member or the EDT's creation, even down to zero members — Story 2.5's invariant).
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
@@ -222,7 +232,12 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   for (const member of members) {
     const resolved = await resolveMemberBranch(git, manifest, member, branchOptions);
     results.push({ service: resolved.service, outcome: resolved.outcome, ...(resolved.detail !== undefined ? { detail: resolved.detail } : {}) });
-    memberEntries.push({ service: resolved.service, repoPath: member, branch: resolved.branch });
+    // A failed member is never registered as a member — closes the gap where a "best
+    // effort" fallback branch (e.g. the repo's current branch) could itself be shared
+    // (story 2.3, AD-8).
+    if (resolved.outcome !== 'failed') {
+      memberEntries.push({ service: resolved.service, repoPath: member, branch: resolved.branch });
+    }
     if (resolved.outcome === 'created') {
       createdBranches.push({ repoPath: member, branchName: branchOptions.names[member] });
     }
@@ -292,15 +307,29 @@ async function resolveMemberBranch(
 
   if (!options.create) {
     const current = await git.currentBranch(member);
-    if (current.ok) {
-      return { service, outcome: 'existing-branch', branch: current.data };
+    if (!current.ok) {
+      return {
+        service,
+        outcome: 'failed',
+        detail: { code: current.error.code, message: current.error.message },
+        branch: sharedBranchFallback,
+      };
     }
-    return {
-      service,
-      outcome: 'failed',
-      detail: { code: current.error.code, message: current.error.message },
-      branch: sharedBranchFallback,
-    };
+
+    // Story 2.3: the existing current branch is never checked by git.createBranch (there is
+    // no create call on this path), so it must pass the shared-branch gate itself before
+    // being reused as the member's own EDT branch (AD-8, FR-7).
+    const allowed = await git.assertAllowedBranch(member, current.data);
+    if (!allowed.ok) {
+      return {
+        service,
+        outcome: 'failed',
+        detail: { code: allowed.error.code, message: allowed.error.message },
+        branch: current.data,
+      };
+    }
+
+    return { service, outcome: 'existing-branch', branch: current.data };
   }
 
   const created = await git.createBranch(member, options.names[member], options.base);
