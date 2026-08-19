@@ -12,6 +12,7 @@ export type { ModalDialogProps } from './modal-dialog.js';
 export {
   KeybindingHelp,
   clampHelpOffset,
+  resolveHelpScroll,
   resolveHelpWindow,
   DEFAULT_HELP_VISIBLE_LINES,
 } from './keybinding-help.js';

@@ -3,13 +3,24 @@ export type Keybinding = {
   description: string;
 };
 
+// Story 2.7: the subset of Ink's `Key` type every list-navigation pure function reads
+// (resolveSelectionDirection/resolveSelectionJump in edts-zone.tsx, resolveHelpScroll in
+// keybinding-help.tsx). Shared here so the shape can't drift out of sync across call sites —
+// arrow/Home/End keys produce an empty `input` string in Ink, only these flags are set.
+export type NavigationKey = {
+  upArrow: boolean;
+  downArrow: boolean;
+  home: boolean;
+  end: boolean;
+};
+
 export const KEYBINDINGS: readonly Keybinding[] = [
   {
-    keys: 'j / k',
-    description: 'Move highlight down/up within a list',
+    keys: '↑ / ↓',
+    description: 'Move highlight up/down within a list',
   },
   {
-    keys: 'g / G',
+    keys: 'Home / End',
     description: 'Jump to top/bottom of the current list',
   },
   {
