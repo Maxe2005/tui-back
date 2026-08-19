@@ -6,7 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry, EdtRegistryPort, EdtMember, EdtStatus } from '../../../core/ports/edt-registry.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 import { edtRegistrySchema } from './schema.js';
@@ -20,6 +20,7 @@ export function createEdtRegistryPort(edtRegistryFile: string): EdtRegistryPort 
     add: (entry) => addEdtRegistryEntry(edtRegistryFile, entry),
     list: () => listEdtRegistry(edtRegistryFile),
     setStatus: (ulid, status) => setEdtStatus(edtRegistryFile, ulid, status),
+    update: (ulid, patch) => updateEdtEntry(edtRegistryFile, ulid, patch),
   };
 }
 
@@ -87,6 +88,43 @@ async function addEdtRegistryEntry(edtRegistryFile: string, entry: EdtRegistryEn
 
   try {
     await writeFile(edtRegistryFile, stringify({ edts: [...listed.data, entry] }), 'utf8');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return err('edt-registry-write-error', `Failed to write EDT registry file ${edtRegistryFile}: ${detail}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.5: read/find/replace/write one entry in place, mirroring setEdtStatus's shape.
+// Used by modifyEdt to apply topic and/or members changes under the per-resource advisory lock
+// (AD-9). Fails with edt-not-found if ulid isn't registered.
+async function updateEdtEntry(edtRegistryFile: string, ulid: string, patch: { topic?: string; members?: EdtMember[] }): Promise<Result<void>> {
+  const ensured = await ensureEdtRegistryDir(edtRegistryFile);
+  if (!ensured.ok) {
+    return ensured;
+  }
+
+  const listed = await listEdtRegistry(edtRegistryFile);
+  if (!listed.ok) {
+    return listed;
+  }
+
+  const index = listed.data.findIndex((candidate) => candidate.ulid === ulid);
+  if (index === -1) {
+    return err('edt-not-found', `No EDT registered with ulid ${ulid}`);
+  }
+
+  const updated = [...listed.data];
+  const entry = updated[index];
+  if (patch.topic !== undefined) {
+    entry.topic = patch.topic;
+  }
+  if (patch.members !== undefined) {
+    entry.members = patch.members;
+  }
+
+  try {
+    await writeFile(edtRegistryFile, stringify({ edts: updated }), 'utf8');
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return err('edt-registry-write-error', `Failed to write EDT registry file ${edtRegistryFile}: ${detail}`);

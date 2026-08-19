@@ -3,6 +3,22 @@
 ## Deferred from: code review of 2-4-switch-the-active-edt-without-data-loss (2026-08-19)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/2-4-switch-the-active-edt-without-data-loss.md`
+
+## Deferred from: code review of 2-5-modify-an-edt-after-creation (2026-08-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/2-5-modify-an-edt-after-creation.md`
+
+- Missing e2e tests for `edt modify` — no end-to-end tests exist for the modify subcommand, the code would ship undetected if flag parsing, semantic validations, or the result envelope broke
+
+- Test: "fails with edt-not-found for unknown topic" returns invalid-argument first — test ordering issue; EDT existence check should come before operation-cardinality check
+
+- Test: shared-branch gate not triggered — mock's currentBranch returns 'feature-x' for shared/protected branch names, masking the AD-8 gate
+
+- Unit tests mock update without verifying patch — all 6 unit tests in modify.test.ts mock update returning ok(undefined) and never inspect the patch argument; a bug in driven adapter updateEdtEntry would pass tests but incorrectly write the registry
+
+- removeMembers filtering not verified in tests — "removes a member" test only checks outcome 'removed' but doesn't verify the update patch correctly filters members from the registry entry; removed members could persist
+
+- renameTo topic not verified in update patch — "renames the EDT topic" test checks the result topic but doesn't verify the update call was passed the new topic; rename could silently fail to persist
   summary: `state.json` and `edts.yaml` writes use a plain `writeFile` with no temp-file+rename, so a crash mid-write can leave either file truncated/corrupt.
   evidence: `src/adapters/driven/state/index.ts:81` and `src/adapters/driven/edt-registry/index.ts:89,119` all call `writeFile` directly. This predates story 2.4 (edt-registry's writes go back to story 2.1) — `state.ts` is new but mirrors the same established, non-atomic pattern. Fixing just one file would be inconsistent; worth a single atomic-write helper shared by every YAML/JSON persistence adapter.
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/2-4-switch-the-active-edt-without-data-loss.md`
