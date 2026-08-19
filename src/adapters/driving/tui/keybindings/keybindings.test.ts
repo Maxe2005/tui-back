@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { KEYBINDINGS } from './index.js';
 
 const EXPECTED = [
-  ['j / k', 'Move highlight down/up within a list'],
-  ['g / G', 'Jump to top/bottom of the current list'],
+  ['↑ / ↓', 'Move highlight up/down within a list'],
+  ['Home / End', 'Jump to top/bottom of the current list'],
   ['Space', 'Toggle (multi-select / checkbox-list-item)'],
   [
     'Enter',

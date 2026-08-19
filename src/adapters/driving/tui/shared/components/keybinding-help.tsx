@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Text, useInput } from 'ink';
-import { KEYBINDINGS } from '../../keybindings/index.js';
+import { KEYBINDINGS, type NavigationKey } from '../../keybindings/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors } from '../theme/theme.js';
 import { ModalDialog } from './modal-dialog.js';
@@ -31,15 +31,23 @@ export function resolveHelpWindow<T>(
   };
 }
 
+// Story 2.7: canonical navigation contract retires j/k/g/G in favor of arrows/Home/End —
+// arrow/Home/End keys produce an empty `input` string in Ink, only `key` flags are set.
 export function resolveHelpScroll(
-  input: string,
+  key: NavigationKey,
   offset: number,
   visibleLines: number,
 ): number {
-  if (input === 'j') {
+  if (key.home) {
+    return resolveHelpWindow(KEYBINDINGS, 0, visibleLines).scrollOffset;
+  }
+  if (key.end) {
+    return resolveHelpWindow(KEYBINDINGS, KEYBINDINGS.length, visibleLines).scrollOffset;
+  }
+  if (key.downArrow) {
     return resolveHelpWindow(KEYBINDINGS, offset + 1, visibleLines).scrollOffset;
   }
-  if (input === 'k') {
+  if (key.upArrow) {
     return resolveHelpWindow(KEYBINDINGS, offset - 1, visibleLines).scrollOffset;
   }
   return offset;
@@ -62,9 +70,9 @@ export function KeybindingHelp({
     }
   }, [helpOpen]);
 
-  useInput((input, _key) => {
+  useInput((_input, key) => {
     if (!helpOpen) return;
-    setScrollOffset((offset) => resolveHelpScroll(input, offset, visibleLines));
+    setScrollOffset((offset) => resolveHelpScroll(key, offset, visibleLines));
   });
 
   const { visible } = resolveHelpWindow(

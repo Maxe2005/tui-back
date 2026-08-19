@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { NavigationKey } from '../../keybindings/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -91,18 +92,20 @@ export function formatIssuesSummary(unreachableCount: number, errorCount: number
   return parts.join(', ');
 }
 
-// Review patch: extracted so the j/k row-focus transition is unit-testable directly — the
-// shared renderToString test harness's fake stdin never emits data, so a useInput callback
-// itself is registered but never invoked by any test in the repo (mirrors app-shell.tsx's
-// shouldSwitchZone/shouldQuit pattern: interpret the key as a pure function, dispatch the
-// interpreted value from the hook).
+// Review patch: extracted so the arrow-key row-focus transition is unit-testable directly —
+// the shared renderToString test harness's fake stdin never emits data, so a useInput
+// callback itself is registered but never invoked by any test in the repo (mirrors
+// app-shell.tsx's shouldSwitchZone/shouldQuit pattern: interpret the key as a pure function,
+// dispatch the interpreted value from the hook).
+// Story 2.7: canonical navigation contract retires j/k/g/G in favor of arrows/Home/End —
+// arrow/Home/End keys produce an empty `input` string in Ink, only `key` flags are set.
 export type SelectionDirection = 'up' | 'down';
 
-export function resolveSelectionDirection(input: string): SelectionDirection | null {
-  if (input === 'j') {
+export function resolveSelectionDirection(key: NavigationKey): SelectionDirection | null {
+  if (key.downArrow) {
     return 'down';
   }
-  if (input === 'k') {
+  if (key.upArrow) {
     return 'up';
   }
   return null;
@@ -114,6 +117,29 @@ export function moveSelection(current: number, direction: SelectionDirection, le
   }
   const next = direction === 'down' ? current + 1 : current - 1;
   return Math.min(Math.max(next, 0), length - 1);
+}
+
+// Story 2.7: Home/End jump-to-top/bottom, extracted as a pure function for the same reason
+// resolveSelectionDirection is — the useInput callback itself is never invoked by any test
+// in this repo (fake stdin never emits data), so the matrix's two jump rows are only
+// verifiable by testing the interpretation logic directly.
+export type SelectionJump = 'top' | 'bottom';
+
+export function resolveSelectionJump(key: NavigationKey): SelectionJump | null {
+  if (key.home) {
+    return 'top';
+  }
+  if (key.end) {
+    return 'bottom';
+  }
+  return null;
+}
+
+export function jumpSelection(jump: SelectionJump, length: number): number {
+  if (length === 0) {
+    return 0;
+  }
+  return jump === 'top' ? 0 : length - 1;
 }
 
 export function EdtsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
@@ -145,8 +171,13 @@ export function EdtsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [selected, setSelected] = useState(0);
   const clampedSelected = rows.length === 0 ? 0 : Math.min(selected, rows.length - 1);
 
-  useInput((input) => {
-    const direction = resolveSelectionDirection(input);
+  useInput((_input, key) => {
+    const jump = resolveSelectionJump(key);
+    if (jump !== null) {
+      setSelected(jumpSelection(jump, rows.length));
+      return;
+    }
+    const direction = resolveSelectionDirection(key);
     if (direction === null) {
       return;
     }

@@ -2,8 +2,8 @@ import { Box, Text } from 'ink';
 import { colors, spacing } from '../theme/theme.js';
 
 export const DEFAULT_FOOTER_HINTS = [
-  '[j/k] move',
-  '[g/G] top/bottom',
+  '[↑↓] move',
+  '[Home/End] top/bottom',
   '[d/e/u/l/r/s] zone',
   '[/] filter',
   '[:] cmd',

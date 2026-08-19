@@ -4,6 +4,7 @@
 // truncation with the full name available in the detail pane once focused.
 import { describe, it, expect } from 'vitest';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import {
@@ -11,8 +12,10 @@ import {
   formatIssuesSummary,
   formatServiceDetail,
   formatServiceMeta,
+  jumpSelection,
   moveSelection,
   resolveSelectionDirection,
+  resolveSelectionJump,
   truncateBranchLabel,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.js';
@@ -108,18 +111,25 @@ describe('formatIssuesSummary', () => {
   });
 });
 
-// Review patch: the j/k row-focus transition, extracted to a pure function so it's
+// Review patch: the arrow-key row-focus transition, extracted to a pure function so it's
 // unit-testable directly (the shared renderToString harness's fake stdin never emits data,
 // so a useInput callback itself is registered but never invoked by any test in the repo).
+// Story 2.7: canonical navigation contract — j/k/g/G retired in favor of arrows/Home/End.
+// `noKey`: a fully-populated NavigationKey with every flag false, spread and overridden per
+// case — mirrors the pattern already used in keybinding-help.test.tsx for the same type.
+const noKey: NavigationKey = { upArrow: false, downArrow: false, home: false, end: false };
+
 describe('resolveSelectionDirection', () => {
-  it('maps j to down and k to up', () => {
-    expect(resolveSelectionDirection('j')).toBe('down');
-    expect(resolveSelectionDirection('k')).toBe('up');
+  it('maps downArrow to down and upArrow to up', () => {
+    expect(resolveSelectionDirection({ ...noKey, downArrow: true })).toBe('down');
+    expect(resolveSelectionDirection({ ...noKey, upArrow: true })).toBe('up');
   });
 
-  it('returns null for any other key', () => {
-    expect(resolveSelectionDirection('g')).toBeNull();
-    expect(resolveSelectionDirection('')).toBeNull();
+  // Also covers "retired keys (j/k/g/G) are inert": those characters produce a non-empty
+  // `input` string in Ink but leave every `key` flag false — resolveSelectionDirection no
+  // longer accepts `input` at all, so this is the only reachable state for j/k/g/G too.
+  it('returns null when neither arrow key is pressed', () => {
+    expect(resolveSelectionDirection(noKey)).toBeNull();
   });
 });
 
@@ -145,6 +155,35 @@ describe('moveSelection', () => {
   it('always returns 0 for an empty list, either direction', () => {
     expect(moveSelection(0, 'down', 0)).toBe(0);
     expect(moveSelection(0, 'up', 0)).toBe(0);
+  });
+});
+
+// Story 2.7: Home/End jump-to-top/bottom (matrix: "Jump to top" / "Jump to bottom" in the
+// EDTs zone) — extracted as a pure function for the same testability reason as
+// resolveSelectionDirection/moveSelection above.
+describe('resolveSelectionJump', () => {
+  it('maps Home to top and End to bottom', () => {
+    expect(resolveSelectionJump({ ...noKey, home: true })).toBe('top');
+    expect(resolveSelectionJump({ ...noKey, end: true })).toBe('bottom');
+  });
+
+  it('returns null when neither Home nor End is pressed (including j/k/g/G, which set no key flag)', () => {
+    expect(resolveSelectionJump(noKey)).toBeNull();
+  });
+});
+
+describe('jumpSelection', () => {
+  it('jumps to the first row on top', () => {
+    expect(jumpSelection('top', 5)).toBe(0);
+  });
+
+  it('jumps to the last row on bottom', () => {
+    expect(jumpSelection('bottom', 5)).toBe(4);
+  });
+
+  it('always returns 0 for an empty list, either direction', () => {
+    expect(jumpSelection('top', 0)).toBe(0);
+    expect(jumpSelection('bottom', 0)).toBe(0);
   });
 });
 
