@@ -6,7 +6,7 @@
 // non-member partition, stash-tag symmetry, and per-repo failure isolation.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { ok, err } from '../result.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
@@ -92,7 +92,7 @@ function member(service: string, repoPath: string, branch: string): EdtMember {
   return { service, repoPath, branch };
 }
 
-function edtEntry(ulid: string, topic: string, members: EdtMember[], status = 'active'): EdtRegistryEntry {
+function edtEntry(ulid: string, topic: string, members: EdtMember[], status: EdtStatus = 'active'): EdtRegistryEntry {
   return { ulid, topic, createdAt: '2026-08-18T00:00:00.000Z', status, members };
 }
 
@@ -108,6 +108,7 @@ function makeParams(overrides: Partial<SwitchActiveEdtParams> = {}): SwitchActiv
     git: overrides.git ?? fakeGit(),
     lock: overrides.lock ?? fakeLock(),
     state: overrides.state ?? fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) }),
+    edtRegistryResourceKey: overrides.edtRegistryResourceKey ?? '/cfg/edts.yaml',
     topic: overrides.topic ?? 'target-topic',
     force: overrides.force,
   };
@@ -431,7 +432,7 @@ describe('switchActiveEdt — stash-tag symmetry on a first-ever switch (no outg
 });
 
 describe('switchActiveEdt — state.json write failure', () => {
-  it('surfaces a writeActiveEdt failure as the overall result', async () => {
+  it('surfaces a writeActiveEdt failure as the overall result, keeping the per-repo results as error details (review)', async () => {
     const state = fakeState({
       readActiveEdt: vi.fn(async () => ok('outgoing-ulid')),
       writeActiveEdt: vi.fn(async () => err('state-write-error', 'disk full')),
@@ -440,5 +441,101 @@ describe('switchActiveEdt — state.json write failure', () => {
     const result = await switchActiveEdt(makeParams({ state }));
 
     expect(result).toMatchObject({ ok: false, error: { code: 'state-write-error' } });
+    if (!result.ok) {
+      // The per-repo checkouts already ran by this point — their outcomes aren't discarded
+      // just because the pointer write failed afterward.
+      const details = result.error.details as { results: unknown[] };
+      expect(details.results).toContainEqual({ service: 'svc-a', outcome: 'switched' });
+      expect(details.results).toContainEqual({ service: 'svc-b', outcome: 'switched' });
+      expect(details.results).toContainEqual({ service: 'svc-c', outcome: 'switched' });
+    }
+  });
+});
+
+describe('switchActiveEdt — edts.yaml write under lock (AD-9, review)', () => {
+  it('writes the target/outgoing status flips inside the per-resource action lock', async () => {
+    const lock = fakeLock();
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
+
+    const result = await switchActiveEdt(makeParams({ lock, edtRegistry, edtRegistryResourceKey: '/cfg/edts.yaml' }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(calls(lock.acquire)).toEqual([['/cfg/edts.yaml']]);
+  });
+
+  it('propagates a lock-acquire failure without writing state.json or the registry', async () => {
+    const lock = fakeLock({ acquire: async () => err('action-in-progress', 'another switch is running') });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
+
+    const result = await switchActiveEdt(makeParams({ lock, state, edtRegistry }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'action-in-progress' } });
+    expect(calls(state.writeActiveEdt)).toHaveLength(0);
+    expect(calls(edtRegistry.setStatus)).toHaveLength(0);
+  });
+});
+
+describe('switchActiveEdt — setStatus failure is surfaced, not swallowed (review)', () => {
+  it('reports a failed setStatus(target, active) as a `results` row while state.json still succeeded', async () => {
+    const edtRegistry = fakeEdtRegistry({
+      list: vi.fn(async () => ok([TARGET, OUTGOING])),
+      setStatus: vi.fn(async (ulid: string) =>
+        ulid === 'target-ulid' ? err('edt-registry-write-error', 'disk full') : ok(undefined),
+      ),
+    });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) });
+
+    const result = await switchActiveEdt(makeParams({ edtRegistry, state }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'edt-registry:activate-target',
+        outcome: 'failed',
+        detail: { code: 'edt-registry-write-error', message: 'disk full' },
+      });
+    }
+    // state.json was still written despite the registry-status failure.
+    expect(calls(state.writeActiveEdt)).toEqual([['target-ulid']]);
+  });
+
+  it('reports a failed setStatus(outgoing, inactive) as a `results` row too', async () => {
+    const edtRegistry = fakeEdtRegistry({
+      list: vi.fn(async () => ok([TARGET, OUTGOING])),
+      setStatus: vi.fn(async (ulid: string) =>
+        ulid === 'outgoing-ulid' ? err('edt-registry-write-error', 'disk full') : ok(undefined),
+      ),
+    });
+
+    const result = await switchActiveEdt(makeParams({ edtRegistry }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'edt-registry:deactivate-outgoing',
+        outcome: 'failed',
+        detail: { code: 'edt-registry-write-error', message: 'disk full' },
+      });
+    }
+  });
+});
+
+describe('switchActiveEdt — target member deregistered from RegistryPort (review)', () => {
+  it('reports a target member no longer in the managed-repo registry as `failed`, never silently skipped', async () => {
+    // '/repo/a' is a target member but registry.list() no longer includes it.
+    const registry = fakeRegistry(['/repo/b', '/repo/c']);
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
+
+    const result = await switchActiveEdt(makeParams({ registry, edtRegistry }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'repo-not-registered', message: 'Target member /repo/a is no longer in the managed-repo registry' },
+      });
+    }
   });
 });

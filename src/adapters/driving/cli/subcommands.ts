@@ -267,6 +267,7 @@ async function runEdtCreate(
 async function runEdtSwitch(
   deps: {
     edtRegistry: EdtRegistryPort;
+    edtRegistryResourceKey: string;
     registry: RegistryPort;
     manifest: ManifestPort;
     git: GitPort;
@@ -307,6 +308,7 @@ async function runEdtSwitch(
 
   return switchActiveEdt({
     edtRegistry: deps.edtRegistry,
+    edtRegistryResourceKey: deps.edtRegistryResourceKey,
     registry: deps.registry,
     manifest: deps.manifest,
     git: deps.git,

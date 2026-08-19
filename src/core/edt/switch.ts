@@ -28,7 +28,8 @@
 // updates are expected to). `--force` past a held lock never aborts or kills anything (no
 // abort primitive exists yet) — it only marks the outgoing EDT `interrupted` and proceeds.
 import { resolve } from 'node:path';
-import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
+import { withActionLock } from '../locking.js';
+import type { EdtMember, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
@@ -59,12 +60,15 @@ export interface SwitchActiveEdtParams {
   git: GitPort;
   lock: LockPort;
   state: StatePort;
+  // Review patch (story 2.4): same resource key create.ts's own registry writes lock under
+  // (AD-9) — this use-case writes edts.yaml too and was missing the guard entirely.
+  edtRegistryResourceKey: string;
   topic: string;
   force?: boolean;
 }
 
 export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Result<SwitchActiveEdtData>> {
-  const { edtRegistry, registry, manifest, git, lock, state, force = false } = params;
+  const { edtRegistry, registry, manifest, git, lock, state, edtRegistryResourceKey, force = false } = params;
 
   const topic = params.topic.trim();
   if (topic === '') {
@@ -100,7 +104,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   // Blocked-by-default gate: a non-blocking peek at the outgoing EDT's action lock, before
   // any repo is touched. --force never aborts the held action (no abort primitive exists
   // yet) — it only records the outgoing EDT as interrupted and proceeds regardless.
-  let outgoingFinalStatus: string | undefined;
+  let outgoingFinalStatus: EdtStatus | undefined;
   if (outgoing !== undefined) {
     const peeked = await lock.peek(`edt:${outgoing.ulid}`);
     if (!peeked.ok) {
@@ -127,6 +131,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   }
 
   const targetMembersByPath = new Map(target.members.map((member) => [resolve(member.repoPath), member]));
+  const registeredPaths = new Set(registered.data.map((rawPath) => resolve(rawPath)));
 
   const results: SwitchEdtRepoResult[] = [];
   for (const rawPath of registered.data) {
@@ -139,27 +144,54 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
     );
   }
 
-  // state.json is updated once the target is resolved and no blocking lock applies,
-  // independent of individual repo outcomes above (same philosophy as createEdt still
-  // registering an EDT despite member failures).
-  const wroteState = await state.writeActiveEdt(target.ulid);
-  if (!wroteState.ok) {
-    return wroteState;
-  }
-
-  const activated = await edtRegistry.setStatus(target.ulid, 'active');
-  if (!activated.ok) {
-    console.error(`Failed to mark EDT ${target.ulid} active after switching to it:`, activated.error.message);
-  }
-
-  if (outgoing !== undefined && outgoingFinalStatus !== undefined) {
-    const deactivated = await edtRegistry.setStatus(outgoing.ulid, outgoingFinalStatus);
-    if (!deactivated.ok) {
-      console.error(
-        `Failed to mark EDT ${outgoing.ulid} ${outgoingFinalStatus} after switching away from it:`,
-        deactivated.error.message,
+  // Review patch (story 2.4): a target member whose repoPath has since dropped out of the
+  // managed-repo registry used to be silently skipped — never checked out, no failure
+  // reported, quietly breaking "every target member sits on its own registered branch" with
+  // zero signal. Surfaced as `failed`, same per-repo isolation philosophy as every other row.
+  for (const member of target.members) {
+    if (!registeredPaths.has(resolve(member.repoPath))) {
+      results.push(
+        failed(member.service, {
+          code: 'repo-not-registered',
+          message: `Target member ${member.repoPath} is no longer in the managed-repo registry`,
+        }),
       );
     }
+  }
+
+  // state.json and edts.yaml are updated once the target is resolved and no blocking lock
+  // applies, independent of individual repo outcomes above (same philosophy as createEdt
+  // still registering an EDT despite member failures) — but the two registry writes below
+  // race with a concurrent `edt create`/`edt switch` on the same edts.yaml (AD-9) without this
+  // lock, and a `setStatus` failure used to be swallowed to console.error while the overall
+  // Result still reported ok:true. Both are review patches: the lock serializes the
+  // read-modify-write the same way create.ts's own registry write does, and a setStatus
+  // failure is now a `failed` row in `results` instead of a silent log line.
+  const written = await withActionLock(lock, edtRegistryResourceKey, async () => {
+    const wroteState = await state.writeActiveEdt(target.ulid);
+    if (!wroteState.ok) {
+      // Keep the per-repo results the caller already earned instead of discarding them —
+      // they report what actually happened to each working tree even though the pointer
+      // write itself failed.
+      return err(wroteState.error.code, wroteState.error.message, { results });
+    }
+
+    const activated = await edtRegistry.setStatus(target.ulid, 'active');
+    if (!activated.ok) {
+      results.push(failed('edt-registry:activate-target', activated.error));
+    }
+
+    if (outgoing !== undefined && outgoingFinalStatus !== undefined) {
+      const deactivated = await edtRegistry.setStatus(outgoing.ulid, outgoingFinalStatus);
+      if (!deactivated.ok) {
+        results.push(failed('edt-registry:deactivate-outgoing', deactivated.error));
+      }
+    }
+
+    return ok(undefined);
+  });
+  if (!written.ok) {
+    return written;
   }
 
   return ok({ ulid: target.ulid, topic: target.topic, results, wasInterrupted });
