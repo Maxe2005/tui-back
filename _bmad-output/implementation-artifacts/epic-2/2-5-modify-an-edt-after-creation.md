@@ -105,6 +105,31 @@ context:
 **Manual check:**
 - `tui-back edt create --topic demo --member <r1>` (r1 dirty), then `tui-back edt modify --topic demo --add-member <r2> --set-branch <r1>=fix-x --rename-to demo2` — `edts.yaml` shows topic `demo2` + updated members; r1 is on `fix-x` with its dirty work restored; then `--remove-member <r2>` and `--remove-member <r1>` leaves `members: []` with exit 0.
 
+---
+
+### Review Findings
+
+**decision-needed (unchecked):**
+- [ ] [Review][Decision] Add-member does not persist to EDT registry — AC #1 requires member to be added with its current gated branch, but registry write only applies topic + removals; adds are recorded in results but not persisted
+
+**patch (unchecked):**
+- [ ] [Review][Patch] resetEdtStore() placement outside if-block in modify.test.ts risks test contamination
+- [ ] [Review][Patch] No duplicate member check when adding members — addMembers processed without checking if already in target EDT's member list
+- [ ] [Review][Patch] stash failure doesn't abort cleanly in set-branch — if git.stashSave fails, code continues, potentially leaving repo partially-stashed
+- [ ] [Review][Patch] checkout failure leaves repo intermediate — if git.checkout fails after stash, repo may be in intermediate state
+- [ ] [Review][Patch] path resolution mismatch in member removal — resolve() applied differently to removeMembers paths vs stored m.repoPath
+- [ ] [Review][Patch] hasOp validation precedes EDT existence check — causes incorrect error code (invalid-argument instead of edt-not-found)
+- [ ] [Review][Patch] hasOp check uses permissive OR logic — allows mixing all operation types without validation
+- [ ] [Review][Patch] remove-members loop reports 'removed' without verifying member exists in EDT member list
+
+**defer (checked off, marked deferred):**
+- [x] [Review][Defer] Missing e2e tests for `edt modify` — no end-to-end tests exist for the modify subcommand, deferred as pre-existing
+- [x] [Review][Defer] Test: "fails with edt-not-found for unknown topic" returns invalid-argument first — test ordering issue, deferred
+- [x] [Review][Defer] Test: shared-branch gate not triggered — mock masks the gate, deferred as testing gap
+- [x] [Review][Defer] Unit tests mock update without verifying patch — all 6 unit tests mock update returning ok(undefined), never inspect patch argument
+- [x] [Review][Defer] removeMembers filtering not verified in tests — "removes a member" test only checks outcome 'removed' but doesn't verify update patch correctly filters members
+- [x] [Review][Defer] renameTo topic not verified in update patch — "renames the EDT topic" test checks result topic but doesn't verify update call passed new topic
+
 ## Suggested Review Order
 
 **Entry point — the modify use-case**

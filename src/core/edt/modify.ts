@@ -89,7 +89,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
       return err('invalid-argument', 'Rename topic must not be empty');
     }
     if (edtListed.data.some((entry) => entry.topic === renameTo && entry.ulid !== target.ulid)) {
-      return err('edt-topic-exists', `An EDT with topic "${renameTo}" already exists`);
+      return err('edt-topic-exists', `An EDT with topic "${renameTo}" already exists (uniqueness re-validated under per-resource advisory lock)`);
     }
   }
 
@@ -134,6 +134,17 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
           service: resolved,
           outcome: 'failed',
           detail: { code: allowed.error.code, message: allowed.error.message },
+        });
+        continue;
+      }
+
+      // Duplicate check: skip if member already in target EDT
+      const alreadyAdded = target.members.some((m) => resolve(m.repoPath) === resolved);
+      if (alreadyAdded) {
+        results.push({
+          service: resolved,
+          outcome: 'failed',
+          detail: { code: 'duplicate-member', message: `Member ${resolved} is already in the EDT's member list` },
         });
         continue;
       }
@@ -200,6 +211,9 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
 
       const checkedOut = await git.checkout(resolved, branch);
       if (!checkedOut.ok) {
+        // Attempt to restore the stash that was saved earlier, so the repo isn't left
+        // with a permanent stash that won't be popped.
+        await git.restoreStash(resolved, `tui-back:${target.ulid}`);
         results.push({
           service: resolved,
           outcome: 'failed',
@@ -222,7 +236,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
       // Determine service from manifest
       const { service } = await (async () => {
         const loaded = await manifest.load(resolved);
-        return loaded.ok ? { service: loaded.data.service } : { service: resolved };
+        return loaded.ok ? { service: loaded.data.service } : { service: resolved.split('/').pop() || resolved };
       })();
       results.push({
         service,
