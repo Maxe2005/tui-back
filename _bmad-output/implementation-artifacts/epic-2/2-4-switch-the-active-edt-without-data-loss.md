@@ -2,7 +2,7 @@
 title: 'Switch the Active EDT Without Data Loss'
 type: 'feature'
 created: '2026-08-18'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: fa61e0bcf0463b4fafad20583ca324a969f1e259
 review_loop_iteration: 0
 context:
