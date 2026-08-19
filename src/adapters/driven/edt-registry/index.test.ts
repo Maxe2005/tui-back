@@ -136,3 +136,125 @@ describe('edt-registry setStatus()', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
   });
 });
+
+// Story 2.5: update() is a read/find/replace/write, mirroring setStatus's shape.
+describe('edt-registry update()', () => {
+  it('updates only the topic', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'original',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.update(entry.ulid, { topic: 'renamed' });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({
+      ok: true,
+      data: [{ ...entry, topic: 'renamed' }],
+    });
+  });
+
+  it('updates only the members', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.update(entry.ulid, {
+      members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }],
+    });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({
+      ok: true,
+      data: [{ ...entry, members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }] }],
+    });
+  });
+
+  it('updates both topic and members', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'original',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.update(entry.ulid, {
+      topic: 'renamed',
+      members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }],
+    });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({
+      ok: true,
+      data: [{ topic: 'renamed', members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }] }],
+    });
+  });
+
+  it('fails with edt-not-found for an unregistered ulid', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.update('01JNOTFOUND0000000000000', {
+      topic: 'new-topic',
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    // Registry file should be unchanged
+    expect(await readFile(file, 'utf8')).toEqual(
+      stringify({ edts: [entry] }),
+    );
+  });
+
+  it('leaves sibling entries untouched', async () => {
+    const file = await makeRegistryFile();
+    const entryA = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'a',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    const entryB = {
+      ulid: '01JXXXXX2BBBBBBBBBBBBBBBBB',
+      topic: 'b',
+      createdAt: '2026-08-18T01:00:00.000Z',
+      status: 'active',
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
+    };
+    await writeFile(file, stringify({ edts: [entryA, entryB] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.update(entryA.ulid, { topic: 'renamed-a' });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({
+      ok: true,
+      data: [{ ...entryA, topic: 'renamed-a' }, entryB],
+    });
+  });
+});

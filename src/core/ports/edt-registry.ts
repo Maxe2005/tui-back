@@ -30,6 +30,10 @@ export interface EdtRegistryEntry {
 export interface EdtRegistryPort {
   add(entry: EdtRegistryEntry): Promise<Result<void>>;
   list(): Promise<Result<EdtRegistryEntry[]>>;
+  // Story 2.5: read/find/replace/write one entry in place. Used by modifyEdt to apply
+  // topic and/or members changes under the per-resource advisory lock (AD-9). Fails with
+  // edt-not-found if ulid isn't registered.
+  update(ulid: string, patch: { topic?: string; members?: EdtMember[] }): Promise<Result<void>>;
   // Story 2.4: updates one entry's status field in place (read/find/replace/write). Used by
   // switchActiveEdt to flip the outgoing EDT to 'inactive' (or 'interrupted' under --force
   // past a held lock) and the target EDT to 'active'. Fails with edt-not-found if ulid isn't

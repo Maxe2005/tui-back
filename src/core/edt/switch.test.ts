@@ -52,6 +52,7 @@ function fakeEdtRegistry(overrides: Partial<EdtRegistryPort> = {}): EdtRegistryP
     add: vi.fn(async () => ok(undefined)),
     list: vi.fn(async () => ok([])),
     setStatus: vi.fn(async () => ok(undefined)),
+    update: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }

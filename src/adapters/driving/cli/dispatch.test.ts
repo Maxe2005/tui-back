@@ -151,7 +151,7 @@ describe('subcommand registry guards', () => {
   });
 
   function fakeEdtRegistry(): EdtRegistryPort {
-    return { add: async () => ok(undefined), list: async () => ok([]), setStatus: async () => ok(undefined) };
+    return { add: async () => ok(undefined), list: async () => ok([]), setStatus: async () => ok(undefined), update: async () => ok(undefined) };
   }
 
   function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {

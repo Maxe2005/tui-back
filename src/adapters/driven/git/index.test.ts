@@ -145,6 +145,7 @@ function fakeEdtRegistry(entries: EdtRegistryEntry[]): EdtRegistryPort {
     add: async () => ok(undefined),
     list: async () => ok(entries),
     setStatus: async () => ok(undefined),
+    update: async () => ok(undefined),
   };
 }
 
@@ -230,6 +231,7 @@ describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
       add: async () => ok(undefined),
       list: async () => ({ ok: false, error: { code: 'edt-registry-invalid-format', message: 'bad shape' } }),
       setStatus: async () => ok(undefined),
+      update: async () => ok(undefined),
     };
 
     const result = await assertAllowedBranch(manifest, repo, 'feat/x', 'edt-mine', edtRegistry);
