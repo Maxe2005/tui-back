@@ -166,7 +166,7 @@ The selectable-list unit inside a list/detail split. Base row sits in `{colors.t
 The right-hand content pane in a list/detail split. Carries a `{typography.label}` pane title, then body content in `{colors.text}`. Where the pane summarizes a run outcome (e.g. a group-update result), a `summary-line` divider (`{colors.border}` top rule) closes the pane, colored to match the outcome — success green for a clean run, warning amber for a partial failure, error red for a hard stop.
 
 ### footer-hint
-The permanent bottom row: contextual `[key] action` pairs in `{colors.text-dim}` on `{colors.background}`, ordered left-to-right by expected frequency of use (e.g. `[j/k] move  [enter] open  [space] select  [d] dashboard  [q] quit  ^W resize`). Content changes per zone/context; the row itself is always present.
+The permanent bottom row: contextual `[key] action` pairs in `{colors.text-dim}` on `{colors.background}`, ordered left-to-right by expected frequency of use (e.g. `[↑↓] move  [enter] open  [space] select  [d] dashboard  [q] quit  ^W resize`). Content changes per zone/context; the row itself is always present.
 
 ### modal-dialog
 A floating dialog over the current surface — used for confirmations, guided-resolution menus, similar interruptions, and the keybinding-help screen (`?`). `{colors.surface}` background, an Ink "bold"-style `{colors.border}` edge (see Elevation & Depth), square corners. No overlay dim/scrim beyond the border-weight contrast itself, since a terminal has no real transparency to dim through. The help-screen instance is the same visual spec, scrollable when its content exceeds the modal's `max-height`.

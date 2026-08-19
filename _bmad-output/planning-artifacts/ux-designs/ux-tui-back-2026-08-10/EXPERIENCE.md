@@ -66,7 +66,7 @@ Behavioral. Visual specs live in `DESIGN.md.Components`.
 |---|---|---|
 | zone-tab | Top bar | Single-letter mnemonic or direct click switches zone. Active EDT name stays visible alongside it at all times. A background-event badge (e.g. a crashed service detected while Max is elsewhere) clears once that zone is visited. |
 | status-badge | Anywhere a state is reported | Passive display — not itself interactive, except where a failing service's badge in Logs exposes an adjacent restart control (FR-18). |
-| list-row | Every list/detail split, including bmad-loop-style single-activation lists (OptionList) | `j`/`k` or arrow keys move the highlight; `g`/`G` jump to top/bottom; `Enter` (or a click) activates the highlighted row — same effect regardless of trigger method. |
+| list-row | Every list/detail split, including bmad-loop-style single-activation lists (OptionList) | Arrow keys move the highlight; `Home`/`End` jump to top/bottom; `Enter` (or a click) activates the highlighted row — same effect regardless of trigger method. |
 | detail-pane | Right-hand pane of a list/detail split | Read-focused; content follows the left list's current selection. Becomes its own scrollable/selectable list only where the zone calls for it (e.g. the Logs stream). |
 | footer-hint | Bottom row, always present | Passive; always reflects the current context's live keybindings — never stale after a zone or mode change. |
 | modal-dialog | Confirmations, guided-resolution menus, any interrupting decision, and the keybinding-help screen (`?`) | `Escape` always cancels/closes; `Enter` always confirms — regardless of whether the modal was opened by mouse or keyboard. Explicit fix for a friction point in bmad-loop, where trigger method and confirm binding could mismatch. The help-screen instance is read-only (no confirm action, `Esc` or `?` again closes it) and scrolls with `j`/`k` when its content exceeds the visible height. See `mockups/key-assisted-resolution-modal.html` for the FR-11 guided-menu instance at 1:1 fidelity. |
@@ -161,8 +161,8 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 
 The canonical keybinding contract for downstream implementation:
 
-- `j` / `k` — move highlight down/up within a list (vim-style).
-- `g` / `G` — jump to top/bottom of the current list (vim-style). Reserved for this purpose specifically — never zone-switching (see the zone-mnemonic entry below for why that distinction matters).
+- `↑` / `↓` — move highlight down/up within a list.
+- `Home` / `End` — jump to top/bottom of the current list.
 - `Space` — toggle (multi-select / checkbox-list-item).
 - `Enter` — confirm, always — opens a row, confirms a modal, confirms a multi-select — identical effect regardless of whether the action was reached by keyboard or mouse.
 - `Esc` — cancel, always — closes a modal, exits splitter resize-mode, clears an active filter.
@@ -188,6 +188,7 @@ Behavioral; visual contrast values live in `DESIGN.md`.
 
 - **Mouse is optional, not equal.** Ink has no built-in mouse support — this is a flagged architecture risk, not a settled capability. Mouse-drag splitter resize is the target interaction, modeled on bmad-loop's Splitter widget, but keyboard resize-mode (`Ctrl+W`) is the confirmed-safe fallback if mouse-drag proves infeasible. Every interaction in this spine has a keyboard path; no action is mouse-only.
 - **Terminal width/resize.** No specific minimum-width behavior (e.g. a hard floor, a reflow breakpoint, or a "too narrow" message) is decided — deferred, non-blocking. Not designed now; revisit only if narrow-terminal use (e.g. a cramped tmux pane) becomes a real problem in daily use. See Open Questions.
+- **Terminal fullscreen rendering.** On launch, the TUI takes over the full terminal via the alternate-screen buffer, sized to the terminal's current rows/columns rather than growing inline with scrollback — consistent with the k9s/lazygit register (see Brand & Style). The original screen content is restored on quit, Ctrl+C, or a crash — no leftover TUI output pollutes the shell afterward. Distinct from the still-deferred narrow-terminal minimum-width question above: this decides *that* the app fills the screen, not *how narrow is too narrow*.
 - **Ink FPS/memory ceiling — named, bounded risk.** Ink's documented rendering ceiling (~30 FPS render cap, >50 MB baseline memory) is a known, bounded, monitored risk, not a blocker. It's scoped beyond just the Logs zone to any concurrently-animated surface — e.g. the Update zone's per-service spinners running alongside a live log stream. The debounce/batch mitigation already specified for Logs streaming (see State Patterns) is the first line of defense. `OpenTUI` (same React/TypeScript API, Zig rendering core via Bun) is the pre-identified fallback if this ceiling is ever actually hit in practice — no action is needed now, this is monitored, not scheduled.
 
 ## Inspiration & Anti-patterns

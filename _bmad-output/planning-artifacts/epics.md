@@ -515,10 +515,12 @@ So that navigation and every interaction primitive behave identically across eve
 **Acceptance Criteria:**
 
 **Given** any list pane
-**When** `j`/`k` (or arrows) are pressed
+**When** arrow keys are pressed
 **Then** the highlight moves
-**And When** `g`/`G` are pressed
+**And When** `Home`/`End` are pressed
 **Then** it jumps to top/bottom — never switching zones
+
+> Amended 2026-08-19 (Sprint Change Proposal): originally read `j`/`k` (or arrows) and `g`/`G`; the vim-style bindings were retired in favor of arrows/Home/End — see Story 2.7. Story 1.13 itself never wired list navigation (explicitly deferred to "Epic 2+"), so this is a text correction to match the superseding contract, not a re-opening of a `done` story.
 
 **Given** the app is running
 **When** `d`/`e`/`u`/`l`/`r`/`s` is pressed
@@ -729,6 +731,78 @@ So that I never run `git status`/`git log` by hand.
 **Given** any managed service — EDT member or not (including ones kept on `development` per Story 2.4)
 **When** the EDTs zone is viewed
 **Then** its branch/divergence is shown uniformly
+
+### Story 2.7: Canonical Navigation Contract (Arrows/Home/End/Tab)
+
+As a developer,
+I want arrows/Home/End/Tab as the sole list-navigation contract, with no `j`/`k`/`g`/`G` anywhere,
+So that navigation doesn't require vim familiarity.
+
+**Acceptance Criteria:**
+
+**Given** any list pane
+**When** arrow keys are pressed
+**Then** the highlight moves
+
+**Given** any list pane
+**When** `Home`/`End` are pressed
+**Then** it jumps to top/bottom — never switching zones
+
+**Given** the app in any state
+**When** `j`, `k`, `g`, or `G` are pressed
+**Then** nothing happens — no list movement, no scroll, no zone switch
+
+**Given** a multi-splitter zone or a form
+**When** `Tab` is pressed
+**Then** it cycles focus between fields/boundaries — unchanged from its existing role, never repurposed as a list-movement key
+
+### Story 2.8: Fullscreen TUI Rendering
+
+As a developer,
+I want the TUI to take over the full terminal on launch, like k9s/lazygit,
+So that the permanent chrome (top bar/tabs/footer) is always visible without scroll artifacts.
+
+**Acceptance Criteria:**
+
+**Given** the TUI launches in a TTY
+**When** it starts rendering
+**Then** it enters the terminal's alternate-screen buffer and the app shell fills exactly the terminal's current rows/columns
+
+**Given** the terminal is resized while the TUI is running
+**When** the resize event fires
+**Then** the app shell re-renders to fill the new dimensions without visual artifacts
+
+**Given** the TUI quits (`q`, Ctrl+C, or a crash)
+**When** the process exits
+**Then** the alternate-screen buffer is restored to the original terminal content — no leftover TUI output remains in the shell
+
+### Story 2.9: EDTs Zone — Create, Switch, and Modify
+
+As a developer,
+I want to create, switch, and modify EDTs directly from the TUI's EDTs zone,
+So that I no longer need the CLI for day-to-day EDT management.
+
+**Acceptance Criteria:**
+
+**Given** no EDT exists
+**When** the EDTs zone opens
+**Then** an explicit prompt offers to create one — topic input plus member selection via `checkbox-list-item`, calling `core/edt/create.ts` in-process (AD-2 parity with the CLI)
+
+**Given** existing EDTs
+**When** the developer selects a different one
+**Then** `switchActiveEdt` runs in-process with Story 2.4's protected-switch behavior (uncommitted work preserved, locked-action block/prompt)
+
+**Given** an existing EDT
+**When** the developer edits its members, a member's branch, or its topic
+**Then** `modifyEdt` runs in-process under Story 2.5's constraints (protected-branch rejection, topic uniqueness)
+
+**Given** the EDTs zone's create/switch/modify flows
+**When** built
+**Then** they use Story 2.7's navigation contract (arrows/Home/End/Tab) — never the retired `j`/`k`/`g`/`G`
+
+**Given** Story 2.6's service/divergence list
+**When** the EDT selector is added
+**Then** it stays visible alongside it — exact composition (grouped-by-EDT vs. the existing flat list) resolved at implementation time, per the Sprint Change Proposal's note
 
 ## Epic 3: Group Update & Migrations
 
