@@ -28,6 +28,25 @@ export interface GitPort {
   // not leave orphaned branch refs behind). Shares createBranch's shared-branch gate.
   deleteBranch(repoPath: string, branchName: string): Promise<Result<void>>;
   currentBranch(repoPath: string): Promise<Result<string>>;
+  // Story 2.6 (FR-9): { ahead, behind } counts of the current branch relative to its
+  // configured upstream (git's own branch.<name>.remote/merge tracking config — never a
+  // manifest field, so this always reflects the repo's real, live git state). Never
+  // fabricates a numeric value when there is nothing to compute from — the caller
+  // distinguishes three cases by the Result shape alone:
+  //   - ok:true            -> upstream resolved; { ahead, behind } are real counts.
+  //   - err code
+  //     'no-upstream'      -> no upstream is configured for the current branch at all
+  //                           (core/edt/list.ts renders this as the explicit "no upstream"
+  //                           state, never a numeric value).
+  //     'unknown-offline'  -> an upstream *is* configured but its remote-tracking ref
+  //                           cannot currently be resolved (never fetched yet, remote
+  //                           branch deleted, or any other git error) — rendered as the
+  //                           explicit "unknown (offline)" state, never stale/zero values.
+  //     (anything else)    -> an unexpected git failure (e.g. not a git repository); callers
+  //                           fold this into the same "unknown (offline)" treatment per the
+  //                           spec's I/O matrix ("git error -> show unknown (offline) or
+  //                           detail in dim-annotation").
+  aheadBehind(repoPath: string): Promise<Result<{ ahead: number; behind: number }>>;
   // Moves the working tree onto branchName (must already exist locally — this method never
   // creates a branch). Never gates by itself: callers (switch.ts) decide when a target is
   // safe to check into, via assertAllowedBranch for a member's own branch, or unconditionally

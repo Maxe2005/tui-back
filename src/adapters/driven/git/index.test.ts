@@ -8,13 +8,14 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ok } from '../../../core/result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { loadManifest } from '../manifest/index.js';
 import {
+  aheadBehind,
   assertAllowedBranch,
   branchExistsLocally,
   checkoutBranch,
@@ -366,6 +367,119 @@ describe('currentBranch', () => {
   });
 });
 
+// Story 2.6 (FR-9) — real clone/origin pairs so upstream tracking (branch.<name>.remote/
+// merge, @{u}) is exercised for real, not faked. `git clone` auto-configures the cloned
+// repo's initial branch to track the matching origin branch, so a bare clone is already the
+// "in sync, upstream configured" baseline every other case builds from.
+async function makeOriginAndClone(): Promise<{ origin: string; clone: string }> {
+  const origin = await makeGitRepo();
+  const clone = await mkdtemp(join(tmpdir(), 'tui-back-git-ahead-behind-clone-'));
+  tmpDirs.push(clone);
+  const cloned = spawnSync('git', ['clone', origin, clone], { encoding: 'utf8' });
+  if (cloned.status !== 0) {
+    throw new Error(`git clone failed: ${cloned.stderr}`);
+  }
+  runGit(clone, ['config', 'user.email', 'ahead-behind@tui-back.test']);
+  runGit(clone, ['config', 'user.name', 'tui-back ahead-behind test']);
+  return { origin, clone };
+}
+
+function commit(dir: string, message: string): void {
+  const result = runGit(dir, ['commit', '--allow-empty', '-m', message]);
+  if (result.status !== 0) {
+    throw new Error(`git commit failed in ${dir}: ${result.stderr}`);
+  }
+}
+
+describe('aheadBehind', () => {
+  it('reports 0 ahead / 0 behind for a clone freshly in sync with its upstream', async () => {
+    const { clone } = await makeOriginAndClone();
+
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 0, behind: 0 } });
+  });
+
+  it('reports an ahead count for local commits not yet on the upstream', async () => {
+    const { clone } = await makeOriginAndClone();
+    commit(clone, 'local-only commit');
+
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 0 } });
+  });
+
+  it('reports a behind count once a fetch updates the remote-tracking ref (cached-values read, no live fetch of its own)', async () => {
+    const { origin, clone } = await makeOriginAndClone();
+    commit(origin, 'upstream-only commit');
+    expect(runGit(clone, ['fetch', 'origin']).status).toBe(0);
+
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 0, behind: 1 } });
+  });
+
+  it('reports both ahead and behind together when the two sides have each diverged', async () => {
+    const { origin, clone } = await makeOriginAndClone();
+    commit(origin, 'upstream-only commit');
+    expect(runGit(clone, ['fetch', 'origin']).status).toBe(0);
+    commit(clone, 'local-only commit');
+
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 1 } });
+  });
+
+  it('rejects computing ahead/behind without a configured upstream (no-upstream, never a fabricated value)', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await aheadBehind(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'no-upstream' } });
+  });
+
+  it('reports unknown-offline when an upstream is configured but its ref cannot currently be resolved', async () => {
+    const { clone } = await makeOriginAndClone();
+    // Simulate "configured but unresolvable" (never fetched after a remote branch was
+    // deleted, or genuinely offline before the first fetch): the tracking config
+    // (branch.development.remote/merge) stays in place, but the actual remote-tracking ref
+    // is gone.
+    expect(runGit(clone, ['branch', '-d', '-r', 'origin/development']).status).toBe(0);
+
+    const result = await aheadBehind(clone);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'unknown-offline' } });
+  });
+
+  it('reports a controlled git-ahead-behind-error when the current branch itself cannot be determined', async () => {
+    const dir = await makePlainDir();
+
+    const result = await aheadBehind(dir);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-ahead-behind-error' } });
+  });
+
+  // Review patch: `git config --get`'s documented exit-code taxonomy is 0 = found, 1 = key
+  // genuinely not set — every OTHER status (including a real spawn/git failure) must never
+  // be folded into "not configured" the way it silently was before this patch. A shim `git`
+  // binary that fails only the `config --get` subcommand (forwarding every other subcommand
+  // to the real binary) exercises the exact "config read itself failed" branch for real,
+  // distinct from both the "key genuinely unset" case above and the ENOENT/status===null
+  // case the "spawn failure diagnostics" block below covers for other methods.
+  it('surfaces a real git-config read failure as unknown-offline, never a silent no-upstream', async () => {
+    const { clone } = await makeOriginAndClone();
+    const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+    const shimDir = await mkdtemp(join(tmpdir(), 'tui-back-git-shim-'));
+    tmpDirs.push(shimDir);
+    const shimPath = join(shimDir, 'git');
+    await writeFile(
+      shimPath,
+      `#!/bin/sh\nif [ "$1" = "config" ] && [ "$2" = "--get" ]; then\n  exit 2\nfi\nexec "${realGit}" "$@"\n`,
+      { mode: 0o755 },
+    );
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${shimDir}${delimiter}${originalPath}`;
+    try {
+      const result = await aheadBehind(clone);
+      expect(result).toMatchObject({ ok: false, error: { code: 'unknown-offline' } });
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+});
+
 describe('spawn failure diagnostics (status === null)', () => {
   it('currentBranch surfaces the real spawn cause when git is missing, not a bare stderr', async () => {
     const repo = await makeGitRepo();
@@ -655,6 +769,15 @@ describe('createGitPort', () => {
     expect(branchExists(repo, 'feat/port')).toBe(true);
     expect(await port.deleteBranch(repo, 'feat/port')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/port')).toBe(false);
+  });
+
+  it('wires aheadBehind (story 2.6) behind the factory pattern', async () => {
+    const { clone } = await makeOriginAndClone();
+    const port = createGitPort(manifest);
+
+    expect(await port.aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 0, behind: 0 } });
+    commit(clone, 'local-only commit');
+    expect(await port.aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 0 } });
   });
 
   it('wires the story 2.4 methods (checkout, stash, branchExistsLocally) behind the factory pattern', async () => {

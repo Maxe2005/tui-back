@@ -50,8 +50,13 @@ describe('AppShell', () => {
       store.getState().setActiveZone(zone.id);
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
-      expect(output).toContain('list pane');
-      expect(output).toContain('detail pane');
+      // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
+      // (see edts-zone.test.tsx for its own coverage) — every other zone is still the
+      // placeholder these two literal strings come from.
+      if (zone.id !== 'edts') {
+        expect(output).toContain('list pane');
+        expect(output).toContain('detail pane');
+      }
     }
   });
 
@@ -137,6 +142,12 @@ const minimalState: AppState = {
         markLaunchBannerShown: () => {},
         runInProgress: false,
         setRunInProgress: () => {},
+        edtsBranches: null,
+        edtsBranchesStatus: 'idle',
+        edtsBranchesError: null,
+        edtsUnreachable: [],
+        edtsErrors: [],
+        loadEdtsBranches: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
