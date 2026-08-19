@@ -18,7 +18,7 @@ export const edtRegistryEntrySchema = z
     ulid: z.string().min(1),
     topic: z.string().min(1),
     createdAt: z.string().min(1),
-    status: z.string().min(1),
+    status: z.enum(['active', 'inactive', 'interrupted']),
     members: z.array(edtMemberSchema),
   })
   .strict();

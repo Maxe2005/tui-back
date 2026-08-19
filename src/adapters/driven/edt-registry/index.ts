@@ -6,7 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../../../core/ports/edt-registry.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 import { edtRegistrySchema } from './schema.js';
@@ -96,7 +96,7 @@ async function addEdtRegistryEntry(edtRegistryFile: string, entry: EdtRegistryEn
 
 // Story 2.4: read/find/replace/write, mirroring addEdtRegistryEntry's shape above. Used to
 // flip an EDT's status (active/inactive/interrupted) during a switch.
-async function setEdtStatus(edtRegistryFile: string, ulid: string, status: string): Promise<Result<void>> {
+async function setEdtStatus(edtRegistryFile: string, ulid: string, status: EdtStatus): Promise<Result<void>> {
   const ensured = await ensureEdtRegistryDir(edtRegistryFile);
   if (!ensured.ok) {
     return ensured;
