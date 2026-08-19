@@ -1126,6 +1126,54 @@ describe('tui-back edt switch (black-box)', () => {
     expect((await readStateJson(xdg)).activeEdt).toBe(data.ulid);
   });
 
+  it(
+    "rejects a target member whose branch is already registered as a different, still-registered EDT's own " +
+      'branch for the same repo (AD-8 cross-EDT gate, review)',
+    async () => {
+      const xdg = await makeTempDir();
+      const env = createEnv(xdg);
+      const repo = await makeCleanGitRepo();
+      await registerRepos([repo], env);
+
+      // EDT "a" claims repo on feat/shared. Branch creation only creates the ref, never
+      // checks the working tree out to it — the repo stays on `development` after this.
+      const createA = runCli(
+        ['edt', 'create', '--topic', 'a', '--member', repo, '--create-branches', '--branch-name', 'feat/shared'],
+        env,
+      );
+      expect(createA.status).toBe(0);
+      expect(runGit(repo, ['checkout', 'feat/shared']).status).toBe(0);
+
+      // EDT "b" is created without --create-branches: the repo's current branch is now
+      // feat/shared, and create.ts's branch-creation-disabled path has no edtId to
+      // re-verify against — so "b" registers the very same repo+branch as its own, too.
+      // This reproduces the ambiguous-ownership state the cross-EDT gate exists to catch at
+      // switch time, since `assertAllowedBranch` is only ever re-verified (with an edtId)
+      // inside switchActiveEdt, never at creation.
+      const createB = runCli(['edt', 'create', '--topic', 'b', '--member', repo], env);
+      expect(createB.status).toBe(0);
+      expect(JSON.parse(createB.stdout.trim()).data.results).toEqual([
+        expect.objectContaining({ outcome: 'existing-branch' }),
+      ]);
+
+      // main.ts's composition-root wiring (createGitPort(manifest, edtRegistry)) is what
+      // makes this rejection real through the actual CLI binary — a regression there would
+      // let this switch through undetected by any unit test, since those construct their own
+      // EdtRegistryPort/GitPort directly rather than going through main.ts.
+      const switched = runCli(['edt', 'switch', '--to', 'b'], env);
+
+      expect(switched.status).toBe(0);
+      const data = JSON.parse(switched.stdout.trim()).data;
+      expect(data.results).toEqual([
+        expect.objectContaining({
+          service: 'route-explorer',
+          outcome: 'failed',
+          detail: expect.objectContaining({ code: 'branch-owned-by-other-edt' }),
+        }),
+      ]);
+    },
+  );
+
   it('blocks by default on a held outgoing lock; --force proceeds and marks it interrupted; returning reports wasInterrupted (AC)', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
