@@ -168,6 +168,7 @@ describe('subcommand registry guards', () => {
       createBranch: async () => ok(undefined),
       deleteBranch: async () => ok(undefined),
       currentBranch: async () => ok('development'),
+      aheadBehind: async () => ok({ ahead: 0, behind: 0 }),
       checkout: async () => ok(undefined),
       hasUncommittedChanges: async () => ok(false),
       stashSave: async () => ok(undefined),
@@ -190,7 +191,7 @@ describe('subcommand registry guards', () => {
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edt without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -198,9 +199,22 @@ describe('subcommand registry guards', () => {
       'list-repos',
       'scan',
       'ping',
+      'edts',
       'edt',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
+  });
+
+  it('edts (story 2.6) rejects excess arguments and otherwise runs the divergence use-case', async () => {
+    const subcommands = buildTestSubcommands();
+    const edts = subcommands.find((subcommand) => subcommand.name === 'edts');
+    if (!edts) throw new Error('expected edts subcommand');
+
+    const excess = await edts.run(['extra']);
+    expect(excess).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const result = await edts.run([]);
+    expect(result).toMatchObject({ ok: true, data: { services: [], unreachable: [], errors: [] } });
   });
 
   it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {

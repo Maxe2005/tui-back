@@ -1,7 +1,59 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { ok, err } from '../../../../core/result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../core/ports/git.js';
+import type { Manifest, ManifestPort } from '../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../core/ports/registry.js';
+import type { StatePort } from '../../../../core/ports/state.js';
 import { ZONES } from '../zones/zones.js';
 import { DEFAULT_LIST_RATIO } from '../shared/components/list-detail-split.js';
-import { createAppStore } from './app-store.js';
+import { createAppStore, type AppStoreDeps } from './app-store.js';
+
+function manifestFor(repoPath: string): Manifest {
+  const name = repoPath.split('/').pop();
+  return {
+    service: `svc-${name}`,
+    container: `ctr-${name}`,
+    migrationCommand: 'npm run migration:run',
+    sharedBranch: 'development',
+    modules: {},
+  };
+}
+
+function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
+  const registry: RegistryPort = {
+    list: vi.fn(async () => ok(['/repo/a'])),
+    add: vi.fn(async () => ok(undefined)),
+    exists: vi.fn(async () => ok(true)),
+    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+    reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+  };
+  const manifest: ManifestPort = { load: vi.fn(async (path: string) => ok(manifestFor(path))) };
+  const git: GitPort = {
+    assertAllowedBranch: vi.fn(async () => ok(undefined)),
+    createBranch: vi.fn(async () => ok(undefined)),
+    deleteBranch: vi.fn(async () => ok(undefined)),
+    currentBranch: vi.fn(async () => ok('feat/a')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 2, behind: 0 })),
+    checkout: vi.fn(async () => ok(undefined)),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    stashSave: vi.fn(async () => ok(undefined)),
+    restoreStash: vi.fn(async () => ok(undefined)),
+    branchExistsLocally: vi.fn(async () => ok(true)),
+    fetch: vi.fn(async () => ok(undefined)),
+  };
+  const edtRegistry: EdtRegistryPort = {
+    add: vi.fn(async () => ok(undefined)),
+    list: vi.fn(async () => ok([] as EdtRegistryEntry[])),
+    setStatus: vi.fn(async () => ok(undefined)),
+    update: vi.fn(async () => ok(undefined)),
+  };
+  const state: StatePort = {
+    readActiveEdt: vi.fn(async () => ok(null)),
+    writeActiveEdt: vi.fn(async () => ok(undefined)),
+  };
+  return { registry, manifest, git, edtRegistry, state, ...overrides };
+}
 
 describe('app store', () => {
   it('scaffolds placeholder cross-zone state: dashboard active, empty events, 2:3 splitter ratios, no active EDT (AD-10)', () => {
@@ -84,6 +136,112 @@ describe('app store', () => {
     expect(store.getState().launchBannerShown).toBe(true);
     store.getState().markLaunchBannerShown();
     expect(store.getState().launchBannerShown).toBe(true);
+  });
+
+  describe('loadEdtsBranches (story 2.6, FR-9)', () => {
+    it('starts idle with no data before the first load', () => {
+      const store = createAppStore(fakeDeps());
+      expect(store.getState().edtsBranches).toBeNull();
+      expect(store.getState().edtsBranchesStatus).toBe('idle');
+      expect(store.getState().edtsBranchesError).toBeNull();
+    });
+
+    it('flips to loading synchronously, then populates edtsBranches from the core use-case and returns to idle', async () => {
+      const store = createAppStore(fakeDeps());
+
+      const pending = store.getState().loadEdtsBranches();
+      expect(store.getState().edtsBranchesStatus).toBe('loading');
+
+      await pending;
+
+      expect(store.getState().edtsBranchesStatus).toBe('idle');
+      expect(store.getState().edtsBranchesError).toBeNull();
+      expect(store.getState().edtsBranches).toEqual([
+        { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'feat/a', ahead: 2, behind: 0, status: 'current' },
+      ]);
+    });
+
+    it('sets an explicit error state (never a stale value) when the underlying use-case fails', async () => {
+      const registry: RegistryPort = {
+        list: vi.fn(async () => err('registry-invalid-yaml', 'bad yaml')),
+        add: vi.fn(async () => ok(undefined)),
+        exists: vi.fn(async () => ok(true)),
+        scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+        reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+      };
+      const store = createAppStore(fakeDeps({ registry }));
+
+      await store.getState().loadEdtsBranches();
+
+      expect(store.getState().edtsBranchesStatus).toBe('error');
+      expect(store.getState().edtsBranchesError).toBe('bad yaml');
+      expect(store.getState().edtsBranches).toBeNull();
+    });
+
+    it('degrades to an explicit error, never a throw, when the store was created with no ports wired', async () => {
+      const store = createAppStore();
+
+      await store.getState().loadEdtsBranches();
+
+      expect(store.getState().edtsBranchesStatus).toBe('error');
+      expect(store.getState().edtsBranchesError).toBeTruthy();
+      expect(store.getState().edtsBranches).toBeNull();
+    });
+
+    it('populates edtsUnreachable/edtsErrors from the core use-case alongside edtsBranches (review patch)', async () => {
+      const registry: RegistryPort = {
+        list: vi.fn(async () => ok(['/repo/a', '/repo/gone', '/repo/bad'])),
+        add: vi.fn(async () => ok(undefined)),
+        exists: vi.fn(async (path: string) => ok(path !== '/repo/gone')),
+        scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+        reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+      };
+      const manifest: ManifestPort = {
+        load: vi.fn(async (path: string) =>
+          path === '/repo/bad' ? err('manifest-validation-failed', 'Invalid .tui-back.yaml') : ok(manifestFor(path)),
+        ),
+      };
+      const store = createAppStore(fakeDeps({ registry, manifest }));
+
+      await store.getState().loadEdtsBranches();
+
+      expect(store.getState().edtsBranchesStatus).toBe('idle');
+      expect(store.getState().edtsUnreachable).toEqual(['/repo/gone']);
+      expect(store.getState().edtsErrors).toEqual([
+        { path: '/repo/bad', code: 'manifest-validation-failed', message: 'Invalid .tui-back.yaml' },
+      ]);
+    });
+
+    it('starts with empty edtsUnreachable/edtsErrors before the first load', () => {
+      const store = createAppStore(fakeDeps());
+      expect(store.getState().edtsUnreachable).toEqual([]);
+      expect(store.getState().edtsErrors).toEqual([]);
+    });
+
+    it('never starts a second concurrent fetch while one is already in flight', async () => {
+      let resolveList: (() => void) | undefined;
+      const registry: RegistryPort = {
+        list: vi.fn(
+          () =>
+            new Promise<ReturnType<typeof ok<string[]>>>((resolveFn) => {
+              resolveList = () => resolveFn(ok(['/repo/a']));
+            }),
+        ),
+        add: vi.fn(async () => ok(undefined)),
+        exists: vi.fn(async () => ok(true)),
+        scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+        reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+      };
+      const store = createAppStore(fakeDeps({ registry }));
+
+      const first = store.getState().loadEdtsBranches();
+      const second = store.getState().loadEdtsBranches();
+      expect(registry.list).toHaveBeenCalledTimes(1);
+
+      resolveList?.();
+      await Promise.all([first, second]);
+      expect(store.getState().edtsBranchesStatus).toBe('idle');
+    });
   });
 });
 

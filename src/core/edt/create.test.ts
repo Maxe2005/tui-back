@@ -94,6 +94,7 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     createBranch: vi.fn(async () => ok(undefined)),
     deleteBranch: vi.fn(async () => ok(undefined)),
     currentBranch: vi.fn(async () => ok('development')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
     checkout: vi.fn(async () => ok(undefined)),
     hasUncommittedChanges: vi.fn(async () => ok(false)),
     stashSave: vi.fn(async () => ok(undefined)),

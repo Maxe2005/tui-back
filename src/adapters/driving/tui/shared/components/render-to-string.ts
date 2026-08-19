@@ -23,6 +23,12 @@ export async function renderToString(node: ReactNode): Promise<string> {
       callback();
     },
   });
+  // Without an explicit columns/rows, Ink's getWindowSize() falls through to a real
+  // terminal-size probe of the test process (ink/build/utils.js) whenever this Writable
+  // doesn't report both — making wrap-sensitive assertions non-deterministic across
+  // environments (interactive shell vs. CI, narrow vs. wide). Fixing both pins every test's
+  // layout width regardless of where it runs.
+  Object.assign(stdout, { columns: 120, rows: 40 });
   const instance = render(node, {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stdin: createFakeTtyStdin(),

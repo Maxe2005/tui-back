@@ -38,6 +38,7 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     createBranch: (repoPath, branchName, baseBranch) => createBranch(manifest, repoPath, branchName, baseBranch),
     deleteBranch: (repoPath, branchName) => deleteBranch(manifest, repoPath, branchName),
     currentBranch: (repoPath) => currentBranch(repoPath),
+    aheadBehind: (repoPath) => aheadBehind(repoPath),
     checkout: (repoPath, branchName) => checkoutBranch(repoPath, branchName),
     hasUncommittedChanges: (repoPath) => hasUncommittedChanges(repoPath),
     stashSave: (repoPath, message) => stashSave(repoPath, message),
@@ -177,6 +178,112 @@ export async function currentBranch(repoPath: string): Promise<Result<string>> {
     return err('git-current-branch-error', `Cannot determine a named branch in ${repoPath}: HEAD is detached or unborn`);
   }
   return ok(branch);
+}
+
+// Story 2.6 (FR-9): ahead/behind counts of the current branch relative to its configured
+// upstream. Deliberately never fetches (the "cached values, not a live fetch" half of the
+// Ask-First resolved in the spec's Design Notes: refresh happens on-demand at the call
+// site's own cadence — zone render / explicit refresh — not by this adapter reaching the
+// network on every read) — so this is always a fast, local-only read.
+//
+// Three-step read, each step distinguishing a real failure mode (never silently folded into
+// a fabricated 0/0):
+//   1. currentBranch (existing method) — any failure here (detached HEAD, not a git repo,
+//      ...) is a git error, not an upstream question.
+//   2. Is an upstream *configured* at all for this branch? `git config --get
+//      branch.<branch>.remote`/`.merge` are the two config keys `git branch
+//      --set-upstream-to`/`git push -u` set — checking config directly (rather than trying
+//      to resolve `@{u}` first) is what lets step 3 distinguish "no upstream" from
+//      "upstream configured but its ref can't be resolved right now" below.
+//   3. Resolve the actual upstream ref (`@{u}`) and count commits each side is unique on via
+//      `git rev-list --left-right --count upstream...branch` (prints "<behind>\t<ahead>" —
+//      the standard idiom; NOT `git log --count`, which is not a real git-log option and
+//      silently no-ops instead of counting).
+export async function aheadBehind(repoPath: string): Promise<Result<{ ahead: number; behind: number }>> {
+  const branchResult = await currentBranch(repoPath);
+  if (!branchResult.ok) {
+    return err('git-ahead-behind-error', `Cannot determine current branch in ${repoPath}: ${branchResult.error.message}`);
+  }
+  const branch = branchResult.data;
+
+  // Review patch: `git config --get`'s documented exit-code taxonomy is 0 = found, 1 = key
+  // genuinely not set — anything else (including status === null, e.g. the git binary
+  // itself missing) is a real spawn/git failure, not evidence of "no upstream configured".
+  // Treating every non-zero status as "not configured" (the pre-patch behavior) silently
+  // reported a real environment error as `no-upstream`.
+  const remoteConfig = readBranchConfig(repoPath, branch, 'remote');
+  if (remoteConfig.kind === 'error') {
+    return err(
+      'unknown-offline',
+      `Cannot read upstream remote config for branch "${branch}" in ${repoPath}: ${remoteConfig.detail}`,
+    );
+  }
+  const mergeConfig = readBranchConfig(repoPath, branch, 'merge');
+  if (mergeConfig.kind === 'error') {
+    return err(
+      'unknown-offline',
+      `Cannot read upstream merge config for branch "${branch}" in ${repoPath}: ${mergeConfig.detail}`,
+    );
+  }
+  const hasUpstreamConfigured =
+    remoteConfig.kind === 'set' && remoteConfig.value !== '' && mergeConfig.kind === 'set' && mergeConfig.value !== '';
+
+  if (!hasUpstreamConfigured) {
+    return err('no-upstream', `No upstream configured for branch "${branch}" in ${repoPath}`);
+  }
+
+  const upstreamRef = spawnSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (upstreamRef.status !== 0) {
+    // Configured (step 2 passed) but the remote-tracking ref itself can't be resolved right
+    // now — never fetched yet, or the remote branch was deleted. Surfaced as "unknown
+    // (offline)" per the spec, never as a stale/zero value.
+    return err(
+      'unknown-offline',
+      `Upstream is configured but its ref cannot be resolved for branch "${branch}" in ${repoPath}: ${spawnFailureDetail(upstreamRef)}`,
+    );
+  }
+  const upstream = String(upstreamRef.stdout).trim();
+
+  const counted = spawnSync('git', ['rev-list', '--left-right', '--count', `${upstream}...${branch}`], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (counted.status !== 0) {
+    return err('unknown-offline', `Cannot count divergence for branch "${branch}" in ${repoPath}: ${spawnFailureDetail(counted)}`);
+  }
+  const [behindRaw, aheadRaw] = String(counted.stdout).trim().split(/\s+/);
+  const behind = Number(behindRaw);
+  const ahead = Number(aheadRaw);
+  if (!Number.isFinite(behind) || !Number.isFinite(ahead)) {
+    return err('unknown-offline', `Unexpected git rev-list output for branch "${branch}" in ${repoPath}: "${counted.stdout}"`);
+  }
+
+  return ok({ ahead, behind });
+}
+
+// `git config --get branch.<branch>.<key>`'s exit-code taxonomy: 0 = found ('set'), 1 = the
+// key genuinely isn't set ('unset' — the normal, expected shape of "no upstream configured"
+// for one of the two tracking keys), anything else (including status === null, e.g. the git
+// binary itself missing) is a real spawn/git failure ('error') that must never be folded
+// into "not configured".
+interface BranchConfigOutcome {
+  kind: 'set' | 'unset' | 'error';
+  value: string;
+  detail: string;
+}
+
+function readBranchConfig(repoPath: string, branch: string, key: 'remote' | 'merge'): BranchConfigOutcome {
+  const result = spawnSync('git', ['config', '--get', `branch.${branch}.${key}`], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status === 0) {
+    return { kind: 'set', value: String(result.stdout).trim(), detail: '' };
+  }
+  if (result.status === 1) {
+    return { kind: 'unset', value: '', detail: '' };
+  }
+  return { kind: 'error', value: '', detail: spawnFailureDetail(result) };
 }
 
 function isSharedBranch(branchName: string, manifestSharedBranch: string): boolean {

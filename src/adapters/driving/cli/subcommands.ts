@@ -10,6 +10,7 @@ import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
 import { switchActiveEdt } from '../../../core/edt/switch.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
+import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
@@ -86,6 +87,24 @@ export function buildSubcommands(deps: {
       name: 'ping',
       usage: 'tui-back ping',
       run: async (args) => (args.length === 0 ? ping() : err('invalid-argument', 'Usage: tui-back ping')),
+    },
+    {
+      name: 'edts',
+      usage: 'tui-back edts',
+      // Story 2.6 (FR-9): every managed service's current branch + ahead/behind divergence
+      // from its own configured upstream, uniformly for EDT members and non-members alike —
+      // the same core/edt/list.ts use-case the TUI's EDTs zone will consume in-process
+      // (AD-2).
+      run: async (args) =>
+        args.length === 0
+          ? listEdtBranchesDivergence({
+              registry: deps.registry,
+              manifest: deps.manifest,
+              git: deps.git,
+              edtRegistry: deps.edtRegistry,
+              state: deps.state,
+            })
+          : err('invalid-argument', 'Usage: tui-back edts'),
     },
     {
       name: 'edt',

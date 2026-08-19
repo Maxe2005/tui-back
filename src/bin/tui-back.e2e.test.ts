@@ -479,14 +479,116 @@ describe('tui-back scan (black-box)', () => {
 });
 
 describe('tui-back --help (black-box)', () => {
-  it('lists every registered command, including edt, exit 0', () => {
+  it('lists every registered command, including edts and edt, exit 0', () => {
     const { status, stdout } = runCli(['--help']);
 
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edt']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt']);
+  });
+});
+
+// commits the manifest `makeGitRepo()` leaves untracked — needed whenever a repo is either
+// cloned (an untracked file in the source working tree is never copied by `git clone`) or
+// put through `edt switch` (which would otherwise stash an untracked .tui-back.yaml away as
+// "uncommitted work", deleting it from the working tree and breaking every later manifest
+// read for that repo).
+function commitManifest(dir: string): void {
+  expect(runGit(dir, ['add', '.tui-back.yaml']).status).toBe(0);
+  expect(runGit(dir, ['commit', '-m', 'add manifest']).status).toBe(0);
+}
+
+describe('tui-back edts (black-box, story 2.6)', () => {
+  it('shows branch + ahead/behind for a service with a configured upstream (AC1)', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    const origin = await makeGitRepo();
+    commitManifest(origin);
+    const repo = await mkdtemp(join(tmpdir(), 'tui-back-e2e-clone-'));
+    tmpDirs.push(repo);
+    expect(spawnSync('git', ['clone', origin, repo], { encoding: 'utf8' }).status).toBe(0);
+    runGit(repo, ['config', 'user.email', 'e2e@tui-back.test']);
+    runGit(repo, ['config', 'user.name', 'tui-back e2e']);
+    runGit(repo, ['commit', '--allow-empty', '-m', 'local-only commit']);
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['edts'], env);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        services: [
+          { service: 'route-explorer', path: repo, isMember: false, branch: 'development', ahead: 1, behind: 0, status: 'current' },
+        ],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
+  it('shows an explicit "no upstream" state for a repo with no remote configured (AC2)', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    const repo = await makeGitRepo();
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['edts'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.services).toEqual([
+      { service: 'route-explorer', path: repo, isMember: false, branch: 'development', ahead: null, behind: null, status: 'no-upstream' },
+    ]);
+  });
+
+  it('with no registry.yaml returns an empty listing and exits 0', async () => {
+    const xdg = await makeTempDir();
+
+    const { status, stdout } = runCli(['edts'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { services: [], unreachable: [], errors: [] } });
+  });
+
+  it('marks the active EDT\'s member service isMember: true, uniformly alongside a non-member (AC4)', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    const member = await makeGitRepo();
+    commitManifest(member);
+    // The default flow (no --create-branches) reuses the member's *current* branch as its
+    // own EDT branch — which must not be the shared `development` branch (story 2.3's gate),
+    // so check it out onto an ordinary feature branch first.
+    expect(runGit(member, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    const nonMember = await makeGitRepo();
+    commitManifest(nonMember);
+    expect(runCli(['register', member], env).status).toBe(0);
+    expect(runCli(['register', nonMember], env).status).toBe(0);
+
+    const created = runCli(['edt', 'create', '--topic', 'demo', '--member', member], env);
+    expect(created.status).toBe(0);
+    expect(runCli(['edt', 'switch', '--to', 'demo'], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['edts'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    const byPath = new Map((parsed.data.services as Array<{ path: string; isMember: boolean }>).map((s) => [s.path, s.isMember]));
+    expect(byPath.get(member)).toBe(true);
+    expect(byPath.get(nonMember)).toBe(false);
+  });
+
+  it('rejects excess arguments with invalid-argument', async () => {
+    const xdg = await makeTempDir();
+
+    const { status, stdout } = runCli(['edts', 'extra'], { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg });
+
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
   });
 });
 

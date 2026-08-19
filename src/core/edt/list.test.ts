@@ -1,0 +1,334 @@
+// core/edt/list: unit tests against fake ports (AD-13 core layer) — every I/O-matrix row of
+// story 2.6 (FR-9): upstream configured, no upstream, offline/unresolvable, member vs.
+// non-member uniformity (including a non-member kept on `development`), and the
+// reachability/manifest-error passthrough mirroring core/scripts/list-repos.ts. Real
+// git/fs behavior lives in adapters/driven/git/index.test.ts and the black-box e2e.
+import { describe, expect, it, vi } from 'vitest';
+import { ok, err } from '../result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
+import type { GitPort } from '../ports/git.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
+import type { RegistryPort } from '../ports/registry.js';
+import type { StatePort } from '../ports/state.js';
+import { listEdtBranchesDivergence } from './list.js';
+
+function manifestFor(repoPath: string): Manifest {
+  const name = repoPath.split('/').pop();
+  return {
+    service: `svc-${name}`,
+    container: `ctr-${name}`,
+    migrationCommand: 'npm run migration:run',
+    sharedBranch: 'development',
+    modules: {},
+  };
+}
+
+function fakeManifest(overrides: Partial<ManifestPort> = {}): ManifestPort {
+  return {
+    load: vi.fn(async (path: string) => ok(manifestFor(path))),
+    ...overrides,
+  };
+}
+
+function fakeRegistry(paths: string[], overrides: Partial<RegistryPort> = {}): RegistryPort {
+  return {
+    list: vi.fn(async () => ok(paths)),
+    add: vi.fn(async () => ok(undefined)),
+    exists: vi.fn(async () => ok(true)),
+    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+    reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    ...overrides,
+  };
+}
+
+function fakeEdtRegistry(entries: EdtRegistryEntry[] = [], overrides: Partial<EdtRegistryPort> = {}): EdtRegistryPort {
+  return {
+    add: vi.fn(async () => ok(undefined)),
+    list: vi.fn(async () => ok(entries)),
+    setStatus: vi.fn(async () => ok(undefined)),
+    update: vi.fn(async () => ok(undefined)),
+    ...overrides,
+  };
+}
+
+function fakeState(overrides: Partial<StatePort> = {}): StatePort {
+  return {
+    readActiveEdt: vi.fn(async () => ok(null)),
+    writeActiveEdt: vi.fn(async () => ok(undefined)),
+    ...overrides,
+  };
+}
+
+function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
+  return {
+    assertAllowedBranch: vi.fn(async () => ok(undefined)),
+    createBranch: vi.fn(async () => ok(undefined)),
+    deleteBranch: vi.fn(async () => ok(undefined)),
+    currentBranch: vi.fn(async () => ok('development')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+    checkout: vi.fn(async () => ok(undefined)),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    stashSave: vi.fn(async () => ok(undefined)),
+    restoreStash: vi.fn(async () => ok(undefined)),
+    branchExistsLocally: vi.fn(async () => ok(true)),
+    fetch: vi.fn(async () => ok(undefined)),
+    ...overrides,
+  };
+}
+
+function edtEntry(ulid: string, topic: string, members: EdtRegistryEntry['members']): EdtRegistryEntry {
+  return { ulid, topic, createdAt: '2026-08-19T00:00:00.000Z', status: 'active', members };
+}
+
+describe('listEdtBranchesDivergence', () => {
+  it('shows branch + both ahead/behind counts for a service with a configured upstream (AC1)', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('feat/a')),
+      aheadBehind: vi.fn(async () => ok({ ahead: 2, behind: 1 })),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git,
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        services: [
+          { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'feat/a', ahead: 2, behind: 1, status: 'current' },
+        ],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
+  it('shows an explicit "no upstream" state, not a numeric value, when none is configured (AC2)', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('feat/a')),
+      aheadBehind: vi.fn(async () => err('no-upstream', 'No upstream configured for branch "feat/a" in /repo/a')),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git,
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.services).toEqual([
+      { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'feat/a', ahead: null, behind: null, status: 'no-upstream' },
+    ]);
+  });
+
+  it('shows an explicit "unknown (offline)" state, not a stale/zero value, when the upstream ref is unresolvable (AC3)', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('feat/a')),
+      aheadBehind: vi.fn(async () => err('unknown-offline', 'Upstream is configured but its ref cannot be resolved')),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git,
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.services).toEqual([
+      {
+        service: 'svc-a',
+        path: '/repo/a',
+        isMember: false,
+        branch: 'feat/a',
+        ahead: null,
+        behind: null,
+        status: 'unknown-offline',
+        detail: { code: 'unknown-offline', message: 'Upstream is configured but its ref cannot be resolved' },
+      },
+    ]);
+  });
+
+  it('folds any other git error (e.g. currentBranch failure) into the same "unknown (offline)" treatment', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => err('git-current-branch-error', 'HEAD is detached')),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git,
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.services).toEqual([
+      {
+        service: 'svc-a',
+        path: '/repo/a',
+        isMember: false,
+        branch: null,
+        ahead: null,
+        behind: null,
+        status: 'unknown-offline',
+        detail: { code: 'git-current-branch-error', message: 'HEAD is detached' },
+      },
+    ]);
+  });
+
+  it('shows branch/divergence uniformly for an EDT member and a non-member alike (AC4)', async () => {
+    const registry = fakeRegistry(['/repo/member', '/repo/non-member']);
+    const edtRegistry = fakeEdtRegistry([edtEntry('edt-1', 'topic-1', [{ service: 'svc-member', repoPath: '/repo/member', branch: 'feat/member' }])]);
+    const git = fakeGit({
+      currentBranch: vi.fn(async (path: string) => ok(path === '/repo/member' ? 'feat/member' : 'development')),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git,
+      edtRegistry,
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok('edt-1')) }),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    const byPath = new Map(result.data.services.map((s) => [s.path, s]));
+    expect(byPath.get('/repo/member')).toMatchObject({ isMember: true, branch: 'feat/member' });
+    expect(byPath.get('/repo/non-member')).toMatchObject({ isMember: false, branch: 'development' });
+  });
+
+  it('shows a non-member service correctly kept on development the same as any other service (story 2.4 interplay)', async () => {
+    const registry = fakeRegistry(['/repo/kept-on-development']);
+    const edtRegistry = fakeEdtRegistry([edtEntry('edt-1', 'topic-1', [{ service: 'svc-other', repoPath: '/repo/other-member', branch: 'feat/other' }])]);
+    const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')) });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git,
+      edtRegistry,
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok('edt-1')) }),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.services).toEqual([
+      { service: 'svc-kept-on-development', path: '/repo/kept-on-development', isMember: false, branch: 'development', ahead: 0, behind: 0, status: 'current' },
+    ]);
+  });
+
+  it('leaves every service isMember: false when no EDT is active', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok(null)) }),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.services[0].isMember).toBe(false);
+  });
+
+  it('silently skips a genuinely unmanaged repo, same as list-repos', async () => {
+    const registry = fakeRegistry(['/repo/unmanaged']);
+    const manifest = fakeManifest({ load: vi.fn(async () => err('manifest-not-found', 'no manifest')) });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest,
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result).toEqual({ ok: true, data: { services: [], unreachable: [], errors: [] } });
+  });
+
+  it('reports an unreachable registered path rather than crashing the listing', async () => {
+    const registry = fakeRegistry(['/repo/gone'], { exists: vi.fn(async () => ok(false)) });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result).toEqual({ ok: true, data: { services: [], unreachable: ['/repo/gone'], errors: [] } });
+  });
+
+  it('surfaces a failing manifest as an errors entry, not a crash and not a silent skip', async () => {
+    const registry = fakeRegistry(['/repo/bad']);
+    const manifest = fakeManifest({ load: vi.fn(async () => err('manifest-validation-failed', 'Invalid .tui-back.yaml')) });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest,
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: { services: [], unreachable: [], errors: [{ path: '/repo/bad', code: 'manifest-validation-failed', message: 'Invalid .tui-back.yaml' }] },
+    });
+  });
+
+  it('propagates a registry.list() failure instead of masking it', async () => {
+    const registry = fakeRegistry([], { list: vi.fn(async () => err('registry-invalid-yaml', 'bad yaml')) });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'registry-invalid-yaml' } });
+  });
+
+  it('propagates a state.readActiveEdt() failure', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState({ readActiveEdt: vi.fn(async () => err('state-read-error', 'cannot read state.json')) }),
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'state-read-error' } });
+  });
+
+  it('propagates an edtRegistry.list() failure once an active EDT is set', async () => {
+    const registry = fakeRegistry(['/repo/a']);
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry([], { list: vi.fn(async () => err('edt-registry-invalid-format', 'bad shape')) }),
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok('edt-1')) }),
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-invalid-format' } });
+  });
+});
