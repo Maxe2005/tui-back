@@ -196,6 +196,17 @@ describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
     expect(result).toEqual({ ok: true, data: undefined });
   });
 
+  it('detects a conflict even when the registry\'s stored repoPath differs in formatting (trailing slash, review)', async () => {
+    const repo = await makeGitRepo();
+    // Same repo, unresolved trailing-slash form — as if it were stored at EDT-creation time
+    // in a shape that doesn't byte-match the caller's already-resolve()'d repoPath.
+    const edtRegistry = fakeEdtRegistry([edtEntry('edt-other', `${repo}/`, 'feat/shared-name')]);
+
+    const result = await assertAllowedBranch(manifest, repo, 'feat/shared-name', 'edt-mine', edtRegistry);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-owned-by-other-edt' } });
+  });
+
   it('skips the cross-EDT check entirely when edtId/edtRegistry are omitted (pre-2.4 behavior)', async () => {
     const repo = await makeGitRepo();
 

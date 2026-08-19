@@ -23,6 +23,7 @@
 // flag. `git checkout <branch> --` uses the (different) trailing-`--` form git-checkout(1)
 // documents to force <branch> to be read as a revision, never a pathspec.
 import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -77,10 +78,16 @@ export async function assertAllowedBranch(
     if (!listed.ok) {
       return listed;
     }
+    // Review patch (story 2.4): normalize both sides before comparing — repoPath is whatever
+    // shape the registry stored a member's path in, which isn't guaranteed to match the
+    // caller's resolve()'d repoPath byte-for-byte (trailing slash, relative segments, ...).
+    // Without this, the cross-EDT gate this story adds can silently fail to detect a real
+    // conflict.
+    const target = resolve(repoPath);
     const ownedByOther = listed.data.some(
       (candidate) =>
         candidate.ulid !== edtId &&
-        candidate.members.some((member) => member.repoPath === repoPath && member.branch === branchName),
+        candidate.members.some((member) => resolve(member.repoPath) === target && member.branch === branchName),
     );
     if (ownedByOther) {
       return err(
