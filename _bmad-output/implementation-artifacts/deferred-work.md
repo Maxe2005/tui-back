@@ -161,3 +161,21 @@ _Iteration 2 (branch vs epic-1, 2026-08-13):_
 ## Deferred from: code review of story-1-13-canonical-keybinding-contract-zone-navigation (2026-08-17)
 - **F6**: Story 1-10 status transition — status changed from review→done without proper review loopback, pre-existing workflow issue (not a code defect).
 Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews.
+
+## Deferred from: step-03 matrix audit of 2-6-branch-and-divergence-visibility (2026-08-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/2-6-branch-and-divergence-visibility.md`
+  summary: Branch/divergence display in the Dashboard, Update, Logs, Routes, and shared-types zones (the Intent's "related displays") is unbuilt — only the EDTs zone got real rendering this story.
+  evidence: every one of those five zones (`src/adapters/driving/tui/zones/{dashboard,update,logs,routes,shared-types}/*.tsx`) is still a bare `ZonePlaceholder` with no per-service listing at all to attach branch/divergence data to — there is nothing to extend yet. Track: wire each zone's branch/divergence column as part of whichever future story first gives that zone a real per-service listing (e.g. the Update zone's real content is Epic 3's group-update work).
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/2-6-branch-and-divergence-visibility.md`
+  summary: The I/O matrix's "Divergence computed mid-run" row (shown in the update zone's per-service outcome summary during a group update) is unimplemented and untested.
+  evidence: no group-update use-case or Update-zone outcome summary exists yet (that's Epic 3, story 3.1). Track: cover this matrix row once the group-update use-case and its Update-zone rendering exist — reuse `listEdtBranchesDivergence`/`GitPort.aheadBehind` rather than re-deriving divergence.
+
+## Deferred from: code review of 2-6-branch-and-divergence-visibility (2026-08-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/2-6-branch-and-divergence-visibility.md`
+  summary: `listEdtBranchesDivergence` has no test covering `registry.exists()` returning `ok: false` (a filesystem error), even though that path is implemented (pushed into the `errors` array).
+  evidence: `src/core/edt/list.test.ts` covers `exists` returning `ok(false)` (unreachable) and a failing `manifest.load`, but no test overrides `exists` to return `err(...)`; `src/core/edt/list.ts`'s `if (!exists.ok) { errors.push(...); continue; }` branch is reachable but unexercised.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/2-6-branch-and-divergence-visibility.md`
+  summary: `listEdtBranchesDivergence` reads every registered repo's branch/divergence strictly sequentially (a `for...await` loop with no concurrency), and each read is itself 4-5 blocking `spawnSync` git calls (`currentBranch` is called twice per repo — once directly, once again inside `aheadBehind`'s own implementation).
+  evidence: `src/core/edt/list.ts`'s main loop and `readServiceDivergence`; `src/adapters/driven/git/index.ts`'s `aheadBehind` calls `currentBranch(repoPath)` itself rather than accepting an already-resolved branch. All git reads go through `spawnSync`, which blocks Node's event loop synchronously despite the surrounding functions being `async` — for a large registry this could make the EDTs zone's "Loading services…" state slow to appear and the listing itself slow to complete. Pre-existing `spawnSync`-everywhere convention in the git adapter, not introduced by this story; worth a concurrency pass (e.g. `Promise.all` with a cap, or switching to async `spawn`) once real-world repo counts make it a felt problem.
