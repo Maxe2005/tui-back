@@ -78,3 +78,61 @@ describe('edt-registry list()', () => {
     }
   });
 });
+
+// Story 2.4: setStatus is a read/find/replace/write, mirroring addEdtRegistryEntry's shape.
+describe('edt-registry setStatus()', () => {
+  it('updates only the matching entry, leaving others and their fields untouched', async () => {
+    const file = await makeRegistryFile();
+    const entryA = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'a',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
+    };
+    const entryB = {
+      ulid: '01JXXXXX2BBBBBBBBBBBBBBBBB',
+      topic: 'b',
+      createdAt: '2026-08-18T01:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entryA, entryB] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.setStatus(entryA.ulid, 'inactive');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({
+      ok: true,
+      data: [{ ...entryA, status: 'inactive' }, entryB],
+    });
+  });
+
+  it('fails with edt-not-found for an unregistered ulid, without writing anything', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.setStatus('01JNOTFOUND0000000000000', 'inactive');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    expect(await port.list()).toEqual({ ok: true, data: [entry] });
+  });
+
+  it('creates the registry directory when it does not exist yet, on an empty registry', async () => {
+    const file = await makeRegistryFile();
+    const port = createEdtRegistryPort(file);
+
+    const result = await port.setStatus('01JXXXXX1AAAAAAAAAAAAAAAAA', 'inactive');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+  });
+});

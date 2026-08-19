@@ -10,7 +10,7 @@ import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acquireLock, createLockPort, reclaim, releaseLock } from './index.js';
+import { acquireLock, createLockPort, peekLock, reclaim, releaseLock } from './index.js';
 import { lockPathFor, sanitizeResourceKey } from './helpers.js';
 
 const tmpDirs: string[] = [];
@@ -346,6 +346,109 @@ describe('createLockPort / acquireLock (mkdir advisory lock)', () => {
 
     const handle = await port.acquire('/abs/registry.yaml');
     expect(handle.ok).toBe(true);
+    if (handle.ok) {
+      await handle.data.release();
+    }
+  });
+});
+
+// Story 2.4: peek() is a non-blocking, stat-only read (no mkdir/retry/wait/reclaim) that the
+// EDT-switch use-case uses to check whether the outgoing EDT's `edt:<ulid>` lock is held.
+describe('peekLock (non-blocking, stat-only)', () => {
+  it('reports not-locked when no lock dir exists yet', async () => {
+    const lockDir = await makeLockDir();
+
+    const result = await peekLock(lockDir, 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA');
+
+    expect(result).toEqual({ ok: true, data: { locked: false } });
+  });
+
+  it('reports locked while a live holder owns the lock, without acquiring it itself', async () => {
+    const lockDir = await makeLockDir();
+    const key = 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA';
+    const held = await acquireLock(lockDir, key, process.pid, SHORT);
+    expect(held.ok).toBe(true);
+
+    const result = await peekLock(lockDir, key);
+
+    expect(result).toEqual({ ok: true, data: { locked: true } });
+    // peek must never mutate: a second acquire attempt is still contended by the same holder.
+    const stillHeld = await acquireLock(lockDir, key, process.pid + 1, SHORT);
+    expect(stillHeld).toMatchObject({ ok: false, error: { code: 'action-in-progress' } });
+
+    if (held.ok) {
+      await held.data.release();
+    }
+  });
+
+  it('reports not-locked once the holder releases', async () => {
+    const lockDir = await makeLockDir();
+    const key = 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA';
+    const held = await acquireLock(lockDir, key, process.pid, SHORT);
+    expect(held.ok).toBe(true);
+    if (held.ok) {
+      await held.data.release();
+    }
+
+    const result = await peekLock(lockDir, key);
+
+    expect(result).toEqual({ ok: true, data: { locked: false } });
+  });
+
+  it('reports not-locked for a stale holder (recorded pid no longer alive)', async () => {
+    const lockDir = await makeLockDir();
+    const key = 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA';
+    const lockPath = lockPathFor(lockDir, key);
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: 99999999, timestamp: Date.now() }), 'utf8');
+
+    const result = await peekLock(lockDir, key);
+
+    expect(result).toEqual({ ok: true, data: { locked: false } });
+  });
+
+  it('reports not-locked for an aged orphan lock dir (no/corrupt owner metadata)', async () => {
+    const lockDir = await makeLockDir();
+    const key = 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA';
+    const lockPath = lockPathFor(lockDir, key);
+    await mkdir(lockPath);
+    const old = new Date(Date.now() - 60_000);
+    await utimes(lockPath, old, old);
+
+    const result = await peekLock(lockDir, key);
+
+    expect(result).toEqual({ ok: true, data: { locked: false } });
+  });
+
+  it('reports locked for a young orphan lock dir (a winner still finalizing its owner write)', async () => {
+    const lockDir = await makeLockDir();
+    const key = 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA';
+    const lockPath = lockPathFor(lockDir, key);
+    await mkdir(lockPath);
+
+    const result = await peekLock(lockDir, key);
+
+    expect(result).toEqual({ ok: true, data: { locked: true } });
+  });
+
+  it('rejects an empty resource key with invalid-argument', async () => {
+    const lockDir = await makeLockDir();
+
+    const result = await peekLock(lockDir, '   ');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('createLockPort.peek delegates to peekLock', async () => {
+    const lockDir = await makeLockDir();
+    const port = createLockPort(lockDir, SHORT);
+    const key = 'edt:01JXXXXX1AAAAAAAAAAAAAAAAA';
+
+    expect(await port.peek(key)).toEqual({ ok: true, data: { locked: false } });
+
+    const handle = await port.acquire(key);
+    expect(handle.ok).toBe(true);
+    expect(await port.peek(key)).toEqual({ ok: true, data: { locked: true } });
     if (handle.ok) {
       await handle.data.release();
     }

@@ -5,12 +5,21 @@ import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
+import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
 
 function fakeLock(): LockPort {
   return {
     acquire: async (resourceKey) => ok({ release: async () => ok(undefined) }),
+    peek: async () => ok({ locked: false }),
+  };
+}
+
+function fakeState(): StatePort {
+  return {
+    readActiveEdt: async () => ok(null),
+    writeActiveEdt: async () => ok(undefined),
   };
 }
 
@@ -142,7 +151,7 @@ describe('subcommand registry guards', () => {
   });
 
   function fakeEdtRegistry(): EdtRegistryPort {
-    return { add: async () => ok(undefined), list: async () => ok([]) };
+    return { add: async () => ok(undefined), list: async () => ok([]), setStatus: async () => ok(undefined) };
   }
 
   function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
@@ -159,6 +168,12 @@ describe('subcommand registry guards', () => {
       createBranch: async () => ok(undefined),
       deleteBranch: async () => ok(undefined),
       currentBranch: async () => ok('development'),
+      checkout: async () => ok(undefined),
+      hasUncommittedChanges: async () => ok(false),
+      stashSave: async () => ok(undefined),
+      restoreStash: async () => ok(undefined),
+      branchExistsLocally: async () => ok(true),
+      fetch: async () => ok(undefined),
     };
 
     return buildSubcommands({
@@ -170,6 +185,7 @@ describe('subcommand registry guards', () => {
       edtRegistry: fakeEdtRegistry(),
       edtRegistryResourceKey: '/cfg/edts.yaml',
       git,
+      state: fakeState(),
       ...overrides,
     });
   }

@@ -15,15 +15,24 @@ export interface EdtMember {
   branch: string;
 }
 
+// Story 2.4 (review patch): a bare `string` status let a typo compile and persist silently,
+// including breaking switchActiveEdt's own exact-string comparisons (`status === 'interrupted'`).
+export type EdtStatus = 'active' | 'inactive' | 'interrupted';
+
 export interface EdtRegistryEntry {
   ulid: string;
   topic: string;
   createdAt: string;
-  status: string;
+  status: EdtStatus;
   members: EdtMember[];
 }
 
 export interface EdtRegistryPort {
   add(entry: EdtRegistryEntry): Promise<Result<void>>;
   list(): Promise<Result<EdtRegistryEntry[]>>;
+  // Story 2.4: updates one entry's status field in place (read/find/replace/write). Used by
+  // switchActiveEdt to flip the outgoing EDT to 'inactive' (or 'interrupted' under --force
+  // past a held lock) and the target EDT to 'active'. Fails with edt-not-found if ulid isn't
+  // registered.
+  setStatus(ulid: string, status: EdtStatus): Promise<Result<void>>;
 }

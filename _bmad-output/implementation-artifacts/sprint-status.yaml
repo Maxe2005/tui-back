@@ -68,7 +68,7 @@ development_status:
   2-1-create-an-edt: done
   2-2-create-dev-branches-at-edt-creation: done
   2-3-git-branch-scope-safety-gate-shared-branch-rejection: done
-  2-4-switch-the-active-edt-without-data-loss: backlog
+  2-4-switch-the-active-edt-without-data-loss: review
   2-5-modify-an-edt-after-creation: backlog
   2-6-branch-and-divergence-visibility: backlog
   epic-2-retrospective: optional
