@@ -72,7 +72,7 @@ development_status:
   2-5-modify-an-edt-after-creation: done
   2-6-branch-and-divergence-visibility: done
   2-7-canonical-navigation-contract: done
-  2-8-fullscreen-tui-rendering: review
+  2-8-fullscreen-tui-rendering: done
   2-9-edts-zone-create-switch-modify: backlog
   epic-2-retrospective: optional
 
