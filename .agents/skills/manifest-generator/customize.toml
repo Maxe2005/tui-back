@@ -1,0 +1,18 @@
+# Manifest Generator Skill Customization
+
+# workflow spec_template — template used when distilling spec-like input
+# (not used directly for manifest generation but included for consistency)
+workflow.spec_template = "assets/template.md"
+
+# workflow.activation_steps_prepend — run before main operation
+# (empty by default, can be configured per project)
+
+# workflow.activation_steps_append — run after main operation
+# (empty by default, can be configured per project)
+
+# workflow.on_complete — called after successful manifest generation
+# (empty by default)
+
+# definition_drift_check — whether to run the self-validation check after
+# generating the manifest. Set to false to skip the validation step.
+workflow.definition_drift_check = true
