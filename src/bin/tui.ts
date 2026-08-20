@@ -60,7 +60,10 @@ const onQuit = async () => {
 };
 
 try {
-  render(createElement(AppShell, { useStore: store, onQuit }), { exitOnCtrlC: true });
+  render(createElement(AppShell, { useStore: store, onQuit }), {
+    exitOnCtrlC: true,
+    alternateScreen: true,
+  });
 } catch (error) {
   if (lock) {
     await lock.release();

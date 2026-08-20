@@ -7,6 +7,13 @@
 // spawnSync's stdout is a pipe by default, so every case here exercises the non-TTY
 // JSON-line branch; the TTY/human-text branch is covered directly by envelope.test.ts.
 //
+// Story 2.8 (fullscreen TUI rendering): the interactive `tui-back-tui` binary itself is never
+// spawned by this suite (its own `process.stdin.isTTY` guard would just make it exit 1 under
+// spawnSync's piped stdin), so alt-screen enter/exit and live-resize behavior are NOT covered
+// here — there's no pty lib in this repo's stack to give a child process a real TTY. That
+// coverage is intentionally left to the manual verification steps in
+// spec-2-8-fullscreen-tui-rendering.md's `## Verification` section.
+//
 // Story 1.5's register/list-repos/scan cases all override XDG_CONFIG_HOME with a temp dir
 // so the child process never touches the real config dir (registry.yaml writes are scoped
 // to the fixture).

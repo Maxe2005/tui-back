@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-08-18
+last_updated: 2026-08-20
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -72,7 +72,7 @@ development_status:
   2-5-modify-an-edt-after-creation: done
   2-6-branch-and-divergence-visibility: done
   2-7-canonical-navigation-contract: done
-  2-8-fullscreen-tui-rendering: backlog
+  2-8-fullscreen-tui-rendering: review
   2-9-edts-zone-create-switch-modify: backlog
   epic-2-retrospective: optional
 
