@@ -33,6 +33,20 @@ describe('AppShell', () => {
     expect(output).toContain('[/] filter');
   });
 
+  it('still renders its full chrome (top bar, zone tabs, footer) once the root height is bound to the terminal rows (story 2.8)', async () => {
+    // render-to-string.ts pins the test harness's stdout to a fixed 40-row size, mirroring
+    // Ink's own useWindowSize() height binding on AppShell's root Box — this guards against
+    // that height binding clipping content off the bottom of a real, shorter terminal.
+    const store = createAppStore();
+    const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(output).toContain('tui-back');
+    for (const zone of ZONES) {
+      expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
+    }
+    expect(output).toContain('[/] filter');
+    expect(output).toContain('[q] quit');
+  });
+
   it('shows a glyph+counter badge while the developer is elsewhere and clears it once the zone is visited (AC3)', async () => {
     const store = createAppStore();
     store.getState().addZoneEvent('logs');

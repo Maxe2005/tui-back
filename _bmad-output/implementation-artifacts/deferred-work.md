@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: code review of 2-8-fullscreen-tui-rendering (2026-08-20)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-fullscreen-tui-rendering.md`
+  summary: `src/bin/tui.ts`'s own `render()` call — the actual production wiring that passes `alternateScreen: true` to Ink — is never exercised by any test; nothing would fail if that flag were dropped, renamed, or misspelled during a future refactor.
+  evidence: `tui.ts` is a top-level-await composition-root script (checks `process.stdin.isTTY`, acquires a real lock, wires all driven ports) that `tui-back.e2e.test.ts` already documents as unexercised for the same reason (no pty lib, `spawnSync`'s piped stdin trips the `isTTY` guard). The new `app-shell.alternate-screen.test.tsx` calls `render()` directly with its own hard-coded `alternateScreen: true`, so it verifies Ink's mechanism but not that `tui.ts` actually passes the option through. Closing this within the story's bounded "two prop/option additions" scope would need extracting the composition root's `render()` options into an importable, independently-testable unit — an architecture change beyond what the approved sprint-change-proposal scoped. **Track:** revisit if `tui.ts` is ever refactored to separate composition wiring from process-lifecycle side effects (e.g. for the pty-based e2e coverage story eventually), at which point this option can be asserted directly.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-fullscreen-tui-rendering.md`
+  summary: The real `q`/Ctrl+C quit paths (`onQuit` → `process.exit(0)`, and Ink's own `exitOnCtrlC` handler) are not exercised by any test — `app-shell.alternate-screen.test.tsx` verifies alt-screen restoration only via a direct `instance.unmount()` call, a narrower proxy for the same `signal-exit`-patches-`process.exit` mechanism.
+  evidence: testing a real `process.exit()`/SIGINT path in-process, without killing the test runner, is inherently difficult without a pty (same documented constraint as the composition-root gap above); the Design Notes' reasoning for trusting this path rests on `signal-exit`'s well-known patching behavior, not on new code this story adds. **Track:** covered only by the manual verification step in the spec until a pty-based e2e story exists.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-fullscreen-tui-rendering.md`
+  summary: `FakeTtyStdout`/`fakeTtyStdin` in `app-shell.alternate-screen.test.tsx` are cast through `as unknown as NodeJS.WriteStream`/`NodeJS.ReadStream`, papering over missing standard stream members (`getColorDepth`, `cursorTo`, `clearLine`, `fd`, etc.) that today's Ink code path happens not to touch.
+  evidence: a future Ink upgrade that reads any of those would fail with a cryptic runtime error inside `node_modules` rather than a clear type error at the test's own call site. Low priority — the same risk already exists in `render-to-string.ts`'s established fake-stdin technique this file deliberately mirrors. **Track:** revisit if an Ink upgrade ever breaks either fake-stream test with an unclear error.
+
 ## Deferred from: code review of 2-4-switch-the-active-edt-without-data-loss (2026-08-19)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/2-4-switch-the-active-edt-without-data-loss.md`

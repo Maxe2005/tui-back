@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import { Footer } from './shared/components/footer.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
 import { ModalDialog } from './shared/components/modal-dialog.js';
@@ -68,6 +68,7 @@ export function AppShell({
   const openHelp = useStore((state) => state.openHelp);
   const closeHelp = useStore((state) => state.closeHelp);
   const ZoneScreen = getZoneScreen(activeZone);
+  const { rows } = useWindowSize();
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -116,7 +117,7 @@ export function AppShell({
   });
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" height={rows} overflow="hidden">
       <TopBar activeEdt={activeEdt} />
       <ZoneTabBar activeZone={activeZone} events={zoneEvents} />
       <ZoneScreen useStore={useStore} />
