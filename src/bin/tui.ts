@@ -8,6 +8,7 @@ import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
+import { createLockPort } from '../adapters/driven/lock/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 
 if (!process.stdin.isTTY) {
@@ -64,8 +65,14 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
-
-const store = createAppStore({ registry, manifest, git, edtRegistry, state });
+// Story 2.11: the repo registry screen reuses Story 1.5's registerRepo use-case as-is
+// (AD-2), which requires a LockPort + a resource key for its withActionLock call — mirrors
+// src/bin/main.ts:39-44's CLI composition root exactly (same lock dir, same registry file
+// as the resource key so a TUI-initiated register and a hand-run CLI one serialize on the
+// same resource rather than racing each other). Named `actionLock` (distinct from the
+// single-instance TUI `lock` above) since both live in this module's scope.
+const actionLock = createLockPort(lockDir);
+const store = createAppStore({ registry, manifest, git, edtRegistry, state, lock: actionLock, registryResourceKey: registryFile });
 const onQuit = async () => {
   if (lock) {
     await lock.release();

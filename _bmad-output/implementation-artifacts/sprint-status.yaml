@@ -75,7 +75,7 @@ development_status:
   2-8-fullscreen-tui-rendering: done
   2-9-edts-zone-create-switch-modify: backlog
   2-10-recover-from-an-already-running-tui-instance: done
-  2-11-repo-registry-screen-manifest-onboarding-guidance: backlog
+  2-11-repo-registry-screen-manifest-onboarding-guidance: in-progress
   2-12-zone-tab-bar-focus-arrow-navigation: backlog
   2-13-manifest-gated-zone-tab-visibility-disabled-state: backlog
   epic-2-retrospective: optional

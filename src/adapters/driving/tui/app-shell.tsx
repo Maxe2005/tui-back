@@ -5,6 +5,7 @@ import { KeybindingHelp } from './shared/components/keybinding-help.js';
 import { ModalDialog } from './shared/components/modal-dialog.js';
 import { TopBar } from './shared/components/top-bar.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
+import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
 import { ZONES, type ZoneId } from './zones/zones.js';
@@ -67,11 +68,16 @@ export function AppShell({
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
   const closeHelp = useStore((state) => state.closeHelp);
+  // Story 2.11: the registry screen's open/close flag lives in the store (not local AppShell
+  // state) so both the `:` command palette below and Dashboard's empty-registry prompt can
+  // trigger it.
+  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
+  const openRegistryScreen = useStore((state) => state.openRegistryScreen);
+  const closeRegistryScreen = useStore((state) => state.closeRegistryScreen);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
 
   const [filterOpen, setFilterOpen] = useState(false);
-  const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => {
     if (activeZone !== 'dashboard' && !useStore.getState().launchBannerShown) {
@@ -82,9 +88,15 @@ export function AppShell({
   useInput((input, key) => {
     const state = useStore.getState();
 
-    resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+    // Skip help dispatch entirely while the registry screen is open — it owns free-text
+    // keystroke capture (the root-path field), so `?` typed there must land as a literal
+    // character, never also pop the keybinding-help modal on top of the overlay. Mirrors how
+    // the registry screen's own Esc-close below is gated on registryScreenOpen.
+    if (!registryScreenOpen) {
+      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+    }
 
-    if (!helpOpen && !filterOpen && !commandOpen) {
+    if (!helpOpen && !filterOpen && !registryScreenOpen) {
       const zoneId = shouldSwitchZone(input);
       if (zoneId) {
         setActiveZone(zoneId);
@@ -97,7 +109,7 @@ export function AppShell({
       }
 
       if (shouldOpenCommand(input)) {
-        setCommandOpen(true);
+        openRegistryScreen();
         return;
       }
 
@@ -111,8 +123,10 @@ export function AppShell({
       setFilterOpen(false);
     }
 
-    if (commandOpen && (input === '?' || key.escape === true)) {
-      setCommandOpen(false);
+    // Esc always closes the registry screen, regardless of its internal phase (Boundaries:
+    // "closed via Esc, or after a register run" — no partial back-navigation between phases).
+    if (registryScreenOpen && key.escape === true) {
+      closeRegistryScreen();
     }
   });
 
@@ -132,16 +146,7 @@ export function AppShell({
           <Text>Filter input — wired in Epic 2+</Text>
         </ModalDialog>
       )}
-      {commandOpen && (
-        <ModalDialog
-          title="COMMAND"
-          onConfirm={() => {}}
-          onCancel={() => setCommandOpen(false)}
-          open={true}
-        >
-          <Text>Command entry — wired in Epic 2+</Text>
-        </ModalDialog>
-      )}
+      {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
       <Footer />
     </Box>
   );
