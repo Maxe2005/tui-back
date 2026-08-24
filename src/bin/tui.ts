@@ -70,7 +70,6 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
-const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
 
 const store = createAppStore({

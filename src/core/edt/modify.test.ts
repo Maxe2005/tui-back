@@ -191,7 +191,7 @@ describe('modifyEdt — unit / matrix', () => {
         setStatus: async () => ok(undefined),
         update: async () => ok(undefined),
       } as any,
-      registry: makeMockRegistry(new Set(["/repos/some-repo"])),
+      registry: makeMockRegistry(new Set(["/repos/test-shared", "/repos/some-repo"])),
       manifest,
       git,
       lock: {
@@ -201,7 +201,7 @@ describe('modifyEdt — unit / matrix', () => {
       } as any,
       edtRegistryResourceKey: '/dev/null',
       topic: 'demo',
-      addMembers: ['/repos/shared-repo'],
+      addMembers: ['/repos/test-shared'],
       removeMembers: [],
       setBranches: [],
       renameTo: undefined,
@@ -299,7 +299,7 @@ describe('modifyEdt — unit / matrix', () => {
 
     const result = await modifyEdt({
       edtRegistry: {
-        list: async () => ok([]),
+        list: async () => ok([{ ulid: '01JTEST000000000000005', topic: 'demo', createdAt: '2026-08-18T00:00:00.000Z', status: 'active', members: [] }]),
         add: async () => ok(undefined),
         setStatus: async () => ok(undefined),
         update: async () => ok(undefined),

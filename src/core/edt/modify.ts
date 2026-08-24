@@ -67,13 +67,8 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     return err('missing-argument', 'Usage: tui-back edt modify --topic <topic> [--add-member <path>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]');
   }
 
-  // At least one operation required
-  const hasOp = addMembers.length > 0 || removeMembers.length > 0 || setBranches.length > 0 || (renameTo !== undefined);
-  if (!hasOp) {
-    return err('invalid-argument', 'At least one operation required: --add-member, --remove-member, --set-branch, or --rename-to');
-  }
-
-  // Fast-fail: check target EDT exists
+  // Fast-fail: check target EDT exists (before no-operations check, so unknown topic
+  // takes priority over “no operation provided”)
   const edtListed = await edtRegistry.list();
   if (!edtListed.ok) {
     return edtListed;
@@ -83,6 +78,11 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     return err('edt-not-found', `No EDT with topic "${trimmedTopic}" is registered`);
   }
 
+  // At least one operation required
+  const hasOp = addMembers.length > 0 || removeMembers.length > 0 || setBranches.length > 0 || (renameTo !== undefined);
+  if (!hasOp) {
+    return err('invalid-argument', 'At least one operation required: --add-member, --remove-member, --set-branch, or --rename-to');
+  }
   // If rename, check uniqueness (fast-fail, re-validated under lock)
   if (renameTo !== undefined) {
     if (renameTo.trim() === '') {
@@ -147,6 +147,9 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
 
       const allowed = await git.assertAllowedBranch(resolved, current.data, target.ulid);
       if (!allowed.ok) {
+        if (allowed.error.code === 'shared-branch-rejected') {
+          return err('shared-branch-rejected', allowed.error.message);
+        }
         results.push({
           service: resolved,
           outcome: 'failed',
