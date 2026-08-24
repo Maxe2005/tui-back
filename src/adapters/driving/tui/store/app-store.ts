@@ -1,15 +1,30 @@
 import { create } from 'zustand';
 import type { UseBoundStore, StoreApi } from 'zustand';
 import {
+  createEdt as createEdtUseCase,
+  type CreateBranchOptions,
+  type CreateEdtData,
+} from '../../../../core/edt/create.js';
+import {
+  switchActiveEdt as switchActiveEdtUseCase,
+  type SwitchActiveEdtData,
+} from '../../../../core/edt/switch.js';
+import {
+  modifyEdt as modifyEdtUseCase,
+  type ModifyEdtData,
+} from '../../../../core/edt/modify.js';
+import {
   listEdtBranchesDivergence,
   type BranchDivergenceEntryError,
   type ServiceBranchDivergence,
 } from '../../../../core/edt/list.js';
-import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
+import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { StatePort } from '../../../../core/ports/state.js';
+import type { Result } from '../../../../core/result.js';
 import {
   DEFAULT_LIST_RATIO,
   clampListRatio,
@@ -26,13 +41,47 @@ export type ZoneRatios = Record<ZoneId, number>;
 // Optional so every pre-existing `createAppStore()` call (tests, and the module-level
 // `useAppStore` default below) keeps working unwired; loadEdtsBranches degrades to an
 // explicit error state rather than throwing when no deps were supplied.
+// Story 2.9 extends the deps with `lock`/`edtRegistryResourceKey`/`edtsBaseDir` — the same
+// three createEdt/switchActiveEdt/modifyEdt need alongside the pre-existing five, closing the
+// composition-root gap (src/bin/tui.ts previously built these for nothing, since no store
+// action consumed them).
 export type AppStoreDeps = {
   registry: RegistryPort;
   manifest: ManifestPort;
   git: GitPort;
   edtRegistry: EdtRegistryPort;
   state: StatePort;
+  lock: LockPort;
+  edtRegistryResourceKey: string;
+  edtsBaseDir: string;
 };
+
+export type CreateEdtParams = {
+  topic: string;
+  members: string[];
+};
+
+export type SwitchEdtParams = {
+  topic: string;
+  force?: boolean;
+};
+
+export type ModifyEdtParams = {
+  topic: string;
+  addMembers: string[];
+  removeMembers: string[];
+  setBranches: Array<{ repoPath: string; branch: string }>;
+  renameTo?: string;
+};
+
+const NO_DEPS_ERROR = 'No ports wired into the TUI store';
+
+// Story 2.9: no branch-creation UI in the EDTs zone's create form (AC1 scopes it to topic +
+// member selection only — branch-creation naming/mode was Story 2.2's separate concern, not
+// reintroduced here). Every member reuses its existing current branch, gated the same way
+// the branch-creation-disabled CLI path already is (core/edt/create.ts's
+// resolveMemberBranch).
+const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: 'development', mode: 'grouped', names: {} };
 
 export type AppState = {
   activeZone: ZoneId;
@@ -69,6 +118,46 @@ export type AppState = {
   edtsUnreachable: string[];
   edtsErrors: BranchDivergenceEntryError[];
   loadEdtsBranches: () => Promise<void>;
+  // Story 2.9: the EDT registry's own entries (ulid/topic/status/members) — the EDT
+  // selector's data source. Distinct from `edtsBranches` above, which is the flat
+  // per-service branch/divergence list (Story 2.6) and carries no per-EDT grouping.
+  // Mirrors edtsBranches' own "never show stale rows under an error banner" rule: a failed
+  // reload clears `edts` to an empty array rather than leaving a stale list in place.
+  edts: EdtRegistryEntry[] | null;
+  edtsStatus: 'idle' | 'loading' | 'error';
+  edtsError: string | null;
+  // The store's cached read of state.json's active-EDT pointer (AD-10), populated by
+  // loadEdts() and refreshed by a successful switchEdt() — never continuously re-synced via
+  // fs.watch/poll while the TUI is open (that AD-10 half is explicitly out of this story's
+  // scope; see deferred-work.md). Used by the EDTs zone to tell which selector row is the
+  // currently active EDT (never `EdtRegistryEntry.status`, which create.ts always sets to
+  // 'active' for a brand-new entry regardless of any other EDT's own status — not an
+  // exclusive "the one active EDT" flag on its own).
+  loadEdts: () => Promise<void>;
+  // Story 2.9: the zone-owned dialogs (create/switch/modify) call these three core
+  // use-cases in-process (AD-2), never by shelling out to the CLI — the same ones
+  // `runEdtCreate`/`runEdtSwitch`/`runEdtModify` (src/adapters/driving/cli/subcommands.ts)
+  // wrap, mirroring that call shape exactly. Deps are closed over the same way
+  // loadEdtsBranches' are; an unwired store degrades to an explicit error Result rather than
+  // throwing (every pre-2.9 `createAppStore()` call, including tests, stays usable).
+  createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
+  switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
+  modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
+  // Story 2.9: set by a zone while one of its own dialogs/forms has captured keyboard input
+  // (create/switch-confirm/modify/branch-edit) — gates AppShell's global shortcuts (`?`,
+  // zone mnemonics, `/`, `:`, `q`) so a typed character (including `?`) never leaks through
+  // to a global dispatch while a text field or checklist owns the keystroke.
+  zoneInputCaptured: boolean;
+  setZoneInputCaptured: (value: boolean) => void;
+  // Review patch (story 2.9): `q` is unreachable while `zoneInputCaptured` is set (it must
+  // be typable into a text field), so a zone whose captured dialog has no cancel target of
+  // its own — the EDTs zone's AC1 create prompt when the registry is still genuinely empty,
+  // where Escape has nothing meaningful to cancel back to either — needs another way to ask
+  // the composition root to quit. `requestQuit()` flips this flag; AppShell's own effect (the
+  // only place `onQuit` is in scope) observes it and calls `onQuit()`, mirroring how the
+  // zone-input-capture handoff between a zone and AppShell already works.
+  quitRequested: boolean;
+  requestQuit: () => void;
 };
 
 function emptyEvents(): ZoneEvents {
@@ -150,6 +239,115 @@ export function createAppStore(deps?: AppStoreDeps) {
         set({ edtsBranchesStatus: 'error', edtsBranchesError: result.error.message });
       }
     },
+    edts: null,
+    edtsStatus: 'idle',
+    edtsError: null,
+    loadEdts: async () => {
+      if (!deps) {
+        set({ edtsStatus: 'error', edtsError: NO_DEPS_ERROR });
+        return;
+      }
+      if (get().edtsStatus === 'loading') {
+        return;
+      }
+      set({ edtsStatus: 'loading', edtsError: null });
+      const listed = await deps.edtRegistry.list();
+      if (!listed.ok) {
+        // Mirrors edtsBranches' own rule: never show stale rows under an error banner —
+        // `edts` is cleared, not left at its last-successful value.
+        set({ edtsStatus: 'error', edtsError: listed.error.message, edts: [] });
+        return;
+      }
+      // Review patch (story 2.9): a `state.json` read failure is a separate, unrelated
+      // concern from whether the EDT registry itself loaded — don't discard a perfectly
+      // good `edts` list (including a genuinely-empty one AC1 depends on to auto-open the
+      // create prompt) just because the active-EDT pointer read failed alongside it.
+      // Degrade only the pointer, to "no active EDT known", rather than the whole load.
+      const activeUlid = await deps.state.readActiveEdt();
+      set({
+        edts: listed.data,
+        edtsStatus: 'idle',
+        edtsError: null,
+        activeEdt: activeUlid.ok ? activeUlid.data : null,
+      });
+    },
+    createEdt: async (params) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      const result = await createEdtUseCase({
+        edtsBaseDir: deps.edtsBaseDir,
+        manifest: deps.manifest,
+        edtRegistry: deps.edtRegistry,
+        lock: deps.lock,
+        edtRegistryResourceKey: deps.edtRegistryResourceKey,
+        registry: deps.registry,
+        git: deps.git,
+        topic: params.topic,
+        members: params.members,
+        branchOptions: NO_BRANCH_CREATION,
+      });
+      if (result.ok) {
+        // Review patch (story 2.9): unlike switchEdt, createEdt itself never writes
+        // state.json's active-EDT pointer (create.ts only sets the registry entry's own
+        // `status: 'active'`, not an exclusive flag — see the `edts` field comment above).
+        // The TUI's create dialog is only ever reachable via AC1's zero-EDT prompt today
+        // (a second EDT is CLI-only, see deferred-work.md), so every TUI-driven create is
+        // the first EDT and should become the active one — exactly as if the user had
+        // immediately switched to it. Best-effort: if the state.json write fails, the EDT
+        // is still created successfully; the active pointer just stays whatever it was.
+        const wroteActive = await deps.state.writeActiveEdt(result.data.ulid);
+        if (wroteActive.ok) {
+          set({ activeEdt: result.data.ulid });
+        }
+      }
+      return result;
+    },
+    switchEdt: async (params) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      const result = await switchActiveEdtUseCase({
+        edtRegistry: deps.edtRegistry,
+        edtRegistryResourceKey: deps.edtRegistryResourceKey,
+        registry: deps.registry,
+        manifest: deps.manifest,
+        git: deps.git,
+        lock: deps.lock,
+        state: deps.state,
+        topic: params.topic,
+        force: params.force,
+      });
+      if (result.ok) {
+        // Success updates the store's cached active-EDT pointer immediately — a direct
+        // consequence of this TUI-driven switch, not the continuous fs.watch/poll re-sync
+        // AD-10 also describes (that half stays out of this story's scope).
+        set({ activeEdt: result.data.ulid });
+      }
+      return result;
+    },
+    modifyEdt: async (params) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return modifyEdtUseCase({
+        edtRegistry: deps.edtRegistry,
+        edtRegistryResourceKey: deps.edtRegistryResourceKey,
+        registry: deps.registry,
+        manifest: deps.manifest,
+        git: deps.git,
+        lock: deps.lock,
+        topic: params.topic,
+        addMembers: params.addMembers,
+        removeMembers: params.removeMembers,
+        setBranches: params.setBranches,
+        renameTo: params.renameTo,
+      });
+    },
+    zoneInputCaptured: false,
+    setZoneInputCaptured: (value) => set({ zoneInputCaptured: value }),
+    quitRequested: false,
+    requestQuit: () => set({ quitRequested: true }),
   }));
 }
 

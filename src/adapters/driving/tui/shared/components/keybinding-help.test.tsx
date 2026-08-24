@@ -50,7 +50,7 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
 // Story 2.7: canonical navigation contract — resolveHelpScroll reads key flags
 // (upArrow/downArrow/home/end) instead of input==='j'/'k', and j/k/g/G are inert.
 describe('resolveHelpScroll (story 2.7)', () => {
-  const noKey = { upArrow: false, downArrow: false, home: false, end: false };
+  const noKey = { upArrow: false, downArrow: false, home: false, end: false, tab: false };
 
   it('moves the offset down on downArrow and up on upArrow', () => {
     expect(resolveHelpScroll({ ...noKey, downArrow: true }, 0, 10)).toBe(1);

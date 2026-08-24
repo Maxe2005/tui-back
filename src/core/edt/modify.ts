@@ -13,7 +13,7 @@
 // (AD-3). NodeNext `.js` imports; imports-first.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
+import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
@@ -97,6 +97,12 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
   // We do git writes outside the lock (same precedent as create/switch), then under the
   // lock we only assemble the final entry and write edts.yaml.
   const results: ModifyEdtResult[] = [];
+  // Review patch (story 2.9): adds/branch-changes were computed into `results` above but
+  // never fed back into the registry entry written under the lock below — the write only
+  // ever applied the deterministic topic rename + removals. These two arrays carry the
+  // *successful* outcomes' data forward so the lock section can actually persist them.
+  const addedMembers: EdtMember[] = [];
+  const branchChanges: Array<{ repoPath: string; branch: string }> = [];
 
   // ---- 1. Add members (pre-lock: read current branch + gate AD-8) ----
   if (addMembers.length > 0) {
@@ -113,6 +119,17 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
           service: resolved,
           outcome: 'failed',
           detail: { code: 'invalid-member', message: `Member is not a registered managed repo: ${resolved}` },
+        });
+        continue;
+      }
+
+      // Duplicate check: skip if member already in target EDT
+      const alreadyAdded = target.members.some((m) => resolve(m.repoPath) === resolved);
+      if (alreadyAdded) {
+        results.push({
+          service: resolved,
+          outcome: 'failed',
+          detail: { code: 'duplicate-member', message: `Member ${resolved} is already in the EDT's member list` },
         });
         continue;
       }
@@ -138,23 +155,20 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
         continue;
       }
 
-      // Duplicate check: skip if member already in target EDT
-      const alreadyAdded = target.members.some((m) => resolve(m.repoPath) === resolved);
-      if (alreadyAdded) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: 'duplicate-member', message: `Member ${resolved} is already in the EDT's member list` },
-        });
-        continue;
-      }
+      // Resolve the real service identity for the persisted registry entry (same source
+      // create.ts uses) rather than falling back to the raw path — a manifest-load failure
+      // here is not fatal to the add (the branch is already gated), it only degrades the
+      // recorded service label.
+      const loadedManifest = await manifest.load(resolved);
+      const service = loadedManifest.ok ? loadedManifest.data.service : resolved;
 
       // Record member with current (gated) branch — success
       results.push({
-        service: resolved,
+        service,
         outcome: 'added',
         newBranch: current.data,
       });
+      addedMembers.push({ service, repoPath: resolved, branch: current.data });
     }
   }
 
@@ -243,6 +257,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
         outcome: 'branch-changed',
         newBranch: branch,
       });
+      branchChanges.push({ repoPath: resolved, branch });
     }
   }
 
@@ -276,15 +291,37 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     }
 
     // Apply removes: filter out members whose repoPath appears in removeMembers
+    let members = targetEntry.members;
     if (removeMembers.length > 0) {
       const removePaths = new Set(removeMembers.map((p) => resolve(p)));
-      targetEntry.members = targetEntry.members.filter((m) => !removePaths.has(resolve(m.repoPath)));
+      members = members.filter((m) => !removePaths.has(resolve(m.repoPath)));
     }
 
-    // Note: adds and branch-changes are recorded in `results` above but the registry entry
-    // only reflects the deterministic changes (topic + removals). This matches per-repo
-    // isolation: one failed op never aborts the registry write, and the caller reads
-    // results to see what actually happened to each working tree.
+    // Review patch (story 2.9): apply the successful adds computed pre-lock. Re-checks
+    // membership under the lock too (not just the pre-lock fast-fail) so a racing concurrent
+    // modify that added the same member first doesn't produce a duplicate entry.
+    if (addedMembers.length > 0) {
+      const existingPaths = new Set(members.map((m) => resolve(m.repoPath)));
+      for (const added of addedMembers) {
+        if (!existingPaths.has(resolve(added.repoPath))) {
+          members = [...members, added];
+          existingPaths.add(resolve(added.repoPath));
+        }
+      }
+    }
+
+    // Review patch (story 2.9): apply the successful branch changes computed pre-lock, over
+    // the final member set (including any just-added above) so a branch override on a
+    // member added in the same call wins over its auto-resolved current branch.
+    if (branchChanges.length > 0) {
+      const branchByPath = new Map(branchChanges.map((c) => [resolve(c.repoPath), c.branch]));
+      members = members.map((m) => {
+        const newBranch = branchByPath.get(resolve(m.repoPath));
+        return newBranch !== undefined ? { ...m, branch: newBranch } : m;
+      });
+    }
+
+    targetEntry.members = members;
 
     // Write the updated entry
     const writeResult = await edtRegistry.update(targetEntry.ulid, {

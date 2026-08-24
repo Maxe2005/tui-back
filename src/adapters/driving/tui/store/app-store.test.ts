@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ok, err } from '../../../../core/result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
+import type { LockPort } from '../../../../core/ports/lock.js';
 import type { Manifest, ManifestPort } from '../../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { StatePort } from '../../../../core/ports/state.js';
@@ -52,7 +56,38 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     readActiveEdt: vi.fn(async () => ok(null)),
     writeActiveEdt: vi.fn(async () => ok(undefined)),
   };
-  return { registry, manifest, git, edtRegistry, state, ...overrides };
+  const lock: LockPort = {
+    acquire: vi.fn(async () => ok({ release: async () => ok(undefined) })),
+    peek: vi.fn(async () => ok({ locked: false })),
+  };
+  return {
+    registry,
+    manifest,
+    git,
+    edtRegistry,
+    state,
+    lock,
+    edtRegistryResourceKey: '/tmp/edts.yaml',
+    edtsBaseDir: '/tmp/edts',
+    ...overrides,
+  };
+}
+
+const tmpDirs: string[] = [];
+
+afterEach(async () => {
+  while (tmpDirs.length > 0) {
+    const dir = tmpDirs.pop();
+    if (dir) {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+async function makeEdtsBaseDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'tui-back-app-store-createedt-'));
+  tmpDirs.push(dir);
+  return dir;
 }
 
 describe('app store', () => {
@@ -241,6 +276,183 @@ describe('app store', () => {
       resolveList?.();
       await Promise.all([first, second]);
       expect(store.getState().edtsBranchesStatus).toBe('idle');
+    });
+  });
+
+  // Review patch (story 2.9): the composition-root wiring this story added — the actual
+  // glue between the store and createEdt/switchActiveEdt/modifyEdt/loadEdts — had zero
+  // direct coverage; every zone test substituted its own fakes for these four fields
+  // instead of exercising the real implementations against fakeDeps().
+  describe('loadEdts (story 2.9)', () => {
+    it('populates edts and activeEdt from the core ports on success', async () => {
+      const edts: EdtRegistryEntry[] = [{ ulid: '01JXXXX1', topic: 'demo', createdAt: '2026-01-01T00:00:00.000Z', status: 'active', members: [] }];
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok(edts)),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok('01JXXXX1')),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+      await store.getState().loadEdts();
+
+      expect(store.getState().edtsStatus).toBe('idle');
+      expect(store.getState().edts).toEqual(edts);
+      expect(store.getState().activeEdt).toBe('01JXXXX1');
+    });
+
+    it('clears edts to empty (never a stale list) when the registry read itself fails', async () => {
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => err('edt-registry-invalid-format', 'bad yaml')),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry }));
+
+      await store.getState().loadEdts();
+
+      expect(store.getState().edtsStatus).toBe('error');
+      expect(store.getState().edtsError).toBe('bad yaml');
+      expect(store.getState().edts).toEqual([]);
+    });
+
+    // Review patch: readActiveEdt failing used to be treated the same as the registry
+    // list itself failing — discarding a perfectly good, already-loaded `edts` list (and
+    // with it, AC1's ability to tell "genuinely empty" from "failed to load").
+    it('keeps a successfully-loaded edts list even when the separate active-EDT read fails', async () => {
+      const edts: EdtRegistryEntry[] = [];
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok(edts)),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => err('state-read-failed', 'corrupt state.json')),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+      await store.getState().loadEdts();
+
+      expect(store.getState().edtsStatus).toBe('idle');
+      expect(store.getState().edtsError).toBeNull();
+      expect(store.getState().edts).toEqual(edts);
+      expect(store.getState().activeEdt).toBeNull();
+    });
+  });
+
+  describe('createEdt / switchEdt / modifyEdt (story 2.9)', () => {
+    it('createEdt forwards deps to the core use-case and, on success, writes and caches the new EDT as active', async () => {
+      const edtsBaseDir = await makeEdtsBaseDir();
+      let addedUlid: string | undefined;
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async (entry) => {
+          addedUlid = entry.ulid;
+          return ok(undefined);
+        }),
+        list: vi.fn(async () => ok([])),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry, state, edtsBaseDir }));
+
+      const result = await store.getState().createEdt({ topic: 'demo', members: ['/repo/a'] });
+
+      expect(result.ok).toBe(true);
+      expect(addedUlid).toBeDefined();
+      expect(state.writeActiveEdt).toHaveBeenCalledWith(addedUlid);
+      expect(store.getState().activeEdt).toBe(addedUlid);
+    });
+
+    it('createEdt leaves activeEdt untouched when the state.json write itself fails, without failing the overall result', async () => {
+      const edtsBaseDir = await makeEdtsBaseDir();
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok([])),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => err('state-write-failed', 'disk full')),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry, state, edtsBaseDir }));
+
+      const result = await store.getState().createEdt({ topic: 'demo', members: ['/repo/a'] });
+
+      expect(result.ok).toBe(true);
+      expect(store.getState().activeEdt).toBeNull();
+    });
+
+    it('returns an explicit store-not-wired error, never a throw, when no ports are wired', async () => {
+      const store = createAppStore();
+      expect(await store.getState().createEdt({ topic: 'demo', members: [] })).toEqual({
+        ok: false,
+        error: { code: 'store-not-wired', message: 'No ports wired into the TUI store' },
+      });
+      expect(await store.getState().switchEdt({ topic: 'demo' })).toEqual({
+        ok: false,
+        error: { code: 'store-not-wired', message: 'No ports wired into the TUI store' },
+      });
+      expect(await store.getState().modifyEdt({ topic: 'demo', addMembers: [], removeMembers: [], setBranches: [] })).toEqual({
+        ok: false,
+        error: { code: 'store-not-wired', message: 'No ports wired into the TUI store' },
+      });
+    });
+
+    it('switchEdt updates the cached activeEdt pointer on success', async () => {
+      const targetEntry: EdtRegistryEntry = { ulid: '01JTARGET', topic: 'target', createdAt: '2026-01-01T00:00:00.000Z', status: 'active', members: [] };
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok([targetEntry])),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+      const result = await store.getState().switchEdt({ topic: 'target' });
+
+      expect(result.ok).toBe(true);
+      expect(store.getState().activeEdt).toBe('01JTARGET');
+    });
+
+    it('modifyEdt forwards params through to the core use-case', async () => {
+      const targetEntry: EdtRegistryEntry = { ulid: '01JMOD', topic: 'demo', createdAt: '2026-01-01T00:00:00.000Z', status: 'active', members: [] };
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok([targetEntry])),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry }));
+
+      const result = await store.getState().modifyEdt({ topic: 'demo', addMembers: ['/repo/a'], removeMembers: [], setBranches: [] });
+
+      expect(result.ok).toBe(true);
+      expect(edtRegistry.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('requestQuit (story 2.9)', () => {
+    it('flips quitRequested — AppShell observes it to call onQuit when a zone has no other way to reach it', () => {
+      const store = createAppStore();
+      expect(store.getState().quitRequested).toBe(false);
+      store.getState().requestQuit();
+      expect(store.getState().quitRequested).toBe(true);
     });
   });
 });

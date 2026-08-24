@@ -4,21 +4,46 @@
 // truncation with the full name available in the detail pane once focused.
 import { describe, it, expect } from 'vitest';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import {
   EdtsZone,
+  canEditMemberBranch,
+  cycleFormFocus,
+  formatEdtDetail,
+  formatEdtRowMeta,
   formatIssuesSummary,
   formatServiceDetail,
   formatServiceMeta,
+  isSwitchBlockedError,
   jumpSelection,
   moveSelection,
+  nextTextInputValue,
+  resolveCandidateListState,
+  resolveModifyEnterAction,
+  resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
+  summarizeFailedResults,
+  toggleMemberSelection,
+  togglePaneFocus,
   truncateBranchLabel,
+  validateBranchEditValue,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.js';
+
+function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
+  return {
+    ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+    topic: 'demo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    status: 'inactive',
+    members: [],
+    ...overrides,
+  };
+}
 
 function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranchDivergence {
   return {
@@ -117,7 +142,7 @@ describe('formatIssuesSummary', () => {
 // Story 2.7: canonical navigation contract — j/k/g/G retired in favor of arrows/Home/End.
 // `noKey`: a fully-populated NavigationKey with every flag false, spread and overridden per
 // case — mirrors the pattern already used in keybinding-help.test.tsx for the same type.
-const noKey: NavigationKey = { upArrow: false, downArrow: false, home: false, end: false };
+const noKey: NavigationKey = { upArrow: false, downArrow: false, home: false, end: false, tab: false };
 
 describe('resolveSelectionDirection', () => {
   it('maps downArrow to down and upArrow to up', () => {
@@ -217,7 +242,9 @@ describe('EdtsZone (story 2.6)', () => {
       edtsBranches: null,
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} />);
+    // Story 2.9: the SERVICES detail pane (where this error surfaces) is only rendered
+    // while the SERVICES pane is focused — the EDT selector is focused by default now.
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
     expect(output).toContain('Failed to load services');
     expect(output).toContain('registry-invalid-yaml');
   });
@@ -283,7 +310,7 @@ describe('EdtsZone (story 2.6)', () => {
       edtsBranches: [service({ service: 'long-branch-svc', branch: long })],
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
     expect(output).toContain(truncateBranchLabel(long, BRANCH_MAX_WIDTH));
     expect(output).toContain(long);
   });
@@ -304,7 +331,7 @@ describe('EdtsZone (story 2.6)', () => {
       ],
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
     expect(output).toContain('detached-head-svc');
     expect(output).toContain('(unknown)');
     expect(output).toContain('HEAD is detached');
@@ -321,7 +348,7 @@ describe('EdtsZone (story 2.6)', () => {
       edtsBranches: [service({ service: 'stale-svc', branch: 'feat/stale' })],
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
     expect(output).toContain('Failed to load services');
     expect(output).not.toContain('stale-svc');
     expect(output).not.toContain('feat/stale');
@@ -383,3 +410,491 @@ describe('EdtsZone (story 2.6)', () => {
     expect(called).toBe(true);
   });
 });
+
+// ==========================================================================================
+// Story 2.9 — EDTs zone: create, switch, and modify
+// ==========================================================================================
+
+describe('togglePaneFocus', () => {
+  it('cycles edts <-> services', () => {
+    expect(togglePaneFocus('edts')).toBe('services');
+    expect(togglePaneFocus('services')).toBe('edts');
+  });
+});
+
+describe('cycleFormFocus', () => {
+  it('cycles topic <-> members', () => {
+    expect(cycleFormFocus('topic')).toBe('members');
+    expect(cycleFormFocus('members')).toBe('topic');
+  });
+});
+
+describe('nextTextInputValue', () => {
+  it('appends a typed character', () => {
+    expect(nextTextInputValue('ab', 'c', {})).toBe('abc');
+  });
+
+  it('backspaces the last character', () => {
+    expect(nextTextInputValue('abc', '', { backspace: true })).toBe('ab');
+    expect(nextTextInputValue('abc', '', { delete: true })).toBe('ab');
+  });
+
+  it('leaves an empty value unchanged on backspace', () => {
+    expect(nextTextInputValue('', '', { backspace: true })).toBe('');
+  });
+
+  it('ignores return/escape/tab/arrows/ctrl/meta — never appended as text', () => {
+    expect(nextTextInputValue('ab', '\r', { return: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '\x1b', { escape: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { tab: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { upArrow: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { downArrow: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { leftArrow: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { rightArrow: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { home: true })).toBe('ab');
+    expect(nextTextInputValue('ab', '', { end: true })).toBe('ab');
+    expect(nextTextInputValue('ab', 'c', { ctrl: true })).toBe('ab');
+    expect(nextTextInputValue('ab', 'c', { meta: true })).toBe('ab');
+  });
+
+  it('ignores an empty input with no matching key flag (defensive no-op)', () => {
+    expect(nextTextInputValue('ab', '', {})).toBe('ab');
+  });
+
+  it('appends a space character (Space is a valid topic character, not a checkbox toggle here)', () => {
+    expect(nextTextInputValue('ab', ' ', {})).toBe('ab ');
+  });
+});
+
+describe('toggleMemberSelection', () => {
+  it('adds an unselected path', () => {
+    expect(toggleMemberSelection(['/a'], '/b')).toEqual(['/a', '/b']);
+  });
+
+  it('removes an already-selected path', () => {
+    expect(toggleMemberSelection(['/a', '/b'], '/a')).toEqual(['/b']);
+  });
+});
+
+describe('validateBranchEditValue', () => {
+  it('rejects an empty or whitespace-only value', () => {
+    expect(validateBranchEditValue('')).toBe('Branch name must not be empty');
+    expect(validateBranchEditValue('   ')).toBe('Branch name must not be empty');
+  });
+
+  it('accepts a non-empty value', () => {
+    expect(validateBranchEditValue('feature/x')).toBeNull();
+  });
+});
+
+describe('isSwitchBlockedError', () => {
+  it('matches only the lock-block error code', () => {
+    expect(isSwitchBlockedError('switch-blocked-action-in-progress')).toBe(true);
+    expect(isSwitchBlockedError('edt-not-found')).toBe(false);
+  });
+});
+
+describe('formatEdtRowMeta', () => {
+  it('pluralizes the member count', () => {
+    expect(formatEdtRowMeta(edtEntry({ members: [] }), false)).toBe('0 members');
+    expect(formatEdtRowMeta(edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }] }), false)).toBe('1 member');
+    expect(
+      formatEdtRowMeta(
+        edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }, { service: 'b', repoPath: '/b', branch: 'main' }] }),
+        false,
+      ),
+    ).toBe('2 members');
+  });
+
+  it('appends "— active" only for the active EDT', () => {
+    expect(formatEdtRowMeta(edtEntry(), true)).toBe('0 members — active');
+    expect(formatEdtRowMeta(edtEntry(), false)).toBe('0 members');
+  });
+});
+
+describe('formatEdtDetail', () => {
+  it('shows topic, status (active overrides the raw status field), and each member', () => {
+    const detail = formatEdtDetail(
+      edtEntry({ topic: 'my-topic', status: 'inactive', members: [{ service: 'api-gateway', repoPath: '/repos/a', branch: 'feat/x' }] }),
+      true,
+    );
+    expect(detail).toContain('Topic: my-topic');
+    expect(detail).toContain('Status: active');
+    expect(detail).toContain('api-gateway (feat/x)');
+  });
+
+  it('shows a zero-member EDT as valid, not an error (matrix: "Modify to zero members")', () => {
+    expect(formatEdtDetail(edtEntry({ members: [] }), false)).toContain('Members: none');
+  });
+});
+
+describe('resolveCandidateListState', () => {
+  it('is "loading" while the services fetch is in flight, regardless of count', () => {
+    expect(resolveCandidateListState('loading', 0)).toBe('loading');
+    expect(resolveCandidateListState('loading', 5)).toBe('loading');
+  });
+
+  it('is "empty" once resolved with zero candidates', () => {
+    expect(resolveCandidateListState('idle', 0)).toBe('empty');
+  });
+
+  it('is "ready" once resolved with at least one candidate', () => {
+    expect(resolveCandidateListState('idle', 1)).toBe('ready');
+  });
+
+  // Review patch (story 2.9): 'error' used to fall through to the same branch as 'idle',
+  // reporting a genuine services-load failure as "no registered services available."
+  it('is "error" when the services fetch itself failed, never conflated with "empty"', () => {
+    expect(resolveCandidateListState('error', 0)).toBe('error');
+    expect(resolveCandidateListState('error', 5)).toBe('error');
+  });
+});
+
+describe('summarizeFailedResults', () => {
+  it('returns null when every row succeeded', () => {
+    expect(summarizeFailedResults([{ service: 'a', outcome: 'added' }])).toBeNull();
+    expect(summarizeFailedResults([])).toBeNull();
+  });
+
+  it('joins every failed row\'s service and detail message', () => {
+    const summary = summarizeFailedResults([
+      { service: 'a', outcome: 'added' },
+      { service: 'b', outcome: 'failed', detail: { code: 'shared-branch-rejected', message: 'Branch "development" is shared/protected' } },
+      { service: 'c', outcome: 'failed' },
+    ]);
+    expect(summary).toBe('b: Branch "development" is shared/protected; c');
+  });
+});
+
+describe('canEditMemberBranch', () => {
+  const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
+
+  it('is true only for an existing member that is still checked', () => {
+    expect(canEditMemberBranch(target, '/repos/a', ['/repos/a'])).toBe(true);
+  });
+
+  it('is false for an existing member that was unchecked', () => {
+    expect(canEditMemberBranch(target, '/repos/a', [])).toBe(false);
+  });
+
+  it('is false for a freshly-checked path that is not yet an existing member', () => {
+    expect(canEditMemberBranch(target, '/repos/new', ['/repos/new'])).toBe(false);
+  });
+});
+
+describe('resolveModifyEnterAction', () => {
+  const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
+
+  it('opens branch-edit on a branch-editable members-focus row', () => {
+    expect(resolveModifyEnterAction('members', target, ['/repos/a'], '/repos/a')).toEqual({
+      type: 'edit-branch',
+      repoPath: '/repos/a',
+    });
+  });
+
+  it('submits when topic-focused, regardless of the focused member row', () => {
+    expect(resolveModifyEnterAction('topic', target, ['/repos/a'], '/repos/a')).toEqual({ type: 'submit' });
+  });
+
+  it('submits when members-focused but the row is not branch-editable (unchecked or not-yet-a-member)', () => {
+    expect(resolveModifyEnterAction('members', target, [], '/repos/a')).toEqual({ type: 'submit' });
+    expect(resolveModifyEnterAction('members', target, ['/repos/new'], '/repos/new')).toEqual({ type: 'submit' });
+  });
+
+  it('submits when there is no focused row at all (empty candidate list)', () => {
+    expect(resolveModifyEnterAction('members', target, [], undefined)).toEqual({ type: 'submit' });
+  });
+});
+
+describe('resolveModifyOps', () => {
+  it('derives addMembers/removeMembers from the selection diff against the original members', () => {
+    const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
+    const ops = resolveModifyOps(target, target.topic, ['/repos/a', '/repos/b'], {});
+    expect(ops.addMembers).toEqual(['/repos/b']);
+    expect(ops.removeMembers).toEqual([]);
+  });
+
+  it('reports a removal when an original member is no longer selected', () => {
+    const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
+    const ops = resolveModifyOps(target, target.topic, [], {});
+    expect(ops.removeMembers).toEqual(['/repos/a']);
+  });
+
+  it('includes a staged branch edit for a still-selected member', () => {
+    const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
+    const ops = resolveModifyOps(target, target.topic, ['/repos/a'], { '/repos/a': 'feature-y' });
+    expect(ops.setBranches).toEqual([{ repoPath: '/repos/a', branch: 'feature-y' }]);
+  });
+
+  it('drops a staged branch edit for a member no longer selected (boundary rule)', () => {
+    const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
+    const ops = resolveModifyOps(target, target.topic, [], { '/repos/a': 'feature-y' });
+    expect(ops.setBranches).toEqual([]);
+    expect(ops.removeMembers).toEqual(['/repos/a']);
+  });
+
+  it('sets renameTo only when the topic actually changed to a non-empty value', () => {
+    const target = edtEntry({ topic: 'original', members: [] });
+    expect(resolveModifyOps(target, 'renamed', [], {}).renameTo).toBe('renamed');
+    expect(resolveModifyOps(target, 'original', [], {}).renameTo).toBeUndefined();
+    expect(resolveModifyOps(target, '   ', [], {}).renameTo).toBeUndefined();
+  });
+});
+
+// ---- renderToString smoke tests: one per new zone state -------------------------------
+
+const noopAsync = async () => {};
+
+describe('EdtsZone (story 2.9 zone states)', () => {
+  it('AC1: no EDT exists -> the create prompt auto-opens with topic input + member checklist, never a bare empty list', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [service({ service: 'api-gateway', path: '/repos/api-gateway' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
+    expect(output).toContain('CREATE EDT');
+    expect(output).toContain('Topic:');
+    expect(output).toContain('api-gateway');
+  });
+
+  it('AC1: the create prompt shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: null,
+      edtsBranchesStatus: 'loading',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
+    expect(output).toContain('CREATE EDT');
+    expect(output).toContain('Loading services');
+    expect(output).not.toContain('No registered services available');
+  });
+
+  it('AC1: the create prompt shows a genuinely-empty registry distinctly from loading', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
+    expect(output).toContain('CREATE EDT');
+    expect(output).toContain('No registered services available.');
+  });
+
+  it('shows the EDT selector above the flat SERVICES list once EDTs exist — the flat list is never replaced (AC5)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'my-work', members: [] })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'api-gateway' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('EDTS');
+    expect(output).toContain('my-work');
+    expect(output).toContain('SERVICES');
+    expect(output).toContain('api-gateway');
+  });
+
+  it('shows a loading state for the EDT selector before the first load resolves', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: null,
+      edtsStatus: 'loading',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('Loading EDTs');
+  });
+
+  it('mirrors the flat list\'s "never show stale rows under an error banner" rule for the EDT selector', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'error',
+      edtsError: 'edt-registry-invalid-format: bad yaml',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('Failed to load EDTs');
+    // The create-prompt auto-open effect must never fire on an error status (only a
+    // genuinely-resolved-empty list) — the empty-array shown here is the error's stale-row
+    // clearing, not "zero EDTs".
+    expect(output).not.toContain('CREATE EDT');
+  });
+
+  it('calls loadEdts on mount', async () => {
+    let called = false;
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry()],
+      edtsStatus: 'idle',
+      loadEdts: async () => {
+        called = true;
+      },
+      loadEdtsBranches: noopAsync,
+    });
+    await renderToString(<EdtsZone useStore={store} />);
+    expect(called).toBe(true);
+  });
+
+  it('hides the EDT-list keybinding hint line while the create dialog is open (boundary rule)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
+    expect(output).not.toContain('[Enter] switch/modify');
+  });
+
+  it('shows the EDT-list keybinding hint line when no dialog is open', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'my-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('[Enter] switch/modify');
+  });
+
+  it('shows the EDT detail pane (not the services detail pane) by default — the EDT selector is focused by default (Design Notes)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'my-work', members: [{ service: 'api-gateway', repoPath: '/repos/a', branch: 'feat/x' }] })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('MY-WORK');
+    expect(output).toContain('api-gateway (feat/x)');
+  });
+
+  it('AC2: the switch-confirm dialog asks to confirm switching to the selected (non-active) EDT', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-confirm" />);
+    expect(output).toContain('SWITCH EDT');
+    expect(output).toContain('other-work');
+  });
+
+  it('AC2: switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-blocked" />);
+    expect(output).toContain('SWITCH EDT');
+    expect(output).toContain('force switch');
+    expect(output).toContain('cancel');
+  });
+
+  it('AC3: the modify form shows the topic, and every candidate service checked/unchecked per current membership', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [
+        edtEntry({
+          ulid: 'active-ulid',
+          topic: 'active-edt',
+          status: 'active',
+          members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'feat/x' }],
+        }),
+      ],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        service({ service: 'api-gateway', path: '/repos/api-gateway' }),
+        service({ service: 'route-explorer', path: '/repos/route-explorer' }),
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="modify" />);
+    expect(output).toContain('MODIFY EDT');
+    expect(output).toContain('Topic: active-edt');
+    expect(output).toContain('[x]');
+    expect(output).toContain('api-gateway');
+    expect(output).toContain('[ ]');
+    expect(output).toContain('route-explorer');
+  });
+
+  it('hides the EDT-list keybinding hint line while the switch-confirm dialog is open', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-confirm" />);
+    expect(output).not.toContain('[Enter] switch/modify');
+  });
+
+  it('hides the EDT-list keybinding hint line while the modify dialog is open', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active' })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="modify" />);
+    expect(output).not.toContain('[Enter] switch/modify');
+  });
+});
+

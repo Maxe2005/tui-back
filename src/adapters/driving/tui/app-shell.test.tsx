@@ -162,6 +162,17 @@ const minimalState: AppState = {
         edtsUnreachable: [],
         edtsErrors: [],
         loadEdtsBranches: async () => {},
+        edts: null,
+        edtsStatus: 'idle',
+        edtsError: null,
+        loadEdts: async () => {},
+        createEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        switchEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        modifyEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        zoneInputCaptured: false,
+        setZoneInputCaptured: () => {},
+        quitRequested: false,
+        requestQuit: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
