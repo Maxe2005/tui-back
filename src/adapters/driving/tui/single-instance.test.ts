@@ -62,7 +62,7 @@ describe('single-instance lock', () => {
     await lock?.release();
   });
 
-  it('returns null for stale lock (dead PID) - v1 treats as held', async () => {
+  it('auto-reclaims stale lock (dead PID) and acquires lock', async () => {
     const { resolveXdgPaths, ensureXdgDir } = await import('../../driven/xdg/index.js');
     const paths = resolveXdgPaths();
     const lockDir = join(paths.stateDir, 'locks');
@@ -72,6 +72,8 @@ describe('single-instance lock', () => {
     await import('node:fs').then(fs => fs.promises.writeFile(lockFile, JSON.stringify({ pid: 999999, timestamp: new Date().toISOString() }), 'utf8'));
 
     const lock = await acquireTuiLock();
-    expect(lock).toBeNull();
+    expect(lock).not.toBeNull();
+    expect(typeof lock?.release).toBe('function');
+    await lock?.release();
   });
 });
