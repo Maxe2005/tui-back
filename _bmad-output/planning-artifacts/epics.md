@@ -29,8 +29,8 @@ FR-9: Every managed service is displayed with its current branch and how far tha
 FR-10: A developer can run a group update — pull `development`, run migrations, restart containers — against either the active EDT's member services (default) or explicitly against all managed repos regardless of EDT (maintenance mode).
 FR-11: When a group update hits a repo that isn't cleanly updatable, the tool auto-resolves already-known-safe cases and otherwise guides the developer through a bounded menu, then re-verifies before continuing.
 FR-12: When a migration fails during a group update, the tool surfaces which service, which migration, and the error output, and lets the developer re-trigger just that service's migration after a fix.
-FR-13: A developer can publish a new `shared-types` version through the tool, which runs the `shared-types` repo's existing `npm run v` script (bump → build → publish → push).
-FR-14: The tool shows, for the active EDT's member services, which are on the latest published `shared-types` version and which aren't.
+FR-13: A developer can publish a new `shared-types` version through the tool, which runs the `shared-types` repo's existing `npm run v` script (bump → build → publish → push), gated on the active EDT including the `shared-types-source` repo as a member, and chaining into propagation on success (amended 2026-08-24).
+FR-14: The tool shows, for the active EDT's member services, which are on the version most recently published from the active EDT's own `shared-types` branch (resolved via git ancestry, never the global-max version across unrelated branches) and which aren't (amended 2026-08-24).
 FR-15: A developer can propagate the new `shared-types` version to some or all of the active EDT's eligible member services in one action.
 FR-16: A developer can view a single, live, aggregated log stream from every service in the active EDT, or a chosen subset.
 FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it.
@@ -75,7 +75,7 @@ NFR-6 (Single-instance enforcement): A second running instance of the tool on th
 
 UX-DR1: Implement the Atelier design token system — colors (`background` #1c1b1f, `surface` #232228, `surface-selected` #28262c, `border` #3a3844, `text` #eae7e1, `text-dim` #8f8b98, `accent` #c9a13b, `success` #3f9d6e, `error` #c1495e, `warning` #cf9a3e, `info` #4f80a8), one monospace type family, and the character-cell spacing scale (0/1/2/3ch, glyph-gap, indent, pane-padding-x). Accent reserved exclusively for active-selection/primary-action, never a status color.
 UX-DR2: Implement the "square, deliberate" shape rule — every in-app panel, modal, badge, and list row renders at 0px corner radius, no rounding anywhere.
-UX-DR3: Implement the `zone-tab` component — six permanent top-bar entries (Dashboard, EDTs, Update, Logs, Routes, shared-types), inactive/active visual states, and a background-event glyph+counter badge that clears once the zone is visited.
+UX-DR3: Implement the `zone-tab` component — up to six top-bar entries (Dashboard, EDTs, Update, Logs, Routes, shared-types); Dashboard/EDTs/Update/Logs are permanent, Routes/shared-types are manifest-gated (Story 2.13, amended 2026-08-24): fully omitted if no repo in the entire registry activates the module, disabled (dimmed/strikethrough) if the module exists in the registry but no active-EDT member carries it. Inactive/active/disabled visual states, and a background-event glyph+counter badge (never on a disabled tab) that clears once the zone is visited.
 UX-DR4: Implement the `status-badge` component — the closed glyph+color vocabulary (`●`/`○` up/down, `✔`/`✖` done/failed, `⣾` in-progress, `›`/`▸` selection/action marker), glyph and color always shipped together, never color alone.
 UX-DR5: Implement the `list-row` component — base row, nested-member indent, selected state (surface-selected fill + accent bar + `›` marker), and right-aligned/trailing dim meta-suffix (branch, divergence, timestamp).
 UX-DR6: Implement the `detail-pane` component — uppercase label-styled title, body content, and an outcome-colored `summary-line` divider (success/warning/error) for run-outcome panes.
@@ -88,7 +88,7 @@ UX-DR12: Implement the `dim-annotation` component — optional italic/dim/indent
 UX-DR13: Implement the permanent top bar — app name, active EDT name, `[/]` filter and `[:]` command affordances, always visible above the zone-tab bar.
 UX-DR14: Implement the launch banner — a k9s-inspired ASCII-art banner shown once on launch, above/within the Dashboard zone's content area, monochrome (text-dim or accent), no motion/gradient.
 UX-DR15: Implement the dedicated keybinding-palette/help screen — opened via `?` from any zone, a `modal-dialog` instance listing every key + description beyond the contextual footer-hint, read-only, scrollable with `j`/`k`, closes via `Esc` or `?` again.
-UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` top/bottom (list-jump only, never zone-switching), `Space` toggle, `Enter` confirm, `Esc` cancel, `Tab` cycle, `Ctrl+W` resize-mode, `/` filter, `:` command entry, `?` help, `q` quit (confirms first if a group update/publish/propagation run is in progress), and single-letter zone mnemonics `d`/`e`/`u`/`l`/`r`/`s`.
+UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` top/bottom (list-jump only, never zone-switching), `Space` toggle, `Enter` confirm, `Esc` cancel, `Tab` cycle, `Ctrl+W` resize-mode, `/` filter, `:` command entry, `?` help, `q` quit (confirms first if a group update/publish/propagation run is in progress), and single-letter zone mnemonics `d`/`e`/`u`/`l`/`r`/`s`. Amended 2026-08-24 (Sprint Change Proposal, Story 2.12): `Tab`, outside any form/resize-mode, moves focus onto the zone-tab bar; while focused, `Left`/`Right` move a highlight among reachable tabs, `Enter` switches to the highlighted zone, `Esc`/`Tab` returns focus to content unchanged.
 UX-DR17: Implement the two-layer outcome-message voice pattern across every zone — a dry/factual primary line sufficient on its own, with an optional `dim-annotation` wink line that is never required and never folded into the primary line; raw stderr/stack traces always stay one action away, never fully hidden.
 UX-DR18: Implement the resizable list/detail split as the primary content layout within each zone (roughly 2:3 list:detail ratio), per `{components.splitter}`.
 UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (active EDT + member health + last group-update timestamp + default "enter last EDT" action), "no EDT yet" first-run prompt, and background-event badge surfacing while on Dashboard.
@@ -96,9 +96,11 @@ UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" promp
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart.
 UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes).
-UX-DR24: Implement shared-types zone states — no-members explicit state, publish-in-progress per-step status with spinner, publish-step-failure detail + resume-from-failed-step re-trigger, propagation status (on-latest vs. behind, live not cached), propagation-in-progress/per-service-failure independent retriability, and quit-mid-run confirmation with resume offer.
+UX-DR24: Implement shared-types zone states — no-members explicit state, publish-in-progress per-step status with spinner, publish-step-failure detail + resume-from-failed-step re-trigger, propagation status (on-latest-for-this-branch vs. behind, resolved live via git ancestry, never a global-max version — amended 2026-08-24), publish-success chaining immediately into a propagation offer, propagation-in-progress/per-service-failure independent retriability, and quit-mid-run confirmation with resume offer.
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
+UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11): Implement the repo registry screen — static manifest-creation guidance always shown, scan-a-root-path via `checkbox-list-item` multi-select, per-path register outcome (registered/already-registered/failed), distinct empty-scan state, reachable via the `:` command palette and auto-offered from Dashboard's "no repos registered yet" state.
+UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12): Implement zone-tab-bar keyboard focus — `Tab` moves focus onto the bar (content default is unfocused), `Left`/`Right` highlight reachable tabs, `Enter` activates, `Esc`/`Tab` releases focus back to content without switching.
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback.
 
 ### FR Coverage Map
@@ -484,6 +486,8 @@ So that every zone is reachable from a consistent, always-visible navigation fra
 **When** this story is complete
 **Then** each has a placeholder screen mounted at its tab — none is missing or unreachable
 
+> Amended 2026-08-24 (Sprint Change Proposal, Story 2.13): this AC described the state as of Story 1.9, before manifest-gated tab visibility existed. From Story 2.13 onward, Routes/shared-types may be fully omitted (no repo in the registry ever activates the module) or disabled-with-explanation (module exists in the registry but not on an active-EDT member) — a text correction to match the superseding contract, not a re-opening of a `done` story.
+
 ### Story 1.12: Launch Banner & Keybinding-Help Screen
 
 As a developer,
@@ -842,6 +846,114 @@ So that a stale lock from a crashed session never locks me out permanently, and 
 **When** invoked while a TUI holds the lock
 **Then** it is never affected by this story — AD-9 mechanism 1 (single-TUI enforcement) stays scoped to the interactive TUI's own launch path only
 
+### Story 2.11: Repo Registry Screen & Manifest Onboarding Guidance
+
+> Added 2026-08-24 (Sprint Change Proposal): a TUI front-end over the already-decided `scan`/`register` mechanism (AD-6, Story 1.5, `done`) plus static manifest-creation guidance — not the PRD's deferred guided onboarding wizard or AI-assisted manifest bootstrapping (§5/§6.2 Non-Goals, untouched). Appended to Epic 2 because its branch is still open (same rationale as stories 2.7-2.10), even though the affected mechanism sits under Epic 1's territory.
+
+As a developer,
+I want a TUI screen to scan a root path for repos already carrying a manifest, register the ones I select, and see clear static guidance on creating a manifest for repos that don't have one yet,
+So that I can populate the tool's repo registry — on first use or any time later — without dropping to a separate CLI command.
+
+**Acceptance Criteria:**
+
+**Given** zero registered repos
+**When** the TUI launches
+**Then** Dashboard shows an explicit "no repos registered yet" prompt (never a bare empty EDT prompt), offering to open the registry screen — chains before Story 2.1/UX-DR19's existing "no EDT yet" state
+
+**Given** the registry screen
+**When** opened
+**Then** it always shows static manifest-creation guidance (manual `.tui-back.yaml` per Story 1.4's schema, or the manifest-generator skill run in the target repo) alongside the scan/register controls — not just on first launch
+
+**Given** a root path
+**When** the developer triggers a scan
+**Then** it lists every candidate manifest-carrying directory found (Story 1.5's `scan`, AD-6), via `checkbox-list-item` (UX-DR9) for multi-select
+
+**Given** one or more candidates selected
+**When** confirmed
+**Then** each selected path is registered (Story 1.5's `register`) and the outcome is reported per-path (registered / already-registered / failed)
+
+**Given** a scan finds nothing
+**When** displayed
+**Then** it's a distinct "no manifest-carrying repos found here" state — never indistinguishable from a scan failure
+
+**Given** this screen
+**When** exercised via keyboard only
+**Then** every action is reachable without a mouse (Story 1.9's standing rule)
+
+**Implementation notes:** reuses Story 1.5's existing `scan`/`register` use-cases — no new port/adapter. Reachable via the `:` command palette (stubbed since Story 1.13). The exact manifest-generator skill invocation text is to be verified at build time.
+
+### Story 2.12: Zone-Tab Bar Focus & Arrow Navigation
+
+> Added 2026-08-24 (Sprint Change Proposal): purely additive to the canonical keybinding contract (Stories 1.13/2.7, `done`) — a new, distinct focus state that never touches list-navigation or `Tab`'s existing role inside forms/resize-mode.
+
+As a developer,
+I want to move keyboard focus onto the zone-tab bar with `Tab` and navigate it with the left/right arrows,
+So that I can switch zones without memorizing or reaching for the single-letter mnemonics.
+
+**Acceptance Criteria:**
+
+**Given** content focus (default, no form/resize-mode active)
+**When** `Tab` is pressed
+**Then** focus moves to the zone-tab bar, highlighting the currently active zone's tab
+
+**Given** the tab bar is focused
+**When** `Left`/`Right` is pressed
+**Then** the highlight moves to the previous/next reachable zone tab (wraps at the ends; skips fully-omitted tabs, lands on disabled ones per Story 2.13) — the active zone's content is not switched yet
+
+**Given** the tab bar is focused, a different tab highlighted
+**When** `Enter` is pressed
+**Then** the app switches to that zone (same effect as its mnemonic) and focus returns to content
+
+**Given** the tab bar is focused
+**When** `Esc` or `Tab` is pressed again
+**Then** focus returns to content, active zone unchanged
+
+**Given** a form is open or resize-mode (`Ctrl+W`) is active
+**When** `Tab` is pressed
+**Then** it keeps its existing role (field/boundary cycling) — the tab bar never gains focus in this state; Story 2.7's AC stays true, unamended
+
+**Given** any focus state
+**When** a zone mnemonic (`d`/`e`/`u`/`l`/`r`/`s`) is pressed
+**Then** it switches zones immediately as today — unaffected by this story
+
+**Implementation notes:** new shell-level focus state (e.g. `shellFocus: 'content' | 'tab-bar'` + `highlightedZone`) in `app-store`/`AppShell`. No core/port change — `adapters/driving/tui` only.
+
+### Story 2.13: Manifest-Gated Zone Tab Visibility & Disabled State (Routes & shared-types)
+
+> Added 2026-08-24 (Sprint Change Proposal): supersedes `EXPERIENCE.md`'s original "Routes and shared-types are always-present, never conditionally hidden" decision with a two-tier rule, refined interactively — a blunt hide-when-unused was rejected in favor of hidden-only-when-globally-absent-from-the-registry, disabled-with-explanation otherwise. Amends Story 1.9's AC (text correction, not a re-opening).
+
+As a developer,
+I want `Routes` and `shared-types` to disappear only when no registered repo anywhere could ever use them, and otherwise show as disabled with a clear reason when my active EDT just doesn't need them right now,
+So that the tab bar never lies about what's possible, while still decluttering when a capability is genuinely absent from my machine's registry.
+
+**Acceptance Criteria:**
+
+**Given** zero repos in the entire registry activate a route-explorer module
+**When** the tab bar renders
+**Then** `Routes` is fully omitted — mnemonic and arrow-navigation never land on it; the same rule applies to `shared-types` if zero registered repos declare `shared-types-source` or `shared-types-consumer`
+
+**Given** at least one registered repo activates the module, but the active EDT has no qualifying member
+**When** the tab bar renders
+**Then** the tab is shown in a distinct disabled visual state (dimmed/strikethrough — see `DESIGN.md`)
+
+**Given** a disabled tab
+**When** reached (mnemonic, or `Left`/`Right` + `Enter` on a focused tab bar, Story 2.12)
+**Then** it becomes the active zone and shows a single explanatory message instead of the normal zone screen — e.g. `Routes`: "Aucun de vos services dans cet EDT ne contient de routes ! Les repos avec des routes sont : `api-gateway`, ..."; `shared-types`: "Le repo `shared-types` (qui importe le module `shared-types-source`) ne fait pas partie de votre EDT actif."
+
+**Given** a fully-omitted tab
+**When** its mnemonic is pressed or the tab bar is arrow-navigated
+**Then** it is skipped entirely — never landed on, unlike the disabled case
+
+**Given** the active EDT's membership changes
+**When** a tab's enabled/disabled state changes as a result
+**Then** the tab bar updates immediately; if the currently active zone becomes disabled, its content switches to the explanatory message in place — no forced navigation away
+
+**Given** the repo registry changes (Story 2.11)
+**When** that changes whether any repo anywhere has the module
+**Then** a tab can newly appear or disappear entirely; if the active zone's tab disappears this way, the app falls back to Dashboard
+
+**Implementation notes:** the registry-wide check requires loading manifests for all registered repos (not just active-EDT members) at shell level — verify this doesn't complicate the cold-load spinner state (UX-DR19). The `shared-types-source` module id and the git-ancestry version-resolution mechanism it feeds are specified further under Epic 4's Story 4.1/4.2 (amended below).
+
 ## Epic 3: Group Update & Migrations
 
 A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
@@ -982,11 +1094,17 @@ A developer can publish a new `shared-types` version and see/propagate its adopt
 
 ### Story 4.1: Publish a New `shared-types` Version
 
+> Amended 2026-08-24 (Sprint Change Proposal, correction to not-yet-built Epic 4): publish is now gated on a new `shared-types-source` manifest module identifying the `shared-types` repo itself (previously undocumented how the tool identified it), and chains into propagation on success — closing the "find the propagate action separately" gap.
+
 As a developer,
 I want to publish a new `shared-types` version through the tool,
 So that I don't have to run the release script by hand and lose track of which step failed if something breaks.
 
 **Acceptance Criteria:**
+
+**Given** the active EDT does not include, as a member, the repo whose manifest declares `shared-types-source`
+**When** the developer looks for the publish action
+**Then** it isn't offered (ties to Story 2.13's disabled-tab rule)
 
 **Given** a developer triggers publish
 **When** the tool runs `shared-types`'s `npm run v` script
@@ -1008,17 +1126,23 @@ So that I don't have to run the release script by hand and lose track of which s
 **When** the developer presses `q`
 **Then** quitting requires explicit confirmation first, consistent with the Update zone's rule (Story 3.1)
 
+**Given** a publish completes successfully
+**When** the run finishes
+**Then** the tool immediately offers propagation to the active EDT's eligible consumer members (one, several, or all), chaining into Story 4.3 — propagation remains independently triggerable later too (e.g. a newly added consumer catching up)
+
 ### Story 4.2: See Propagation Status
 
+> Amended 2026-08-24 (Sprint Change Proposal, correction to not-yet-built Epic 4): the original "latest published version" framing is functionally wrong — `shared-types` version numbers are globally unique but published independently per branch, so the global maximum can be unrelated to the active EDT's own branch lineage (e.g. global latest = 660, but the version actually relevant to this branch = 613, because 614–660 were published from unrelated branches). Corrected to resolve "latest relevant" via git ancestry on the active EDT's own `shared-types` branch. The exact resolution mechanism (walking tags/commits reachable from the branch tip) is flagged for `bmad-architecture` to specify before this story is built.
+
 As a developer,
-I want to see which of my active EDT's member services are on the latest `shared-types` version,
-So that I never have to check `package.json` by hand across repos.
+I want to see which of my active EDT's member services are on the version relevant to my active EDT's own `shared-types` branch,
+So that I never have to check `package.json` by hand across repos, and never get a false "behind" reading caused by an unrelated branch's version bump.
 
 **Acceptance Criteria:**
 
 **Given** the active EDT's member services
 **When** the shared-types zone is viewed
-**Then** every member service that declares itself a `shared-types-consumer` in its manifest shows whether it's on the latest published version or behind
+**Then** every member service that declares itself a `shared-types-consumer` in its manifest shows whether it's on the version most recently published from the active EDT's own `shared-types` branch — resolved by walking that branch's git ancestry, never by comparing against the single highest version number across all branches
 
 **Given** a member service that doesn't declare `shared-types-consumer`
 **When** the view is rendered
@@ -1026,7 +1150,7 @@ So that I never have to check `package.json` by hand across repos.
 
 **Given** the status is viewed
 **When** rendered
-**Then** it reflects the latest published version at that moment, not a cached one
+**Then** it reflects the branch-relevant latest version, resolved live via git ancestry at that moment — never cached, never the global maximum across unrelated branches
 
 **Given** the active EDT has zero member services
 **When** the shared-types zone is viewed

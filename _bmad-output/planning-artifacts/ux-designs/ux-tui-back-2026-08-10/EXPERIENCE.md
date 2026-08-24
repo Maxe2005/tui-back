@@ -31,7 +31,7 @@ Six permanent zones, always reachable from the top bar:
 | Routes | Route-explorer module: discover routes, fire requests with automatic dev-mode auth, save/customize/re-fire, response + correlated logs together, global saved-request library. | FR-19–FR-23 |
 | shared-types | Publish a new `shared-types` version, see Propagation status for the active EDT's member services, propagate to chosen ones. | FR-13–FR-15 |
 
-Routes and shared-types are always-present core UI, not conditionally hidden zones — what's manifest-gated is the *content* within them (which services/repos appear), never the zone's own visibility.
+Routes and shared-types are gated at two levels (amended 2026-08-24, Sprint Change Proposal — supersedes the original "always-present, never hidden" decision): fully omitted from the tab bar only when *no repo in the entire registry* (across every EDT, or none) ever activates the relevant module (`route-explorer` for Routes; `shared-types-source`/`shared-types-consumer` for shared-types) — but when the module exists somewhere in the registry and just isn't present on an active-EDT member, the tab stays visible in a disabled state (dimmed/strikethrough) and, when selected, shows an explanatory message naming which registered repos do carry the module. What's manifest-gated at the *content* level (which services/repos appear inside an enabled zone) is unchanged.
 
 An un-manifested/defunct repo (e.g. the real environment's `micro-bookings`) is simply absent from every list and view across all six zones — invisible by construction (FR-2), never a flagged or excluded special case requiring its own UI treatment.
 
@@ -64,7 +64,7 @@ Behavioral. Visual specs live in `DESIGN.md.Components`.
 
 | Component | Use | Behavioral rules |
 |---|---|---|
-| zone-tab | Top bar | Single-letter mnemonic or direct click switches zone. Active EDT name stays visible alongside it at all times. A background-event badge (e.g. a crashed service detected while Max is elsewhere) clears once that zone is visited. |
+| zone-tab | Top bar | Single-letter mnemonic or direct click switches zone from anywhere. `Tab` moves keyboard focus onto the tab bar (unless a form/resize-mode is capturing `Tab` already); while focused, `Left`/`Right` move a highlight among reachable tabs (skipping fully-omitted ones, landing on disabled ones), `Enter` switches to the highlighted zone, `Esc`/`Tab` returns focus to content without switching (amended 2026-08-24, Sprint Change Proposal). Active EDT name stays visible alongside it at all times. A background-event badge (e.g. a crashed service detected while Max is elsewhere) clears once that zone is visited. Routes/shared-types may render disabled — see the gating rule above. |
 | status-badge | Anywhere a state is reported | Passive display — not itself interactive, except where a failing service's badge in Logs exposes an adjacent restart control (FR-18). |
 | list-row | Every list/detail split, including bmad-loop-style single-activation lists (OptionList) | Arrow keys move the highlight; `Home`/`End` jump to top/bottom; `Enter` (or a click) activates the highlighted row — same effect regardless of trigger method. |
 | detail-pane | Right-hand pane of a list/detail split | Read-focused; content follows the left list's current selection. Becomes its own scrollable/selectable list only where the zone calls for it (e.g. the Logs stream). |

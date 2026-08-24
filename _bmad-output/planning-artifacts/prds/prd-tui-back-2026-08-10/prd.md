@@ -102,7 +102,7 @@ A developer can invoke any Must-scope action (repo update, migration, propagatio
 
 #### FR-2: Per-repo manifest declares identity and active modules
 
-The tool only acts on a repo that carries a manifest; the manifest declares that repo's service identity and which modules are active for it (e.g. `shared-types-consumer`, or a route-explorer module paired with a specific scanner/auth implementation).
+The tool only acts on a repo that carries a manifest; the manifest declares that repo's service identity and which modules are active for it (e.g. `shared-types-consumer`, `shared-types-source`, or a route-explorer module paired with a specific scanner/auth implementation).
 
 **Consequences (testable):**
 - A repo with no manifest is invisible to every tool action (this is how `micro-bookings` is excluded, with no special-case code).
@@ -226,7 +226,7 @@ When a migration fails during a group update, the tool surfaces which service, w
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
-**Description:** Absorbs `shared-types`'s existing one-command release script and closes the "no repo-by-repo manual check" gap. Realizes UJ-3. Active only on repos whose manifest declares them a `shared-types` consumer.
+**Description:** Absorbs `shared-types`'s existing one-command release script and closes the "no repo-by-repo manual check" gap. Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation status/action (FR-14/FR-15) is active only on repos whose manifest declares them a `shared-types-consumer`.
 
 **Functional Requirements:**
 
@@ -238,15 +238,19 @@ A developer can publish a new `shared-types` version through the tool, which run
 - A failure at any step of `npm run v` is surfaced with which step failed, not just a generic error, instead of leaving the developer to re-read raw script output.
 - After a fix, the developer can re-trigger the publish without the tool treating the prior failed attempt as success; the tool re-verifies before marking the version published — the same detect → fix → re-verify guarantee as FR-11/FR-12, applied here too.
 - A re-trigger after a partial failure (e.g. publish/push failed after bump and build already succeeded) resumes from the failed step rather than restarting from bump, avoiding a duplicate version bump or a publish conflict on an already-published version.
+- On success, the tool immediately offers propagation to the active EDT's eligible consumer members (one, several, or all) in the same flow, chaining into FR-15 — no separate manual step to go find the propagate action. Propagation remains independently triggerable later too (e.g. a newly added consumer catching up).
+- Publish is offered only when the active EDT includes the `shared-types` repo itself as a member, identified via a `shared-types-source` manifest module (distinct from `shared-types-consumer`).
 
 #### FR-14: See propagation status without a manual check
 
-The tool shows, for the active EDT's member services, which are on the latest published `shared-types` version and which aren't — without the developer checking any repo by hand.
+The tool shows, for the active EDT's member services that declare themselves a `shared-types` consumer, whether they're on the version most recently published from the active EDT's own `shared-types` branch — without the developer checking any repo by hand.
 
 **Consequences (testable):**
 - Propagation status for every EDT-member service that declares itself a `shared-types` consumer is shown without the developer running `npm ls`/checking `package.json` by hand.
-- Status reflects the latest published version, not a cached one, at the moment it's viewed.
+- The "latest" version is resolved by walking the active EDT's `shared-types` branch's git ancestry (tags/commits reachable from its tip) — **never** by comparing against the single highest version number across all branches. Version numbers are globally unique but published independently per branch, so the global maximum can be functionally unrelated to the active branch's own lineage (e.g. global latest = 660, but the version actually relevant to this branch = 613, because 614–660 were published from unrelated branches).
+- Status reflects the branch-relevant latest version, resolved live via git ancestry at view time — never cached.
 - A member service that doesn't declare `shared-types-consumer` in its manifest is omitted from this view.
+- Unavailable when the active EDT doesn't include the `shared-types` repo itself as a member (see FR-13's `shared-types-source` gating).
 
 #### FR-15: Propagate to chosen services
 
