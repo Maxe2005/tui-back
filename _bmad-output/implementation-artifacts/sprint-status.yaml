@@ -74,6 +74,7 @@ development_status:
   2-7-canonical-navigation-contract: done
   2-8-fullscreen-tui-rendering: done
   2-9-edts-zone-create-switch-modify: backlog
+  2-10-recover-from-an-already-running-tui-instance: backlog
   epic-2-retrospective: optional
 
   epic-3: backlog

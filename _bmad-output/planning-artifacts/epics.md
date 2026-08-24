@@ -804,6 +804,44 @@ So that I no longer need the CLI for day-to-day EDT management.
 **When** the EDT selector is added
 **Then** it stays visible alongside it — exact composition (grouped-by-EDT vs. the existing flat list) resolved at implementation time, per the Sprint Change Proposal's note
 
+### Story 2.10: Recover From an Already-Running TUI Instance
+
+> Added 2026-08-24 (Sprint Change Proposal): extends NFR-6 / AD-9 mechanism 1 (single-TUI enforcement, delivered by Story 1.11) — no new FR. Appended to Epic 2 because its branch is still open (same rationale as stories 2.7-2.9), even though the affected code sits under Epic 1's territory.
+
+As a developer,
+I want the TUI to help me resolve a blocked launch instead of only refusing it,
+So that a stale lock from a crashed session never locks me out permanently, and killing a genuinely running instance to replace it takes one keystroke instead of a manual `kill`/`rm` of the lock file.
+
+**Acceptance Criteria:**
+
+**Given** the TUI lock file records a pid that is no longer alive (a prior session crashed or was killed without releasing the lock)
+**When** a developer launches the TUI
+**Then** the stale lock is detected and automatically reclaimed, and the TUI starts normally — no prompt, no manual deletion of the lock file (closes the v1 gap where a dead-pid lock blocks every future launch forever)
+
+**Given** the TUI lock file records a pid that is still alive (a genuinely running TUI instance)
+**When** a developer launches a second TUI instance in an interactive terminal
+**Then** the tool prompts, naming the existing instance's pid and start time, offering to kill it and take over
+
+**Given** that prompt
+**When** the developer confirms
+**Then** the tool signals the existing process to terminate, waits briefly for it to release the lock, force-terminates it if it hasn't exited in time, then acquires the lock and starts normally
+
+**Given** that prompt
+**When** the developer declines (or gives no input)
+**Then** the tool exits 1 with today's "Another TUI instance is already running" message, unchanged — nothing is killed, nothing is deleted
+
+**Given** stdin/stdout is not an interactive TTY (a script or CI invocation)
+**When** the lock is held by a live pid
+**Then** no prompt is ever shown — it refuses immediately with today's message and exit code 1, exactly as now
+
+**Given** the developer confirms killing the existing instance
+**When** the tool lacks permission to signal that pid (e.g. it's owned by another user)
+**Then** the failure is clearly reported and the tool exits 1 — it never falls through to deleting the lock file out from under a process it failed to actually stop
+
+**Given** a CLI subcommand (non-TUI)
+**When** invoked while a TUI holds the lock
+**Then** it is never affected by this story — AD-9 mechanism 1 (single-TUI enforcement) stays scoped to the interactive TUI's own launch path only
+
 ## Epic 3: Group Update & Migrations
 
 A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
