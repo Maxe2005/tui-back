@@ -40,16 +40,26 @@ export async function acquireTuiLock(): Promise<{ release: () => Promise<void> }
   } catch (error: unknown) {
     if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
       const existingLock = readLockFile(lockFile);
-      if (existingLock && isPidAlive(existingLock.pid)) {
+      if (!existingLock) {
         return null;
       }
-      return null;
+      if (isPidAlive(existingLock.pid)) {
+        return null;
+      }
+      // AC1: stale lock (dead PID) → auto-reclaim and proceed
+      try {
+        unlinkSync(lockFile);
+      } catch {
+        // Ignore: lock file may already be gone
+      }
+      // Recursively try to acquire the lock (will succeed since we removed the stale lock)
+      return await acquireTuiLock();
     }
     throw error;
   }
 }
 
-function readLockFile(lockFile: string): LockContent | null {
+export function readLockFile(lockFile: string): LockContent | null {
   try {
     const content = readFileSync(lockFile, 'utf8');
     return JSON.parse(content) as LockContent;
