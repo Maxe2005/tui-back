@@ -88,7 +88,7 @@ UX-DR12: Implement the `dim-annotation` component — optional italic/dim/indent
 UX-DR13: Implement the permanent top bar — app name, active EDT name, `[/]` filter and `[:]` command affordances, always visible above the zone-tab bar.
 UX-DR14: Implement the launch banner — a k9s-inspired ASCII-art banner shown once on launch, above/within the Dashboard zone's content area, monochrome (text-dim or accent), no motion/gradient.
 UX-DR15: Implement the dedicated keybinding-palette/help screen — opened via `?` from any zone, a `modal-dialog` instance listing every key + description beyond the contextual footer-hint, read-only, scrollable with `j`/`k`, closes via `Esc` or `?` again.
-UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` top/bottom (list-jump only, never zone-switching), `Space` toggle, `Enter` confirm, `Esc` cancel, `Tab` cycle, `Ctrl+W` resize-mode, `/` filter, `:` command entry, `?` help, `q` quit (confirms first if a group update/publish/propagation run is in progress), and single-letter zone mnemonics `d`/`e`/`u`/`l`/`r`/`s`. Amended 2026-08-24 (Sprint Change Proposal, Story 2.12): `Tab`, outside any form/resize-mode, moves focus onto the zone-tab bar; while focused, `Left`/`Right` move a highlight among reachable tabs, `Enter` switches to the highlighted zone, `Esc`/`Tab` returns focus to content unchanged.
+UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` top/bottom (list-jump only, never zone-switching), `Space` toggle, `Enter` confirm, `Esc` cancel, `Tab` cycle, `Ctrl+W` resize-mode, `/` filter, `:` command entry, `?` help, `q` quit (confirms first if a group update/publish/propagation run is in progress), and single-letter zone mnemonics `d`/`e`/`u`/`l`/`r`/`s`. Amended 2026-08-24 (Sprint Change Proposal, Story 2.12); zone-switching mechanism corrected 2026-08-25 after a review loopback (see Story 2.12): `Left`/`Right`, with no form/overlay capturing input, directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends — always available, no focus mode. `Tab` is unaffected by this story.
 UX-DR17: Implement the two-layer outcome-message voice pattern across every zone — a dry/factual primary line sufficient on its own, with an optional `dim-annotation` wink line that is never required and never folded into the primary line; raw stderr/stack traces always stay one action away, never fully hidden.
 UX-DR18: Implement the resizable list/detail split as the primary content layout within each zone (roughly 2:3 list:detail ratio), per `{components.splitter}`.
 UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (active EDT + member health + last group-update timestamp + default "enter last EDT" action), "no EDT yet" first-run prompt, and background-event badge surfacing while on Dashboard.
@@ -100,7 +100,7 @@ UX-DR24: Implement shared-types zone states — no-members explicit state, publi
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
 UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11; command mechanism corrected 2026-08-25, Story 2.14): Implement the repo registry screen — static manifest-creation guidance always shown, scan-a-root-path via `checkbox-list-item` multi-select, per-path register outcome (registered/already-registered/failed), distinct empty-scan state, reachable as a registered command inside the `:` command-entry bar (UX-DR29) and auto-offered from Dashboard's "no repos registered yet" state.
-UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12): Implement zone-tab-bar keyboard focus — `Tab` moves focus onto the bar (content default is unfocused), `Left`/`Right` highlight reachable tabs, `Enter` activates, `Esc`/`Tab` releases focus back to content without switching.
+UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism corrected 2026-08-25 after a review loopback): Implement zone arrow navigation — `Left`/`Right` directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends, always available with no form/overlay capturing input. No focus mode; `Tab` is untouched.
 UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14): Implement the `:` command-entry bar — a `modal-dialog` instance with a text input and a `list-row`-styled candidate list of registered commands, filtered by name-prefix as the developer types; `Tab` autocompletes on a single match, `Enter` runs an exact match and closes the bar, `Esc` cancels without executing, and an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently.
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback.
 
@@ -889,41 +889,43 @@ So that I can populate the tool's repo registry — on first use or any time lat
 
 > Amended 2026-08-25 (Sprint Change Proposal, Story 2.14): the original implementation bound `:` directly to opening this screen — a misreading of UX-DR13/UX-DR16's "`:` opens command entry" as a single hardcoded action rather than the generic, extensible command input it always described (stubbed since Story 1.13). The registry screen is now reachable only as a registered command inside Story 2.14's `:` command-entry bar.
 
-### Story 2.12: Zone-Tab Bar Focus & Arrow Navigation
+### Story 2.12: Zone Arrow Navigation
 
-> Added 2026-08-24 (Sprint Change Proposal): purely additive to the canonical keybinding contract (Stories 1.13/2.7, `done`) — a new, distinct focus state that never touches list-navigation or `Tab`'s existing role inside forms/resize-mode.
+> Added 2026-08-24 (Sprint Change Proposal): purely additive to the canonical keybinding contract (Stories 1.13/2.7, `done`) — a new zone-switching input that never touches list-navigation or `Tab`'s existing role inside forms/resize-mode.
+>
+> Amended 2026-08-25 (story 2.12 review loopback): the original design (`Tab` moves focus onto the zone-tab bar; `Left`/`Right` only highlights a tab; `Enter` confirms the switch; `Esc`/`Tab` releases focus) left that focus state stuck on the tab bar whenever a global overlay (`?`/`/`/`:`) opened and closed while it was active, since nothing blurred it — a real, reproducible bug caught in review. Renegotiated to drop the focus-mode state machine entirely: `Left`/`Right` now switch the active zone directly and are always available; `Tab` keeps exactly its pre-story role with zero shell-level involvement. Superseded ACs below are rewritten to match (text correction, not a re-opening).
 
 As a developer,
-I want to move keyboard focus onto the zone-tab bar with `Tab` and navigate it with the left/right arrows,
+I want to switch zones with the left/right arrow keys,
 So that I can switch zones without memorizing or reaching for the single-letter mnemonics.
 
 **Acceptance Criteria:**
 
-**Given** content focus (default, no form/resize-mode active)
-**When** `Tab` is pressed
-**Then** focus moves to the zone-tab bar, highlighting the currently active zone's tab
+**Given** content focus (nothing capturing input, no overlay open)
+**When** `Right` is pressed
+**Then** the active zone switches directly to the next zone in tab-bar order
 
-**Given** the tab bar is focused
+**Given** the same preconditions
+**When** `Left` is pressed
+**Then** the active zone switches directly to the previous zone in tab-bar order
+
+**Given** the active zone is the last (or first) in tab-bar order
+**When** `Right` (or `Left`) is pressed
+**Then** it wraps to the first (or last) zone (skips fully-omitted tabs, lands on disabled ones per Story 2.13)
+
+**Given** a zone dialog has captured input, or a global overlay (help/filter/command) is open
 **When** `Left`/`Right` is pressed
-**Then** the highlight moves to the previous/next reachable zone tab (wraps at the ends; skips fully-omitted tabs, lands on disabled ones per Story 2.13) — the active zone's content is not switched yet
+**Then** nothing happens — same gate the zone mnemonics already use
 
-**Given** the tab bar is focused, a different tab highlighted
-**When** `Enter` is pressed
-**Then** the app switches to that zone (same effect as its mnemonic) and focus returns to content
-
-**Given** the tab bar is focused
-**When** `Esc` or `Tab` is pressed again
-**Then** focus returns to content, active zone unchanged
-
-**Given** a form is open or resize-mode (`Ctrl+W`) is active
+**Given** any state, including a form or resize-mode (`Ctrl+W`)
 **When** `Tab` is pressed
-**Then** it keeps its existing role (field/boundary cycling) — the tab bar never gains focus in this state; Story 2.7's AC stays true, unamended
+**Then** it behaves exactly as it did before this story — no shell-level `Tab` handling was added; Story 2.7's AC stays true, unamended
 
-**Given** any focus state
+**Given** any state
 **When** a zone mnemonic (`d`/`e`/`u`/`l`/`r`/`s`) is pressed
 **Then** it switches zones immediately as today — unaffected by this story
 
-**Implementation notes:** new shell-level focus state (e.g. `shellFocus: 'content' | 'tab-bar'` + `highlightedZone`) in `app-store`/`AppShell`. No core/port change — `adapters/driving/tui` only.
+**Implementation notes:** a pure wrap function over the zone-tab order (`nextZoneId`) plus one dispatch branch beside the existing mnemonic dispatch in `AppShell`. No new store state, no core/port change — `adapters/driving/tui` only.
 
 ### Story 2.13: Manifest-Gated Zone Tab Visibility & Disabled State (Routes & shared-types)
 
@@ -944,7 +946,7 @@ So that the tab bar never lies about what's possible, while still decluttering w
 **Then** the tab is shown in a distinct disabled visual state (dimmed/strikethrough — see `DESIGN.md`)
 
 **Given** a disabled tab
-**When** reached (mnemonic, or `Left`/`Right` + `Enter` on a focused tab bar, Story 2.12)
+**When** reached (mnemonic, or `Left`/`Right` direct zone switching, Story 2.12)
 **Then** it becomes the active zone and shows a single explanatory message instead of the normal zone screen — e.g. `Routes`: "Aucun de vos services dans cet EDT ne contient de routes ! Les repos avec des routes sont : `api-gateway`, ..."; `shared-types`: "Le repo `shared-types` (qui importe le module `shared-types-source`) ne fait pas partie de votre EDT actif."
 
 **Given** a fully-omitted tab
@@ -1005,7 +1007,7 @@ So that `:` behaves like the terminal-style command entry the keybinding contrac
 
 **Given** the command bar is open
 **When** `Tab` is pressed
-**Then** it is fully consumed by autocomplete — Story 2.12's zone-tab-bar focus-on-`Tab` behavior never triggers while the bar is open
+**Then** it is fully consumed by autocomplete — `Tab` has no zone-switching role to conflict with (Story 2.12 uses `Left`/`Right`, not `Tab`)
 
 **Given** this bar
 **When** exercised via keyboard only

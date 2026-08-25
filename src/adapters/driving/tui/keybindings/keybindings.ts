@@ -71,4 +71,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       'Switch directly to Dashboard / EDTs / Update / Logs / Routes / shared-types',
   },
+  {
+    keys: '← / →',
+    description: 'Switch to previous/next zone tab, wrapping at the ends',
+  },
 ];

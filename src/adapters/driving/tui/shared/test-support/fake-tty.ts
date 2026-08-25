@@ -81,6 +81,8 @@ export const KEYS = {
   backspace: '\x7f',
   up: '\x1b[A',
   down: '\x1b[B',
+  left: '\x1b[D',
+  right: '\x1b[C',
   home: '\x1b[H',
   end: '\x1b[F',
 } as const;

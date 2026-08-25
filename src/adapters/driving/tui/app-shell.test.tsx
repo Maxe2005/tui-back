@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AppShell, shouldCloseHelp, shouldOpenHelp, shouldQuit, shouldSwitchZone, shouldOpenCommand, shouldOpenFilter } from './app-shell.js';
+import { AppShell, shouldCloseHelp, shouldOpenHelp, shouldQuit, shouldSwitchZone, shouldOpenCommand, shouldOpenFilter, resolveZoneArrowSwitch } from './app-shell.js';
 import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from './store/app-store.js';
 import { ZONES } from './zones/zones.js';
 import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
@@ -147,6 +147,30 @@ describe('AppShell', () => {
     it('shouldOpenFilter returns true for /', () => {
       expect(shouldOpenFilter('/')).toBe(true);
       expect(shouldOpenFilter('j')).toBe(false);
+    });
+
+    describe('resolveZoneArrowSwitch (story 2.12)', () => {
+      it('resolves rightArrow to the next zone in ZONES order', () => {
+        expect(resolveZoneArrowSwitch({ rightArrow: true }, 'dashboard')).toBe('edts');
+        expect(resolveZoneArrowSwitch({ rightArrow: true }, 'edts')).toBe('update');
+      });
+
+      it('resolves leftArrow to the previous zone in ZONES order', () => {
+        expect(resolveZoneArrowSwitch({ leftArrow: true }, 'edts')).toBe('dashboard');
+        expect(resolveZoneArrowSwitch({ leftArrow: true }, 'update')).toBe('edts');
+      });
+
+      it('wraps forward past the last zone back to the first', () => {
+        expect(resolveZoneArrowSwitch({ rightArrow: true }, 'shared-types')).toBe('dashboard');
+      });
+
+      it('wraps backward past the first zone to the last', () => {
+        expect(resolveZoneArrowSwitch({ leftArrow: true }, 'dashboard')).toBe('shared-types');
+      });
+
+      it('returns null when neither arrow key is set', () => {
+        expect(resolveZoneArrowSwitch({}, 'dashboard')).toBeNull();
+      });
     });
 
     it('shouldOpenCommand returns true for :', () => {

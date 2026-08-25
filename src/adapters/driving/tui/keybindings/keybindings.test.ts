@@ -26,10 +26,14 @@ const EXPECTED = [
     'd / e / u / l / r / s',
     'Switch directly to Dashboard / EDTs / Update / Logs / Routes / shared-types',
   ],
+  [
+    '← / →',
+    'Switch to previous/next zone tab, wrapping at the ends',
+  ],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 12 canonical bindings in documented order (AC2)', () => {
+  it('lists exactly the 13 canonical bindings in documented order (AC2, story 2.12)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),
