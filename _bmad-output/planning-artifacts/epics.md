@@ -99,8 +99,9 @@ UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure
 UX-DR24: Implement shared-types zone states — no-members explicit state, publish-in-progress per-step status with spinner, publish-step-failure detail + resume-from-failed-step re-trigger, propagation status (on-latest-for-this-branch vs. behind, resolved live via git ancestry, never a global-max version — amended 2026-08-24), publish-success chaining immediately into a propagation offer, propagation-in-progress/per-service-failure independent retriability, and quit-mid-run confirmation with resume offer.
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
-UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11): Implement the repo registry screen — static manifest-creation guidance always shown, scan-a-root-path via `checkbox-list-item` multi-select, per-path register outcome (registered/already-registered/failed), distinct empty-scan state, reachable via the `:` command palette and auto-offered from Dashboard's "no repos registered yet" state.
+UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11; command mechanism corrected 2026-08-25, Story 2.14): Implement the repo registry screen — static manifest-creation guidance always shown, scan-a-root-path via `checkbox-list-item` multi-select, per-path register outcome (registered/already-registered/failed), distinct empty-scan state, reachable as a registered command inside the `:` command-entry bar (UX-DR29) and auto-offered from Dashboard's "no repos registered yet" state.
 UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12): Implement zone-tab-bar keyboard focus — `Tab` moves focus onto the bar (content default is unfocused), `Left`/`Right` highlight reachable tabs, `Enter` activates, `Esc`/`Tab` releases focus back to content without switching.
+UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14): Implement the `:` command-entry bar — a `modal-dialog` instance with a text input and a `list-row`-styled candidate list of registered commands, filtered by name-prefix as the developer types; `Tab` autocompletes on a single match, `Enter` runs an exact match and closes the bar, `Esc` cancels without executing, and an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently.
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback.
 
 ### FR Coverage Map
@@ -880,7 +881,9 @@ So that I can populate the tool's repo registry — on first use or any time lat
 **When** exercised via keyboard only
 **Then** every action is reachable without a mouse (Story 1.9's standing rule)
 
-**Implementation notes:** reuses Story 1.5's existing `scan`/`register` use-cases — no new port/adapter. Reachable via the `:` command palette (stubbed since Story 1.13). The exact manifest-generator skill invocation text is to be verified at build time.
+**Implementation notes:** reuses Story 1.5's existing `scan`/`register` use-cases — no new port/adapter. Reachable as a registered command in the `:` command-entry bar (Story 2.14) — not bound directly to the `:` keypress itself. The exact manifest-generator skill invocation text is to be verified at build time.
+
+> Amended 2026-08-25 (Sprint Change Proposal, Story 2.14): the original implementation bound `:` directly to opening this screen — a misreading of UX-DR13/UX-DR16's "`:` opens command entry" as a single hardcoded action rather than the generic, extensible command input it always described (stubbed since Story 1.13). The registry screen is now reachable only as a registered command inside Story 2.14's `:` command-entry bar.
 
 ### Story 2.12: Zone-Tab Bar Focus & Arrow Navigation
 
@@ -953,6 +956,58 @@ So that the tab bar never lies about what's possible, while still decluttering w
 **Then** a tab can newly appear or disappear entirely; if the active zone's tab disappears this way, the app falls back to Dashboard
 
 **Implementation notes:** the registry-wide check requires loading manifests for all registered repos (not just active-EDT members) at shell level — verify this doesn't complicate the cold-load spinner state (UX-DR19). The `shared-types-source` module id and the git-ancestry version-resolution mechanism it feeds are specified further under Epic 4's Story 4.1/4.2 (amended below).
+
+### Story 2.14: Command Entry Bar (`:`) & Registered Commands
+
+> Added 2026-08-25 (Sprint Change Proposal): corrects Story 2.11, whose implementation bound `:` directly to opening the repo registry screen — a misreading of UX-DR13/UX-DR16's "`:` opens command entry," which describes a generic, extensible command input (stubbed since Story 1.13), not one hardcoded action. Appended to Epic 2 because its branch is still open (same rationale as stories 2.7–2.13), even though the affected keybinding stub sits under Epic 1's territory (Story 1.13).
+
+As a developer,
+I want `:` to open a real command-entry bar — type a registered command name, `Tab` to autocomplete, `Enter` to run it, `Esc` to cancel — with the repo registry screen wired as its first registered command,
+So that `:` behaves like the terminal-style command entry the keybinding contract always promised, and future actions can be added as new commands without re-binding a key each time.
+
+**Acceptance Criteria:**
+
+**Given** content focus (no overlay open)
+**When** `:` is pressed
+**Then** a command-entry bar opens with an empty, focused text input and the full list of registered commands shown
+
+**Given** the command bar open with some text typed
+**When** the input changes
+**Then** the shown command list filters to commands whose name starts with the typed text (case-insensitive) — an empty input shows every command, no match shows an explicit "no matching command" state
+
+**Given** the command bar open
+**When** `Tab` is pressed and exactly one command matches the current input
+**Then** the input is completed to that command's full name
+**And When** `Tab` is pressed with zero or more than one match
+**Then** nothing changes
+
+**Given** the command bar open with text that exactly matches a registered command's name
+**When** `Enter` is pressed
+**Then** that command executes and the bar closes
+**And When** `Enter` is pressed with text matching no registered command exactly
+**Then** the bar stays open and shows an explicit "unknown command" message — never executes anything silently
+
+**Given** the command bar open
+**When** `Esc` is pressed
+**Then** it closes without executing anything, discarding the typed text
+
+**Given** the registry screen (Story 2.11)
+**When** it is opened
+**Then** it is opened only by running its registered command (e.g. `registry`) through this bar — `:` itself never opens it directly
+
+**Given** another overlay is already open (help, filter, registry screen, or the command bar itself)
+**When** `:` is pressed
+**Then** nothing happens — the command bar never stacks on top of another overlay
+
+**Given** the command bar is open
+**When** `Tab` is pressed
+**Then** it is fully consumed by autocomplete — Story 2.12's zone-tab-bar focus-on-`Tab` behavior never triggers while the bar is open
+
+**Given** this bar
+**When** exercised via keyboard only
+**Then** every action (type, filter, autocomplete, run, cancel) is reachable without a mouse (Story 1.9's standing rule)
+
+**Implementation notes:** the command registry is a small in-memory, statically-defined list (command name → handler) in `adapters/driving/tui` — no core/port change, mirrors Story 2.11's own "no new port/adapter" rule. Visual treatment reuses the existing `modal-dialog` + `list-row` components (see amended `DESIGN.md`/`EXPERIENCE.md`) rather than introducing new chrome. Only one command (`registry`) is registered by this story; the dispatch mechanism itself is the deliverable — adding a second command later is registry-only, no shell-level change.
 
 ## Epic 3: Group Update & Migrations
 
