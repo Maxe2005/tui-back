@@ -2,7 +2,7 @@
 title: 'Command Entry Bar (`:`) & Registered Commands (Story 2.14)'
 type: 'feature'
 created: '2026-08-25'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 baseline_commit: '60e9adbb7ab406669d80fe06fd9c3b138ce44d47'
 context:
@@ -58,9 +58,9 @@ context:
 
 ## Code Map
 
-- `src/adapters/driving/tui/app-shell.tsx:153-156` -- replace the `openRegistryScreen()` call in the `shouldOpenCommand` branch with opening the new bar; extend the overlay guard at line 135 with the new open-flag
-- `src/adapters/driving/tui/app-shell.tsx:127-133` -- extend the registry-screen-only skip-help-dispatch condition to also skip while the command bar is open (same reasoning as the existing comment: it owns free-text capture)
-- `src/adapters/driving/tui/app-shell.tsx:175-194` -- mount the new command-bar component the same way `RepoRegistryScreen`/`KeybindingHelp` are mounted
+- `src/adapters/driving/tui/app-shell.tsx:159` -- replaces the `openRegistryScreen()` call in the `shouldOpenCommand` branch with opening the new bar; overlay guard at line 140 extended with the new open-flag
+- `src/adapters/driving/tui/app-shell.tsx:131-137` -- extends the registry-screen-only skip-help-dispatch condition to also skip while the command bar is open (same reasoning as the existing comment: it owns free-text capture)
+- `src/adapters/driving/tui/app-shell.tsx:196-199` -- mounts the new command-bar component the same way `RepoRegistryScreen`/`KeybindingHelp` are mounted
 - `src/adapters/driving/tui/commands/commands.ts` (new) -- static registry `Command[] = [{ name, run }]`, one `registry` entry calling `useStore.getState().openRegistryScreen()`; pure `matchCommands(query, commands)` prefix-filter helper (mirrors `zones.ts`'s pure-function convention)
 - `src/adapters/driving/tui/shared/command-bar.tsx` (new) -- `modal-dialog` + `list-row` bar component; self-contained `useInput`, mirroring `repo-registry-screen.tsx`'s `typeRootInputChar`/`backspaceRootInput` shape for the query text; renders one `ListRow` per filtered command plus the "no matching command"/"unknown command" states
 - `src/adapters/driving/tui/shared/components/modal-dialog.tsx`, `.../list-row.tsx` -- reused as-is
@@ -85,15 +85,23 @@ context:
 
 ## Spec Change Log
 
+- **Finding (review, two independent reviewers, confirmed against Ink's actual `useInput` semantics):** Ink dispatches every keypress to every mounted `useInput` hook unless a component passes `{ isActive: false }`. `EdtsZone`'s own `useInput` has no such gate and stays mounted regardless of `commandBarOpen`, so while the bar is open with the EDTs zone active, `Tab` also fires `EdtsZone`'s own pane-focus toggle and an exact-match `Enter` also fires its `openEdtAction()` (which can open a dialog and set `zoneInputCaptured: true`, silently freezing global shortcuts once the bar closes).
+- **Amended:** `commandBarOpen` moved from `AppShell` local state into the store (mirrors `registryScreenOpen`'s placement, not `filterOpen`'s, since — like it — another component now needs to read it). `EdtsZone`'s `useInput` is gated with `{ isActive: !commandBarOpen }` so it stops reacting to keystrokes while the bar owns input.
+- **Known-bad state avoided:** silent, invisible zone-state mutation (pane-focus toggle, or a stray dialog opening) behind the command bar, including a `zoneInputCaptured` stuck `true` after the bar closes.
+- **KEEP:** the bar's own self-contained phase-dispatch `useInput` (typing/filter/Tab/Enter/Esc) is unaffected and correct as originally specified — the gap was one-directional (the bar never leaked into the zone; the zone leaked into itself underneath the bar).
+- **Deferred (not this story's problem — pre-existing, predates 2.14):** the same exposure already exists for `registryScreenOpen`/`filterOpen`/`helpOpen` against any zone with meaningful key handling (e.g. `EdtsZone`'s own `Enter` already collides with Story 2.11's registry-screen `Enter`-to-scan). Logged to `deferred-work.md` for a dedicated hardening pass rather than fixed piecemeal here.
+
 ## Design Notes
 
-The bar mirrors `RepoRegistryScreen`'s self-contained phase-dispatch shape rather than routing keys through `AppShell`'s central `useInput`. `AppShell` tracks only a single local boolean and conditionally mounts the bar:
+The bar mirrors `RepoRegistryScreen`'s self-contained phase-dispatch shape rather than routing keys through `AppShell`'s central `useInput`. `run` takes the store as a parameter (not a closure over the module-level singleton), matching `RepoRegistryScreen`'s own `useStore`-as-prop dependency-injection convention:
 
 ```ts
-export const COMMANDS: Command[] = [
-  { name: 'registry', run: () => useStore.getState().openRegistryScreen() },
+export const COMMANDS: readonly Command[] = [
+  { name: 'registry', run: (useStore) => useStore.getState().openRegistryScreen() },
 ];
 ```
+
+`commandBarOpen` lives in the store (like `registryScreenOpen`, not `filterOpen`'s local placement originally sketched here) so that a mounted zone screen can read it too — see Spec Change Log.
 
 ## Verification
 
