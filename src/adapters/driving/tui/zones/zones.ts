@@ -67,4 +67,3 @@ export function nextZoneId(current: ZoneId, direction: 1 | -1): ZoneId {
   const nextIndex = (index + direction + ZONES.length) % ZONES.length;
   return ZONES[nextIndex]!.id;
 }
-

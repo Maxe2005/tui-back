@@ -58,4 +58,3 @@ describe('nextZoneId (story 2.12)', () => {
     expect(nextZoneId('dashboard', -1)).toBe('shared-types');
   });
 });
-

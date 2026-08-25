@@ -28,7 +28,7 @@ const EXPECTED = [
   ],
   [
     '← / →',
-    'Switch to previous/next zone tab',
+    'Switch to previous/next zone tab, wrapping at the ends',
   ],
 ] as const;
 

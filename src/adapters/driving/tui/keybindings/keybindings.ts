@@ -73,6 +73,6 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: '← / →',
-    description: 'Switch to previous/next zone tab',
+    description: 'Switch to previous/next zone tab, wrapping at the ends',
   },
 ];
