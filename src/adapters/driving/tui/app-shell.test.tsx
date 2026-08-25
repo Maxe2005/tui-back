@@ -74,6 +74,21 @@ describe('AppShell', () => {
     }
   });
 
+  it('opens the repo registry screen from the store (the `:` command palette\'s one wired command, story 2.11) and hides it again', async () => {
+    const store = createAppStore();
+    let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(output).not.toContain('REPO REGISTRY');
+
+    store.getState().openRegistryScreen();
+    output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(output).toContain('REPO REGISTRY');
+    expect(output).toContain('Root path:');
+
+    store.getState().closeRegistryScreen();
+    output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(output).not.toContain('REPO REGISTRY');
+  });
+
   it('opens the keybinding-help modal from the store and hides it again (AC2, AC3)', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
@@ -162,6 +177,21 @@ const minimalState: AppState = {
         edtsUnreachable: [],
         edtsErrors: [],
         loadEdtsBranches: async () => {},
+        registryScreenOpen: false,
+        openRegistryScreen: () => {},
+        closeRegistryScreen: () => {},
+        registrySessionId: 0,
+        registryEmpty: null,
+        registryEmptyStatus: 'idle',
+        checkRegistryEmpty: async () => {},
+        registryScanStatus: 'idle',
+        registryScanError: null,
+        registryScanResult: null,
+        scanRegistryRoot: async () => {},
+        registryRegisterStatus: 'idle',
+        registryRegisterResults: null,
+        registerRegistryCandidates: async () => {},
+        resetRegistryScreen: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

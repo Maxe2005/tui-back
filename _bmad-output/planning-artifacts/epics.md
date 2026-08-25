@@ -56,7 +56,7 @@ NFR-6 (Single-instance enforcement): A second running instance of the tool on th
 - **Hexagonal architecture, one-way dependency direction.** `core/` never imports from `adapters/`; `adapters/driven/*` implement interfaces declared in `core/ports`; `adapters/driving/*` (`tui`, `cli`) call `core/` use-cases only — never a driven adapter directly (AD-1).
 - **Script/CLI parity via one umbrella binary, shared core code.** Every Must-scope action is a subcommand of one CLI binary (`tui-back <subcommand>`), a thin `driving/cli` wrapper around exactly one core use-case; the TUI calls that same core use-case directly, in-process — it never spawns the CLI subcommand as a child process (AD-2).
 - **Script output envelope.** Every core use-case returns a `{ok,data}`/`{ok,error}` TypeScript shape; the CLI adapter serializes it to stdout as human-readable text (TTY) or a single final JSON line (non-TTY): `{"ok":true,"data":{...}}` / `{"ok":false,"error":{"code":"...","message":"...","details":{...}}}`; exit code `0`/`1` only (AD-3).
-- **Manifest is the only per-repo activation surface.** A repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service`, `container`, `migrationCommand`, optional `sharedBranch` (default `development`), and `modules` (module-id → per-module config) (AD-4).
+- **Manifest is the only per-repo activation surface.** A repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service`, `container`, optional `migrationCommand` (absent = the service has no migrations), optional `sharedBranch` (default `development`), and `modules` (module-id → per-module config) (AD-4).
 - **Module implementations are statically registered, never dynamically loaded.** The tool ships a compiled-in registry mapping module id → implementation; a manifest only selects a key from that registry (AD-5).
 - **Repo registry is explicit, never path-convention-based.** The set of local filesystem paths the tool scans lives in an explicit registry (`XDG_CONFIG_HOME/tui-back/registry.yaml`), populated by an explicit register action; a separate scan subcommand may propose candidates but never auto-registers (AD-6).
 - **Storage topology.** One SQLite file per EDT at `XDG_DATA_HOME/tui-back/edts/<ulid>.db` (filename is a generated ULID, never the topic). One global store at `XDG_DATA_HOME/tui-back/global.db` (saved-request library, per-EDT hide/favorite flags, global favorites). Active-EDT pointer and transient UI state live at `XDG_STATE_HOME/tui-back/state.json`. Each `.db`'s schema evolves through hand-rolled, numbered `.sql` files tracked by a `schema_version` table — no external migration framework (AD-7).
@@ -263,6 +263,10 @@ So that an unmanaged repo is never accidentally touched.
 **Given** a repo with a root `.tui-back.yaml` declaring `service`, `container`, `migrationCommand`, `modules`
 **When** loaded
 **Then** it validates against the zod schema and exposes the identity/modules to core
+
+**Given** a repo with a root `.tui-back.yaml` that omits `migrationCommand`
+**When** loaded
+**Then** it validates successfully and the service is treated as having no migrations (consistent with Story 3.2's group-update skip behavior)
 
 **Given** a manifest missing a required field
 **When** loaded
