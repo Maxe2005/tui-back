@@ -2,7 +2,7 @@
 title: 'Zone-Tab Bar Focus & Arrow Navigation (Story 2.12)'
 type: 'feature'
 created: '2026-08-25'
-status: 'ready-for-dev'
+status: 'in-progress'
 review_loop_iteration: 1
 baseline_commit: 'cb471505c3bf5642396d416ae6ceb8f098ce1271'
 context:
