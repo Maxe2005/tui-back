@@ -173,12 +173,22 @@ export type AppState = {
   // zone-input-capture handoff between a zone and AppShell already works.
   quitRequested: boolean;
   requestQuit: () => void;
-  // Story 2.11: repo registry screen — reachable via the `:` command palette and
-  // auto-offered from Dashboard's empty-registry prompt (a single store-level open/close
-  // flag, not local AppShell state, so both call sites can trigger it).
+  // Story 2.11: repo registry screen — reachable exclusively via the `registry` command
+  // inside Story 2.14's `:` command bar, and auto-offered from Dashboard's empty-registry
+  // prompt (a single store-level open/close flag, not local AppShell state, so both call
+  // sites can trigger it).
   registryScreenOpen: boolean;
   openRegistryScreen: () => void;
   closeRegistryScreen: () => void;
+  // Story 2.14: the `:` command-entry bar's open/close flag. Lives in the store (like
+  // registryScreenOpen, not local AppShell state as originally sketched) so a mounted zone
+  // screen can read it too and gate its own `useInput` with `{ isActive: !commandBarOpen }`
+  // — Ink dispatches every keypress to every mounted `useInput` hook regardless of z-order,
+  // so without this a zone's own key handling (e.g. EdtsZone's Tab/Enter) would silently
+  // fire underneath the bar (Spec Change Log, story 2.14 review finding).
+  commandBarOpen: boolean;
+  openCommandBar: () => void;
+  closeCommandBar: () => void;
   // Bumped by resetRegistryScreen (and therefore by openRegistryScreen, which always calls
   // it) — scanRegistryRoot/registerRegistryCandidates/checkRegistryEmpty each capture this at
   // the start of their async work and no-op their terminal `set()` if it has moved on by the
@@ -408,6 +418,9 @@ export function createAppStore(deps?: AppStoreDeps) {
       set({ registryScreenOpen: true });
     },
     closeRegistryScreen: () => set({ registryScreenOpen: false }),
+    commandBarOpen: false,
+    openCommandBar: () => set({ commandBarOpen: true }),
+    closeCommandBar: () => set({ commandBarOpen: false }),
     registrySessionId: 0,
     registryEmpty: null,
     registryEmptyStatus: 'idle',

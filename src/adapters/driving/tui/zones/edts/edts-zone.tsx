@@ -460,6 +460,11 @@ export function EdtsZone({
   const modifyEdtAction = useStore((state) => state.modifyEdt);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const requestQuit = useStore((state) => state.requestQuit);
+  // Story 2.14 review fix: Ink dispatches every keypress to every mounted `useInput` hook
+  // regardless of z-order, so without this gate Tab/Enter typed into the `:` command bar
+  // would also silently fire this zone's own pane-focus toggle / openEdtAction() underneath
+  // it (Spec Change Log, spec-2-14).
+  const commandBarOpen = useStore((state) => state.commandBarOpen);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -849,7 +854,7 @@ export function EdtsZone({
     if (direction !== null) {
       setServicesSelected((prevIndex) => moveSelection(prevIndex, direction, rows.length));
     }
-  });
+  }, { isActive: !commandBarOpen });
 
   const focused: ServiceBranchDivergence | undefined = rows[clampedSelected];
   const loading = status === 'loading' && rows.length === 0;

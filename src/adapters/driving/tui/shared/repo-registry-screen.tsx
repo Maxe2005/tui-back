@@ -2,7 +2,8 @@
 // existing scan/register use-cases (AD-6). Not a 7th ZoneId/tab (zones/zones.ts's closed
 // union stays unchanged) — an overlay in the same family as the command/filter/help
 // ModalDialog overlays, opened/closed via app-store's registryScreenOpen flag so both the
-// `:` command palette (app-shell.tsx) and Dashboard's empty-registry prompt can trigger it.
+// `registry` command inside Story 2.14's `:` command bar and Dashboard's empty-registry
+// prompt can trigger it (`:` itself never opens this screen directly, story 2.14).
 //
 // Testability convention (render-to-string.tsx): the shared renderToString harness's fake
 // stdin never emits data, so a useInput callback itself is never invoked by any test in this

@@ -33,6 +33,12 @@ describe('AppShell', () => {
     expect(output).toContain('[/] filter');
   });
 
+  it('never mounts the command bar on initial render — commandBarOpen defaults closed (story 2.14)', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(output).not.toContain('COMMAND');
+  });
+
   it('still renders its full chrome (top bar, zone tabs, footer) once the root height is bound to the terminal rows (story 2.8)', async () => {
     // render-to-string.ts pins the test harness's stdout to a fixed 40-row size, mirroring
     // Ink's own useWindowSize() height binding on AppShell's root Box — this guards against
@@ -74,7 +80,7 @@ describe('AppShell', () => {
     }
   });
 
-  it('opens the repo registry screen from the store (the `:` command palette\'s one wired command, story 2.11) and hides it again', async () => {
+  it('opens the repo registry screen from the store (reachable only via the `registry` command inside the `:` command bar, story 2.14) and hides it again', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('REPO REGISTRY');
@@ -204,6 +210,9 @@ const minimalState: AppState = {
         registryScreenOpen: false,
         openRegistryScreen: () => {},
         closeRegistryScreen: () => {},
+        commandBarOpen: false,
+        openCommandBar: () => {},
+        closeCommandBar: () => {},
         registrySessionId: 0,
         registryEmpty: null,
         registryEmptyStatus: 'idle',
