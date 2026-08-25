@@ -73,9 +73,9 @@ development_status:
   2-6-branch-and-divergence-visibility: done
   2-7-canonical-navigation-contract: done
   2-8-fullscreen-tui-rendering: done
-  2-9-edts-zone-create-switch-modify: review
+  2-9-edts-zone-create-switch-modify: done
   2-10-recover-from-an-already-running-tui-instance: done
-  2-11-repo-registry-screen-manifest-onboarding-guidance: review
+  2-11-repo-registry-screen-manifest-onboarding-guidance: done
   2-12-zone-tab-bar-focus-arrow-navigation: backlog
   2-13-manifest-gated-zone-tab-visibility-disabled-state: backlog
   2-14-command-entry-bar-registered-commands: backlog
