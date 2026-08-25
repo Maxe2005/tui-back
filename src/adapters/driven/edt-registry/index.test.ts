@@ -10,6 +10,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { createEdtRegistryPort } from './index.js';
+import { modifyEdt } from '../../../core/edt/modify.js';
+import { ok, type Result } from '../../../core/result.js';
+import type { GitPort } from '../../../core/ports/git.js';
+import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { LockPort } from '../../../core/ports/lock.js';
 
 const tmpDirs: string[] = [];
 
@@ -203,7 +209,7 @@ describe('edt-registry update()', () => {
     expect(result).toEqual({ ok: true, data: undefined });
     expect(await port.list()).toEqual({
       ok: true,
-      data: [{ topic: 'renamed', members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }] }],
+      data: [{ ...entry, topic: 'renamed', members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }] }],
     });
   });
 
@@ -256,5 +262,241 @@ describe('edt-registry update()', () => {
       ok: true,
       data: [{ ...entryA, topic: 'renamed-a' }, entryB],
     });
+  });
+});
+
+// Story 2.9 regression: modify.ts computed added members / branch changes into `results`
+// but never fed them back into the patch it wrote to the registry. This test drives
+// modifyEdt end-to-end against a *real* createEdtRegistryPort (temp file, real update()) —
+// not a mock that just echoes ok(undefined) — so a re-introduction of the bug (persisted
+// entry silently missing the add/branch-change) fails this test instead of shipping
+// undetected, the way it did the first time (see deferred-work.md, code review of 2-5).
+describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
+  function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
+    return {
+      assertAllowedBranch: async () => ok(undefined),
+      createBranch: async () => ok(undefined),
+      deleteBranch: async () => ok(undefined),
+      currentBranch: async () => ok('feature-new'),
+      aheadBehind: async () => ok({ ahead: 0, behind: 0 }),
+      checkout: async () => ok(undefined),
+      hasUncommittedChanges: async () => ok(false),
+      stashSave: async () => ok(undefined),
+      restoreStash: async () => ok(undefined),
+      branchExistsLocally: async () => ok(true),
+      fetch: async () => ok(undefined),
+      ...overrides,
+    };
+  }
+
+  function fakeManifest(): ManifestPort {
+    return {
+      load: async (repoPath: string) =>
+        ok({
+          service: `service-${repoPath.split('/').pop()}`,
+          container: 'ctr',
+          migrationCommand: 'true',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+    };
+  }
+
+  function fakeRegistry(paths: string[]): RegistryPort {
+    return {
+      list: async () => ok(paths),
+      add: async () => ok(undefined),
+      exists: async () => ok(true),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: paths[0] ?? '', backupPath: null }),
+    };
+  }
+
+  function fakeLock(): LockPort {
+    return {
+      acquire: async () => ok({ release: async (): Promise<Result<void>> => ok(undefined) }),
+      peek: async () => ok({ locked: false }),
+    };
+  }
+
+  it('actually persists an added member to the registry entry (not just `results`)', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const edtRegistry = createEdtRegistryPort(file);
+
+    const result = await modifyEdt({
+      edtRegistry,
+      registry: fakeRegistry(['/repos/new-member']),
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      lock: fakeLock(),
+      edtRegistryResourceKey: file,
+      topic: 'demo',
+      addMembers: ['/repos/new-member'],
+      removeMembers: [],
+      setBranches: [],
+      renameTo: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+
+    const persisted = await edtRegistry.list();
+    expect(persisted.ok).toBe(true);
+    if (persisted.ok) {
+      expect(persisted.data[0].members).toEqual([
+        { service: 'service-new-member', repoPath: '/repos/new-member', branch: 'feature-new' },
+      ]);
+    }
+  });
+
+  it('actually persists a member branch change to the registry entry (not just `results`)', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'old-branch' }],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const edtRegistry = createEdtRegistryPort(file);
+
+    const result = await modifyEdt({
+      edtRegistry,
+      registry: fakeRegistry(['/repos/a']),
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      lock: fakeLock(),
+      edtRegistryResourceKey: file,
+      topic: 'demo',
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [{ repoPath: '/repos/a', branch: 'new-branch' }],
+      renameTo: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+
+    const persisted = await edtRegistry.list();
+    expect(persisted.ok).toBe(true);
+    if (persisted.ok) {
+      expect(persisted.data[0].members).toEqual([
+        { service: 'route-explorer', repoPath: '/repos/a', branch: 'new-branch' },
+      ]);
+    }
+  });
+
+  it('drops a removed member entirely, verified against the real persisted patch', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'main' }],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const edtRegistry = createEdtRegistryPort(file);
+
+    const result = await modifyEdt({
+      edtRegistry,
+      registry: fakeRegistry(['/repos/a']),
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      lock: fakeLock(),
+      edtRegistryResourceKey: file,
+      topic: 'demo',
+      addMembers: [],
+      removeMembers: ['/repos/a'],
+      setBranches: [],
+      renameTo: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+
+    const persisted = await edtRegistry.list();
+    expect(persisted.ok).toBe(true);
+    if (persisted.ok) {
+      expect(persisted.data[0].members).toEqual([]);
+    }
+  });
+
+  it('persists a renamed topic against the real registry file', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'original',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const edtRegistry = createEdtRegistryPort(file);
+
+    const result = await modifyEdt({
+      edtRegistry,
+      registry: fakeRegistry([]),
+      manifest: fakeManifest(),
+      git: fakeGit(),
+      lock: fakeLock(),
+      edtRegistryResourceKey: file,
+      topic: 'original',
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [],
+      renameTo: 'renamed',
+    });
+
+    expect(result.ok).toBe(true);
+
+    const persisted = await edtRegistry.list();
+    expect(persisted.ok).toBe(true);
+    if (persisted.ok) {
+      expect(persisted.data[0].topic).toBe('renamed');
+    }
+  });
+
+  it('a branch override on a member added in the same call wins over its auto-resolved current branch', async () => {
+    const file = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const edtRegistry = createEdtRegistryPort(file);
+
+    const result = await modifyEdt({
+      edtRegistry,
+      registry: fakeRegistry(['/repos/new-member']),
+      manifest: fakeManifest(),
+      git: fakeGit({ currentBranch: async () => ok('auto-resolved') }),
+      lock: fakeLock(),
+      edtRegistryResourceKey: file,
+      topic: 'demo',
+      addMembers: ['/repos/new-member'],
+      removeMembers: [],
+      setBranches: [{ repoPath: '/repos/new-member', branch: 'chosen-instead' }],
+      renameTo: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+
+    const persisted = await edtRegistry.list();
+    expect(persisted.ok).toBe(true);
+    if (persisted.ok) {
+      expect(persisted.data[0].members).toEqual([
+        { service: 'service-new-member', repoPath: '/repos/new-member', branch: 'chosen-instead' },
+      ]);
+    }
   });
 });

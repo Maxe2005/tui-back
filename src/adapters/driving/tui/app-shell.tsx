@@ -76,6 +76,7 @@ export function AppShell({
   const closeRegistryScreen = useStore((state) => state.closeRegistryScreen);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
+  const quitRequested = useStore((state) => state.quitRequested);
 
   const [filterOpen, setFilterOpen] = useState(false);
 
@@ -85,8 +86,27 @@ export function AppShell({
     }
   }, [activeZone, useStore]);
 
+  // Review patch (story 2.9): `q` can't reach onQuit while a zone dialog has captured
+  // input (see the zoneInputCaptured gate below) — a zone whose captured dialog has no
+  // cancel target of its own (the EDTs zone's forced, genuinely-empty-registry create
+  // prompt) calls `requestQuit()` instead. onQuit is only in scope here, at the
+  // composition root's boundary, so this effect is the handoff.
+  useEffect(() => {
+    if (quitRequested) {
+      onQuit();
+    }
+  }, [quitRequested, onQuit]);
+
   useInput((input, key) => {
     const state = useStore.getState();
+
+    // Story 2.9: a zone-owned dialog/form (e.g. the EDTs zone's create/switch/modify
+    // flows) sets zoneInputCaptured while it owns the keystroke — every global shortcut,
+    // including `?` help, must not fire while it's set, the same way it's already gated
+    // for the zone-mnemonic/filter/command dispatch below.
+    if (state.zoneInputCaptured) {
+      return;
+    }
 
     // Skip help dispatch entirely while the registry screen is open — it owns free-text
     // keystroke capture (the root-path field), so `?` typed there must land as a literal

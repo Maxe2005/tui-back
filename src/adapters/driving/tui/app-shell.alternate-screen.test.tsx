@@ -5,55 +5,15 @@
 // real pty: a fake stdout/stdin that report `isTTY: true` is enough to drive Ink's actual
 // alternate-screen and resize machinery — the same technique `render-to-string.ts` already
 // uses for its fake TTY stdin, just with `interactive: true` instead of `false`.
-import { EventEmitter } from 'node:events';
-import { Writable } from 'node:stream';
+// Story 2.9 extracted the fakes themselves to `shared/test-support/fake-tty.ts` so the new
+// real-keypress interaction tests (edts-zone.interaction.test.tsx) reuse this exact
+// technique instead of re-declaring it.
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import { AppShell } from './app-shell.js';
 import { createAppStore } from './store/app-store.js';
-
-class FakeTtyStdout extends Writable {
-  isTTY = true;
-  columns = 80;
-  rows = 24;
-  private chunks: string[] = [];
-  override _write(
-    chunk: Buffer | string,
-    _encoding: BufferEncoding,
-    callback: (error?: Error | null) => void,
-  ): void {
-    this.chunks.push(chunk.toString());
-    callback();
-  }
-  get output(): string {
-    return this.chunks.join('');
-  }
-  get chunkCount(): number {
-    return this.chunks.length;
-  }
-  // Each render also emits synchronized-update toggle sequences ("\x1b[?2026h"/"l") and an
-  // empty flush marker around the actual frame — filter down to chunks that carry an
-  // actual frame (Ink clears the screen with "\x1b[2J" before writing new content).
-  contentFramesSince(count: number): string[] {
-    return this.chunks.slice(count).filter((chunk) => chunk.includes('[2J'));
-  }
-}
-
-function fakeTtyStdin(): NodeJS.ReadStream {
-  const stdin = new EventEmitter() as unknown as NodeJS.ReadStream;
-  Object.assign(stdin, {
-    isTTY: true,
-    setRawMode: () => {},
-    setEncoding: () => {},
-    ref: () => {},
-    unref: () => {},
-    read: () => null,
-    pause: () => stdin,
-    resume: () => stdin,
-  });
-  return stdin;
-}
+import { FakeTtyStdout, fakeTtyStdin } from './shared/test-support/fake-tty.js';
 
 describe('AppShell alternate-screen rendering (AC1, AC2, AC3)', () => {
   it('enters the alternate screen on mount and exits it on unmount', async () => {
