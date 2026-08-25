@@ -93,3 +93,150 @@ describe('AppShell real-keypress interactions (story 2.9, AC6)', () => {
     }
   });
 });
+
+describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
+  it('Right switches to the next zone in ZONES order', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).toBe('dashboard');
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('edts');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Left switches to the previous zone in ZONES order', async () => {
+    const store = createAppStore();
+    store.getState().setActiveZone('update');
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.left);
+
+      expect(store.getState().activeZone).toBe('edts');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Right wraps from the last zone back to the first', async () => {
+    const store = createAppStore();
+    store.getState().setActiveZone('shared-types');
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Left wraps from the first zone back to the last', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).toBe('dashboard');
+
+      await press(instance, stdin, KEYS.left);
+
+      expect(store.getState().activeZone).toBe('shared-types');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('has no effect while a zone dialog has captured input (zoneInputCaptured)', async () => {
+    const store = createAppStore();
+    store.setState({ zoneInputCaptured: true, activeZone: 'dashboard' });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('has no effect while the filter overlay is open', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '/'); // opens the filter modal (local AppShell state)
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('has no effect while the help overlay is open', async () => {
+    const store = createAppStore();
+    store.getState().openHelp();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('has no effect while the repo registry screen is open', async () => {
+    const store = createAppStore();
+    store.getState().openRegistryScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('leaves Tab byte-for-byte unaffected — no shell-level interception is added', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).toBe('dashboard');
+
+      await press(instance, stdin, KEYS.tab);
+
+      // Tab has no shell-level zone-switching effect either before or after this story.
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

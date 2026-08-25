@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ZONES, isZoneId } from './zones.js';
+import { ZONES, isZoneId, nextZoneId } from './zones.js';
 
 describe('zones metadata', () => {
   it('defines exactly the six navigation zones (AC6)', () => {
@@ -30,6 +30,32 @@ describe('zones metadata', () => {
       expect(isZoneId(zone.id)).toBe(true);
     }
     expect(isZoneId('bogus')).toBe(false);
+  });
+});
+
+describe('nextZoneId (story 2.12)', () => {
+  it('moves forward to the next zone in ZONES order', () => {
+    expect(nextZoneId('dashboard', 1)).toBe('edts');
+    expect(nextZoneId('edts', 1)).toBe('update');
+    expect(nextZoneId('update', 1)).toBe('logs');
+    expect(nextZoneId('logs', 1)).toBe('routes');
+    expect(nextZoneId('routes', 1)).toBe('shared-types');
+  });
+
+  it('moves backward to the previous zone in ZONES order', () => {
+    expect(nextZoneId('shared-types', -1)).toBe('routes');
+    expect(nextZoneId('routes', -1)).toBe('logs');
+    expect(nextZoneId('logs', -1)).toBe('update');
+    expect(nextZoneId('update', -1)).toBe('edts');
+    expect(nextZoneId('edts', -1)).toBe('dashboard');
+  });
+
+  it('wraps forward from the last zone to the first', () => {
+    expect(nextZoneId('shared-types', 1)).toBe('dashboard');
+  });
+
+  it('wraps backward from the first zone to the last', () => {
+    expect(nextZoneId('dashboard', -1)).toBe('shared-types');
   });
 });
 

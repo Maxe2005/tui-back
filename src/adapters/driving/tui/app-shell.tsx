@@ -8,7 +8,7 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
-import { ZONES, type ZoneId } from './zones/zones.js';
+import { ZONES, nextZoneId, type ZoneId } from './zones/zones.js';
 
 export function shouldOpenHelp(input: string): boolean {
   return input === '?';
@@ -40,6 +40,22 @@ export function resolveHelpDispatch(
 export function shouldSwitchZone(input: string): ZoneId | null {
   const zone = ZONES.find((z) => z.mnemonic === input);
   return zone?.id ?? null;
+}
+
+// Story 2.12: `Left`/`Right` directly switch the active zone to the previous/next zone in
+// `ZONES` order, wrapping at the ends — no mode to enter first, gated exactly like
+// `shouldSwitchZone`'s mnemonic dispatch (same `if` block, same early-return guards).
+export function resolveZoneArrowSwitch(
+  key: { leftArrow?: boolean; rightArrow?: boolean },
+  activeZone: ZoneId,
+): ZoneId | null {
+  if (key.leftArrow) {
+    return nextZoneId(activeZone, -1);
+  }
+  if (key.rightArrow) {
+    return nextZoneId(activeZone, 1);
+  }
+  return null;
 }
 
 export function shouldOpenFilter(input: string): boolean {
@@ -120,6 +136,12 @@ export function AppShell({
       const zoneId = shouldSwitchZone(input);
       if (zoneId) {
         setActiveZone(zoneId);
+        return;
+      }
+
+      const arrowZoneId = resolveZoneArrowSwitch(key, activeZone);
+      if (arrowZoneId) {
+        setActiveZone(arrowZoneId);
         return;
       }
 

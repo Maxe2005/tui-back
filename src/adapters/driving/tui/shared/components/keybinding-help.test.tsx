@@ -39,7 +39,8 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
     expect(down.scrollOffset).toBe(1);
 
     const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    expect(atBottom.visible.at(-1)?.keys).toBe('d / e / u / l / r / s');
+    // Story 2.12 appended the '← / →' entry, so it — not the mnemonics row — is now last.
+    expect(atBottom.visible.at(-1)?.keys).toBe('← / →');
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
     const backUp = resolveHelpWindow(KEYBINDINGS, atBottom.scrollOffset - 1, 10);

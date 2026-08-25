@@ -56,10 +56,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `zones.ts` -- add `nextZoneId(current, direction)` -- reusable wrap-arithmetic, no dispatch coupling
-- [ ] `app-shell.tsx` -- add arrow-switch pure function + dispatch branch beside `shouldSwitchZone` -- drives the interaction with zero new state
-- [ ] `keybindings.ts` -- add the `← / →` help entry -- keeps `?` help accurate
-- [ ] `zones.test.ts`, `app-shell.test.tsx`, `app-shell.interaction.test.tsx`, `keybindings.test.ts` -- cover the I/O matrix and the new help entry
+- [x] `zones.ts` -- add `nextZoneId(current, direction)` -- reusable wrap-arithmetic, no dispatch coupling
+- [x] `app-shell.tsx` -- add arrow-switch pure function + dispatch branch beside `shouldSwitchZone` -- drives the interaction with zero new state
+- [x] `keybindings.ts` -- add the `← / →` help entry -- keeps `?` help accurate
+- [x] `zones.test.ts`, `app-shell.test.tsx`, `app-shell.interaction.test.tsx`, `keybindings.test.ts` -- cover the I/O matrix and the new help entry (also fixed a pre-existing hardcoded last-row assertion in `keybinding-help.test.tsx`, and added `left`/`right` raw sequences to the shared `KEYS` test fixture)
 
 **Acceptance Criteria:**
 - Given any focus state, when a zone mnemonic is pressed, then it switches zones immediately exactly as it does today (mnemonics are untouched by this story)
