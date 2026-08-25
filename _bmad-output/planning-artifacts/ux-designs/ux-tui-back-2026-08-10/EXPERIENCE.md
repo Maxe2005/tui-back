@@ -31,7 +31,7 @@ Six permanent zones, always reachable from the top bar:
 | Routes | Route-explorer module: discover routes, fire requests with automatic dev-mode auth, save/customize/re-fire, response + correlated logs together, global saved-request library. | FR-19–FR-23 |
 | shared-types | Publish a new `shared-types` version, see Propagation status for the active EDT's member services, propagate to chosen ones. | FR-13–FR-15 |
 
-Routes and shared-types are always-present core UI, not conditionally hidden zones — what's manifest-gated is the *content* within them (which services/repos appear), never the zone's own visibility.
+Routes and shared-types are gated at two levels (amended 2026-08-24, Sprint Change Proposal — supersedes the original "always-present, never hidden" decision): fully omitted from the tab bar only when *no repo in the entire registry* (across every EDT, or none) ever activates the relevant module (`route-explorer` for Routes; `shared-types-source`/`shared-types-consumer` for shared-types) — but when the module exists somewhere in the registry and just isn't present on an active-EDT member, the tab stays visible in a disabled state (dimmed/strikethrough) and, when selected, shows an explanatory message naming which registered repos do carry the module. What's manifest-gated at the *content* level (which services/repos appear inside an enabled zone) is unchanged.
 
 An un-manifested/defunct repo (e.g. the real environment's `micro-bookings`) is simply absent from every list and view across all six zones — invisible by construction (FR-2), never a flagged or excluded special case requiring its own UI treatment.
 
@@ -64,7 +64,7 @@ Behavioral. Visual specs live in `DESIGN.md.Components`.
 
 | Component | Use | Behavioral rules |
 |---|---|---|
-| zone-tab | Top bar | Single-letter mnemonic or direct click switches zone. Active EDT name stays visible alongside it at all times. A background-event badge (e.g. a crashed service detected while Max is elsewhere) clears once that zone is visited. |
+| zone-tab | Top bar | Single-letter mnemonic or direct click switches zone from anywhere. `Tab` moves keyboard focus onto the tab bar (unless a form/resize-mode is capturing `Tab` already); while focused, `Left`/`Right` move a highlight among reachable tabs (skipping fully-omitted ones, landing on disabled ones), `Enter` switches to the highlighted zone, `Esc`/`Tab` returns focus to content without switching (amended 2026-08-24, Sprint Change Proposal). Active EDT name stays visible alongside it at all times. A background-event badge (e.g. a crashed service detected while Max is elsewhere) clears once that zone is visited. Routes/shared-types may render disabled — see the gating rule above. |
 | status-badge | Anywhere a state is reported | Passive display — not itself interactive, except where a failing service's badge in Logs exposes an adjacent restart control (FR-18). |
 | list-row | Every list/detail split, including bmad-loop-style single-activation lists (OptionList) | Arrow keys move the highlight; `Home`/`End` jump to top/bottom; `Enter` (or a click) activates the highlighted row — same effect regardless of trigger method. |
 | detail-pane | Right-hand pane of a list/detail split | Read-focused; content follows the left list's current selection. Becomes its own scrollable/selectable list only where the zone calls for it (e.g. the Logs stream). |
@@ -74,6 +74,7 @@ Behavioral. Visual specs live in `DESIGN.md.Components`.
 | splitter | Divider between a list pane and a detail pane (or any two resizable regions) | Mouse-drag resizes directly. `Ctrl+W` enters keyboard resize-mode: arrow keys resize the active boundary, `Tab` cycles which boundary is active (in a zone with more than one), `Enter` or `Esc` exits resize-mode. Pane sizes persist across sessions, per zone independently — not one global size — mirroring bmad-loop's own per-pane persistence (e.g. its `left_width`/`runs_height`/`deferred_height`/`tasks_height` each tracked separately). |
 | spinner | Any in-progress action (pull, publish step, propagation) | Purely a running-state indicator — no interaction. |
 | dim-annotation | The optional wink line under a factual message | Not focusable, not required reading; purely visual, always attached to the factual line above it. |
+| command-bar | Top-level `:` action (Story 2.14, amended 2026-08-25 Sprint Change Proposal — corrects Story 2.11, which had bound `:` directly to one screen instead of this generic input) | A `modal-dialog` instance (text input + `list-row`-styled candidate list). Typing filters the shown commands by name-prefix, case-insensitive; `Tab` completes the input on exactly one match; `Enter` runs an exact match and closes the bar; `Esc` cancels without executing; an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently. Never opens on top of another overlay, and consumes `Tab` itself while open (Story 2.12's zone-tab-bar focus-on-`Tab` does not trigger). |
 
 ## State Patterns
 
@@ -156,6 +157,7 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Focus / active selection | `{components.list-row}` selected treatment — accent bar + `surface-selected` fill. |
 | Background event | `{components.zone-tab}` badge on the affected zone's tab while Max is elsewhere — no overlay/toast interrupts the current screen. |
 | Keybinding-help screen open | A `modal-dialog` instance, opened via `?` from any zone over whatever's currently on screen; `Esc` or `?` again closes it and returns to the underlying zone unchanged. |
+| Command bar open | A `modal-dialog`-based overlay opened via `:` from any zone (Story 2.14); filters/autocompletes/executes registered commands; `Esc` or a successful run closes it and returns to the underlying zone unchanged. Never stacks on top of another open overlay. |
 
 ## Interaction Primitives
 
@@ -169,7 +171,7 @@ The canonical keybinding contract for downstream implementation:
 - `Tab` — cycle — between fields in a form, or between resizable boundaries in a multi-splitter zone.
 - `Ctrl+W` — enter keyboard resize-mode on the active splitter; arrow keys resize; `Tab` cycles the active boundary; `Enter`/`Esc` exits.
 - `/` — open filter within the current zone.
-- `:` — open command entry.
+- `:` — open the command-entry bar (Story 2.14, amended 2026-08-25 Sprint Change Proposal): type a registered command name, `Tab` autocompletes on a single match, `Enter` runs an exact match, `Esc` cancels.
 - `?` — open the dedicated keybinding-palette/help screen: every key in the app plus its description, beyond what the contextual footer-hint shows.
 - `q` — quit; confirms first if a group update, shared-types publish, or propagation run is in progress (consistent with FR-6's EDT-switch-blocked-during-update precedent) — see the Update and shared-types zones' "Quit mid-run" states.
 - Single-letter zone mnemonics — `d`=Dashboard, `e`=EDTs, `u`=Update, `l`=Logs, `r`=Routes, `s`=shared-types; each switches directly to that zone from anywhere. An earlier mockup showed `g` for Dashboard (visible in the footer hint, e.g. `[g] dashboard`) — corrected to `d`, specifically so the zone-mnemonic namespace never collides with the vim-style `g`/`G` list-jump above, which stays reserved for top/bottom-of-list regardless of which zone is active.

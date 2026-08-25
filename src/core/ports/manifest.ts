@@ -6,7 +6,7 @@ import type { Result } from '../result.js';
 export interface Manifest {
   service: string;
   container: string;
-  migrationCommand: string;
+  migrationCommand?: string;
   sharedBranch: string;
   modules: Record<string, Record<string, unknown>>;
 }

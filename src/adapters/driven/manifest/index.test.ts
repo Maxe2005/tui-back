@@ -65,7 +65,47 @@ describe('loadManifest', () => {
   });
 
   it('fails with a clear validation error naming the missing field (AC2), no throw', async () => {
-    const repo = await tempRepo(['service: route-explorer', 'container: route-explorer', 'modules: {}'].join('\n'));
+    const repo = await tempRepo(
+      ['container: route-explorer', 'migrationCommand: migrate', 'modules: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('service'),
+      },
+    });
+    if (!result.ok) {
+      expect(result.error.details).toBeDefined();
+      expect(result.error.details).toHaveProperty('issues');
+    }
+  });
+
+  it('loads a manifest omitting migrationCommand as having no migrations', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'modules: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.migrationCommand).toBeUndefined();
+    }
+  });
+
+  it('rejects a present-but-empty migrationCommand instead of treating it as absent', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'migrationCommand: "   "',
+        'modules: {}',
+      ].join('\n'),
+    );
 
     const result = await loadManifest(repo);
 
@@ -76,10 +116,6 @@ describe('loadManifest', () => {
         message: expect.stringContaining('migrationCommand'),
       },
     });
-    if (!result.ok) {
-      expect(result.error.details).toBeDefined();
-      expect(result.error.details).toHaveProperty('issues');
-    }
   });
 
   it('treats a repo with no .tui-back.yaml as unmanaged (AC3), no throw', async () => {

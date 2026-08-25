@@ -96,7 +96,7 @@ graph LR
 
 - **Binds:** FR-2, FR-19, FR-20
 - **Prevents:** activating a module, or onboarding a new repo, ever requiring a core code change.
-- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), `container` (docker-compose/container target name), `migrationCommand`, optional `sharedBranch` (default `development` — FR-8), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
+- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), `container` (docker-compose/container target name), optional `migrationCommand` (absent means the service has no migrations — a group update skips the migration step for it without error, FR-10/FR-12), optional `sharedBranch` (default `development` — FR-8), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
 
 ### AD-5 — Module implementations are statically registered, never dynamically loaded
 
@@ -168,7 +168,7 @@ graph LR
 
 | Concern | Convention |
 | --- | --- |
-| Naming (entities, files, interfaces, events) | kebab-case files/directories; `PascalCase` types/classes; `camelCase` functions/variables. Manifest module ids are kebab-case strings (`shared-types-consumer`, `route-explorer`), matched 1:1 against the compiled-in module registry (AD-5). |
+| Naming (entities, files, interfaces, events) | kebab-case files/directories; `PascalCase` types/classes; `camelCase` functions/variables. Manifest module ids are kebab-case strings (`shared-types-consumer`, `shared-types-source`, `route-explorer`), matched 1:1 against the compiled-in module registry (AD-5). |
 | Data & formats (ids, dates, error shapes, envelopes) | Generated entity ids (EDT id, saved-request id) are ULIDs. Dates/times are ISO 8601. Script output envelope per AD-3: TTY → human text; non-TTY → single JSON line, `{ok:true,data}` or `{ok:false,error:{code,message,details}}`; exit code `0`/`1` only. `error.code` values are kebab-case strings (e.g. `unknown-subcommand`, `internal-error`) — set as precedent by Story 1.3, every use-case's error codes follow it. Any use-case that reports an outcome per service (FR-10 group update, FR-12 migrations, FR-14 propagation status, FR-15 propagation) puts it in `data.results: {service, outcome, detail?}[]`, `outcome` from a shared closed set (`"updated"`/`"skipped"`/`"failed"`, or the use-case's own equivalent) — one shape every zone/dashboard consumer can render uniformly instead of each script inventing its own. |
 | State & cross-cutting (mutation, errors, logging, config, auth) | TUI cross-zone state lives in exactly one Zustand store (AD-10). Every git write passes through the git-adapter's branch-scope gate (AD-8) — never invoked directly from `core` or from `driving/*`. Module implementations resolve only via the compiled-in registry keyed by manifest module id (AD-5). Every script/subcommand use-case is idempotent — running it twice with no intervening state change produces no additional side effect (FR-1). |
 

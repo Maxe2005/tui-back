@@ -1,19 +1,32 @@
-import { join } from 'node:path';
-import { createElement } from 'react';
-import { render } from 'ink';
-import { AppShell } from '../adapters/driving/tui/app-shell.js';
-import { createAppStore } from '../adapters/driving/tui/store/app-store.js';
-import { acquireTuiLock, readLockFile } from '../adapters/driving/tui/single-instance.js';
-import { loadManifest } from '../adapters/driven/manifest/index.js';
-import { createGitPort } from '../adapters/driven/git/index.js';
-import { createLockPort } from '../adapters/driven/lock/index.js';
-import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
-import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
-import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
-import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { join } from "node:path";
+import { createElement } from "react";
+import { render } from "ink";
+import { AppShell } from "../adapters/driving/tui/app-shell.js";
+import { createAppStore } from "../adapters/driving/tui/store/app-store.js";
+import {
+  acquireTuiLock,
+  readLockFile,
+} from "../adapters/driving/tui/single-instance.js";
+import { loadManifest } from "../adapters/driven/manifest/index.js";
+import { createGitPort } from "../adapters/driven/git/index.js";
+import { createLockPort } from "../adapters/driven/lock/index.js";
+import {
+  createRegistryPort,
+  resolveRegistryFile,
+} from "../adapters/driven/registry/index.js";
+import {
+  createEdtRegistryPort,
+  resolveEdtRegistryFile,
+} from "../adapters/driven/edt-registry/index.js";
+import {
+  createStatePort,
+  resolveStateFile,
+} from "../adapters/driven/state/index.js";
+import { createLockPort } from "../adapters/driven/lock/index.js";
+import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 
 if (!process.stdin.isTTY) {
-  process.stderr.write('tui-back-tui requires an interactive terminal\n');
+  process.stderr.write("tui-back-tui requires an interactive terminal\n");
   process.exit(1);
 }
 
@@ -27,31 +40,35 @@ try {
   if (!tuiLock) {
     const existingLock = readLockFile(lockFile);
     if (existingLock) {
-      process.stderr.write(`\nAnother TUI instance is already running (PID ${existingLock.pid}, started at ${existingLock.timestamp}).\n`);
-      process.stderr.write('Would you like to kill the existing process and take over? (y/n)\n');
-      const answer = await new Promise<string>(resolve => {
-        process.stdin!.addListener('data', (data: NodeJS.ReadableStream) => {
+      process.stderr.write(
+        `\nAnother TUI instance is already running (PID ${existingLock.pid}, started at ${existingLock.timestamp}).\n`,
+      );
+      process.stderr.write(
+        "Would you like to kill the existing process and take over? (y/n)\n",
+      );
+      const answer = await new Promise<string>((resolve) => {
+        process.stdin!.addListener("data", (data: NodeJS.ReadableStream) => {
           const input = data.toString().trim().toLowerCase();
           resolve(input);
         });
       });
-      if (answer === 'y' || answer === 'yes') {
+      if (answer === "y" || answer === "yes") {
         try {
-          process.kill(existingLock.pid, 'SIGTERM');
+          process.kill(existingLock.pid, "SIGTERM");
         } catch {
           // Process already terminated
         }
         process.exit(0);
       }
       // AC4: developer declines → exit 1, nothing killed/deleted
-      process.stderr.write('Another TUI instance is already running\n');
+      process.stderr.write("Another TUI instance is already running\n");
       process.exit(1);
     }
-    process.stderr.write('Another TUI instance is already running\n');
+    process.stderr.write("Another TUI instance is already running\n");
     process.exit(1);
   }
 } catch (error) {
-  process.stderr.write('Failed to acquire TUI lock\n');
+  process.stderr.write("Failed to acquire TUI lock\n");
   process.exit(1);
 }
 
@@ -64,21 +81,27 @@ try {
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
-const edtsBaseDir = join(xdg.dataDir, 'edts');
+const edtsBaseDir = join(xdg.dataDir, "edts");
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
-const lock = createLockPort(lockDir);
-
+// Story 2.11: the repo registry screen reuses Story 1.5's registerRepo use-case as-is
+// (AD-2), which requires a LockPort + a resource key for its withActionLock call — mirrors
+// src/bin/main.ts:39-44's CLI composition root exactly (same lock dir, same registry file
+// as the resource key so a TUI-initiated register and a hand-run CLI one serialize on the
+// same resource rather than racing each other). Named `actionLock` (distinct from the
+// single-instance TUI `lock` above) since both live in this module's scope.
+const actionLock = createLockPort(lockDir);
 const store = createAppStore({
   registry,
   manifest,
   git,
   edtRegistry,
   state,
-  lock,
+  lock: actionLock,
+  registryResourceKey: registryFile,
   edtRegistryResourceKey: edtRegistryFile,
   edtsBaseDir,
 });
