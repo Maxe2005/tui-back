@@ -70,13 +70,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `commands/commands.ts` -- static registry + `matchCommands` pure filter -- new dispatch mechanism, no core/port change
-- [ ] `commands/commands.test.ts` -- unit tests for `matchCommands` (empty/no-match/partial/case-insensitive/exact) -- covers filter rows of the I/O matrix
-- [ ] `shared/command-bar.tsx` -- bar component: self-contained typing/filter/Tab/Enter/Esc handling, "no matching command"/"unknown command" states -- delivers the bar end-to-end
-- [ ] `app-shell.tsx` -- add local `commandBarOpen` state (mirrors `filterOpen`'s local placement — no other entry point needs to open this bar, unlike `registryScreenOpen`); replace the `:` dispatch bug; extend the overlay guard; mount `<CommandBar>` -- wires `:` to the bar, removes the direct-registry-open bug
-- [ ] `app-shell.test.tsx` -- rewrite the outdated registry-via-`:` test; add coverage for the new dispatch and guard extension
-- [ ] `app-shell.interaction.test.tsx` -- real-keypress coverage for the full I/O matrix (open, blocked-while-overlay-open, filter, Tab single/ambiguous, Enter run/unknown, Esc, registry-via-command end-to-end, Tab-exclusivity) -- mirrors Story 2.12's existing test shape
-- [ ] `keybindings/keybindings.ts` + `keybindings.test.ts` -- confirm/adjust `:` description and its `EXPECTED` fixture if changed
+- [x] `commands/commands.ts` -- static registry + `matchCommands` pure filter -- new dispatch mechanism, no core/port change
+- [x] `commands/commands.test.ts` -- unit tests for `matchCommands` (empty/no-match/partial/case-insensitive/exact) -- covers filter rows of the I/O matrix
+- [x] `shared/command-bar.tsx` -- bar component: self-contained typing/filter/Tab/Enter/Esc handling, "no matching command"/"unknown command" states -- delivers the bar end-to-end
+- [x] `app-shell.tsx` -- add local `commandBarOpen` state (mirrors `filterOpen`'s local placement — no other entry point needs to open this bar, unlike `registryScreenOpen`); replace the `:` dispatch bug; extend the overlay guard; mount `<CommandBar>` -- wires `:` to the bar, removes the direct-registry-open bug
+- [x] `app-shell.test.tsx` -- rewrite the outdated registry-via-`:` test; add coverage for the new dispatch and guard extension
+- [x] `app-shell.interaction.test.tsx` -- real-keypress coverage for the full I/O matrix (open, blocked-while-overlay-open, filter, Tab single/ambiguous, Enter run/unknown, Esc, registry-via-command end-to-end, Tab-exclusivity) -- mirrors Story 2.12's existing test shape
+- [x] `keybindings/keybindings.ts` + `keybindings.test.ts` -- confirm/adjust `:` description and its `EXPECTED` fixture if changed -- confirmed: current text "Open command entry" is already accurate, no change made
 
 **Acceptance Criteria:**
 - Given the registry screen (Story 2.11), when it is opened, then it is opened only by running the `registry` command through the bar — `:` itself never opens it directly
