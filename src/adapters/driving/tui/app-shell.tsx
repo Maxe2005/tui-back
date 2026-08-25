@@ -90,15 +90,19 @@ export function AppShell({
   // empty-registry prompt can trigger it.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const closeRegistryScreen = useStore((state) => state.closeRegistryScreen);
+  // Story 2.14: lives in the store (like registryScreenOpen, not local AppShell state as
+  // originally sketched) so a mounted zone screen can also read it and gate its own
+  // `useInput` with `{ isActive: !commandBarOpen }` — Ink dispatches every keypress to every
+  // mounted `useInput` hook regardless of z-order, so without this a zone's own key handling
+  // would silently fire underneath the bar (see EdtsZone).
+  const commandBarOpen = useStore((state) => state.commandBarOpen);
+  const openCommandBar = useStore((state) => state.openCommandBar);
+  const closeCommandBar = useStore((state) => state.closeCommandBar);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
 
   const [filterOpen, setFilterOpen] = useState(false);
-  // Story 2.14: mirrors filterOpen's local placement — no other entry point needs to open
-  // the command bar (unlike registryScreenOpen, which Dashboard's empty-registry prompt also
-  // triggers), so it stays local AppShell state rather than living in the store.
-  const [commandBarOpen, setCommandBarOpen] = useState(false);
 
   useEffect(() => {
     if (activeZone !== 'dashboard' && !useStore.getState().launchBannerShown) {
@@ -156,7 +160,7 @@ export function AppShell({
       }
 
       if (shouldOpenCommand(input)) {
-        setCommandBarOpen(true);
+        openCommandBar();
         return;
       }
 
@@ -195,7 +199,7 @@ export function AppShell({
       )}
       {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
       {commandBarOpen && (
-        <CommandBar useStore={useStore} onClose={() => setCommandBarOpen(false)} />
+        <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}
       <Footer />
     </Box>
