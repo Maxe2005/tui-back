@@ -31,6 +31,20 @@ async function press(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStre
   await instance.waitUntilRenderFlush();
 }
 
+// A lone ESC byte is ambiguous on the wire — Ink's input parser can't tell it apart from the
+// first byte of a CSI sequence (e.g. an arrow key) until either more bytes arrive or its own
+// internal `pendingInputFlushDelayMilliseconds` (20ms, ink/build/components/App.js) real timer
+// fires to flush it as a standalone Escape keypress. `waitUntilRenderFlush()` only waits for
+// React's own commit, not that timer, so a bare `press(..., KEYS.escape)` can resolve before
+// Ink has actually delivered `key.escape: true` to `useInput` at all (edts-zone.interaction
+// .test.tsx documents/works around the same gap) — every Escape press in this file goes
+// through this instead.
+async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+  await press(instance, stdin, KEYS.escape);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await instance.waitUntilRenderFlush();
+}
+
 describe('AppShell real-keypress interactions (story 2.9, AC6)', () => {
   it('a typed "?" never opens the global help modal while zoneInputCaptured is set', async () => {
     const store = createAppStore();
@@ -234,6 +248,262 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
 
       // Tab has no shell-level zone-switching effect either before or after this story.
       expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell command-entry bar (:) (story 2.14)', () => {
+  it('opens on : from content focus with an empty focused input and the full command list', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ':');
+
+      expect(stdout.output).toContain('COMMAND');
+      expect(stdout.output).toContain('registry');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never stacks on top of the help overlay', async () => {
+    const store = createAppStore();
+    store.getState().openHelp();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ':');
+
+      expect(stdout.output).not.toContain('COMMAND');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never stacks on top of the filter overlay', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '/'); // opens the filter modal (local AppShell state)
+
+      await press(instance, stdin, ':');
+
+      expect(stdout.output).not.toContain('COMMAND');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never stacks on top of the repo registry screen', async () => {
+    const store = createAppStore();
+    store.getState().openRegistryScreen();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ':');
+
+      expect(stdout.output).not.toContain('COMMAND');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never re-opens (no stacking) on a second : while already open — it types a literal ":" instead', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      expect(stdout.output).toContain('COMMAND');
+
+      // A second ':' is captured as a literal query character by the bar's own free-text
+      // input (it owns keystroke capture while open) rather than opening a second bar. Proven
+      // by typing "registry" right after: the query becomes ":registry" (leading literal
+      // colon), which is not an exact match on "registry" — Enter must show "unknown".
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'registry');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().registryScreenOpen).toBe(false);
+      expect(stdout.output).toContain('Unknown command.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('filters the command list to a case-insensitive name-prefix match as text is typed', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+
+      await press(instance, stdin, 'REG');
+
+      expect(stdout.output).toContain('registry');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('shows an explicit "no matching command" state on zero matches — never a blank list', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+
+      await press(instance, stdin, 'zzz');
+
+      expect(stdout.output).toContain('No matching command.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Tab autocompletes a single match to its full name — proven by a subsequent exact-match Enter succeeding', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'reg'); // partial — not an exact match on its own
+
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter);
+
+      // "reg" alone would show "unknown command" on Enter (not an exact match) — this only
+      // succeeds if Tab actually completed the input to the full "registry" name first.
+      expect(store.getState().registryScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Tab leaves the input unchanged on zero matches — never guesses at a command', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'zzz');
+      expect(stdout.output).toContain('No matching command.');
+
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter);
+
+      // If Tab had wrongly filled in "registry" despite zero matches, this Enter would have
+      // run it; it must not have.
+      expect(store.getState().registryScreenOpen).toBe(false);
+      expect(stdout.output).toContain('Unknown command.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on an exact match runs the command and closes the bar', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'registry');
+      expect(stdout.output).toContain('COMMAND');
+
+      await press(instance, stdin, KEYS.enter);
+
+      // The command ran (store-verifiable proof it actually executed, not just closed).
+      expect(store.getState().registryScreenOpen).toBe(true);
+
+      // The bar itself closing (commandBarOpen reset) has no store field of its own to read
+      // directly — prove it the same way Story 2.12's suite proves an overlay guard lifted:
+      // close the registry screen programmatically (bypassing the UI) and confirm Left/Right
+      // zone-switching works again. If the bar's local commandBarOpen had wrongly stayed
+      // true, this would still be blocked.
+      store.getState().closeRegistryScreen();
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().activeZone).toBe('edts');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on a non-exact match keeps the bar open and shows "unknown command" — never executes', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'reg');
+
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().registryScreenOpen).toBe(false);
+      expect(stdout.output).toContain('Unknown command.');
+      expect(stdout.output).toContain('COMMAND');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc closes the bar without executing anything, discarding the typed text', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'registry');
+      expect(stdout.output).toContain('COMMAND');
+
+      await pressEscape(instance, stdin);
+
+      // Never executed.
+      expect(store.getState().registryScreenOpen).toBe(false);
+
+      // The bar itself closed (commandBarOpen reset, unlike registryScreenOpen there's no
+      // store field to read directly) — proven the same way as the Enter/exact-match test
+      // above: Left/Right zone-switching, blocked while the bar owns input, works again.
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().activeZone).toBe('edts');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Tab is fully consumed by autocomplete — no zone-switching side effect while the bar is open', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).toBe('dashboard');
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'zzz');
+
+      await press(instance, stdin, KEYS.tab);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+      expect(stdout.output).toContain('COMMAND');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
