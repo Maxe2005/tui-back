@@ -18,7 +18,7 @@ import { ListRow } from './components/list-row.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
-import { COMMANDS, matchCommands, findExactCommand } from '../commands/commands.js';
+import { COMMANDS, matchCommands, findExactCommand, type Command } from '../commands/commands.js';
 
 // Query free-text entry. Ctrl/meta combos (e.g. Ctrl+W resize-mode, reserved elsewhere in the
 // app) and empty-input control keys (Tab/Enter/Esc/backspace — all handled separately by their
@@ -33,6 +33,14 @@ export function typeCommandQueryChar(current: string, input: string, key: Pick<K
 
 export function backspaceCommandQuery(current: string): string {
   return current.slice(0, -1);
+}
+
+// Tab autocompletes only on an unambiguous single match; zero or 2+ matches leave the query
+// untouched (I/O matrix: "Autocomplete ambiguous/none"). Extracted as its own pure function so
+// the 2+-match branch is directly unit-testable — the real COMMANDS registry currently holds
+// only one entry, so that branch can never be reached through a real keypress.
+export function resolveTabAutocomplete(query: string, matches: readonly Command[]): string {
+  return matches.length === 1 ? matches[0]!.name : query;
 }
 
 export type CommandBarProps = {
@@ -64,8 +72,9 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     }
 
     if (key.tab) {
-      if (matches.length === 1) {
-        setQuery(matches[0]!.name);
+      const next = resolveTabAutocomplete(query, matches);
+      if (next !== query) {
+        setQuery(next);
         setUnknownCommand(false);
       }
       return;
