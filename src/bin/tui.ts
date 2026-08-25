@@ -22,7 +22,6 @@ import {
   createStatePort,
   resolveStateFile,
 } from "../adapters/driven/state/index.js";
-import { createLockPort } from "../adapters/driven/lock/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 
 if (!process.stdin.isTTY) {
