@@ -2,7 +2,7 @@
 title: 'Command Entry Bar (`:`) & Registered Commands (Story 2.14)'
 type: 'feature'
 created: '2026-08-25'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: '60e9adbb7ab406669d80fe06fd9c3b138ce44d47'
 context:
@@ -73,7 +73,7 @@ context:
 - [x] `commands/commands.ts` -- static registry + `matchCommands` pure filter -- new dispatch mechanism, no core/port change
 - [x] `commands/commands.test.ts` -- unit tests for `matchCommands` (empty/no-match/partial/case-insensitive/exact) -- covers filter rows of the I/O matrix
 - [x] `shared/command-bar.tsx` -- bar component: self-contained typing/filter/Tab/Enter/Esc handling, "no matching command"/"unknown command" states -- delivers the bar end-to-end
-- [x] `app-shell.tsx` -- add local `commandBarOpen` state (mirrors `filterOpen`'s local placement — no other entry point needs to open this bar, unlike `registryScreenOpen`); replace the `:` dispatch bug; extend the overlay guard; mount `<CommandBar>` -- wires `:` to the bar, removes the direct-registry-open bug
+- [x] `app-shell.tsx` -- add `commandBarOpen` state (store-based, mirrors `registryScreenOpen` — see Spec Change Log); replace the `:` dispatch bug; extend the overlay guard; mount `<CommandBar>` -- wires `:` to the bar, removes the direct-registry-open bug
 - [x] `app-shell.test.tsx` -- rewrite the outdated registry-via-`:` test; add coverage for the new dispatch and guard extension
 - [x] `app-shell.interaction.test.tsx` -- real-keypress coverage for the full I/O matrix (open, blocked-while-overlay-open, filter, Tab single/ambiguous, Enter run/unknown, Esc, registry-via-command end-to-end, Tab-exclusivity) -- mirrors Story 2.12's existing test shape
 - [x] `keybindings/keybindings.ts` + `keybindings.test.ts` -- confirm/adjust `:` description and its `EXPECTED` fixture if changed -- confirmed: current text "Open command entry" is already accurate, no change made
@@ -112,4 +112,52 @@ export const COMMANDS: readonly Command[] = [
 
 **Manual checks:**
 - From Dashboard, press `:` — bar opens with the full command list. Type `reg` — list filters to `registry`. Press `Tab` — input completes to `registry`. Press `Enter` — repo-registry screen opens, bar closes. Reopen with `:`, press `Esc` — bar closes without executing. Press `:` while help/filter/registry is open — nothing happens.
+
+## Suggested Review Order
+
+**Ink `useInput` fan-out fix (review-caught, see Spec Change Log)**
+
+- Entry point — `commandBarOpen` moved into the store so a mounted zone can read it.
+  [`app-store.ts:189`](../../../src/adapters/driving/tui/store/app-store.ts#L189)
+
+- The actual fix: `EdtsZone`'s own `useInput` stops reacting while the bar owns input.
+  [`edts-zone.tsx:857`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L857)
+
+**Command dispatch — `:` wiring**
+
+- The bug this story corrects: `:` now opens the bar instead of the registry screen directly.
+  [`app-shell.tsx:162`](../../../src/adapters/driving/tui/app-shell.tsx#L162)
+
+- Overlay-exclusivity guard extended with the new flag, mirroring the other three overlays.
+  [`app-shell.tsx:144`](../../../src/adapters/driving/tui/app-shell.tsx#L144)
+
+- Command bar mounted the same way `RepoRegistryScreen`/`KeybindingHelp` already are.
+  [`app-shell.tsx:201`](../../../src/adapters/driving/tui/app-shell.tsx#L201)
+
+**Command bar — self-contained input handling**
+
+- The bar's own `useInput`: typing, filter, Tab-autocomplete, Enter-run/unknown, Esc-cancel.
+  [`command-bar.tsx:57`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L57)
+
+- Tab-autocomplete extracted as its own pure function — the 2+-match branch is unreachable via a real keypress today, so it's unit-tested directly instead.
+  [`command-bar.tsx:42`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L42)
+
+**Command registry**
+
+- The static registry and its pure prefix-match / exact-match helpers — no core/port change.
+  [`commands.ts`](../../../src/adapters/driving/tui/commands/commands.ts)
+
+**Peripherals**
+
+- Real-keypress coverage for the fan-out regression, the full I/O matrix, and the two new overlay-guard cases.
+  [`app-shell.interaction.test.tsx:258`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L258)
+
+- Unit coverage for the command bar's own pure functions, including the ambiguous-match case.
+  [`command-bar.test.tsx`](../../../src/adapters/driving/tui/shared/command-bar.test.tsx)
+
+- Unit coverage for the registry's filter/exact-match helpers.
+  [`commands.test.ts`](../../../src/adapters/driving/tui/commands/commands.test.ts)
+
+- Two stale comments corrected to stop describing `:` as opening the registry screen directly.
+  [`repo-registry-screen.tsx:3`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L3)
 </content>
