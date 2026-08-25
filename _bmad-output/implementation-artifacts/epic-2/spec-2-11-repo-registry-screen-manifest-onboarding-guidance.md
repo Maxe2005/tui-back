@@ -58,7 +58,7 @@ context:
 - `src/core/scripts/register.ts` -- `registerRepo(registry, lock, resourceKey, path)`, reused as-is; single-path only, loop client-side for multi-select
 - `src/core/ports/registry.ts` -- `RegistryPort.list()/scan()/add()` signatures consumed by the screen
 - `src/adapters/driven/registry/index.ts:78-98` -- `add()` is idempotent, no add-vs-exists signal — confirms the snapshot-diff requirement above
-- `src/adapters/driven/manifest/schema.ts` -- manifest field reference (`service`, `container`, `migrationCommand`, `modules`) for the static guidance text
+- `src/adapters/driven/manifest/schema.ts` -- manifest field reference (`service`, `container`, `modules`, optional `migrationCommand`) for the static guidance text
 - `src/bin/main.ts:39-44` -- reference composition wiring for `lock`/`registryResourceKey` to mirror in `bin/tui.ts`
 - `src/bin/tui.ts:56-68` -- `AppStoreDeps` composition root; currently missing `LockPort` — extend here
 - `src/adapters/driving/tui/store/app-store.ts` -- `AppStoreDeps` type to extend with `lock`/`registryResourceKey`

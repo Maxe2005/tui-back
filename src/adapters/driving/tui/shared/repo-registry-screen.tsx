@@ -26,11 +26,13 @@ import type { ScanResult } from '../../../../core/ports/registry.js';
 
 // Static manifest-creation guidance (Boundaries & Constraints: "always shown alongside
 // scan/register controls — never gated to first launch only"). Field names mirror Story
-// 1.4's zod schema (adapters/driven/manifest/schema.ts): service, container,
-// migrationCommand, modules, optional sharedBranch (default development).
+// 1.4's zod schema (adapters/driven/manifest/schema.ts): service, container, modules,
+// optional migrationCommand (absent = no migrations to run), optional sharedBranch
+// (default development).
 export const MANIFEST_GUIDANCE_LINES: readonly string[] = [
   'A repo is managed once it has a root .tui-back.yaml declaring service, container,',
-  'migrationCommand, and modules (sharedBranch is optional, defaults to "development").',
+  'and modules (migrationCommand is optional — omit it if the service has no migrations;',
+  'sharedBranch is optional too, defaults to "development").',
   'Create one by hand, or run the /manifest-generator skill inside the target repo.',
 ];
 
