@@ -2,7 +2,7 @@
 title: 'Zone-Tab Bar Focus & Arrow Navigation (Story 2.12)'
 type: 'feature'
 created: '2026-08-25'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 1
 baseline_commit: 'cb471505c3bf5642396d416ae6ceb8f098ce1271'
 context:
@@ -85,3 +85,30 @@ Story 2.13 will later filter which zones count as "reachable" (skip fully-omitte
 
 **Manual checks (if no CLI):**
 - Launch the TUI: from Dashboard, `Right` switches straight to EDTs; repeated `Right` cycles through all six zones and wraps back to Dashboard; `Left` cycles backward and wraps past Dashboard to shared-types. `Tab` behaves exactly as before this story in every zone/dialog. Opening `?`/`/`/`:` and closing it leaves zone switching unaffected either way.
+
+## Suggested Review Order
+
+**Zone arrow-switch dispatch**
+
+- Entry point — the pure function turning arrow keys into a target zone, mirroring `shouldSwitchZone`'s mnemonic lookup.
+  [`app-shell.tsx:48`](../../../src/adapters/driving/tui/app-shell.tsx#L48)
+
+- Where it's wired into the existing dispatch, beside the mnemonic branch, same gating.
+  [`app-shell.tsx:142`](../../../src/adapters/driving/tui/app-shell.tsx#L142)
+
+- The wrap-arithmetic it delegates to — kept separate so Story 2.13 can later narrow the candidate set.
+  [`zones.ts:65`](../../../src/adapters/driving/tui/zones/zones.ts#L65)
+
+- The new help-screen entry, kept in sync with the actual behavior (including the wrap).
+  [`keybindings.ts:75`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L75)
+
+**Peripherals**
+
+- Pure-function unit coverage for `resolveZoneArrowSwitch` (next/prev/wrap-forward/wrap-backward/no-op).
+  [`app-shell.test.tsx:152`](../../../src/adapters/driving/tui/app-shell.test.tsx#L152)
+
+- `nextZoneId` unit coverage over the full `ZONES` order.
+  [`zones.test.ts:36`](../../../src/adapters/driving/tui/zones/zones.test.ts#L36)
+
+- Real fake-stdin keypress coverage for every I/O-matrix row, including the three overlay-inert cases and Tab's untouched behavior.
+  [`app-shell.interaction.test.tsx:97`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L97)
