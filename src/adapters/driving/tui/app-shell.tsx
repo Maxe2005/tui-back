@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
+import { CommandBar } from './shared/command-bar.js';
 import { Footer } from './shared/components/footer.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
 import { ModalDialog } from './shared/components/modal-dialog.js';
@@ -85,16 +86,19 @@ export function AppShell({
   const openHelp = useStore((state) => state.openHelp);
   const closeHelp = useStore((state) => state.closeHelp);
   // Story 2.11: the registry screen's open/close flag lives in the store (not local AppShell
-  // state) so both the `:` command palette below and Dashboard's empty-registry prompt can
-  // trigger it.
+  // state) so both the `registry` command inside Story 2.14's command bar and Dashboard's
+  // empty-registry prompt can trigger it.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
-  const openRegistryScreen = useStore((state) => state.openRegistryScreen);
   const closeRegistryScreen = useStore((state) => state.closeRegistryScreen);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
 
   const [filterOpen, setFilterOpen] = useState(false);
+  // Story 2.14: mirrors filterOpen's local placement — no other entry point needs to open
+  // the command bar (unlike registryScreenOpen, which Dashboard's empty-registry prompt also
+  // triggers), so it stays local AppShell state rather than living in the store.
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
 
   useEffect(() => {
     if (activeZone !== 'dashboard' && !useStore.getState().launchBannerShown) {
@@ -124,15 +128,16 @@ export function AppShell({
       return;
     }
 
-    // Skip help dispatch entirely while the registry screen is open — it owns free-text
-    // keystroke capture (the root-path field), so `?` typed there must land as a literal
-    // character, never also pop the keybinding-help modal on top of the overlay. Mirrors how
-    // the registry screen's own Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen) {
+    // Skip help dispatch entirely while the registry screen or the command bar is open — both
+    // own free-text keystroke capture (the registry's root-path field, the bar's command
+    // query), so `?` typed there must land as a literal character, never also pop the
+    // keybinding-help modal on top of the overlay. Mirrors how the registry screen's own
+    // Esc-close below is gated on registryScreenOpen.
+    if (!registryScreenOpen && !commandBarOpen) {
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
-    if (!helpOpen && !filterOpen && !registryScreenOpen) {
+    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen) {
       const zoneId = shouldSwitchZone(input);
       if (zoneId) {
         setActiveZone(zoneId);
@@ -151,7 +156,7 @@ export function AppShell({
       }
 
       if (shouldOpenCommand(input)) {
-        openRegistryScreen();
+        setCommandBarOpen(true);
         return;
       }
 
@@ -189,6 +194,9 @@ export function AppShell({
         </ModalDialog>
       )}
       {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
+      {commandBarOpen && (
+        <CommandBar useStore={useStore} onClose={() => setCommandBarOpen(false)} />
+      )}
       <Footer />
     </Box>
   );
