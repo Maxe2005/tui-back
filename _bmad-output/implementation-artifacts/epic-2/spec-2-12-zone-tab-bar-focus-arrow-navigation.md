@@ -2,8 +2,8 @@
 title: 'Zone-Tab Bar Focus & Arrow Navigation (Story 2.12)'
 type: 'feature'
 created: '2026-08-25'
-status: 'in-progress'
-review_loop_iteration: 0
+status: 'ready-for-dev'
+review_loop_iteration: 1
 baseline_commit: 'cb471505c3bf5642396d416ae6ceb8f098ce1271'
 context:
   - '_bmad-output/planning-artifacts/epics.md'
@@ -14,76 +14,74 @@ context:
 
 ## Intent
 
-**Problem:** Switching zones today requires memorizing/reaching for a single-letter mnemonic (`d`/`e`/`u`/`l`/`r`/`s`); there is no way to browse the zone-tab bar with the keyboard.
+**Problem:** Switching zones today requires memorizing/reaching for a single-letter mnemonic (`d`/`e`/`u`/`l`/`r`/`s`); there is no way to browse zones with the keyboard. The first design (a `Tab`-triggered tab-bar "focus mode" with `Left`/`Right` to highlight and `Enter` to confirm) left `shellFocus` stuck on the tab bar whenever a global overlay (`?`/`/`/`:`) opened while it was active, since nothing blurred it. Renegotiated: drop the whole focus-mode state machine.
 
-**Approach:** Add shell-level keyboard focus (`shellFocus: 'content' | 'tab-bar'` + `highlightedZone`) to the store: `Tab` (content-focused, nothing else capturing input) moves focus onto the tab bar and highlights the active zone; `Left`/`Right` moves the highlight, wrapping at the ends; `Enter` switches to the highlighted zone and returns focus to content; `Esc`/`Tab` returns focus to content unchanged. Mnemonics keep working from any focus state.
+**Approach:** `Left`/`Right` (content-focused, nothing capturing input) directly switch the active zone to the previous/next zone in `ZONES` order, wrapping at the ends — always available, no mode to enter first. `Tab` is fully unchanged: it keeps exactly its pre-story role (per-zone/dialog focus cycling), with zero shell-level involvement.
 
 ## Boundaries & Constraints
 
 **Always:**
-- New store state only: `shellFocus: 'content' | 'tab-bar'`, `highlightedZone: ZoneId | null`, plus actions, following the `zoneInputCaptured`/`registryScreenOpen` flag-plus-paired-actions convention (`app-store.ts`). No core/port change.
-- New dispatch lives inside `AppShell`'s single `useInput` callback, after the existing `state.zoneInputCaptured` early-return (~line 107) — already keeps it inert while a zone dialog owns input.
-- `Left`/`Right` wrap over the full `ZONES` order (`zones.ts`) via its own pure function (mirrors `shouldSwitchZone`), so Story 2.13 can later narrow the candidate set without a rewrite — today every zone counts as reachable.
-- `EdtsZone`'s `useInput` (`edts-zone.tsx:804`) has a base-view `Tab` handler (`togglePaneFocus`) that fires on the same keypress. Gate it with Ink's `useInput(fn, { isActive: shellFocus === 'content' })` so a zone never double-handles a keystroke meant for the tab bar. No other zone owns a `useInput` hook today.
-- Highlighted-not-active tab needs a visual distinct from the active zone's solid `colors.accent` fill (reserved for current selection): reuse the list-row focus convention — `colors['surface-selected']` background plus an accent leading bar glyph (`list-row.tsx`'s `▌`/`resolveRowLayout`) — via a new `highlighted: boolean` input to `resolveZoneTabState`/`ZoneTabBar` (`zone-tab-bar.tsx`).
-- Mnemonic dispatch (`shouldSwitchZone`, `app-shell.tsx:120`) is untouched and keeps firing in any `shellFocus` state.
+- `Left`/`Right` dispatch lives beside `shouldSwitchZone` in `AppShell`'s single `useInput` callback, gated exactly like mnemonics (`!helpOpen && !filterOpen && !registryScreenOpen`, inert while `zoneInputCaptured` via the existing early-return). No new store state.
+- Wrap arithmetic over the full `ZONES` order lives in its own pure function in `zones.ts` (mirrors `shouldSwitchZone`'s lookup shape), so Story 2.13 can later narrow the candidate set without a rewrite — today every zone counts as reachable.
+- Switching reuses `setActiveZone` as-is (same badge-clear behavior as a mnemonic switch). No new tab visual: the active zone's existing solid `colors.accent` fill is the only marker — there's no "highlighted-but-not-active" state since there's no confirm step.
 
 **Ask First:** none identified.
 
 **Never:**
-- Never build resize-mode (`Ctrl+W`) — no state for it exists yet; the AC's resize-mode clause has nothing to gate on and is out of scope here.
-- Never change `/`(filter) or `:`(command) dispatch's relationship to `shellFocus` — unaffected by this story.
-- Never touch list-navigation or any zone's dialog Tab-cycling beyond the `isActive` gate above.
+- Never add any shell-level `Tab` handling, `shellFocus`/focus-mode state, or an `isActive` gate on any zone's own `useInput` — `Tab` and every zone's own key handling stay byte-for-byte as they were before this story.
+- Never build resize-mode (`Ctrl+W`) — no state for it exists yet, out of scope here.
+- Never change `/`(filter), `:`(command), or `?`(help) dispatch — unaffected, since there is no focus mode for them to interact with.
 
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| Focus the tab bar | `shellFocus:'content'`, `Tab` pressed, nothing capturing input | `shellFocus→'tab-bar'`, `highlightedZone` = current `activeZone` | N/A |
-| Move highlight | `shellFocus:'tab-bar'`, `Right` at last zone | `highlightedZone` wraps to first zone | N/A |
-| Activate highlighted zone | `shellFocus:'tab-bar'`, `Enter` on a non-active tab | `activeZone` switches, `shellFocus→'content'` | N/A |
-| Cancel without switching | `shellFocus:'tab-bar'`, `Esc` or `Tab` pressed | `shellFocus→'content'`, `activeZone` unchanged | N/A |
-| Zone dialog owns input | `zoneInputCaptured:true`, `Tab` pressed | No effect on `shellFocus` (existing early-return) | N/A |
-| Mnemonic while tab bar focused | `shellFocus:'tab-bar'`, `e` pressed | Switches to EDTs immediately, same as today | N/A |
+| Switch to next zone | content focused, nothing capturing input, `Right` pressed | `activeZone` moves to the next zone in `ZONES` order | N/A |
+| Switch to previous zone | same preconditions, `Left` pressed | `activeZone` moves to the previous zone in `ZONES` order | N/A |
+| Wrap forward | `activeZone` is the last zone, `Right` pressed | `activeZone` wraps to the first zone | N/A |
+| Wrap backward | `activeZone` is the first zone, `Left` pressed | `activeZone` wraps to the last zone | N/A |
+| Zone dialog owns input | `zoneInputCaptured:true`, `Left`/`Right` pressed | No effect (existing early-return, same as mnemonics) | N/A |
+| Overlay open | `helpOpen`/`filterOpen`/`registryScreenOpen`, `Left`/`Right` pressed | No effect (same gate mnemonics already use) | N/A |
+| Tab unaffected | any state, `Tab` pressed | Exactly today's pre-story behavior (per-zone/dialog cycling); shell never intercepts it | N/A |
 
 </frozen-after-approval>
 
 ## Code Map
 
-- `src/adapters/driving/tui/store/app-store.ts:101-212` -- `AppState`; add `shellFocus`/`highlightedZone` + `focusTabBar`/`blurTabBar`/`moveHighlight`/`activateHighlightedZone`, plus their impls (~227+)
-- `src/adapters/driving/tui/app-shell.tsx:100-151` -- single `useInput` callback; add dispatch after the `zoneInputCaptured` gate (line 107-109); pass focus props to `ZoneTabBar` (line 156)
-- `src/adapters/driving/tui/zones/zones.ts:18-55` -- `ZONES` ordering array, iterated for wrap-around
-- `src/adapters/driving/tui/shared/components/zone-tab-bar.tsx` -- `resolveZoneTabState`/`ZoneTabBar` (13-59): add `highlighted` input + visual; mirror `list-row.tsx:20-32`'s `▌` focus-glyph pattern
-- `src/adapters/driving/tui/zones/edts/edts-zone.tsx:804,820` -- `useInput` call + base-view `Tab` handler; needs `isActive: shellFocus === 'content'`
-- `src/adapters/driving/tui/keybindings/keybindings.ts:44-47` -- `Tab` entry's help text needs updating
-- `src/adapters/driving/tui/app-shell.test.tsx:136+` -- pure-dispatch-helper tests
-- `src/adapters/driving/tui/app-shell.interaction.test.tsx:34+` -- real fake-stdin keypress tests
+- `src/adapters/driving/tui/zones/zones.ts:18-59` -- `ZONES` array; add a `nextZoneId(current, direction)` pure wrap function beside `isZoneId` (mirrors `shouldSwitchZone`'s lookup shape)
+- `src/adapters/driving/tui/app-shell.tsx:40-140` -- `shouldSwitchZone` and the `useInput` callback's `if (!helpOpen && !filterOpen && !registryScreenOpen)` block (~line 119): add a sibling pure function (e.g. `resolveZoneArrowSwitch(key, activeZone)`) and one dispatch branch calling `setActiveZone` directly, same shape as the mnemonic branch
+- `src/adapters/driving/tui/keybindings/keybindings.ts:21-74` -- `KEYBINDINGS`: add a `← / →` entry ("Switch to previous/next zone tab"); the `Tab` entry's text is untouched
+- `src/adapters/driving/tui/app-shell.test.tsx`, `app-shell.interaction.test.tsx`, `zones/zones.test.ts`, `keybindings/keybindings.test.ts` -- unit + real-keypress coverage for the I/O matrix and the new help entry
 
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `app-store.ts` -- add `shellFocus`/`highlightedZone` state + actions -- new focus model lives in the store per convention
-- [ ] `app-shell.tsx` -- wire Tab/Left/Right/Enter/Esc dispatch, pass focus props to `ZoneTabBar` -- drives the new interaction
-- [ ] `edts-zone.tsx` -- gate `useInput` with `isActive: shellFocus === 'content'` -- prevents double-handling `Tab`
-- [ ] `zone-tab-bar.tsx` -- add `highlighted` visual state -- makes focus visible
-- [ ] `keybindings.ts` -- update `Tab` description -- keeps `?` help accurate
-- [ ] `app-shell.test.tsx` + `app-shell.interaction.test.tsx` -- cover the I/O matrix -- proves the dispatch and focus/blur/wrap/activate paths
-- [ ] `zone-tab-bar.test.tsx` -- cover the new `highlighted` visual state
+- [ ] `zones.ts` -- add `nextZoneId(current, direction)` -- reusable wrap-arithmetic, no dispatch coupling
+- [ ] `app-shell.tsx` -- add arrow-switch pure function + dispatch branch beside `shouldSwitchZone` -- drives the interaction with zero new state
+- [ ] `keybindings.ts` -- add the `← / →` help entry -- keeps `?` help accurate
+- [ ] `zones.test.ts`, `app-shell.test.tsx`, `app-shell.interaction.test.tsx`, `keybindings.test.ts` -- cover the I/O matrix and the new help entry
 
 **Acceptance Criteria:**
-- Given a form/dialog has captured input (`zoneInputCaptured`), when `Tab` is pressed, then `shellFocus` is unaffected (dialog's own Tab role, if any, still applies)
-- Given the tab bar is focused, when a zone mnemonic is pressed, then the zone switches immediately and `shellFocus` returns to `'content'` (mirrors direct mnemonic use today)
+- Given any focus state, when a zone mnemonic is pressed, then it switches zones immediately exactly as it does today (mnemonics are untouched by this story)
+- Given `Tab` is pressed in any zone or dialog, when observed, then behavior is byte-for-byte identical to before this story (no shell-level interception was added)
+
+## Spec Change Log
+
+- **Finding (review, human-directed simplification):** the first design's `Tab`-triggered tab-bar focus mode left `shellFocus` stuck on `'tab-bar'` after a global overlay (`?`/`/`/`:`) opened and closed while it was active — root cause was the frozen Boundaries' explicit "never touch `/`/`:` dispatch's relationship to `shellFocus`," which forbade the natural fix.
+- **Amended:** dropped the entire focus-mode state machine (`shellFocus`, `highlightedZone`, `focusTabBar`/`blurTabBar`/`moveHighlight`/`activateHighlightedZone`, the `isActive` gate on `EdtsZone`, the tab bar's `highlighted` visual). Replaced with direct, always-available `Left`/`Right` zone switching — no mode, so nothing to get stuck in, and `Tab` needs zero changes.
+- **Known-bad state avoided:** a stuck tab-bar-focus UI state after closing any global overlay, and the EdtsZone `isActive`-gate race on the mode-entry keystroke (both reported in review as real, reproducible issues).
+- **KEEP:** the wrap-arithmetic pure function over `ZONES` (previously `nextZoneId`, mirroring `shouldSwitchZone`'s lookup shape) is still the right, reusable shape for Story 2.13 to later narrow — re-add it as specified in Code Map above.
 
 ## Design Notes
 
-Story 2.13 will later filter which zones count as "reachable" for wrap-around (omitted tabs skipped, disabled tabs still landed on). Keep the wrap step as one small pure function over `ZONES` so 2.13 can swap its candidate list without touching the dispatch plumbing around it.
+Story 2.13 will later filter which zones count as "reachable" (skip fully-omitted tabs, still land on disabled ones). Keep `nextZoneId` as its own small pure function over `ZONES` so 2.13 can swap its candidate list without touching the dispatch plumbing around it.
 
 ## Verification
 
 **Commands:**
-- `npm test` -- all suites green, including new `app-shell`/`zone-tab-bar` cases
+- `npm test` -- all suites green, including the new `zones`/`app-shell`/`keybindings` cases
 - `npm run typecheck` -- clean
 - `npm run depcheck` -- no boundary violations (changes confined to `adapters/driving/tui`)
 
 **Manual checks (if no CLI):**
-- Launch the TUI: `Tab` from Dashboard highlights the Dashboard tab; `Right` moves highlight to EDTs, wraps past shared-types back to Dashboard; `Enter` on a highlighted tab switches there; `Esc` from a highlighted tab returns to content with the zone unchanged; typing `e` while the tab bar is focused switches straight to EDTs.
+- Launch the TUI: from Dashboard, `Right` switches straight to EDTs; repeated `Right` cycles through all six zones and wraps back to Dashboard; `Left` cycles backward and wraps past Dashboard to shared-types. `Tab` behaves exactly as before this story in every zone/dialog. Opening `?`/`/`/`:` and closing it leaves zone switching unaffected either way.
