@@ -15,7 +15,6 @@ import type {
 } from "../../../../core/ports/manifest.js";
 import type {
   RegistryPort,
-  ScanResult,
 } from "../../../../core/ports/registry.js";
 import type { StatePort } from "../../../../core/ports/state.js";
 import { ZONES } from "../zones/zones.js";
@@ -66,10 +65,6 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const state: StatePort = {
     readActiveEdt: vi.fn(async () => ok(null)),
     writeActiveEdt: vi.fn(async () => ok(undefined)),
-  };
-  const lock: LockPort = {
-    acquire: vi.fn(async () => ok({ release: async () => ok(undefined) })),
-    peek: vi.fn(async () => ok({ locked: false })),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () =>
