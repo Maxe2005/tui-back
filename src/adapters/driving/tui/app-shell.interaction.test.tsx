@@ -237,6 +237,22 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
     }
   });
 
+  it('has no effect while the command bar is open (story 2.14)', async () => {
+    const store = createAppStore();
+    store.getState().openCommandBar();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('leaves Tab byte-for-byte unaffected — no shell-level interception is added', async () => {
     const store = createAppStore();
     const { instance, stdin } = mount(store);
@@ -282,6 +298,25 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
       await press(instance, stdin, ':');
 
       expect(stdout.output).not.toContain('COMMAND');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a typed "?" never opens the global help modal while the command bar is open', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      expect(store.getState().helpOpen).toBe(false);
+
+      await press(instance, stdin, '?');
+
+      // "?" must land as a literal query character (the bar owns free-text capture) — it
+      // must never also pop the global keybinding-help modal on top of the bar.
+      expect(store.getState().helpOpen).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -431,16 +466,9 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
 
       // The command ran (store-verifiable proof it actually executed, not just closed).
       expect(store.getState().registryScreenOpen).toBe(true);
-
-      // The bar itself closing (commandBarOpen reset) has no store field of its own to read
-      // directly — prove it the same way Story 2.12's suite proves an overlay guard lifted:
-      // close the registry screen programmatically (bypassing the UI) and confirm Left/Right
-      // zone-switching works again. If the bar's local commandBarOpen had wrongly stayed
-      // true, this would still be blocked.
-      store.getState().closeRegistryScreen();
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.right);
-      expect(store.getState().activeZone).toBe('edts');
+      // The bar itself closed too (commandBarOpen lives in the store since the review fix
+      // that moved it there so EdtsZone could also read it — see spec-2-14's Spec Change Log).
+      expect(store.getState().commandBarOpen).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -477,14 +505,9 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
 
       await pressEscape(instance, stdin);
 
-      // Never executed.
+      // Never executed, and the bar itself closed.
       expect(store.getState().registryScreenOpen).toBe(false);
-
-      // The bar itself closed (commandBarOpen reset, unlike registryScreenOpen there's no
-      // store field to read directly) — proven the same way as the Enter/exact-match test
-      // above: Left/Right zone-switching, blocked while the bar owns input, works again.
-      await press(instance, stdin, KEYS.right);
-      expect(store.getState().activeZone).toBe('edts');
+      expect(store.getState().commandBarOpen).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -504,6 +527,61 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
 
       expect(store.getState().activeZone).toBe('dashboard');
       expect(stdout.output).toContain('COMMAND');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter inside the bar never leaks into EdtsZone\'s own key.return handler underneath it (review fix)', async () => {
+    // Ink dispatches every keypress to every mounted useInput hook regardless of z-order —
+    // with the EDTs zone active, a selected row, and pane-focus on its default 'edts' list,
+    // EdtsZone's own key.return (openEdtAction(), which opens a dialog and flips
+    // zoneInputCaptured true via its effect) would otherwise silently fire underneath the bar
+    // the moment an exact-match Enter also runs a command. EdtsZone gates its useInput with
+    // `{ isActive: !commandBarOpen }` to prevent this.
+    //
+    // Deliberately no Tab press in this test: EdtsZone's own key.tab toggles its local
+    // paneFocus to 'services' (also leaked without the gate, per the same root cause) —
+    // that pane has no key.return handling at all, so a Tab immediately before Enter would
+    // incidentally mask the very leak this test exists to catch, regardless of the fix.
+    // paneFocus itself has no store-observable footprint to assert against directly; the
+    // isActive gate covers both leaks identically, and this test proves it via the one leak
+    // (Enter -> openEdtAction -> zoneInputCaptured) that is store-observable.
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'edts',
+      edts: [
+        {
+          ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+          topic: 'demo',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'inactive',
+          members: [],
+        },
+      ],
+      edtsStatus: 'idle',
+      // A bare createAppStore() has no deps wired, so EdtsZone's real loadEdts()/
+      // loadEdtsBranches() (called once on its own mount effect) would unconditionally
+      // overwrite the seeded edts/edtsStatus above with an error state before this test's
+      // keypresses even run. edts-zone.interaction.test.tsx's own suite stubs these the same
+      // way for the same reason.
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'registry');
+
+      await press(instance, stdin, KEYS.enter);
+
+      // The command actually ran...
+      expect(store.getState().registryScreenOpen).toBe(true);
+      // ...and EdtsZone's own Enter handler (openEdtAction) never fired underneath the bar —
+      // if it had, its dialog-open effect would have flipped this true.
+      expect(store.getState().zoneInputCaptured).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
