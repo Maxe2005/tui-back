@@ -8,10 +8,96 @@
 // technique (shared/test-support/fake-tty.ts) to close that gap.
 import { createElement } from 'react';
 import { render } from 'ink';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { ok } from '../../../core/result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../core/ports/git.js';
+import type { LockPort } from '../../../core/ports/lock.js';
+import type { Manifest, ManifestPort } from '../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { StatePort } from '../../../core/ports/state.js';
 import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
+import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
+
+// Mirrors app-store.test.ts's own fakeDeps/manifestFor exactly (story 2.13 review fix): the
+// mount-time/registry-close `loadTabVisibility()` effect is AppShell's sole production
+// activation path, but every other test in this file uses a deps-less `createAppStore()`,
+// where `loadTabVisibility()` only ever takes the `!deps` early-return branch — no test here
+// could otherwise tell that effect running correctly apart from it being deleted entirely.
+function manifestFor(repoPath: string): Manifest {
+  const name = repoPath.split('/').pop();
+  return {
+    service: `svc-${name}`,
+    container: `ctr-${name}`,
+    migrationCommand: 'npm run migration:run',
+    sharedBranch: 'development',
+    modules: {},
+  };
+}
+
+function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
+  const registry: RegistryPort = {
+    list: vi.fn(async () => ok(['/repo/a'])),
+    add: vi.fn(async () => ok(undefined)),
+    exists: vi.fn(async () => ok(true)),
+    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+    reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+  };
+  const manifest: ManifestPort = {
+    load: vi.fn(async (path: string) => ok(manifestFor(path))),
+  };
+  const git: GitPort = {
+    assertAllowedBranch: vi.fn(async () => ok(undefined)),
+    createBranch: vi.fn(async () => ok(undefined)),
+    deleteBranch: vi.fn(async () => ok(undefined)),
+    currentBranch: vi.fn(async () => ok('feat/a')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+    checkout: vi.fn(async () => ok(undefined)),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    stashSave: vi.fn(async () => ok(undefined)),
+    restoreStash: vi.fn(async () => ok(undefined)),
+    branchExistsLocally: vi.fn(async () => ok(true)),
+    fetch: vi.fn(async () => ok(undefined)),
+  };
+  const edtRegistry: EdtRegistryPort = {
+    add: vi.fn(async () => ok(undefined)),
+    list: vi.fn(async () => ok([] as EdtRegistryEntry[])),
+    setStatus: vi.fn(async () => ok(undefined)),
+    update: vi.fn(async () => ok(undefined)),
+  };
+  const state: StatePort = {
+    readActiveEdt: vi.fn(async () => ok(null)),
+    writeActiveEdt: vi.fn(async () => ok(undefined)),
+  };
+  const lock: LockPort = {
+    acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
+    peek: vi.fn(async () => ok({ locked: false })),
+  };
+  return {
+    registry,
+    manifest,
+    git,
+    edtRegistry,
+    state,
+    lock,
+    registryResourceKey: '/config/registry.yaml',
+    edtRegistryResourceKey: '/tmp/edts.yaml',
+    edtsBaseDir: '/tmp/edts',
+    ...overrides,
+  };
+}
+
+// loadTabVisibility() chains several awaited port calls (listRepos, readActiveEdt, ...) before
+// its terminal set() lands — `waitUntilRenderFlush()` only waits for React's own next commit,
+// not that async chain settling, so every wait below pairs it with a real macrotask delay
+// (mirrors this file's own `pressEscape` working around the same class of gap for Ink's
+// internal Escape-flush timer).
+async function flushAsyncLoad(instance: ReturnType<typeof render>): Promise<void> {
+  await instance.waitUntilRenderFlush();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await instance.waitUntilRenderFlush();
+}
 
 function mount(store: ReturnType<typeof createAppStore>) {
   const stdout = new FakeTtyStdout();
@@ -264,6 +350,156 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
 
       // Tab has no shell-level zone-switching effect either before or after this story.
       expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell manifest-gated tab visibility (story 2.13)', () => {
+  it('skips an omitted tab entirely during Right arrow-nav wrap traversal', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'logs',
+      tabVisibility: {
+        routes: { status: 'omitted', carryingServices: [] },
+        sharedTypes: { status: 'enabled', carryingServices: [] },
+      },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      // 'routes' is omitted — Right from 'logs' must land directly on 'shared-types'.
+      expect(store.getState().activeZone).toBe('shared-types');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('lands on a disabled tab via arrow-nav rather than skipping it', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'logs',
+      tabVisibility: {
+        routes: { status: 'disabled', carryingServices: ['api-gateway'] },
+        sharedTypes: { status: 'enabled', carryingServices: [] },
+      },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('routes');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('an omitted tab\'s mnemonic does nothing — never lands on it', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'dashboard',
+      tabVisibility: {
+        routes: { status: 'omitted', carryingServices: [] },
+        sharedTypes: { status: 'enabled', carryingServices: [] },
+      },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, 'r'); // routes' mnemonic
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a disabled tab\'s mnemonic still lands on it — becomes the active zone', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'dashboard',
+      tabVisibility: {
+        routes: { status: 'disabled', carryingServices: ['api-gateway'] },
+        sharedTypes: { status: 'enabled', carryingServices: [] },
+      },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, 'r');
+
+      expect(store.getState().activeZone).toBe('routes');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('falls back to Dashboard when the active zone\'s tab becomes omitted', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'routes',
+      tabVisibility: {
+        routes: { status: 'enabled', carryingServices: ['api-gateway'] },
+        sharedTypes: { status: 'omitted', carryingServices: [] },
+      },
+    });
+    const { instance } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).toBe('routes');
+
+      // A registry change (Story 2.11) drops the only carrying repo — routes flips omitted
+      // while it's still the active zone.
+      store.setState({
+        tabVisibility: {
+          routes: { status: 'omitted', carryingServices: [] },
+          sharedTypes: { status: 'omitted', carryingServices: [] },
+        },
+      });
+      await instance.waitUntilRenderFlush();
+
+      expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never forces navigation when the active zone merely becomes disabled (content swaps in place)', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'routes',
+      tabVisibility: {
+        routes: { status: 'enabled', carryingServices: ['api-gateway'] },
+        sharedTypes: { status: 'omitted', carryingServices: [] },
+      },
+    });
+    const { instance } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      store.setState({
+        tabVisibility: {
+          routes: { status: 'disabled', carryingServices: ['api-gateway'] },
+          sharedTypes: { status: 'omitted', carryingServices: [] },
+        },
+      });
+      await instance.waitUntilRenderFlush();
+
+      expect(store.getState().activeZone).toBe('routes');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -582,6 +818,78 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
       // ...and EdtsZone's own Enter handler (openEdtAction) never fired underneath the bar —
       // if it had, its dialog-open effect would have flipped this true.
       expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell tabVisibility load activation (story 2.13 review fix)', () => {
+  it('loads real tabVisibility from wired deps on mount — reflected in store state and the rendered tab bar', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (path: string) => ok({ ...manifestFor(path), modules: { 'route-explorer': {} } })),
+    };
+    const store = createAppStore(fakeDeps({ manifest }));
+
+    const { instance, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+
+      // routes has one carrying repo (svc-a) but no active EDT — 'disabled', not 'enabled'.
+      // sharedTypes has zero carrying repos — 'omitted'. Neither is the pre-load default
+      // (both 'enabled'), so this can only pass if the mount effect actually loaded real data.
+      expect(store.getState().tabVisibility).toEqual({
+        routes: { status: 'disabled', carryingServices: ['svc-a'] },
+        sharedTypes: { status: 'omitted', carryingServices: [] },
+      });
+      // The tab bar reflects it too: routes (disabled) stays reachable, shared-types
+      // (omitted) is dropped from the bar entirely. `stdout.output` accumulates every frame
+      // (including the pre-load one, which still shows both tabs) — the TopBar's "tui-back"
+      // label re-renders at the start of every frame, so its last occurrence marks where the
+      // final (post-load) frame begins.
+      const output = stdout.output;
+      const lastFrame = output.slice(output.lastIndexOf('tui-back'));
+      expect(lastFrame).toContain('[r] Routes');
+      expect(lastFrame).not.toContain('[s] Shared types');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('reloads tabVisibility after closeRegistryScreen() is called on an already-mounted shell', async () => {
+    let loadCount = 0;
+    const manifest: ManifestPort = {
+      load: vi.fn(async (path: string) => {
+        loadCount += 1;
+        // Only the reload triggered by closing the registry screen (the 3rd load: mount,
+        // then the open->close flip) reports the carrying module — isolates the assertion to
+        // that specific reload rather than any load happening at all.
+        const modules: Record<string, Record<string, unknown>> = loadCount >= 3 ? { 'route-explorer': {} } : {};
+        return ok({ ...manifestFor(path), modules });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ manifest }));
+
+    const { instance } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      expect(store.getState().tabVisibility.routes.status).toBe('omitted');
+
+      // Simulate the registry screen having been opened (without exercising openRegistryScreen
+      // itself, which is a separate concern) so closeRegistryScreen() below actually flips
+      // registryScreenOpen false->true->false, re-triggering AppShell's effect.
+      store.setState({ registryScreenOpen: true });
+      await flushAsyncLoad(instance);
+
+      store.getState().closeRegistryScreen();
+      await flushAsyncLoad(instance);
+
+      expect(store.getState().tabVisibility.routes).toEqual({
+        status: 'disabled',
+        carryingServices: ['svc-a'],
+      });
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

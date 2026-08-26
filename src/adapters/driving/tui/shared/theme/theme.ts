@@ -46,6 +46,11 @@ export const typography = Object.freeze({
   label: Object.freeze({ bold: false }),
   'dim-wink': Object.freeze({ italic: true }),
   'active-tab': Object.freeze({ bold: true }),
+  // Story 2.13: a manifest-gated zone tab (Routes/shared-types) whose module exists
+  // somewhere in the registry but has no active-EDT member — text-dim + strikethrough
+  // (never bold, never accent-filled), per DESIGN.md's disabled-state convention. No new
+  // color: colors['text-dim'] carries it, this token only adds the strikethrough/weight.
+  'disabled-tab': Object.freeze({ bold: false, strikethrough: true }),
 } as const);
 
 // Atelier is square-cornered by deliberate choice; every panel, modal, badge,

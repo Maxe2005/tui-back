@@ -1,7 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { AppShell, shouldCloseHelp, shouldOpenHelp, shouldQuit, shouldSwitchZone, shouldOpenCommand, shouldOpenFilter, resolveZoneArrowSwitch } from './app-shell.js';
+import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
+import {
+  AppShell,
+  shouldCloseHelp,
+  shouldOpenHelp,
+  shouldQuit,
+  shouldSwitchZone,
+  shouldOpenCommand,
+  shouldOpenFilter,
+  resolveZoneArrowSwitch,
+  shouldFallbackToDashboard,
+} from './app-shell.js';
 import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from './store/app-store.js';
-import { ZONES } from './zones/zones.js';
+import { ZONES, type ZoneId } from './zones/zones.js';
 import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
 import { renderToString } from './shared/components/render-to-string.js';
 
@@ -150,6 +161,62 @@ describe('AppShell', () => {
       expect(shouldSwitchZone('x')).toBeNull();
     });
 
+    describe('reachable-set gating (story 2.13)', () => {
+      it('shouldSwitchZone returns null for an omitted zone\'s mnemonic — never lands on it', () => {
+        const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
+        expect(shouldSwitchZone('r', reachable)).toBeNull();
+      });
+
+      it('shouldSwitchZone still resolves a disabled (but reachable) zone\'s mnemonic', () => {
+        const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'routes', 'shared-types']);
+        expect(shouldSwitchZone('r', reachable)).toBe('routes');
+      });
+
+      it('resolveZoneArrowSwitch skips an omitted tab during wrap traversal', () => {
+        const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
+        expect(resolveZoneArrowSwitch({ rightArrow: true }, 'logs', reachable)).toBe('shared-types');
+      });
+
+      it('resolveZoneArrowSwitch lands on a disabled (still reachable) tab', () => {
+        const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'routes']);
+        expect(resolveZoneArrowSwitch({ rightArrow: true }, 'logs', reachable)).toBe('routes');
+      });
+    });
+
+    describe('shouldFallbackToDashboard (story 2.13)', () => {
+      function tabVisibility(overrides: Partial<ResolveTabVisibilityData> = {}): ResolveTabVisibilityData {
+        return {
+          routes: { status: 'enabled', carryingServices: [] },
+          sharedTypes: { status: 'enabled', carryingServices: [] },
+          ...overrides,
+        };
+      }
+
+      it('is true when the active zone is routes and routes is omitted', () => {
+        const visibility = tabVisibility({ routes: { status: 'omitted', carryingServices: [] } });
+        expect(shouldFallbackToDashboard('routes', visibility)).toBe(true);
+      });
+
+      it('is true when the active zone is shared-types and shared-types is omitted', () => {
+        const visibility = tabVisibility({ sharedTypes: { status: 'omitted', carryingServices: [] } });
+        expect(shouldFallbackToDashboard('shared-types', visibility)).toBe(true);
+      });
+
+      it('is false when the active zone is merely disabled (content swaps in place, no forced nav)', () => {
+        const visibility = tabVisibility({ routes: { status: 'disabled', carryingServices: ['api-gateway'] } });
+        expect(shouldFallbackToDashboard('routes', visibility)).toBe(false);
+      });
+
+      it('is false for a non-gated active zone regardless of tabVisibility', () => {
+        const visibility = tabVisibility({
+          routes: { status: 'omitted', carryingServices: [] },
+          sharedTypes: { status: 'omitted', carryingServices: [] },
+        });
+        expect(shouldFallbackToDashboard('dashboard', visibility)).toBe(false);
+        expect(shouldFallbackToDashboard('logs', visibility)).toBe(false);
+      });
+    });
+
     it('shouldOpenFilter returns true for /', () => {
       expect(shouldOpenFilter('/')).toBe(true);
       expect(shouldOpenFilter('j')).toBe(false);
@@ -207,6 +274,13 @@ const minimalState: AppState = {
         edtsUnreachable: [],
         edtsErrors: [],
         loadEdtsBranches: async () => {},
+        tabVisibility: {
+          routes: { status: 'enabled', carryingServices: [] },
+          sharedTypes: { status: 'enabled', carryingServices: [] },
+        },
+        tabVisibilityStatus: 'idle',
+        tabVisibilityError: null,
+        loadTabVisibility: async () => {},
         registryScreenOpen: false,
         openRegistryScreen: () => {},
         closeRegistryScreen: () => {},

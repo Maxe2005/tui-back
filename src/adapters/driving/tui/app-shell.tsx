@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
+import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
 import { CommandBar } from './shared/command-bar.js';
 import { Footer } from './shared/components/footer.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
@@ -9,7 +10,7 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
-import { ZONES, nextZoneId, type ZoneId } from './zones/zones.js';
+import { ALL_ZONE_IDS, ZONES, nextZoneId, resolveReachableZones, zoneGatedStatus, type ZoneId } from './zones/zones.js';
 
 export function shouldOpenHelp(input: string): boolean {
   return input === '?';
@@ -38,25 +39,50 @@ export function resolveHelpDispatch(
   }
 }
 
-export function shouldSwitchZone(input: string): ZoneId | null {
+// Story 2.13 adds the optional `reachable` param (defaults to every zone, preserving the
+// pre-2.13 behavior every existing call site relies on): a mnemonic whose zone isn't in
+// `reachable` (i.e. it's currently `omitted`) resolves to null — the mnemonic does nothing,
+// same as it never existed. A `disabled` zone stays in `reachable` and is landed on as
+// normal.
+export function shouldSwitchZone(
+  input: string,
+  reachable: ReadonlySet<ZoneId> = ALL_ZONE_IDS,
+): ZoneId | null {
   const zone = ZONES.find((z) => z.mnemonic === input);
-  return zone?.id ?? null;
+  if (zone === undefined || !reachable.has(zone.id)) {
+    return null;
+  }
+  return zone.id;
 }
 
 // Story 2.12: `Left`/`Right` directly switch the active zone to the previous/next zone in
 // `ZONES` order, wrapping at the ends — no mode to enter first, gated exactly like
 // `shouldSwitchZone`'s mnemonic dispatch (same `if` block, same early-return guards).
+// Story 2.13 adds the optional `reachable` param, forwarded straight to `nextZoneId` (same
+// default-preserving behavior as `shouldSwitchZone` above).
 export function resolveZoneArrowSwitch(
   key: { leftArrow?: boolean; rightArrow?: boolean },
   activeZone: ZoneId,
+  reachable: ReadonlySet<ZoneId> = ALL_ZONE_IDS,
 ): ZoneId | null {
   if (key.leftArrow) {
-    return nextZoneId(activeZone, -1);
+    return nextZoneId(activeZone, -1, reachable);
   }
   if (key.rightArrow) {
-    return nextZoneId(activeZone, 1);
+    return nextZoneId(activeZone, 1, reachable);
   }
   return null;
+}
+
+// Story 2.13: the active zone falling to `omitted` (a registry change removed the only
+// carrying repo while that gated zone was active) has no explanatory-message content to
+// fall back to in place — unlike a mere disable, this one forces navigation back to
+// Dashboard (Boundaries: "Active tab going omitted -> AppShell falls back to dashboard").
+export function shouldFallbackToDashboard(
+  activeZone: ZoneId,
+  tabVisibility: ResolveTabVisibilityData,
+): boolean {
+  return zoneGatedStatus(activeZone, tabVisibility) === 'omitted';
 }
 
 export function shouldOpenFilter(input: string): boolean {
@@ -98,6 +124,11 @@ export function AppShell({
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const openCommandBar = useStore((state) => state.openCommandBar);
   const closeCommandBar = useStore((state) => state.closeCommandBar);
+  // Story 2.13: manifest-gated Routes/shared-types tab visibility — loaded once on mount and
+  // reloaded on registry-screen close / active-EDT membership change (see the effect below
+  // and app-store.ts's createEdt/switchEdt/modifyEdt).
+  const tabVisibility = useStore((state) => state.tabVisibility);
+  const loadTabVisibility = useStore((state) => state.loadTabVisibility);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
@@ -109,6 +140,23 @@ export function AppShell({
       useStore.getState().markLaunchBannerShown();
     }
   }, [activeZone, useStore]);
+
+  // Story 2.13: mirrors dashboard-zone.tsx's own checkRegistryEmpty effect idiom — a single
+  // effect keyed on `registryScreenOpen` both fires the mount-time load (it runs once on
+  // mount, `registryScreenOpen` starting false) and reloads whenever the registry screen
+  // closes (Story 2.11: registering may newly show/hide a gated tab). loadTabVisibility()
+  // itself no-ops a call that lands while a prior one is still in flight, so this never races.
+  useEffect(() => {
+    void loadTabVisibility();
+  }, [registryScreenOpen, loadTabVisibility]);
+
+  // Story 2.13 (Boundaries): the active zone going `omitted` has no explanatory-message
+  // content to swap to in place — unlike a mere disable, force a fallback to Dashboard.
+  useEffect(() => {
+    if (shouldFallbackToDashboard(activeZone, tabVisibility)) {
+      setActiveZone('dashboard');
+    }
+  }, [activeZone, tabVisibility, setActiveZone]);
 
   // Review patch (story 2.9): `q` can't reach onQuit while a zone dialog has captured
   // input (see the zoneInputCaptured gate below) — a zone whose captured dialog has no
@@ -142,13 +190,17 @@ export function AppShell({
     }
 
     if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen) {
-      const zoneId = shouldSwitchZone(input);
+      // Story 2.13: the reachable-zone set (every zone minus whichever gated tab is
+      // currently 'omitted') gates both the mnemonic and the arrow-nav dispatch below —
+      // an omitted tab is never landed on either way; a disabled one stays reachable.
+      const reachable = resolveReachableZones(state.tabVisibility);
+      const zoneId = shouldSwitchZone(input, reachable);
       if (zoneId) {
         setActiveZone(zoneId);
         return;
       }
 
-      const arrowZoneId = resolveZoneArrowSwitch(key, activeZone);
+      const arrowZoneId = resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;
@@ -184,7 +236,7 @@ export function AppShell({
   return (
     <Box flexDirection="column" height={rows} overflow="hidden">
       <TopBar activeEdt={activeEdt} />
-      <ZoneTabBar activeZone={activeZone} events={zoneEvents} />
+      <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} />
       <ZoneScreen useStore={useStore} />
       <KeybindingHelp useStore={useStore} />
       {filterOpen && (
