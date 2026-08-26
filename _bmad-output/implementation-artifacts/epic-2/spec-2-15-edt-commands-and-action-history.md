@@ -2,7 +2,7 @@
 title: 'EDT Commands in Command Bar & Action History in Detail Pane'
 type: 'feature'
 created: '2026-08-26'
-status: 'backlog'
+status: 'ready-for-dev'
 context:
   - '_bmad-output/planning-artifacts/epics.md'
   - '_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md'
