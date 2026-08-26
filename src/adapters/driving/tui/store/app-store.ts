@@ -18,6 +18,11 @@ import {
   type BranchDivergenceEntryError,
   type ServiceBranchDivergence,
 } from '../../../../core/edt/list.js';
+import {
+  resolveTabVisibility,
+  DEFAULT_TAB_VISIBILITY,
+  type ResolveTabVisibilityData,
+} from '../../../../core/edt/resolve-tab-visibility.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
 import type { LockPort } from '../../../../core/ports/lock.js';
@@ -133,6 +138,16 @@ export type AppState = {
   edtsUnreachable: string[];
   edtsErrors: BranchDivergenceEntryError[];
   loadEdtsBranches: () => Promise<void>;
+  // Story 2.13: per-gated-zone tab visibility (Routes/shared-types). Defaults to 'enabled'
+  // for both — the Boundaries' "default reachable state" before the first load resolves, so
+  // AppShell never shows a shell-wide spinner or a flash-then-hide on mount. Loaded once on
+  // mount (mirrors the EDT slice's own mount-effect idiom) and reloaded on registry-screen
+  // close (Story 2.11) and active-EDT membership change (createEdt/switchEdt/modifyEdt below
+  // each fire-and-forget a reload on success) — never blocks AppShell's render.
+  tabVisibility: ResolveTabVisibilityData;
+  tabVisibilityStatus: 'idle' | 'loading' | 'error';
+  tabVisibilityError: string | null;
+  loadTabVisibility: () => Promise<void>;
   // Story 2.9: the EDT registry's own entries (ulid/topic/status/members) — the EDT
   // selector's data source. Distinct from `edtsBranches` above, which is the flat
   // per-service branch/divergence list (Story 2.6) and carries no per-EDT grouping.
@@ -300,6 +315,33 @@ export function createAppStore(deps?: AppStoreDeps) {
         set({ edtsBranchesStatus: 'error', edtsBranchesError: result.error.message });
       }
     },
+    tabVisibility: DEFAULT_TAB_VISIBILITY,
+    tabVisibilityStatus: 'idle',
+    tabVisibilityError: null,
+    loadTabVisibility: async () => {
+      if (!deps) {
+        set({ tabVisibilityStatus: 'error', tabVisibilityError: NO_DEPS_ERROR });
+        return;
+      }
+      if (get().tabVisibilityStatus === 'loading') {
+        return;
+      }
+      set({ tabVisibilityStatus: 'loading', tabVisibilityError: null });
+      const result = await resolveTabVisibility({
+        registry: deps.registry,
+        manifest: deps.manifest,
+        edtRegistry: deps.edtRegistry,
+        state: deps.state,
+      });
+      if (result.ok) {
+        set({ tabVisibility: result.data, tabVisibilityStatus: 'idle', tabVisibilityError: null });
+      } else {
+        // Never reset tabVisibility to a hiding/dimming value on a transient load failure —
+        // keep whatever was last known-good (or the 'enabled' default on a first-load
+        // failure) rather than falsely omitting/disabling a real capability.
+        set({ tabVisibilityStatus: 'error', tabVisibilityError: result.error.message });
+      }
+    },
     edts: null,
     edtsStatus: 'idle',
     edtsError: null,
@@ -361,6 +403,10 @@ export function createAppStore(deps?: AppStoreDeps) {
         if (wroteActive.ok) {
           set({ activeEdt: result.data.ulid });
         }
+        // Story 2.13: a newly-created EDT is a fresh set of active-EDT members — reload
+        // gated-tab visibility so a carrying member just added flips its tab enabled
+        // immediately. Fire-and-forget: never blocks the create flow's own result.
+        void get().loadTabVisibility();
       }
       return result;
     },
@@ -384,6 +430,9 @@ export function createAppStore(deps?: AppStoreDeps) {
         // consequence of this TUI-driven switch, not the continuous fs.watch/poll re-sync
         // AD-10 also describes (that half stays out of this story's scope).
         set({ activeEdt: result.data.ulid });
+        // Story 2.13: switching the active EDT swaps its whole member set — reload
+        // gated-tab visibility so a newly (in)active member's tab flips immediately.
+        void get().loadTabVisibility();
       }
       return result;
     },
@@ -391,7 +440,7 @@ export function createAppStore(deps?: AppStoreDeps) {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
-      return modifyEdtUseCase({
+      const result = await modifyEdtUseCase({
         edtRegistry: deps.edtRegistry,
         edtRegistryResourceKey: deps.edtRegistryResourceKey,
         registry: deps.registry,
@@ -404,6 +453,15 @@ export function createAppStore(deps?: AppStoreDeps) {
         setBranches: params.setBranches,
         renameTo: params.renameTo,
       });
+      if (result.ok) {
+        // Story 2.13: a member add/remove may target the active EDT — reload gated-tab
+        // visibility so the tab bar reflects the new membership immediately (Boundaries:
+        // "active EDT membership changes ... tab bar updates immediately"). Cheap and
+        // always-correct even when the modified EDT wasn't the active one (the recomputed
+        // status is then identical to what it already was).
+        void get().loadTabVisibility();
+      }
+      return result;
     },
     zoneInputCaptured: false,
     setZoneInputCaptured: (value) => set({ zoneInputCaptured: value }),

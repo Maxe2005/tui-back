@@ -301,4 +301,230 @@ describe("app store", () => {
       expect(store.getState().edtsBranchesStatus).toBe("idle");
     });
   });
+
+  describe("loadTabVisibility (story 2.13)", () => {
+    it("starts with the default reachable state (both enabled) before the first load — no spinner, no flash-then-hide", () => {
+      const store = createAppStore(fakeDeps());
+      expect(store.getState().tabVisibility).toEqual({
+        routes: { status: "enabled", carryingServices: [] },
+        sharedTypes: { status: "enabled", carryingServices: [] },
+      });
+      expect(store.getState().tabVisibilityStatus).toBe("idle");
+      expect(store.getState().tabVisibilityError).toBeNull();
+    });
+
+    it("flips to loading synchronously, then populates tabVisibility from the core use-case and returns to idle", async () => {
+      const manifest: ManifestPort = {
+        load: vi.fn(async (path: string) => ok({ ...manifestFor(path), modules: { "route-explorer": {} } })),
+      };
+      const store = createAppStore(fakeDeps({ manifest }));
+
+      const pending = store.getState().loadTabVisibility();
+      expect(store.getState().tabVisibilityStatus).toBe("loading");
+      await pending;
+
+      expect(store.getState().tabVisibilityStatus).toBe("idle");
+      expect(store.getState().tabVisibilityError).toBeNull();
+      expect(store.getState().tabVisibility).toEqual({
+        routes: { status: "disabled", carryingServices: ["svc-a"] },
+        sharedTypes: { status: "omitted", carryingServices: [] },
+      });
+    });
+
+    it("sets an explicit error state when the underlying use-case fails, but leaves tabVisibility untouched — never falsely hides/dims a real capability", async () => {
+      const registry: RegistryPort = {
+        list: vi.fn(async () => err("registry-invalid-yaml", "bad yaml")),
+        add: vi.fn(async () => ok(undefined)),
+        exists: vi.fn(async () => ok(true)),
+        scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+        reset: vi.fn(async () => ok({ path: "/x", backupPath: null })),
+      };
+      const store = createAppStore(fakeDeps({ registry }));
+
+      await store.getState().loadTabVisibility();
+
+      expect(store.getState().tabVisibilityStatus).toBe("error");
+      expect(store.getState().tabVisibilityError).toBe("bad yaml");
+      expect(store.getState().tabVisibility).toEqual({
+        routes: { status: "enabled", carryingServices: [] },
+        sharedTypes: { status: "enabled", carryingServices: [] },
+      });
+    });
+
+    it("degrades to an explicit error, never a throw, when the store was created with no ports wired", async () => {
+      const store = createAppStore();
+
+      await store.getState().loadTabVisibility();
+
+      expect(store.getState().tabVisibilityStatus).toBe("error");
+      expect(store.getState().tabVisibilityError).toBeTruthy();
+      expect(store.getState().tabVisibility).toEqual({
+        routes: { status: "enabled", carryingServices: [] },
+        sharedTypes: { status: "enabled", carryingServices: [] },
+      });
+    });
+
+    it("never starts a second concurrent fetch while one is already in flight", async () => {
+      let resolveList: (() => void) | undefined;
+      const registry: RegistryPort = {
+        list: vi.fn(
+          () =>
+            new Promise<ReturnType<typeof ok<string[]>>>((resolveFn) => {
+              resolveList = () => resolveFn(ok(["/repo/a"]));
+            }),
+        ),
+        add: vi.fn(async () => ok(undefined)),
+        exists: vi.fn(async () => ok(true)),
+        scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+        reset: vi.fn(async () => ok({ path: "/x", backupPath: null })),
+      };
+      const store = createAppStore(fakeDeps({ registry }));
+
+      const first = store.getState().loadTabVisibility();
+      const second = store.getState().loadTabVisibility();
+      expect(registry.list).toHaveBeenCalledTimes(1);
+
+      resolveList?.();
+      await Promise.all([first, second]);
+      expect(store.getState().tabVisibilityStatus).toBe("idle");
+    });
+
+    it("keeps the last known-good tabVisibility on a later reload failure (review-guard, mirrors edtsBranches' rule)", async () => {
+      let call = 0;
+      const registry: RegistryPort = {
+        list: vi.fn(async () => {
+          call += 1;
+          return call === 1 ? ok(["/repo/a"]) : err("registry-invalid-yaml", "bad yaml");
+        }),
+        add: vi.fn(async () => ok(undefined)),
+        exists: vi.fn(async () => ok(true)),
+        scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+        reset: vi.fn(async () => ok({ path: "/x", backupPath: null })),
+      };
+      const manifest: ManifestPort = {
+        load: vi.fn(async (path: string) => ok({ ...manifestFor(path), modules: { "route-explorer": {} } })),
+      };
+      const store = createAppStore(fakeDeps({ registry, manifest }));
+
+      await store.getState().loadTabVisibility();
+      expect(store.getState().tabVisibility.routes.status).toBe("disabled");
+
+      await store.getState().loadTabVisibility();
+      expect(store.getState().tabVisibilityStatus).toBe("error");
+      expect(store.getState().tabVisibility.routes.status).toBe("disabled");
+    });
+  });
+
+  describe("active-EDT membership change reloads tabVisibility (story 2.13)", () => {
+    it("createEdt success triggers a tabVisibility reload", async () => {
+      const edtsBaseDir = await makeEdtsBaseDir();
+      const store = createAppStore(fakeDeps({ edtsBaseDir }));
+      const loadTabVisibility = vi.fn(async () => {});
+      store.setState({ loadTabVisibility });
+
+      const result = await store.getState().createEdt({ topic: "demo", members: ["/repo/a"] });
+
+      expect(result.ok).toBe(true);
+      expect(loadTabVisibility).toHaveBeenCalled();
+    });
+
+    it("createEdt failure (e.g. zero members) never triggers a reload", async () => {
+      const store = createAppStore(fakeDeps());
+      const loadTabVisibility = vi.fn(async () => {});
+      store.setState({ loadTabVisibility });
+
+      const result = await store.getState().createEdt({ topic: "demo", members: [] });
+
+      expect(result.ok).toBe(false);
+      expect(loadTabVisibility).not.toHaveBeenCalled();
+    });
+
+    it("switchEdt success triggers a tabVisibility reload", async () => {
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () =>
+          ok([
+            {
+              ulid: "edt-1",
+              topic: "demo",
+              createdAt: "2026-08-19T00:00:00.000Z",
+              status: "inactive" as const,
+              members: [{ service: "svc-a", repoPath: "/repo/a", branch: "feat/a" }],
+            },
+          ]),
+        ),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry }));
+      const loadTabVisibility = vi.fn(async () => {});
+      store.setState({ loadTabVisibility });
+
+      const result = await store.getState().switchEdt({ topic: "demo" });
+
+      expect(result.ok).toBe(true);
+      expect(loadTabVisibility).toHaveBeenCalled();
+    });
+
+    it("switchEdt failure (unknown topic) never triggers a reload", async () => {
+      const store = createAppStore(fakeDeps());
+      const loadTabVisibility = vi.fn(async () => {});
+      store.setState({ loadTabVisibility });
+
+      const result = await store.getState().switchEdt({ topic: "does-not-exist" });
+
+      expect(result.ok).toBe(false);
+      expect(loadTabVisibility).not.toHaveBeenCalled();
+    });
+
+    it("modifyEdt success triggers a tabVisibility reload", async () => {
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () =>
+          ok([
+            {
+              ulid: "edt-1",
+              topic: "demo",
+              createdAt: "2026-08-19T00:00:00.000Z",
+              status: "active" as const,
+              members: [],
+            },
+          ]),
+        ),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry }));
+      const loadTabVisibility = vi.fn(async () => {});
+      store.setState({ loadTabVisibility });
+
+      const result = await store.getState().modifyEdt({
+        topic: "demo",
+        addMembers: [],
+        removeMembers: [],
+        setBranches: [],
+        renameTo: "renamed",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(loadTabVisibility).toHaveBeenCalled();
+    });
+
+    it("modifyEdt failure (unknown topic) never triggers a reload", async () => {
+      const store = createAppStore(fakeDeps());
+      const loadTabVisibility = vi.fn(async () => {});
+      store.setState({ loadTabVisibility });
+
+      const result = await store.getState().modifyEdt({
+        topic: "does-not-exist",
+        addMembers: [],
+        removeMembers: [],
+        setBranches: [],
+        renameTo: "renamed",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(loadTabVisibility).not.toHaveBeenCalled();
+    });
+  });
 });
