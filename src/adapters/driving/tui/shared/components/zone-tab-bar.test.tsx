@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ResolveTabVisibilityData } from '../../../../../core/edt/resolve-tab-visibility.js';
 import { ZONES } from '../../zones/zones.js';
 import { colors } from '../theme/theme.js';
 import { resolveZoneTabState } from './zone-tab-bar.js';
@@ -14,6 +15,7 @@ describe('resolveZoneTabState', () => {
       labelColor: colors.background,
       backgroundColor: colors.accent,
       bold: true,
+      strikethrough: false,
       badge: null,
     });
   });
@@ -26,8 +28,37 @@ describe('resolveZoneTabState', () => {
       labelColor: colors['text-dim'],
       backgroundColor: colors.background,
       bold: false,
+      strikethrough: false,
       badge: null,
     });
+  });
+
+  it('resolves a disabled tab: text-dim + strikethrough, never accent, never bold (story 2.13)', () => {
+    const zone = ZONES[4];
+    const state = resolveZoneTabState(zone, 'dashboard', 0, 'disabled');
+    expect(state).toEqual({
+      active: false,
+      labelColor: colors['text-dim'],
+      backgroundColor: colors.background,
+      bold: false,
+      strikethrough: true,
+      badge: null,
+    });
+  });
+
+  it('resolves a disabled tab that is also the active zone: still no accent fill (story 2.13)', () => {
+    const zone = ZONES[4];
+    const state = resolveZoneTabState(zone, zone.id, 0, 'disabled');
+    expect(state.active).toBe(true);
+    expect(state.backgroundColor).toBe(colors.background);
+    expect(state.labelColor).toBe(colors['text-dim']);
+    expect(state.strikethrough).toBe(true);
+  });
+
+  it('never shows a badge on a disabled tab, even with pending events (story 2.13)', () => {
+    const zone = ZONES[4];
+    const state = resolveZoneTabState(zone, 'dashboard', 3, 'disabled');
+    expect(state.badge).toBeNull();
   });
 
   it('shows a glyph+counter badge in the zone status color when a background event is pending (AC3)', () => {
@@ -66,5 +97,43 @@ describe('ZoneTabBar', () => {
       />,
     );
     expect(output).toContain('●2');
+  });
+
+  const events = { dashboard: 0, edts: 0, update: 0, logs: 0, routes: 0, 'shared-types': 0 };
+
+  it('never renders an omitted tab (story 2.13)', async () => {
+    const tabVisibility: ResolveTabVisibilityData = {
+      routes: { status: 'omitted', carryingServices: [] },
+      sharedTypes: { status: 'enabled', carryingServices: [] },
+    };
+    const output = await renderToString(
+      <ZoneTabBar activeZone="dashboard" events={events} tabVisibility={tabVisibility} />,
+    );
+    expect(output).not.toContain('[r] Routes');
+    expect(output).toContain('[s] Shared types');
+  });
+
+  it('omits both gated tabs when both are omitted', async () => {
+    const tabVisibility: ResolveTabVisibilityData = {
+      routes: { status: 'omitted', carryingServices: [] },
+      sharedTypes: { status: 'omitted', carryingServices: [] },
+    };
+    const output = await renderToString(
+      <ZoneTabBar activeZone="dashboard" events={events} tabVisibility={tabVisibility} />,
+    );
+    expect(output).not.toContain('[r] Routes');
+    expect(output).not.toContain('[s] Shared types');
+    expect(output).toContain('[d] Dashboard');
+  });
+
+  it('still renders a disabled tab label (dimmed/strikethrough, not omitted) (story 2.13)', async () => {
+    const tabVisibility: ResolveTabVisibilityData = {
+      routes: { status: 'enabled', carryingServices: [] },
+      sharedTypes: { status: 'disabled', carryingServices: ['shared-types'] },
+    };
+    const output = await renderToString(
+      <ZoneTabBar activeZone="dashboard" events={events} tabVisibility={tabVisibility} />,
+    );
+    expect(output).toContain('[s] Shared types');
   });
 });
