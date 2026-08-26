@@ -62,6 +62,11 @@ describe('DashboardZone (story 2.11)', () => {
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain('DASHBOARD');
+    // story 2.16: banner is permanent — shows above the placeholder content too, not just the
+    // empty-registry prompt.
+    for (const line of BANNER_LINES) {
+      expect(output).toContain(line);
+    }
   });
 
   it('shows the existing placeholder content (never assumes empty) before the registry check resolves', async () => {
@@ -85,6 +90,10 @@ describe('DashboardZone (story 2.11)', () => {
     expect(output).toContain(REGISTRY_CHECK_ERROR_MESSAGE);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).not.toContain('DASHBOARD');
+    // story 2.16: banner is permanent — shows above the error message too.
+    for (const line of BANNER_LINES) {
+      expect(output).toContain(line);
+    }
   });
 
   it('checks the registry emptiness on mount', async () => {
