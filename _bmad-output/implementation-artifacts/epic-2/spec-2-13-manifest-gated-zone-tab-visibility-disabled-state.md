@@ -2,8 +2,9 @@
 title: 'Manifest-Gated Zone Tab Visibility & Disabled State (Story 2.13)'
 type: 'feature'
 created: '2026-08-25'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: 'b30dfc03daf2ba396c7aa26cdd211095faf1363e'
 context:
   - '_bmad-output/planning-artifacts/epics.md'
   - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
@@ -61,13 +62,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `core/edt/resolve-tab-visibility.ts` + `.test.ts` -- new use-case computing per-gated-zone status/carrying-services -- core aggregation, no port change
-- [ ] `zones.ts` + `zones.test.ts` -- `nextZoneId` reachable-set param -- lets wrap-nav skip omitted tabs
-- [ ] `app-store.ts` + tests -- `tabVisibility` slice + `loadTabVisibility()` -- deps-gated, mirrors EDT slice
-- [ ] `app-shell.tsx` + `app-shell.test.tsx`/`.interaction.test.tsx` -- mount-time load, omitted-fallback effect, reachable-set gating on mnemonic/arrow dispatch -- drives the interaction
-- [ ] `zone-tab-bar.tsx` + `zone-tab-bar.test.tsx` -- omit/disabled rendering -- visual contract
-- [ ] `theme.ts` -- `disabled-tab` typography token -- no new color, per DESIGN.md
-- [ ] `routes-zone.tsx`, `shared-types-zone.tsx` + tests -- explanatory-message body on `disabled` -- I/O matrix rows 2-3
+- [x] `core/edt/resolve-tab-visibility.ts` + `.test.ts` -- new use-case computing per-gated-zone status/carrying-services -- core aggregation, no port change
+- [x] `zones.ts` + `zones.test.ts` -- `nextZoneId` reachable-set param -- lets wrap-nav skip omitted tabs
+- [x] `app-store.ts` + tests -- `tabVisibility` slice + `loadTabVisibility()` -- deps-gated, mirrors EDT slice
+- [x] `app-shell.tsx` + `app-shell.test.tsx`/`.interaction.test.tsx` -- mount-time load, omitted-fallback effect, reachable-set gating on mnemonic/arrow dispatch -- drives the interaction
+- [x] `zone-tab-bar.tsx` + `zone-tab-bar.test.tsx` -- omit/disabled rendering -- visual contract
+- [x] `theme.ts` -- `disabled-tab` typography token -- no new color, per DESIGN.md
+- [x] `routes-zone.tsx`, `shared-types-zone.tsx` + tests -- explanatory-message body on `disabled` -- I/O matrix rows 2-3
 
 **Acceptance Criteria:**
 - Given `moduleRegistry` stays empty (human-confirmed scope), when this story's tests run, then `disabled`/`enabled` paths are exercised via injected port fixtures, never real manifests
@@ -82,4 +83,80 @@ context:
 
 **Manual checks (if no CLI):**
 - With an empty registry, `Routes`/`shared-types` never appear in the tab bar and their mnemonics do nothing.
+
+## Suggested Review Order
+
+**Core aggregation**
+
+- Entry point: cross-references registry-wide `moduleIds` against active-EDT membership into `omitted`/`disabled`/`enabled` — the whole feature's source of truth.
+  [`resolve-tab-visibility.ts:58`](../../../src/core/edt/resolve-tab-visibility.ts#L58)
+
+- Per-module gating: zero carrying repos anywhere → `omitted`; a carrying repo exists but none is an active-EDT member → `disabled`.
+  [`resolve-tab-visibility.ts:93`](../../../src/core/edt/resolve-tab-visibility.ts#L93)
+
+- Gating module ids and the safe pre-load default (`enabled`/`enabled`), reused across the store and UI layers.
+  [`resolve-tab-visibility.ts:22`](../../../src/core/edt/resolve-tab-visibility.ts#L22)
+
+**Zone reachability**
+
+- Derives which zones a `disabled`-but-reachable vs. `omitted`-but-unreachable status yields, single dispatch point for both tab bar and shell.
+  [`zones.ts:71`](../../../src/adapters/driving/tui/zones/zones.ts#L71)
+
+- Reachable-zone set (all zones minus `omitted`) that wrap-nav and mnemonic dispatch narrow to.
+  [`zones.ts:87`](../../../src/adapters/driving/tui/zones/zones.ts#L87)
+
+- Wrap traversal now takes the reachable set as an optional param (default preserves story 2.12 behavior), with a defensive fallback if `current` momentarily isn't in it.
+  [`zones.ts:101`](../../../src/adapters/driving/tui/zones/zones.ts#L101)
+
+**Shell activation & gating**
+
+- Mount-time load plus reload on registry-screen close, wired through the reachable-set gate on mnemonic/arrow dispatch.
+  [`app-shell.tsx:149`](../../../src/adapters/driving/tui/app-shell.tsx#L149)
+
+- Active zone going `omitted` forces a Dashboard fallback; a mere `disabled` never does (content swaps in place).
+  [`app-shell.tsx:81`](../../../src/adapters/driving/tui/app-shell.tsx#L81)
+
+- Reachable-set computed once per keypress and threaded into both mnemonic and arrow-nav resolution.
+  [`app-shell.tsx:196`](../../../src/adapters/driving/tui/app-shell.tsx#L196)
+
+**Store wiring**
+
+- `tabVisibility` slice: safe `enabled` default, `loadTabVisibility()` deps-gated and in-flight-guarded like the EDT slice.
+  [`app-store.ts:318`](../../../src/adapters/driving/tui/store/app-store.ts#L318)
+
+- `createEdt`/`switchEdt`/`modifyEdt` each fire-and-forget a reload on success so membership changes flip a tab's status immediately.
+  [`app-store.ts:409`](../../../src/adapters/driving/tui/store/app-store.ts#L409)
+
+**Tab bar rendering**
+
+- Status computed once per zone, `omitted` filtered out entirely before render.
+  [`zone-tab-bar.tsx:53`](../../../src/adapters/driving/tui/shared/components/zone-tab-bar.tsx#L53)
+
+- Visual contract: `disabled` is `text-dim` + strikethrough, never accent, never a badge.
+  [`zone-tab-bar.tsx:24`](../../../src/adapters/driving/tui/shared/components/zone-tab-bar.tsx#L24)
+
+- New `disabled-tab` typography token backing the strikethrough — no new color, per DESIGN.md.
+  [`theme.ts:53`](../../../src/adapters/driving/tui/shared/theme/theme.ts#L53)
+
+**Disabled-zone messaging**
+
+- Explanatory message replacing `ZonePlaceholder` when `shared-types` is `disabled`, naming every carrying repo.
+  [`shared-types-zone.tsx:19`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L19)
+
+- Same idiom for `Routes`, reusing `edts-zone.tsx`'s labelled-lines message style.
+  [`routes-zone.tsx:11`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L11)
+
+**Peripherals**
+
+- Core use-case coverage: omission/disabled/enabled across both gated modules, plus port-failure propagation.
+  [`resolve-tab-visibility.test.ts`](../../../src/core/edt/resolve-tab-visibility.test.ts)
+
+- Store-level coverage: load lifecycle, error/stale-state guard, and the three membership-change reload triggers.
+  [`app-store.test.ts`](../../../src/adapters/driving/tui/store/app-store.test.ts)
+
+- Shell interaction coverage: reachable-set gating on mnemonic/arrow dispatch, omitted-fallback, and the real mount/registry-close load activation.
+  [`app-shell.interaction.test.tsx`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx)
+
+- Visual-contract and message-copy coverage.
+  [`zone-tab-bar.test.tsx`](../../../src/adapters/driving/tui/shared/components/zone-tab-bar.test.tsx)
 
