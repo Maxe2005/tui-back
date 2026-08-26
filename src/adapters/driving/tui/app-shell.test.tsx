@@ -130,7 +130,11 @@ describe('AppShell', () => {
     }
 
     store.getState().setActiveZone('logs');
-    await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    const logsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    // The banner is scoped to DashboardZone — it must never appear while another zone is active.
+    for (const line of BANNER_LINES) {
+      expect(logsOutput).not.toContain(line);
+    }
 
     store.getState().setActiveZone('dashboard');
     const output2 = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);

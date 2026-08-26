@@ -2,7 +2,7 @@
 title: 'Permanent Dashboard Banner'
 type: 'feature'
 created: '2026-08-26'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 baseline_commit: '5cff68fa84241760d7b9b19601a79149aac456ac'
 context:

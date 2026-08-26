@@ -75,6 +75,11 @@ describe('DashboardZone (story 2.11)', () => {
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain('DASHBOARD');
+    // story 2.16: banner is permanent — shows above the placeholder content too, even before
+    // the registry check has resolved.
+    for (const line of BANNER_LINES) {
+      expect(output).toContain(line);
+    }
   });
 
   // review patch: a registry.list() failure was previously invisible — registryEmptyStatus
