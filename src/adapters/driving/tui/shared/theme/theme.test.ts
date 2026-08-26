@@ -66,6 +66,11 @@ describe('theme typography', () => {
     expect(typography['dim-wink'].italic).toBe(true);
     expect(typography['active-tab'].bold).toBe(true);
   });
+
+  it('defines the disabled-tab role: dim + strikethrough, never bold (story 2.13)', () => {
+    expect(typography['disabled-tab'].bold).toBe(false);
+    expect(typography['disabled-tab'].strikethrough).toBe(true);
+  });
 });
 
 describe('theme rounded', () => {
@@ -92,5 +97,6 @@ describe('theme aggregate', () => {
     expect(Object.isFrozen(typography.label)).toBe(true);
     expect(Object.isFrozen(typography['dim-wink'])).toBe(true);
     expect(Object.isFrozen(typography['active-tab'])).toBe(true);
+    expect(Object.isFrozen(typography['disabled-tab'])).toBe(true);
   });
 });
