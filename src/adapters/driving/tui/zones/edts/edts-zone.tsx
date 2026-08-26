@@ -586,12 +586,14 @@ export function EdtsZone({
     if (currentEdtAction && dialog.kind === 'none') {
       if (currentEdtAction.type === 'create') {
         setDialog(initialCreateDialog());
+        setCurrentEdtAction(null);
       } else if (currentEdtAction.type === 'switch') {
         // If a topic was specified, find the EDT and open switch-confirm pre-targeted
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
           if (targetEdt) {
             setDialog(initialSwitchDialog(targetEdt));
+            setCurrentEdtAction(null);
           } else {
             // EDT not found - will be handled by the dialog's error state
             setDialog({ kind: 'none' });
@@ -603,6 +605,7 @@ export function EdtsZone({
           const nonActiveEdt = edtsRows.find((e) => e.ulid !== activeEdtUlid);
           if (nonActiveEdt) {
             setDialog(initialSwitchDialog(nonActiveEdt));
+            setCurrentEdtAction(null);
           } else {
             setDialog({ kind: 'none' });
             setCurrentEdtAction(null);
@@ -614,6 +617,7 @@ export function EdtsZone({
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
           if (targetEdt) {
             setDialog(initialModifyDialog(targetEdt));
+            setCurrentEdtAction(null);
           } else {
             setDialog({ kind: 'none' });
             setCurrentEdtAction(null);
@@ -622,6 +626,7 @@ export function EdtsZone({
           // No topic specified - open modify for the focused EDT
           if (focusedEdt) {
             setDialog(initialModifyDialog(focusedEdt));
+            setCurrentEdtAction(null);
           } else {
             setDialog({ kind: 'none' });
             setCurrentEdtAction(null);
@@ -632,11 +637,15 @@ export function EdtsZone({
   }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, focusedEdt, setDialog, setCurrentEdtAction]);
 
   // Story 2.15: load action log when an EDT row is focused
+  // Track which EDT we've loaded to avoid infinite reload loops
+  const [lastLoadedEdtUlid, setLastLoadedEdtUlid] = useState<string | null>(null);
+
   useEffect(() => {
-    if (focusedEdt && edtActionLogStatus === 'idle') {
+    if (focusedEdt && edtActionLogStatus === 'idle' && focusedEdt.ulid !== lastLoadedEdtUlid) {
       void loadEdtActionLog(focusedEdt.ulid);
+      setLastLoadedEdtUlid(focusedEdt.ulid);
     }
-  }, [focusedEdt, edtActionLogStatus, loadEdtActionLog]);
+  }, [focusedEdt, edtActionLogStatus, loadEdtActionLog, lastLoadedEdtUlid]);
 
   function openEdtAction() {
     const target = edtsRows[clampedEdtsSelected];
@@ -807,6 +816,7 @@ export function EdtsZone({
       // release in src/bin/tui.ts).
       if (edtsRows.length > 0) {
         setDialog({ kind: 'none' });
+        setCurrentEdtAction(null);
         return;
       }
       requestQuit();
@@ -850,6 +860,7 @@ export function EdtsZone({
     if (key.escape) {
       if (!current.submitting) {
         setDialog({ kind: 'none' });
+        setCurrentEdtAction(null);
       }
       return;
     }
@@ -906,6 +917,7 @@ export function EdtsZone({
     if (key.escape) {
       if (!current.submitting) {
         setDialog({ kind: 'none' });
+        setCurrentEdtAction(null);
       }
       return;
     }
