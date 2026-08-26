@@ -268,6 +268,42 @@ export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): str
   return lines.join('\n');
 }
 
+// Story 2.15: formats the EDT action history for the detail pane.
+// Returns a joined string with timestamps (dim), outcome glyphs, and action details.
+export function formatEdtActionHistory(
+  actionLog: Array<{ id: string; timestamp: string; actionType: string; outcome: 'success' | 'failed'; detail: string }>,
+  inProgressAction: { type: 'create' | 'switch' | 'modify'; target: string; startedAt: string } | null,
+): string {
+  const lines: string[] = [];
+
+  // In-progress action
+  if (inProgressAction) {
+    const typeLabel = inProgressAction.type.charAt(0).toUpperCase() + inProgressAction.type.slice(1);
+    lines.push(`⣾ ${typeLabel} "${inProgressAction.target}"…`);
+    lines.push(''); // blank line separator
+  }
+
+  // Recent actions
+  if (actionLog.length === 0) {
+    lines.push('No actions yet');
+  } else {
+    lines.push('Recent actions:');
+    for (const entry of actionLog) {
+      const time = new Date(entry.timestamp).toLocaleTimeString();
+      const glyph = entry.outcome === 'success' ? '✔' : '✖';
+      const typeLabel = entry.actionType.charAt(0).toUpperCase() + entry.actionType.slice(1);
+      lines.push(`  ${glyph} [${time}] ${typeLabel}: ${entry.detail}`);
+    }
+  }
+
+  lines.push(''); // blank line before available actions
+
+  // Available actions
+  lines.push('Available: [Enter] Switch  [c] Create  [m] Modify');
+
+  return lines.join('\n');
+}
+
 // AC1's "candidate list must reflect a still-loading services fetch (a distinct state)
 // rather than rendering 'No registered services available.' while edtsBranches simply
 // hasn't resolved yet" — a still-loading fetch, a genuinely-empty registry, a load
@@ -465,6 +501,13 @@ export function EdtsZone({
   // would also silently fire this zone's own pane-focus toggle / openEdtAction() underneath
   // it (Spec Change Log, spec-2-14).
   const commandBarOpen = useStore((state) => state.commandBarOpen);
+  // Story 2.15: EDT action state for detail pane — tracks in-progress action and action log
+  const currentEdtAction = useStore((state) => state.currentEdtAction);
+  const setCurrentEdtAction = useStore((state) => state.setCurrentEdtAction);
+  const edtActionLog = useStore((state) => state.edtActionLog);
+  const edtActionLogStatus = useStore((state) => state.edtActionLogStatus);
+  const loadEdtActionLog = useStore((state) => state.loadEdtActionLog);
+  const logEdtAction = useStore((state) => state.logEdtAction);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -537,6 +580,73 @@ export function EdtsZone({
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
+  // Story 2.15: handle command-triggered dialogs via currentEdtAction state.
+  // When a command sets currentEdtAction, open the corresponding dialog.
+  useEffect(() => {
+    if (currentEdtAction && dialog.kind === 'none') {
+      if (currentEdtAction.type === 'create') {
+        setDialog(initialCreateDialog());
+        setCurrentEdtAction(null);
+      } else if (currentEdtAction.type === 'switch') {
+        // If a topic was specified, find the EDT and open switch-confirm pre-targeted
+        if (currentEdtAction.target !== 'select EDT') {
+          const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
+          if (targetEdt) {
+            setDialog(initialSwitchDialog(targetEdt));
+            setCurrentEdtAction(null);
+          } else {
+            // EDT not found - will be handled by the dialog's error state
+            setDialog({ kind: 'none' });
+            setCurrentEdtAction(null);
+          }
+        } else {
+          // No topic specified - the dialog will show quick-pick (handled by switch dialog logic)
+          // For now, open switch-confirm for the first non-active EDT
+          const nonActiveEdt = edtsRows.find((e) => e.ulid !== activeEdtUlid);
+          if (nonActiveEdt) {
+            setDialog(initialSwitchDialog(nonActiveEdt));
+            setCurrentEdtAction(null);
+          } else {
+            setDialog({ kind: 'none' });
+            setCurrentEdtAction(null);
+          }
+        }
+      } else if (currentEdtAction.type === 'modify') {
+        // If a topic was specified, find the EDT and open modify dialog pre-targeted
+        if (currentEdtAction.target !== 'select EDT') {
+          const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
+          if (targetEdt) {
+            setDialog(initialModifyDialog(targetEdt));
+            setCurrentEdtAction(null);
+          } else {
+            setDialog({ kind: 'none' });
+            setCurrentEdtAction(null);
+          }
+        } else {
+          // No topic specified - open modify for the focused EDT
+          if (focusedEdt) {
+            setDialog(initialModifyDialog(focusedEdt));
+            setCurrentEdtAction(null);
+          } else {
+            setDialog({ kind: 'none' });
+            setCurrentEdtAction(null);
+          }
+        }
+      }
+    }
+  }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, focusedEdt, setDialog, setCurrentEdtAction]);
+
+  // Story 2.15: load action log when an EDT row is focused
+  // Track which EDT we've loaded to avoid infinite reload loops
+  const [lastLoadedEdtUlid, setLastLoadedEdtUlid] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (focusedEdt && edtActionLogStatus === 'idle' && focusedEdt.ulid !== lastLoadedEdtUlid) {
+      void loadEdtActionLog(focusedEdt.ulid);
+      setLastLoadedEdtUlid(focusedEdt.ulid);
+    }
+  }, [focusedEdt, edtActionLogStatus, loadEdtActionLog, lastLoadedEdtUlid]);
+
   function openEdtAction() {
     const target = edtsRows[clampedEdtsSelected];
     if (target === undefined) {
@@ -574,11 +684,23 @@ export function EdtsZone({
         setDialog((prev) =>
           prev.kind === 'create' ? { ...prev, submitting: false, error: `EDT created, but some members could not be added — ${failedSummary}` } : prev,
         );
+        // Log failed action
+        if (focusedEdt) {
+          await logEdtAction(focusedEdt.ulid, 'create', 'failed', failedSummary);
+        }
         return;
       }
       setDialog({ kind: 'none' });
+      // Log successful action
+      if (focusedEdt) {
+        await logEdtAction(focusedEdt.ulid, 'create', 'success', `Created EDT "${current.topic}" with ${current.selectedMembers.length} member(s)`);
+      }
     } else {
       setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: false, error: result.error.message } : prev));
+      // Log failed action
+      if (focusedEdt) {
+        await logEdtAction(focusedEdt.ulid, 'create', 'failed', result.error.message);
+      }
     }
   }
 
@@ -597,9 +719,17 @@ export function EdtsZone({
         setDialog((prev) =>
           prev.kind === 'switch-confirm' ? { ...prev, submitting: false, error: `Switched, but some repos had a problem — ${failedSummary}` } : prev,
         );
+        // Log failed action
+        if (focusedEdt) {
+          await logEdtAction(focusedEdt.ulid, 'switch', 'failed', failedSummary);
+        }
         return;
       }
       setDialog({ kind: 'none' });
+      // Log successful action
+      if (focusedEdt) {
+        await logEdtAction(focusedEdt.ulid, 'switch', 'success', `Switched to EDT "${current.target.topic}"${force ? ' (forced)' : ''}`);
+      }
       return;
     }
     // switch-blocked-action-in-progress is surfaced as an explicit block/prompt
@@ -612,6 +742,10 @@ export function EdtsZone({
       return;
     }
     setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: false, error: result.error.message } : prev));
+    // Log failed action
+    if (focusedEdt) {
+      await logEdtAction(focusedEdt.ulid, 'switch', 'failed', result.error.message);
+    }
   }
 
   async function submitModify(current: ModifyDialogState) {
@@ -629,11 +763,29 @@ export function EdtsZone({
         setDialog((prev) =>
           prev.kind === 'modify' ? { ...prev, submitting: false, error: `Some changes could not be applied — ${failedSummary}` } : prev,
         );
+        // Log failed action
+        if (focusedEdt) {
+          await logEdtAction(focusedEdt.ulid, 'modify', 'failed', failedSummary);
+        }
         return;
       }
       setDialog({ kind: 'none' });
+      // Log successful action
+      if (focusedEdt) {
+        const changes: string[] = [];
+        if (ops.addMembers.length > 0) changes.push(`added ${ops.addMembers.length} member(s)`);
+        if (ops.removeMembers.length > 0) changes.push(`removed ${ops.removeMembers.length} member(s)`);
+        if (ops.setBranches.length > 0) changes.push(`changed ${ops.setBranches.length} branch(es)`);
+        if (ops.renameTo) changes.push(`renamed to "${ops.renameTo}"`);
+        const detail = changes.length > 0 ? changes.join(', ') : 'no changes';
+        await logEdtAction(focusedEdt.ulid, 'modify', 'success', detail);
+      }
     } else {
       setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: false, error: result.error.message } : prev));
+      // Log failed action
+      if (focusedEdt) {
+        await logEdtAction(focusedEdt.ulid, 'modify', 'failed', result.error.message);
+      }
     }
   }
 
@@ -664,6 +816,7 @@ export function EdtsZone({
       // release in src/bin/tui.ts).
       if (edtsRows.length > 0) {
         setDialog({ kind: 'none' });
+        setCurrentEdtAction(null);
         return;
       }
       requestQuit();
@@ -707,6 +860,7 @@ export function EdtsZone({
     if (key.escape) {
       if (!current.submitting) {
         setDialog({ kind: 'none' });
+        setCurrentEdtAction(null);
       }
       return;
     }
@@ -763,6 +917,7 @@ export function EdtsZone({
     if (key.escape) {
       if (!current.submitting) {
         setDialog({ kind: 'none' });
+        setCurrentEdtAction(null);
       }
       return;
     }
@@ -905,9 +1060,15 @@ export function EdtsZone({
             {paneFocus === 'edts' ? (
               <>
                 <DetailPane title={focusedEdt ? focusedEdt.topic : 'EDT'}>
-                  {focusedEdt ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) : 'No EDT selected.'}
+                  {focusedEdt
+                    ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
+                      '\n\n' +
+                      formatEdtActionHistory(edtActionLog, currentEdtAction)
+                    : 'No EDT selected.'}
                 </DetailPane>
                 {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
+                {edtActionLogStatus === 'loading' && <DimAnnotation text="Loading action history…" />}
+                {edtActionLogStatus === 'error' && <DimAnnotation text="Failed to load action history" />}
               </>
             ) : (
               <>

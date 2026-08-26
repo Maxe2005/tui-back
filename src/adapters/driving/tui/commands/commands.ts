@@ -8,17 +8,31 @@
 // `useAppStore` singleton) so it dispatches against whichever store instance the bar was
 // mounted with — the same dependency-injection convention every other tui/shared component
 // in this codebase already follows (see RepoRegistryScreen's `useStore` prop).
+// Story 2.15: adds `edt-create`, `edt-switch`, `edt-modify` commands that open the same
+// dialogs Story 2.9 already implements (coexisting with Enter-key shortcuts).
 import type { AppStore } from '../store/app-store.js';
 
 export type Command = {
   name: string;
-  run: (useStore: AppStore) => void;
+  run: (useStore: AppStore, fullQuery: string) => void;
 };
 
 export const COMMANDS: readonly Command[] = [
   {
     name: 'registry',
     run: (useStore) => useStore.getState().openRegistryScreen(),
+  },
+  {
+    name: 'edt-create',
+    run: (useStore) => useStore.getState().openEdtCreateDialog(),
+  },
+  {
+    name: 'edt-switch',
+    run: (useStore, fullQuery) => useStore.getState().openEdtSwitchDialog(fullQuery),
+  },
+  {
+    name: 'edt-modify',
+    run: (useStore, fullQuery) => useStore.getState().openEdtModifyDialog(fullQuery),
   },
 ];
 

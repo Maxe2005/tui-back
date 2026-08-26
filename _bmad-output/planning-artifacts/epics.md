@@ -1015,6 +1015,46 @@ So that `:` behaves like the terminal-style command entry the keybinding contrac
 
 **Implementation notes:** the command registry is a small in-memory, statically-defined list (command name → handler) in `adapters/driving/tui` — no core/port change, mirrors Story 2.11's own "no new port/adapter" rule. Visual treatment reuses the existing `modal-dialog` + `list-row` components (see amended `DESIGN.md`/`EXPERIENCE.md`) rather than introducing new chrome. Only one command (`registry`) is registered by this story; the dispatch mechanism itself is the deliverable — adding a second command later is registry-only, no shell-level change.
 
+### Story 2.15: EDT Commands in Command Bar & Action History in Detail Pane
+
+> Added 2026-08-26: completes Story 2.9's EDT management by exposing create/switch/modify as `:` commands (coexisting with Enter-key shortcuts) and adding an action feed to the EDT detail pane so developers can see what happened, what's happening, and what's possible.
+
+As a developer,
+I want `edt-create`, `edt-switch`, and `edt-modify` available in the `:` command bar, and the EDT detail pane to show recent actions, any in-progress action, and available actions for the selected EDT,
+So that I can manage EDTs from the command bar without memorizing zone-specific shortcuts, and always have visibility into what actions occurred on each EDT.
+
+**Acceptance Criteria:**
+
+**Given** the command bar is open (no overlay)
+**When** the developer types `edt-create` and presses `Enter`
+**Then** the create EDT dialog opens (same dialog as Story 2.9's Enter-on-empty-list or zero-EDT prompt)
+
+**Given** the command bar is open
+**When** the developer types `edt-switch` and presses `Enter`
+**Then** a quick-pick list of non-active EDTs appears; selecting one opens the switch-confirm dialog
+
+**Given** the command bar is open with `edt-switch my-topic`
+**When** `Enter` is pressed
+**Then** if `my-topic` matches a non-active EDT, the switch-confirm dialog opens pre-targeted; else an inline "EDT not found" error shows in the command bar
+
+**Given** the command bar is open
+**When** the developer types `edt-modify` and presses `Enter`
+**Then** a quick-pick list of all EDTs appears; selecting one opens the modify dialog pre-targeted
+
+**Given** an EDT row is focused in the EDT selector list
+**When** the detail pane renders
+**Then** it shows an "Actions" section with: any in-progress action (with spinner/glyph), the last 5 actions (timestamp, type, outcome, detail), and a line of available actions (e.g. `[Enter] Switch  [c] Create  [m] Modify`)
+
+**Given** an EDT action (create/switch/modify) completes
+**When** the detail pane is viewed for that EDT
+**Then** the action appears in the recent actions list with its outcome (success/failed) and detail
+
+**Given** a command-triggered dialog is open
+**When** the developer types any character including `?`
+**Then** no AppShell global shortcut fires (the `zoneInputCaptured` gate works identically to Enter-triggered dialogs)
+
+**Implementation notes:** reuses the exact dialog state machines from `edts-zone.tsx` (extract shared open-dialog functions or call the same store actions). Action history stored per-EDT in each EDT's SQLite (`action_log` table: id, timestamp, action_type, outcome, detail_json) — extends `EdtRegistryPort` with `logAction`/`getActionLog`. Command handlers parse their own args from the full query string (e.g. `edt-switch my-topic`). The `DetailPane` currently wraps children in a single `<Text>` — format the Actions section as a joined string with `DimAnnotation` for timestamps and outcome glyphs (`✔`/`✖`), no live spinner in detail pane (static `⣾` glyph for in-progress). Follows the existing pure-interpreter + `useInput` pattern; command bar filtering/autocomplete unchanged.
+
 ## Epic 3: Group Update & Migrations
 
 A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.

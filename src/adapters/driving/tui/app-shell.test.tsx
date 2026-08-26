@@ -252,7 +252,7 @@ describe('AppShell', () => {
     });
 
 it('shouldQuit returns true for q', () => {
-const minimalState: AppState = {
+      const minimalState: AppState = {
         activeZone: 'dashboard',
         setActiveZone: () => {},
         zoneEvents: {} as ZoneEvents,
@@ -310,6 +310,16 @@ const minimalState: AppState = {
         setZoneInputCaptured: () => {},
         quitRequested: false,
         requestQuit: () => {},
+        // Story 2.15: EDT action state
+        currentEdtAction: null,
+        setCurrentEdtAction: () => {},
+        edtActionLog: [],
+        edtActionLogStatus: 'idle',
+        loadEdtActionLog: async () => {},
+        openEdtCreateDialog: () => {},
+        openEdtSwitchDialog: () => {},
+        openEdtModifyDialog: () => {},
+        logEdtAction: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

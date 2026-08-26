@@ -63,7 +63,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     if (key.return) {
       const exact = findExactCommand(query, COMMANDS);
       if (exact) {
-        exact.run(useStore);
+        exact.run(useStore, query);
         onClose();
       } else {
         setUnknownCommand(true);

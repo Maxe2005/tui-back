@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { UseBoundStore, StoreApi } from 'zustand';
+import { ulid as generateUlid } from 'ulid';
 import {
   createEdt as createEdtUseCase,
   type CreateBranchOptions,
@@ -103,6 +104,22 @@ export type RegistryRegisterResult = {
   detail?: string;
 };
 
+// Story 2.15: EDT action state for in-progress actions shown in the detail pane.
+export type EdtActionState = {
+  type: 'create' | 'switch' | 'modify';
+  target: string; // EDT topic or "new EDT" for create
+  startedAt: string; // ISO timestamp
+};
+
+// Story 2.15: EDT action log entry (matches the action_log table schema).
+export type EdtActionLogEntry = {
+  id: string; // ULID
+  timestamp: string; // ISO timestamp
+  actionType: string; // 'create' | 'switch' | 'modify'
+  outcome: 'success' | 'failed';
+  detail: string;
+};
+
 export type AppState = {
   activeZone: ZoneId;
   setActiveZone: (zone: ZoneId) => void;
@@ -204,6 +221,20 @@ export type AppState = {
   commandBarOpen: boolean;
   openCommandBar: () => void;
   closeCommandBar: () => void;
+  // Story 2.15: EDT action state for the detail pane — tracks in-progress action and
+  // loads action log per-EDT.
+  currentEdtAction: EdtActionState | null;
+  setCurrentEdtAction: (action: EdtActionState | null) => void;
+  edtActionLog: EdtActionLogEntry[];
+  edtActionLogStatus: 'idle' | 'loading' | 'error';
+  loadEdtActionLog: (ulid: string) => Promise<void>;
+  // Story 2.15: EDT command dialog openers — delegate to the same dialog state machines
+  // from edts-zone.tsx. These are thin store-level wrappers so commands can trigger them.
+  openEdtCreateDialog: () => void;
+  openEdtSwitchDialog: (fullQuery: string) => void;
+  openEdtModifyDialog: (fullQuery: string) => void;
+  // Story 2.15: logs an EDT action to the per-EDT SQLite action_log table.
+  logEdtAction: (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => Promise<void>;
   // Bumped by resetRegistryScreen (and therefore by openRegistryScreen, which always calls
   // it) — scanRegistryRoot/registerRegistryCandidates/checkRegistryEmpty each capture this at
   // the start of their async work and no-op their terminal `set()` if it has moved on by the
@@ -605,6 +636,74 @@ export function createAppStore(deps?: AppStoreDeps) {
         registryRegisterStatus: 'idle',
         registryRegisterResults: null,
       })),
+    // Story 2.15: EDT action state for detail pane
+    currentEdtAction: null,
+    setCurrentEdtAction: (action) => set({ currentEdtAction: action }),
+    edtActionLog: [],
+    edtActionLogStatus: 'idle',
+    loadEdtActionLog: async (ulid: string) => {
+      if (!deps) {
+        set({ edtActionLogStatus: 'error' });
+        return;
+      }
+      if (get().edtActionLogStatus === 'loading') {
+        return;
+      }
+      set({ edtActionLogStatus: 'loading' });
+      // Use the EDT registry port's getActionLog if available
+      const edtRegistry = deps.edtRegistry as EdtRegistryPort & {
+        getActionLog?: (ulid: string, limit?: number) => Promise<Result<EdtActionLogEntry[]>>;
+      };
+      if (typeof edtRegistry.getActionLog === 'function') {
+        const result = await edtRegistry.getActionLog(ulid, 5);
+        if (result.ok) {
+          set({ edtActionLog: result.data, edtActionLogStatus: 'idle' });
+        } else {
+          set({ edtActionLogStatus: 'error', edtActionLog: [] });
+        }
+      } else {
+        set({ edtActionLog: [], edtActionLogStatus: 'idle' });
+      }
+    },
+    // Story 2.15: EDT command dialog openers - delegate to the edts-zone dialog state machines
+    // These are thin store-level wrappers so commands can trigger the same dialogs
+    openEdtCreateDialog: () => {
+      // The edts-zone component manages its own dialog state locally.
+      // We set a flag that the zone can read to auto-open the create dialog.
+      set({ currentEdtAction: { type: 'create', target: 'new EDT', startedAt: new Date().toISOString() } });
+      // The actual dialog opening is handled by the edts-zone's useEffect watching this state
+    },
+    openEdtSwitchDialog: (fullQuery: string) => {
+      // Parse optional topic from query: "edt-switch [topic]"
+      const parts = fullQuery.trim().split(/\s+/);
+      const topic = parts.length > 1 ? parts.slice(1).join(' ') : null;
+      set({ currentEdtAction: { type: 'switch', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
+      // The edts-zone will handle showing the quick-pick or pre-targeted switch-confirm
+    },
+    openEdtModifyDialog: (fullQuery: string) => {
+      // Parse optional topic from query: "edt-modify [topic]"
+      const parts = fullQuery.trim().split(/\s+/);
+      const topic = parts.length > 1 ? parts.slice(1).join(' ') : null;
+      set({ currentEdtAction: { type: 'modify', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
+      // The edts-zone will handle showing the quick-pick or pre-targeted modify dialog
+    },
+    // Story 2.15: log EDT action to per-EDT SQLite
+    logEdtAction: async (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => {
+      if (!deps) return;
+      const edtRegistry = deps.edtRegistry as EdtRegistryPort & {
+        logAction?: (ulid: string, actionType: string, outcome: string, detail: string) => Promise<Result<void>>;
+      };
+      if (typeof edtRegistry.logAction === 'function') {
+        await edtRegistry.logAction(ulid, actionType, outcome, detail);
+      }
+      // Clear current action state after logging
+      set({ currentEdtAction: null });
+      // Reload action log for the current EDT if it matches
+      const activeEdt = get().activeEdt;
+      if (activeEdt === ulid) {
+        await get().loadEdtActionLog(ulid);
+      }
+    },
   }));
 }
 
