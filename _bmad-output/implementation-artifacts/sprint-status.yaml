@@ -79,6 +79,7 @@ development_status:
   2-12-zone-tab-bar-focus-arrow-navigation: done
   2-13-manifest-gated-zone-tab-visibility-disabled-state: done
   2-14-command-entry-bar-registered-commands: done
+  2-15-edt-commands-and-action-history: backlog
   epic-2-retrospective: optional
 
   epic-3: backlog
