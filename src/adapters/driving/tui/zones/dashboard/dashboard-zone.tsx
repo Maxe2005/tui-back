@@ -31,7 +31,6 @@ export function DashboardZone({
 }: {
   useStore?: AppStore;
 }) {
-  const launchBannerShown = useStore((state) => state.launchBannerShown);
   const registryEmpty = useStore((state) => state.registryEmpty);
   const registryEmptyStatus = useStore((state) => state.registryEmptyStatus);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
@@ -43,7 +42,10 @@ export function DashboardZone({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {launchBannerShown ? null : <LaunchBanner />}
+      {/* story 2.16: rendered unconditionally — the banner is permanent on every Dashboard
+          render, above whatever content follows, superseding story 1.12's one-time
+          launchBannerShown-gated display. */}
+      <LaunchBanner />
       {registryEmptyStatus === 'error' ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
           <Text color={colors.error}>{REGISTRY_CHECK_ERROR_MESSAGE}</Text>

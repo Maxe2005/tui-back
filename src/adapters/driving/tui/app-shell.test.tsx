@@ -122,31 +122,24 @@ describe('AppShell', () => {
     expect(output).not.toContain('KEYBINDINGS');
   });
 
-  it('shows the launch banner on the first Dashboard visit only (AC1)', async () => {
+  it('shows the launch banner on every Dashboard visit, including after switching away and back (story 2.16)', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
       expect(output).toContain(line);
     }
-    expect(store.getState().launchBannerShown).toBe(false);
 
     store.getState().setActiveZone('logs');
-    await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
-    expect(store.getState().launchBannerShown).toBe(true);
+    const logsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    // The banner is scoped to DashboardZone — it must never appear while another zone is active.
+    for (const line of BANNER_LINES) {
+      expect(logsOutput).not.toContain(line);
+    }
 
     store.getState().setActiveZone('dashboard');
     const output2 = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
-      expect(output2).not.toContain(line);
-    }
-  });
-
-  it('prevents the launch banner from reappearing once the store flag is set (AC1 regression guard)', async () => {
-    const store = createAppStore();
-    store.getState().markLaunchBannerShown();
-    const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
-    for (const line of BANNER_LINES) {
-      expect(output).not.toContain(line);
+      expect(output2).toContain(line);
     }
   });
 
@@ -264,8 +257,6 @@ it('shouldQuit returns true for q', () => {
         helpOpen: false,
         openHelp: () => {},
         closeHelp: () => {},
-        launchBannerShown: false,
-        markLaunchBannerShown: () => {},
         runInProgress: false,
         setRunInProgress: () => {},
         edtsBranches: null,
