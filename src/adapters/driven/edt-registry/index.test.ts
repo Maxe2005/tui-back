@@ -28,15 +28,15 @@ afterEach(async () => {
   }
 });
 
-async function makeRegistryFile(): Promise<string> {
+async function makeRegistryFile(): Promise<{ file: string; edtsBaseDir: string }> {
   const dir = await mkdtemp(join(tmpdir(), 'tui-back-edt-registry-'));
   tmpDirs.push(dir);
-  return join(dir, 'edts.yaml');
+  return { file: join(dir, 'edts.yaml'), edtsBaseDir: dir };
 }
 
 describe('edt-registry list()', () => {
   it('round-trips a new-shape registry file ({ulid, topic, createdAt, status, members})', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -46,13 +46,13 @@ describe('edt-registry list()', () => {
     };
     await writeFile(file, stringify({ edts: [entry] }));
 
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     expect(await port.list()).toEqual({ ok: true, data: [entry] });
   });
 
   it('round-trips per-member entries including their branches', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -62,20 +62,20 @@ describe('edt-registry list()', () => {
     };
     await writeFile(file, stringify({ edts: [entry] }));
 
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     expect(await port.list()).toEqual({ ok: true, data: [entry] });
     expect(await readFile(file, 'utf8')).toBe(stringify({ edts: [entry] }));
   });
 
   it('rejects a legacy 2.1-shape entry (ulid/branch, no topic/members) as edt-registry-invalid-format', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     await writeFile(
       file,
       stringify({ edts: [{ ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA', branch: 'edt-01JXXXXX1AAAAAAAAAAAAAAAAA', createdAt: '2026-08-18T00:00:00.000Z', status: 'active' }] }),
     );
 
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.list();
     expect(result.ok).toBe(false);
@@ -88,7 +88,7 @@ describe('edt-registry list()', () => {
 // Story 2.4: setStatus is a read/find/replace/write, mirroring addEdtRegistryEntry's shape.
 describe('edt-registry setStatus()', () => {
   it('updates only the matching entry, leaving others and their fields untouched', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entryA = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'a',
@@ -104,7 +104,7 @@ describe('edt-registry setStatus()', () => {
       members: [],
     };
     await writeFile(file, stringify({ edts: [entryA, entryB] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.setStatus(entryA.ulid, 'inactive');
 
@@ -116,7 +116,7 @@ describe('edt-registry setStatus()', () => {
   });
 
   it('fails with edt-not-found for an unregistered ulid, without writing anything', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -125,7 +125,7 @@ describe('edt-registry setStatus()', () => {
       members: [],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.setStatus('01JNOTFOUND0000000000000', 'inactive');
 
@@ -134,8 +134,8 @@ describe('edt-registry setStatus()', () => {
   });
 
   it('creates the registry directory when it does not exist yet, on an empty registry', async () => {
-    const file = await makeRegistryFile();
-    const port = createEdtRegistryPort(file);
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.setStatus('01JXXXXX1AAAAAAAAAAAAAAAAA', 'inactive');
 
@@ -146,7 +146,7 @@ describe('edt-registry setStatus()', () => {
 // Story 2.5: update() is a read/find/replace/write, mirroring setStatus's shape.
 describe('edt-registry update()', () => {
   it('updates only the topic', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'original',
@@ -155,7 +155,7 @@ describe('edt-registry update()', () => {
       members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.update(entry.ulid, { topic: 'renamed' });
 
@@ -167,7 +167,7 @@ describe('edt-registry update()', () => {
   });
 
   it('updates only the members', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -176,7 +176,7 @@ describe('edt-registry update()', () => {
       members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.update(entry.ulid, {
       members: [{ service: 'shared-types', repoPath: '/repos/b', branch: 'main' }],
@@ -190,7 +190,7 @@ describe('edt-registry update()', () => {
   });
 
   it('updates both topic and members', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'original',
@@ -199,7 +199,7 @@ describe('edt-registry update()', () => {
       members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.update(entry.ulid, {
       topic: 'renamed',
@@ -214,7 +214,7 @@ describe('edt-registry update()', () => {
   });
 
   it('fails with edt-not-found for an unregistered ulid', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -223,7 +223,7 @@ describe('edt-registry update()', () => {
       members: [],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.update('01JNOTFOUND0000000000000', {
       topic: 'new-topic',
@@ -237,7 +237,7 @@ describe('edt-registry update()', () => {
   });
 
   it('leaves sibling entries untouched', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entryA = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'a',
@@ -253,7 +253,7 @@ describe('edt-registry update()', () => {
       members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
     };
     await writeFile(file, stringify({ edts: [entryA, entryB] }));
-    const port = createEdtRegistryPort(file);
+    const port = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await port.update(entryA.ulid, { topic: 'renamed-a' });
 
@@ -320,7 +320,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
   }
 
   it('actually persists an added member to the registry entry (not just `results`)', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -329,7 +329,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       members: [],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const edtRegistry = createEdtRegistryPort(file);
+    const edtRegistry = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await modifyEdt({
       edtRegistry,
@@ -357,7 +357,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
   });
 
   it('actually persists a member branch change to the registry entry (not just `results`)', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -366,7 +366,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'old-branch' }],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const edtRegistry = createEdtRegistryPort(file);
+    const edtRegistry = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await modifyEdt({
       edtRegistry,
@@ -394,7 +394,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
   });
 
   it('drops a removed member entirely, verified against the real persisted patch', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -403,7 +403,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'main' }],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const edtRegistry = createEdtRegistryPort(file);
+    const edtRegistry = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await modifyEdt({
       edtRegistry,
@@ -429,7 +429,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
   });
 
   it('persists a renamed topic against the real registry file', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'original',
@@ -438,7 +438,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       members: [],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const edtRegistry = createEdtRegistryPort(file);
+    const edtRegistry = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await modifyEdt({
       edtRegistry,
@@ -464,7 +464,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
   });
 
   it('a branch override on a member added in the same call wins over its auto-resolved current branch', async () => {
-    const file = await makeRegistryFile();
+    const { file, edtsBaseDir } = await makeRegistryFile();
     const entry = {
       ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
       topic: 'demo',
@@ -473,7 +473,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       members: [],
     };
     await writeFile(file, stringify({ edts: [entry] }));
-    const edtRegistry = createEdtRegistryPort(file);
+    const edtRegistry = createEdtRegistryPort(file, edtsBaseDir);
 
     const result = await modifyEdt({
       edtRegistry,

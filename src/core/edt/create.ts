@@ -213,8 +213,19 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   // Create the SQLite database (AD-7) as a sibling of the EDT directory, at
   // edtsBaseDir/<ulid>.db — better-sqlite3 gives a real, valid (empty) SQLite file rather
   // than a 0-byte placeholder. Real schema/migrations land in later stories.
+  // Story 2.15: create the action_log table for per-EDT action history.
   try {
-    new Database(dbPath).close();
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS action_log (
+        id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        detail TEXT NOT NULL
+      )
+    `);
+    db.close();
   } catch (dbError) {
     rollback();
     return err('edt-creation-failed', `Failed to create SQLite database at ${dbPath}`, dbError);

@@ -30,7 +30,7 @@ describe('matchCommands (story 2.14)', () => {
   });
 
   it('defaults to filtering the real COMMANDS registry when no list is supplied', () => {
-    expect(matchCommands('registry')).toEqual([...COMMANDS]);
+    expect(matchCommands('registry')).toEqual([COMMANDS[0]!]);
     expect(matchCommands('nope')).toEqual([]);
   });
 });
@@ -55,9 +55,21 @@ describe('findExactCommand (story 2.14)', () => {
   });
 });
 
-describe('COMMANDS (story 2.14)', () => {
-  it('registers exactly one command, "registry", for now', () => {
-    expect(COMMANDS.map((command) => command.name)).toEqual(['registry']);
+describe('COMMANDS (story 2.14, 2.15)', () => {
+  it('registers the registry command', () => {
+    expect(COMMANDS.find((c) => c.name === 'registry')).toBeDefined();
+  });
+
+  it('registers the edt-create command', () => {
+    expect(COMMANDS.find((c) => c.name === 'edt-create')).toBeDefined();
+  });
+
+  it('registers the edt-switch command', () => {
+    expect(COMMANDS.find((c) => c.name === 'edt-switch')).toBeDefined();
+  });
+
+  it('registers the edt-modify command', () => {
+    expect(COMMANDS.find((c) => c.name === 'edt-modify')).toBeDefined();
   });
 
   it('the registry command calls the store\'s openRegistryScreen action — no core/ports import', () => {
@@ -68,8 +80,50 @@ describe('COMMANDS (story 2.14)', () => {
       }),
     } as unknown as Parameters<Command['run']>[0];
 
-    COMMANDS[0]!.run(fakeStore);
+    COMMANDS[0]!.run(fakeStore, '');
 
     expect(calls).toEqual(['openRegistryScreen']);
+  });
+
+  it('the edt-create command calls openEdtCreateDialog', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openEdtCreateDialog: () => calls.push('openEdtCreateDialog'),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const createCmd = COMMANDS.find((c) => c.name === 'edt-create')!;
+    createCmd.run(fakeStore, '');
+
+    expect(calls).toEqual(['openEdtCreateDialog']);
+  });
+
+  it('the edt-switch command calls openEdtSwitchDialog with full query', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openEdtSwitchDialog: (query: string) => calls.push(query),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const switchCmd = COMMANDS.find((c) => c.name === 'edt-switch')!;
+    switchCmd.run(fakeStore, 'edt-switch my-topic');
+
+    expect(calls).toEqual(['edt-switch my-topic']);
+  });
+
+  it('the edt-modify command calls openEdtModifyDialog with full query', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openEdtModifyDialog: (query: string) => calls.push(query),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const modifyCmd = COMMANDS.find((c) => c.name === 'edt-modify')!;
+    modifyCmd.run(fakeStore, 'edt-modify my-topic');
+
+    expect(calls).toEqual(['edt-modify my-topic']);
   });
 });

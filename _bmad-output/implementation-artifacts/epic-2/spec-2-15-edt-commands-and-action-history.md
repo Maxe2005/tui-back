@@ -2,7 +2,7 @@
 title: 'EDT Commands in Command Bar & Action History in Detail Pane'
 type: 'feature'
 created: '2026-08-26'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'ec0e4554de6cf8bef691dd9586abd4538d21842a'
 context:
   - '_bmad-output/planning-artifacts/epics.md'
@@ -72,15 +72,15 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/commands/commands.ts` — add `edt-create`, `edt-switch`, `edt-modify` to `COMMANDS` with handlers calling store actions
-- [ ] `src/adapters/driving/tui/commands/commands.test.ts` — test the three new commands exist and dispatch correctly
-- [ ] `src/adapters/driving/tui/store/app-store.ts` — add `currentEdtAction` state, dialog-opening actions, `logEdtAction`, and action log loading (per-EDT, lazy or eager)
-- [ ] `src/adapters/driven/edt-registry/index.ts` — add `action_log` table (columns: `id` ULID, `timestamp` ISO8601, `action_type` TEXT, `outcome` TEXT, `detail` JSON), `logAction`, `getActionLog`; hand-rolled migration SQL
-- [ ] `src/adapters/driven/edt-registry/schema.ts` — bump `schema_version`, add migration
-- [ ] `src/core/ports/edt-registry.ts` — extend `EdtRegistryPort` with optional `logAction`/`getActionLog`
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` — extract dialog-opening logic to be callable from commands; enhance detail pane with Actions section (in-progress, recent, available); wire `currentEdtAction` display
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.test.tsx` — smoke tests for detail pane action section; interaction tests for command-triggered dialogs
-- [ ] `src/adapters/driving/tui/app-shell.tsx` — ensure `zoneInputCaptured` is set when command-triggered dialogs open (same as Enter-triggered)
+- [x] `src/adapters/driving/tui/commands/commands.ts` — add `edt-create`, `edt-switch`, `edt-modify` to `COMMANDS` with handlers calling store actions
+- [x] `src/adapters/driving/tui/commands/commands.test.ts` — test the three new commands exist and dispatch correctly
+- [x] `src/adapters/driving/tui/store/app-store.ts` — add `currentEdtAction` state, dialog-opening actions, `logEdtAction`, and action log loading (per-EDT, lazy or eager)
+- [x] `src/adapters/driven/edt-registry/index.ts` — add `action_log` table (columns: `id` ULID, `timestamp` ISO8601, `action_type` TEXT, `outcome` TEXT, `detail` JSON), `logAction`, `getActionLog`; hand-rolled migration SQL
+- [x] `src/adapters/driven/edt-registry/schema.ts` — bump `schema_version`, add migration
+- [x] `src/core/ports/edt-registry.ts` — extend `EdtRegistryPort` with optional `logAction`/`getActionLog`
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` — extract dialog-opening logic to be callable from commands; enhance detail pane with Actions section (in-progress, recent, available); wire `currentEdtAction` display
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.test.tsx` — smoke tests for detail pane action section; interaction tests for command-triggered dialogs
+- [x] `src/adapters/driving/tui/app-shell.tsx` — ensure `zoneInputCaptured` is set when command-triggered dialogs open (same as Enter-triggered)
 
 **Acceptance Criteria:**
 - Given the command bar is open, when the developer types `edt-create` and presses Enter, then the create EDT dialog opens (same as Story 2.9's zero-EDT auto-prompt).
