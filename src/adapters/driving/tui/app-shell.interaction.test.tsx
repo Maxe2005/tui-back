@@ -896,3 +896,52 @@ describe('AppShell tabVisibility load activation (story 2.13 review fix)', () =>
     }
   });
 });
+
+describe('AppShell edts load activation (story 2.20)', () => {
+  it('resolves the active EDT topic in the top bar from a wired mount-time loadEdts(), without ever visiting the EDTs zone', async () => {
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () =>
+        ok([
+          {
+            ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+            topic: 'checkout-revamp',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            status: 'active',
+            members: [],
+          },
+        ] as EdtRegistryEntry[]),
+      ),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+    };
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok('01JXXXXX1AAAAAAAAAAAAAAAAA')),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+    // The default activeZone is 'dashboard' — this test never switches to 'edts', so
+    // EdtsZone's own mount-time loadEdts() call never fires; the store's edts/activeEdt can
+    // only be populated by AppShell's own mount-time loadEdts() effect.
+    expect(store.getState().activeZone).toBe('dashboard');
+
+    const { instance, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+
+      expect(store.getState().edts).toEqual([
+        expect.objectContaining({ ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA', topic: 'checkout-revamp' }),
+      ]);
+      expect(store.getState().activeEdt).toBe('01JXXXXX1AAAAAAAAAAAAAAAAA');
+
+      const output = stdout.output;
+      const lastFrame = output.slice(output.lastIndexOf('tui-back'));
+      expect(lastFrame).toContain('checkout-revamp');
+      expect(lastFrame).not.toContain('01JXXXXX1AAAAAAAAAAAAAAAAA');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

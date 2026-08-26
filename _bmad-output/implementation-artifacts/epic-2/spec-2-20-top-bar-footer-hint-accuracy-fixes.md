@@ -57,11 +57,11 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/shared/components/top-bar.tsx` -- add `edts` prop, derive and render the resolved `topic` -- fulfills the Intent's core behavior change (ulid → topic)
-- [ ] `src/adapters/driving/tui/app-shell.tsx` -- load `edts` once at mount, pass it to `TopBar` -- makes the label correct regardless of which zone renders first
-- [ ] `src/adapters/driving/tui/shared/components/footer.tsx` -- add `'[←→] zone'` to `DEFAULT_FOOTER_HINTS` -- fulfills the Intent's second fix
-- [ ] `src/adapters/driving/tui/shared/components/top-bar-footer-split.test.tsx` -- update `TopBar` tests for topic resolution (incl. `edts: null`); add `Footer` hint-list assertion
-- [ ] `src/adapters/driving/tui/app-shell.interaction.test.tsx` -- add a mount-level test proving the topic resolves without visiting the EDTs zone
+- [x] `src/adapters/driving/tui/shared/components/top-bar.tsx` -- add `edts` prop, derive and render the resolved `topic` -- fulfills the Intent's core behavior change (ulid → topic)
+- [x] `src/adapters/driving/tui/app-shell.tsx` -- load `edts` once at mount, pass it to `TopBar` -- makes the label correct regardless of which zone renders first
+- [x] `src/adapters/driving/tui/shared/components/footer.tsx` -- add `'[←→] zone'` to `DEFAULT_FOOTER_HINTS` -- fulfills the Intent's second fix
+- [x] `src/adapters/driving/tui/shared/components/top-bar-footer-split.test.tsx` -- update `TopBar` tests for topic resolution (incl. `edts: null`); add `Footer` hint-list assertion
+- [x] `src/adapters/driving/tui/app-shell.interaction.test.tsx` -- add a mount-level test proving the topic resolves without visiting the EDTs zone
 
 **Acceptance Criteria:**
 - Given an EDT is active, when the top bar renders, then it shows that EDT's `topic` — never its ULID — resolved regardless of which zone is currently active.

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Text } from 'ink';
+import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { TopBar } from './top-bar.js';
 import { Footer, DEFAULT_FOOTER_HINTS } from './footer.js';
 import {
@@ -9,17 +10,39 @@ import {
 } from './list-detail-split.js';
 import { renderToString } from './render-to-string.js';
 
+const EDTS: EdtRegistryEntry[] = [
+  {
+    ulid: 'edt-01hx2',
+    topic: 'checkout-revamp',
+    createdAt: '2026-08-26T00:00:00.000Z',
+    status: 'active',
+    members: [],
+  },
+];
+
 describe('TopBar', () => {
-  it('renders the app name, active EDT, and chrome hints in one row (AC1)', async () => {
-    const output = await renderToString(<TopBar activeEdt="edt-01hx2" />);
+  it('renders the app name, active EDT topic, and chrome hints in one row (AC1)', async () => {
+    const output = await renderToString(<TopBar activeEdt="edt-01hx2" edts={EDTS} />);
     expect(output).toContain('tui-back');
-    expect(output).toContain('edt-01hx2');
+    expect(output).toContain('checkout-revamp');
+    expect(output).not.toContain('edt-01hx2');
     expect(output).toContain('[/] filter');
     expect(output).toContain('[:] cmd');
   });
 
   it('shows a dim placeholder when no EDT is active', async () => {
-    const output = await renderToString(<TopBar activeEdt={null} />);
+    const output = await renderToString(<TopBar activeEdt={null} edts={EDTS} />);
+    expect(output).toContain('no active EDT');
+  });
+
+  it('shows a dim placeholder when edts has not loaded yet', async () => {
+    const output = await renderToString(<TopBar activeEdt="edt-01hx2" edts={null} />);
+    expect(output).toContain('no active EDT');
+    expect(output).not.toContain('edt-01hx2');
+  });
+
+  it('shows a dim placeholder when the active EDT has no matching entry', async () => {
+    const output = await renderToString(<TopBar activeEdt="edt-missing" edts={[]} />);
     expect(output).toContain('no active EDT');
   });
 });
@@ -43,6 +66,13 @@ describe('Footer', () => {
   it('accepts zone-specific hints', async () => {
     const output = await renderToString(<Footer hints={['[?] help']} />);
     expect(output).toContain('[?] help');
+  });
+
+  it('includes [←→] zone immediately after [d/e/u/l/r/s] zone in the default hints (UX-DR7, Story 2.20)', () => {
+    const mnemonicIndex = DEFAULT_FOOTER_HINTS.indexOf('[d/e/u/l/r/s] zone');
+    const arrowIndex = DEFAULT_FOOTER_HINTS.indexOf('[←→] zone');
+    expect(mnemonicIndex).toBeGreaterThanOrEqual(0);
+    expect(arrowIndex).toBe(mnemonicIndex + 1);
   });
 });
 

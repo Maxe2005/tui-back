@@ -5,6 +5,7 @@ export const DEFAULT_FOOTER_HINTS = [
   '[↑↓] move',
   '[Home/End] top/bottom',
   '[d/e/u/l/r/s] zone',
+  '[←→] zone',
   '[/] filter',
   '[:] cmd',
   '[?] help',
