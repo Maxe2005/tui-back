@@ -50,7 +50,7 @@ function fakeStdin(): NodeJS.ReadStream {
 describe('DashboardZone (story 2.11)', () => {
   it('shows the "no repos registered yet" prompt when the registry is confirmed empty (AC1)', async () => {
     const store = createAppStore();
-    store.setState({ launchBannerShown: true, registryEmpty: true, checkRegistryEmpty: noopCheck });
+    store.setState({ registryEmpty: true, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain(EMPTY_REGISTRY_HINT);
@@ -58,7 +58,7 @@ describe('DashboardZone (story 2.11)', () => {
 
   it('shows the existing (unchanged) placeholder content when the registry is non-empty — no registry prompt', async () => {
     const store = createAppStore();
-    store.setState({ launchBannerShown: true, registryEmpty: false, checkRegistryEmpty: noopCheck });
+    store.setState({ registryEmpty: false, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain('DASHBOARD');
@@ -66,7 +66,7 @@ describe('DashboardZone (story 2.11)', () => {
 
   it('shows the existing placeholder content (never assumes empty) before the registry check resolves', async () => {
     const store = createAppStore();
-    store.setState({ launchBannerShown: true, registryEmpty: null, checkRegistryEmpty: noopCheck });
+    store.setState({ registryEmpty: null, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain('DASHBOARD');
@@ -77,7 +77,6 @@ describe('DashboardZone (story 2.11)', () => {
   it('shows an explicit error message when the registry check itself fails — never silently falls back to the placeholder or a stale prompt', async () => {
     const store = createAppStore();
     store.setState({
-      launchBannerShown: true,
       registryEmpty: true, // stale value from a prior successful check — must not still show
       registryEmptyStatus: 'error',
       checkRegistryEmpty: noopCheck,
@@ -92,7 +91,6 @@ describe('DashboardZone (story 2.11)', () => {
     let called = false;
     const store = createAppStore();
     store.setState({
-      launchBannerShown: true,
       checkRegistryEmpty: async () => {
         called = true;
       },
@@ -101,7 +99,7 @@ describe('DashboardZone (story 2.11)', () => {
     expect(called).toBe(true);
   });
 
-  it('still shows the launch banner on the first visit, above the empty-registry prompt', async () => {
+  it('always shows the launch banner, above the empty-registry prompt', async () => {
     const store = createAppStore();
     store.setState({ registryEmpty: true, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
@@ -122,7 +120,6 @@ describe('DashboardZone (story 2.11)', () => {
     let calls = 0;
     const store = createAppStore();
     store.setState({
-      launchBannerShown: true,
       checkRegistryEmpty: async () => {
         calls += 1;
       },

@@ -132,8 +132,6 @@ export type AppState = {
   helpOpen: boolean;
   openHelp: () => void;
   closeHelp: () => void;
-  launchBannerShown: boolean;
-  markLaunchBannerShown: () => void;
   runInProgress: boolean;
   setRunInProgress: (value: boolean) => void;
   // Story 2.6 (FR-9): the EDTs zone's branch/divergence listing. `edtsBranches` is null only
@@ -306,8 +304,6 @@ export function createAppStore(deps?: AppStoreDeps) {
     helpOpen: false,
     openHelp: () => set({ helpOpen: true }),
     closeHelp: () => set({ helpOpen: false }),
-    launchBannerShown: false,
-    markLaunchBannerShown: () => set({ launchBannerShown: true }),
     runInProgress: false,
     setRunInProgress: (value: boolean) => set({ runInProgress: value }),
     edtsBranches: null,

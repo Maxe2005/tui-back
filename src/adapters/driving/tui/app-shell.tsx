@@ -135,12 +135,6 @@ export function AppShell({
 
   const [filterOpen, setFilterOpen] = useState(false);
 
-  useEffect(() => {
-    if (activeZone !== 'dashboard' && !useStore.getState().launchBannerShown) {
-      useStore.getState().markLaunchBannerShown();
-    }
-  }, [activeZone, useStore]);
-
   // Story 2.13: mirrors dashboard-zone.tsx's own checkRegistryEmpty effect idiom — a single
   // effect keyed on `registryScreenOpen` both fires the mount-time load (it runs once on
   // mount, `registryScreenOpen` starting false) and reloads whenever the registry screen

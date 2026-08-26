@@ -59,13 +59,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx` -- make `LaunchBanner` render unconditional; remove `launchBannerShown` from the `useStore` selector -- fulfills the Intent's core behavior change
-- [ ] `src/adapters/driving/tui/store/app-store.ts` -- remove `launchBannerShown` field, initial state, and `markLaunchBannerShown` action from `AppState` and `createAppStore` -- the flag has no remaining reader once the banner is unconditional
-- [ ] `src/adapters/driving/tui/app-shell.tsx` -- remove the mount effect that calls `markLaunchBannerShown()` when the active zone leaves `'dashboard'` -- this is the writer of the flag being deleted; leaving it would call a removed action
-- [ ] `src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx` -- remove all `launchBannerShown: true` seeding; update assertions/descriptions so every case reflects the banner always being present
-- [ ] `src/adapters/driving/tui/zones/dashboard/launch-banner.test.tsx` -- update the "hides" test to assert the banner always shows; remove the `markLaunchBannerShown` call
-- [ ] `src/adapters/driving/tui/app-shell.test.tsx` -- rewrite the "first Dashboard visit only" test to cover switch-away-and-back always showing the banner; delete the reappearing-guard test; drop the removed fields from the `minimalState: AppState` literal
-- [ ] `src/adapters/driving/tui/store/app-store.test.ts` -- delete the "marks the launch banner shown once" test
+- [x] `src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx` -- make `LaunchBanner` render unconditional; remove `launchBannerShown` from the `useStore` selector -- fulfills the Intent's core behavior change
+- [x] `src/adapters/driving/tui/store/app-store.ts` -- remove `launchBannerShown` field, initial state, and `markLaunchBannerShown` action from `AppState` and `createAppStore` -- the flag has no remaining reader once the banner is unconditional
+- [x] `src/adapters/driving/tui/app-shell.tsx` -- remove the mount effect that calls `markLaunchBannerShown()` when the active zone leaves `'dashboard'` -- this is the writer of the flag being deleted; leaving it would call a removed action
+- [x] `src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx` -- remove all `launchBannerShown: true` seeding; update assertions/descriptions so every case reflects the banner always being present
+- [x] `src/adapters/driving/tui/zones/dashboard/launch-banner.test.tsx` -- update the "hides" test to assert the banner always shows; remove the `markLaunchBannerShown` call
+- [x] `src/adapters/driving/tui/app-shell.test.tsx` -- rewrite the "first Dashboard visit only" test to cover switch-away-and-back always showing the banner; delete the reappearing-guard test; drop the removed fields from the `minimalState: AppState` literal
+- [x] `src/adapters/driving/tui/store/app-store.test.ts` -- delete the "marks the launch banner shown once" test
 
 **Acceptance Criteria:**
 - Given the app starts, when the Dashboard first renders, then the banner shows exactly as today.

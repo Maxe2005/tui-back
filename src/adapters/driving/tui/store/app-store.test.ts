@@ -173,15 +173,6 @@ describe("app store", () => {
     expect(store.getState().helpOpen).toBe(false);
   });
 
-  it("marks the launch banner shown once, in-memory only, and it stays set (AC1)", () => {
-    const store = createAppStore();
-    expect(store.getState().launchBannerShown).toBe(false);
-    store.getState().markLaunchBannerShown();
-    expect(store.getState().launchBannerShown).toBe(true);
-    store.getState().markLaunchBannerShown();
-    expect(store.getState().launchBannerShown).toBe(true);
-  });
-
   describe("loadEdtsBranches (story 2.6, FR-9)", () => {
     it("starts idle with no data before the first load", () => {
       const store = createAppStore(fakeDeps());

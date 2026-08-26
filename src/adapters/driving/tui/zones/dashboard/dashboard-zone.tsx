@@ -31,7 +31,6 @@ export function DashboardZone({
 }: {
   useStore?: AppStore;
 }) {
-  const launchBannerShown = useStore((state) => state.launchBannerShown);
   const registryEmpty = useStore((state) => state.registryEmpty);
   const registryEmptyStatus = useStore((state) => state.registryEmptyStatus);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
@@ -43,7 +42,7 @@ export function DashboardZone({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {launchBannerShown ? null : <LaunchBanner />}
+      <LaunchBanner />
       {registryEmptyStatus === 'error' ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
           <Text color={colors.error}>{REGISTRY_CHECK_ERROR_MESSAGE}</Text>
