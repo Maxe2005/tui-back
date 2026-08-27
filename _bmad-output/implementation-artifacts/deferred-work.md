@@ -236,6 +236,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-12-zone-tab-bar-focus-arrow-navigation.md`
   summary: When the splitter's `Ctrl+W` keyboard resize-mode (documented since UX-DR10/1-9, never yet implemented) is eventually built, its resize-mode state will need adding to the same exclusion gate story 2.12's `Left`/`Right` zone-switch dispatch already checks (`!helpOpen && !filterOpen && !registryScreenOpen`, inert under `zoneInputCaptured`) — otherwise arrow keys meant to resize a splitter boundary would also switch zones.
   evidence: `src/adapters/driving/tui/app-shell.tsx`'s `resolveZoneArrowSwitch` dispatch branch has no resize-mode flag to check because none exists in the codebase yet (confirmed absent during story 2.10/2.12 investigation); flagged in review so whichever story implements `Ctrl+W` resize-mode remembers to add the gate, mirroring how `zoneInputCaptured` is already threaded through every global shortcut.
+  tracked_by: Story 2.21 (Sprint Change Proposal, 2026-08-27) — EDT Zone Multi-Splitter Layout with Keyboard Resize-Mode. Item stays open until 2.21 actually lands and the gate is added.
 
 ## Deferred from: code review of 2-14-command-entry-bar-registered-commands (2026-08-25)
 
