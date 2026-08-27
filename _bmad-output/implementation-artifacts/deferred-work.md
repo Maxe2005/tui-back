@@ -260,3 +260,8 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-20-top-bar-footer-hint-accuracy-fixes.md`
   summary: `src/bin/tui-back.e2e.test.ts`'s `edt switch` black-box tests (56 failures) fail independently of this story, all at `registerRepos`'s `expect(runCli(['register', repo], env).status).toBe(0)`.
   evidence: Confirmed by the verification-gap reviewer as pre-existing and unrelated to this diff — `tui-back.e2e.test.ts` was last modified in story 2.8 (commit `842cd84`), long before this story's `baseline_commit`, and this diff touches only `adapters/driving/tui/**`. Looks like a sandbox/environment issue (e.g. git config in the test env) rather than a code regression. **Track:** root-cause the `register` subcommand's non-zero exit in the e2e sandbox next time this suite is touched.
+
+## Deferred from: code review of 2-17-terminal-style-command-bar-autocomplete-grid-browser (2026-08-27)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-20-top-bar-footer-hint-accuracy-fixes.md`
+  summary: The story 2.20 entry above ("`registerRepos` ... 56 failures ... sandbox/environment issue") is resolved, not merely deferred: `tui-back.e2e.test.ts`'s `scriptPath` was pointed at `tui-back.mjs` (the interactive-TUI entrypoint, which exits 1 under `spawnSync`'s non-TTY `register` calls) instead of `cli-back.mjs` (the actual CLI dispatcher) ever since `b081de8` split the two entrypoints. Repointing it to `cli-back.mjs` (this story's diff) makes all 57 tests in the file pass reliably. **Track:** nothing further — close the story 2.20 entry above once its own spec is next touched, it no longer needs root-causing.
