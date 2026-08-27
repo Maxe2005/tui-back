@@ -158,12 +158,22 @@ export function jumpSelection(jump: SelectionJump, length: number): number {
 // Story 2.9 -----------------------------------------------------------------------------
 
 // Tab's second consumer (the first is cycleFormFocus below, inside a form): cycling which of
-// the two simultaneously-visible base-view lists arrows/Home/End move. Default focus is the
+// the three simultaneously-visible base-view lists arrows/Home/End move. Default focus is the
 // EDT selector (Design Notes, review-loop iteration 0's resolution).
-export type PaneFocus = 'edts' | 'services';
+// Story 2.18: widened from a 2-way edts/services toggle to a 3-way cycle — the flat SERVICES
+// list (story 2.6) is now split into EDT SERVICES / OTHER SERVICES, partitioned by the
+// *selected* EDT's own membership (partitionServicesByEdtMembership below), each
+// independently arrow/Home/End-navigable.
+export type PaneFocus = 'edts' | 'edt-services' | 'other-services';
 
-export function togglePaneFocus(current: PaneFocus): PaneFocus {
-  return current === 'edts' ? 'services' : 'edts';
+export function cyclePaneFocus(current: PaneFocus): PaneFocus {
+  if (current === 'edts') {
+    return 'edt-services';
+  }
+  if (current === 'edt-services') {
+    return 'other-services';
+  }
+  return 'edts';
 }
 
 // Tab's first consumer: cycling a form's topic-input ↔ member-checklist while a
@@ -252,10 +262,12 @@ export function summarizeFailedResults(results: readonly FailableResultRow[]): s
   return failed.map((row) => `${row.service}${row.detail ? `: ${row.detail.message}` : ''}`).join('; ');
 }
 
-export function formatEdtRowMeta(entry: EdtRegistryEntry, isActive: boolean): string {
+// Amended 2026-08-27 (Sprint Change Proposal): no longer takes `isActive` — the "— active"
+// suffix moved out of this string and into `ListRow`'s own `active` prop (rendered as a
+// discreet, independently-colored suffix), so this stays a pure member-count formatter.
+export function formatEdtRowMeta(entry: EdtRegistryEntry): string {
   const count = entry.members.length;
-  const base = `${count} member${count === 1 ? '' : 's'}`;
-  return isActive ? `${base} — active` : base;
+  return `${count} member${count === 1 ? '' : 's'}`;
 }
 
 export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): string {
@@ -296,12 +308,45 @@ export function formatEdtActionHistory(
     }
   }
 
-  lines.push(''); // blank line before available actions
-
-  // Available actions
-  lines.push('Available: [Enter] Switch  [c] Create  [m] Modify');
-
   return lines.join('\n');
+}
+
+// Story 2.18: replaces the "Available: [Enter] Switch  [c] Create  [m] Modify" line formerly
+// hardcoded inside formatEdtActionHistory above — that line was static and never matched what
+// Enter actually did once EDT SERVICES/OTHER SERVICES panes existed. Never lists `c`/`m` (the
+// spec's Boundaries: they were never wired as direct keys). The zone's render joins this with
+// formatEdtDetail/formatEdtActionHistory using the same '\n\n' separator already used today
+// (Design Notes).
+export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActiveEdt: boolean): string {
+  switch (paneFocus) {
+    case 'edts':
+      return focusedIsActiveEdt ? '[Enter] Modify' : '[Enter] Switch';
+    case 'edt-services':
+      return '[Enter] Remove / Change branch';
+    case 'other-services':
+      return '[Enter] Add to EDT';
+    default:
+      return '';
+  }
+}
+
+// Story 2.18: splits the flat SERVICES list (story 2.6) into EDT SERVICES (rows whose `path`
+// is a member of the *selected* EDT — never `row.isMember`, which stays tied to the *active*
+// EDT for its own divergence-badge use, per the spec's Boundaries) and OTHER SERVICES
+// (everything else). `focusedEdt` undefined -> every row lands in OTHER SERVICES; callers
+// show a "No EDT selected" note instead of an empty EDT SERVICES group (never render an empty
+// EDT SERVICES section in that case).
+export function partitionServicesByEdtMembership(
+  rows: readonly ServiceBranchDivergence[],
+  focusedEdt: EdtRegistryEntry | undefined,
+): { edtServices: ServiceBranchDivergence[]; otherServices: ServiceBranchDivergence[] } {
+  if (focusedEdt === undefined) {
+    return { edtServices: [], otherServices: [...rows] };
+  }
+  const memberPaths = new Set(focusedEdt.members.map((member) => member.repoPath));
+  const edtServices = rows.filter((row) => memberPaths.has(row.path));
+  const otherServices = rows.filter((row) => !memberPaths.has(row.path));
+  return { edtServices, otherServices };
 }
 
 // AC1's "candidate list must reflect a still-loading services fetch (a distinct state)
@@ -434,7 +479,50 @@ type ModifyDialogState = {
   error: string | null;
 };
 
-type EdtDialogState = { kind: 'none' } | CreateDialogState | SwitchDialogState | ModifyDialogState;
+// Story 2.18: the EDT SERVICES row contextual menu opened by Enter — Remove from EDT / Change
+// branch for this EDT / a visibly disabled Restart (Epic 5). No new list-picker component:
+// three ListRows inside the existing ModalDialog, arrow/Home/End-navigable via the same
+// resolveSelectionDirection/moveSelection pair every other list here already uses (Design
+// Notes: "mirrors the create/switch/modify dialogs' existing structure").
+export const SERVICE_ACTION_MENU_ITEMS = Object.freeze([
+  { label: 'Remove from EDT', disabled: false },
+  { label: 'Change branch for this EDT', disabled: false },
+  { label: 'Restart', disabled: true },
+] as const);
+
+type ServiceActionsDialogState = {
+  kind: 'service-actions';
+  edt: EdtRegistryEntry;
+  repoPath: string;
+  serviceName: string;
+  cursor: number;
+  branchEdit: BranchEditState | null;
+  submitting: boolean;
+  error: string | null;
+};
+
+// Story 2.18: the OTHER SERVICES row's Add-to-EDT dialog opened by Enter — a single
+// branch-edit text input, pre-filled with the service's current branch
+// (ServiceBranchDivergence.branch), editable; confirm calls modifyEdt with both `addMembers`
+// and `setBranches` for the same repoPath in one call (core/edt/modify.ts already composes
+// these correctly — see Design Notes).
+type AddToEdtDialogState = {
+  kind: 'add-to-edt';
+  edt: EdtRegistryEntry;
+  repoPath: string;
+  serviceName: string;
+  value: string;
+  error: string | null;
+  submitting: boolean;
+};
+
+type EdtDialogState =
+  | { kind: 'none' }
+  | CreateDialogState
+  | SwitchDialogState
+  | ModifyDialogState
+  | ServiceActionsDialogState
+  | AddToEdtDialogState;
 
 function initialCreateDialog(): CreateDialogState {
   return { kind: 'create', topic: '', formFocus: 'topic', selectedMembers: [], memberCursor: 0, submitting: false, error: null };
@@ -459,6 +547,19 @@ function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {
   };
 }
 
+function initialServiceActionsDialog(edt: EdtRegistryEntry, repoPath: string, serviceName: string): ServiceActionsDialogState {
+  return { kind: 'service-actions', edt, repoPath, serviceName, cursor: 0, branchEdit: null, submitting: false, error: null };
+}
+
+function initialAddToEdtDialog(
+  edt: EdtRegistryEntry,
+  repoPath: string,
+  serviceName: string,
+  currentBranch: string | null,
+): AddToEdtDialogState {
+  return { kind: 'add-to-edt', edt, repoPath, serviceName, value: currentBranch ?? '', error: null, submitting: false };
+}
+
 export function EdtsZone({
   useStore = useAppStore,
   // Test-only injection point (mirrors `useStore` above): `renderToString`'s fake stdin
@@ -477,7 +578,7 @@ export function EdtsZone({
 }: {
   useStore?: AppStore;
   initialPaneFocus?: PaneFocus;
-  initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify';
+  initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' | 'service-actions' | 'add-to-edt';
 }) {
   const ratio = useStore((state) => state.splitterRatios.edts);
   const services = useStore((state) => state.edtsBranches);
@@ -527,12 +628,15 @@ export function EdtsZone({
   const rows = status === 'error' ? [] : (services ?? []);
   // Same "never a stale value on error" gating as `rows` above.
   const issuesSummary = status === 'error' ? null : formatIssuesSummary(unreachable.length, errors.length);
-  const [servicesSelected, setServicesSelected] = useState(0);
-  const clampedSelected = rows.length === 0 ? 0 : Math.min(servicesSelected, rows.length - 1);
 
   // Story 2.9 -----------------------------------------------------------------------------
   const [paneFocus, setPaneFocus] = useState<PaneFocus>(initialPaneFocus);
   const [edtsSelected, setEdtsSelected] = useState(0);
+  // Story 2.18: the flat SERVICES pane's single cursor is now two independent cursors, one
+  // per partitioned pane (EDT SERVICES / OTHER SERVICES) — each keeps its own position as
+  // paneFocus cycles between them, same as edtsSelected already does for the EDT selector.
+  const [edtServicesSelected, setEdtServicesSelected] = useState(0);
+  const [otherServicesSelected, setOtherServicesSelected] = useState(0);
   const [dialog, setDialog] = useState<EdtDialogState>(() => {
     if (initialDialogKind === undefined) {
       return { kind: 'none' };
@@ -550,6 +654,24 @@ export function EdtsZone({
     if (initialDialogKind === 'switch-blocked') {
       return { ...initialSwitchDialog(target), blocked: true, error: 'An action is in progress on the current EDT.' };
     }
+    if (initialDialogKind === 'service-actions') {
+      const branches = useStore.getState().edtsBranches ?? [];
+      const memberPath = target.members[0]?.repoPath;
+      const svc = branches.find((candidate) => candidate.path === memberPath);
+      if (svc === undefined) {
+        return { kind: 'none' };
+      }
+      return initialServiceActionsDialog(target, svc.path, svc.service);
+    }
+    if (initialDialogKind === 'add-to-edt') {
+      const branches = useStore.getState().edtsBranches ?? [];
+      const memberPaths = new Set(target.members.map((member) => member.repoPath));
+      const svc = branches.find((candidate) => !memberPaths.has(candidate.path));
+      if (svc === undefined) {
+        return { kind: 'none' };
+      }
+      return initialAddToEdtDialog(target, svc.path, svc.service, svc.branch);
+    }
     return initialModifyDialog(target);
   });
 
@@ -559,6 +681,25 @@ export function EdtsZone({
 
   const candidates = rows; // the flat services list doubles as the create/modify candidate pool
   const candidateState = resolveCandidateListState(status, candidates.length);
+
+  // Story 2.18: the flat SERVICES list, partitioned against the *selected* EDT's membership —
+  // each half is its own independently arrow/Home/End-navigable pane.
+  const { edtServices, otherServices } = partitionServicesByEdtMembership(rows, focusedEdt);
+  const clampedEdtServicesSelected = edtServices.length === 0 ? 0 : Math.min(edtServicesSelected, edtServices.length - 1);
+  const clampedOtherServicesSelected = otherServices.length === 0 ? 0 : Math.min(otherServicesSelected, otherServices.length - 1);
+  const focusedEdtService: ServiceBranchDivergence | undefined = edtServices[clampedEdtServicesSelected];
+  const focusedOtherService: ServiceBranchDivergence | undefined = otherServices[clampedOtherServicesSelected];
+
+  // Review fix (story 2.18): arrowing within the `edts` pane changes `focusedEdt` — and
+  // therefore the contents of both partitioned service panes — without touching either pane's
+  // own cursor. Left un-reset, a cursor could silently land on a row unrelated to the newly
+  // selected EDT (e.g. row 2 of the old EDT SERVICES list happens to still be in range for the
+  // new one, but is a completely different service). Reset both to the top whenever which EDT
+  // is selected changes.
+  useEffect(() => {
+    setEdtServicesSelected(0);
+    setOtherServicesSelected(0);
+  }, [focusedEdt?.ulid]);
 
   const dialogOpen = dialog.kind !== 'none';
 
@@ -961,6 +1102,185 @@ export function EdtsZone({
     setDialog((prev) => (prev.kind === 'modify' ? { ...prev, topic: nextTextInputValue(prev.topic, input, key) } : prev));
   }
 
+  // Story 2.18: EDT SERVICES row contextual menu — "Remove from EDT" ------------------------
+  async function submitRemoveFromEdt(current: ServiceActionsDialogState) {
+    if (current.submitting) {
+      return;
+    }
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null } : prev));
+    const result = await modifyEdtAction({ topic: current.edt.topic, addMembers: [], removeMembers: [current.repoPath], setBranches: [] });
+    if (result.ok) {
+      void loadEdts();
+      void loadEdtsBranches();
+      const failedSummary = summarizeFailedResults(result.data.results);
+      if (failedSummary !== null) {
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, error: failedSummary } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedSummary);
+        return;
+      }
+      setDialog({ kind: 'none' });
+      await logEdtAction(current.edt.ulid, 'modify', 'success', `Removed ${current.serviceName} from EDT "${current.edt.topic}"`);
+      return;
+    }
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, error: result.error.message } : prev));
+    await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
+  }
+
+  // Story 2.18: EDT SERVICES row contextual menu — "Change branch for this EDT" -------------
+  async function submitServiceActionsBranchChange(current: ServiceActionsDialogState, branch: string) {
+    if (current.submitting) {
+      return;
+    }
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null } : prev));
+    const result = await modifyEdtAction({
+      topic: current.edt.topic,
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [{ repoPath: current.repoPath, branch }],
+    });
+    if (result.ok) {
+      void loadEdts();
+      void loadEdtsBranches();
+      const failedSummary = summarizeFailedResults(result.data.results);
+      if (failedSummary !== null) {
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchEdit: null, error: failedSummary } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedSummary);
+        return;
+      }
+      setDialog({ kind: 'none' });
+      await logEdtAction(current.edt.ulid, 'modify', 'success', `Changed branch for ${current.serviceName} to "${branch}"`);
+      return;
+    }
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchEdit: null, error: result.error.message } : prev));
+    await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
+  }
+
+  function openServiceActionsBranchEdit(current: ServiceActionsDialogState) {
+    const existing = current.edt.members.find((member) => member.repoPath === current.repoPath)?.branch ?? '';
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchEdit: { repoPath: current.repoPath, value: existing, error: null } } : prev));
+  }
+
+  function handleServiceActionsBranchEditInput(current: ServiceActionsDialogState, branchEdit: BranchEditState, input: string, key: Key) {
+    if (key.escape) {
+      // Review fix (story 2.18): guard against tearing down the branch-edit sub-view while a
+      // submit is in flight, same as handleServiceActionsInput's and handleAddToEdtInput's own
+      // Escape guards.
+      if (!current.submitting) {
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchEdit: null } : prev));
+      }
+      return;
+    }
+    if (key.return) {
+      const validationError = validateBranchEditValue(branchEdit.value);
+      if (validationError !== null) {
+        setDialog((prev) =>
+          prev.kind === 'service-actions' && prev.branchEdit ? { ...prev, branchEdit: { ...prev.branchEdit, error: validationError } } : prev,
+        );
+        return;
+      }
+      void submitServiceActionsBranchChange(current, branchEdit.value.trim());
+      return;
+    }
+    setDialog((prev) => {
+      if (prev.kind !== 'service-actions' || prev.branchEdit === null) {
+        return prev;
+      }
+      return { ...prev, branchEdit: { ...prev.branchEdit, value: nextTextInputValue(prev.branchEdit.value, input, key), error: null } };
+    });
+  }
+
+  // Boundary/Design Notes: the two new direct-action flows (this contextual menu's "Change
+  // branch" and the Add-to-EDT dialog below) open their branch-edit text input straight from
+  // the row-level Enter handler — they never route through resolveModifyEnterAction/
+  // canEditMemberBranch (the big Modify dialog's own member-checklist Enter dispatch), so
+  // that check's existing restriction (member of target EDT AND currently checked) simply
+  // doesn't apply here: it's bypassed, not loosened.
+  function handleServiceActionsInput(current: ServiceActionsDialogState, input: string, key: Key) {
+    if (current.branchEdit !== null) {
+      handleServiceActionsBranchEditInput(current, current.branchEdit, input, key);
+      return;
+    }
+    if (key.escape) {
+      if (!current.submitting) {
+        setDialog({ kind: 'none' });
+      }
+      return;
+    }
+    const jump = resolveSelectionJump(key);
+    if (jump !== null) {
+      setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: jumpSelection(jump, SERVICE_ACTION_MENU_ITEMS.length) } : prev));
+      return;
+    }
+    const direction = resolveSelectionDirection(key);
+    if (direction !== null) {
+      setDialog((prev) =>
+        prev.kind === 'service-actions' ? { ...prev, cursor: moveSelection(prev.cursor, direction, SERVICE_ACTION_MENU_ITEMS.length) } : prev,
+      );
+      return;
+    }
+    if (key.return) {
+      const item = SERVICE_ACTION_MENU_ITEMS[current.cursor];
+      if (item === undefined || item.disabled) {
+        // Restart is rendered disabled — Enter on it never dispatches (Boundaries).
+        return;
+      }
+      if (current.cursor === 0) {
+        void submitRemoveFromEdt(current);
+      } else {
+        openServiceActionsBranchEdit(current);
+      }
+    }
+  }
+
+  // Story 2.18: OTHER SERVICES row's Add-to-EDT dialog --------------------------------------
+  async function submitAddToEdt(current: AddToEdtDialogState) {
+    if (current.submitting) {
+      return;
+    }
+    const branch = current.value.trim();
+    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: true, error: null } : prev));
+    const result = await modifyEdtAction({
+      topic: current.edt.topic,
+      addMembers: [current.repoPath],
+      removeMembers: [],
+      setBranches: [{ repoPath: current.repoPath, branch }],
+    });
+    if (result.ok) {
+      void loadEdts();
+      void loadEdtsBranches();
+      const failedSummary = summarizeFailedResults(result.data.results);
+      if (failedSummary !== null) {
+        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, error: failedSummary } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedSummary);
+        return;
+      }
+      setDialog({ kind: 'none' });
+      await logEdtAction(current.edt.ulid, 'modify', 'success', `Added ${current.serviceName} to EDT "${current.edt.topic}" on branch "${branch}"`);
+      return;
+    }
+    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, error: result.error.message } : prev));
+    await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
+  }
+
+  function handleAddToEdtInput(current: AddToEdtDialogState, input: string, key: Key) {
+    if (key.escape) {
+      if (!current.submitting) {
+        setDialog({ kind: 'none' });
+      }
+      return;
+    }
+    if (key.return) {
+      const validationError = validateBranchEditValue(current.value);
+      if (validationError !== null) {
+        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, error: validationError } : prev));
+        return;
+      }
+      void submitAddToEdt(current);
+      return;
+    }
+    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, value: nextTextInputValue(prev.value, input, key), error: null } : prev));
+  }
+
   useInput((input, key) => {
     if (dialog.kind === 'create') {
       handleCreateInput(dialog, input, key);
@@ -974,11 +1294,20 @@ export function EdtsZone({
       handleModifyDialogInput(dialog, input, key);
       return;
     }
+    if (dialog.kind === 'service-actions') {
+      handleServiceActionsInput(dialog, input, key);
+      return;
+    }
+    if (dialog.kind === 'add-to-edt') {
+      handleAddToEdtInput(dialog, input, key);
+      return;
+    }
 
-    // Base edt-list view (no dialog open): Tab cycles which list is focused; arrows/Home/End
-    // move only the currently-focused list — both stay independently navigable.
+    // Base edt-list view (no dialog open): Tab cycles which of the three lists is focused;
+    // arrows/Home/End move only the currently-focused list — all three stay independently
+    // navigable.
     if (key.tab) {
-      setPaneFocus((current) => togglePaneFocus(current));
+      setPaneFocus((current) => cyclePaneFocus(current));
       return;
     }
 
@@ -999,19 +1328,45 @@ export function EdtsZone({
       return;
     }
 
-    // paneFocus === 'services'
+    if (paneFocus === 'edt-services') {
+      const jump = resolveSelectionJump(key);
+      if (jump !== null) {
+        setEdtServicesSelected(jumpSelection(jump, edtServices.length));
+        return;
+      }
+      const direction = resolveSelectionDirection(key);
+      if (direction !== null) {
+        setEdtServicesSelected((prevIndex) => moveSelection(prevIndex, direction, edtServices.length));
+        return;
+      }
+      if (key.return) {
+        const service = edtServices[clampedEdtServicesSelected];
+        if (service !== undefined && focusedEdt !== undefined) {
+          setDialog(initialServiceActionsDialog(focusedEdt, service.path, service.service));
+        }
+      }
+      return;
+    }
+
+    // paneFocus === 'other-services'
     const jump = resolveSelectionJump(key);
     if (jump !== null) {
-      setServicesSelected(jumpSelection(jump, rows.length));
+      setOtherServicesSelected(jumpSelection(jump, otherServices.length));
       return;
     }
     const direction = resolveSelectionDirection(key);
     if (direction !== null) {
-      setServicesSelected((prevIndex) => moveSelection(prevIndex, direction, rows.length));
+      setOtherServicesSelected((prevIndex) => moveSelection(prevIndex, direction, otherServices.length));
+      return;
+    }
+    if (key.return) {
+      const service = otherServices[clampedOtherServicesSelected];
+      if (service !== undefined && focusedEdt !== undefined) {
+        setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch));
+      }
     }
   }, { isActive: !commandBarOpen });
 
-  const focused: ServiceBranchDivergence | undefined = rows[clampedSelected];
   const loading = status === 'loading' && rows.length === 0;
   const edtsLoading = edtsStatus === 'loading' && edts === null;
 
@@ -1031,26 +1386,65 @@ export function EdtsZone({
               <ListRow
                 key={entry.ulid}
                 label={entry.topic}
-                meta={formatEdtRowMeta(entry, entry.ulid === activeEdtUlid)}
+                meta={formatEdtRowMeta(entry)}
                 selected={paneFocus === 'edts' && index === clampedEdtsSelected}
+                // Amended 2026-08-27 (Sprint Change Proposal): `emphasized` now marks the row
+                // at `clampedEdtsSelected` — the same index `focusedEdt` (below) is read from,
+                // whose membership drives the EDT SERVICES/OTHER SERVICES split — so it persists
+                // across all three panes' focus, not just while paneFocus === 'edts' (unlike
+                // `selected` above).
+                emphasized={index === clampedEdtsSelected}
+                // `active` (repurposed): the tool-wide active EDT's row, now a discreet suffix
+                // instead of accent+bold — decoupled from `emphasized`, can land on the same or
+                // a different row.
+                active={entry.ulid === activeEdtUlid}
               />
             ))}
             {!dialogOpen ? <DimAnnotation text="[Enter] switch/modify  [Tab] focus" /> : null}
 
             <Text> </Text>
-            <Text color={paneFocus === 'services' ? colors.accent : colors['text-dim']}>SERVICES</Text>
+            {/* Story 2.18: the flat SERVICES list (story 2.6) is now split into two
+                Tab-cyclable panes, partitioned against the *selected* EDT's own membership
+                (partitionServicesByEdtMembership) — never an empty EDT SERVICES group when no
+                EDT is focused; a "No EDT selected" note stands in for it instead. */}
+            {/* Review fix (story 2.18): issuesSummary counts unreachable/error services across
+                the whole flat list, which may include rows that land in either partitioned
+                group — shown once here, above both groups, rather than nested only under
+                OTHER SERVICES where a flagged service that's actually an EDT member would go
+                unreported. */}
             {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
             {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
-            {!loading && status !== 'error' && rows.length === 0 ? (
+            {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
+            {focusedEdt !== undefined ? (
+              <>
+                <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
+                {!loading && status !== 'error' && edtServices.length === 0 ? (
+                  <Text color={colors['text-dim']}>No services in this EDT.</Text>
+                ) : null}
+                {edtServices.map((service, index) => (
+                  <ListRow
+                    key={service.path}
+                    label={service.service}
+                    meta={formatServiceMeta(service)}
+                    selected={paneFocus === 'edt-services' && index === clampedEdtServicesSelected}
+                  />
+                ))}
+                <Text> </Text>
+              </>
+            ) : (
+              <DimAnnotation text="No EDT selected" />
+            )}
+
+            <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
+            {!loading && status !== 'error' && otherServices.length === 0 ? (
               <Text color={colors['text-dim']}>No managed services found.</Text>
             ) : null}
-            {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
-            {rows.map((service, index) => (
+            {otherServices.map((service, index) => (
               <ListRow
                 key={service.path}
                 label={service.service}
                 meta={formatServiceMeta(service)}
-                selected={paneFocus === 'services' && index === clampedSelected}
+                selected={paneFocus === 'other-services' && index === clampedOtherServicesSelected}
               />
             ))}
           </Box>
@@ -1063,19 +1457,33 @@ export function EdtsZone({
                   {focusedEdt
                     ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
                       '\n\n' +
-                      formatEdtActionHistory(edtActionLog, currentEdtAction)
+                      formatEdtActionHistory(edtActionLog, currentEdtAction) +
+                      '\n\n' +
+                      formatAvailableActionsHint('edts', focusedEdt.ulid === activeEdtUlid)
                     : 'No EDT selected.'}
                 </DetailPane>
                 {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
                 {edtActionLogStatus === 'loading' && <DimAnnotation text="Loading action history…" />}
                 {edtActionLogStatus === 'error' && <DimAnnotation text="Failed to load action history" />}
               </>
+            ) : paneFocus === 'edt-services' ? (
+              <>
+                <DetailPane title={focusedEdtService ? focusedEdtService.service : 'Service'}>
+                  {(focusedEdtService ? formatServiceDetail(focusedEdtService) : 'No service selected.') +
+                    '\n\n' +
+                    formatAvailableActionsHint('edt-services', false)}
+                </DetailPane>
+                {focusedEdtService?.detail ? <DimAnnotation text={focusedEdtService.detail.message} /> : null}
+                {status === 'error' && error ? <DimAnnotation text={error} /> : null}
+              </>
             ) : (
               <>
-                <DetailPane title={focused ? focused.service : 'Service'}>
-                  {focused ? formatServiceDetail(focused) : 'No service selected.'}
+                <DetailPane title={focusedOtherService ? focusedOtherService.service : 'Service'}>
+                  {(focusedOtherService ? formatServiceDetail(focusedOtherService) : 'No service selected.') +
+                    '\n\n' +
+                    formatAvailableActionsHint('other-services', false)}
                 </DetailPane>
-                {focused?.detail ? <DimAnnotation text={focused.detail.message} /> : null}
+                {focusedOtherService?.detail ? <DimAnnotation text={focusedOtherService.detail.message} /> : null}
                 {status === 'error' && error ? <DimAnnotation text={error} /> : null}
               </>
             )}
@@ -1162,6 +1570,45 @@ export function EdtsZone({
                 {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
               </>
             )}
+          </Box>
+        </ModalDialog>
+      ) : null}
+
+      {dialog.kind === 'service-actions' ? (
+        <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>{dialog.serviceName}</Text>
+            {dialog.branchEdit !== null ? (
+              <>
+                <Text color={colors.accent}>Branch for {dialog.serviceName}: {dialog.branchEdit.value}</Text>
+                {dialog.branchEdit.error ? <DimAnnotation text={dialog.branchEdit.error} /> : null}
+                {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
+              </>
+            ) : (
+              <>
+                {SERVICE_ACTION_MENU_ITEMS.map((item, index) => (
+                  <ListRow
+                    key={item.label}
+                    label={item.label}
+                    meta={item.disabled ? 'Available with Epic 5' : undefined}
+                    selected={index === dialog.cursor}
+                  />
+                ))}
+                {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+                {dialog.submitting ? <DimAnnotation text="Working…" /> : null}
+              </>
+            )}
+          </Box>
+        </ModalDialog>
+      ) : null}
+
+      {dialog.kind === 'add-to-edt' ? (
+        <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>Add {dialog.serviceName} to "{dialog.edt.topic}"</Text>
+            <Text color={colors.accent}>Branch: {dialog.value}</Text>
+            {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+            {dialog.submitting ? <DimAnnotation text="Adding…" /> : null}
           </Box>
         </ModalDialog>
       ) : null}

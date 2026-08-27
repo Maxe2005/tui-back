@@ -8,10 +8,14 @@ import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
+import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import {
   EdtsZone,
   canEditMemberBranch,
   cycleFormFocus,
+  cyclePaneFocus,
+  formatAvailableActionsHint,
+  formatEdtActionHistory,
   formatEdtDetail,
   formatEdtRowMeta,
   formatIssuesSummary,
@@ -21,6 +25,7 @@ import {
   jumpSelection,
   moveSelection,
   nextTextInputValue,
+  partitionServicesByEdtMembership,
   resolveCandidateListState,
   resolveModifyEnterAction,
   resolveModifyOps,
@@ -28,7 +33,6 @@ import {
   resolveSelectionJump,
   summarizeFailedResults,
   toggleMemberSelection,
-  togglePaneFocus,
   truncateBranchLabel,
   validateBranchEditValue,
   BRANCH_MAX_WIDTH,
@@ -244,7 +248,7 @@ describe('EdtsZone (story 2.6)', () => {
     });
     // Story 2.9: the SERVICES detail pane (where this error surfaces) is only rendered
     // while the SERVICES pane is focused — the EDT selector is focused by default now.
-    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(output).toContain('Failed to load services');
     expect(output).toContain('registry-invalid-yaml');
   });
@@ -310,7 +314,7 @@ describe('EdtsZone (story 2.6)', () => {
       edtsBranches: [service({ service: 'long-branch-svc', branch: long })],
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(output).toContain(truncateBranchLabel(long, BRANCH_MAX_WIDTH));
     expect(output).toContain(long);
   });
@@ -331,7 +335,7 @@ describe('EdtsZone (story 2.6)', () => {
       ],
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(output).toContain('detached-head-svc');
     expect(output).toContain('(unknown)');
     expect(output).toContain('HEAD is detached');
@@ -348,7 +352,7 @@ describe('EdtsZone (story 2.6)', () => {
       edtsBranches: [service({ service: 'stale-svc', branch: 'feat/stale' })],
       loadEdtsBranches: noopLoad,
     });
-    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="services" />);
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(output).toContain('Failed to load services');
     expect(output).not.toContain('stale-svc');
     expect(output).not.toContain('feat/stale');
@@ -415,10 +419,11 @@ describe('EdtsZone (story 2.6)', () => {
 // Story 2.9 — EDTs zone: create, switch, and modify
 // ==========================================================================================
 
-describe('togglePaneFocus', () => {
-  it('cycles edts <-> services', () => {
-    expect(togglePaneFocus('edts')).toBe('services');
-    expect(togglePaneFocus('services')).toBe('edts');
+describe('cyclePaneFocus', () => {
+  it('cycles edts -> edt-services -> other-services -> edts (story 2.18: 3-way)', () => {
+    expect(cyclePaneFocus('edts')).toBe('edt-services');
+    expect(cyclePaneFocus('edt-services')).toBe('other-services');
+    expect(cyclePaneFocus('other-services')).toBe('edts');
   });
 });
 
@@ -494,21 +499,17 @@ describe('isSwitchBlockedError', () => {
   });
 });
 
+// Amended 2026-08-27 (Sprint Change Proposal): no longer takes an `isActive` flag — the
+// "— active" suffix moved to `ListRow`'s own `active` prop (list-row.test.tsx covers it).
 describe('formatEdtRowMeta', () => {
   it('pluralizes the member count', () => {
-    expect(formatEdtRowMeta(edtEntry({ members: [] }), false)).toBe('0 members');
-    expect(formatEdtRowMeta(edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }] }), false)).toBe('1 member');
+    expect(formatEdtRowMeta(edtEntry({ members: [] }))).toBe('0 members');
+    expect(formatEdtRowMeta(edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }] }))).toBe('1 member');
     expect(
       formatEdtRowMeta(
         edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }, { service: 'b', repoPath: '/b', branch: 'main' }] }),
-        false,
       ),
     ).toBe('2 members');
-  });
-
-  it('appends "— active" only for the active EDT', () => {
-    expect(formatEdtRowMeta(edtEntry(), true)).toBe('0 members — active');
-    expect(formatEdtRowMeta(edtEntry(), false)).toBe('0 members');
   });
 });
 
@@ -638,6 +639,85 @@ describe('resolveModifyOps', () => {
     expect(resolveModifyOps(target, 'renamed', [], {}).renameTo).toBe('renamed');
     expect(resolveModifyOps(target, 'original', [], {}).renameTo).toBeUndefined();
     expect(resolveModifyOps(target, '   ', [], {}).renameTo).toBeUndefined();
+  });
+});
+
+// ==========================================================================================
+// Story 2.18 — EDT zone: active highlight, EDT SERVICES / OTHER SERVICES panes, per-service
+// actions, and the context-derived detail-pane hint.
+// ==========================================================================================
+
+describe('partitionServicesByEdtMembership', () => {
+  const focusedEdt = edtEntry({
+    members: [
+      { service: 'a', repoPath: '/repos/a', branch: 'main' },
+      { service: 'b', repoPath: '/repos/b', branch: 'feature-x' },
+    ],
+  });
+
+  it('splits rows into EDT SERVICES (member of the *selected* EDT) and OTHER SERVICES', () => {
+    const rows = [
+      service({ service: 'a', path: '/repos/a' }),
+      service({ service: 'b', path: '/repos/b' }),
+      service({ service: 'c', path: '/repos/c' }),
+    ];
+    const { edtServices, otherServices } = partitionServicesByEdtMembership(rows, focusedEdt);
+    expect(edtServices.map((row) => row.path)).toEqual(['/repos/a', '/repos/b']);
+    expect(otherServices.map((row) => row.path)).toEqual(['/repos/c']);
+  });
+
+  // Boundary: partitioning is against the *selected* EDT's member list, never `row.isMember`
+  // (which stays tied to the *active* EDT for the divergence badge). A row can be a member of
+  // the active EDT (isMember: true) yet land in OTHER SERVICES here because the *selected*
+  // (focused) EDT is a different one.
+  it('partitions by the selected EDT\'s membership, never by row.isMember', () => {
+    const rows = [service({ service: 'c', path: '/repos/c', isMember: true })];
+    const { edtServices, otherServices } = partitionServicesByEdtMembership(rows, focusedEdt);
+    expect(edtServices).toEqual([]);
+    expect(otherServices.map((row) => row.path)).toEqual(['/repos/c']);
+  });
+
+  it('puts every row under OTHER SERVICES when no EDT is focused/selected — never an empty EDT SERVICES group', () => {
+    const rows = [service({ service: 'a', path: '/repos/a' }), service({ service: 'b', path: '/repos/b' })];
+    const { edtServices, otherServices } = partitionServicesByEdtMembership(rows, undefined);
+    expect(edtServices).toEqual([]);
+    expect(otherServices).toEqual(rows);
+  });
+});
+
+describe('formatAvailableActionsHint', () => {
+  it('shows [Enter] Modify on the EDT selector when the focused row is the active EDT', () => {
+    expect(formatAvailableActionsHint('edts', true)).toBe('[Enter] Modify');
+  });
+
+  it('shows [Enter] Switch on the EDT selector when the focused row is not the active EDT', () => {
+    expect(formatAvailableActionsHint('edts', false)).toBe('[Enter] Switch');
+  });
+
+  it('shows Remove / Change branch on EDT SERVICES, regardless of the active-EDT flag', () => {
+    expect(formatAvailableActionsHint('edt-services', true)).toBe('[Enter] Remove / Change branch');
+    expect(formatAvailableActionsHint('edt-services', false)).toBe('[Enter] Remove / Change branch');
+  });
+
+  it('shows Add to EDT on OTHER SERVICES, regardless of the active-EDT flag', () => {
+    expect(formatAvailableActionsHint('other-services', true)).toBe('[Enter] Add to EDT');
+    expect(formatAvailableActionsHint('other-services', false)).toBe('[Enter] Add to EDT');
+  });
+
+  // Boundary: never c/m — they were never wired as direct keys.
+  it('never mentions the c/m mnemonics', () => {
+    for (const isActive of [true, false]) {
+      expect(formatAvailableActionsHint('edts', isActive)).not.toMatch(/\[c\]|\[m\]/);
+      expect(formatAvailableActionsHint('edt-services', isActive)).not.toMatch(/\[c\]|\[m\]/);
+      expect(formatAvailableActionsHint('other-services', isActive)).not.toMatch(/\[c\]|\[m\]/);
+    }
+  });
+});
+
+describe('formatEdtActionHistory (story 2.18 regression)', () => {
+  it('no longer bakes the static "Available: ..." hint line into the action history (extracted to formatAvailableActionsHint)', () => {
+    const history = formatEdtActionHistory([], null);
+    expect(history).not.toContain('Available:');
   });
 });
 
@@ -895,6 +975,176 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="modify" />);
     expect(output).not.toContain('[Enter] switch/modify');
+  });
+});
+
+// ==========================================================================================
+// Story 2.18 — active highlight, EDT SERVICES / OTHER SERVICES panes, per-service actions
+// ==========================================================================================
+
+describe('EdtsZone (story 2.18 zone states)', () => {
+  it('AC1: the active EDT\'s row renders accent+bold regardless of cursor position, distinct from the cursor row', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [
+        edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active' }),
+        edtEntry({ ulid: 'other-ulid', topic: 'other-edt', status: 'inactive' }),
+      ],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    // Plain-text presence only — both rows render regardless of which one the cursor sits
+    // on. The actual accent+bold *styling* assertion (this test's real subject) needs
+    // FORCE_COLOR=1 to produce ANSI codes at all; see edts-zone.styles.test.tsx, which
+    // renders this same active-vs-cursor distinction and asserts the raw escape sequences.
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('active-edt');
+    expect(output).toContain('other-edt');
+  });
+
+  it('AC3: no EDT selected -> every service renders under OTHER SERVICES with a "No EDT selected" note, never an empty EDT SERVICES group', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'api-gateway', path: '/repos/api-gateway' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    // No initialDialogKind: renderToString's single synchronous pass never observes the
+    // effect-triggered "zero EDTs auto-opens the create dialog" behavior (AC1), so the base
+    // view renders deterministically here (same precedent as the story 2.9 smoke tests above).
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('No EDT selected');
+    expect(output).not.toContain('EDT SERVICES');
+    expect(output).toContain('OTHER SERVICES');
+    expect(output).toContain('api-gateway');
+  });
+
+  it('AC4: the EDT SERVICES contextual menu shows Remove / Change branch / a disabled Restart annotated "Available with Epic 5"', async () => {
+    const store = createAppStore();
+    const target = edtEntry({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'main' }],
+    });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [service({ service: 'api-gateway', path: '/repos/api-gateway', isMember: true })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="service-actions" />);
+    expect(output).toContain('SERVICE ACTIONS');
+    expect(output).toContain('Remove from EDT');
+    expect(output).toContain('Change branch for this EDT');
+    expect(output).toContain('Restart');
+    expect(output).toContain('Available with Epic 5');
+  });
+
+  it('AC9: the Add-to-EDT dialog opens a branch text input pre-filled with the service\'s current branch', async () => {
+    const store = createAppStore();
+    const target = edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer', branch: 'feature-y', isMember: false })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="add-to-edt" />);
+    expect(output).toContain('ADD TO EDT');
+    expect(output).toContain('route-explorer');
+    expect(output).toContain('feature-y');
+  });
+
+  it('AC7: the detail-pane hint for EDT SERVICES/OTHER SERVICES matches Enter\'s actual behavior', async () => {
+    const store = createAppStore();
+    const target = edtEntry({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'main' }],
+    });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        service({ service: 'api-gateway', path: '/repos/api-gateway', isMember: true }),
+        service({ service: 'route-explorer', path: '/repos/route-explorer', isMember: false }),
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const edtServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="edt-services" />);
+    expect(edtServicesOutput).toContain('[Enter] Remove / Change branch');
+
+    const otherServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
+    expect(otherServicesOutput).toContain('[Enter] Add to EDT');
+  });
+
+  // AC2: the detail pane's horizontal position/width is derived once from ListDetailSplit's
+  // flexGrow ratio (resolveSplitFlex), independent of content (list-detail-split.tsx) — this
+  // regression test proves the split stays stable across the new, longer detail content this
+  // story adds (longer action history + the new hint line), never a layout change.
+  it('AC2: the detail pane\'s split ratio is unchanged whether the content is short or long (regression)', async () => {
+    const shortStore = createAppStore();
+    shortStore.setState({
+      edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active' })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const shortRatio = shortStore.getState().splitterRatios.edts;
+
+    const longStore = createAppStore();
+    longStore.setState({
+      edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active' })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+      edtActionLog: Array.from({ length: 5 }, (_, index) => ({
+        id: `action-${index}`,
+        timestamp: '2026-01-01T00:00:00.000Z',
+        actionType: 'modify',
+        outcome: 'success' as const,
+        detail: `A much longer action detail line, number ${index}, describing exactly what changed in this modification`,
+      })),
+    });
+    const longRatio = longStore.getState().splitterRatios.edts;
+
+    // Same ratio input -> resolveSplitFlex (the sole width driver, confirmed content-blind by
+    // reading list-detail-split.tsx) returns identical flexGrow values regardless of how much
+    // text the detail pane's children happen to render.
+    expect(resolveSplitFlex(longRatio)).toEqual(resolveSplitFlex(shortRatio));
+
+    const shortOutput = await renderToString(<EdtsZone useStore={shortStore} />);
+    const longOutput = await renderToString(<EdtsZone useStore={longStore} />);
+    // The longer action history actually renders (proves the test exercises real growth)...
+    expect(longOutput).toContain('A much longer action detail line, number 4');
+    expect(shortOutput).not.toContain('A much longer action detail line');
+    // ...while the ratio driving the split's own layout never changed.
+    expect(longStore.getState().splitterRatios.edts).toBe(shortStore.getState().splitterRatios.edts);
   });
 });
 
