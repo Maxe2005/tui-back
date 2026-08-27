@@ -68,11 +68,9 @@ describe('Footer', () => {
     expect(output).toContain('[?] help');
   });
 
-  it('includes [←→] zone immediately after [d/e/u/l/r/s] zone in the default hints (UX-DR7, Story 2.20)', () => {
-    const mnemonicIndex = DEFAULT_FOOTER_HINTS.indexOf('[d/e/u/l/r/s] zone');
-    const arrowIndex = DEFAULT_FOOTER_HINTS.indexOf('[←→] zone');
-    expect(mnemonicIndex).toBeGreaterThanOrEqual(0);
-    expect(arrowIndex).toBe(mnemonicIndex + 1);
+  it('omits the redundant [d/e/u/l/r/s] zone mnemonic, keeping [←→] zone in the default hints (UX-DR7, Story 2.20)', () => {
+    expect(DEFAULT_FOOTER_HINTS).not.toContain('[d/e/u/l/r/s] zone');
+    expect(DEFAULT_FOOTER_HINTS).toContain('[←→] zone');
   });
 });
 
