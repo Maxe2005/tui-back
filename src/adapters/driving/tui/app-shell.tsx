@@ -106,6 +106,8 @@ export function AppShell({
 }) {
   const activeZone = useStore((state) => state.activeZone);
   const activeEdt = useStore((state) => state.activeEdt);
+  const edts = useStore((state) => state.edts);
+  const loadEdts = useStore((state) => state.loadEdts);
   const zoneEvents = useStore((state) => state.zoneEvents);
   const setActiveZone = useStore((state) => state.setActiveZone);
   const helpOpen = useStore((state) => state.helpOpen);
@@ -143,6 +145,15 @@ export function AppShell({
   useEffect(() => {
     void loadTabVisibility();
   }, [registryScreenOpen, loadTabVisibility]);
+
+  // Story 2.20: load `edts` once at mount so the top bar's active-EDT topic label is
+  // correct regardless of which zone renders first — EdtsZone's own mount-time
+  // `loadEdts()` call is untouched and still reloads fresh whenever that zone is visited.
+  useEffect(() => {
+    void loadEdts();
+    // Deliberately fires once on mount only, mirroring EdtsZone's own mount-once idiom.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Story 2.13 (Boundaries): the active zone going `omitted` has no explanatory-message
   // content to swap to in place — unlike a mere disable, force a fallback to Dashboard.
@@ -229,7 +240,7 @@ export function AppShell({
 
   return (
     <Box flexDirection="column" height={rows} overflow="hidden">
-      <TopBar activeEdt={activeEdt} />
+      <TopBar activeEdt={activeEdt} edts={edts} />
       <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} />
       <ZoneScreen useStore={useStore} />
       <KeybindingHelp useStore={useStore} />
