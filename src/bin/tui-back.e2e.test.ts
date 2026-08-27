@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { lockPathFor } from '../adapters/driven/lock/helpers.js';
 
-const scriptPath = fileURLToPath(new URL('./tui-back.mjs', import.meta.url));
+const scriptPath = fileURLToPath(new URL('./cli-back.mjs', import.meta.url));
 const manifestYaml = [
   'service: route-explorer',
   'container: route-explorer',
