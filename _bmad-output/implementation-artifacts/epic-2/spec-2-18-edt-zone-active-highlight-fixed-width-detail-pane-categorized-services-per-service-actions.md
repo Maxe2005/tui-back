@@ -2,8 +2,9 @@
 title: 'EDT Zone — Active Highlight, Fixed-Width Detail Pane, Categorized Services & Per-Service Actions'
 type: 'feature'
 created: '2026-08-26'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: '5f35527819c00d878af5b5a2e2a367d5fb4b4ff7'
 context:
   - '_bmad-output/planning-artifacts/epics.md'
   - '_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md'
@@ -72,16 +73,16 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/shared/components/list-row.tsx` -- add `active` prop + layout resolution -- AC1
-- [ ] `src/adapters/driving/tui/shared/components/list-row.test.tsx` -- cover `active` alone and combined with `selected` -- AC1
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- 3-way `cyclePaneFocus`, `partitionServicesByEdtMembership`, EDT SERVICES/OTHER SERVICES rendering with the "No EDT selected" fallback -- AC4, AC5, AC6
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- contextual action menu dialog (Remove / Change branch / disabled Restart) wired to `modifyEdt` + `logEdtAction` -- AC7, AC8
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- Add-to-EDT dialog (pre-filled branch input) wired to `modifyEdt` (`addMembers`+`setBranches`) + `logEdtAction` -- AC9
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- loosen/bypass `canEditMemberBranch` for the two new direct-action call sites -- AC7, AC9
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- `formatAvailableActionsHint` replacing the hardcoded hint line, applied to the EDT selector and pass `active` through to its `ListRow` -- AC1, AC3
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.test.tsx` -- unit tests for all new pure functions (I/O Matrix rows) -- all ACs
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx` -- real-keypress tests: 3-way Tab cycle, contextual menu open/confirm, Add-to-EDT open/confirm -- AC4, AC7, AC9
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` / test -- regression test proving detail-pane width doesn't shift as content grows (longer action history + new hint lines) -- AC2
+- [x] `src/adapters/driving/tui/shared/components/list-row.tsx` -- add `active` prop + layout resolution -- AC1
+- [x] `src/adapters/driving/tui/shared/components/list-row.test.tsx` -- cover `active` alone and combined with `selected` -- AC1
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- 3-way `cyclePaneFocus`, `partitionServicesByEdtMembership`, EDT SERVICES/OTHER SERVICES rendering with the "No EDT selected" fallback -- AC4, AC5, AC6
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- contextual action menu dialog (Remove / Change branch / disabled Restart) wired to `modifyEdt` + `logEdtAction` -- AC7, AC8
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- Add-to-EDT dialog (pre-filled branch input) wired to `modifyEdt` (`addMembers`+`setBranches`) + `logEdtAction` -- AC9
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- loosen/bypass `canEditMemberBranch` for the two new direct-action call sites -- AC7, AC9
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- `formatAvailableActionsHint` replacing the hardcoded hint line, applied to the EDT selector and pass `active` through to its `ListRow` -- AC1, AC3
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.test.tsx` -- unit tests for all new pure functions (I/O Matrix rows) -- all ACs
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx` -- real-keypress tests: 3-way Tab cycle, contextual menu open/confirm, Add-to-EDT open/confirm -- AC4, AC7, AC9
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` / test -- regression test proving detail-pane width doesn't shift as content grows (longer action history + new hint lines) -- AC2
 
 **Acceptance Criteria:**
 - Given the EDT selector, when it renders, then the active EDT's row shows the accent+bold `active` label regardless of cursor position, and the cursor row keeps its own accent-bar+`›` marker independently.
@@ -119,10 +120,66 @@ context:
 - Focus a non-member row in OTHER SERVICES, press `Enter`, confirm with the pre-filled branch: confirm the service now appears in EDT SERVICES on that branch
 - Browse between EDTs/services with long vs. short detail content: confirm the detail pane's left/right boundary never shifts
 
+**Result:** `npm test` — 833/833 green, including 4 new `list-row.test.tsx` cases (`active` alone and composed with `selected`), 16 new `edts-zone.test.tsx` cases (`partitionServicesByEdtMembership`, `formatAvailableActionsHint`, `cyclePaneFocus`, the active-highlight row, the "No EDT selected" fallback, both new dialogs, and the detail-pane width regression), and 7 new `edts-zone.interaction.test.tsx` real-keypress cases (3-way Tab cycle, contextual-menu Remove/Change-branch incl. empty-value rejection and the disabled-Restart no-op, Add-to-EDT confirm/partial-failure). `npm run typecheck` and `npm run depcheck` both clean (no boundary violations — only `src/adapters/driving/tui/shared/components/list-row.{tsx,test.tsx}` and `src/adapters/driving/tui/zones/edts/edts-zone.{tsx,test.tsx,interaction.test.tsx}` touched; `core/edt/modify.ts` and `core/ports/edt-registry.ts` stayed read-only references, never edited).
+
 ## Suggested Review Order
 
-1. `list-row.tsx`'s `active` prop — pure, isolated, no behavior risk
-2. `partitionServicesByEdtMembership` + `cyclePaneFocus` — pure functions, directly unit-testable
-3. `formatAvailableActionsHint` — pure, replaces the hardcoded hint text
-4. Contextual-menu and Add-to-EDT dialog wiring to `modifyEdt`/`logEdtAction` — the actual behavior change
-5. Interaction tests end-to-end: Tab cycle → row Enter → dialog confirm → detail pane update
+**Pure functions — isolated, directly unit-testable**
+
+- `ListRow`'s new `active` prop: `resolveRowLayout` sets `labelColor: colors.accent, bold: true` when `active`, composing with (never replacing) `selected`'s own accent-bar/`›`/fill treatment.
+  [`list-row.tsx:26`](../../../src/adapters/driving/tui/shared/components/list-row.tsx#L26)
+
+- `cyclePaneFocus`: the 3-way `edts → edt-services → other-services → edts` rotation replacing the old 2-way `togglePaneFocus`.
+  [`edts-zone.tsx:169`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L169)
+
+- `formatAvailableActionsHint`: the context-derived hint line, extracted out of `formatEdtActionHistory`'s old hardcoded "Available: ..." line.
+  [`edts-zone.tsx:318`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L318)
+
+- `partitionServicesByEdtMembership`: splits the flat SERVICES list against the *selected* EDT's membership (never `row.isMember`, which stays tied to the *active* EDT).
+  [`edts-zone.tsx:337`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L337)
+
+- `SERVICE_ACTION_MENU_ITEMS`: the contextual menu's fixed three rows (Remove / Change branch / disabled Restart), rendered via `ListRow` per the Design Notes.
+  [`edts-zone.tsx:485`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L485)
+
+**Review-loop corrections — cursor and summary placement fixes from the first review pass**
+
+- Both service-pane cursors reset to `0` whenever the *selected* EDT changes, so a stale index never silently points at an unrelated row after switching EDTs.
+  [`edts-zone.tsx:698`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L698)
+
+- The unreachable/error `issuesSummary` now renders once, independent of which partition (EDT SERVICES vs. OTHER SERVICES) the flagged service falls into — previously orphaned under OTHER SERVICES only.
+  [`edts-zone.tsx:1408`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1408)
+
+**Contextual-menu and Add-to-EDT dialog wiring — the actual behavior change**
+
+- EDT SERVICES row menu: `Remove from EDT` → `modifyEdt({removeMembers:[repoPath]})`.
+  [`edts-zone.tsx:1104`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1104)
+
+- EDT SERVICES row menu: `Change branch for this EDT` → `modifyEdt({setBranches:[...]})`, validated via the existing `validateBranchEditValue`.
+  [`edts-zone.tsx:1128`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1128)
+
+- The menu's own input dispatcher — arrow/Home/End cursor movement, the disabled Restart row's Enter no-op, and (post-review) an `!current.submitting` guard on Escape matching its sibling dialogs.
+  [`edts-zone.tsx:1196`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1196)
+
+- OTHER SERVICES row: `Add to EDT` → `modifyEdt({addMembers, setBranches})` in one call, pre-filled from `ServiceBranchDivergence.branch`.
+  [`edts-zone.tsx:1234`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1234)
+
+- `canEditMemberBranch` loosening, resolved as a bypass (Design Notes): both new flows open their branch-edit text input directly from the row-level `Enter` handler, never routing through `resolveModifyEnterAction`/`canEditMemberBranch` — confirmed sufficient, `canEditMemberBranch` itself is unchanged.
+
+**Wiring into the base view**
+
+- The EDT selector's `ListRow` now passes `active={entry.ulid === activeEdtUlid}`, independent of which row the keyboard cursor sits on.
+  [`edts-zone.tsx:1391`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1391)
+
+- The detail pane joins `formatEdtDetail` + `formatEdtActionHistory` + `formatAvailableActionsHint` with the existing `'\n\n'` separator.
+  [`edts-zone.tsx:1451`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1451)
+
+**Interaction and styling tests — the end-to-end and visual proof**
+
+- New `FORCE_COLOR=1` styles test proving the active row's label actually carries the bold/accent ANSI sequence (mirroring `zone-tab-bar.styles.test.tsx`), added after the first review pass found the plain-text AC1 test didn't verify styling.
+  [`edts-zone.styles.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx)
+
+- 3-way Tab cycle, contextual-menu Remove/Change-branch (incl. empty-value rejection, the disabled-Restart no-op, and partial-failure via `summarizeFailedResults`), Add-to-EDT confirm/partial-failure, Escape/cancel on both new dialogs and the branch-edit sub-view, and Enter no-ops on empty panes.
+  [`edts-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx)
+
+- Pure-function coverage plus renderToString smoke tests for the active-highlight row, the "No EDT selected" fallback, both new dialogs, the per-pane hint text, and the width-stability regression.
+  [`edts-zone.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)
