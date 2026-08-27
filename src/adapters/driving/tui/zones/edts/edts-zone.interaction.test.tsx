@@ -54,7 +54,9 @@ async function type(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStrea
 
 function mount(
   store: ReturnType<typeof createAppStore>,
-  extraProps: { initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' } = {},
+  extraProps: {
+    initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' | 'service-actions' | 'add-to-edt';
+  } = {},
 ) {
   const stdout = new FakeTtyStdout();
   const stdin = fakeInteractiveTtyStdin();
@@ -557,6 +559,666 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await pressEscape(instance, stdin);
 
       expect(store.getState().quitRequested).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+// ==========================================================================================
+// Story 2.18 — active highlight, 3-way pane cycle, EDT SERVICES/OTHER SERVICES contextual
+// actions (real-keypress coverage: the Tab cycle, dialog opens, and async submits below are
+// only exercisable through a real Ink useInput round-trip — see the file header).
+// ==========================================================================================
+
+describe('EdtsZone real-keypress interactions (story 2.18)', () => {
+  it('Tab cycles edts -> edt-services -> other-services -> edts (AC: 3-way base-view cycle)', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // Default focus: the EDT selector — its detail-pane hint is [Enter] Modify (row 0 is
+      // the active EDT).
+      expect(stdout.output).toContain('[Enter] Modify');
+
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('[Enter] Remove / Change branch');
+
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('[Enter] Add to EDT');
+
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('[Enter] Modify');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on an EDT SERVICES row -> Remove from EDT calls modifyEdt with removeMembers and logs the outcome', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyParams: ModifyEdtParams | undefined;
+    let loggedOutcome: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+      logEdtAction: async (_ulid, _actionType, outcome) => {
+        loggedOutcome = outcome;
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu on the one row
+      expect(stdout.output).toContain('SERVICE ACTIONS');
+      expect(stdout.output).toContain('Remove from EDT');
+
+      await press(instance, stdin, KEYS.enter); // cursor 0 (Remove from EDT) -> confirm
+
+      expect(modifyParams).toEqual({ topic: 'active-edt', addMembers: [], removeMembers: ['/repos/a'], setBranches: [] });
+      expect(loggedOutcome).toBe('success');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on an EDT SERVICES row -> Change branch for this EDT calls modifyEdt with setBranches', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyParams: ModifyEdtParams | undefined;
+    let loggedOutcome: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+      logEdtAction: async (_ulid, _actionType, outcome) => {
+        loggedOutcome = outcome;
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
+      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
+      await type(instance, stdin, '-y'); // pre-filled with "main" -> "main-y"
+      await press(instance, stdin, KEYS.enter); // confirm
+
+      expect(modifyParams).toEqual({
+        topic: 'active-edt',
+        addMembers: [],
+        removeMembers: [],
+        setBranches: [{ repoPath: '/repos/a', branch: 'main-y' }],
+      });
+      expect(loggedOutcome).toBe('success');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('matrix: Change branch, empty value -> inline rejection, never reaches modifyEdt', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyCalls = 0;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
+        modifyCalls += 1;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter); // open branch-edit, pre-filled "main"
+      for (let i = 0; i < 'main'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await press(instance, stdin, KEYS.enter); // submit empty
+
+      expect(stdout.output).toContain('Branch name must not be empty');
+      expect(modifyCalls).toBe(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the Restart row is visibly disabled and Enter on it is a no-op — never dispatches', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyCalls = 0;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
+        modifyCalls += 1;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // -> Change branch
+      await press(instance, stdin, KEYS.down); // -> Restart (disabled)
+      await press(instance, stdin, KEYS.enter); // no-op
+
+      expect(modifyCalls).toBe(0);
+      // Still the same contextual menu — never torn down by the no-op Enter.
+      expect(stdout.output).toContain('SERVICE ACTIONS');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on an OTHER SERVICES row -> Add to EDT (pre-filled branch, confirmed) calls modifyEdt with addMembers+setBranches in one call', async () => {
+    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    let modifyParams: ModifyEdtParams | undefined;
+    let loggedOutcome: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+      logEdtAction: async (_ulid, _actionType, outcome) => {
+        loggedOutcome = outcome;
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.tab); // edt-services -> other-services
+      await press(instance, stdin, KEYS.enter); // open Add to EDT on the one row
+      expect(stdout.output).toContain('ADD TO EDT');
+      expect(stdout.output).toContain('feature-y'); // pre-filled with the row's current branch
+
+      await press(instance, stdin, KEYS.enter); // confirm, branch left as pre-filled
+
+      expect(modifyParams).toEqual({
+        topic: 'active-edt',
+        addMembers: ['/repos/b'],
+        removeMembers: [],
+        setBranches: [{ repoPath: '/repos/b', branch: 'feature-y' }],
+      });
+      expect(loggedOutcome).toBe('success');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('matrix: Add-to-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
+    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    let loggedOutcome: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => ({
+        ok: true,
+        data: {
+          ulid: 'active-ulid',
+          topic: 'active-edt',
+          results: [
+            { service: 'svc-b', outcome: 'failed', detail: { code: 'shared-branch-rejected', message: 'Branch "feature-y" is shared/protected' } },
+          ],
+        },
+      }),
+      logEdtAction: async (_ulid, _actionType, outcome) => {
+        loggedOutcome = outcome;
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open Add to EDT
+      await press(instance, stdin, KEYS.enter); // confirm
+
+      expect(stdout.output).toContain('shared/protected');
+      expect(loggedOutcome).toBe('failed');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Review fix: submitRemoveFromEdt implements the same per-repo summarizeFailedResults
+  // partial-failure handling as submitAddToEdt above — this was previously only covered for
+  // Add-to-EDT.
+  it('matrix: Remove-from-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let loggedOutcome: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => ({
+        ok: true,
+        data: {
+          ulid: 'active-ulid',
+          topic: 'active-edt',
+          results: [
+            { service: 'svc-a', outcome: 'failed', detail: { code: 'git-checkout-failed', message: 'Working tree has uncommitted changes' } },
+          ],
+        },
+      }),
+      logEdtAction: async (_ulid, _actionType, outcome) => {
+        loggedOutcome = outcome;
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.enter); // cursor 0 (Remove from EDT) -> confirm
+      // A second flush: unlike a full-success confirm (one setDialog after the awaited
+      // modifyEdt call), the partial-failure path runs one more microtask hop
+      // (summarizeFailedResults's setDialog, then the awaited logEdtAction call) before the
+      // error text actually lands in a committed render.
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('uncommitted changes');
+      expect(loggedOutcome).toBe('failed');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Review fix: submitServiceActionsBranchChange implements the same partial-failure
+  // handling too — previously only covered for Add-to-EDT.
+  it('matrix: Change-branch partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let loggedOutcome: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => ({
+        ok: true,
+        data: {
+          ulid: 'active-ulid',
+          topic: 'active-edt',
+          results: [
+            { service: 'svc-a', outcome: 'failed', detail: { code: 'shared-branch-rejected', message: 'Branch "main-y" is shared/protected' } },
+          ],
+        },
+      }),
+      logEdtAction: async (_ulid, _actionType, outcome) => {
+        loggedOutcome = outcome;
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
+      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
+      await type(instance, stdin, '-y');
+      await press(instance, stdin, KEYS.enter); // confirm
+      // A second flush — same reason as the Remove-from-EDT partial-failure test above.
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('shared/protected');
+      expect(loggedOutcome).toBe('failed');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Review fix: no test previously exercised Escape/cancel for either new dialog, or backing
+  // out of the branch-edit sub-view via Escape.
+  it('Escape cancels the EDT SERVICES contextual menu without calling modifyEdt', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyCalls = 0;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
+        modifyCalls += 1;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      expect(stdout.output).toContain('SERVICE ACTIONS');
+
+      // `stdout.output` accumulates every frame ever written, so a `.not.toContain` against
+      // the whole log would vacuously pass even if Escape did nothing — the menu's own
+      // now-stale frame is still in there. Only the output *written since* Escape proves the
+      // dialog is actually gone from the current render (same technique as the
+      // "rejects an empty branch-edit value inline" test in the story 2.9 suite above).
+      const outputLengthBeforeEscape = stdout.output.length;
+      await pressEscape(instance, stdin);
+      const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
+
+      expect(modifyCalls).toBe(0);
+      expect(outputSinceEscape).not.toContain('SERVICE ACTIONS');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Escape backs out of the branch-edit sub-view to the contextual menu, without closing it entirely', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyCalls = 0;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
+        modifyCalls += 1;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // -> Change branch
+      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
+      expect(stdout.output).toContain('Branch for svc-a');
+
+      // Only the output *written since* Escape proves the menu is back in the *current*
+      // render, not merely present somewhere earlier in the accumulated log (same technique
+      // as the story 2.9 suite's "rejects an empty branch-edit value inline" test above).
+      const outputLengthBeforeEscape = stdout.output.length;
+      await pressEscape(instance, stdin);
+      const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
+
+      // Back at the contextual menu (still open), never fully torn down, never submitted.
+      expect(modifyCalls).toBe(0);
+      expect(outputSinceEscape).toContain('SERVICE ACTIONS');
+      expect(outputSinceEscape).toContain('Remove from EDT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Escape cancels the Add-to-EDT dialog without calling modifyEdt', async () => {
+    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    let modifyCalls = 0;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
+        modifyCalls += 1;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open Add to EDT
+      expect(stdout.output).toContain('ADD TO EDT');
+
+      // Only the output *written since* Escape proves the dialog is gone from the *current*
+      // render (same technique as the two tests above and the story 2.9 suite's own
+      // "rejects an empty branch-edit value inline" test).
+      const outputLengthBeforeEscape = stdout.output.length;
+      await pressEscape(instance, stdin);
+      const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
+
+      expect(modifyCalls).toBe(0);
+      expect(outputSinceEscape).not.toContain('ADD TO EDT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Review fix: the `undefined` guards in the base-view Enter dispatch for EDT
+  // SERVICES/OTHER SERVICES (protecting against opening a dialog for a row that doesn't
+  // exist) were previously unverified — Enter on an empty pane must be a no-op.
+  it('Enter on an empty EDT SERVICES pane is a no-op — never opens the contextual menu', async () => {
+    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      // No members -> EDT SERVICES is empty; the one service is a non-member, so it lands in
+      // OTHER SERVICES instead.
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services (empty)
+      expect(stdout.output).toContain('No services in this EDT.');
+
+      await press(instance, stdin, KEYS.enter); // no-op: nothing to open a menu for
+
+      expect(stdout.output).not.toContain('SERVICE ACTIONS');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on an empty OTHER SERVICES pane is a no-op — never opens Add to EDT', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      // The one service is a member of the selected EDT -> OTHER SERVICES is empty.
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.tab); // edt-services -> other-services (empty)
+      expect(stdout.output).toContain('No managed services found.');
+
+      await press(instance, stdin, KEYS.enter); // no-op: nothing to open Add to EDT for
+
+      expect(stdout.output).not.toContain('ADD TO EDT');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
