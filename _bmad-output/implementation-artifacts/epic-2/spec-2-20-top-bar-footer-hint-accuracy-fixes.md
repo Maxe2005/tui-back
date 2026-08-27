@@ -2,7 +2,7 @@
 title: 'Top Bar & Footer Hint Accuracy Fixes'
 type: 'bugfix'
 created: '2026-08-26'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 baseline_commit: '04c2e3ec2a5a20ad5467420fdeb99864bc400ff4'
 context:
@@ -80,3 +80,5 @@ context:
 
 **Manual checks:**
 - `node src/bin/tui-back.mjs` (TUI): with an active EDT, launch straight into Dashboard (never visiting EDTs zone) — top bar shows the EDT's topic, not its ulid. Check the footer shows `[←→] zone`.
+- Same launch, with no EDT registered yet (empty `edts.yaml`) — top bar shows `"no active EDT"`, never blank or an id, for the brief window before `loadEdts()` resolves and after.
+- Press `[←→]` from Dashboard to switch zones and confirm the shortcut actually works, matching the footer's advertised hint.
