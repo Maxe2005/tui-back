@@ -2,7 +2,7 @@
 title: 'Top Bar & Footer Hint Accuracy Fixes'
 type: 'bugfix'
 created: '2026-08-26'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: '04c2e3ec2a5a20ad5467420fdeb99864bc400ff4'
 context:
@@ -82,3 +82,40 @@ context:
 - `node src/bin/tui-back.mjs` (TUI): with an active EDT, launch straight into Dashboard (never visiting EDTs zone) — top bar shows the EDT's topic, not its ulid. Check the footer shows `[←→] zone`.
 - Same launch, with no EDT registered yet (empty `edts.yaml`) — top bar shows `"no active EDT"`, never blank or an id, for the brief window before `loadEdts()` resolves and after.
 - Press `[←→]` from Dashboard to switch zones and confirm the shortcut actually works, matching the footer's advertised hint.
+
+## Suggested Review Order
+
+**Top bar topic resolution**
+
+- Entry point: `TopBar` now takes `edts` and derives the displayed label from the matching entry's `topic` instead of the raw ulid.
+  [`top-bar.tsx:5`](../../../../src/adapters/driving/tui/shared/components/top-bar.tsx#L5)
+
+- The lookup and its null-safe fallback — every unresolved case (`null` EDT, unloaded `edts`, no match) collapses to the same placeholder.
+  [`top-bar.tsx:12`](../../../../src/adapters/driving/tui/shared/components/top-bar.tsx#L12)
+
+**Mount-time `edts` load in AppShell**
+
+- New store selectors feeding the top bar, added next to the existing `activeEdt` one.
+  [`app-shell.tsx:109`](../../../../src/adapters/driving/tui/app-shell.tsx#L109)
+
+- Mount-once effect loads `edts` regardless of which zone renders first — deliberately left with no dependency on `EdtsZone`'s own reload.
+  [`app-shell.tsx:149`](../../../../src/adapters/driving/tui/app-shell.tsx#L149)
+
+- `edts` now threaded into `TopBar` alongside `activeEdt`.
+  [`app-shell.tsx:243`](../../../../src/adapters/driving/tui/app-shell.tsx#L243)
+
+**Footer hint list**
+
+- `[←→] zone` added immediately after the mnemonic zone hint, per UX-DR7 adjacency.
+  [`footer.tsx:8`](../../../../src/adapters/driving/tui/shared/components/footer.tsx#L8)
+
+**Tests**
+
+- `TopBar` unit tests updated for topic resolution, plus the two new not-yet-loaded / no-match cases.
+  [`top-bar-footer-split.test.tsx:24`](../../../../src/adapters/driving/tui/shared/components/top-bar-footer-split.test.tsx#L24)
+
+- `Footer` hint-list adjacency assertion.
+  [`top-bar-footer-split.test.tsx:71`](../../../../src/adapters/driving/tui/shared/components/top-bar-footer-split.test.tsx#L71)
+
+- Mount-level proof the topic resolves without ever visiting the EDTs zone.
+  [`app-shell.interaction.test.tsx:900`](../../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L900)
