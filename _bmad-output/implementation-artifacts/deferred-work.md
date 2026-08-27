@@ -266,3 +266,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-20-top-bar-footer-hint-accuracy-fixes.md`
   summary: The story 2.20 entry above ("`registerRepos` ... 56 failures ... sandbox/environment issue") is resolved, not merely deferred: `tui-back.e2e.test.ts`'s `scriptPath` was pointed at `tui-back.mjs` (the interactive-TUI entrypoint, which exits 1 under `spawnSync`'s non-TTY `register` calls) instead of `cli-back.mjs` (the actual CLI dispatcher) ever since `b081de8` split the two entrypoints. Repointing it to `cli-back.mjs` (this story's diff) makes all 57 tests in the file pass reliably. **Track:** nothing further — close the story 2.20 entry above once its own spec is next touched, it no longer needs root-causing.
+
+## Deferred from: code review of 2-18-edt-zone-active-highlight-fixed-width-detail-pane-categorized-services-per-service-actions-2 (2026-08-27)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-18-edt-zone-active-highlight-fixed-width-detail-pane-categorized-services-per-service-actions.md`
+  summary: The original story 2.18 spec's frontmatter still says `status: 'done'` while `sprint-status.yaml` tracks the story as `review` — a pre-existing mismatch this amendment doesn't reconcile (the frozen spec isn't rewritten in place; the amendment gets its own `-2` spec file per this repo's routing convention for touching an already-`done` spec).
+  evidence: `spec-2-18-....md:5` (`status: 'done'`) vs. `sprint-status.yaml`'s `2-18-...: review` entry — both present as of this amendment; not caused by this change, predates it. **Track:** reconcile whichever way is correct (either the spec's status or sprint-status.yaml) next time story 2.18's branch is touched for merge.

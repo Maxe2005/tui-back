@@ -13,6 +13,7 @@ describe('resolveRowLayout', () => {
       metaColor: colors['text-dim'],
       paddingLeft: 0,
       bold: false,
+      activeSuffix: '',
     });
   });
 
@@ -25,6 +26,7 @@ describe('resolveRowLayout', () => {
       metaColor: colors['text-dim'],
       paddingLeft: 0,
       bold: false,
+      activeSuffix: '',
     });
   });
 
@@ -37,13 +39,15 @@ describe('resolveRowLayout', () => {
       metaColor: colors['text-dim'],
       paddingLeft: spacing.indent,
       bold: false,
+      activeSuffix: '',
     });
     expect(spacing.indent).toBe(2);
   });
 
-  // Story 2.18: `active` (the tool-wide active EDT) is accent+bold, independent of `selected`.
-  it('resolves an active row: accent-colored, bold label — independent of selected', () => {
-    expect(resolveRowLayout({ label: 'my-edt', active: true })).toEqual({
+  // Story 2.18, repurposed 2026-08-27 (Sprint Change Proposal): `emphasized` (whichever row
+  // drives a categorized split) is accent+bold, independent of `selected`.
+  it('resolves an emphasized row: accent-colored, bold label — independent of selected', () => {
+    expect(resolveRowLayout({ label: 'my-edt', emphasized: true })).toEqual({
       barGlyph: ' ',
       marker: ' ',
       background: colors.surface,
@@ -51,11 +55,12 @@ describe('resolveRowLayout', () => {
       metaColor: colors['text-dim'],
       paddingLeft: 0,
       bold: true,
+      activeSuffix: '',
     });
   });
 
-  it('composes active with selected — the cursor treatment and the active label style both apply', () => {
-    expect(resolveRowLayout({ label: 'my-edt', active: true, selected: true })).toEqual({
+  it('composes emphasized with selected — the cursor treatment and the emphasized label style both apply', () => {
+    expect(resolveRowLayout({ label: 'my-edt', emphasized: true, selected: true })).toEqual({
       barGlyph: '▌',
       marker: '›',
       background: colors['surface-selected'],
@@ -63,6 +68,36 @@ describe('resolveRowLayout', () => {
       metaColor: colors['text-dim'],
       paddingLeft: 0,
       bold: true,
+      activeSuffix: '',
+    });
+  });
+
+  // Story 2.18, repurposed 2026-08-27 (Sprint Change Proposal): `active` (the tool-wide active
+  // EDT) no longer touches label color/bold — it's a discreet suffix instead, decoupled from
+  // `emphasized`.
+  it('resolves an active row: a discreet " active" suffix, label untouched', () => {
+    expect(resolveRowLayout({ label: 'my-edt', active: true })).toEqual({
+      barGlyph: ' ',
+      marker: ' ',
+      background: colors.surface,
+      labelColor: colors.text,
+      metaColor: colors['text-dim'],
+      paddingLeft: 0,
+      bold: false,
+      activeSuffix: ' • active',
+    });
+  });
+
+  it('composes active with emphasized on the same row — both the suffix and the bold label apply', () => {
+    expect(resolveRowLayout({ label: 'my-edt', active: true, emphasized: true })).toEqual({
+      barGlyph: ' ',
+      marker: ' ',
+      background: colors.surface,
+      labelColor: colors.accent,
+      metaColor: colors['text-dim'],
+      paddingLeft: 0,
+      bold: true,
+      activeSuffix: ' • active',
     });
   });
 });
@@ -100,17 +135,39 @@ describe('ListRow', () => {
     expect(output).not.toContain('▌');
   });
 
-  it('renders the active label (story 2.18) — no marker/accent-bar of its own when not also selected', async () => {
-    const output = await renderToString(<ListRow label="my-edt" active />);
+  it('renders the emphasized label (story 2.18) — no marker/accent-bar of its own when not also selected', async () => {
+    const output = await renderToString(<ListRow label="my-edt" emphasized />);
     expect(output).toContain('my-edt');
     expect(output).not.toContain('›');
     expect(output).not.toContain('▌');
   });
 
-  it('renders active composed with selected — both the › marker/▌ bar and the active label appear', async () => {
+  it('renders emphasized composed with selected — both the › marker/▌ bar and the emphasized label appear', async () => {
+    const output = await renderToString(<ListRow label="my-edt" emphasized selected />);
+    expect(output).toContain('my-edt');
+    expect(output).toContain('›');
+    expect(output).toContain('▌');
+  });
+
+  // Story 2.18, repurposed 2026-08-27 (Sprint Change Proposal): `active` renders a discreet
+  // "• active" suffix, decoupled from `emphasized`/`selected`. The `•` glyph is required — see
+  // list-row.tsx's `active` prop doc: `colors.info` is a semantic status color and DESIGN.md
+  // mandates every status color be paired with a glyph, never carried by color alone.
+  it('renders the discreet "• active" suffix after the label', async () => {
+    const output = await renderToString(<ListRow label="my-edt" active />);
+    expect(output).toContain('my-edt • active');
+  });
+
+  it('renders the "• active" suffix after meta when both are present', async () => {
+    const output = await renderToString(<ListRow label="my-edt" meta="3 members" active />);
+    expect(output).toContain('my-edt 3 members • active');
+  });
+
+  it('renders active composed with selected — the cursor treatment applies alongside the discreet suffix, independent of emphasized', async () => {
     const output = await renderToString(<ListRow label="my-edt" active selected />);
     expect(output).toContain('my-edt');
     expect(output).toContain('›');
     expect(output).toContain('▌');
+    expect(output).toContain('• active');
   });
 });

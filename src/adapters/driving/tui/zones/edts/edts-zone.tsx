@@ -262,10 +262,12 @@ export function summarizeFailedResults(results: readonly FailableResultRow[]): s
   return failed.map((row) => `${row.service}${row.detail ? `: ${row.detail.message}` : ''}`).join('; ');
 }
 
-export function formatEdtRowMeta(entry: EdtRegistryEntry, isActive: boolean): string {
+// Amended 2026-08-27 (Sprint Change Proposal): no longer takes `isActive` — the "— active"
+// suffix moved out of this string and into `ListRow`'s own `active` prop (rendered as a
+// discreet, independently-colored suffix), so this stays a pure member-count formatter.
+export function formatEdtRowMeta(entry: EdtRegistryEntry): string {
   const count = entry.members.length;
-  const base = `${count} member${count === 1 ? '' : 's'}`;
-  return isActive ? `${base} — active` : base;
+  return `${count} member${count === 1 ? '' : 's'}`;
 }
 
 export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): string {
@@ -1384,10 +1386,17 @@ export function EdtsZone({
               <ListRow
                 key={entry.ulid}
                 label={entry.topic}
-                meta={formatEdtRowMeta(entry, entry.ulid === activeEdtUlid)}
+                meta={formatEdtRowMeta(entry)}
                 selected={paneFocus === 'edts' && index === clampedEdtsSelected}
-                // Story 2.18: the tool-wide active EDT's row — accent+bold, independent of
-                // which row the cursor (`selected`) happens to be on.
+                // Amended 2026-08-27 (Sprint Change Proposal): `emphasized` now marks the row
+                // at `clampedEdtsSelected` — the same index `focusedEdt` (below) is read from,
+                // whose membership drives the EDT SERVICES/OTHER SERVICES split — so it persists
+                // across all three panes' focus, not just while paneFocus === 'edts' (unlike
+                // `selected` above).
+                emphasized={index === clampedEdtsSelected}
+                // `active` (repurposed): the tool-wide active EDT's row, now a discreet suffix
+                // instead of accent+bold — decoupled from `emphasized`, can land on the same or
+                // a different row.
                 active={entry.ulid === activeEdtUlid}
               />
             ))}

@@ -499,21 +499,17 @@ describe('isSwitchBlockedError', () => {
   });
 });
 
+// Amended 2026-08-27 (Sprint Change Proposal): no longer takes an `isActive` flag — the
+// "— active" suffix moved to `ListRow`'s own `active` prop (list-row.test.tsx covers it).
 describe('formatEdtRowMeta', () => {
   it('pluralizes the member count', () => {
-    expect(formatEdtRowMeta(edtEntry({ members: [] }), false)).toBe('0 members');
-    expect(formatEdtRowMeta(edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }] }), false)).toBe('1 member');
+    expect(formatEdtRowMeta(edtEntry({ members: [] }))).toBe('0 members');
+    expect(formatEdtRowMeta(edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }] }))).toBe('1 member');
     expect(
       formatEdtRowMeta(
         edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }, { service: 'b', repoPath: '/b', branch: 'main' }] }),
-        false,
       ),
     ).toBe('2 members');
-  });
-
-  it('appends "— active" only for the active EDT', () => {
-    expect(formatEdtRowMeta(edtEntry(), true)).toBe('0 members — active');
-    expect(formatEdtRowMeta(edtEntry(), false)).toBe('0 members');
   });
 });
 
