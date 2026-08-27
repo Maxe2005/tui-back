@@ -81,7 +81,7 @@ development_status:
   2-14-command-entry-bar-registered-commands: done
   2-15-edt-commands-and-action-history: done
   2-16-permanent-dashboard-banner: done
-  2-17-terminal-style-command-bar-autocomplete-grid-browser: backlog
+  2-17-terminal-style-command-bar-autocomplete-grid-browser: done
   2-18-edt-zone-active-highlight-fixed-width-detail-pane-categorized-services-per-service-actions: backlog
   2-19-global-settings-screen: backlog
   2-20-top-bar-footer-hint-accuracy-fixes: done

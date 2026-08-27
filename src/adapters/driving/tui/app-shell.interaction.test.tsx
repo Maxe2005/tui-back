@@ -507,8 +507,8 @@ describe('AppShell manifest-gated tab visibility (story 2.13)', () => {
   });
 });
 
-describe('AppShell command-entry bar (:) (story 2.14)', () => {
-  it('opens on : from content focus with an empty focused input and the full command list', async () => {
+describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid reworked by story 2.17)', () => {
+  it('opens on : with an empty focused input and no list/grid until Tab is pressed', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -517,6 +517,12 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
       await press(instance, stdin, ':');
 
       expect(stdout.output).toContain('COMMAND');
+      expect(stdout.output).not.toContain('registry');
+
+      // Tab on the still-empty input reveals the full grid immediately (no double-press
+      // needed, nothing to complete).
+      await press(instance, stdin, KEYS.tab);
+
       expect(stdout.output).toContain('registry');
     } finally {
       instance.unmount();
@@ -615,28 +621,42 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
     }
   });
 
-  it('filters the command list to a case-insensitive name-prefix match as text is typed', async () => {
+  it('re-filters the visible grid live to a case-insensitive name-prefix match as text is typed', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, ':');
-
-      await press(instance, stdin, 'REG');
-
+      // Empty-input Tab reveals the full grid immediately.
+      await press(instance, stdin, KEYS.tab);
       expect(stdout.output).toContain('registry');
+
+      // "ED" (uppercase) case-insensitively narrows to the 3 edt-* commands — still 2+
+      // matches, so the grid stays visible rather than hiding (that only happens at exactly
+      // one remaining match).
+      await press(instance, stdin, 'ED');
+
+      // stdout.output accumulates every rendered frame (it can't express "no longer
+      // present"), so this proves the live re-filter narrowed to the 3 edt-* commands by
+      // their all appearing only after "ED" was typed, not that "registry" stopped
+      // rendering — command-bar.test.tsx's layoutCommandGrid/matchCommands unit coverage
+      // is what actually proves the match set itself narrows.
+      expect(stdout.output).toContain('edt-create');
+      expect(stdout.output).toContain('edt-switch');
+      expect(stdout.output).toContain('edt-modify');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
     }
   });
 
-  it('shows an explicit "no matching command" state on zero matches — never a blank list', async () => {
+  it('shows an explicit "no matching command" state once the live-visible grid narrows to zero — never a blank grid', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the grid first (nothing shows before Tab)
 
       await press(instance, stdin, 'zzz');
 
@@ -674,7 +694,6 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, ':');
       await press(instance, stdin, 'zzz');
-      expect(stdout.output).toContain('No matching command.');
 
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter);
@@ -818,6 +837,206 @@ describe('AppShell command-entry bar (:) (story 2.14)', () => {
       // ...and EdtsZone's own Enter handler (openEdtAction) never fired underneath the bar —
       // if it had, its dialog-open effect would have flipped this true.
       expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Down from the input enters the grid at the top of the first column; Enter on the highlighted cell completes the query and returns focus to the input (story 2.17)', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // empty-input Tab reveals the full grid
+
+      await press(instance, stdin, KEYS.down); // input -> grid, top of first column (registry)
+      // Move to the second row (edt-create) before completing, proving the grid actually
+      // tracks cursor movement rather than always completing to the first row.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter); // completes to the highlighted cell, focus -> input
+
+      // Focus is back on the input and the query is the exact "edt-create" name — a second
+      // Enter (only reachable from input focus) now runs it.
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().currentEdtAction?.type).toBe('create');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a printable character typed while the grid is focused returns focus to the input, appends it, and collapses the grid (story 2.17)', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the grid
+      await press(instance, stdin, KEYS.down); // input -> grid, top of first column
+
+      await press(instance, stdin, 'x');
+
+      // The grid must have collapsed and focus returned to the input rather than the
+      // keypress being swallowed as grid navigation — proven by a subsequent Enter treating
+      // "x" as an unknown command (from the input) instead of the grid's own Enter-on-cell
+      // behavior completing to whichever cell was highlighted.
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().registryScreenOpen).toBe(false);
+      expect(stdout.output).toContain('Unknown command.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('backspace while the grid is focused returns focus to the input and applies the backspace, per the spec\'s Ask-First resolution (story 2.17)', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'edt-'); // 3 matches, already sitting at the maximal common prefix
+
+      await press(instance, stdin, KEYS.tab); // 1st Tab: arms pending, no visible change
+      await press(instance, stdin, KEYS.tab); // 2nd Tab, same query, within window: shows the grid
+      await press(instance, stdin, KEYS.down); // input -> grid, top of first column (edt-create)
+
+      await press(instance, stdin, KEYS.backspace);
+
+      // Backspace returned focus to the input (not the grid's own Enter-on-cell path) and
+      // dropped the query to "edt" — a subsequent Enter shows "unknown command" because "edt"
+      // isn't an exact match on its own; if focus had wrongly stayed in the grid, this same
+      // Enter would instead silently complete to the highlighted cell without that message.
+      await press(instance, stdin, KEYS.enter);
+
+      expect(stdout.output).toContain('Unknown command.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the grid hides once live filtering narrows the match set to exactly one (story 2.17)', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the full grid
+
+      await press(instance, stdin, 'registry'); // live-narrows the match set to exactly one
+
+      // The grid must have hidden (fallen back to the no-list state) rather than continuing
+      // to show a stale multi-command grid — proven by Down (only meaningful while the grid
+      // is visible) being a no-op, so the very next Enter runs the single exact match
+      // directly from the input rather than the grid's own Enter-on-cell behavior firing.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().registryScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc from grid focus closes the bar entirely without running anything (story 2.17)', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the grid
+      await press(instance, stdin, KEYS.down); // input -> grid, top of first column
+
+      await pressEscape(instance, stdin);
+
+      expect(store.getState().registryScreenOpen).toBe(false);
+      expect(store.getState().commandBarOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Tab while the grid is focused is a no-op — it never leaks a literal tab character into the query (review fix)', async () => {
+    // Boundaries only defines Up/Down/Left/Right/Enter/printable/Esc for grid focus; Tab has
+    // no case there. Left unguarded, it previously fell through to the printable-character
+    // branch and got appended into the query as a literal '\t' (Ink reports Tab's raw input
+    // as that byte), corrupting the query and dropping out of the grid.
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the grid
+      await press(instance, stdin, KEYS.down); // input -> grid, top of first column (registry)
+
+      await press(instance, stdin, KEYS.tab);
+
+      // Still in the grid, query untouched — completing from the still-highlighted first
+      // cell and running it proves both: the query was never corrupted, and focus never left
+      // the grid.
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().registryScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a non-Tab key between two Tab presses discards the pending double-Tab state, so the grid does not open early (review fix)', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'edt-'); // 3 matches, already at the maximal common prefix
+
+      await press(instance, stdin, KEYS.tab); // 1st Tab: arms pending
+      // An intervening key that isn't Tab and doesn't disturb the query (gridVisible is still
+      // false at this point, so Down is a no-op) must discard the pending state per the
+      // Boundaries ("any other key ... discards the pending state").
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.tab); // this Tab must be treated as a fresh 1st press
+
+      // If pending had wrongly survived the intervening key, this Tab would be read as the
+      // 2nd press and open the grid; Down would then enter it and Enter would only complete
+      // the query (not run it). Since pending was correctly discarded, the grid never opened:
+      // Down remains a no-op and Enter runs straight off the unfinished "edt-" query instead.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+
+      expect(stdout.output).toContain('Unknown command.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Up at the top row leaves the grid and returns focus to the input (story 2.17, real-keypress wiring check)', async () => {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the grid
+      await press(instance, stdin, KEYS.down); // input -> grid, top of first column (row 0)
+
+      await press(instance, stdin, KEYS.up); // row 0 -> back to the input
+
+      // Back at the input: typing now appends to the (still-empty) query rather than being
+      // swallowed as grid navigation — proven by a subsequent exact "registry" + Enter run.
+      await press(instance, stdin, 'registry');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().registryScreenOpen).toBe(true);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
