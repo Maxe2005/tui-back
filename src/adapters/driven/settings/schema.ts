@@ -22,6 +22,7 @@ export const settingsSchema: z.ZodType<Settings> = z
     edts: z
       .object({
         hiddenActionHints: z.array(z.string()),
+        hiddenActionTypes: z.array(z.string()),
       })
       .strict()
       .optional()

@@ -124,10 +124,18 @@ export type EdtActionLogEntry = {
 };
 
 // Story 2.19: a partial update accepted by updateSettings — each present top-level key
-// replaces (shallow-merges into) that whole sub-object, e.g. `{ commandPalette: { gridMaxRows: 10 } }`
-// or `{ edts: { hiddenActionHints: [...] } }`. Never a deep-merge of individual leaf fields —
-// the two sub-objects each have exactly one field today, so this stays simple and explicit.
-export type SettingsUpdate = Partial<Settings>;
+// shallow-merges into that whole sub-object's existing fields, e.g.
+// `{ commandPalette: { gridMaxRows: 10 } }` or `{ edts: { hiddenActionHints: [...] } }` (the
+// latter leaves `edts.hiddenActionTypes` untouched, and vice versa) — see updateSettings'
+// `{ ...current.edts, ...partial.edts }` spread below. Deliberately `Partial` one level deeper
+// than a plain `Partial<Settings>` would give (each sub-object's own fields are individually
+// optional too) — that's the whole point: a caller only ever supplies the one field it's
+// changing, never the sub-object's other, untouched field. Never a deep-merge below this one
+// level, though — the two sub-objects each stay flat.
+export type SettingsUpdate = {
+  commandPalette?: Partial<Settings['commandPalette']>;
+  edts?: Partial<Settings['edts']>;
+};
 
 export type AppState = {
   activeZone: ZoneId;

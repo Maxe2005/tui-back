@@ -2,7 +2,7 @@
 title: 'Global Settings Screen (`:settings`)'
 type: 'feature'
 created: '2026-08-26'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: '6c8505b98f6a29fcfc6cc5bad7dfe60a134374af'
 context:
@@ -86,10 +86,10 @@ context:
 - [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- gate `useInput` on `settingsScreenOpen`/`registryScreenOpen` -- real-usage review fix (commit `6c8505b`)
 
 **Execution (amended 2026-08-28, Sprint Change Proposal -- new work):**
-- [ ] `src/core/ports/settings.ts` -- add `Settings.edts.hiddenActionTypes: string[]` -- AC5
-- [ ] `src/adapters/driven/settings/schema.ts` -- zod field for `hiddenActionTypes` -- AC5
-- [ ] `src/adapters/driving/tui/shared/settings-screen.tsx` + test -- EDTs tab group-list level (drill-in/out), "Recent action types" checkbox group -- AC1 (amended), AC5, AC6, I/O matrix "Enter a settings group"/"Toggle hidden action type"/"Step back out of a group"
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- filter `actionLog` by `edts.hiddenActionTypes` in `formatEdtActionHistory` -- AC5, I/O matrix "Toggle hidden action type"
+- [x] `src/core/ports/settings.ts` -- add `Settings.edts.hiddenActionTypes: string[]` -- AC5
+- [x] `src/adapters/driven/settings/schema.ts` -- zod field for `hiddenActionTypes` -- AC5
+- [x] `src/adapters/driving/tui/shared/settings-screen.tsx` + test -- EDTs tab group-list level (drill-in/out), "Recent action types" checkbox group -- AC1 (amended), AC5, AC6, I/O matrix "Enter a settings group"/"Toggle hidden action type"/"Step back out of a group"
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- filter `actionLog` by `edts.hiddenActionTypes` in `formatEdtActionHistory` -- AC5, I/O matrix "Toggle hidden action type"
 
 **Acceptance Criteria:**
 - AC1 — Given the settings screen is open, when `Left`/`Right`/`Tab` is pressed, then focus cycles General → EDTs → Command Palette → General, visually matching the zone-tab bar's active/inactive treatment at a smaller scale. *(Amended 2026-08-28: this cycles the top-level tabs only -- it does not fire while a group is drilled into on the EDTs tab, per AC6.)*
@@ -196,3 +196,50 @@ context:
 
 - New unit tests covering the serialized-save and stale-load-guard patches (`app-store.test.ts`) and the out-of-range `gridMaxRows` fallback (`index.test.ts`).
   [`app-store.test.ts:628`](../../../src/adapters/driving/tui/store/app-store.test.ts#L628)
+
+## Suggested Review Order — Amendment (2026-08-28)
+
+Scoped to this round's diff only (since `baseline_commit`) — the EDTs tab's group-list level and the new `hiddenActionTypes` filter. Everything above (first round) is unchanged.
+
+**Model: the new field**
+
+- `Settings.edts` gains `hiddenActionTypes: string[]`, defaulted to `[]` alongside the existing `hiddenActionHints` — the additive shape this whole amendment hangs off.
+  [`settings.ts:21`](../../../src/core/ports/settings.ts#L21)
+
+- Matching zod field, same `.strict()` object as `hiddenActionHints` — an old `settings.yaml` missing it now fails validation and falls back to every default, per the frozen Boundaries' documented "corrupt/invalid falls back to every default" convention.
+  [`schema.ts:22`](../../../src/adapters/driven/settings/schema.ts#L22)
+
+**Filter: hiding action types from the "Recent actions" log**
+
+- `formatEdtActionHistory` gains a `hiddenActionTypes` parameter, filtering `actionLog` before rendering — same live-read-no-cache pattern as the existing hint filter; a fully-hidden log reads as "No actions yet" rather than a dangling header.
+  [`edts-zone.tsx:290`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L290)
+
+- Call site reads `store.settings.edts.hiddenActionTypes` live and threads it into the render — confirms an EDTs-tab checkbox toggle is visibly live.
+  [`edts-zone.tsx:1502`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1502)
+
+**EDTs tab: the new group-list drill-down (AC6)**
+
+- `drilledIn`/`SETTINGS_GROUPS`/`HIDEABLE_ACTION_TYPES` — the two-level state machine (group list → checkbox list) this amendment's whole UX hinges on.
+  [`settings-screen.tsx:152`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L152)
+
+- `useInput`'s Esc branch: tab-aware — steps back one level when drilled in, otherwise closes the whole screen (amended Boundaries).
+  [`settings-screen.tsx:199`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L199)
+
+- Tab/Left/Right cycling is now gated on `!drilledIn` (AC1 amended) — prevents cycling away from underneath a drilled-in group.
+  [`settings-screen.tsx:213`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L213)
+
+- Group-list level's own Up/Down/Enter handling, and the drilled-in "action-types" checkbox handling reusing `toggleHiddenHint`/`moveHintCursor` from the first round.
+  [`settings-screen.tsx:248`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L248)
+
+**Wiring: Esc-close ownership moved out of AppShell**
+
+- `SettingsScreen` now owns its own Esc-close via an `onClose` prop (mirrors `CommandBar`'s existing pattern) — necessary because only `SettingsScreen` knows whether a group is drilled in; AppShell's previous centralized Esc-close couldn't express that. The one change beyond the spec's amended Code Map.
+  [`app-shell.tsx:284`](../../../src/adapters/driving/tui/app-shell.tsx#L284)
+
+**Peripherals**
+
+- `SettingsUpdate`'s type tightened to make `commandPalette`/`edts` independently partial, so a caller can update just `hiddenActionTypes` without also supplying `hiddenActionHints` — the runtime shallow-merge already allowed this; only the type didn't.
+  [`app-store.ts:135`](../../../src/adapters/driving/tui/store/app-store.ts#L135)
+
+- New tests: the group-list pure functions and two-level Enter/Esc navigation (`settings-screen.test.tsx`), the action-type filter (`edts-zone.test.tsx`), and the tab-cycle-suppression/two-stage-Esc interaction regressions (`app-shell.interaction.test.tsx`).
+  [`settings-screen.test.tsx:133`](../../../src/adapters/driving/tui/shared/settings-screen.test.tsx#L133)

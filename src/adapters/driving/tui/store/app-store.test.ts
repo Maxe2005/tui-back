@@ -536,7 +536,10 @@ describe("app store", () => {
       const settings: SettingsPort = {
         load: vi.fn(async () =>
           ok({
-            settings: { commandPalette: { gridMaxRows: 12 }, edts: { hiddenActionHints: ["edts"] } },
+            settings: {
+              commandPalette: { gridMaxRows: 12 },
+              edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+            },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
           }),
         ),
@@ -548,7 +551,7 @@ describe("app store", () => {
 
       expect(store.getState().settings).toEqual({
         commandPalette: { gridMaxRows: 12 },
-        edts: { hiddenActionHints: ["edts"] },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
     });
@@ -596,19 +599,41 @@ describe("app store", () => {
 
       expect(save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 15 },
-        edts: { hiddenActionHints: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
       });
     });
 
     it("updateSettings() shallow-merges only the provided sub-object, leaving the other untouched", async () => {
       const store = createAppStore(fakeDeps());
-      store.setState({ settings: { commandPalette: { gridMaxRows: 20 }, edts: { hiddenActionHints: ["edts"] } } });
+      store.setState({
+        settings: {
+          commandPalette: { gridMaxRows: 20 },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+        },
+      });
 
       await store.getState().updateSettings({ edts: { hiddenActionHints: ["other-services"] } });
 
       expect(store.getState().settings).toEqual({
         commandPalette: { gridMaxRows: 20 },
-        edts: { hiddenActionHints: ["other-services"] },
+        edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [] },
+      });
+    });
+
+    it("updateSettings() shallow-merges hiddenActionTypes independently of hiddenActionHints (amended 2026-08-28)", async () => {
+      const store = createAppStore(fakeDeps());
+      store.setState({
+        settings: {
+          commandPalette: { gridMaxRows: 20 },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"] },
+        },
+      });
+
+      await store.getState().updateSettings({ edts: { hiddenActionTypes: ["create", "modify"] } });
+
+      expect(store.getState().settings).toEqual({
+        commandPalette: { gridMaxRows: 20 },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"] },
       });
     });
 
@@ -710,7 +735,7 @@ describe("app store", () => {
       // The stale load now resolves with an older on-disk value — it must not clobber the
       // newer update already applied above.
       resolveLoad?.({
-        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [] } },
+        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
         warning: null,
       });
       await loading;

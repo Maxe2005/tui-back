@@ -61,7 +61,7 @@ describe('loadSettings', () => {
     const file = join(root, 'settings.yaml');
     await writeFile(
       file,
-      'commandPalette:\n  gridMaxRows: 12\nedts:\n  hiddenActionHints:\n    - edt-services\n',
+      'commandPalette:\n  gridMaxRows: 12\nedts:\n  hiddenActionHints:\n    - edt-services\n  hiddenActionTypes:\n    - modify\n',
     );
 
     const result = await loadSettings(file);
@@ -69,7 +69,10 @@ describe('loadSettings', () => {
     expect(result).toEqual({
       ok: true,
       data: {
-        settings: { commandPalette: { gridMaxRows: 12 }, edts: { hiddenActionHints: ['edt-services'] } },
+        settings: {
+          commandPalette: { gridMaxRows: 12 },
+          edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
+        },
         warning: null,
       },
     });
@@ -127,6 +130,19 @@ describe('loadSettings', () => {
     expect(result.data.warning).not.toBeNull();
   });
 
+  it('falls back to defaults with a warning when an explicit edts block omits hiddenActionTypes (amended 2026-08-28, strict schema requires both fields)', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  hiddenActionHints:\n    - edts\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).not.toBeNull();
+  });
+
   it('reports a genuine I/O error (not ENOENT) as an err Result', async () => {
     const root = await tempRoot();
     const dirNotFile = join(root, 'settings.yaml');
@@ -142,7 +158,10 @@ describe('saveSettings', () => {
   it('creates the config dir and persists the settings as YAML', async () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'settings.yaml');
-    const settings = { commandPalette: { gridMaxRows: 10 }, edts: { hiddenActionHints: ['other-services'] } };
+    const settings = {
+      commandPalette: { gridMaxRows: 10 },
+      edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
+    };
 
     const result = await saveSettings(file, settings);
 
@@ -155,11 +174,14 @@ describe('saveSettings', () => {
     const file = join(root, 'settings.yaml');
     await saveSettings(file, DEFAULT_SETTINGS);
 
-    await saveSettings(file, { commandPalette: { gridMaxRows: 20 }, edts: { hiddenActionHints: [] } });
+    await saveSettings(file, {
+      commandPalette: { gridMaxRows: 20 },
+      edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+    });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       commandPalette: { gridMaxRows: 20 },
-      edts: { hiddenActionHints: [] },
+      edts: { hiddenActionHints: [], hiddenActionTypes: [] },
     });
   });
 });
@@ -169,7 +191,10 @@ describe('createSettingsPort', () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     const port = createSettingsPort(file);
-    const settings = { commandPalette: { gridMaxRows: 5 }, edts: { hiddenActionHints: ['edts'] } };
+    const settings = {
+      commandPalette: { gridMaxRows: 5 },
+      edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
+    };
 
     await port.save(settings);
     const result = await port.load();

@@ -16,6 +16,15 @@
 // `PaneFocus` contexts edts-zone.tsx's `formatAvailableActionsHint` (story 2.18, its
 // formerly-`formatEdtActionHistory`-embedded hint line) emits one hint string for — 'edts',
 // 'edt-services', 'other-services' — never invented placeholder ids.
+//
+// Amended 2026-08-28 (Sprint Change Proposal): the EDTs tab now holds two distinct settings
+// groups ("Hint visibility" above, "Recent action types" below) behind a drill-down — first
+// opening the tab shows an Up/Down-navigable group list, `Enter` drills into that group's own
+// checkbox list, `Esc` steps back out to the group list (only at this tab; General/Command
+// Palette stay single-level). This is why Esc-close moves from AppShell's centralized handling
+// (registryScreenOpen's precedent) to a self-contained `onClose` prop here, mirroring
+// command-bar.tsx's own self-contained Esc pattern — AppShell no longer knows or needs to know
+// how deep the EDTs tab is drilled.
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
@@ -102,6 +111,10 @@ export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
   { id: 'other-services', label: 'Other services — "[Enter] Add to EDT"' },
 ];
 
+// Generic clamped cursor mover — reused for the EDTs tab's group-list cursor, its
+// "Hint visibility" checkbox cursor, and its "Recent action types" checkbox cursor (all three
+// are just an index into a small fixed-length list; the name predates the group-list level but
+// the logic was already list-agnostic).
 export function moveHintCursor(current: number, direction: 'up' | 'down', length: number): number {
   if (length === 0) {
     return 0;
@@ -112,41 +125,97 @@ export function moveHintCursor(current: number, direction: 'up' | 'down', length
 
 // Toggles `id` in `hidden`, never mutating the input array (mirrors
 // repo-registry-screen.tsx's toggleCandidateSelection immutability convention, array-shaped
-// since Settings.edts.hiddenActionHints is a string[], not a Set).
+// since Settings.edts.hiddenActionHints/hiddenActionTypes are each a string[], not a Set).
+// Reused as-is for both the "Hint visibility" and "Recent action types" checkbox groups — the
+// toggle logic is identical, only which settings field it's applied to differs at the call site.
 export function toggleHiddenHint(hidden: readonly string[], id: string): string[] {
   return hidden.includes(id) ? hidden.filter((existing) => existing !== id) : [...hidden, id];
 }
 
-// No `onClose`/Esc handling here (unlike command-bar.tsx's self-contained Esc): AppShell owns
-// Esc-close for this screen the same way it does for registryScreenOpen — wired centrally in
-// app-shell.tsx's own useInput, gated on `settingsScreenOpen`, rather than duplicated locally.
+// Amended 2026-08-28 (Sprint Change Proposal): the "Recent action types" group's rows — the
+// literal `EdtActionLogEntry['actionType']` domain (app-store.ts), confirmed exhaustive by
+// grepping every `logEdtAction(...)` call site in this file. A closed, hardcoded list, never
+// derived from `edtActionLog` at runtime (an EDT with no `modify` entries yet must still offer
+// to hide `modify`) — Design Notes: "Action-type list is closed, not derived".
+export type HideableActionType = { id: string; label: string };
+
+export const HIDEABLE_ACTION_TYPES: readonly HideableActionType[] = [
+  { id: 'create', label: 'Create' },
+  { id: 'switch', label: 'Switch' },
+  { id: 'modify', label: 'Modify' },
+];
+
+// Amended 2026-08-28 (Sprint Change Proposal): the EDTs tab's group-list level, ahead of its
+// two checkbox lists (Boundaries: "a single flat checkbox list would conflate two unrelated
+// toggles"; Design Notes explains why this is a drill-down rather than a flat list or a nested
+// tab strip).
+export type SettingsGroupId = 'hint-visibility' | 'action-types';
+
+export type SettingsGroup = { id: SettingsGroupId; label: string };
+
+export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
+  { id: 'hint-visibility', label: 'Hint visibility' },
+  { id: 'action-types', label: 'Recent action types' },
+];
+
+// Amended 2026-08-28 (Sprint Change Proposal): self-contained Esc handling, mirroring
+// command-bar.tsx's own `onClose` pattern rather than repo-registry-screen.tsx's
+// AppShell-centralized one — the EDTs tab's drill-down state (is a group open?) is local to
+// this component, so only this component can decide whether Esc steps back a level or closes
+// the whole screen (Boundaries: "Esc's meaning is now tab-aware"). `onClose` defaults to a
+// no-op so a bare smoke-test render (no interaction) never crashes for lack of a prop.
 export type SettingsScreenProps = {
   useStore?: AppStore;
-  // Test-only injection point (mirrors edts-zone.tsx's `initialPaneFocus`): renderToString
+  onClose?: () => void;
+  // Test-only injection points (mirror edts-zone.tsx's `initialPaneFocus`): renderToString
   // performs one synchronous render-then-unmount pass and never observes a keypress (the
-  // shared harness's fake stdin never emits data), so a smoke test can't Tab its way to the
-  // EDTs/Command Palette tab bodies otherwise. Production always starts on General (AC1).
+  // shared harness's fake stdin never emits data), so a smoke test can't Tab/Enter its way to
+  // a specific tab/drilled-group otherwise. Production always starts on General, group list
+  // (AC1, AC6).
   initialTab?: SettingsTab;
+  initialEdtsGroup?: SettingsGroupId | null;
 };
 
-export function SettingsScreen({ useStore = useAppStore, initialTab = 'general' }: SettingsScreenProps) {
+export function SettingsScreen({
+  useStore = useAppStore,
+  onClose = () => {},
+  initialTab = 'general',
+  initialEdtsGroup = null,
+}: SettingsScreenProps) {
   const settings = useStore((state) => state.settings);
   const settingsWarning = useStore((state) => state.settingsWarning);
   const updateSettings = useStore((state) => state.updateSettings);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
+  const [edtsGroup, setEdtsGroup] = useState<SettingsGroupId | null>(initialEdtsGroup);
+  const [groupCursor, setGroupCursor] = useState(0);
   const [hintCursor, setHintCursor] = useState(0);
+  const [actionTypeCursor, setActionTypeCursor] = useState(0);
+
+  // AC6: only true on the EDTs tab with a group drilled in — every other combination (General,
+  // Command Palette, or the EDTs tab's own group list) is "not drilled in" for Esc purposes.
+  const drilledIn = tab === 'edts' && edtsGroup !== null;
 
   useInput((input, key) => {
     if (key.escape) {
-      // Esc is handled by AppShell (closeSettingsScreen) — swallow it here only so it never
-      // falls through to the tab-cycle/value-adjust branches below.
+      if (drilledIn) {
+        // Steps back up to the group list — the whole settings screen stays open.
+        setEdtsGroup(null);
+        return;
+      }
+      onClose();
       return;
     }
 
-    // AC1/AC4: Left/Right/Tab cycle tabs, always available, keyboard-only.
-    if (key.tab || key.leftArrow || key.rightArrow) {
+    // AC1 (amended): Left/Right/Tab cycle the top-level tabs, but never while a group is
+    // drilled into on the EDTs tab — those keys have no meaning at that level (Up/Down/Space/
+    // Esc do instead), so cycling out from under a drilled-in group would be surprising.
+    if (!drilledIn && (key.tab || key.leftArrow || key.rightArrow)) {
       const direction = key.leftArrow ? -1 : 1;
+      // Landing on (or leaving) the EDTs tab always resets to its group-list level (AC6:
+      // "on first opening the EDTs tab" — every arrival, not just the very first).
+      setEdtsGroup(null);
+      setGroupCursor(0);
       setTab((current) => nextSettingsTab(current, direction));
       return;
     }
@@ -172,7 +241,30 @@ export function SettingsScreen({ useStore = useAppStore, initialTab = 'general' 
       return;
     }
 
-    if (tab === 'edts') {
+    if (tab !== 'edts') {
+      return;
+    }
+
+    if (!drilledIn) {
+      // AC6: the group-list level — Up/Down navigates, Enter drills in.
+      if (key.upArrow) {
+        setGroupCursor((current) => moveHintCursor(current, 'up', SETTINGS_GROUPS.length));
+        return;
+      }
+      if (key.downArrow) {
+        setGroupCursor((current) => moveHintCursor(current, 'down', SETTINGS_GROUPS.length));
+        return;
+      }
+      if (key.return) {
+        const group = SETTINGS_GROUPS[groupCursor];
+        if (group) {
+          setEdtsGroup(group.id);
+        }
+      }
+      return;
+    }
+
+    if (edtsGroup === 'hint-visibility') {
       if (key.upArrow) {
         setHintCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_HINTS.length));
         return;
@@ -189,11 +281,30 @@ export function SettingsScreen({ useStore = useAppStore, initialTab = 'general' 
           });
         }
       }
+      return;
+    }
+
+    // edtsGroup === 'action-types'
+    if (key.upArrow) {
+      setActionTypeCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_TYPES.length));
+      return;
+    }
+    if (key.downArrow) {
+      setActionTypeCursor((current) => moveHintCursor(current, 'down', HIDEABLE_ACTION_TYPES.length));
+      return;
+    }
+    if (input === ' ') {
+      const token = HIDEABLE_ACTION_TYPES[actionTypeCursor];
+      if (token) {
+        void updateSettings({
+          edts: { hiddenActionTypes: toggleHiddenHint(settings.edts.hiddenActionTypes, token.id) },
+        });
+      }
     }
   });
 
   return (
-    <ModalDialog title="SETTINGS" open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title="SETTINGS" open onConfirm={() => {}} onCancel={onClose}>
       <Box flexDirection="column">
         <Box flexDirection="row">
           {SETTINGS_TABS.map((t) => {
@@ -224,7 +335,24 @@ export function SettingsScreen({ useStore = useAppStore, initialTab = 'general' 
           </Box>
         ) : null}
 
-        {tab === 'edts' ? (
+        {tab === 'edts' && !drilledIn ? (
+          // AC6: first opening the EDTs tab (or stepping back out of a group via Esc) shows
+          // this Up/Down-navigable group list — no checkboxes at this level.
+          <Box flexDirection="column">
+            {SETTINGS_GROUPS.map((group, index) => {
+              const highlighted = index === groupCursor;
+              return (
+                <Box key={group.id} flexDirection="row">
+                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text}>{group.label}</Text>
+                </Box>
+              );
+            })}
+            <DimAnnotation text="Enter to open a group. Esc to close." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'hint-visibility' ? (
           <Box flexDirection="column">
             {HIDEABLE_ACTION_HINTS.map((token, index) => {
               const highlighted = index === hintCursor;
@@ -242,7 +370,26 @@ export function SettingsScreen({ useStore = useAppStore, initialTab = 'general' 
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle — checked hides that hint from the EDT detail pane." />
+            <DimAnnotation text="Space to toggle — checked hides that hint from the EDT detail pane. Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'action-types' ? (
+          <Box flexDirection="column">
+            {HIDEABLE_ACTION_TYPES.map((token, index) => {
+              const highlighted = index === actionTypeCursor;
+              return (
+                <Box key={token.id} flexDirection="row">
+                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <CheckboxListItem
+                    label={token.label}
+                    selected={highlighted}
+                    state={settings.edts.hiddenActionTypes.includes(token.id) ? 'checked' : 'unchecked'}
+                  />
+                </Box>
+              );
+            })}
+            <DimAnnotation text="Space to toggle — checked hides that action type from the Recent actions log. Esc for the group list." />
           </Box>
         ) : null}
       </Box>

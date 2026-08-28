@@ -752,6 +752,36 @@ describe('formatEdtActionHistory (story 2.18 regression)', () => {
   });
 });
 
+describe('formatEdtActionHistory hiddenActionTypes filter (story 2.19 amended, AC5)', () => {
+  const log = [
+    { id: 'a1', timestamp: '2026-01-01T00:00:00.000Z', actionType: 'create', outcome: 'success' as const, detail: 'Created EDT "demo"' },
+    { id: 'a2', timestamp: '2026-01-01T00:01:00.000Z', actionType: 'switch', outcome: 'success' as const, detail: 'Switched to EDT "demo"' },
+    { id: 'a3', timestamp: '2026-01-01T00:02:00.000Z', actionType: 'modify', outcome: 'success' as const, detail: 'Added api-gateway' },
+  ];
+
+  it('includes every entry when hiddenActionTypes is empty (or omitted, defaulting to [])', () => {
+    const history = formatEdtActionHistory(log, null, []);
+    expect(history).toContain('Created EDT "demo"');
+    expect(history).toContain('Switched to EDT "demo"');
+    expect(history).toContain('Added api-gateway');
+
+    expect(formatEdtActionHistory(log, null)).toBe(history);
+  });
+
+  it('drops only the entries whose actionType is hidden', () => {
+    const history = formatEdtActionHistory(log, null, ['modify']);
+    expect(history).toContain('Created EDT "demo"');
+    expect(history).toContain('Switched to EDT "demo"');
+    expect(history).not.toContain('Added api-gateway');
+  });
+
+  it('falls back to "No actions yet" once every entry is filtered out, same as a genuinely empty log', () => {
+    const history = formatEdtActionHistory(log, null, ['create', 'switch', 'modify']);
+    expect(history).toContain('No actions yet');
+    expect(history).not.toContain('Recent actions:');
+  });
+});
+
 // ---- renderToString smoke tests: one per new zone state -------------------------------
 
 const noopAsync = async () => {};
@@ -1147,7 +1177,10 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
-      settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: ['edt-services', 'other-services'] } },
+      settings: {
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [] },
+      },
     });
 
     const edtServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="edt-services" />);
@@ -1155,6 +1188,49 @@ describe('EdtsZone (story 2.18 zone states)', () => {
 
     const otherServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(otherServicesOutput).not.toContain('[Enter] Add to EDT');
+  });
+
+  it('story 2.19 amended (AC5): an action type hidden via settings.edts.hiddenActionTypes disappears from the "Recent actions" log', async () => {
+    const store = createAppStore();
+    const target = edtEntry({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'main' }],
+    });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [service({ service: 'api-gateway', path: '/repos/api-gateway', isMember: true })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+      edtActionLog: [
+        {
+          id: 'a1',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          actionType: 'modify',
+          outcome: 'success',
+          detail: 'Added api-gateway to EDT "active-edt"',
+        },
+        {
+          id: 'a2',
+          timestamp: '2026-01-01T00:01:00.000Z',
+          actionType: 'switch',
+          outcome: 'success',
+          detail: 'Switched to EDT "active-edt"',
+        },
+      ],
+      settings: {
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] },
+      },
+    });
+
+    const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="edts" />);
+    expect(output).not.toContain('Added api-gateway to EDT "active-edt"');
+    expect(output).toContain('Switched to EDT "active-edt"');
   });
 
   // AC2: the detail pane's horizontal position/width is derived once from ListDetailSplit's

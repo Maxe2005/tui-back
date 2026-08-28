@@ -15,6 +15,10 @@ export interface Settings {
   };
   edts: {
     hiddenActionHints: string[];
+    // Amended 2026-08-28 (Sprint Change Proposal): the EDT detail pane's "Recent actions" log
+    // entry types (create/switch/modify, story 2.15) the developer has chosen to hide — a
+    // second, independent settings group on the EDTs tab alongside hiddenActionHints above.
+    hiddenActionTypes: string[];
   };
 }
 
@@ -24,7 +28,7 @@ export interface Settings {
 // pre-2.19 `createAppStore()` call left unwired in a test).
 export const DEFAULT_SETTINGS: Settings = {
   commandPalette: { gridMaxRows: 8 },
-  edts: { hiddenActionHints: [] },
+  edts: { hiddenActionHints: [], hiddenActionTypes: [] },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/

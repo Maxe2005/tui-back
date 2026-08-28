@@ -9,8 +9,10 @@ import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
 import {
   HIDEABLE_ACTION_HINTS,
+  HIDEABLE_ACTION_TYPES,
   MAX_GRID_MAX_ROWS,
   MIN_GRID_MAX_ROWS,
+  SETTINGS_GROUPS,
   SETTINGS_TABS,
   SettingsScreen,
   adjustGridMaxRows,
@@ -122,6 +124,19 @@ describe('HIDEABLE_ACTION_HINTS', () => {
   });
 });
 
+describe('HIDEABLE_ACTION_TYPES (amended 2026-08-28, AC5)', () => {
+  it('lists exactly the three EdtActionLogEntry[\'actionType\'] values — never invented ids', () => {
+    expect(HIDEABLE_ACTION_TYPES.map((token) => token.id)).toEqual(['create', 'switch', 'modify']);
+  });
+});
+
+describe('SETTINGS_GROUPS (amended 2026-08-28, AC6)', () => {
+  it('lists exactly the two EDTs-tab settings groups, in this order', () => {
+    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types']);
+    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types']);
+  });
+});
+
 describe('SettingsScreen (story 2.19)', () => {
   it('opens on the General tab, rendering the tab strip and a valid empty-tab body (AC1, AC2)', async () => {
     const store = createAppStore();
@@ -148,8 +163,18 @@ describe('SettingsScreen (story 2.19)', () => {
 
   it('reflects hidden hints from the store for the EDTs tab data path', () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'] } } });
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [] } },
+    });
     expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edt-services']);
+  });
+
+  it('reflects hidden action types from the store for the EDTs tab data path (amended 2026-08-28, AC5)', () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] } },
+    });
+    expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['modify']);
   });
 
   it('renders the live gridMaxRows value and hint on the Command Palette tab (AC1)', async () => {
@@ -161,16 +186,48 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Up/Down to adjust, or type a digit (1-9).');
   });
 
-  it('renders every hideable hint as a checkbox row, checked where hidden (I/O matrix "Toggle hidden hint")', async () => {
+  it('opens the EDTs tab on its group list, not a checkbox list (AC6)', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'] } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
+    expect(output).toContain('Hint visibility');
+    expect(output).toContain('Recent action types');
+    for (const token of HIDEABLE_ACTION_HINTS) {
+      expect(output).not.toContain(token.label);
+    }
+  });
+
+  it('drilled into "Hint visibility", renders every hideable hint as a checkbox row, checked where hidden (I/O matrix "Toggle hidden hint")', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [] } },
+    });
+    const output = await renderToString(
+      <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="hint-visibility" />,
+    );
     for (const token of HIDEABLE_ACTION_HINTS) {
       expect(output).toContain(token.label);
     }
     const lines = output.split('\n');
     const hiddenLine = lines.find((line) => line.includes('EDT services'));
     const visibleLine = lines.find((line) => line.includes('EDT selector'));
+    expect(hiddenLine).toContain('[x]');
+    expect(visibleLine).toContain('[ ]');
+  });
+
+  it('drilled into "Recent action types", renders create/switch/modify as a checkbox row, checked where hidden (amended 2026-08-28, AC5)', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] } },
+    });
+    const output = await renderToString(
+      <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="action-types" />,
+    );
+    for (const token of HIDEABLE_ACTION_TYPES) {
+      expect(output).toContain(token.label);
+    }
+    const lines = output.split('\n');
+    const hiddenLine = lines.find((line) => line.includes('Modify'));
+    const visibleLine = lines.find((line) => line.includes('Create'));
     expect(hiddenLine).toContain('[x]');
     expect(visibleLine).toContain('[ ]');
   });

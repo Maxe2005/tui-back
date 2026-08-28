@@ -1130,7 +1130,9 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // column-major with maxRows=2 -> 3 columns of [2, 2, 1] — directly observable in the
     // rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
-    store.setState({ settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [] } } });
+    store.setState({
+      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
+    });
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
@@ -1206,13 +1208,64 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(stdout.output).toContain('No general settings yet.');
 
       await press(instance, stdin, KEYS.tab);
-      expect(stdout.output).toContain('EDT selector');
+      // Amended 2026-08-28: the EDTs tab now opens on its group list, not the flat checkbox
+      // list — AC6.
+      expect(stdout.output).toContain('Hint visibility');
+      expect(stdout.output).toContain('Recent action types');
 
       await press(instance, stdin, KEYS.tab);
       expect(stdout.output).toContain('Command grid max rows:');
 
       await press(instance, stdin, KEYS.tab);
       expect(stdout.output).toContain('No general settings yet.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never cycles tabs while a group is drilled into on the EDTs tab (AC1 amended, AC6)', async () => {
+    const store = createAppStore();
+    store.getState().openSettingsScreen();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
+      await press(instance, stdin, KEYS.enter); // drill into "Hint visibility"
+      expect(stdout.output).toContain('EDT selector');
+
+      // Tab must not cycle away to Command Palette while drilled in.
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('EDT selector');
+      expect(stdout.output).not.toContain('Command grid max rows:');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc steps back to the EDTs tab group list without closing the screen, then closes on the next Esc (AC6, amended Boundaries)', async () => {
+    const store = createAppStore();
+    store.getState().openSettingsScreen();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
+      await press(instance, stdin, KEYS.enter); // drill into "Hint visibility"
+      expect(stdout.output).toContain('EDT selector');
+
+      await pressEscape(instance, stdin);
+
+      // Still open, back at the group list.
+      expect(store.getState().settingsScreenOpen).toBe(true);
+      expect(stdout.output).toContain('Hint visibility');
+      expect(stdout.output).toContain('Recent action types');
+
+      await pressEscape(instance, stdin);
+
+      expect(store.getState().settingsScreenOpen).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1253,7 +1306,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(store.getState().settings.commandPalette.gridMaxRows).toBe(9);
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 9 },
-        edts: { hiddenActionHints: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
       });
     } finally {
       instance.unmount();
@@ -1261,7 +1314,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Space on an EDTs-tab checkbox row toggles that hint into settings.edts.hiddenActionHints and persists (I/O matrix "Toggle hidden hint")', async () => {
+  it('Space on a "Hint visibility" checkbox row toggles that hint into settings.edts.hiddenActionHints and persists (I/O matrix "Toggle hidden hint")', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1271,14 +1324,46 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.tab); // General -> EDTs (first hint row highlighted)
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
+      await press(instance, stdin, KEYS.enter); // drill into "Hint visibility" (first row highlighted)
 
       await press(instance, stdin, ' ');
 
       expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edts']);
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: ['edts'] },
+        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on the EDTs tab\'s group list drills into "Recent action types"; Space toggles a type into settings.edts.hiddenActionTypes and persists (AC5, AC6)', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list, "Hint visibility" highlighted)
+
+      await press(instance, stdin, KEYS.down); // highlight "Recent action types"
+      await press(instance, stdin, KEYS.enter); // drill in
+      expect(stdout.output).toContain('Create');
+      expect(stdout.output).toContain('Switch');
+      expect(stdout.output).toContain('Modify');
+
+      await press(instance, stdin, ' '); // toggle "Create" (first row)
+
+      expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['create']);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
       });
     } finally {
       instance.unmount();

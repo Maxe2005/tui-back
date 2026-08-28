@@ -279,7 +279,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [] } },
+        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},

@@ -127,9 +127,11 @@ export function AppShell({
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const openCommandBar = useStore((state) => state.openCommandBar);
   const closeCommandBar = useStore((state) => state.closeCommandBar);
-  // Story 2.19: the `:settings` screen's open/close flag — mirrors registryScreenOpen exactly
-  // (store-level, not local AppShell state; gated into the same global-shortcut skip below;
-  // Esc-closes the same way).
+  // Story 2.19: the `:settings` screen's open/close flag — mirrors registryScreenOpen for the
+  // store-level open flag and the global-shortcut skip below, but (amended 2026-08-28) Esc no
+  // longer closes it centrally here — `closeSettingsScreen` is instead passed down as
+  // SettingsScreen's own `onClose` prop, since only that component knows whether the EDTs
+  // tab's group-list is drilled in (Esc should step back, not close).
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const closeSettingsScreen = useStore((state) => state.closeSettingsScreen);
   const loadSettings = useStore((state) => state.loadSettings);
@@ -254,11 +256,12 @@ export function AppShell({
       closeRegistryScreen();
     }
 
-    // Story 2.19: Esc always closes the settings screen — nothing to discard (every change
-    // already applied/persisted immediately, no separate save step to abandon).
-    if (settingsScreenOpen && key.escape === true) {
-      closeSettingsScreen();
-    }
+    // Story 2.19 (amended 2026-08-28): Esc-close for the settings screen is no longer
+    // centralized here — it moved to SettingsScreen's own self-contained useInput (mirrors
+    // command-bar.tsx's own `onClose` pattern), because only that component knows whether the
+    // EDTs tab currently has a group drilled in (Esc should step back a level, not close the
+    // whole screen) or not (Esc should close). `closeSettingsScreen` is passed down as
+    // `onClose` below instead.
   });
 
   return (
@@ -278,7 +281,7 @@ export function AppShell({
         </ModalDialog>
       )}
       {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
-      {settingsScreenOpen && <SettingsScreen useStore={useStore} />}
+      {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
       {commandBarOpen && (
         <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}

@@ -282,9 +282,15 @@ export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): str
 
 // Story 2.15: formats the EDT action history for the detail pane.
 // Returns a joined string with timestamps (dim), outcome glyphs, and action details.
+// Amended 2026-08-28 (Sprint Change Proposal, story 2.19): `hiddenActionTypes` filters
+// `actionLog` before formatting — a live read of `settings.edts.hiddenActionTypes`, never a
+// cached copy, same convention as `resolveActionHint`'s live read of `hiddenActionHints`
+// above. Defaults to `[]` (nothing hidden) so every pre-2.19-amendment call site keeps
+// working unchanged.
 export function formatEdtActionHistory(
   actionLog: Array<{ id: string; timestamp: string; actionType: string; outcome: 'success' | 'failed'; detail: string }>,
   inProgressAction: { type: 'create' | 'switch' | 'modify'; target: string; startedAt: string } | null,
+  hiddenActionTypes: readonly string[] = [],
 ): string {
   const lines: string[] = [];
 
@@ -295,12 +301,15 @@ export function formatEdtActionHistory(
     lines.push(''); // blank line separator
   }
 
-  // Recent actions
-  if (actionLog.length === 0) {
+  // Recent actions — filtered by hiddenActionTypes first, so a fully-hidden log (every entry
+  // is a hidden type) reads the same as a genuinely-empty one ("No actions yet"), never a
+  // dangling "Recent actions:" header with nothing under it.
+  const visibleActionLog = actionLog.filter((entry) => !hiddenActionTypes.includes(entry.actionType));
+  if (visibleActionLog.length === 0) {
     lines.push('No actions yet');
   } else {
     lines.push('Recent actions:');
-    for (const entry of actionLog) {
+    for (const entry of visibleActionLog) {
       const time = new Date(entry.timestamp).toLocaleTimeString();
       const glyph = entry.outcome === 'success' ? '✔' : '✖';
       const typeLabel = entry.actionType.charAt(0).toUpperCase() + entry.actionType.slice(1);
@@ -641,6 +650,7 @@ export function EdtsZone({
   // Story 2.19: hides a per-context action hint immediately from the detail pane once toggled
   // in the settings screen's EDTs tab.
   const hiddenActionHints = useStore((state) => state.settings.edts.hiddenActionHints);
+  const hiddenActionTypes = useStore((state) => state.settings.edts.hiddenActionTypes);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -1489,7 +1499,7 @@ export function EdtsZone({
                   {focusedEdt
                     ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
                       '\n\n' +
-                      formatEdtActionHistory(edtActionLog, currentEdtAction) +
+                      formatEdtActionHistory(edtActionLog, currentEdtAction, hiddenActionTypes) +
                       appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints))
                     : 'No EDT selected.'}
                 </DetailPane>
