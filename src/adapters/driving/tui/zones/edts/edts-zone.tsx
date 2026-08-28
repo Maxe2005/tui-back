@@ -330,6 +330,29 @@ export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActive
   }
 }
 
+// Story 2.19 (I/O matrix "Toggle hidden hint"): each `PaneFocus` value is exactly the hint
+// token id the settings screen's EDTs tab offers to hide (settings-screen.tsx's
+// HIDEABLE_ACTION_HINTS). Hidden immediately — this is a pure read of the live
+// `settings.edts.hiddenActionHints` array, never a separate loaded/cached copy — so a toggle
+// in the settings screen reflects here on the very next render, no restart needed. Returns
+// '' (never null) so call sites can join unconditionally when non-empty.
+export function resolveActionHint(
+  paneFocus: PaneFocus,
+  focusedIsActiveEdt: boolean,
+  hiddenActionHints: readonly string[],
+): string {
+  if (hiddenActionHints.includes(paneFocus)) {
+    return '';
+  }
+  return formatAvailableActionsHint(paneFocus, focusedIsActiveEdt);
+}
+
+// A hidden hint (resolveActionHint returning '') must vanish cleanly — no dangling blank
+// paragraph left where it used to render — rather than joining an empty string with '\n\n'.
+export function appendHint(hint: string): string {
+  return hint ? '\n\n' + hint : '';
+}
+
 // Story 2.18: splits the flat SERVICES list (story 2.6) into EDT SERVICES (rows whose `path`
 // is a member of the *selected* EDT — never `row.isMember`, which stays tied to the *active*
 // EDT for its own divergence-badge use, per the spec's Boundaries) and OTHER SERVICES
@@ -609,6 +632,9 @@ export function EdtsZone({
   const edtActionLogStatus = useStore((state) => state.edtActionLogStatus);
   const loadEdtActionLog = useStore((state) => state.loadEdtActionLog);
   const logEdtAction = useStore((state) => state.logEdtAction);
+  // Story 2.19: hides a per-context action hint immediately from the detail pane once toggled
+  // in the settings screen's EDTs tab.
+  const hiddenActionHints = useStore((state) => state.settings.edts.hiddenActionHints);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -1458,8 +1484,7 @@ export function EdtsZone({
                     ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
                       '\n\n' +
                       formatEdtActionHistory(edtActionLog, currentEdtAction) +
-                      '\n\n' +
-                      formatAvailableActionsHint('edts', focusedEdt.ulid === activeEdtUlid)
+                      appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints))
                     : 'No EDT selected.'}
                 </DetailPane>
                 {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
@@ -1470,8 +1495,7 @@ export function EdtsZone({
               <>
                 <DetailPane title={focusedEdtService ? focusedEdtService.service : 'Service'}>
                   {(focusedEdtService ? formatServiceDetail(focusedEdtService) : 'No service selected.') +
-                    '\n\n' +
-                    formatAvailableActionsHint('edt-services', false)}
+                    appendHint(resolveActionHint('edt-services', false, hiddenActionHints))}
                 </DetailPane>
                 {focusedEdtService?.detail ? <DimAnnotation text={focusedEdtService.detail.message} /> : null}
                 {status === 'error' && error ? <DimAnnotation text={error} /> : null}
@@ -1480,8 +1504,7 @@ export function EdtsZone({
               <>
                 <DetailPane title={focusedOtherService ? focusedOtherService.service : 'Service'}>
                   {(focusedOtherService ? formatServiceDetail(focusedOtherService) : 'No service selected.') +
-                    '\n\n' +
-                    formatAvailableActionsHint('other-services', false)}
+                    appendHint(resolveActionHint('other-services', false, hiddenActionHints))}
                 </DetailPane>
                 {focusedOtherService?.detail ? <DimAnnotation text={focusedOtherService.detail.message} /> : null}
                 {status === 'error' && error ? <DimAnnotation text={error} /> : null}

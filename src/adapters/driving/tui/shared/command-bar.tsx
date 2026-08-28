@@ -36,10 +36,10 @@ import { COMMANDS, matchCommands, findExactCommand, type Command } from '../comm
 // adapters/driven/lock/index.ts's ORPHAN_STALE_AGE_MS convention.
 export const TAB_DOUBLE_PRESS_WINDOW_MS = 500;
 
-// Grid rows per column (Boundaries: "≤ COMMAND_GRID_MAX_ROWS rows/column"). A plain top-level
-// constant, deliberately not wired to settings — Story 2.19 is what later makes it
-// settings-overridable.
-export const COMMAND_GRID_MAX_ROWS = 8;
+// Story 2.19: the default grid-rows-per-column value, now user-overridable via the
+// `:settings` screen's Command Palette tab (store.settings.commandPalette.gridMaxRows) — this
+// constant survives only as DEFAULT_SETTINGS.commandPalette.gridMaxRows (core/ports/settings.ts),
+// the single source of truth an unwired/pre-first-load store still falls back to.
 
 // Layout-only implementation details (not named by the spec): the gap rendered between
 // adjacent grid columns and the width reserved for a truncation "…" marker on a hidden edge.
@@ -321,6 +321,9 @@ export type CommandBarProps = {
 };
 
 export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps) {
+  // Story 2.19: read live from the store (settings screen's Command Palette tab) instead of
+  // the retired COMMAND_GRID_MAX_ROWS constant.
+  const gridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
   const [query, setQuery] = useState('');
   const [unknownCommand, setUnknownCommand] = useState(false);
   const [pending, setPending] = useState<TabPressState | null>(null);
@@ -338,8 +341,8 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
 
   const { columns: terminalColumns } = useWindowSize();
   const availableWidth = Math.max(terminalColumns - MODAL_CHROME_WIDTH, MIN_GRID_WIDTH);
-  const allColumns = groupCommandsByColumn(matches, COMMAND_GRID_MAX_ROWS);
-  const layout = layoutCommandGrid(matches, COMMAND_GRID_MAX_ROWS, availableWidth, scrollOffset);
+  const allColumns = groupCommandsByColumn(matches, gridMaxRows);
+  const layout = layoutCommandGrid(matches, gridMaxRows, availableWidth, scrollOffset);
 
   const openGridAtOrigin = () => {
     setGridShown(true);

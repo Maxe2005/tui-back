@@ -2,8 +2,9 @@
 title: 'Global Settings Screen (`:settings`)'
 type: 'feature'
 created: '2026-08-26'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
+baseline_commit: '673e418657e941e04938eb70a95c48e7582e5b48'
 context:
   - '_bmad-output/planning-artifacts/epics.md'
   - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
@@ -56,16 +57,16 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/ports/settings.ts` -- define `Settings`/`SettingsPort` -- typed contract core/adapter/store all share
-- [ ] `src/adapters/driven/settings/schema.ts` -- zod schema with defaults -- AD-4 validation convention
-- [ ] `src/adapters/driven/settings/index.ts` + test -- load/save, corrupt-file fallback+warning -- I/O matrix "Corrupt file"/"Missing file"
-- [ ] `src/adapters/driving/tui/store/app-store.ts` -- `settings` slice, screen open/close flags, optimistic update+persist -- AC3, I/O matrix "Restart"
-- [ ] `src/adapters/driving/tui/commands/commands.ts` + test -- `settings` command entry -- AC1, I/O matrix "Open"
-- [ ] `src/adapters/driving/tui/shared/settings-screen.tsx` + test -- tab strip + 3 tab bodies -- AC1, AC2, AC4
-- [ ] `src/adapters/driving/tui/app-shell.tsx` -- mount/gate/Esc-close wiring -- AC1, AC4
-- [ ] `src/adapters/driving/tui/shared/command-bar.tsx` -- consume `commandPalette.gridMaxRows` -- I/O matrix "Adjust grid rows"
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- filter hint line by `edts.hiddenActionHints` -- I/O matrix "Toggle hidden hint"
-- [ ] `src/bin/tui.ts` -- composition-root wiring -- AC3
+- [x] `src/core/ports/settings.ts` -- define `Settings`/`SettingsPort` -- typed contract core/adapter/store all share
+- [x] `src/adapters/driven/settings/schema.ts` -- zod schema with defaults -- AD-4 validation convention
+- [x] `src/adapters/driven/settings/index.ts` + test -- load/save, corrupt-file fallback+warning -- I/O matrix "Corrupt file"/"Missing file"
+- [x] `src/adapters/driving/tui/store/app-store.ts` -- `settings` slice, screen open/close flags, optimistic update+persist -- AC3, I/O matrix "Restart"
+- [x] `src/adapters/driving/tui/commands/commands.ts` + test -- `settings` command entry -- AC1, I/O matrix "Open"
+- [x] `src/adapters/driving/tui/shared/settings-screen.tsx` + test -- tab strip + 3 tab bodies -- AC1, AC2, AC4
+- [x] `src/adapters/driving/tui/app-shell.tsx` -- mount/gate/Esc-close wiring -- AC1, AC4
+- [x] `src/adapters/driving/tui/shared/command-bar.tsx` -- consume `commandPalette.gridMaxRows` -- I/O matrix "Adjust grid rows"
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- filter hint line by `edts.hiddenActionHints` -- I/O matrix "Toggle hidden hint"
+- [x] `src/bin/tui.ts` -- composition-root wiring -- AC3
 
 **Acceptance Criteria:**
 - AC1 — Given the settings screen is open, when `Left`/`Right`/`Tab` is pressed, then focus cycles General → EDTs → Command Palette → General, visually matching the zone-tab bar's active/inactive treatment at a smaller scale.
@@ -92,8 +93,67 @@ context:
 
 ## Suggested Review Order
 
-1. `core/ports/settings.ts` + `adapters/driven/settings/schema.ts` -- pure contract/schema, no behavior risk
-2. `adapters/driven/settings/index.ts` + test -- load/save and the corrupt-file-falls-back-to-defaults path (the story's one genuinely novel I/O behavior)
-3. `store/app-store.ts`'s `settings` slice -- optimistic update + persist, screen open/close flags
-4. `shared/settings-screen.tsx` -- tab strip + 3 tab bodies (visual, low risk once the slice is right)
-5. `app-shell.tsx` wiring + the two downstream consumers (`command-bar.tsx`, `edts-zone.tsx`) -- confirm a change in one tab is visibly live elsewhere without restarting
+**Settings model & shared bounds**
+
+- Entry point: the `Settings` contract plus the [MIN, MAX] range shared by the zod schema and the screen's own clamp, so gridMaxRows can never drift between the two.
+  [`settings.ts:12`](../../../src/core/ports/settings.ts#L12)
+
+- Zod enforces the same upper/lower bound as the live UI clamp — a hand-edited `settings.yaml` with an out-of-range value now falls back to defaults instead of silently persisting.
+  [`schema.ts:17`](../../../src/adapters/driven/settings/schema.ts#L17)
+
+**Load/save adapter (the one genuinely novel I/O path)**
+
+- `loadSettings`/`saveSettings` mirror the registry adapter's read/parse/validate flow; corrupt/invalid files are always `ok` with a warning, never an `err`.
+  [`index.ts:31`](../../../src/adapters/driven/settings/index.ts#L31)
+
+- `resolveSettingsFile`/`createSettingsPort` -- the XDG-path + port-factory pair the composition root wires in.
+  [`index.ts:20`](../../../src/adapters/driven/settings/index.ts#L20)
+
+**Store slice: optimistic update, serialized persistence, stale-load guard**
+
+- `settingsSaveChain`/`settingsVersion` -- closure-scoped state added in the review-loop patch pass: serializes concurrent `updateSettings()` disk writes in request order, and lets `loadSettings()` detect it's been superseded.
+  [`app-store.ts:307`](../../../src/adapters/driving/tui/store/app-store.ts#L307)
+
+- `loadSettings()` captures its start version and discards a stale in-flight result rather than clobbering a newer optimistic update.
+  [`app-store.ts:542`](../../../src/adapters/driving/tui/store/app-store.ts#L542)
+
+- `updateSettings()` bumps the version, applies optimistically, then chains its `save()` onto the pending chain and clears `settingsWarning` on success.
+  [`app-store.ts:563`](../../../src/adapters/driving/tui/store/app-store.ts#L563)
+
+- `closeSettingsScreen()` also clears `settingsWarning` -- closing acknowledges a previously-surfaced warning instead of leaving it to linger.
+  [`app-store.ts:238`](../../../src/adapters/driving/tui/store/app-store.ts#L238)
+
+**Settings screen: tab strip, grid-rows control, hint checkboxes**
+
+- `SettingsScreen` -- the modal's tab cycling, digit/arrow grid-rows editing, and checkbox hint-toggling, wired to the store slice above.
+  [`settings-screen.tsx:132`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L132)
+
+- `clampGridMaxRows`/`adjustGridMaxRows`/`parseGridMaxRowsDigit` -- pure functions behind the Command Palette tab, now bounded by the shared `MIN_GRID_MAX_ROWS`/`MAX_GRID_MAX_ROWS` re-exported from `core/ports/settings.ts`.
+  [`settings-screen.tsx:78`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L78)
+
+- `HIDEABLE_ACTION_HINTS`/`toggleHiddenHint`/`moveHintCursor` -- the EDTs tab's checkbox list over Story 2.18's actual hint tokens.
+  [`settings-screen.tsx:99`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L99)
+
+**Live downstream consumers**
+
+- `command-bar.tsx` reads `store.settings.commandPalette.gridMaxRows` in place of the old constant -- confirms a Command Palette tab change is visibly live without restarting.
+  [`command-bar.tsx:326`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L326)
+
+- `edts-zone.tsx` filters the rendered action hint by `store.settings.edts.hiddenActionHints` -- confirms an EDTs-tab checkbox toggle is visibly live.
+  [`edts-zone.tsx:342`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L342)
+
+**Wiring & composition root**
+
+- `app-shell.tsx` mounts/gates/Esc-closes `SettingsScreen` exactly like `registryScreenOpen`, and loads settings once at mount.
+  [`app-shell.tsx:259`](../../../src/adapters/driving/tui/app-shell.tsx#L259)
+
+- `commands.ts`'s `settings` command entry -- the only way to reach the screen (never a raw keypress).
+  [`commands.ts:40`](../../../src/adapters/driving/tui/commands/commands.ts#L40)
+
+- `tui.ts` composition root -- `resolveSettingsFile`/`createSettingsPort` wired into `createAppStore`.
+  [`tui.ts:102`](../../../src/bin/tui.ts#L102)
+
+**Peripherals**
+
+- New unit tests covering the serialized-save and stale-load-guard patches (`app-store.test.ts`) and the out-of-range `gridMaxRows` fallback (`index.test.ts`).
+  [`app-store.test.ts:628`](../../../src/adapters/driving/tui/store/app-store.test.ts#L628)

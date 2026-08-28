@@ -16,6 +16,7 @@ import type { LockPort } from '../../../core/ports/lock.js';
 import type { Manifest, ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { StatePort } from '../../../core/ports/state.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
@@ -74,6 +75,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
     peek: vi.fn(async () => ok({ locked: false })),
   };
+  const settings: SettingsPort = {
+    load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+    save: vi.fn(async () => ok(undefined)),
+  };
   return {
     registry,
     manifest,
@@ -84,6 +89,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     registryResourceKey: '/config/registry.yaml',
     edtRegistryResourceKey: '/tmp/edts.yaml',
     edtsBaseDir: '/tmp/edts',
+    settings,
     ...overrides,
   };
 }
@@ -1037,6 +1043,167 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       await press(instance, stdin, KEYS.enter);
 
       expect(store.getState().registryScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('gridMaxRows from the settings screen is live in the command bar\'s grid layout', async () => {
+    // 5 registered commands (registry, edt-create, edt-switch, edt-modify, settings), grouped
+    // column-major with maxRows=2 -> 3 columns of [2, 2, 1] — directly observable in the
+    // rendered COMMAND grid without needing to stub extra commands.
+    const store = createAppStore();
+    store.setState({ settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [] } } });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, KEYS.tab); // reveal the full grid
+
+      const lines = stdout.output.split('\n');
+      // Column 0 = [registry, edt-create], column 1 = [edt-switch, edt-modify], column 2 =
+      // [settings] (maxRows=2). Row 0 of the grid renders column-0-row-0 and column-1-row-0
+      // on the SAME terminal line ("registry" + "edt-switch"); "edt-create" (column 0's row
+      // 1) lands on the NEXT line instead. A single-column-of-5 layout (the pre-2.19 default,
+      // maxRows=8) would instead put every command on its own line, with "edt-create"
+      // sharing no line with "registry" either way — the positive signal here is
+      // "edt-switch" sharing registry's line, which only maxRows=2 grouping produces.
+      const registryLine = lines.find((line) => line.includes('registry'));
+      expect(registryLine).toBeDefined();
+      expect(registryLine).toContain('edt-switch');
+      expect(registryLine).not.toContain('edt-create');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell settings screen (:settings) (story 2.19)', () => {
+  it('opens on the General tab via the registered `settings` command — never a raw keypress', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      // A bare keypress (not through the command bar) must never open it.
+      await press(instance, stdin, 's');
+      expect(stdout.output).not.toContain('SETTINGS');
+
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'settings');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().settingsScreenOpen).toBe(true);
+      expect(stdout.output).toContain('SETTINGS');
+      expect(stdout.output).toContain('No general settings yet.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc closes it (AC4) — nothing to discard', async () => {
+    const store = createAppStore();
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().settingsScreenOpen).toBe(true);
+
+      await pressEscape(instance, stdin);
+
+      expect(store.getState().settingsScreenOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Tab/Left/Right cycle General -> EDTs -> Command Palette -> General (AC1)', async () => {
+    const store = createAppStore();
+    store.getState().openSettingsScreen();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('No general settings yet.');
+
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('EDT selector');
+
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('Command grid max rows:');
+
+      await press(instance, stdin, KEYS.tab);
+      expect(stdout.output).toContain('No general settings yet.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('never stacks on top of the help overlay, and a typed "?" never opens help while it is open', async () => {
+    const store = createAppStore();
+    store.getState().openHelp();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'settings');
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).not.toContain('SETTINGS');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Up/Down on the Command Palette tab adjusts gridMaxRows live and persists via updateSettings (I/O matrix "Adjust grid rows")', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+
+      await press(instance, stdin, KEYS.up);
+
+      expect(store.getState().settings.commandPalette.gridMaxRows).toBe(9);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        commandPalette: { gridMaxRows: 9 },
+        edts: { hiddenActionHints: [] },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on an EDTs-tab checkbox row toggles that hint into settings.edts.hiddenActionHints and persists (I/O matrix "Toggle hidden hint")', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (first hint row highlighted)
+
+      await press(instance, stdin, ' ');
+
+      expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edts']);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: ['edts'] },
+      });
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

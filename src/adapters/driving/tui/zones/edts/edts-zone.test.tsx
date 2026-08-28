@@ -11,6 +11,7 @@ import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import {
   EdtsZone,
+  appendHint,
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
@@ -27,6 +28,7 @@ import {
   nextTextInputValue,
   partitionServicesByEdtMembership,
   resolveCandidateListState,
+  resolveActionHint,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
@@ -714,6 +716,35 @@ describe('formatAvailableActionsHint', () => {
   });
 });
 
+describe('resolveActionHint (story 2.19, I/O matrix "Toggle hidden hint")', () => {
+  it('returns the same string formatAvailableActionsHint would when nothing is hidden', () => {
+    expect(resolveActionHint('edts', true, [])).toBe('[Enter] Modify');
+    expect(resolveActionHint('edt-services', false, [])).toBe('[Enter] Remove / Change branch');
+    expect(resolveActionHint('other-services', false, [])).toBe('[Enter] Add to EDT');
+  });
+
+  it('returns an empty string once that context\'s token is in hiddenActionHints', () => {
+    expect(resolveActionHint('edts', true, ['edts'])).toBe('');
+    expect(resolveActionHint('edt-services', false, ['edt-services'])).toBe('');
+    expect(resolveActionHint('other-services', false, ['other-services'])).toBe('');
+  });
+
+  it('only hides the matching token, leaving the other two contexts unaffected', () => {
+    expect(resolveActionHint('edts', true, ['edt-services'])).toBe('[Enter] Modify');
+    expect(resolveActionHint('other-services', false, ['edt-services'])).toBe('[Enter] Add to EDT');
+  });
+});
+
+describe('appendHint', () => {
+  it('prefixes a non-empty hint with a blank-line separator', () => {
+    expect(appendHint('[Enter] Modify')).toBe('\n\n[Enter] Modify');
+  });
+
+  it('renders nothing (no dangling separator) for a hidden hint', () => {
+    expect(appendHint('')).toBe('');
+  });
+});
+
 describe('formatEdtActionHistory (story 2.18 regression)', () => {
   it('no longer bakes the static "Available: ..." hint line into the action history (extracted to formatAvailableActionsHint)', () => {
     const history = formatEdtActionHistory([], null);
@@ -1095,6 +1126,35 @@ describe('EdtsZone (story 2.18 zone states)', () => {
 
     const otherServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(otherServicesOutput).toContain('[Enter] Add to EDT');
+  });
+
+  it('story 2.19: a hint hidden via settings.edts.hiddenActionHints disappears from the detail pane', async () => {
+    const store = createAppStore();
+    const target = edtEntry({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'main' }],
+    });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        service({ service: 'api-gateway', path: '/repos/api-gateway', isMember: true }),
+        service({ service: 'route-explorer', path: '/repos/route-explorer', isMember: false }),
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+      settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: ['edt-services', 'other-services'] } },
+    });
+
+    const edtServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="edt-services" />);
+    expect(edtServicesOutput).not.toContain('[Enter] Remove / Change branch');
+
+    const otherServicesOutput = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
+    expect(otherServicesOutput).not.toContain('[Enter] Add to EDT');
   });
 
   // AC2: the detail pane's horizontal position/width is derived once from ListDetailSplit's

@@ -22,6 +22,10 @@ import {
   createStatePort,
   resolveStateFile,
 } from "../adapters/driven/state/index.js";
+import {
+  createSettingsPort,
+  resolveSettingsFile,
+} from "../adapters/driven/settings/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 
 if (!process.stdin.isTTY) {
@@ -93,6 +97,10 @@ const state = createStatePort(stateFile);
 // same resource rather than racing each other). Named `actionLock` (distinct from the
 // single-instance TUI `lock` above) since both live in this module's scope.
 const actionLock = createLockPort(lockDir);
+// Story 2.19: the settings screen's persistence port — XDG_CONFIG_HOME/tui-back/settings.yaml,
+// zod-validated like the manifest/registry, independent of every EDT/global SQLite store.
+const settingsFile = resolveSettingsFile(xdg);
+const settings = createSettingsPort(settingsFile);
 const store = createAppStore({
   registry,
   manifest,
@@ -103,6 +111,7 @@ const store = createAppStore({
   registryResourceKey: registryFile,
   edtRegistryResourceKey: edtRegistryFile,
   edtsBaseDir,
+  settings,
 });
 const onQuit = async () => {
   if (tuiLock) {
