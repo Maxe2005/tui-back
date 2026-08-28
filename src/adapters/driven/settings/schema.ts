@@ -21,8 +21,17 @@ export const settingsSchema: z.ZodType<Settings> = z
       .default(DEFAULT_SETTINGS.commandPalette),
     edts: z
       .object({
-        hiddenActionHints: z.array(z.string()),
-        hiddenActionTypes: z.array(z.string()),
+        hiddenActionHints: z.array(z.string()).optional().default(DEFAULT_SETTINGS.edts.hiddenActionHints),
+        // Field added 2026-08-28 (Sprint Change Proposal): must stay optional-with-default, not
+        // required — a settings.yaml written by the pre-amendment code has an `edts:` block
+        // with `hiddenActionHints` only, no `hiddenActionTypes` key at all. Requiring it here
+        // made that pre-existing, otherwise-valid file fail validation as a whole (confirmed in
+        // real usage: it fell back to every default, silently discarding the developer's
+        // existing hiddenActionHints and commandPalette.gridMaxRows customizations too, not
+        // just the missing field), which is exactly the file header's own "every top-level and
+        // nested key is optional... so ... parses to the full default shape rather than
+        // failing" convention this violated.
+        hiddenActionTypes: z.array(z.string()).optional().default(DEFAULT_SETTINGS.edts.hiddenActionTypes),
       })
       .strict()
       .optional()

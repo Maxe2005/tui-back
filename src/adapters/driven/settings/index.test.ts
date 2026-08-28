@@ -130,17 +130,29 @@ describe('loadSettings', () => {
     expect(result.data.warning).not.toBeNull();
   });
 
-  it('falls back to defaults with a warning when an explicit edts block omits hiddenActionTypes (amended 2026-08-28, strict schema requires both fields)', async () => {
+  it('loads a pre-amendment file whose edts block predates hiddenActionTypes — defaults just that field, keeps hiddenActionHints (review fix, 2026-08-28)', async () => {
+    // A settings.yaml written before this amendment has an `edts:` block with
+    // `hiddenActionHints` only — `hiddenActionTypes` didn't exist yet. This must parse
+    // successfully (hiddenActionTypes defaulting to []), not fall back to every default: a
+    // required-field version of this schema previously discarded the developer's existing
+    // hiddenActionHints (and even unrelated commandPalette.gridMaxRows) customizations on
+    // every load, confirmed in real usage.
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
-    await writeFile(file, 'edts:\n  hiddenActionHints:\n    - edts\n');
+    await writeFile(file, 'commandPalette:\n  gridMaxRows: 15\nedts:\n  hiddenActionHints:\n    - edts\n');
 
     const result = await loadSettings(file);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('expected ok');
-    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
-    expect(result.data.warning).not.toBeNull();
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          commandPalette: { gridMaxRows: 15 },
+          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+        },
+        warning: null,
+      },
+    });
   });
 
   it('reports a genuine I/O error (not ENOENT) as an err Result', async () => {
