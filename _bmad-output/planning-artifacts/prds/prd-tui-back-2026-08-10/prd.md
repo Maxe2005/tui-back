@@ -138,6 +138,11 @@ At EDT creation, a developer can have the tool create a working branch in each s
 - A branch the tool creates this way becomes that service's registered branch for the EDT (see FR-9).
 - A per-service branch-creation failure (e.g. base branch missing, name collision) is reported per service and does not abort creation for the others.
 
+> Amended 2026-08-28 (Sprint Change Proposal, Story 2.22): "optional at creation" narrows to the
+> TUI's mandatory flow — branch creation is no longer a developer choice in the TUI (always
+> happens when ≥1 member is selected), only the base branch and naming mode remain choices.
+> `core` still exposes the no-branch-creation shape for non-TUI driving adapters.
+
 #### FR-5: Modify an EDT after creation
 
 A developer can add or remove member services from an existing EDT, and change a member service's working branch, after the EDT has been created.
