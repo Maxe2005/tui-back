@@ -55,11 +55,28 @@ export function ListRow(props: ListRowProps) {
   const { label, meta } = props;
   const layout = resolveRowLayout(props);
   return (
-    <Box paddingLeft={layout.paddingLeft} backgroundColor={layout.background}>
+    <Box paddingLeft={layout.paddingLeft} backgroundColor={layout.background} minWidth={0} overflow="hidden">
       <Text color={colors.accent}>{layout.barGlyph}</Text>
       <Text color={colors.accent}>{layout.marker}</Text>
-      <Text color={layout.labelColor} bold={layout.bold}>{label}</Text>
-      {meta ? <Text color={layout.metaColor}> {meta}</Text> : null}
+      {/* Bugfix (story 2.21 follow-up #2): now that the list pane's own width is genuinely
+          ratio-bound (list-detail-split.tsx), a row whose label+meta combined no longer fits
+          the real column width surfaced Ink's default word-wrap mid-token (e.g.
+          "detached-head-s" / "c" split across two lines) — previously masked entirely by the
+          pane-sizing bug, which let the whole row overflow outward instead of ever being
+          measured against a real width. `Text` has no layout props of its own (Ink), so the
+          shrink/truncate behavior is carried by a wrapping `Box`: the label's `flexShrink={1}`
+          + `minWidth={0}` lets it absorb the squeeze, with `wrap="truncate-end"` turning that
+          into a clean ellipsis instead of a mid-word break; `meta`'s `flexShrink={0}` keeps the
+          trailing status text (the more information-dense half) intact and the last thing to
+          give. */}
+      <Box flexShrink={1} minWidth={0}>
+        <Text color={layout.labelColor} bold={layout.bold} wrap="truncate-end">{label}</Text>
+      </Box>
+      {meta ? (
+        <Box flexShrink={0}>
+          <Text color={layout.metaColor}> {meta}</Text>
+        </Box>
+      ) : null}
       {layout.activeSuffix ? <Text color={colors.info}>{layout.activeSuffix}</Text> : null}
     </Box>
   );

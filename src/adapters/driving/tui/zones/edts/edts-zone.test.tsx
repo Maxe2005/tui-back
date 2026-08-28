@@ -338,7 +338,13 @@ describe('EdtsZone (story 2.6)', () => {
       loadEdtsBranches: noopLoad,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
-    expect(output).toContain('detached-head-svc');
+    // Bugfix (story 2.21 follow-up #2): the list pane's width is now genuinely ratio-bound
+    // (list-detail-split.tsx), so this row's label — combined with its long "unknown (offline)"
+    // meta — no longer fits the column and cleanly truncates with an ellipsis (list-row.tsx).
+    // The detail pane's own title (never truncated — full name is DetailPane's whole point)
+    // still carries the untruncated, upper-cased name, so this assertion is case-insensitive
+    // rather than tied to the row's own (now-truncated) rendering.
+    expect(output.toLowerCase()).toContain('detached-head-svc');
     expect(output).toContain('(unknown)');
     expect(output).toContain('HEAD is detached');
   });
