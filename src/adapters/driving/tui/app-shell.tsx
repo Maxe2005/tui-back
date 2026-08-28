@@ -13,6 +13,11 @@ import { useAppStore, type AppStore, type AppState } from './store/app-store.js'
 import { getZoneScreen } from './zones/index.js';
 import { ALL_ZONE_IDS, ZONES, nextZoneId, resolveReachableZones, zoneGatedStatus, type ZoneId } from './zones/zones.js';
 
+// Story 2.21: the Ctrl+W keyboard resize-mode's per-keypress step — an implementation choice
+// (Design Notes: "pick something responsive"), ~12 positions across the
+// MIN_LIST_RATIO..MAX_LIST_RATIO (0.2..0.8) clamp range.
+export const RESIZE_STEP = 0.05;
+
 export function shouldOpenHelp(input: string): boolean {
   return input === '?';
 }
@@ -73,6 +78,57 @@ export function resolveZoneArrowSwitch(
     return nextZoneId(activeZone, 1, reachable);
   }
   return null;
+}
+
+// Story 2.21: Ctrl+W engages resize-mode only while the EDTs zone is active (Boundaries:
+// "Ctrl+W engages resize-mode only while the EDT zone is active — a no-op elsewhere"). Ink
+// delivers a ctrl+letter combo as `input === '<letter>'` with `key.ctrl: true` (confirmed
+// against ink's own parse-keypress.js), never a distinct `key` flag of its own.
+export function shouldEnterResizeMode(
+  input: string,
+  key: { ctrl?: boolean },
+  activeZone: ZoneId,
+): boolean {
+  return key.ctrl === true && input === 'w' && activeZone === 'edts';
+}
+
+// Story 2.21: boundary 0 is always the vertical list<->detail split (Design Notes) — every
+// other boundary (1, 2, ... for a future multi-boundary zone) is one of that zone's own
+// horizontal sub-splits. Arrow-key axis follows the boundary's own orientation: `←`/`→` for
+// the vertical boundary, `↑`/`↓` for a horizontal one (AC: "on a horizontal boundary, ↑/↓
+// moves it ... on the vertical boundary, ←/→ does likewise").
+export function isVerticalResizeBoundary(boundaryIndex: number): boolean {
+  return boundaryIndex === 0;
+}
+
+// Returns the signed step to apply to the targeted boundary's ratio, or null when the
+// keypress doesn't move it (letting the caller fall through to Tab/Enter/Esc handling).
+export function resolveResizeStep(
+  key: { upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean },
+  targetBoundary: number,
+): number | null {
+  if (isVerticalResizeBoundary(targetBoundary)) {
+    if (key.leftArrow) {
+      return -RESIZE_STEP;
+    }
+    if (key.rightArrow) {
+      return RESIZE_STEP;
+    }
+    return null;
+  }
+  if (key.upArrow) {
+    return -RESIZE_STEP;
+  }
+  if (key.downArrow) {
+    return RESIZE_STEP;
+  }
+  return null;
+}
+
+// Enter or Esc both exit resize-mode with no separate save step (AC: "Enter or Esc exits with
+// no separate save step") — every boundary move already applied/persisted live as it happened.
+export function shouldExitResizeMode(key: { return?: boolean; escape?: boolean }): boolean {
+  return key.return === true || key.escape === true;
 }
 
 // Story 2.13: the active zone falling to `omitted` (a registry change removed the only
@@ -140,6 +196,10 @@ export function AppShell({
   // and app-store.ts's createEdt/switchEdt/modifyEdt).
   const tabVisibility = useStore((state) => state.tabVisibility);
   const loadTabVisibility = useStore((state) => state.loadTabVisibility);
+  // Story 2.21: loaded once at mount (mirrors loadSettings' own mount-once idiom below) so the
+  // EDTs zone's persisted boundary ratios are live before it ever renders, independent of
+  // whether the EDTs zone is the first one visited.
+  const loadSplitterRatios = useStore((state) => state.loadSplitterRatios);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
@@ -173,6 +233,15 @@ export function AppShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Story 2.21 (I/O matrix "App restart after a boundary move"): loaded once at app mount,
+  // same mount-once idiom as loadSettings above — the EDTs zone reads `store.splitterRatios`
+  // unconditionally, so the persisted ratios (not the built-in defaults) must be live before
+  // it ever renders.
+  useEffect(() => {
+    void loadSplitterRatios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Story 2.13 (Boundaries): the active zone going `omitted` has no explanatory-message
   // content to swap to in place — unlike a mere disable, force a fallback to Dashboard.
   useEffect(() => {
@@ -203,6 +272,38 @@ export function AppShell({
       return;
     }
 
+    // Story 2.21: Ctrl+W resize-mode. Entering and dispatching within it both live under the
+    // same overlay exclusion as the zone-switch block below (Boundaries: "Ctrl+W under any
+    // overlay ... no-op"); entering additionally requires the EDTs zone to be active
+    // (shouldEnterResizeMode).
+    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen) {
+      if (state.resizeMode !== null) {
+        if (key.tab) {
+          state.cycleResizeTargetBoundary();
+          return;
+        }
+        if (shouldExitResizeMode(key)) {
+          state.exitResizeMode();
+          return;
+        }
+        const step = resolveResizeStep(key, state.resizeMode.targetBoundary);
+        if (step !== null) {
+          const zoneRatios = state.splitterRatios[state.resizeMode.zone];
+          const current = zoneRatios[state.resizeMode.targetBoundary];
+          void state.setSplitterRatio(state.resizeMode.zone, state.resizeMode.targetBoundary, current + step);
+        }
+        // Every other key is inert while resize-mode owns input — Tab/arrows/Enter/Esc are
+        // its only live bindings (AC: "the targeted boundary recolors to accent, and same-key
+        // global shortcuts go inert").
+        return;
+      }
+
+      if (shouldEnterResizeMode(input, key, activeZone)) {
+        state.enterResizeMode(activeZone);
+        return;
+      }
+    }
+
     // Skip help dispatch entirely while the registry screen, the command bar, or the settings
     // screen is open — each owns its own keystroke capture (the registry's root-path field,
     // the bar's command query, the settings screen's tab/value navigation), so `?` typed there
@@ -213,7 +314,20 @@ export function AppShell({
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
-    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen) {
+    // Story 2.21 (deferred-work.md, tracked_by this story): resizeMode gates this block too —
+    // while it's active, arrows resize the targeted boundary (handled above) rather than
+    // switching zones, and every other shortcut here goes inert alongside it. In practice
+    // this is always true by the time execution reaches here (the resizeMode !== null branch
+    // above already returned), but the explicit check keeps this block's own guard
+    // self-documenting/defensive against future reordering.
+    if (
+      !helpOpen &&
+      !filterOpen &&
+      !registryScreenOpen &&
+      !commandBarOpen &&
+      !settingsScreenOpen &&
+      state.resizeMode === null
+    ) {
       // Story 2.13: the reachable-zone set (every zone minus whichever gated tab is
       // currently 'omitted') gates both the mnemonic and the arrow-nav dispatch below —
       // an omitted tab is never landed on either way; a disabled one stays reachable.

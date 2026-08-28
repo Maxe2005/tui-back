@@ -20,6 +20,10 @@ const BOLD = `${String.fromCharCode(0x1b)}[1m`;
 // colors.info (#4f80a8) as a truecolor foreground escape — same convention as
 // zone-tab-bar.styles.test.tsx's status-color assertion.
 const INFO_FG = `${String.fromCharCode(0x1b)}[38;2;79;128;168m`;
+// Story 2.21: colors.accent (#c9a13b) / colors.border (#3a3844) as truecolor foreground
+// escapes — the Ctrl+W resize-mode's targeted-vs-untargeted splitter coloring.
+const ACCENT_FG = `${String.fromCharCode(0x1b)}[38;2;201;161;59m`;
+const BORDER_FG = `${String.fromCharCode(0x1b)}[38;2;58;56;68m`;
 
 beforeAll(() => {
   process.env.FORCE_COLOR = '1';
@@ -100,5 +104,80 @@ describe('EdtsZone rendered styling (story 2.18 AC1, amended 2026-08-27)', () =>
     // No `›` cursor marker anywhere — focus is on EDT SERVICES (empty here), not the EDT
     // selector, so its row's own cursor-bar treatment is inert despite still being emphasized.
     expect(output).not.toContain('›');
+  });
+});
+
+// Story 2.21: the EDTs zone has 3 splitter boundaries — 1 vertical (list<->detail, rendered
+// by the shared ListDetailSplit, boundary 0) and 2 horizontal (the list column's own
+// EDTS<->rest / EDT SERVICES<->OTHER SERVICES sub-splits, boundaries 1/2). Ctrl+W resize-mode
+// recolors whichever one is currently targeted to colors.accent; every other boundary stays
+// colors.border. Boundary 0 is a real regression case: it's rendered by ListDetailSplit
+// (list-detail-split.tsx), a component EdtsZone doesn't own outright — a prop-plumbing gap
+// there would leave it permanently colors.border regardless of resizeMode.
+describe('EdtsZone splitter targeting under Ctrl+W resize-mode (story 2.21)', () => {
+  it('recolors only boundary 0 (the vertical list<->detail split) to accent when targeted', async () => {
+    const { renderToString } = await import('../../shared/components/render-to-string.js');
+    const { createAppStore } = await import('../../store/app-store.js');
+    const { EdtsZone } = await import('./edts-zone.js');
+
+    const store = createAppStore();
+    store.setState({ edtsStatus: 'idle', edts: [], resizeMode: { zone: 'edts', targetBoundary: 0 } });
+
+    const output = await renderToString(<EdtsZone useStore={store} />);
+
+    expect(output).toContain(`${ACCENT_FG}│`);
+    expect(output).not.toContain(`${ACCENT_FG}─`);
+  });
+
+  it('recolors only boundary 1 (EDTS <-> rest) to accent when targeted', async () => {
+    const { renderToString } = await import('../../shared/components/render-to-string.js');
+    const { createAppStore } = await import('../../store/app-store.js');
+    const { EdtsZone } = await import('./edts-zone.js');
+
+    const store = createAppStore();
+    store.setState({ edtsStatus: 'idle', edts: [], resizeMode: { zone: 'edts', targetBoundary: 1 } });
+
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    const accentHorizontalCount = output.split(`${ACCENT_FG}─`).length - 1;
+
+    expect(accentHorizontalCount).toBe(1);
+    expect(output).not.toContain(`${ACCENT_FG}│`);
+    // The other (boundary 2) horizontal splitter stays plain border-colored.
+    expect(output).toContain(`${BORDER_FG}─`);
+  });
+
+  it('recolors only boundary 2 (EDT SERVICES <-> OTHER SERVICES) to accent when targeted', async () => {
+    const { renderToString } = await import('../../shared/components/render-to-string.js');
+    const { createAppStore } = await import('../../store/app-store.js');
+    const { EdtsZone } = await import('./edts-zone.js');
+
+    const store = createAppStore();
+    store.setState({ edtsStatus: 'idle', edts: [], resizeMode: { zone: 'edts', targetBoundary: 2 } });
+
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    const accentHorizontalCount = output.split(`${ACCENT_FG}─`).length - 1;
+
+    expect(accentHorizontalCount).toBe(1);
+    expect(output).not.toContain(`${ACCENT_FG}│`);
+    expect(output).toContain(`${BORDER_FG}─`);
+  });
+
+  it('every boundary stays colors.border while resize-mode is inactive', async () => {
+    const { renderToString } = await import('../../shared/components/render-to-string.js');
+    const { createAppStore } = await import('../../store/app-store.js');
+    const { EdtsZone } = await import('./edts-zone.js');
+
+    const store = createAppStore();
+    store.setState({ edtsStatus: 'idle', edts: [], resizeMode: null });
+
+    const output = await renderToString(<EdtsZone useStore={store} />);
+
+    // Accent is legitimately used elsewhere in the UI (e.g. the focused pane's label) —
+    // narrow the assertion to the splitter glyphs specifically, never accent-colored while
+    // resize-mode is inactive.
+    expect(output).not.toContain(`${ACCENT_FG}│`);
+    expect(output).not.toContain(`${ACCENT_FG}─`);
+    expect(output).toContain(`${BORDER_FG}│`);
+    expect(output).toContain(`${BORDER_FG}─`);
   });
 });

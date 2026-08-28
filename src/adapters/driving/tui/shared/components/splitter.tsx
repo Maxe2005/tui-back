@@ -4,11 +4,15 @@ import { colors } from '../theme/theme.js';
 export type SplitterProps = {
   orientation: 'horizontal' | 'vertical';
   size: number;
+  // Story 2.21: recolors the splitter glyph to `colors.accent` while its boundary is the
+  // Ctrl+W resize-mode's current target — every other boundary (the default, `false`) renders
+  // in the plain `colors.border` (AC: "the targeted boundary recolors to accent").
+  targeted?: boolean;
   onResize?: (newSize: number) => void;
 };
 
 export function Splitter(props: SplitterProps) {
-  const { orientation, size, onResize } = props;
+  const { orientation, size, targeted = false, onResize } = props;
   const isHorizontal = orientation === 'horizontal';
   const dimension = isHorizontal ? 'height' : 'width';
   const otherDim = isHorizontal ? 'width' : 'height';
@@ -21,7 +25,7 @@ export function Splitter(props: SplitterProps) {
       borderRightColor={colors.border}
       borderBottomColor={colors.border}
     >
-      <Text color={colors.accent}>
+      <Text color={targeted ? colors.accent : colors.border}>
         {isHorizontal ? '─' : '│'}
       </Text>
     </Box>

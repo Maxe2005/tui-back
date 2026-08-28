@@ -1248,7 +1248,8 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
     });
-    const shortRatio = shortStore.getState().splitterRatios.edts;
+    // Boundary 0 is the list<->detail split ListDetailSplit itself reads (edts-zone.tsx).
+    const shortRatio = shortStore.getState().splitterRatios.edts[0];
 
     const longStore = createAppStore();
     longStore.setState({
@@ -1267,7 +1268,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
         detail: `A much longer action detail line, number ${index}, describing exactly what changed in this modification`,
       })),
     });
-    const longRatio = longStore.getState().splitterRatios.edts;
+    const longRatio = longStore.getState().splitterRatios.edts[0];
 
     // Same ratio input -> resolveSplitFlex (the sole width driver, confirmed content-blind by
     // reading list-detail-split.tsx) returns identical flexGrow values regardless of how much
@@ -1280,7 +1281,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(longOutput).toContain('A much longer action detail line, number 4');
     expect(shortOutput).not.toContain('A much longer action detail line');
     // ...while the ratio driving the split's own layout never changed.
-    expect(longStore.getState().splitterRatios.edts).toBe(shortStore.getState().splitterRatios.edts);
+    expect(longStore.getState().splitterRatios.edts).toEqual(shortStore.getState().splitterRatios.edts);
   });
 });
 
