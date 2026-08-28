@@ -849,6 +849,82 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
+  it('a keypress meant for the settings overlay (already open) never leaks into EdtsZone underneath it (story 2.19 review fix)', async () => {
+    // Confirmed in real usage: unlike the test above (which only checks the single Enter
+    // that *opens* an overlay), this checks a *later*, separate keypress typed once the
+    // overlay is already open — e.g. Tab/arrows cycling the settings screen's tab strip —
+    // which EdtsZone's `useInput` previously kept receiving underneath it, silently moving
+    // its own list selection/pane focus at the same time (isActive only checked
+    // `!commandBarOpen`, never `!settingsScreenOpen`).
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'edts',
+      edts: [
+        {
+          ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+          topic: 'demo',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'inactive',
+          members: [],
+        },
+      ],
+      edtsStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'settings');
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().settingsScreenOpen).toBe(true);
+
+      // A later Enter, meant for the settings screen, must not reach EdtsZone's own
+      // key.return (openEdtAction) underneath it.
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a keypress meant for the registry overlay (already open) never leaks into EdtsZone underneath it (story 2.19 review fix)', async () => {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'edts',
+      edts: [
+        {
+          ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+          topic: 'demo',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'inactive',
+          members: [],
+        },
+      ],
+      edtsStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'registry');
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().registryScreenOpen).toBe(true);
+
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('Down from the input enters the grid at the top of the first column; Enter on the highlighted cell completes the query and returns focus to the input (story 2.17)', async () => {
     const store = createAppStore();
     const { instance, stdin } = mount(store);

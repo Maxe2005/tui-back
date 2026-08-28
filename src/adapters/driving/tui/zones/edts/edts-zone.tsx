@@ -625,6 +625,12 @@ export function EdtsZone({
   // would also silently fire this zone's own pane-focus toggle / openEdtAction() underneath
   // it (Spec Change Log, spec-2-14).
   const commandBarOpen = useStore((state) => state.commandBarOpen);
+  // Story 2.19 review fix (confirmed in real usage): the same leakage applies to the registry
+  // and settings screens — both are overlays rendered on top of this zone while it stays
+  // mounted underneath, so without this gate Left/Right/Tab/Up/Down typed into either popup
+  // also silently drove this zone's own pane focus/list-cursor/dialogs at the same time.
+  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
+  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   // Story 2.15: EDT action state for detail pane — tracks in-progress action and action log
   const currentEdtAction = useStore((state) => state.currentEdtAction);
   const setCurrentEdtAction = useStore((state) => state.setCurrentEdtAction);
@@ -1391,7 +1397,7 @@ export function EdtsZone({
         setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch));
       }
     }
-  }, { isActive: !commandBarOpen });
+  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen });
 
   const loading = status === 'loading' && rows.length === 0;
   const edtsLoading = edtsStatus === 'loading' && edts === null;
