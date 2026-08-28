@@ -20,6 +20,8 @@ function fakeState(): StatePort {
   return {
     readActiveEdt: async () => ok(null),
     writeActiveEdt: async () => ok(undefined),
+    readSplitterRatios: async () => ok(null),
+    writeSplitterRatios: async () => ok(undefined),
   };
 }
 

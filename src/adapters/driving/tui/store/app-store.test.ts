@@ -66,6 +66,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const state: StatePort = {
     readActiveEdt: vi.fn(async () => ok(null)),
     writeActiveEdt: vi.fn(async () => ok(undefined)),
+    readSplitterRatios: vi.fn(async () => ok(null)),
+    writeSplitterRatios: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () =>
@@ -117,8 +119,17 @@ describe("app store", () => {
     expect(state.activeEdt).toBeNull();
     for (const zone of ZONES) {
       expect(state.zoneEvents[zone.id]).toBe(0);
-      expect(state.splitterRatios[zone.id]).toBe(DEFAULT_LIST_RATIO);
+      expect(state.splitterRatios[zone.id]).toEqual(
+        zone.id === "edts"
+          ? [DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO]
+          : [DEFAULT_LIST_RATIO],
+      );
     }
+  });
+
+  it("defaults resizeMode to null (story 2.21)", () => {
+    const store = createAppStore();
+    expect(store.getState().resizeMode).toBeNull();
   });
 
   it("covers exactly the six compiled-in zones — no duplicate copy per zone (AC5)", () => {
@@ -151,15 +162,64 @@ describe("app store", () => {
     expect(store.getState().zoneEvents.dashboard).toBe(1);
   });
 
-  it("stores the splitter ratio per zone, clamped to keep both panes usable (AC4)", () => {
+  it("stores the splitter ratio per zone/boundary, clamped to keep both panes usable (AC4)", () => {
     const store = createAppStore();
-    store.getState().setSplitterRatio("edts", 0.5);
-    expect(store.getState().splitterRatios.edts).toBe(0.5);
-    store.getState().setSplitterRatio("edts", 1);
-    expect(store.getState().splitterRatios.edts).toBe(0.8);
-    store.getState().setSplitterRatio("edts", 0);
-    expect(store.getState().splitterRatios.edts).toBe(0.2);
-    expect(store.getState().splitterRatios.dashboard).toBe(DEFAULT_LIST_RATIO);
+    store.getState().setSplitterRatio("edts", 0, 0.5);
+    expect(store.getState().splitterRatios.edts[0]).toBe(0.5);
+    store.getState().setSplitterRatio("edts", 0, 1);
+    expect(store.getState().splitterRatios.edts[0]).toBe(0.8);
+    store.getState().setSplitterRatio("edts", 0, 0);
+    expect(store.getState().splitterRatios.edts[0]).toBe(0.2);
+    expect(store.getState().splitterRatios.dashboard[0]).toBe(DEFAULT_LIST_RATIO);
+  });
+
+  // Story 2.21: the EDTs zone has 3 independently movable boundaries — each setSplitterRatio
+  // call only ever touches the one boundaryIndex it's given, never the other two.
+  it("moves only the targeted boundary within a multi-boundary zone (story 2.21)", () => {
+    const store = createAppStore();
+    store.getState().setSplitterRatio("edts", 1, 0.7);
+    expect(store.getState().splitterRatios.edts).toEqual([DEFAULT_LIST_RATIO, 0.7, DEFAULT_LIST_RATIO]);
+    store.getState().setSplitterRatio("edts", 2, 0.3);
+    expect(store.getState().splitterRatios.edts).toEqual([DEFAULT_LIST_RATIO, 0.7, 0.3]);
+  });
+
+  it("ignores an out-of-range boundaryIndex rather than writing a sparse array (story 2.21)", () => {
+    const store = createAppStore();
+    const before = store.getState().splitterRatios.dashboard;
+    store.getState().setSplitterRatio("dashboard", 5, 0.5);
+    expect(store.getState().splitterRatios.dashboard).toEqual(before);
+  });
+
+  describe("resizeMode (story 2.21, Ctrl+W keyboard resize-mode)", () => {
+    it("enterResizeMode sets the zone with targetBoundary 0", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("edts");
+      expect(store.getState().resizeMode).toEqual({ zone: "edts", targetBoundary: 0 });
+    });
+
+    it("exitResizeMode clears it back to null", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("edts");
+      store.getState().exitResizeMode();
+      expect(store.getState().resizeMode).toBeNull();
+    });
+
+    it("cycleResizeTargetBoundary wraps across the zone's own boundary count", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("edts");
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode?.targetBoundary).toBe(1);
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode?.targetBoundary).toBe(2);
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode?.targetBoundary).toBe(0);
+    });
+
+    it("cycleResizeTargetBoundary is a no-op while resizeMode is null", () => {
+      const store = createAppStore();
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode).toBeNull();
+    });
   });
 
   it("tracks the active EDT placeholder field (AD-10)", () => {
@@ -741,6 +801,185 @@ describe("app store", () => {
       await loading;
 
       expect(store.getState().settings.commandPalette.gridMaxRows).toBe(42);
+    });
+  });
+
+  describe("splitterRatios persistence (story 2.21)", () => {
+    it("setSplitterRatio() applies live before persistence resolves, then persists the whole ratios map (Boundaries: no separate save step)", async () => {
+      let resolveSave: (() => void) | undefined;
+      const savePromise = new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      });
+      const writeSplitterRatios = vi.fn(async () => {
+        await savePromise;
+        return ok(undefined);
+      });
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok(null)),
+        writeSplitterRatios,
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      const applyPromise = store.getState().setSplitterRatio("edts", 1, 0.6);
+      // Optimistic: the store already reflects the new value before the write resolves.
+      expect(store.getState().splitterRatios.edts[1]).toBe(0.6);
+
+      resolveSave?.();
+      await applyPromise;
+
+      expect(writeSplitterRatios).toHaveBeenCalledWith(store.getState().splitterRatios);
+    });
+
+    it("setSplitterRatio() is a no-op persistence-wise when the store is unwired, but still applies live", async () => {
+      const store = createAppStore();
+      await store.getState().setSplitterRatio("edts", 0, 0.6);
+      expect(store.getState().splitterRatios.edts[0]).toBe(0.6);
+    });
+
+    it("setSplitterRatio() persists concurrent calls in the order they were requested, not resolution order", async () => {
+      const persisted: Record<string, number[]>[] = [];
+      let resolveFirst: (() => void) | undefined;
+      const firstGate = new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const writeSplitterRatios = vi
+        .fn()
+        .mockImplementationOnce(async (ratios: Record<string, number[]>) => {
+          await firstGate;
+          persisted.push(ratios);
+          return ok(undefined);
+        })
+        .mockImplementationOnce(async (ratios: Record<string, number[]>) => {
+          persisted.push(ratios);
+          return ok(undefined);
+        });
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok(null)),
+        writeSplitterRatios,
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      const first = store.getState().setSplitterRatio("edts", 0, 0.3);
+      const second = store.getState().setSplitterRatio("edts", 0, 0.4);
+      resolveFirst?.();
+      await Promise.all([first, second]);
+
+      expect(persisted.map((ratios) => ratios.edts[0])).toEqual([0.3, 0.4]);
+    });
+
+    it("loadSplitterRatios() hydrates a valid persisted map, per-zone", async () => {
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok({ edts: [0.3, 0.4, 0.5], dashboard: [0.6] })),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      await store.getState().loadSplitterRatios();
+
+      expect(store.getState().splitterRatios.edts).toEqual([0.3, 0.4, 0.5]);
+      expect(store.getState().splitterRatios.dashboard).toEqual([0.6]);
+    });
+
+    it("loadSplitterRatios() falls back to the built-in default for a zone whose persisted array length doesn't match its own boundary count, leaving other zones untouched", async () => {
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        // 'edts' has 3 boundaries — a persisted array of length 1 is a shape mismatch for it.
+        readSplitterRatios: vi.fn(async () => ok({ edts: [0.3], dashboard: [0.6] })),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      await store.getState().loadSplitterRatios();
+
+      expect(store.getState().splitterRatios.edts).toEqual([
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+      ]);
+      expect(store.getState().splitterRatios.dashboard).toEqual([0.6]);
+    });
+
+    it("loadSplitterRatios() on a genuine I/O error keeps the built-in defaults", async () => {
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => err("state-invalid-json", "corrupt state.json")),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      await store.getState().loadSplitterRatios();
+
+      expect(store.getState().splitterRatios.edts).toEqual([
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+      ]);
+    });
+
+    it("loadSplitterRatios() on a fresh/pre-2.21 machine (null) keeps the built-in defaults", async () => {
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok(null)),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      await store.getState().loadSplitterRatios();
+
+      expect(store.getState().splitterRatios.edts).toEqual([
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+      ]);
+    });
+
+    it("loadSplitterRatios() is a no-op when the store is unwired", async () => {
+      const store = createAppStore();
+      await store.getState().loadSplitterRatios();
+      expect(store.getState().splitterRatios.edts).toEqual([
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+        DEFAULT_LIST_RATIO,
+      ]);
+    });
+
+    // Review fix (story 2.21, finding 4): mirrors the settingsVersion-guarded
+    // "loadSettings() discards a stale result superseded by a newer updateSettings()" test
+    // above — loadSplitterRatios() (AppShell's mount-time load) must never overwrite a live
+    // setSplitterRatio() move (e.g. a Ctrl+W resize) that lands while the read is still in
+    // flight with the stale pre-move value it read from disk.
+    it("loadSplitterRatios() discards a stale result superseded by a newer setSplitterRatio() while it was in flight", async () => {
+      let resolveLoad: ((value: { ok: true; data: Record<string, number[]> }) => void) | undefined;
+      const loadPromise = new Promise<{ ok: true; data: Record<string, number[]> }>((resolve) => {
+        resolveLoad = resolve;
+      });
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => loadPromise),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      const loading = store.getState().loadSplitterRatios();
+      // A newer setSplitterRatio() lands while the load above is still in flight.
+      await store.getState().setSplitterRatio("edts", 0, 0.75);
+
+      // The stale load now resolves with an older on-disk value — it must not clobber the
+      // newer live move already applied above.
+      resolveLoad?.({ ok: true, data: { edts: [0.2, 0.2, 0.2] } });
+      await loading;
+
+      expect(store.getState().splitterRatios.edts[0]).toBe(0.75);
     });
   });
 });

@@ -43,7 +43,18 @@ import { ZONES, type ZoneId } from '../zones/zones.js';
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
 export type ZoneEvents = Record<ZoneId, number>;
-export type ZoneRatios = Record<ZoneId, number>;
+// Story 2.21: widened from a single ratio per zone to an array of per-boundary ratios — every
+// zone has exactly one boundary (its list<->detail split) except the EDTs zone, which has
+// three (see edts-zone.tsx's Design Notes: list<->detail, EDTS<->rest, EDT SERVICES<->OTHER
+// SERVICES). A zone's own array length is the authoritative "how many boundaries does this
+// zone have" signal — `emptyRatios()`, `loadSplitterRatios`, and `cycleResizeTargetBoundary`
+// all read it off the array rather than a second hard-coded constant.
+export type ZoneRatios = Record<ZoneId, number[]>;
+// Story 2.21: the Ctrl+W keyboard resize-mode's single source of truth (Boundaries: "one
+// store flag ... so AppShell's global gate and EdtsZone's own useInput check the same
+// source"). `zone` is always 'edts' today — Ctrl+W only ever engages while the EDTs zone is
+// active — kept generic so a future zone can reuse the mechanism without a shape change.
+export type ResizeMode = { zone: ZoneId; targetBoundary: number } | null;
 
 // Story 2.6: the ports createAppStore closes over to run core use-cases in-process (AD-2) —
 // the same ones src/bin/main.ts's CLI composition root builds, mirrored by src/bin/tui.ts.
@@ -143,7 +154,23 @@ export type AppState = {
   zoneEvents: ZoneEvents;
   addZoneEvent: (zone: ZoneId) => void;
   splitterRatios: ZoneRatios;
-  setSplitterRatio: (zone: ZoneId, ratio: number) => void;
+  // Story 2.21: `boundaryIndex` selects which of that zone's own splitterRatios entries moves
+  // (0 is every zone's list<->detail split; 1/2 also exist for the EDTs zone's own two
+  // sub-splits). Persists via StatePort.writeSplitterRatios immediately — no separate save
+  // step — chained like updateSettings' settingsSaveChain so concurrent moves land on disk in
+  // the order they were requested rather than racing.
+  setSplitterRatio: (zone: ZoneId, boundaryIndex: number, ratio: number) => Promise<void>;
+  // Story 2.21: hydrates splitterRatios from state.json once at AppShell mount, mirroring
+  // loadSettings(). A missing/corrupt file, or a persisted zone whose array length doesn't
+  // match that zone's own boundary count, silently keeps that zone's built-in default
+  // (Boundaries: "fall back to that zone's default silently").
+  loadSplitterRatios: () => Promise<void>;
+  resizeMode: ResizeMode;
+  enterResizeMode: (zone: ZoneId) => void;
+  exitResizeMode: () => void;
+  // Cycles the active resize-mode's targetBoundary across however many boundaries its zone
+  // has (splitterRatios[zone].length) — a no-op while resizeMode is null.
+  cycleResizeTargetBoundary: () => void;
   activeEdt: string | null;
   setActiveEdt: (edt: string | null) => void;
   helpOpen: boolean;
@@ -300,9 +327,14 @@ function emptyEvents(): ZoneEvents {
   return Object.fromEntries(ZONES.map((zone) => [zone.id, 0])) as ZoneEvents;
 }
 
+// Story 2.21: every zone gets a single-entry default array (its one list<->detail boundary)
+// except the EDTs zone, whose list column has 3 fixed-but-movable boundaries (Design Notes).
 function emptyRatios(): ZoneRatios {
   return Object.fromEntries(
-    ZONES.map((zone) => [zone.id, DEFAULT_LIST_RATIO]),
+    ZONES.map((zone) => [
+      zone.id,
+      zone.id === 'edts' ? [DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO] : [DEFAULT_LIST_RATIO],
+    ]),
   ) as ZoneRatios;
 }
 
@@ -314,6 +346,15 @@ export function createAppStore(deps?: AppStoreDeps) {
   // landed since it started and skip clobbering it.
   let settingsSaveChain: Promise<void> = Promise.resolve();
   let settingsVersion = 0;
+  // Story 2.21: serializes setSplitterRatio's persistence calls the same way settingsSaveChain
+  // does for updateSettings — each write chains onto the previous one so concurrent boundary
+  // moves (e.g. holding an arrow key) hit disk in the order they were requested.
+  let splitterRatiosSaveChain: Promise<void> = Promise.resolve();
+  // Review fix (story 2.21): mirrors settingsVersion above — a monotonic counter bumped on
+  // every setSplitterRatio call so a slower, in-flight loadSplitterRatios (the AppShell
+  // mount-time load) can detect that a newer live boundary move has landed since it started
+  // and skip clobbering it with the stale value it read from disk.
+  let splitterRatiosVersion = 0;
   return create<AppState>()((set, get) => ({
     activeZone: 'dashboard',
     setActiveZone: (zone) =>
@@ -330,13 +371,87 @@ export function createAppStore(deps?: AppStoreDeps) {
         },
       })),
     splitterRatios: emptyRatios(),
-    setSplitterRatio: (zone, ratio) =>
-      set((state) => ({
-        splitterRatios: {
-          ...state.splitterRatios,
-          [zone]: clampListRatio(ratio),
-        },
-      })),
+    setSplitterRatio: async (zone, boundaryIndex, ratio) => {
+      splitterRatiosVersion += 1;
+      set((state) => {
+        const zoneRatios = state.splitterRatios[zone];
+        if (boundaryIndex < 0 || boundaryIndex >= zoneRatios.length) {
+          // Out-of-range boundary index (e.g. a stale resizeMode after a zone's boundary
+          // count somehow shrank): never write a sparse/invalid array.
+          return {};
+        }
+        const nextZoneRatios = zoneRatios.map((value, index) =>
+          index === boundaryIndex ? clampListRatio(ratio) : value,
+        );
+        return { splitterRatios: { ...state.splitterRatios, [zone]: nextZoneRatios } };
+      });
+      // Applies to the live store synchronously above, before persistence even starts
+      // (Boundaries: "every boundary move applies live and persists immediately — no separate
+      // save step"). An unwired store (every pre-2.21 `createAppStore()` test call) just can't
+      // persist, exactly like updateSettings' own `!deps` early return.
+      if (!deps) {
+        return;
+      }
+      const next = get().splitterRatios;
+      const run = async () => {
+        // Write failures are never surfaced back to the caller — the live move already
+        // applied (Boundaries I/O matrix: "Write failure: move still applies live").
+        await deps.state.writeSplitterRatios(next);
+      };
+      const chained = splitterRatiosSaveChain.then(run, run);
+      splitterRatiosSaveChain = chained;
+      await chained;
+    },
+    loadSplitterRatios: async () => {
+      if (!deps) {
+        return;
+      }
+      // Review fix (story 2.21): captured before the await, mirroring loadSettings' own
+      // settingsVersion guard — if a setSplitterRatio call lands (bumping the version) while
+      // this read is still in flight, the result below is stale and must never overwrite the
+      // newer live value with whatever was on disk before that move happened.
+      const startVersion = splitterRatiosVersion;
+      const result = await deps.state.readSplitterRatios();
+      if (splitterRatiosVersion !== startVersion) {
+        return;
+      }
+      if (!result.ok || result.data === null) {
+        // A genuine I/O error, or a fresh/pre-2.21 machine with nothing persisted yet: keep
+        // the built-in defaults already seeded into `splitterRatios` above.
+        return;
+      }
+      const persisted = result.data;
+      set((state) => {
+        const next: ZoneRatios = { ...state.splitterRatios };
+        for (const zone of ZONES) {
+          const candidate = persisted[zone.id];
+          const boundaryCount = state.splitterRatios[zone.id].length;
+          // A wrong-length array for this zone falls back to its own default silently
+          // (Boundaries I/O matrix: "That zone falls back to its default array only") — every
+          // other zone's ratios are unaffected.
+          if (Array.isArray(candidate) && candidate.length === boundaryCount) {
+            next[zone.id] = candidate.map((value) => clampListRatio(value));
+          }
+        }
+        return { splitterRatios: next };
+      });
+    },
+    resizeMode: null,
+    enterResizeMode: (zone) => set({ resizeMode: { zone, targetBoundary: 0 } }),
+    exitResizeMode: () => set({ resizeMode: null }),
+    cycleResizeTargetBoundary: () =>
+      set((state) => {
+        if (state.resizeMode === null) {
+          return {};
+        }
+        const boundaryCount = state.splitterRatios[state.resizeMode.zone].length;
+        return {
+          resizeMode: {
+            zone: state.resizeMode.zone,
+            targetBoundary: (state.resizeMode.targetBoundary + 1) % boundaryCount,
+          },
+        };
+      }),
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
     helpOpen: false,

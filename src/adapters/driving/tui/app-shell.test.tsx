@@ -10,6 +10,11 @@ import {
   shouldOpenFilter,
   resolveZoneArrowSwitch,
   shouldFallbackToDashboard,
+  shouldEnterResizeMode,
+  isVerticalResizeBoundary,
+  resolveResizeStep,
+  shouldExitResizeMode,
+  RESIZE_STEP,
 } from './app-shell.js';
 import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from './store/app-store.js';
 import { ZONES, type ZoneId } from './zones/zones.js';
@@ -239,6 +244,71 @@ describe('AppShell', () => {
       });
     });
 
+    describe('resize-mode dispatch helpers (story 2.21, Ctrl+W)', () => {
+      describe('shouldEnterResizeMode', () => {
+        it('is true for ctrl+w while the EDTs zone is active', () => {
+          expect(shouldEnterResizeMode('w', { ctrl: true }, 'edts')).toBe(true);
+        });
+
+        it('is false without the ctrl modifier', () => {
+          expect(shouldEnterResizeMode('w', { ctrl: false }, 'edts')).toBe(false);
+        });
+
+        it('is false for a different letter, even with ctrl', () => {
+          expect(shouldEnterResizeMode('q', { ctrl: true }, 'edts')).toBe(false);
+        });
+
+        it('is false while any other zone is active (Boundaries: "a no-op elsewhere")', () => {
+          for (const zone of ZONES) {
+            if (zone.id === 'edts') {
+              continue;
+            }
+            expect(shouldEnterResizeMode('w', { ctrl: true }, zone.id)).toBe(false);
+          }
+        });
+      });
+
+      describe('isVerticalResizeBoundary', () => {
+        it('is true only for boundary 0', () => {
+          expect(isVerticalResizeBoundary(0)).toBe(true);
+          expect(isVerticalResizeBoundary(1)).toBe(false);
+          expect(isVerticalResizeBoundary(2)).toBe(false);
+        });
+      });
+
+      describe('resolveResizeStep', () => {
+        it('boundary 0 (vertical): leftArrow/rightArrow move it, upArrow/downArrow do not', () => {
+          expect(resolveResizeStep({ leftArrow: true }, 0)).toBe(-RESIZE_STEP);
+          expect(resolveResizeStep({ rightArrow: true }, 0)).toBe(RESIZE_STEP);
+          expect(resolveResizeStep({ upArrow: true }, 0)).toBeNull();
+          expect(resolveResizeStep({ downArrow: true }, 0)).toBeNull();
+        });
+
+        it('boundary 1/2 (horizontal): upArrow/downArrow move it, leftArrow/rightArrow do not', () => {
+          expect(resolveResizeStep({ upArrow: true }, 1)).toBe(-RESIZE_STEP);
+          expect(resolveResizeStep({ downArrow: true }, 1)).toBe(RESIZE_STEP);
+          expect(resolveResizeStep({ leftArrow: true }, 2)).toBeNull();
+          expect(resolveResizeStep({ rightArrow: true }, 2)).toBeNull();
+        });
+
+        it('returns null for a non-arrow key', () => {
+          expect(resolveResizeStep({}, 0)).toBeNull();
+          expect(resolveResizeStep({}, 1)).toBeNull();
+        });
+      });
+
+      describe('shouldExitResizeMode', () => {
+        it('is true for Enter or Escape', () => {
+          expect(shouldExitResizeMode({ return: true })).toBe(true);
+          expect(shouldExitResizeMode({ escape: true })).toBe(true);
+        });
+
+        it('is false for every other key', () => {
+          expect(shouldExitResizeMode({})).toBe(false);
+        });
+      });
+    });
+
     it('shouldOpenCommand returns true for :', () => {
       expect(shouldOpenCommand(':')).toBe(true);
       expect(shouldOpenCommand('j')).toBe(false);
@@ -251,7 +321,12 @@ it('shouldQuit returns true for q', () => {
         zoneEvents: {} as ZoneEvents,
         addZoneEvent: () => {},
         splitterRatios: {} as ZoneRatios,
-        setSplitterRatio: () => {},
+        setSplitterRatio: async () => {},
+        loadSplitterRatios: async () => {},
+        resizeMode: null,
+        enterResizeMode: () => {},
+        exitResizeMode: () => {},
+        cycleResizeTargetBoundary: () => {},
         activeEdt: null,
         setActiveEdt: () => {},
         helpOpen: false,

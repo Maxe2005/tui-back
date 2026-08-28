@@ -24,9 +24,10 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { ListDetailSplit } from '../../shared/components/list-detail-split.js';
+import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { Splitter } from '../../shared/components/splitter.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 
 // A fixed max width (the spec's "ellipsizes past a fixed max width") — generous enough for
@@ -612,7 +613,11 @@ export function EdtsZone({
   initialPaneFocus?: PaneFocus;
   initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' | 'service-actions' | 'add-to-edt';
 }) {
+  // Story 2.21: splitterRatios.edts is now a 3-entry array — boundary 0 (index 0) drives the
+  // existing list<->detail split below; boundaries 1/2 drive the list column's own two
+  // sub-splits (EDTS<->rest, EDT SERVICES<->OTHER SERVICES — Design Notes).
   const ratio = useStore((state) => state.splitterRatios.edts);
+  const resizeMode = useStore((state) => state.resizeMode);
   const services = useStore((state) => state.edtsBranches);
   const status = useStore((state) => state.edtsBranchesStatus);
   const error = useStore((state) => state.edtsBranchesError);
@@ -1407,7 +1412,11 @@ export function EdtsZone({
         setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch));
       }
     }
-  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen });
+  // Story 2.21: while Ctrl+W resize-mode owns input (AppShell's own useInput dispatches
+  // Tab/arrows/Enter/Esc to the store directly — see app-shell.tsx), this zone's own Tab/
+  // arrow/Enter handling must go inert too, the same way it already does under the other
+  // three overlays.
+  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode });
 
   const loading = status === 'loading' && rows.length === 0;
   const edtsLoading = edtsStatus === 'loading' && edts === null;
@@ -1415,80 +1424,108 @@ export function EdtsZone({
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       <ListDetailSplit
-        ratio={ratio}
+        ratio={ratio[0]}
+        listSplitterTargeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 0}
         list={
-          <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
-            <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
-            {edtsLoading ? <Text color={colors['text-dim']}>Loading EDTs…</Text> : null}
-            {edtsStatus === 'error' ? <Text color={colors.error}>Failed to load EDTs</Text> : null}
-            {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
-              <Text color={colors['text-dim']}>No EDTs yet.</Text>
-            ) : null}
-            {edtsRows.map((entry, index) => (
-              <ListRow
-                key={entry.ulid}
-                label={entry.topic}
-                meta={formatEdtRowMeta(entry)}
-                selected={paneFocus === 'edts' && index === clampedEdtsSelected}
-                // Amended 2026-08-27 (Sprint Change Proposal): `emphasized` now marks the row
-                // at `clampedEdtsSelected` — the same index `focusedEdt` (below) is read from,
-                // whose membership drives the EDT SERVICES/OTHER SERVICES split — so it persists
-                // across all three panes' focus, not just while paneFocus === 'edts' (unlike
-                // `selected` above).
-                emphasized={index === clampedEdtsSelected}
-                // `active` (repurposed): the tool-wide active EDT's row, now a discreet suffix
-                // instead of accent+bold — decoupled from `emphasized`, can land on the same or
-                // a different row.
-                active={entry.ulid === activeEdtUlid}
-              />
-            ))}
-            {!dialogOpen ? <DimAnnotation text="[Enter] switch/modify  [Tab] focus" /> : null}
+          <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']}>
+            {/* Story 2.21: the list column's own 3 fixed-but-movable regions — EDTS,
+                EDT SERVICES, OTHER SERVICES — each a sub-Box separated by a horizontal
+                Splitter, sized off splitterRatios.edts[1]/[2] (Design Notes: boundary 1 splits
+                EDTS vs. the "rest" below it; boundary 2 splits that rest into EDT SERVICES vs.
+                OTHER SERVICES). `targeted` recolors whichever boundary Ctrl+W resize-mode
+                currently has selected, read off the same store flag AppShell's own useInput
+                dispatches against (Boundaries: "one store flag ... so AppShell's global gate
+                and EdtsZone's own useInput check the same source"). */}
+            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).list}>
+              <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
+              {edtsLoading ? <Text color={colors['text-dim']}>Loading EDTs…</Text> : null}
+              {edtsStatus === 'error' ? <Text color={colors.error}>Failed to load EDTs</Text> : null}
+              {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
+                <Text color={colors['text-dim']}>No EDTs yet.</Text>
+              ) : null}
+              {edtsRows.map((entry, index) => (
+                <ListRow
+                  key={entry.ulid}
+                  label={entry.topic}
+                  meta={formatEdtRowMeta(entry)}
+                  selected={paneFocus === 'edts' && index === clampedEdtsSelected}
+                  // Amended 2026-08-27 (Sprint Change Proposal): `emphasized` now marks the row
+                  // at `clampedEdtsSelected` — the same index `focusedEdt` (below) is read from,
+                  // whose membership drives the EDT SERVICES/OTHER SERVICES split — so it persists
+                  // across all three panes' focus, not just while paneFocus === 'edts' (unlike
+                  // `selected` above).
+                  emphasized={index === clampedEdtsSelected}
+                  // `active` (repurposed): the tool-wide active EDT's row, now a discreet suffix
+                  // instead of accent+bold — decoupled from `emphasized`, can land on the same or
+                  // a different row.
+                  active={entry.ulid === activeEdtUlid}
+                />
+              ))}
+              {!dialogOpen ? <DimAnnotation text="[Enter] switch/modify  [Tab] focus" /> : null}
+            </Box>
 
-            <Text> </Text>
-            {/* Story 2.18: the flat SERVICES list (story 2.6) is now split into two
-                Tab-cyclable panes, partitioned against the *selected* EDT's own membership
-                (partitionServicesByEdtMembership) — never an empty EDT SERVICES group when no
-                EDT is focused; a "No EDT selected" note stands in for it instead. */}
-            {/* Review fix (story 2.18): issuesSummary counts unreachable/error services across
-                the whole flat list, which may include rows that land in either partitioned
-                group — shown once here, above both groups, rather than nested only under
-                OTHER SERVICES where a flagged service that's actually an EDT member would go
-                unreported. */}
-            {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-            {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
-            {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
-            {focusedEdt !== undefined ? (
-              <>
-                <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
-                {!loading && status !== 'error' && edtServices.length === 0 ? (
-                  <Text color={colors['text-dim']}>No services in this EDT.</Text>
+            <Splitter
+              orientation="horizontal"
+              size={1}
+              targeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 1}
+            />
+
+            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).detail}>
+              {/* Story 2.18: the flat SERVICES list (story 2.6) is now split into two
+                  Tab-cyclable panes, partitioned against the *selected* EDT's own membership
+                  (partitionServicesByEdtMembership) — never an empty EDT SERVICES group when no
+                  EDT is focused; a "No EDT selected" note stands in for it instead. */}
+              {/* Review fix (story 2.18): issuesSummary counts unreachable/error services across
+                  the whole flat list, which may include rows that land in either partitioned
+                  group — shown once here, above both groups, rather than nested only under
+                  OTHER SERVICES where a flagged service that's actually an EDT member would go
+                  unreported. */}
+              {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
+              {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+              {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
+
+              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).list}>
+                {focusedEdt !== undefined ? (
+                  <>
+                    <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
+                    {!loading && status !== 'error' && edtServices.length === 0 ? (
+                      <Text color={colors['text-dim']}>No services in this EDT.</Text>
+                    ) : null}
+                    {edtServices.map((service, index) => (
+                      <ListRow
+                        key={service.path}
+                        label={service.service}
+                        meta={formatServiceMeta(service)}
+                        selected={paneFocus === 'edt-services' && index === clampedEdtServicesSelected}
+                      />
+                    ))}
+                  </>
+                ) : (
+                  <DimAnnotation text="No EDT selected" />
+                )}
+              </Box>
+
+              <Splitter
+                orientation="horizontal"
+                size={1}
+                targeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 2}
+              />
+
+              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).detail}>
+                <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
+                {!loading && status !== 'error' && otherServices.length === 0 ? (
+                  <Text color={colors['text-dim']}>No managed services found.</Text>
                 ) : null}
-                {edtServices.map((service, index) => (
+                {otherServices.map((service, index) => (
                   <ListRow
                     key={service.path}
                     label={service.service}
                     meta={formatServiceMeta(service)}
-                    selected={paneFocus === 'edt-services' && index === clampedEdtServicesSelected}
+                    selected={paneFocus === 'other-services' && index === clampedOtherServicesSelected}
                   />
                 ))}
-                <Text> </Text>
-              </>
-            ) : (
-              <DimAnnotation text="No EDT selected" />
-            )}
-
-            <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
-            {!loading && status !== 'error' && otherServices.length === 0 ? (
-              <Text color={colors['text-dim']}>No managed services found.</Text>
-            ) : null}
-            {otherServices.map((service, index) => (
-              <ListRow
-                key={service.path}
-                label={service.service}
-                meta={formatServiceMeta(service)}
-                selected={paneFocus === 'other-services' && index === clampedOtherServicesSelected}
-              />
-            ))}
+              </Box>
+            </Box>
           </Box>
         }
         detail={
