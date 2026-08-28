@@ -1427,7 +1427,7 @@ export function EdtsZone({
         ratio={ratio[0]}
         listSplitterTargeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 0}
         list={
-          <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']}>
+          <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {/* Story 2.21: the list column's own 3 fixed-but-movable regions — EDTS,
                 EDT SERVICES, OTHER SERVICES — each a sub-Box separated by a horizontal
                 Splitter, sized off splitterRatios.edts[1]/[2] (Design Notes: boundary 1 splits
@@ -1436,7 +1436,14 @@ export function EdtsZone({
                 currently has selected, read off the same store flag AppShell's own useInput
                 dispatches against (Boundaries: "one store flag ... so AppShell's global gate
                 and EdtsZone's own useInput check the same source"). */}
-            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).list}>
+            {/* Bugfix (post-2.21 human review): every flexGrow box below also carries
+                `flexBasis={0} minHeight={0} overflow="hidden"` — without it, a pane's default
+                minimum size is its own content size (Yoga/CSS "min-size: auto"), so e.g. a long
+                EDTS list would grow past its ratio share and drag the EDTS/EDT-SERVICES
+                boundary down with it, exactly the "position moves with content volume" bug the
+                fixed-but-Ctrl+W-movable contract forbids. Verified empirically (0 to 100+ rows
+                of content, boundary position unchanged) before applying here. */}
+            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).list} flexBasis={0} minHeight={0} overflow="hidden">
               <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
               {edtsLoading ? <Text color={colors['text-dim']}>Loading EDTs…</Text> : null}
               {edtsStatus === 'error' ? <Text color={colors.error}>Failed to load EDTs</Text> : null}
@@ -1470,7 +1477,7 @@ export function EdtsZone({
               targeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 1}
             />
 
-            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).detail}>
+            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).detail} flexBasis={0} minHeight={0} overflow="hidden">
               {/* Story 2.18: the flat SERVICES list (story 2.6) is now split into two
                   Tab-cyclable panes, partitioned against the *selected* EDT's own membership
                   (partitionServicesByEdtMembership) — never an empty EDT SERVICES group when no
@@ -1484,7 +1491,7 @@ export function EdtsZone({
               {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
               {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
 
-              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).list}>
+              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).list} flexBasis={0} minHeight={0} overflow="hidden">
                 {focusedEdt !== undefined ? (
                   <>
                     <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
@@ -1511,7 +1518,7 @@ export function EdtsZone({
                 targeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 2}
               />
 
-              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).detail}>
+              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).detail} flexBasis={0} minHeight={0} overflow="hidden">
                 <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
                 {!loading && status !== 'error' && otherServices.length === 0 ? (
                   <Text color={colors['text-dim']}>No managed services found.</Text>
@@ -1529,7 +1536,7 @@ export function EdtsZone({
           </Box>
         }
         detail={
-          <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
+          <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {paneFocus === 'edts' ? (
               <>
                 <DetailPane title={focusedEdt ? focusedEdt.topic : 'EDT'}>
