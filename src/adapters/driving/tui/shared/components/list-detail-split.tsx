@@ -36,10 +36,24 @@ export function ListDetailSplit({
 }) {
   const flex = resolveSplitFlex(ratio);
   return (
-    <Box flexDirection="row" flexGrow={1}>
-      <Box flexGrow={flex.list}>{list}</Box>
+    <Box flexDirection="row" flexGrow={1} minHeight={0} overflow="hidden">
+      {/* Bugfix (story 2.21 follow-up #2): same Yoga "a flex item's minimum size is its own
+          content size" trap the internal EDTS/EDT-SERVICES/OTHER-SERVICES sub-splits were
+          fixed against (edts-zone.tsx) — but never applied here, at the list<->detail split
+          every zone actually renders through. Without `flexBasis={0}`/`minWidth={0}`/
+          `overflow="hidden"`, a long unbroken run of content in either pane (a long branch
+          name, a wide action-log line) refuses to shrink to its ratio share and blows straight
+          through the splitter into the other pane's space — confirmed with a standalone repro
+          (an 80-col container, ratio 0.4, a 200-char word in `list`: the detail pane's own
+          short text got squeezed to ~4 visible columns, overlapping the overflowing list text)
+          before landing this fix. */}
+      <Box flexGrow={flex.list} flexBasis={0} minWidth={0} minHeight={0} overflow="hidden">
+        {list}
+      </Box>
       <Splitter orientation="vertical" size={1} targeted={listSplitterTargeted} />
-      <Box flexGrow={flex.detail}>{detail}</Box>
+      <Box flexGrow={flex.detail} flexBasis={0} minWidth={0} minHeight={0} overflow="hidden">
+        {detail}
+      </Box>
     </Box>
   );
 }
