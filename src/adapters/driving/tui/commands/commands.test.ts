@@ -72,6 +72,10 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(COMMANDS.find((c) => c.name === 'edt-modify')).toBeDefined();
   });
 
+  it('registers the settings command', () => {
+    expect(COMMANDS.find((c) => c.name === 'settings')).toBeDefined();
+  });
+
   it('the registry command calls the store\'s openRegistryScreen action — no core/ports import', () => {
     const calls: string[] = [];
     const fakeStore = {
@@ -125,5 +129,19 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     modifyCmd.run(fakeStore, 'edt-modify my-topic');
 
     expect(calls).toEqual(['edt-modify my-topic']);
+  });
+
+  it('the settings command calls the store\'s openSettingsScreen action', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openSettingsScreen: () => calls.push('openSettingsScreen'),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const settingsCmd = COMMANDS.find((c) => c.name === 'settings')!;
+    settingsCmd.run(fakeStore, '');
+
+    expect(calls).toEqual(['openSettingsScreen']);
   });
 });

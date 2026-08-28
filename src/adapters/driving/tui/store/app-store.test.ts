@@ -17,6 +17,7 @@ import type {
   RegistryPort,
 } from "../../../../core/ports/registry.js";
 import type { StatePort } from "../../../../core/ports/state.js";
+import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/settings.js";
 import { ZONES } from "../zones/zones.js";
 import { DEFAULT_LIST_RATIO } from "../shared/components/list-detail-split.js";
 import { createAppStore, type AppStoreDeps } from "./app-store.js";
@@ -72,6 +73,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     ),
     peek: vi.fn(async () => ok({ locked: false })),
   };
+  const settings: SettingsPort = {
+    load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+    save: vi.fn(async () => ok(undefined)),
+  };
   return {
     registry,
     manifest,
@@ -82,6 +87,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     registryResourceKey: "/config/registry.yaml",
     edtRegistryResourceKey: "/tmp/edts.yaml",
     edtsBaseDir: "/tmp/edts",
+    settings,
     ...overrides,
   };
 }
@@ -516,6 +522,225 @@ describe("app store", () => {
 
       expect(result.ok).toBe(false);
       expect(loadTabVisibility).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("settings slice (story 2.19)", () => {
+    it("seeds `settings` with DEFAULT_SETTINGS before loadSettings() ever resolves", () => {
+      const store = createAppStore(fakeDeps());
+      expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
+      expect(store.getState().settingsWarning).toBeNull();
+    });
+
+    it("loadSettings() applies the loaded value and any non-blocking warning (corrupt-file fallback)", async () => {
+      const settings: SettingsPort = {
+        load: vi.fn(async () =>
+          ok({
+            settings: {
+              commandPalette: { gridMaxRows: 12 },
+              edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+            },
+            warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
+          }),
+        ),
+        save: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+
+      await store.getState().loadSettings();
+
+      expect(store.getState().settings).toEqual({
+        commandPalette: { gridMaxRows: 12 },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+      });
+      expect(store.getState().settingsWarning).toContain("using defaults");
+    });
+
+    it("loadSettings() on a genuine I/O error keeps the last-known settings, surfacing the failure as a warning", async () => {
+      const settings: SettingsPort = {
+        load: vi.fn(async () => err("settings-read-error", "Failed to read settings file")),
+        save: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+
+      await store.getState().loadSettings();
+
+      expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
+      expect(store.getState().settingsWarning).toBe("Failed to read settings file");
+    });
+
+    it("loadSettings() is a no-op when the store is unwired", async () => {
+      const store = createAppStore();
+      await store.getState().loadSettings();
+      expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
+    });
+
+    it("updateSettings() applies optimistically before persistence resolves, then persists (Boundaries: no separate save step)", async () => {
+      let resolveSave: (() => void) | undefined;
+      const savePromise = new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      });
+      const save = vi.fn(async () => {
+        await savePromise;
+        return ok(undefined);
+      });
+      const settings: SettingsPort = {
+        load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+        save,
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+
+      const updatePromise = store.getState().updateSettings({ commandPalette: { gridMaxRows: 15 } });
+      // Optimistic: the store already reflects the new value before save() resolves.
+      expect(store.getState().settings.commandPalette.gridMaxRows).toBe(15);
+
+      resolveSave?.();
+      await updatePromise;
+
+      expect(save).toHaveBeenCalledWith({
+        commandPalette: { gridMaxRows: 15 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      });
+    });
+
+    it("updateSettings() shallow-merges only the provided sub-object, leaving the other untouched", async () => {
+      const store = createAppStore(fakeDeps());
+      store.setState({
+        settings: {
+          commandPalette: { gridMaxRows: 20 },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+        },
+      });
+
+      await store.getState().updateSettings({ edts: { hiddenActionHints: ["other-services"] } });
+
+      expect(store.getState().settings).toEqual({
+        commandPalette: { gridMaxRows: 20 },
+        edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [] },
+      });
+    });
+
+    it("updateSettings() shallow-merges hiddenActionTypes independently of hiddenActionHints (amended 2026-08-28)", async () => {
+      const store = createAppStore(fakeDeps());
+      store.setState({
+        settings: {
+          commandPalette: { gridMaxRows: 20 },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"] },
+        },
+      });
+
+      await store.getState().updateSettings({ edts: { hiddenActionTypes: ["create", "modify"] } });
+
+      expect(store.getState().settings).toEqual({
+        commandPalette: { gridMaxRows: 20 },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"] },
+      });
+    });
+
+    it("updateSettings() surfaces a save failure as settingsWarning without reverting the optimistic value", async () => {
+      const settings: SettingsPort = {
+        load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+        save: vi.fn(async () => err("settings-write-error", "Failed to write settings file")),
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+
+      await store.getState().updateSettings({ commandPalette: { gridMaxRows: 3 } });
+
+      expect(store.getState().settings.commandPalette.gridMaxRows).toBe(3);
+      expect(store.getState().settingsWarning).toBe("Failed to write settings file");
+    });
+
+    it("openSettingsScreen/closeSettingsScreen toggle settingsScreenOpen (mirrors registryScreenOpen)", () => {
+      const store = createAppStore(fakeDeps());
+      expect(store.getState().settingsScreenOpen).toBe(false);
+
+      store.getState().openSettingsScreen();
+      expect(store.getState().settingsScreenOpen).toBe(true);
+
+      store.getState().closeSettingsScreen();
+      expect(store.getState().settingsScreenOpen).toBe(false);
+    });
+
+    it("closeSettingsScreen() also clears settingsWarning, so a previously-seen warning doesn't linger", () => {
+      const store = createAppStore(fakeDeps());
+      store.setState({ settingsScreenOpen: true, settingsWarning: "Invalid settings file — using defaults." });
+
+      store.getState().closeSettingsScreen();
+
+      expect(store.getState().settingsWarning).toBeNull();
+    });
+
+    it("updateSettings() clears a stale settingsWarning once a save succeeds", async () => {
+      const settings: SettingsPort = {
+        load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+        save: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+      store.setState({ settingsWarning: "Failed to write settings file" });
+
+      await store.getState().updateSettings({ commandPalette: { gridMaxRows: 3 } });
+
+      expect(store.getState().settingsWarning).toBeNull();
+    });
+
+    it("updateSettings() persists concurrent calls in the order they were requested, not resolution order", async () => {
+      const persisted: number[] = [];
+      let resolveFirst: (() => void) | undefined;
+      const firstGate = new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const save = vi
+        .fn()
+        .mockImplementationOnce(async (next: { commandPalette: { gridMaxRows: number } }) => {
+          // The first save is the slow one — it resolves after the second call has already
+          // been issued, so without serialization the faster second save would land on disk
+          // first and the slower first save would overwrite it afterwards with stale data.
+          await firstGate;
+          persisted.push(next.commandPalette.gridMaxRows);
+          return ok(undefined);
+        })
+        .mockImplementationOnce(async (next: { commandPalette: { gridMaxRows: number } }) => {
+          persisted.push(next.commandPalette.gridMaxRows);
+          return ok(undefined);
+        });
+      const settings: SettingsPort = {
+        load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+        save,
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+
+      const first = store.getState().updateSettings({ commandPalette: { gridMaxRows: 1 } });
+      const second = store.getState().updateSettings({ commandPalette: { gridMaxRows: 2 } });
+      resolveFirst?.();
+      await Promise.all([first, second]);
+
+      expect(persisted).toEqual([1, 2]);
+    });
+
+    it("loadSettings() discards a stale result superseded by a newer updateSettings() while it was in flight", async () => {
+      let resolveLoad: ((value: { settings: typeof DEFAULT_SETTINGS; warning: string | null }) => void) | undefined;
+      const loadPromise = new Promise<{ settings: typeof DEFAULT_SETTINGS; warning: string | null }>((resolve) => {
+        resolveLoad = resolve;
+      });
+      const settings: SettingsPort = {
+        load: vi.fn(async () => ok(await loadPromise)),
+        save: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ settings }));
+
+      const loading = store.getState().loadSettings();
+      // A newer updateSettings() lands while the load above is still in flight.
+      await store.getState().updateSettings({ commandPalette: { gridMaxRows: 42 } });
+
+      // The stale load now resolves with an older on-disk value — it must not clobber the
+      // newer update already applied above.
+      resolveLoad?.({
+        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
+        warning: null,
+      });
+      await loading;
+
+      expect(store.getState().settings.commandPalette.gridMaxRows).toBe(42);
     });
   });
 });

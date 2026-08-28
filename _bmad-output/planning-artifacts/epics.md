@@ -105,7 +105,7 @@ UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14; reveal mechanism 
 
 UX-DR30 (added 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `command-grid` component — a multi-column, arrow-navigable browser for the command bar's matching commands (UX-DR29), column-major left-to-right layout with a configurable max rows per column, trailing `…` truncation when the full grid exceeds the display width, and horizontal scrolling at either extremity to reveal columns hidden by that truncation. `Down` from the input enters the grid (landing top-of-first-column); `Up` from a column's top row returns to the input; `Enter` or any typed character exits back to the input (completing or resuming edit, respectively).
 
-UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error.
+UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level.
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
 ### FR Coverage Map
@@ -1257,6 +1257,8 @@ So that the EDTs zone reads at a glance instead of requiring me to cross-referen
 ### Story 2.19: Global Settings Screen (`:settings`)
 
 > Added 2026-08-26 (Sprint Change Proposal): introduces a persisted user-preferences surface, reachable via the `:` command bar (Story 2.14), tab-organized — a "General" tab plus one tab per feature area that has settings (starting with EDTs and the Command Palette). First TUI surface that needs config the manifest/registry model doesn't cover — extends AD-7's storage topology (additive, not a rewrite) rather than reusing per-EDT/global SQLite. Appended to Epic 2 because its branch is still open; seeds the two settings Story 2.17 (command palette) and Story 2.18 (EDT detail pane) reference.
+>
+> Amended 2026-08-28 (Sprint Change Proposal): the "EDTs" tab's real intent was under-specified on first pass — the original AC only captured per-pane hint-visibility (below), never Max's actual second ask for this tab: filtering which action *types* (`create`/`switch`/`modify`, Story 2.15) show in the EDT detail pane's "Recent actions" log. Discovered during real-usage review of the implemented story (branch not yet merged). Corrects the "EDTs" tab AC below (now two settings groups behind a drill-down) and the global `Esc` AC (now scoped to "no group drilled into"); every other AC, and everything already implemented for the Command Palette tab, `settings.yaml` persistence, and corrupt-file fallback, stays exactly as shipped (KEEP).
 
 As a developer,
 I want a single settings screen, organized by tab, where I can adjust the tool's configurable behaviors (starting with the command palette's grid density and which EDT-detail actions show),
@@ -1277,8 +1279,20 @@ So that these preferences are discoverable in one place and persist across sessi
 **Then** it shows a single numeric setting — the max rows per grid column (Story 2.17) — editable, defaulting to that story's constant, with `Up`/`Down` (or typed digits) adjusting it, applied immediately to the live command bar without restarting the tool
 
 **Given** the "EDTs" tab
-**When** viewed
-**Then** it shows a `checkbox-list-item` list of the EDT detail pane's available-action hints (Story 2.18) the developer can hide from that display — unchecked by default (nothing hidden); toggling applies immediately
+**When** first opened
+**Then** it shows an Up/Down-navigable list of two settings groups — "Hint visibility" and "Recent action types" — each row marked with a `›` cursor when highlighted, no checkboxes at this level
+
+**Given** the "EDTs" tab's group list, a group highlighted
+**When** `Enter` is pressed
+**Then** it drills into that group's own `checkbox-list-item` list:
+- "Hint visibility" — the EDT detail pane's available-action hints (Story 2.18) the developer can hide from that display, one row per hint token — unchecked by default (nothing hidden)
+- "Recent action types" — the EDT detail pane's "Recent actions" log entry types (`create`/`switch`/`modify`, Story 2.15), one row per type the developer can hide from that log — unchecked by default (nothing hidden)
+
+toggling either group's checkboxes (`Space`) applies immediately, same as before
+
+**Given** a group's checkbox list is open (drilled in)
+**When** `Esc` is pressed
+**Then** it steps back up to the group list — the whole settings screen does not close
 
 **Given** the "General" tab
 **When** viewed
@@ -1292,15 +1306,17 @@ So that these preferences are discoverable in one place and persist across sessi
 **When** loaded
 **Then** the tool falls back to every setting's default rather than crashing, and surfaces a clear (non-blocking) warning — mirrors the manifest's "clear validation error naming the field, never a generic crash" rule
 
-**Given** the settings screen
+**Given** the settings screen, no tab-internal group drilled into (General tab, Command Palette tab, or the EDTs tab's own group list)
 **When** `Esc` is pressed
-**Then** it closes — there is nothing to discard, since every change already applied live
+**Then** the whole screen closes — there is nothing to discard, since every change already applied live (the EDTs tab's group-level `Esc`, defined above, steps back one level first instead)
 
 **Given** this screen
 **When** exercised via keyboard only
 **Then** every action is reachable without a mouse (Story 1.9's standing rule)
 
 **Implementation notes:** new `core/ports/settings.ts` (`SettingsPort`: `load`/`save`, zod schema) + `adapters/driven/settings` (YAML file, mirrors `adapters/driven/registry`'s shape) — the first new port this Sprint Change Proposal actually requires. `adapters/driving/tui` consumes it through the Zustand store (a `settings` slice, loaded once at startup, updated optimistically on every change) — Story 2.17's `COMMAND_GRID_MAX_ROWS` constant becomes that setting's default value, not a replacement; Story 2.18's hidden-actions list gates which hint tokens the "available actions" line includes. New `settings` entry in `commands.ts`'s `COMMANDS` array, same shape as `registry`.
+
+**Amended 2026-08-28 (Sprint Change Proposal):** `Settings.edts` gains a second field, `hiddenActionTypes: string[]` (values among `create`/`switch`/`modify`), alongside the existing `hiddenActionHints: string[]` — both zod-validated with the same "corrupt/invalid falls back to defaults" convention. `edts-zone.tsx`'s `formatEdtActionHistory` filters `actionLog` by `actionType` against `hiddenActionTypes` before rendering the "Recent actions:" list (new parameter, same live-read-no-cache pattern as `resolveActionHint`'s `hiddenActionHints`). The settings screen's EDTs tab gains a group-list level (its own small pure state machine, `resolveSettingsTabState`-style) ahead of the two now-separate checkbox lists; `Esc`'s handling becomes tab-aware (only the EDTs tab has a group level to step back out of).
 
 ### Story 2.20: Top Bar & Footer Hint Accuracy Fixes
 

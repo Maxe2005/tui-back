@@ -34,6 +34,12 @@ export const COMMANDS: readonly Command[] = [
     name: 'edt-modify',
     run: (useStore, fullQuery) => useStore.getState().openEdtModifyDialog(fullQuery),
   },
+  // Story 2.19: the settings screen is reachable exclusively through this registered
+  // command (mirrors `registry`'s own precedent) — never bound to a raw keypress.
+  {
+    name: 'settings',
+    run: (useStore) => useStore.getState().openSettingsScreen(),
+  },
 ];
 
 // Pure prefix filter, case-insensitive — mirrors zones.ts's pure-function convention

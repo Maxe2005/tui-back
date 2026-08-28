@@ -8,6 +8,7 @@ import { ModalDialog } from './shared/components/modal-dialog.js';
 import { TopBar } from './shared/components/top-bar.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
+import { SettingsScreen } from './shared/settings-screen.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
 import { ALL_ZONE_IDS, ZONES, nextZoneId, resolveReachableZones, zoneGatedStatus, type ZoneId } from './zones/zones.js';
@@ -126,6 +127,14 @@ export function AppShell({
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const openCommandBar = useStore((state) => state.openCommandBar);
   const closeCommandBar = useStore((state) => state.closeCommandBar);
+  // Story 2.19: the `:settings` screen's open/close flag — mirrors registryScreenOpen for the
+  // store-level open flag and the global-shortcut skip below, but (amended 2026-08-28) Esc no
+  // longer closes it centrally here — `closeSettingsScreen` is instead passed down as
+  // SettingsScreen's own `onClose` prop, since only that component knows whether the EDTs
+  // tab's group-list is drilled in (Esc should step back, not close).
+  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
+  const closeSettingsScreen = useStore((state) => state.closeSettingsScreen);
+  const loadSettings = useStore((state) => state.loadSettings);
   // Story 2.13: manifest-gated Routes/shared-types tab visibility — loaded once on mount and
   // reloaded on registry-screen close / active-EDT membership change (see the effect below
   // and app-store.ts's createEdt/switchEdt/modifyEdt).
@@ -152,6 +161,15 @@ export function AppShell({
   useEffect(() => {
     void loadEdts();
     // Deliberately fires once on mount only, mirroring EdtsZone's own mount-once idiom.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Story 2.19 (AC3, I/O matrix "Restart"): loaded once at app mount, independent of whether
+  // the settings screen is ever opened — command-bar.tsx and edts-zone.tsx both read
+  // `store.settings` unconditionally, so the persisted values (not the defaults) must be live
+  // before either of them ever renders.
+  useEffect(() => {
+    void loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -185,16 +203,17 @@ export function AppShell({
       return;
     }
 
-    // Skip help dispatch entirely while the registry screen or the command bar is open — both
-    // own free-text keystroke capture (the registry's root-path field, the bar's command
-    // query), so `?` typed there must land as a literal character, never also pop the
-    // keybinding-help modal on top of the overlay. Mirrors how the registry screen's own
-    // Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen && !commandBarOpen) {
+    // Skip help dispatch entirely while the registry screen, the command bar, or the settings
+    // screen is open — each owns its own keystroke capture (the registry's root-path field,
+    // the bar's command query, the settings screen's tab/value navigation), so `?` typed there
+    // must land as a literal character (or, for settings, simply not open help on top of it),
+    // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
+    // screen's own Esc-close below is gated on registryScreenOpen.
+    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen) {
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
-    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen) {
+    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen) {
       // Story 2.13: the reachable-zone set (every zone minus whichever gated tab is
       // currently 'omitted') gates both the mnemonic and the arrow-nav dispatch below —
       // an omitted tab is never landed on either way; a disabled one stays reachable.
@@ -236,6 +255,13 @@ export function AppShell({
     if (registryScreenOpen && key.escape === true) {
       closeRegistryScreen();
     }
+
+    // Story 2.19 (amended 2026-08-28): Esc-close for the settings screen is no longer
+    // centralized here — it moved to SettingsScreen's own self-contained useInput (mirrors
+    // command-bar.tsx's own `onClose` pattern), because only that component knows whether the
+    // EDTs tab currently has a group drilled in (Esc should step back a level, not close the
+    // whole screen) or not (Esc should close). `closeSettingsScreen` is passed down as
+    // `onClose` below instead.
   });
 
   return (
@@ -255,6 +281,7 @@ export function AppShell({
         </ModalDialog>
       )}
       {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
+      {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
       {commandBarOpen && (
         <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}
