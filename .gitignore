@@ -3,3 +3,5 @@
 .bmad-loop/policy.toml
 _bmad/render/
 node_modules/
+
+test_repos/*
