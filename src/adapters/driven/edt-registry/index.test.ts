@@ -341,7 +341,9 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       topic: 'demo',
       addMembers: ['/repos/new-member'],
       removeMembers: [],
-      setBranches: [],
+      // Story 2.24: addMembers no longer silently defaults to the repo's currentBranch — a
+      // matching setBranches entry is required to name the requested branch explicitly.
+      setBranches: [{ repoPath: '/repos/new-member', branch: 'feature-new' }],
       renameTo: undefined,
     });
 

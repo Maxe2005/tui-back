@@ -2,9 +2,10 @@
 title: 'Modify EDT — Mandatory Branch on Add, No More Silent Default'
 type: 'feature'
 created: '2026-09-14'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
 context: []
+baseline_commit: '6ba7132bdc084007c7965e192d4b51d08683a2d4'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -52,12 +53,12 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `modify.ts` -- split step 1 into `pendingAdds` (matched) vs immediate `branch-required` (unmatched) -- stops the silent `currentBranch` read
-- [ ] `modify.ts` -- step 3 promotes a successful `pendingAdds` change into `addedMembers` -- new member actually lands in the written entry
-- [ ] `edts-zone.tsx` -- `suggestBranchForNewMember(existingMembers, topic)` -- unanimous-branch-or-topic-slug suggestion
-- [ ] `edts-zone.tsx` -- extend `canEditMemberBranch` + Space-toggle to stage/edit a non-member's branch
-- [ ] `edts-zone.tsx` -- `resolveModifyOps` blocks confirm when a selected non-member's staged branch is empty
-- [ ] Extend `modify.test.ts`, `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx` for the I/O matrix
+- [x] `modify.ts` -- split step 1 into `pendingAdds` (matched) vs immediate `branch-required` (unmatched) -- stops the silent `currentBranch` read
+- [x] `modify.ts` -- step 3 promotes a successful `pendingAdds` change into `addedMembers` -- new member actually lands in the written entry
+- [x] `edts-zone.tsx` -- `suggestBranchForNewMember(existingMembers, topic)` -- unanimous-branch-or-topic-slug suggestion
+- [x] `edts-zone.tsx` -- extend `canEditMemberBranch` + Space-toggle to stage/edit a non-member's branch
+- [x] `edts-zone.tsx` -- `resolveModifyOps` blocks confirm when a selected non-member's staged branch is empty
+- [x] Extend `modify.test.ts`, `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx` for the I/O matrix
 
 **Acceptance Criteria:**
 - Given `modifyEdt` with a repo in `addMembers` and a matching `setBranches` entry, when pre-lock steps run, then step 1 makes no `currentBranch`/gate call for it and the repo lands in the final member list with that branch.
@@ -71,7 +72,7 @@ context: []
 
 ## Design Notes
 
-Written ahead of Stories 2.22/2.23/2.25 (all still `backlog`/`ready-for-dev`); recommended build order is 2.23 → 2.25 → {2.22, 2.24, 2.26} in any order. If those have landed by implementation time, prefer their real components over the colocated fallbacks above — no functional rework expected either way.
+Written ahead of Stories 2.22/2.23/2.25 (all still `backlog`/`ready-for-dev` at spec-authoring time); recommended build order was 2.23 → 2.25 → {2.22, 2.24, 2.26} in any order. By implementation time, 2.22 and 2.23 had already landed on `epic-2` (this spec's `baseline_commit` is 2.22's merge commit) — their real components (the branch-setup step, `suggestBranchNameFromTopic`, `TextInputLine`) were reused as intended, exactly as anticipated here, with no functional rework needed. 2.25's structured failure-display registry has not landed yet, so this story still relies on `summarizeFailedResults` as its Boundaries section allows.
 
 ## Verification
 
@@ -82,3 +83,53 @@ Written ahead of Stories 2.22/2.23/2.25 (all still `backlog`/`ready-for-dev`); r
 
 **Manual checks:**
 - Modify an EDT with ≥2 members sharing a branch → check a new service → field pre-fills with that shared branch, editable; clear it → confirm blocked. Zero/divergent-branch members → field falls back to the topic slug. Add-to-EDT on a service whose current branch collides with another EDT → succeeds using the requested branch instead of failing on the current one.
+
+## Suggested Review Order
+
+**No more silent `currentBranch` default (core)**
+
+- Entry point: an `addMembers` entry with a matching `setBranches` entry defers entirely to step 3; unmatched ones fail fast with `branch-required`.
+  [`modify.ts:107`](../../../src/core/edt/modify.ts#L107)
+
+- Step 3 skips a `setBranches` entry whose path step 1 already rejected (invalid/duplicate) — no double-processing.
+  [`modify.ts:190`](../../../src/core/edt/modify.ts#L190)
+
+- A successful checkout for a `pendingAdds` repo promotes into `addedMembers`, not just `branchChanges` — the new member actually lands.
+  [`modify.ts:251`](../../../src/core/edt/modify.ts#L251)
+
+- CLI usage strings spell out the new mandatory `--add-member`/`--set-branch` pairing.
+  [`modify.ts:67`](../../../src/core/edt/modify.ts#L67)
+  [`subcommands.ts:30`](../../../src/adapters/driving/cli/subcommands.ts#L30)
+
+**Modify checklist: auto-staged branch on a new candidate (TUI)**
+
+- `suggestBranchForNewMember` — unanimous existing branch, else the topic slug — the suggestion source for a freshly-checked candidate.
+  [`edts-zone.tsx:251`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L251)
+
+- Space-toggle auto-stages that suggestion into `branchEdits` the moment a not-yet-member row is checked, never overwriting an existing stage.
+  [`edts-zone.tsx:1497`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1497)
+
+- `canEditMemberBranch` now opens the branch-edit sub-dialog for any checked row, not just existing members — dead `target` param dropped.
+  [`edts-zone.tsx:588`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L588)
+
+- `resolveModifyOps` always emits a `setBranches` entry for a checked non-member instead of silently omitting one.
+  [`edts-zone.tsx:620`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L620)
+
+- Confirm blocks inline (no core call) when a newly-checked member's staged branch is empty.
+  [`edts-zone.tsx:1168`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1168)
+
+- Success-log message only counts a real branch change toward "changed N branch(es)", never a plain add.
+  [`edts-zone.tsx:1209`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1209)
+
+**Tests**
+
+- Mixed-batch proof of per-repo isolation: one add succeeds, one hits `shared-branch-rejected`, both independent.
+  [`modify.test.ts:191`](../../../src/core/edt/modify.test.ts#L191)
+
+- Matched-add and unmatched-add (`branch-required`) cases, strengthened to assert the git gate itself is never called.
+  [`modify.test.ts:94`](../../../src/core/edt/modify.test.ts#L94)
+  [`modify.test.ts:146`](../../../src/core/edt/modify.test.ts#L146)
+
+- Real-keypress coverage: suggestion flows through to `modifyEdt`, and an emptied auto-staged branch blocks submit.
+  [`edts-zone.interaction.test.tsx:303`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L303)
+  [`edts-zone.interaction.test.tsx:353`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L353)

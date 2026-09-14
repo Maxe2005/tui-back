@@ -38,6 +38,7 @@ import {
   resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
+  suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
   toggleMemberSelection,
@@ -727,42 +728,58 @@ describe('summarizeFailedResults', () => {
 });
 
 describe('canEditMemberBranch', () => {
-  const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
-
+  // Story 2.24 code review: canEditMemberBranch dropped its unused `target` param — it never
+  // consulted membership, only whether the row is currently checked.
   it('is true only for an existing member that is still checked', () => {
-    expect(canEditMemberBranch(target, '/repos/a', ['/repos/a'])).toBe(true);
+    expect(canEditMemberBranch('/repos/a', ['/repos/a'])).toBe(true);
   });
 
   it('is false for an existing member that was unchecked', () => {
-    expect(canEditMemberBranch(target, '/repos/a', [])).toBe(false);
+    expect(canEditMemberBranch('/repos/a', [])).toBe(false);
   });
 
-  it('is false for a freshly-checked path that is not yet an existing member', () => {
-    expect(canEditMemberBranch(target, '/repos/new', ['/repos/new'])).toBe(false);
+  // Story 2.24: widened to also cover a not-yet-member candidate — checking it now
+  // auto-stages a branch (suggestBranchForNewMember), so Enter on it opens the same
+  // branch-edit sub-dialog an existing member's row already uses.
+  it('is true for a freshly-checked path that is not yet an existing member (story 2.24)', () => {
+    expect(canEditMemberBranch('/repos/new', ['/repos/new'])).toBe(true);
+  });
+
+  it('is false for a not-yet-existing member that is not checked', () => {
+    expect(canEditMemberBranch('/repos/new', [])).toBe(false);
   });
 });
 
 describe('resolveModifyEnterAction', () => {
-  const target = edtEntry({ members: [{ service: 'a', repoPath: '/repos/a', branch: 'main' }] });
-
+  // Story 2.24 code review: resolveModifyEnterAction dropped its `target` param too — it
+  // only ever forwarded it to canEditMemberBranch, which no longer accepts it.
   it('opens branch-edit on a branch-editable members-focus row', () => {
-    expect(resolveModifyEnterAction('members', target, ['/repos/a'], '/repos/a')).toEqual({
+    expect(resolveModifyEnterAction('members', ['/repos/a'], '/repos/a')).toEqual({
       type: 'edit-branch',
       repoPath: '/repos/a',
     });
   });
 
   it('submits when topic-focused, regardless of the focused member row', () => {
-    expect(resolveModifyEnterAction('topic', target, ['/repos/a'], '/repos/a')).toEqual({ type: 'submit' });
+    expect(resolveModifyEnterAction('topic', ['/repos/a'], '/repos/a')).toEqual({ type: 'submit' });
   });
 
-  it('submits when members-focused but the row is not branch-editable (unchecked or not-yet-a-member)', () => {
-    expect(resolveModifyEnterAction('members', target, [], '/repos/a')).toEqual({ type: 'submit' });
-    expect(resolveModifyEnterAction('members', target, ['/repos/new'], '/repos/new')).toEqual({ type: 'submit' });
+  it('submits when members-focused but the row is unchecked', () => {
+    expect(resolveModifyEnterAction('members', [], '/repos/a')).toEqual({ type: 'submit' });
+  });
+
+  // Story 2.24: a freshly-checked not-yet-member row is now branch-editable too — Enter
+  // opens the same branch-edit sub-dialog (its staged branch auto-fills via
+  // suggestBranchForNewMember on check).
+  it('opens branch-edit on a freshly-checked not-yet-member row (story 2.24)', () => {
+    expect(resolveModifyEnterAction('members', ['/repos/new'], '/repos/new')).toEqual({
+      type: 'edit-branch',
+      repoPath: '/repos/new',
+    });
   });
 
   it('submits when there is no focused row at all (empty candidate list)', () => {
-    expect(resolveModifyEnterAction('members', target, [], undefined)).toEqual({ type: 'submit' });
+    expect(resolveModifyEnterAction('members', [], undefined)).toEqual({ type: 'submit' });
   });
 });
 
@@ -798,6 +815,43 @@ describe('resolveModifyOps', () => {
     expect(resolveModifyOps(target, 'renamed', [], {}).renameTo).toBe('renamed');
     expect(resolveModifyOps(target, 'original', [], {}).renameTo).toBeUndefined();
     expect(resolveModifyOps(target, '   ', [], {}).renameTo).toBeUndefined();
+  });
+
+  // Story 2.24: a checked non-member always carries a setBranches entry, staged or not —
+  // never silently omitted, so modify.ts's step 1 always finds a match to defer to instead
+  // of falling back to its branch-required failure.
+  it('includes a setBranches entry for every checked non-member, staged or not (story 2.24)', () => {
+    const target = edtEntry({ members: [] });
+    const ops = resolveModifyOps(target, target.topic, ['/repos/b'], { '/repos/b': 'feature-y' });
+    expect(ops.setBranches).toEqual([{ repoPath: '/repos/b', branch: 'feature-y' }]);
+  });
+
+  it('falls back to an empty setBranches entry for a checked non-member with no staged branch (story 2.24)', () => {
+    const target = edtEntry({ members: [] });
+    const ops = resolveModifyOps(target, target.topic, ['/repos/b'], {});
+    expect(ops.setBranches).toEqual([{ repoPath: '/repos/b', branch: '' }]);
+  });
+});
+
+describe('suggestBranchForNewMember (story 2.24)', () => {
+  it('suggests the shared branch when every existing member agrees on one', () => {
+    const members = [
+      { service: 'a', repoPath: '/repos/a', branch: 'feature-shared' },
+      { service: 'b', repoPath: '/repos/b', branch: 'feature-shared' },
+    ];
+    expect(suggestBranchForNewMember(members, 'Some Topic')).toBe('feature-shared');
+  });
+
+  it('falls back to the topic slug when members diverge on branch', () => {
+    const members = [
+      { service: 'a', repoPath: '/repos/a', branch: 'feature-a' },
+      { service: 'b', repoPath: '/repos/b', branch: 'feature-b' },
+    ];
+    expect(suggestBranchForNewMember(members, 'Fix Auth Bug!!')).toBe('fix-auth-bug');
+  });
+
+  it('falls back to the topic slug when there are zero existing members', () => {
+    expect(suggestBranchForNewMember([], 'Fix Auth Bug!!')).toBe('fix-auth-bug');
   });
 });
 

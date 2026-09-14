@@ -296,6 +296,102 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  // Story 2.24: checking a not-yet-member candidate in Modify auto-stages a suggested branch
+  // (the shared branch when every existing member agrees on one) — it flows straight through
+  // to modifyEdt's addMembers+setBranches without ever having to open the branch-edit
+  // sub-dialog by hand.
+  it('auto-stages a suggested branch when checking a not-yet-member candidate (story 2.24)', async () => {
+    const store = createAppStore();
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'feature-shared' }],
+    });
+    let modifyParams: ModifyEdtParams | undefined;
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'feature-shared', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open modify
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.down); // move cursor onto row 1 (not-yet-member svc-b)
+      await press(instance, stdin, KEYS.space); // check it -> auto-stages branchEdits['/repos/b']
+      await press(instance, stdin, KEYS.tab); // members -> topic
+      await press(instance, stdin, KEYS.enter); // submit (never opened the branch-edit sub-dialog)
+
+      expect(modifyParams).toBeDefined();
+      expect(modifyParams?.addMembers).toEqual(['/repos/b']);
+      // The unanimous existing member's branch ('feature-shared') is the suggestion — never
+      // a silent currentBranch default.
+      expect(modifyParams?.setBranches).toEqual([{ repoPath: '/repos/b', branch: 'feature-shared' }]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 2.24: a newly-checked member's staged branch can still end up empty (e.g. an
+  // all-punctuation topic slugifies to '' and there are zero existing members to fall back
+  // to) — confirm must block inline, never reaching modifyEdt.
+  it('blocks confirm inline when a newly-checked member\'s auto-staged branch is empty (story 2.24)', async () => {
+    const store = createAppStore();
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: '!!!',
+      status: 'active',
+      members: [],
+    });
+    let modifyCalls = 0;
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
+        modifyCalls += 1;
+        return { ok: true, data: { ulid: 'active-ulid', topic: '!!!', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open modify
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // check the only (not-yet-member) candidate
+      await press(instance, stdin, KEYS.tab); // members -> topic
+      await press(instance, stdin, KEYS.enter); // attempt submit -> blocked inline
+
+      expect(stdout.output).toContain('Branch name must not be empty');
+      expect(modifyCalls).toBe(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('guards the create form submit against re-entrancy — a second Enter before the first resolves never double-calls createEdt', async () => {
     const store = createAppStore();
     let createCalls = 0;

@@ -64,7 +64,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
 
   const trimmedTopic = topic.trim();
   if (trimmedTopic === '') {
-    return err('missing-argument', 'Usage: tui-back edt modify --topic <topic> [--add-member <path>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]');
+    return err('missing-argument', 'Usage: tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>] (each --add-member requires a matching --set-branch for that same path — no current-branch default)');
   }
 
   // Fast-fail: check target EDT exists (before no-operations check, so unknown topic
@@ -104,7 +104,20 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
   const addedMembers: EdtMember[] = [];
   const branchChanges: Array<{ repoPath: string; branch: string }> = [];
 
-  // ---- 1. Add members (pre-lock: read current branch + gate AD-8) ----
+  // Story 2.24: pendingAdds — addMembers entries with a matching setBranches entry defer branch
+  // resolution entirely to step 3 (no currentBranch / assertAllowedBranch here). Unmatched
+  // entries fail fast with branch-required.
+  const setBranchesByPath = new Map(setBranches.map(({ repoPath, branch }) => [resolve(repoPath), branch]));
+  const pendingAdds = new Set<string>();
+  // Story 2.24 code review: a resolved path step 1 already rejected (invalid-member /
+  // duplicate-member) must not also be processed by step 3 — a raw caller can combine
+  // --add-member for an invalid/duplicate path with --set-branch for that same path, and
+  // without this, step 3 would still run assertAllowedBranch/checkout against it, producing a
+  // second, possibly conflicting result row and a real git checkout on a path already
+  // declared invalid.
+  const rejectedAddPaths = new Set<string>();
+
+  // ---- 1. Add members (pre-lock: registered/duplicate checks only for pending, branch-required for unmatched) ----
   if (addMembers.length > 0) {
     const registered = await registry.list();
     if (!registered.ok) {
@@ -120,6 +133,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
           outcome: 'failed',
           detail: { code: 'invalid-member', message: `Member is not a registered managed repo: ${resolved}` },
         });
+        rejectedAddPaths.add(resolved);
         continue;
       }
 
@@ -131,47 +145,22 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
           outcome: 'failed',
           detail: { code: 'duplicate-member', message: `Member ${resolved} is already in the EDT's member list` },
         });
+        rejectedAddPaths.add(resolved);
         continue;
       }
 
-      // Read current branch + gate AD-8 (shared-branch + cross-EDT ownership)
-      const current = await git.currentBranch(resolved);
-      if (!current.ok) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: current.error.code, message: current.error.message },
-        });
+      // Story 2.24: if a matching setBranches entry exists, defer entirely to step 3 — no
+      // currentBranch / assertAllowedBranch here. Otherwise fail with branch-required.
+      if (setBranchesByPath.has(resolved)) {
+        pendingAdds.add(resolved);
         continue;
       }
 
-      const allowed = await git.assertAllowedBranch(resolved, current.data, target.ulid);
-      if (!allowed.ok) {
-        if (allowed.error.code === 'shared-branch-rejected') {
-          return err('shared-branch-rejected', allowed.error.message);
-        }
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: allowed.error.code, message: allowed.error.message },
-        });
-        continue;
-      }
-
-      // Resolve the real service identity for the persisted registry entry (same source
-      // create.ts uses) rather than falling back to the raw path — a manifest-load failure
-      // here is not fatal to the add (the branch is already gated), it only degrades the
-      // recorded service label.
-      const loadedManifest = await manifest.load(resolved);
-      const service = loadedManifest.ok ? loadedManifest.data.service : resolved;
-
-      // Record member with current (gated) branch — success
       results.push({
-        service,
-        outcome: 'added',
-        newBranch: current.data,
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: 'branch-required', message: `no branch specified for new member ${resolved}; call with a matching setBranches entry` },
       });
-      addedMembers.push({ service, repoPath: resolved, branch: current.data });
     }
   }
 
@@ -189,9 +178,18 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
   }
 
   // ---- 3. Set branches (pre-lock: gate + protected-switch git) ----
+  // Story 2.24: for pendingAdds (addMembers with matching setBranches), a successful checkout
+  // also promotes into addedMembers (not just branchChanges) so the lock-time assembly picks
+  // it up as a genuinely new member.
   if (setBranches.length > 0) {
     for (const { repoPath, branch } of setBranches) {
       const resolved = resolve(repoPath);
+
+      // Story 2.24 code review: this resolved path already has a failure result from step 1
+      // (invalid-member/duplicate-member) — never process it a second time here.
+      if (rejectedAddPaths.has(resolved)) {
+        continue;
+      }
 
       // Gate: shared-branch + cross-EDT ownership (AD-8)
       const allowed = await git.assertAllowedBranch(resolved, branch, target.ulid);
@@ -250,17 +248,35 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
         continue;
       }
 
-      // Determine service from manifest
+      // Determine service from manifest. Story 2.24 code review: a pendingAdds repo (a
+      // brand-new member) falls back to the full resolved path on a manifest-load failure —
+      // matching the old step-1 behavior for new members — while an existing member's branch
+      // change keeps the pre-existing basename fallback (resolved.split('/').pop()).
+      const isPendingAdd = pendingAdds.has(resolved);
       const { service } = await (async () => {
         const loaded = await manifest.load(resolved);
-        return loaded.ok ? { service: loaded.data.service } : { service: resolved.split('/').pop() || resolved };
+        if (loaded.ok) {
+          return { service: loaded.data.service };
+        }
+        return { service: isPendingAdd ? resolved : resolved.split('/').pop() || resolved };
       })();
-      results.push({
-        service,
-        outcome: 'branch-changed',
-        newBranch: branch,
-      });
-      branchChanges.push({ repoPath: resolved, branch });
+      // Story 2.24: if this setBranches entry corresponds to a pending add, record as 'added'
+      // and promote into addedMembers; otherwise it's a branch change for an existing member.
+      if (isPendingAdd) {
+        results.push({
+          service,
+          outcome: 'added',
+          newBranch: branch,
+        });
+        addedMembers.push({ service, repoPath: resolved, branch });
+      } else {
+        results.push({
+          service,
+          outcome: 'branch-changed',
+          newBranch: branch,
+        });
+        branchChanges.push({ repoPath: resolved, branch });
+      }
     }
   }
 

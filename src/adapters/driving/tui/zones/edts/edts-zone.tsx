@@ -243,6 +243,19 @@ export function validateBranchEditValue(value: string): string | null {
   return value.trim() === '' ? 'Branch name must not be empty' : null;
 }
 
+// Story 2.24 -----------------------------------------------------------------------------
+// Suggestion for a not-yet-member candidate newly checked in the Modify dialog: reuse the
+// EDT's shared branch when every existing member happens to agree on one (>=1 member exists),
+// otherwise fall back to the same topic-slug suggestion the create dialog's branch-setup step
+// already uses (Boundaries: "New pure suggestBranchForNewMember(existingMembers, topic)").
+export function suggestBranchForNewMember(existingMembers: readonly { branch: string }[], topic: string): string {
+  const first = existingMembers[0];
+  if (first !== undefined && existingMembers.every((member) => member.branch === first.branch)) {
+    return first.branch;
+  }
+  return suggestBranchNameFromTopic(topic);
+}
+
 // Story 2.22 -----------------------------------------------------------------------------
 // The create-EDT dialog's mandatory branch-setup step (Boundaries: "shown once >=1 member is
 // selected; no enable/disable choice"). core/edt/create.ts's CreateBranchOptions has required
@@ -566,15 +579,14 @@ export function resolveCandidateListState(
   return candidateCount === 0 ? 'empty' : 'ready';
 }
 
-// A member row is branch-editable only when it's an existing member of the target EDT
-// (there is a registered branch to change) and still checked (an unchecked row's branch
-// edit would be dropped at submit anyway — editing it first is confusing, not useful).
-export function canEditMemberBranch(
-  target: EdtRegistryEntry,
-  repoPath: string,
-  selectedMembers: readonly string[],
-): boolean {
-  return target.members.some((member) => member.repoPath === repoPath) && selectedMembers.includes(repoPath);
+// A row is branch-editable whenever it's currently checked — an unchecked row's branch edit
+// would be dropped at submit anyway (editing it first is confusing, not useful). Story 2.24
+// widens this from "existing member only" to include a not-yet-member candidate too: checking
+// it auto-stages a branchEdits entry (suggestBranchForNewMember), so Enter on that row now has
+// a real staged branch to open the same branch-edit sub-dialog on. No longer needs `target` —
+// membership no longer matters, only whether the row is currently checked.
+export function canEditMemberBranch(repoPath: string, selectedMembers: readonly string[]): boolean {
+  return selectedMembers.includes(repoPath);
 }
 
 export type ModifyEnterAction = { type: 'submit' } | { type: 'edit-branch'; repoPath: string };
@@ -582,14 +594,14 @@ export type ModifyEnterAction = { type: 'submit' } | { type: 'edit-branch'; repo
 // Members-focus Enter is contextual: on a branch-editable row it opens the branch-edit
 // dialog; everywhere else (topic-focus always, or a members-focus row that isn't
 // branch-editable) it submits the whole form — Enter always confirms *something* (UX-DR8),
-// never a dead key.
+// never a dead key. No longer needs `target` — canEditMemberBranch itself dropped it (story
+// 2.24 code review), and nothing else here consults it.
 export function resolveModifyEnterAction(
   formFocus: FormFocus,
-  target: EdtRegistryEntry,
   selectedMembers: readonly string[],
   focusedPath: string | undefined,
 ): ModifyEnterAction {
-  if (formFocus === 'members' && focusedPath !== undefined && canEditMemberBranch(target, focusedPath, selectedMembers)) {
+  if (formFocus === 'members' && focusedPath !== undefined && canEditMemberBranch(focusedPath, selectedMembers)) {
     return { type: 'edit-branch', repoPath: focusedPath };
   }
   return { type: 'submit' };
@@ -620,9 +632,19 @@ export function resolveModifyOps(
   // Boundary: a branch edit staged for a since-unchecked member must never reach
   // modifyEdt — dropped here, before any setBranches entry is built (a real `git checkout`
   // on a repo the developer just told the form to drop).
-  const setBranches = Object.entries(branchEdits)
-    .filter(([path]) => selectedPaths.has(path))
-    .map(([repoPath, branch]) => ({ repoPath, branch }));
+  //
+  // Story 2.24: the inverse must also hold — every checked non-member (addMembers) always
+  // carries a setBranches entry, never silently omitted, so modify.ts's step 1 always finds a
+  // match to defer to instead of falling back to its `branch-required` failure. Confirm is
+  // blocked before this ever runs when that staged value is empty (submitModify), so the ''
+  // fallback below is a safety net, not the normal path.
+  const branchEditsForSelected = new Map(Object.entries(branchEdits).filter(([path]) => selectedPaths.has(path)));
+  for (const path of addMembers) {
+    if (!branchEditsForSelected.has(path)) {
+      branchEditsForSelected.set(path, '');
+    }
+  }
+  const setBranches = Array.from(branchEditsForSelected.entries()).map(([repoPath, branch]) => ({ repoPath, branch }));
 
   const trimmedTopic = topic.trim();
   const renameTo = trimmedTopic !== '' && trimmedTopic !== target.topic ? trimmedTopic : undefined;
@@ -1147,6 +1169,20 @@ export function EdtsZone({
     if (current.submitting) {
       return;
     }
+    // Story 2.24: block confirm inline (no core call) when a newly-checked member's staged
+    // branch is empty — same validateBranchEditValue convention the branch-edit sub-dialog
+    // already uses for its own Enter, just enforced here too since a new member's field can be
+    // reached and cleared without ever opening that sub-dialog.
+    const originalPaths = new Set(current.target.members.map((member) => member.repoPath));
+    for (const path of current.selectedMembers) {
+      if (!originalPaths.has(path)) {
+        const validationError = validateBranchEditValue(current.branchEdits[path] ?? '');
+        if (validationError !== null) {
+          setDialog((prev) => (prev.kind === 'modify' ? { ...prev, error: validationError } : prev));
+          return;
+        }
+      }
+    }
     const ops = resolveModifyOps(current.target, current.topic, current.selectedMembers, current.branchEdits);
     setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: true, error: null } : prev));
     const result = await modifyEdtAction({ topic: current.target.topic, ...ops });
@@ -1170,7 +1206,13 @@ export function EdtsZone({
         const changes: string[] = [];
         if (ops.addMembers.length > 0) changes.push(`added ${ops.addMembers.length} member(s)`);
         if (ops.removeMembers.length > 0) changes.push(`removed ${ops.removeMembers.length} member(s)`);
-        if (ops.setBranches.length > 0) changes.push(`changed ${ops.setBranches.length} branch(es)`);
+        // Story 2.24 code review: resolveModifyOps now always includes a setBranches entry
+        // for every checked non-member (i.e. every add) — only count an entry toward "changed
+        // N branch(es)" when it's NOT also one of the adds, so a plain add with no other
+        // change never double-logs as a branch change too.
+        const addPaths = new Set(ops.addMembers);
+        const actualBranchChanges = ops.setBranches.filter((entry) => !addPaths.has(entry.repoPath));
+        if (actualBranchChanges.length > 0) changes.push(`changed ${actualBranchChanges.length} branch(es)`);
         if (ops.renameTo) changes.push(`renamed to "${ops.renameTo}"`);
         const detail = changes.length > 0 ? changes.join(', ') : 'no changes';
         await logEdtAction(focusedEdt.ulid, 'modify', 'success', detail);
@@ -1443,13 +1485,29 @@ export function EdtsZone({
       if (input === ' ') {
         const path = candidates[current.memberCursor]?.path;
         if (path !== undefined) {
-          setDialog((prev) => (prev.kind === 'modify' ? { ...prev, selectedMembers: toggleMemberSelection(prev.selectedMembers, path) } : prev));
+          setDialog((prev) => {
+            if (prev.kind !== 'modify') {
+              return prev;
+            }
+            const nextSelected = toggleMemberSelection(prev.selectedMembers, path);
+            // Story 2.24: newly checking a not-yet-member candidate auto-stages a suggested
+            // branch (never overwriting one already staged, e.g. from an earlier check/edit/
+            // uncheck/re-check round-trip) so the mandatory-branch confirm guard below always
+            // has something real to validate instead of a silent default.
+            const isNewlyChecked = !prev.selectedMembers.includes(path) && nextSelected.includes(path);
+            const isNotYetMember = !prev.target.members.some((member) => member.repoPath === path);
+            const nextBranchEdits =
+              isNewlyChecked && isNotYetMember && prev.branchEdits[path] === undefined
+                ? { ...prev.branchEdits, [path]: suggestBranchForNewMember(prev.target.members, prev.topic) }
+                : prev.branchEdits;
+            return { ...prev, selectedMembers: nextSelected, branchEdits: nextBranchEdits };
+          });
         }
         return;
       }
       if (key.return) {
         const path = candidates[current.memberCursor]?.path;
-        const action = resolveModifyEnterAction('members', current.target, current.selectedMembers, path);
+        const action = resolveModifyEnterAction('members', current.selectedMembers, path);
         if (action.type === 'edit-branch') {
           openBranchEdit(current, action.repoPath);
         } else {
