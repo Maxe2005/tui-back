@@ -21,7 +21,7 @@ import type { CreateBranchOptions } from '../../../../../core/edt/create.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
-import { NO_BRANCH_CREATION, useAppStore, type AppStore } from '../../store/app-store.js';
+import { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION, useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -312,23 +312,34 @@ export function advanceCreateFormFocus(
 
 // Boundary: "Branch-name field(s) pre-fill via suggestBranchNameFromTopic(topic), always
 // editable, never forced." Fired at two trigger points only (a member is newly selected, or
-// the naming mode is toggled) — never on every keystroke/submit — and only ever fills a field
-// that is still empty, so a value the developer deliberately typed (including clearing a field
-// back down to '' to exercise the empty-value rejection) is never silently overwritten.
+// the naming mode is toggled) — never on every keystroke/submit.
+//
+// Review fix (story 2.22): the original version gated the fill on "is the field currently
+// empty", conflating "never touched yet" with "touched, then deliberately cleared back to
+// ''" — a developer who cleared a field to exercise the empty-value rejection would see it
+// silently resurrected by the very next member-checkbox toggle or naming-mode switch,
+// directly contradicting "never forced"/"never silently overwritten". Gated on an explicit
+// touched flag instead: `branchNameTouched`/`branchNamesTouched` (set true the moment the
+// developer's own edit actually changes a field's value — see handleCreateBranchStepInput)
+// is the only thing that permanently opts a field out of auto-fill, regardless of its
+// current value. An untouched field keeps tracking the topic slug on every call (e.g. across
+// further member selections) since nothing the developer did should freeze it yet.
 export function prefillBranchNames(
   namingMode: NamingMode,
   topic: string,
   selectedMembers: readonly string[],
   branchName: string,
   branchNames: Readonly<Record<string, string>>,
+  branchNameTouched: boolean,
+  branchNamesTouched: Readonly<Record<string, boolean>>,
 ): { branchName: string; branchNames: Record<string, string> } {
   const suggestion = suggestBranchNameFromTopic(topic);
   if (namingMode === 'grouped') {
-    return { branchName: branchName === '' ? suggestion : branchName, branchNames: { ...branchNames } };
+    return { branchName: branchNameTouched ? branchName : suggestion, branchNames: { ...branchNames } };
   }
   const nextNames = { ...branchNames };
   for (const path of selectedMembers) {
-    if (!nextNames[path]) {
+    if (!branchNamesTouched[path]) {
       nextNames[path] = suggestion;
     }
   }
@@ -639,6 +650,12 @@ type CreateDialogState = {
   branchName: string; // grouped mode's single shared field
   branchNames: Readonly<Record<string, string>>; // individual mode: repoPath -> name
   branchNameIndex: number; // individual mode's currently-focused per-member field
+  // Review fix (story 2.22): tracks whether the developer's own edit has ever actually
+  // changed a field's value — the only thing that permanently opts a field out of
+  // prefillBranchNames' auto-fill (see that function's own doc comment). Never reset once
+  // set, including back to '' — a field the developer cleared stays cleared.
+  branchNameTouched: boolean;
+  branchNamesTouched: Readonly<Record<string, boolean>>;
 };
 
 type SwitchDialogState = {
@@ -722,11 +739,13 @@ function initialCreateDialog(): CreateDialogState {
     memberCursor: 0,
     submitting: false,
     error: null,
-    baseBranch: 'development',
+    baseBranch: DEFAULT_BASE_BRANCH,
     namingMode: 'grouped',
     branchName: '',
     branchNames: {},
     branchNameIndex: 0,
+    branchNameTouched: false,
+    branchNamesTouched: {},
   };
 }
 
@@ -1190,27 +1209,49 @@ export function EdtsZone({
             return prev;
           }
           const nextMode: NamingMode = prev.namingMode === 'grouped' ? 'individual' : 'grouped';
-          const filled = prefillBranchNames(nextMode, prev.topic, prev.selectedMembers, prev.branchName, prev.branchNames);
+          const filled = prefillBranchNames(
+            nextMode,
+            prev.topic,
+            prev.selectedMembers,
+            prev.branchName,
+            prev.branchNames,
+            prev.branchNameTouched,
+            prev.branchNamesTouched,
+          );
           return { ...prev, namingMode: nextMode, branchName: filled.branchName, branchNames: filled.branchNames, branchNameIndex: 0 };
         });
       }
       return;
     }
-    // formFocus === 'branch-name'
+    // formFocus === 'branch-name'. Touched only flips true when the developer's own edit
+    // actually changes the value (review fix, story 2.22) — a no-op keypress (e.g. an arrow
+    // key nextTextInputValue itself ignores) never freezes a field out of future auto-fill.
     if (current.namingMode === 'grouped') {
-      setDialog((prev) => (prev.kind === 'create' ? { ...prev, branchName: nextTextInputValue(prev.branchName, input, key) } : prev));
+      const next = nextTextInputValue(current.branchName, input, key);
+      if (next === current.branchName) {
+        return;
+      }
+      setDialog((prev) => (prev.kind === 'create' ? { ...prev, branchName: next, branchNameTouched: true } : prev));
       return;
     }
     const path = current.selectedMembers[current.branchNameIndex];
     if (path === undefined) {
       return;
     }
+    const existing = current.branchNames[path] ?? '';
+    const next = nextTextInputValue(existing, input, key);
+    if (next === existing) {
+      return;
+    }
     setDialog((prev) => {
       if (prev.kind !== 'create') {
         return prev;
       }
-      const existing = prev.branchNames[path] ?? '';
-      return { ...prev, branchNames: { ...prev.branchNames, [path]: nextTextInputValue(existing, input, key) } };
+      return {
+        ...prev,
+        branchNames: { ...prev.branchNames, [path]: next },
+        branchNamesTouched: { ...prev.branchNamesTouched, [path]: true },
+      };
     });
   }
 
@@ -1225,9 +1266,9 @@ export function EdtsZone({
         const { focus, nameIndex } = advanceCreateFormFocus(prev.formFocus, hasMembers, prev.namingMode, prev.branchNameIndex, nameFieldCount);
         // Boundary: fields pre-fill "via suggestBranchNameFromTopic(topic)" the moment the
         // branch-setup step becomes reachable — never forced past this point (prefillBranchNames
-        // only ever fills a still-empty field).
+        // never touches a field the developer has already touched, even one cleared to '').
         const filled = isBranchStepFocus(focus)
-          ? prefillBranchNames(prev.namingMode, prev.topic, prev.selectedMembers, prev.branchName, prev.branchNames)
+          ? prefillBranchNames(prev.namingMode, prev.topic, prev.selectedMembers, prev.branchName, prev.branchNames, prev.branchNameTouched, prev.branchNamesTouched)
           : { branchName: prev.branchName, branchNames: prev.branchNames };
         return { ...prev, formFocus: focus, branchNameIndex: nameIndex, branchName: filled.branchName, branchNames: filled.branchNames };
       });
@@ -1292,7 +1333,15 @@ export function EdtsZone({
             // fires here (not only on Tab into the step) so a direct Enter-to-submit from the
             // checklist, without ever visiting the step UI, still carries a sane default name
             // rather than an unvalidated empty one.
-            const filled = prefillBranchNames(prev.namingMode, prev.topic, nextSelected, prev.branchName, prev.branchNames);
+            const filled = prefillBranchNames(
+              prev.namingMode,
+              prev.topic,
+              nextSelected,
+              prev.branchName,
+              prev.branchNames,
+              prev.branchNameTouched,
+              prev.branchNamesTouched,
+            );
             return { ...prev, selectedMembers: nextSelected, branchName: filled.branchName, branchNames: filled.branchNames };
           });
         }

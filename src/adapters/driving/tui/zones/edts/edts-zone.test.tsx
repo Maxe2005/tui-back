@@ -565,29 +565,47 @@ describe('advanceCreateFormFocus (story 2.22)', () => {
 });
 
 describe('prefillBranchNames (story 2.22)', () => {
-  it('grouped mode fills the shared field from the topic slug only when currently empty', () => {
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {})).toEqual({ branchName: 'fix-auth-bug', branchNames: {} });
+  it('grouped mode fills the shared field from the topic slug when untouched', () => {
+    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {}, false, {})).toEqual({
+      branchName: 'fix-auth-bug',
+      branchNames: {},
+    });
   });
 
-  it('grouped mode never overwrites a value the developer already typed', () => {
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], 'my-custom-name', {})).toEqual({
+  it('grouped mode never overwrites a value the developer already typed (touched)', () => {
+    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], 'my-custom-name', {}, true, {})).toEqual({
       branchName: 'my-custom-name',
       branchNames: {},
     });
   });
 
-  it('individual mode fills every selected member missing an entry, leaves existing entries untouched', () => {
-    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': 'kept' })).toEqual({
+  it('individual mode fills every untouched selected member, leaves touched entries untouched', () => {
+    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': 'kept' }, false, { '/a': true })).toEqual({
       branchName: '',
       branchNames: { '/a': 'kept', '/b': 'fix-auth-bug' },
     });
   });
 
-  it('never re-fills a field the developer deliberately cleared back to empty (no auto-refill at submit time)', () => {
-    // Simulates: the field was already filled once, then the developer backspaced it to ''.
-    // A second prefill call (e.g. a further member toggled) must not resurrect the old value —
-    // '' is treated exactly the same as "never touched", by design (Design Notes/Boundaries).
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {})).toEqual({ branchName: 'fix-auth-bug', branchNames: {} });
+  // Review fix (story 2.22): the original version gated on "is the value currently empty",
+  // which conflated "never touched" with "touched, then deliberately cleared" — a developer
+  // who backspaced a field to '' (to exercise the empty-value rejection) would see the very
+  // next prefill call (a further member toggled, or the naming mode switched) silently
+  // resurrect the old suggestion. Gating on the explicit touched flag instead of the value
+  // fixes this: once touched, a field's '' stays '' no matter how many more prefill calls
+  // follow.
+  it('never re-fills a field the developer deliberately cleared back to empty, even on a later prefill call', () => {
+    // Simulates: the field was filled once, then the developer backspaced it to '' — the
+    // touched flag flips true at that point (handleCreateBranchStepInput), so a second
+    // prefill call (e.g. a further member toggled) must leave it exactly as the developer
+    // left it: ''.
+    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {}, true, {})).toEqual({ branchName: '', branchNames: {} });
+  });
+
+  it('individual mode: a member field cleared and touched stays empty on a later prefill call', () => {
+    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': '' }, false, { '/a': true })).toEqual({
+      branchName: '',
+      branchNames: { '/a': '', '/b': 'fix-auth-bug' },
+    });
   });
 });
 

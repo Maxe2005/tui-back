@@ -708,6 +708,68 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  // Review fix regression (story 2.22): prefillBranchNames used to gate its fill on "is the
+  // value currently empty", so a field the developer deliberately cleared would be silently
+  // resurrected by the very next prefill trigger (another member's checkbox toggled, or the
+  // naming mode switched) — contradicting "always editable, never forced". Gating on an
+  // explicit touched flag instead of the value fixes this end to end.
+  it('clearing the branch-name field then toggling an unrelated member never resurrects the old suggestion', async () => {
+    const store = createAppStore();
+    let createCalls = 0;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
+      await press(instance, stdin, KEYS.tab); // members -> branch-base
+      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
+      for (let i = 0; i < 'demo'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      expect(stdout.output).toContain('Branch name: ');
+
+      // Back to the checklist and select a second, unrelated member — this used to
+      // re-trigger prefillBranchNames and silently repopulate the field with "demo".
+      await pressEscape(instance, stdin);
+      const beforeSecondSelection = stdout.output.length;
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b too
+      await press(instance, stdin, KEYS.tab); // members -> branch-base
+      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name
+
+      // Every frame rendered since the clear must never show the resurrected suggestion.
+      expect(stdout.output.slice(beforeSecondSelection)).not.toContain('Branch name: demo');
+
+      // And confirm is still blocked — the field really is still empty, not just
+      // un-rendered.
+      await press(instance, stdin, KEYS.enter);
+      expect(createCalls).toBe(0);
+      expect(stdout.output).toContain('Branch name must not be empty');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('zero members selected still passes a real (NO_BRANCH_CREATION) branchOptions through to createEdtAction', async () => {
     const store = createAppStore();
     let createParams: CreateEdtParams | undefined;

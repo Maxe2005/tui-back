@@ -105,13 +105,18 @@ export type ModifyEdtParams = {
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 
+// Story 2.22 review fix: the default base branch was a second, independent 'development'
+// literal in edts-zone.tsx's initialCreateDialog() — one shared, exported constant so the
+// two can never drift out of sync.
+export const DEFAULT_BASE_BRANCH = 'development';
+
 // Story 2.9: introduced when the EDTs zone's create form had no branch-creation UI (AC1
 // scoped it to topic + member selection only). Story 2.22 adds the mandatory branch-setup
 // step, so this is no longer the store's own unconditional default — it's now the exact
 // value the zone itself passes through `createEdt`'s `branchOptions` param for the
 // zero-member case (core's `branchOptions` stays mandatory even then). Exported so the zone
 // doesn't need to duplicate the literal.
-export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: 'development', mode: 'grouped', names: {} };
+export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DEFAULT_BASE_BRANCH, mode: 'grouped', names: {} };
 
 // Story 2.11: a per-path register outcome, classified by snapshotting registry.list()
 // before registering and diffing against it — registerRepo/registry.add are idempotent and
