@@ -87,3 +87,68 @@ This story ships ahead of Story 2.23 (visible text-input cursor), per epics.md's
 
 **Manual checks:**
 - TUI: select ≥1 member in the create dialog → branch-setup step appears with base-branch input + naming toggle; switch grouped/individual; edit/accept name(s); confirm creates the EDT with real branches (verify via `git branch` in test repos); an empty name is blocked; zero-member creation is unaffected.
+
+## Suggested Review Order
+
+- The new state shape the whole branch-setup step hangs off — start here to see everything it adds.
+  [`edts-zone.tsx:639`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L639)
+
+**Store contract (TUI ↔ store wiring)**
+
+- `branchOptions` becomes mandatory on `CreateEdtParams` — the seam the whole story exists to fill in.
+  [`app-store.ts:82`](../../../src/adapters/driving/tui/store/app-store.ts#L82)
+
+- One shared `DEFAULT_BASE_BRANCH` constant backs `NO_BRANCH_CREATION`, replacing a literal duplicated in the zone.
+  [`app-store.ts:111`](../../../src/adapters/driving/tui/store/app-store.ts#L111)
+
+- `createEdt` forwards the caller's `branchOptions` verbatim instead of hardcoding `NO_BRANCH_CREATION`.
+  [`app-store.ts:582`](../../../src/adapters/driving/tui/store/app-store.ts#L582)
+
+**Branch-setup step: focus model**
+
+- `CreateFormFocus` widens the shared `FormFocus` with the step's own three fields, Create-dialog only.
+  [`edts-zone.tsx:273`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L273)
+
+- `advanceCreateFormFocus` drives Tab through base → mode → name field(s), incl. individual mode's variable per-member count.
+  [`edts-zone.tsx:287`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L287)
+
+- `initialCreateDialog` seeds the new fields, including the two touched flags below.
+  [`edts-zone.tsx:733`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L733)
+
+**Pre-fill and the touched-flag review fix**
+
+- `suggestBranchNameFromTopic` slugifies the topic into the pre-fill suggestion.
+  [`edts-zone.tsx:257`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L257)
+
+- `prefillBranchNames` gates on an explicit touched flag, not on emptiness — the fix for the resurrected-cleared-field bug caught in review.
+  [`edts-zone.tsx:327`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L327)
+
+- Touched flips true only on an actual value change, so a no-op keypress never freezes a field out of future pre-fill.
+  [`edts-zone.tsx:1196`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1196)
+
+**Submit and validation**
+
+- `validateCreateBranchFields` blocks confirm on any empty required field, reusing `validateBranchEditValue` as-is.
+  [`edts-zone.tsx:384`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L384)
+
+- `buildCreateBranchOptions` shapes the grouped (same name for all) vs. individual (per-repoPath map) `CreateBranchOptions`.
+  [`edts-zone.tsx:354`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L354)
+
+- `submitCreate` wires validation + build into the existing single call site, unchanged for the zero-member path.
+  [`edts-zone.tsx:1038`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1038)
+
+**Rendering**
+
+- The branch-setup step renders in place of the checklist once `isBranchStepFocus` is true — today's plain `<Text>` convention, no `text-input-line.tsx` dependency.
+  [`edts-zone.tsx:1897`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1897)
+
+**Tests**
+
+- Store-level pass-through and `NO_BRANCH_CREATION` fallback, exercised against a real `git.createBranch` fake.
+  [`app-store.test.ts:591`](../../../src/adapters/driving/tui/store/app-store.test.ts#L591)
+
+- Pure-function coverage for the slugifier, pre-fill, option-building, and validation — including the fixed touched-flag regression case.
+  [`edts-zone.test.tsx:596`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L596)
+
+- Real-keypress coverage of the full I/O matrix, plus the review-fix regression: clearing a field then toggling an unrelated member.
+  [`edts-zone.interaction.test.tsx:716`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L716)
