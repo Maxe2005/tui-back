@@ -17,10 +17,11 @@
 // the same split resolveSelectionDirection/moveSelection already established in story 2.6/2.7.
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput, type Key } from 'ink';
+import type { CreateBranchOptions } from '../../../../../core/edt/create.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
-import { useAppStore, type AppStore } from '../../store/app-store.js';
+import { NO_BRANCH_CREATION, useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -239,6 +240,155 @@ export function toggleMemberSelection(selected: readonly string[], path: string)
 // modifyEdt unvalidated." Returns the inline error message, or null when valid.
 export function validateBranchEditValue(value: string): string | null {
   return value.trim() === '' ? 'Branch name must not be empty' : null;
+}
+
+// Story 2.22 -----------------------------------------------------------------------------
+// The create-EDT dialog's mandatory branch-setup step (Boundaries: "shown once >=1 member is
+// selected; no enable/disable choice"). core/edt/create.ts's CreateBranchOptions has required
+// mandatory branch creation ever since Story 2.2/2.3 — this is the TUI finally surfacing it
+// instead of always hardcoding NO_BRANCH_CREATION (app-store.ts).
+
+// Design Notes: slugifies a topic into a branch-name suggestion — lowercase, then any run of
+// non-alphanumeric characters collapses to a single '-', trimmed of leading/trailing '-'
+// (e.g. "Fix Auth Bug!!" -> "fix-auth-bug"). Pure and total: an all-punctuation topic slugifies
+// to '' (still a non-empty *topic* by the time this runs, since submitCreate's own
+// topic-not-empty check already ran first) — that empty suggestion is exactly what
+// validateBranchEditValue below is for, never silently patched over with a fallback name.
+export function suggestBranchNameFromTopic(topic: string): string {
+  return topic
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// The branch-setup step's naming-mode choice (Code Map/Design Notes): grouped shares one name
+// across every selected member; individual gives each its own field.
+export type NamingMode = 'grouped' | 'individual';
+
+// Widens FormFocus (topic/members, shared with Modify) with the branch-setup step's own three
+// fields, for the create dialog only — Modify never grows this step, so its formFocus stays
+// exactly FormFocus. Kept as one flat cycle (Tab-only, no per-mode field count baked into the
+// type itself) rather than a nested per-field state shape, the same flat-enum idiom
+// `cycleFormFocus`/`cyclePaneFocus` already use elsewhere in this file.
+export type CreateFormFocus = FormFocus | 'branch-base' | 'branch-mode' | 'branch-name';
+
+export function isBranchStepFocus(focus: CreateFormFocus): boolean {
+  return focus === 'branch-base' || focus === 'branch-mode' || focus === 'branch-name';
+}
+
+// Tab's advance rule for the create dialog specifically (cycleFormFocus stays the 2-way
+// topic<->members toggle Modify still uses unchanged). `members` only advances into the
+// branch-setup step when >=1 member is selected (Boundaries: "no branch step" otherwise,
+// so it loops straight back to `topic` exactly like cycleFormFocus already does). Within the
+// step: base -> mode -> name field(s) -> topic. Individual mode's name field is a variable
+// number of per-member fields (Ask First's concern) — resolved the same "current index,
+// length" idiom `moveSelection` already established, not a new focus-model mechanism: Tab
+// advances `nameIndex` through them before finally cycling back out to `topic`.
+export function advanceCreateFormFocus(
+  current: CreateFormFocus,
+  hasMembers: boolean,
+  namingMode: NamingMode,
+  nameIndex: number,
+  nameFieldCount: number,
+): { focus: CreateFormFocus; nameIndex: number } {
+  if (current === 'topic') {
+    return { focus: 'members', nameIndex: 0 };
+  }
+  if (current === 'members') {
+    return hasMembers ? { focus: 'branch-base', nameIndex: 0 } : { focus: 'topic', nameIndex: 0 };
+  }
+  if (current === 'branch-base') {
+    return { focus: 'branch-mode', nameIndex: 0 };
+  }
+  if (current === 'branch-mode') {
+    return { focus: 'branch-name', nameIndex: 0 };
+  }
+  // current === 'branch-name'
+  if (namingMode === 'individual' && nameIndex + 1 < nameFieldCount) {
+    return { focus: 'branch-name', nameIndex: nameIndex + 1 };
+  }
+  return { focus: 'topic', nameIndex: 0 };
+}
+
+// Boundary: "Branch-name field(s) pre-fill via suggestBranchNameFromTopic(topic), always
+// editable, never forced." Fired at two trigger points only (a member is newly selected, or
+// the naming mode is toggled) — never on every keystroke/submit — and only ever fills a field
+// that is still empty, so a value the developer deliberately typed (including clearing a field
+// back down to '' to exercise the empty-value rejection) is never silently overwritten.
+export function prefillBranchNames(
+  namingMode: NamingMode,
+  topic: string,
+  selectedMembers: readonly string[],
+  branchName: string,
+  branchNames: Readonly<Record<string, string>>,
+): { branchName: string; branchNames: Record<string, string> } {
+  const suggestion = suggestBranchNameFromTopic(topic);
+  if (namingMode === 'grouped') {
+    return { branchName: branchName === '' ? suggestion : branchName, branchNames: { ...branchNames } };
+  }
+  const nextNames = { ...branchNames };
+  for (const path of selectedMembers) {
+    if (!nextNames[path]) {
+      nextNames[path] = suggestion;
+    }
+  }
+  return { branchName, branchNames: nextNames };
+}
+
+// Boundary: "submitCreate always builds a real CreateBranchOptions when >=1 member selected
+// ... zero members still pass NO_BRANCH_CREATION (core's param is mandatory)." Returns the
+// app-store's own NO_BRANCH_CREATION constant verbatim for the zero-member case so there is
+// exactly one canonical "no branch creation" value in the codebase, never a second literal
+// copy drifting out of sync with it.
+export function buildCreateBranchOptions(
+  selectedMembers: readonly string[],
+  baseBranch: string,
+  namingMode: NamingMode,
+  branchName: string,
+  branchNames: Readonly<Record<string, string>>,
+  noBranchCreation: CreateBranchOptions,
+): CreateBranchOptions {
+  if (selectedMembers.length === 0) {
+    return noBranchCreation;
+  }
+  if (namingMode === 'grouped') {
+    const names: Record<string, string> = {};
+    for (const path of selectedMembers) {
+      names[path] = branchName;
+    }
+    return { create: true, base: baseBranch, mode: 'grouped', names };
+  }
+  const names: Record<string, string> = {};
+  for (const path of selectedMembers) {
+    names[path] = branchNames[path] ?? '';
+  }
+  return { create: true, base: baseBranch, mode: 'individual', names };
+}
+
+// Boundary: "Empty required branch-name field blocks confirm via validateBranchEditValue
+// (reused as-is), dialog stays open." Zero members has nothing to validate (no branch step
+// applies at all). Grouped validates the one shared field; individual validates every
+// selected member's own field, first failure wins (mirrors resolveMemberBranch's
+// deterministic caller-order iteration elsewhere in this file's Design Notes).
+export function validateCreateBranchFields(
+  namingMode: NamingMode,
+  selectedMembers: readonly string[],
+  branchName: string,
+  branchNames: Readonly<Record<string, string>>,
+): string | null {
+  if (selectedMembers.length === 0) {
+    return null;
+  }
+  if (namingMode === 'grouped') {
+    return validateBranchEditValue(branchName);
+  }
+  for (const path of selectedMembers) {
+    const fieldError = validateBranchEditValue(branchNames[path] ?? '');
+    if (fieldError !== null) {
+      return fieldError;
+    }
+  }
+  return null;
 }
 
 export function isSwitchBlockedError(code: string): boolean {
@@ -478,11 +628,17 @@ export function resolveModifyOps(
 type CreateDialogState = {
   kind: 'create';
   topic: string;
-  formFocus: FormFocus;
+  formFocus: CreateFormFocus;
   selectedMembers: readonly string[];
   memberCursor: number;
   submitting: boolean;
   error: string | null;
+  // Story 2.22: the mandatory branch-setup step's own fields — see CreateFormFocus above.
+  baseBranch: string;
+  namingMode: NamingMode;
+  branchName: string; // grouped mode's single shared field
+  branchNames: Readonly<Record<string, string>>; // individual mode: repoPath -> name
+  branchNameIndex: number; // individual mode's currently-focused per-member field
 };
 
 type SwitchDialogState = {
@@ -558,7 +714,20 @@ type EdtDialogState =
   | AddToEdtDialogState;
 
 function initialCreateDialog(): CreateDialogState {
-  return { kind: 'create', topic: '', formFocus: 'topic', selectedMembers: [], memberCursor: 0, submitting: false, error: null };
+  return {
+    kind: 'create',
+    topic: '',
+    formFocus: 'topic',
+    selectedMembers: [],
+    memberCursor: 0,
+    submitting: false,
+    error: null,
+    baseBranch: 'development',
+    namingMode: 'grouped',
+    branchName: '',
+    branchNames: {},
+    branchNameIndex: 0,
+  };
 }
 
 function initialSwitchDialog(target: EdtRegistryEntry): SwitchDialogState {
@@ -859,8 +1028,26 @@ export function EdtsZone({
       setDialog((prev) => (prev.kind === 'create' ? { ...prev, error: 'Topic must not be empty' } : prev));
       return;
     }
+    // Boundary: "submitCreate always builds a real CreateBranchOptions when >=1 member
+    // selected ... zero members still pass NO_BRANCH_CREATION." Validated inline via
+    // validateBranchEditValue, reused as-is (Boundaries) — blocks confirm and keeps the
+    // dialog open, exactly like the topic check above and like modifyEdt's own branch-edit
+    // dialog already does, never reaching createEdtAction unvalidated.
+    const branchFieldError = validateCreateBranchFields(current.namingMode, current.selectedMembers, current.branchName, current.branchNames);
+    if (branchFieldError !== null) {
+      setDialog((prev) => (prev.kind === 'create' ? { ...prev, error: branchFieldError } : prev));
+      return;
+    }
+    const branchOptions = buildCreateBranchOptions(
+      current.selectedMembers,
+      current.baseBranch,
+      current.namingMode,
+      current.branchName,
+      current.branchNames,
+      NO_BRANCH_CREATION,
+    );
     setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: true, error: null } : prev));
-    const result = await createEdtAction({ topic: current.topic, members: [...current.selectedMembers] });
+    const result = await createEdtAction({ topic: current.topic, members: [...current.selectedMembers], branchOptions });
     if (result.ok) {
       // Awaited (not fire-and-forget) so `edtsRows` reflects the newly-created EDT before
       // this function returns — the create dialog's Escape handling below depends on it to
@@ -983,15 +1170,81 @@ export function EdtsZone({
     setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchEdit: { repoPath, value: existing, error: null } } : prev));
   }
 
+  // Story 2.22: the branch-setup step's own field input — base-branch text, the naming-mode
+  // toggle (Space, mirroring the checkbox-toggle idiom), and the name field(s) (grouped's one
+  // shared field, or individual's currently-focused per-member field via branchNameIndex).
+  // Enter always confirms (UX-DR8), same as the topic field and modifyEdt's branch-edit field.
+  function handleCreateBranchStepInput(current: CreateDialogState, input: string, key: Key) {
+    if (key.return) {
+      void submitCreate(current);
+      return;
+    }
+    if (current.formFocus === 'branch-base') {
+      setDialog((prev) => (prev.kind === 'create' ? { ...prev, baseBranch: nextTextInputValue(prev.baseBranch, input, key) } : prev));
+      return;
+    }
+    if (current.formFocus === 'branch-mode') {
+      if (input === ' ') {
+        setDialog((prev) => {
+          if (prev.kind !== 'create') {
+            return prev;
+          }
+          const nextMode: NamingMode = prev.namingMode === 'grouped' ? 'individual' : 'grouped';
+          const filled = prefillBranchNames(nextMode, prev.topic, prev.selectedMembers, prev.branchName, prev.branchNames);
+          return { ...prev, namingMode: nextMode, branchName: filled.branchName, branchNames: filled.branchNames, branchNameIndex: 0 };
+        });
+      }
+      return;
+    }
+    // formFocus === 'branch-name'
+    if (current.namingMode === 'grouped') {
+      setDialog((prev) => (prev.kind === 'create' ? { ...prev, branchName: nextTextInputValue(prev.branchName, input, key) } : prev));
+      return;
+    }
+    const path = current.selectedMembers[current.branchNameIndex];
+    if (path === undefined) {
+      return;
+    }
+    setDialog((prev) => {
+      if (prev.kind !== 'create') {
+        return prev;
+      }
+      const existing = prev.branchNames[path] ?? '';
+      return { ...prev, branchNames: { ...prev.branchNames, [path]: nextTextInputValue(existing, input, key) } };
+    });
+  }
+
   function handleCreateInput(current: CreateDialogState, input: string, key: Key) {
     if (key.tab) {
-      setDialog((prev) => (prev.kind === 'create' ? { ...prev, formFocus: cycleFormFocus(prev.formFocus) } : prev));
+      setDialog((prev) => {
+        if (prev.kind !== 'create') {
+          return prev;
+        }
+        const hasMembers = prev.selectedMembers.length >= 1;
+        const nameFieldCount = prev.namingMode === 'individual' ? prev.selectedMembers.length : 1;
+        const { focus, nameIndex } = advanceCreateFormFocus(prev.formFocus, hasMembers, prev.namingMode, prev.branchNameIndex, nameFieldCount);
+        // Boundary: fields pre-fill "via suggestBranchNameFromTopic(topic)" the moment the
+        // branch-setup step becomes reachable — never forced past this point (prefillBranchNames
+        // only ever fills a still-empty field).
+        const filled = isBranchStepFocus(focus)
+          ? prefillBranchNames(prev.namingMode, prev.topic, prev.selectedMembers, prev.branchName, prev.branchNames)
+          : { branchName: prev.branchName, branchNames: prev.branchNames };
+        return { ...prev, formFocus: focus, branchNameIndex: nameIndex, branchName: filled.branchName, branchNames: filled.branchNames };
+      });
       return;
     }
     if (key.escape) {
       if (current.submitting) {
         // Guard against tearing down a submit in flight, same as every other dialog's
         // Escape handling.
+        return;
+      }
+      // Story 2.22: Escape from inside the branch-setup step steps back to the member
+      // checklist (e.g. to change the selection) rather than tearing down the whole dialog —
+      // the same "back", never a dead end, convention modifyEdt's branchEdit sub-view already
+      // uses for its own Escape.
+      if (isBranchStepFocus(current.formFocus)) {
+        setDialog((prev) => (prev.kind === 'create' ? { ...prev, formFocus: 'members' } : prev));
         return;
       }
       // Review patch (story 2.9): the create dialog used to treat Escape as unconditionally
@@ -1010,6 +1263,10 @@ export function EdtsZone({
       requestQuit();
       return;
     }
+    if (isBranchStepFocus(current.formFocus)) {
+      handleCreateBranchStepInput(current, input, key);
+      return;
+    }
     if (current.formFocus === 'members') {
       const jump = resolveSelectionJump(key);
       if (jump !== null) {
@@ -1026,7 +1283,18 @@ export function EdtsZone({
       if (input === ' ') {
         const path = candidates[current.memberCursor]?.path;
         if (path !== undefined) {
-          setDialog((prev) => (prev.kind === 'create' ? { ...prev, selectedMembers: toggleMemberSelection(prev.selectedMembers, path) } : prev));
+          setDialog((prev) => {
+            if (prev.kind !== 'create') {
+              return prev;
+            }
+            const nextSelected = toggleMemberSelection(prev.selectedMembers, path);
+            // Boundary: the branch-name field(s) pre-fill as soon as >=1 member is selected —
+            // fires here (not only on Tab into the step) so a direct Enter-to-submit from the
+            // checklist, without ever visiting the step UI, still carries a sane default name
+            // rather than an unvalidated empty one.
+            const filled = prefillBranchNames(prev.namingMode, prev.topic, nextSelected, prev.branchName, prev.branchNames);
+            return { ...prev, selectedMembers: nextSelected, branchName: filled.branchName, branchNames: filled.branchNames };
+          });
         }
         return;
       }
@@ -1577,21 +1845,51 @@ export function EdtsZone({
       {dialog.kind === 'create' ? (
         <ModalDialog title="CREATE EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
           <Box flexDirection="column">
-            <Text color={dialog.formFocus === 'topic' ? colors.accent : colors.text}>Topic: {dialog.topic}</Text>
-            {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-            {candidateState === 'error' ? <Text color={colors.error}>Failed to load services — cannot show candidates.</Text> : null}
-            {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
-            {candidateState === 'ready'
-              ? candidates.map((candidate, index) => (
-                  <Box key={candidate.path}>
-                    <Text color={colors.accent}>{dialog.formFocus === 'members' && index === dialog.memberCursor ? '›' : ' '}</Text>
-                    <CheckboxListItem
-                      label={candidate.service}
-                      state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'}
-                    />
-                  </Box>
-                ))
-              : null}
+            {isBranchStepFocus(dialog.formFocus) ? (
+              // Story 2.22: the mandatory branch-setup step — base-branch input + naming-mode
+              // toggle + name field(s), gated on >=1 member already selected (Boundaries: "no
+              // enable/disable choice"). Today's plain <Text> field convention (Code Map:
+              // shared/components/text-input-line.tsx from Story 2.23 doesn't exist yet).
+              <>
+                <Text color={dialog.formFocus === 'branch-base' ? colors.accent : colors.text}>Base branch: {dialog.baseBranch}</Text>
+                <Text color={dialog.formFocus === 'branch-mode' ? colors.accent : colors.text}>
+                  Naming: {dialog.namingMode === 'grouped' ? 'Grouped (same branch for every service)' : 'Individual (one branch per service)'} [Space] toggle
+                </Text>
+                {dialog.namingMode === 'grouped' ? (
+                  <Text color={dialog.formFocus === 'branch-name' ? colors.accent : colors.text}>Branch name: {dialog.branchName}</Text>
+                ) : (
+                  dialog.selectedMembers.map((path, index) => {
+                    const label = candidates.find((candidate) => candidate.path === path)?.service ?? path;
+                    return (
+                      <Text
+                        key={path}
+                        color={dialog.formFocus === 'branch-name' && index === dialog.branchNameIndex ? colors.accent : colors.text}
+                      >
+                        {label}: {dialog.branchNames[path] ?? ''}
+                      </Text>
+                    );
+                  })
+                )}
+              </>
+            ) : (
+              <>
+                <Text color={dialog.formFocus === 'topic' ? colors.accent : colors.text}>Topic: {dialog.topic}</Text>
+                {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
+                {candidateState === 'error' ? <Text color={colors.error}>Failed to load services — cannot show candidates.</Text> : null}
+                {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
+                {candidateState === 'ready'
+                  ? candidates.map((candidate, index) => (
+                      <Box key={candidate.path}>
+                        <Text color={colors.accent}>{dialog.formFocus === 'members' && index === dialog.memberCursor ? '›' : ' '}</Text>
+                        <CheckboxListItem
+                          label={candidate.service}
+                          state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'}
+                        />
+                      </Box>
+                    ))
+                  : null}
+              </>
+            )}
             {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Creating…" /> : null}
           </Box>

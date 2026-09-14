@@ -82,6 +82,12 @@ export type AppStoreDeps = {
 export type CreateEdtParams = {
   topic: string;
   members: string[];
+  // Story 2.22: the create-EDT dialog now always builds and passes a real
+  // CreateBranchOptions (grouped/individual naming, base branch) instead of the store
+  // hardcoding NO_BRANCH_CREATION for every call — mandatory, not optional, so every caller
+  // makes its own branch-creation choice explicit (zero members still passes
+  // NO_BRANCH_CREATION below, exported so the zone can reuse the exact same value).
+  branchOptions: CreateBranchOptions;
 };
 
 export type SwitchEdtParams = {
@@ -99,13 +105,13 @@ export type ModifyEdtParams = {
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 
-// Story 2.9: no branch-creation UI in the EDTs zone's create form (AC1 scopes it to topic +
-// member selection only — branch-creation naming/mode was Story 2.2's separate concern, not
-// reintroduced here). Every member reuses its existing current branch, gated the same way
-// the branch-creation-disabled CLI path already is (core/edt/create.ts's
-// resolveMemberBranch).
-const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: 'development', mode: 'grouped', names: {} 
-};
+// Story 2.9: introduced when the EDTs zone's create form had no branch-creation UI (AC1
+// scoped it to topic + member selection only). Story 2.22 adds the mandatory branch-setup
+// step, so this is no longer the store's own unconditional default — it's now the exact
+// value the zone itself passes through `createEdt`'s `branchOptions` param for the
+// zero-member case (core's `branchOptions` stays mandatory even then). Exported so the zone
+// doesn't need to duplicate the literal.
+export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: 'development', mode: 'grouped', names: {} };
 
 // Story 2.11: a per-path register outcome, classified by snapshotting registry.list()
 // before registering and diffing against it — registerRepo/registry.add are idempotent and
@@ -568,7 +574,7 @@ export function createAppStore(deps?: AppStoreDeps) {
         git: deps.git,
         topic: params.topic,
         members: params.members,
-        branchOptions: NO_BRANCH_CREATION,
+        branchOptions: params.branchOptions,
       });
       if (result.ok) {
         // Review patch (story 2.9): unlike switchEdt, createEdt itself never writes

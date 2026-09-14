@@ -20,7 +20,7 @@ import type { StatePort } from "../../../../core/ports/state.js";
 import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/settings.js";
 import { ZONES } from "../zones/zones.js";
 import { DEFAULT_LIST_RATIO } from "../shared/components/list-detail-split.js";
-import { createAppStore, type AppStoreDeps } from "./app-store.js";
+import { createAppStore, NO_BRANCH_CREATION, type AppStoreDeps } from "./app-store.js";
 
 function manifestFor(repoPath: string): Manifest {
   const name = repoPath.split("/").pop();
@@ -479,7 +479,7 @@ describe("app store", () => {
       const loadTabVisibility = vi.fn(async () => {});
       store.setState({ loadTabVisibility });
 
-      const result = await store.getState().createEdt({ topic: "demo", members: ["/repo/a"] });
+      const result = await store.getState().createEdt({ topic: "demo", members: ["/repo/a"], branchOptions: NO_BRANCH_CREATION });
 
       expect(result.ok).toBe(true);
       expect(loadTabVisibility).toHaveBeenCalled();
@@ -490,12 +490,75 @@ describe("app store", () => {
       const loadTabVisibility = vi.fn(async () => {});
       store.setState({ loadTabVisibility });
 
-      const result = await store.getState().createEdt({ topic: "demo", members: [] });
+      const result = await store.getState().createEdt({ topic: "demo", members: [], branchOptions: NO_BRANCH_CREATION });
 
       expect(result.ok).toBe(false);
       expect(loadTabVisibility).not.toHaveBeenCalled();
     });
+  });
 
+  // Story 2.22: the create-EDT dialog now always builds and supplies its own
+  // CreateBranchOptions — the store must forward exactly what it's given through to
+  // core/edt/create.ts rather than silently substituting its own hardcoded default.
+  describe("createEdt passes branchOptions through unchanged (story 2.22)", () => {
+    it("a real (non-NO_BRANCH_CREATION) branchOptions reaches git.createBranch with the caller's base/name", async () => {
+      const edtsBaseDir = await makeEdtsBaseDir();
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("main")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
+
+      const result = await store.getState().createEdt({
+        topic: "demo",
+        members: ["/repo/a"],
+        branchOptions: { create: true, base: "main", mode: "grouped", names: { "/repo/a": "feature-demo" } },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(git.createBranch).toHaveBeenCalledWith("/repo/a", "feature-demo", "main");
+    });
+
+    it("NO_BRANCH_CREATION (zero-member fallback) never calls git.createBranch", async () => {
+      const edtsBaseDir = await makeEdtsBaseDir();
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("main")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
+
+      const result = await store.getState().createEdt({
+        topic: "demo",
+        members: ["/repo/a"],
+        branchOptions: NO_BRANCH_CREATION,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(git.createBranch).not.toHaveBeenCalled();
+      // NO_BRANCH_CREATION's create:false path reuses the member's current branch instead.
+      expect(git.currentBranch).toHaveBeenCalledWith("/repo/a");
+    });
+  });
+
+  describe("active-EDT membership change reloads tabVisibility (story 2.13) (continued)", () => {
     it("switchEdt success triggers a tabVisibility reload", async () => {
       const edtRegistry: EdtRegistryPort = {
         add: vi.fn(async () => ok(undefined)),

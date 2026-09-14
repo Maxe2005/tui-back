@@ -9,9 +9,12 @@ import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
+import { NO_BRANCH_CREATION } from '../../store/app-store.js';
 import {
   EdtsZone,
+  advanceCreateFormFocus,
   appendHint,
+  buildCreateBranchOptions,
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
@@ -22,21 +25,25 @@ import {
   formatIssuesSummary,
   formatServiceDetail,
   formatServiceMeta,
+  isBranchStepFocus,
   isSwitchBlockedError,
   jumpSelection,
   moveSelection,
   nextTextInputValue,
   partitionServicesByEdtMembership,
+  prefillBranchNames,
   resolveCandidateListState,
   resolveActionHint,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
+  suggestBranchNameFromTopic,
   summarizeFailedResults,
   toggleMemberSelection,
   truncateBranchLabel,
   validateBranchEditValue,
+  validateCreateBranchFields,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.js';
 
@@ -497,6 +504,132 @@ describe('validateBranchEditValue', () => {
 
   it('accepts a non-empty value', () => {
     expect(validateBranchEditValue('feature/x')).toBeNull();
+  });
+});
+
+describe('suggestBranchNameFromTopic (story 2.22)', () => {
+  it('slugifies: lowercase, non-alphanumeric runs -> single "-", trimmed of leading/trailing "-"', () => {
+    expect(suggestBranchNameFromTopic('Fix Auth Bug!!')).toBe('fix-auth-bug');
+  });
+
+  it('collapses multiple separators and mixed case', () => {
+    expect(suggestBranchNameFromTopic('  Hello___World  ')).toBe('hello-world');
+  });
+
+  it('slugifies an all-punctuation topic down to an empty string', () => {
+    expect(suggestBranchNameFromTopic('!!!')).toBe('');
+  });
+
+  it('leaves an already-slug-shaped topic unchanged', () => {
+    expect(suggestBranchNameFromTopic('already-a-slug')).toBe('already-a-slug');
+  });
+});
+
+describe('isBranchStepFocus (story 2.22)', () => {
+  it('is true for every branch-step field, false for topic/members', () => {
+    expect(isBranchStepFocus('branch-base')).toBe(true);
+    expect(isBranchStepFocus('branch-mode')).toBe(true);
+    expect(isBranchStepFocus('branch-name')).toBe(true);
+    expect(isBranchStepFocus('topic')).toBe(false);
+    expect(isBranchStepFocus('members')).toBe(false);
+  });
+});
+
+describe('advanceCreateFormFocus (story 2.22)', () => {
+  it('topic -> members unconditionally', () => {
+    expect(advanceCreateFormFocus('topic', false, 'grouped', 0, 1)).toEqual({ focus: 'members', nameIndex: 0 });
+  });
+
+  it('members -> branch-base once >=1 member is selected', () => {
+    expect(advanceCreateFormFocus('members', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-base', nameIndex: 0 });
+  });
+
+  it('members -> topic when zero members are selected (Boundaries: no branch step)', () => {
+    expect(advanceCreateFormFocus('members', false, 'grouped', 0, 0)).toEqual({ focus: 'topic', nameIndex: 0 });
+  });
+
+  it('branch-base -> branch-mode -> branch-name', () => {
+    expect(advanceCreateFormFocus('branch-base', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-mode', nameIndex: 0 });
+    expect(advanceCreateFormFocus('branch-mode', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-name', nameIndex: 0 });
+  });
+
+  it('grouped mode has exactly one name field: branch-name wraps straight back to topic', () => {
+    expect(advanceCreateFormFocus('branch-name', true, 'grouped', 0, 1)).toEqual({ focus: 'topic', nameIndex: 0 });
+  });
+
+  it('individual mode advances through each per-member name field before wrapping to topic', () => {
+    expect(advanceCreateFormFocus('branch-name', true, 'individual', 0, 3)).toEqual({ focus: 'branch-name', nameIndex: 1 });
+    expect(advanceCreateFormFocus('branch-name', true, 'individual', 1, 3)).toEqual({ focus: 'branch-name', nameIndex: 2 });
+    expect(advanceCreateFormFocus('branch-name', true, 'individual', 2, 3)).toEqual({ focus: 'topic', nameIndex: 0 });
+  });
+});
+
+describe('prefillBranchNames (story 2.22)', () => {
+  it('grouped mode fills the shared field from the topic slug only when currently empty', () => {
+    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {})).toEqual({ branchName: 'fix-auth-bug', branchNames: {} });
+  });
+
+  it('grouped mode never overwrites a value the developer already typed', () => {
+    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], 'my-custom-name', {})).toEqual({
+      branchName: 'my-custom-name',
+      branchNames: {},
+    });
+  });
+
+  it('individual mode fills every selected member missing an entry, leaves existing entries untouched', () => {
+    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': 'kept' })).toEqual({
+      branchName: '',
+      branchNames: { '/a': 'kept', '/b': 'fix-auth-bug' },
+    });
+  });
+
+  it('never re-fills a field the developer deliberately cleared back to empty (no auto-refill at submit time)', () => {
+    // Simulates: the field was already filled once, then the developer backspaced it to ''.
+    // A second prefill call (e.g. a further member toggled) must not resurrect the old value —
+    // '' is treated exactly the same as "never touched", by design (Design Notes/Boundaries).
+    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {})).toEqual({ branchName: 'fix-auth-bug', branchNames: {} });
+  });
+});
+
+describe('buildCreateBranchOptions (story 2.22)', () => {
+  it('zero members -> the exact NO_BRANCH_CREATION value (core param is mandatory)', () => {
+    expect(buildCreateBranchOptions([], 'main', 'grouped', 'unused', {}, NO_BRANCH_CREATION)).toBe(NO_BRANCH_CREATION);
+  });
+
+  it('grouped mode: the identical name for every selected member', () => {
+    expect(buildCreateBranchOptions(['/a', '/b'], 'development', 'grouped', 'feature-x', {}, NO_BRANCH_CREATION)).toEqual({
+      create: true,
+      base: 'development',
+      mode: 'grouped',
+      names: { '/a': 'feature-x', '/b': 'feature-x' },
+    });
+  });
+
+  it('individual mode: a per-repoPath name map', () => {
+    expect(
+      buildCreateBranchOptions(['/a', '/b'], 'development', 'individual', 'unused', { '/a': 'feature-a', '/b': 'feature-b' }, NO_BRANCH_CREATION),
+    ).toEqual({
+      create: true,
+      base: 'development',
+      mode: 'individual',
+      names: { '/a': 'feature-a', '/b': 'feature-b' },
+    });
+  });
+});
+
+describe('validateCreateBranchFields (story 2.22)', () => {
+  it('zero members: nothing to validate', () => {
+    expect(validateCreateBranchFields('grouped', [], '', {})).toBeNull();
+  });
+
+  it('grouped mode: rejects an empty shared field', () => {
+    expect(validateCreateBranchFields('grouped', ['/a'], '', {})).toBe('Branch name must not be empty');
+    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {})).toBeNull();
+  });
+
+  it('individual mode: rejects if any selected member is missing a name', () => {
+    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a' })).toBe('Branch name must not be empty');
+    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a', '/b': 'feature-b' })).toBeNull();
   });
 });
 
