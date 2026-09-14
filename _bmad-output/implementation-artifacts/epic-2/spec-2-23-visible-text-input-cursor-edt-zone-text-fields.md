@@ -2,7 +2,7 @@
 title: 'Visible Text-Input Cursor (EDT Zone Text Fields)'
 type: 'feature'
 created: '2026-08-28'
-status: 'in-progress'
+status: 'ready-for-dev'
 review_loop_iteration: 0
 context: []
 baseline_commit: '5f2ef9ce6422eff874ec6f28f981b7a3e99d2b8c'
