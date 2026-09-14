@@ -1137,6 +1137,23 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('feature-y');
   });
 
+  it('story 2.23: Add-to-EDT branch field shows a visible cursor hint [Enter] confirm [Esc] cancel (closes affordance gap)', async () => {
+    const store = createAppStore();
+    const target = edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer', branch: 'feature-y', isMember: false })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="add-to-edt" />);
+    expect(output).toContain('[Enter] confirm');
+    expect(output).toContain('[Esc] cancel');
+  });
+
   it('AC7: the detail-pane hint for EDT SERVICES/OTHER SERVICES matches Enter\'s actual behavior', async () => {
     const store = createAppStore();
     const target = edtEntry({

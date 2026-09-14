@@ -19,6 +19,9 @@ export {
 export { CheckboxListItem } from './checkbox-list-item.js';
 export type { CheckboxListItemProps, ResolvedCheckboxItem } from './checkbox-list-item.js';
 export { resolveCheckboxItemLayout } from './checkbox-list-item.js';
+export { TextInputLine } from './text-input-line.js';
+export type { TextInputLineProps, ResolvedTextInputLine } from './text-input-line.js';
+export { resolveTextInputLineLayout } from './text-input-line.js';
 export { Splitter } from './splitter.js';
 export type { SplitterProps } from './splitter.js';
 export { Spinner } from './spinner.js';
