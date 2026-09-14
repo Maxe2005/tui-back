@@ -500,6 +500,347 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  // Story 2.22: the mandatory branch-setup step -----------------------------------------
+  it('Tab past the checklist (>=1 member selected) reveals the branch-setup step, pre-filled from the topic', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'Fix Auth Bug');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select the one candidate
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step (>=1 member selected)
+
+      expect(stdout.output).toContain('Base branch: development');
+      expect(stdout.output).toContain('Naming: Grouped');
+      // suggestBranchNameFromTopic('Fix Auth Bug') -> 'fix-auth-bug', pre-filled without ever
+      // typing into the field.
+      expect(stdout.output).toContain('Branch name: fix-auth-bug');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('zero members selected never reaches the branch-setup step: Tab from the checklist loops straight back to topic', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // topic -> members (no member ever checked)
+      await press(instance, stdin, KEYS.tab); // members -> topic (Boundaries: "no branch step")
+
+      expect(stdout.output).not.toContain('Base branch:');
+      expect(stdout.output).not.toContain('Naming:');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('grouped mode submit sends the identical branch name for every selected member', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step
+      await press(instance, stdin, KEYS.enter); // confirm — pre-filled grouped name still applies
+
+      expect(createParams?.branchOptions).toEqual({
+        create: true,
+        base: 'development',
+        mode: 'grouped',
+        names: { '/repos/a': 'demo', '/repos/b': 'demo' },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('individual mode submit sends a per-repoPath name map; a per-member failure is reported without aborting others', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return {
+          ok: true,
+          data: {
+            ulid: 'new-ulid',
+            topic: 'demo',
+            results: [
+              { service: 'svc-a', outcome: 'created' },
+              { service: 'svc-b', outcome: 'failed', detail: { code: 'shared-branch-rejected', message: 'Branch "demo-b" is shared/protected' } },
+            ],
+          },
+        };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b
+      await press(instance, stdin, KEYS.tab); // members -> branch-base
+      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.space); // toggle grouped -> individual
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name (svc-a's field, pre-filled "demo")
+      await type(instance, stdin, '-a');
+      await press(instance, stdin, KEYS.tab); // svc-a's field -> svc-b's field (pre-filled "demo")
+      await type(instance, stdin, '-b');
+      await press(instance, stdin, KEYS.enter); // confirm
+      // submitCreate's own continuation (loadEdts -> failedSummary -> setDialog) commits over
+      // several microtask hops beyond the single flush `press` already awaited.
+      await instance.waitUntilRenderFlush();
+
+      expect(createParams?.branchOptions).toEqual({
+        create: true,
+        base: 'development',
+        mode: 'individual',
+        names: { '/repos/a': 'demo-a', '/repos/b': 'demo-b' },
+      });
+      // Per-member failure surfaced inline via the existing summarizeFailedResults convention
+      // (Boundaries: "no new failure-display code") — others unaffected.
+      expect(stdout.output).toContain('svc-b');
+      expect(stdout.output).toContain('shared/protected');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('an emptied required branch-name field blocks confirm — no core call, dialog stays open', async () => {
+    const store = createAppStore();
+    let createCalls = 0;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
+      await press(instance, stdin, KEYS.tab); // members -> branch-base
+      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
+      for (let i = 0; i < 'demo'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await press(instance, stdin, KEYS.enter); // confirm attempted on the now-emptied field
+
+      expect(createCalls).toBe(0);
+      expect(stdout.output).toContain('Branch name must not be empty');
+      // Still the create dialog, never silently torn down.
+      expect(stdout.output).toContain('CREATE EDT');
+
+      // The rejection didn't wedge the field: typing a valid value and confirming now works.
+      await type(instance, stdin, 'feature-y');
+      await press(instance, stdin, KEYS.enter);
+      expect(createCalls).toBe(1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Review fix regression (story 2.22): prefillBranchNames used to gate its fill on "is the
+  // value currently empty", so a field the developer deliberately cleared would be silently
+  // resurrected by the very next prefill trigger (another member's checkbox toggled, or the
+  // naming mode switched) — contradicting "always editable, never forced". Gating on an
+  // explicit touched flag instead of the value fixes this end to end.
+  it('clearing the branch-name field then toggling an unrelated member never resurrects the old suggestion', async () => {
+    const store = createAppStore();
+    let createCalls = 0;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
+      await press(instance, stdin, KEYS.tab); // members -> branch-base
+      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
+      for (let i = 0; i < 'demo'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      expect(stdout.output).toContain('Branch name: ');
+
+      // Back to the checklist and select a second, unrelated member — this used to
+      // re-trigger prefillBranchNames and silently repopulate the field with "demo".
+      await pressEscape(instance, stdin);
+      const beforeSecondSelection = stdout.output.length;
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b too
+      await press(instance, stdin, KEYS.tab); // members -> branch-base
+      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name
+
+      // Every frame rendered since the clear must never show the resurrected suggestion.
+      expect(stdout.output.slice(beforeSecondSelection)).not.toContain('Branch name: demo');
+
+      // And confirm is still blocked — the field really is still empty, not just
+      // un-rendered.
+      await press(instance, stdin, KEYS.enter);
+      expect(createCalls).toBe(0);
+      expect(stdout.output).toContain('Branch name must not be empty');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('zero members selected still passes a real (NO_BRANCH_CREATION) branchOptions through to createEdtAction', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: false, error: { code: 'invalid-member', message: 'At least one member service is required to create an EDT' } };
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.enter); // submit directly — zero members ever selected
+
+      expect(createParams?.branchOptions).toEqual({ create: false, base: 'development', mode: 'grouped', names: {} });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Escape from inside the branch-setup step steps back to the member checklist rather than closing the dialog', async () => {
+    const store = createAppStore();
+    let createCalls = 0;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step
+      expect(stdout.output).toContain('Base branch:');
+
+      await pressEscape(instance, stdin);
+
+      // Back on the member checklist — the checkbox selection survived, and the dialog
+      // itself never closed (createCalls still 0, no submit happened).
+      expect(stdout.output).toContain('CREATE EDT');
+      expect(createCalls).toBe(0);
+      // Space here still toggles the (already-checked) candidate rather than doing nothing —
+      // proof formFocus really is back on 'members', not stuck in the branch step.
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter); // now zero members selected -> submits directly
+      expect(createCalls).toBe(1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   // Review patch (story 2.9): the create prompt's Escape used to be unconditionally inert,
   // reasoning the forced zero-EDT state has nothing to cancel to — but that also meant `q`
   // (blocked by zoneInputCaptured) and Escape both did nothing, trapping the user with no
