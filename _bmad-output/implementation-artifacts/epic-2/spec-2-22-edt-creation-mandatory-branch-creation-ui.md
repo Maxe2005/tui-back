@@ -2,7 +2,7 @@
 title: 'EDT Creation — Mandatory Branch Creation UI'
 type: 'feature'
 created: '2026-08-28'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 context: []
 baseline_commit: '551b32b0b46a70b0c0b85ecc5ef1cbec5cb967a4'
@@ -54,12 +54,12 @@ baseline_commit: '551b32b0b46a70b0c0b85ecc5ef1cbec5cb967a4'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `edts-zone.tsx` -- add `suggestBranchNameFromTopic(topic)` -- slugifies topic (lowercase, non-alphanumerics → `-`) for pre-fill
-- [ ] `edts-zone.tsx` -- extend `CreateDialogState`/`initialCreateDialog` with base-branch, naming-mode, branch-name(s), branch-step focus -- state for the mandatory step
-- [ ] `edts-zone.tsx` -- render the branch-setup step gated on `selectedMembers.length >= 1`, current `<Text>` field convention + `nextTextInputValue` per field -- no `text-input-line.tsx` dependency (2.23 not built yet)
-- [ ] `edts-zone.tsx` -- `submitCreate` builds `CreateBranchOptions` (or `NO_BRANCH_CREATION` when zero members), blocks confirm via `validateBranchEditValue` -- wires the step end to end
-- [ ] `app-store.ts` -- `CreateEdtParams` gains `branchOptions`; `createEdt` action passes it through instead of hardcoded `NO_BRANCH_CREATION`
-- [ ] Extend `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx`, `app-store.test.ts` for the new step, the I/O matrix, and the pass-through
+- [x] `edts-zone.tsx` -- add `suggestBranchNameFromTopic(topic)` -- slugifies topic (lowercase, non-alphanumerics → `-`) for pre-fill
+- [x] `edts-zone.tsx` -- extend `CreateDialogState`/`initialCreateDialog` with base-branch, naming-mode, branch-name(s), branch-step focus -- state for the mandatory step
+- [x] `edts-zone.tsx` -- render the branch-setup step gated on `selectedMembers.length >= 1`, current `<Text>` field convention + `nextTextInputValue` per field -- no `text-input-line.tsx` dependency (2.23 not built yet)
+- [x] `edts-zone.tsx` -- `submitCreate` builds `CreateBranchOptions` (or `NO_BRANCH_CREATION` when zero members), blocks confirm via `validateBranchEditValue` -- wires the step end to end
+- [x] `app-store.ts` -- `CreateEdtParams` gains `branchOptions`; `createEdt` action passes it through instead of hardcoded `NO_BRANCH_CREATION`
+- [x] Extend `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx`, `app-store.test.ts` for the new step, the I/O matrix, and the pass-through
 
 **Acceptance Criteria:**
 - Given the create-EDT dialog with ≥1 member selected, when the branch-setup step renders, then it offers a base-branch input (default `development`) and a naming-mode choice, with no enable/disable option.
