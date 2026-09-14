@@ -22,6 +22,7 @@ import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js
 import type { NavigationKey } from '../../keybindings/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
+import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
@@ -1577,7 +1578,7 @@ export function EdtsZone({
       {dialog.kind === 'create' ? (
         <ModalDialog title="CREATE EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
           <Box flexDirection="column">
-            <Text color={dialog.formFocus === 'topic' ? colors.accent : colors.text}>Topic: {dialog.topic}</Text>
+            <TextInputLine label="Topic" value={dialog.topic} focused={dialog.formFocus === 'topic'} />
             {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
             {candidateState === 'error' ? <Text color={colors.error}>Failed to load services — cannot show candidates.</Text> : null}
             {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
@@ -1625,12 +1626,12 @@ export function EdtsZone({
           <Box flexDirection="column">
             {dialog.branchEdit !== null ? (
               <>
-                <Text color={colors.accent}>Branch for {dialog.branchEdit.repoPath}: {dialog.branchEdit.value}</Text>
+                <TextInputLine label={`Branch for ${dialog.branchEdit.repoPath}`} value={dialog.branchEdit.value} focused />
                 {dialog.branchEdit.error ? <DimAnnotation text={dialog.branchEdit.error} /> : null}
               </>
             ) : (
               <>
-                <Text color={dialog.formFocus === 'topic' ? colors.accent : colors.text}>Topic: {dialog.topic}</Text>
+                <TextInputLine label="Topic" value={dialog.topic} focused={dialog.formFocus === 'topic'} />
                 {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
                 {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
                 {candidateState === 'ready'
@@ -1663,7 +1664,7 @@ export function EdtsZone({
             <Text color={colors.text}>{dialog.serviceName}</Text>
             {dialog.branchEdit !== null ? (
               <>
-                <Text color={colors.accent}>Branch for {dialog.serviceName}: {dialog.branchEdit.value}</Text>
+                <TextInputLine label={`Branch for ${dialog.serviceName}`} value={dialog.branchEdit.value} focused />
                 {dialog.branchEdit.error ? <DimAnnotation text={dialog.branchEdit.error} /> : null}
                 {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
               </>
@@ -1689,7 +1690,7 @@ export function EdtsZone({
         <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
           <Box flexDirection="column">
             <Text color={colors.text}>Add {dialog.serviceName} to "{dialog.edt.topic}"</Text>
-            <Text color={colors.accent}>Branch: {dialog.value}</Text>
+            <TextInputLine label="Branch" value={dialog.value} focused />
             {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Adding…" /> : null}
           </Box>

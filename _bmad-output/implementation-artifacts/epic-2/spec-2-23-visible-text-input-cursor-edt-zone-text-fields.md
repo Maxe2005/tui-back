@@ -2,7 +2,7 @@
 title: 'Visible Text-Input Cursor (EDT Zone Text Fields)'
 type: 'feature'
 created: '2026-08-28'
-status: 'ready-for-dev'
+status: 'in-progress'
 review_loop_iteration: 0
 context: []
 baseline_commit: '5f2ef9ce6422eff874ec6f28f981b7a3e99d2b8c'
@@ -51,12 +51,12 @@ baseline_commit: '5f2ef9ce6422eff874ec6f28f981b7a3e99d2b8c'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `shared/components/text-input-line.tsx` -- new component + pure layout resolver -- reusable cursor+hint unit
-- [ ] `shared/components/index.ts` -- barrel export -- so the test/zone imports below resolve
-- [ ] `shared/components/text-input-line.test.tsx` -- unit-test `resolveTextInputLineLayout` (focused/unfocused) + `renderToString` checks (label, value, hint present/absent) -- mirrors `checkbox-list-item.test.tsx`
-- [ ] `shared/components/text-input-line.styles.test.tsx` -- `FORCE_COLOR=1`-isolated: inverse ANSI code present when focused, absent when not (mirrors `splitter.styles.test.tsx`) -- proves the cursor glyph, not just its text
-- [ ] `zones/edts/edts-zone.tsx` -- swap the 5 render sites in Code Map -- closes both debug-log findings
-- [ ] `zones/edts/edts-zone.test.tsx` / `.interaction.test.tsx` -- confirm existing `toContain('Topic: my-topic')` / `toContain('Branch for svc-a')` assertions still pass; add one assertion that Add-to-EDT now shows `[Enter] confirm` -- regression + the closed gap
+- [x] `shared/components/text-input-line.tsx` -- new component + pure layout resolver -- reusable cursor+hint unit
+- [x] `shared/components/index.ts` -- barrel export -- so the test/zone imports below resolve
+- [x] `shared/components/text-input-line.test.tsx` -- unit-test `resolveTextInputLineLayout` (focused/unfocused) + `renderToString` checks (label, value, hint present/absent) -- mirrors `checkbox-list-item.test.tsx`
+- [x] `shared/components/text-input-line.styles.test.tsx` -- `FORCE_COLOR=1`-isolated: inverse ANSI code present when focused, absent when not (mirrors `splitter.styles.test.tsx`) -- proves the cursor glyph, not just its text
+- [x] `zones/edts/edts-zone.tsx` -- swap the 5 render sites in Code Map -- closes both debug-log findings
+- [x] `zones/edts/edts-zone.test.tsx` / `.interaction.test.tsx` -- confirm existing `toContain('Topic: my-topic')` / `toContain('Branch for svc-a')` assertions still pass; add one assertion that Add-to-EDT now shows `[Enter] confirm` -- regression + the closed gap
 
 **Acceptance Criteria:**
 - Given any focused text-input field in the EDT zone, when rendered, then an inverse-video cursor cell shows immediately after the value.
