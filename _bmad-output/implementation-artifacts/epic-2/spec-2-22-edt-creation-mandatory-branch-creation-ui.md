@@ -2,9 +2,10 @@
 title: 'EDT Creation — Mandatory Branch Creation UI'
 type: 'feature'
 created: '2026-08-28'
-status: 'ready-for-dev'
+status: 'in-progress'
 review_loop_iteration: 0
 context: []
+baseline_commit: '551b32b0b46a70b0c0b85ecc5ef1cbec5cb967a4'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
