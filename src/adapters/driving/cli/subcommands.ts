@@ -28,7 +28,8 @@ const EDT_CREATE_USAGE =
   '[--base <branch>] [--branch-mode grouped|individual] [--branch-name <name>|<path>=<name>]';
 const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force]';
 const EDT_MODIFY_USAGE =
-  'tui-back edt modify --topic <topic> [--add-member <path>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]';
+  'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
+  ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}`;
 
 export function buildSubcommands(deps: {
