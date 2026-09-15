@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-09-14
+last_updated: 2026-09-15
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -89,7 +89,7 @@ development_status:
   2-22-edt-creation-mandatory-branch-creation-ui: review
   2-23-visible-text-input-cursor-edt-zone-text-fields: in-progress
   2-24-modify-edt-mandatory-branch-on-add-no-more-silent-default: review
-  2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: backlog
+  2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: review
   2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current: backlog
   epic-2-retrospective: optional
 

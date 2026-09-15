@@ -28,6 +28,8 @@ export { Spinner } from './spinner.js';
 export type { SpinnerProps } from './spinner.js';
 export { DimAnnotation } from './dim-annotation.js';
 export type { DimAnnotationProps } from './dim-annotation.js';
+export { FailedResultList, resolveAssistedAction } from './failed-result-list.js';
+export type { FailedResultRow, AssistedAction, FailedResultListProps } from './failed-result-list.js';
 export { TopBar } from './top-bar.js';
 export { Footer, DEFAULT_FOOTER_HINTS } from './footer.js';
 export { ZoneTabBar, resolveZoneTabState } from './zone-tab-bar.js';

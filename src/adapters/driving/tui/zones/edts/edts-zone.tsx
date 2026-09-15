@@ -26,6 +26,7 @@ import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js'
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { FailedResultList, resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
 import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
@@ -430,12 +431,37 @@ export function isSwitchBlockedError(code: string): boolean {
 // the subset of rejections that ride inside an ok:true result rather than the top-level error.
 type FailableResultRow = { service: string; outcome: string; detail?: { code: string; message: string } };
 
-export function summarizeFailedResults(results: readonly FailableResultRow[]): string | null {
-  const failed = results.filter((row) => row.outcome === 'failed');
-  if (failed.length === 0) {
-    return null;
-  }
-  return failed.map((row) => `${row.service}${row.detail ? `: ${row.detail.message}` : ''}`).join('; ');
+// Story 2.25: returns a structured FailedResultRow[] (never a `; `-joined string) — one row
+// per failed repo, rendered by the shared FailedResultList (shared/components/failed-result-
+// list.tsx) at all 6 partial-failure call sites below. `code` is carried through as-is (used
+// by resolveAssistedAction to decide whether a row gets a guided resolution action); a
+// `failed` row's `detail` is always set in practice (every core use-case reports a
+// code+message together), but a defensive fallback message keeps this total.
+export function summarizeFailedResults(results: readonly FailableResultRow[]): FailedResultRow[] {
+  return results
+    .filter((row) => row.outcome === 'failed')
+    .map((row) => ({
+      service: row.service,
+      ...(row.detail?.code !== undefined ? { code: row.detail.code } : {}),
+      message: row.detail?.message ?? 'Failed',
+    }));
+}
+
+// Never boundary: Create and Switch never get the "try a different branch" retry wired —
+// `resolveMemberBranch` never passes an `edtId` to `assertAllowedBranch` at create time
+// (core/edt/create.ts), and `switchActiveEdt` carries no per-member branch override to retry
+// into. Stripping `code` here (used only at those two call sites) makes
+// `resolveAssistedAction` treat every row as unregistered — even `branch-owned-by-other-edt`
+// — matching AC2's "no registered action" treatment exactly, rather than relying on
+// `FailedResultList` itself to know which dialogs are allowed to offer the affordance.
+function stripAssistedActionCodes(rows: readonly FailedResultRow[]): FailedResultRow[] {
+  return rows.map((row) => ({ service: row.service, message: row.message }));
+}
+
+// Review patch (story 2.25): shared by the Modify and service-actions "try a different
+// branch" Enter handlers — both need the same "first row with a registered action" lookup.
+function findRetryableFailedRow(failedRows: readonly FailedResultRow[]): FailedResultRow | undefined {
+  return failedRows.find((row) => resolveAssistedAction(row.code) !== null);
 }
 
 // Amended 2026-08-27 (Sprint Change Proposal): no longer takes `isActive` — the "— active"
@@ -667,6 +693,10 @@ type CreateDialogState = {
   memberCursor: number;
   submitting: boolean;
   error: string | null;
+  // Story 2.25: the structured per-repo breakdown for a partial failure riding inside an
+  // ok:true result (summarizeFailedResults) — rendered via FailedResultList instead of
+  // folding into `error` above, which keeps its own validation/full-failure use unchanged.
+  failedRows: FailedResultRow[];
   // Story 2.22: the mandatory branch-setup step's own fields — see CreateFormFocus above.
   baseBranch: string;
   namingMode: NamingMode;
@@ -686,6 +716,7 @@ type SwitchDialogState = {
   target: EdtRegistryEntry;
   submitting: boolean;
   error: string | null;
+  failedRows: FailedResultRow[];
   blocked: boolean;
 };
 
@@ -693,6 +724,14 @@ type BranchEditState = {
   repoPath: string;
   value: string;
   error: string | null;
+  // Story 2.25: set only when this branch-edit sub-view was opened by the "try a different
+  // branch" retry action (Modify's version of it — service-actions/add-to-edt already
+  // resubmit on confirm unconditionally, so they need no equivalent flag) — confirming it
+  // re-runs submitModify immediately (Boundaries: "confirming re-runs the same submit
+  // function ... not a full-dialog restart"), unlike a normal member-row branch edit, which
+  // only stages the value pending a later, separate submit (other members may still need
+  // checking/unchecking first).
+  autoSubmitOnConfirm?: boolean;
 };
 
 type ModifyDialogState = {
@@ -706,6 +745,7 @@ type ModifyDialogState = {
   branchEdit: BranchEditState | null;
   submitting: boolean;
   error: string | null;
+  failedRows: FailedResultRow[];
 };
 
 // Story 2.18: the EDT SERVICES row contextual menu opened by Enter — Remove from EDT / Change
@@ -728,6 +768,12 @@ type ServiceActionsDialogState = {
   branchEdit: BranchEditState | null;
   submitting: boolean;
   error: string | null;
+  failedRows: FailedResultRow[];
+  // Story 2.25: the branch value last attempted via submitServiceActionsBranchChange — kept
+  // around (never cleared, including on failure) purely so a "try a different branch" retry
+  // can reopen the branch-edit sub-dialog pre-filled with the value that just got rejected,
+  // rather than the member's still-current branch.
+  lastAttemptedBranch: string | null;
 };
 
 // Story 2.18: the OTHER SERVICES row's Add-to-EDT dialog opened by Enter — a single
@@ -742,6 +788,7 @@ type AddToEdtDialogState = {
   serviceName: string;
   value: string;
   error: string | null;
+  failedRows: FailedResultRow[];
   submitting: boolean;
 };
 
@@ -762,6 +809,7 @@ function initialCreateDialog(): CreateDialogState {
     memberCursor: 0,
     submitting: false,
     error: null,
+    failedRows: [],
     baseBranch: DEFAULT_BASE_BRANCH,
     namingMode: 'grouped',
     branchName: '',
@@ -773,7 +821,7 @@ function initialCreateDialog(): CreateDialogState {
 }
 
 function initialSwitchDialog(target: EdtRegistryEntry): SwitchDialogState {
-  return { kind: 'switch-confirm', target, submitting: false, error: null, blocked: false };
+  return { kind: 'switch-confirm', target, submitting: false, error: null, failedRows: [], blocked: false };
 }
 
 function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {
@@ -788,11 +836,23 @@ function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {
     branchEdit: null,
     submitting: false,
     error: null,
+    failedRows: [],
   };
 }
 
 function initialServiceActionsDialog(edt: EdtRegistryEntry, repoPath: string, serviceName: string): ServiceActionsDialogState {
-  return { kind: 'service-actions', edt, repoPath, serviceName, cursor: 0, branchEdit: null, submitting: false, error: null };
+  return {
+    kind: 'service-actions',
+    edt,
+    repoPath,
+    serviceName,
+    cursor: 0,
+    branchEdit: null,
+    submitting: false,
+    error: null,
+    failedRows: [],
+    lastAttemptedBranch: null,
+  };
 }
 
 function initialAddToEdtDialog(
@@ -801,7 +861,16 @@ function initialAddToEdtDialog(
   serviceName: string,
   currentBranch: string | null,
 ): AddToEdtDialogState {
-  return { kind: 'add-to-edt', edt, repoPath, serviceName, value: currentBranch ?? '', error: null, submitting: false };
+  return {
+    kind: 'add-to-edt',
+    edt,
+    repoPath,
+    serviceName,
+    value: currentBranch ?? '',
+    error: null,
+    failedRows: [],
+    submitting: false,
+  };
 }
 
 export function EdtsZone({
@@ -1088,7 +1157,7 @@ export function EdtsZone({
       current.branchNames,
       NO_BRANCH_CREATION,
     );
-    setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: true, error: null } : prev));
+    setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
     const result = await createEdtAction({ topic: current.topic, members: [...current.selectedMembers], branchOptions });
     if (result.ok) {
       // Awaited (not fire-and-forget) so `edtsRows` reflects the newly-created EDT before
@@ -1096,14 +1165,16 @@ export function EdtsZone({
       // tell whether there's now something to cancel back to.
       await loadEdts();
       void loadEdtsBranches();
-      const failedSummary = summarizeFailedResults(result.data.results);
-      if (failedSummary !== null) {
-        setDialog((prev) =>
-          prev.kind === 'create' ? { ...prev, submitting: false, error: `EDT created, but some members could not be added — ${failedSummary}` } : prev,
-        );
+      // Story 2.25: structured per-repo rows (FailedResultList), never the old `; `-joined
+      // string — `logEdtAction`'s failure `detail` stays that same joined shape though
+      // (Boundaries: "action history formatting is out of scope"). stripAssistedActionCodes:
+      // Create never wires a retry action (Never boundary).
+      const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
+      if (failedRows.length > 0) {
+        setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: false, failedRows } : prev));
         // Log failed action
         if (focusedEdt) {
-          await logEdtAction(focusedEdt.ulid, 'create', 'failed', failedSummary);
+          await logEdtAction(focusedEdt.ulid, 'create', 'failed', failedRows.map((row) => row.message).join('; '));
         }
         return;
       }
@@ -1126,19 +1197,22 @@ export function EdtsZone({
     if (current.submitting) {
       return;
     }
-    setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: true, error: null } : prev));
+    setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
     const result = await switchEdtAction({ topic: current.target.topic, force });
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      const failedSummary = summarizeFailedResults(result.data.results);
-      if (failedSummary !== null) {
-        setDialog((prev) =>
-          prev.kind === 'switch-confirm' ? { ...prev, submitting: false, error: `Switched, but some repos had a problem — ${failedSummary}` } : prev,
-        );
+      // Story 2.25: structured rows — Never boundary: switchActiveEdt carries no per-member
+      // branch override, so no row here ever gets a retry action wired, even one whose code
+      // happens to be branch-owned-by-other-edt (AC2's "no registered action" treatment).
+      // stripAssistedActionCodes enforces that at render time too, not just in the key
+      // dispatcher.
+      const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
+      if (failedRows.length > 0) {
+        setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: false, failedRows } : prev));
         // Log failed action
         if (focusedEdt) {
-          await logEdtAction(focusedEdt.ulid, 'switch', 'failed', failedSummary);
+          await logEdtAction(focusedEdt.ulid, 'switch', 'failed', failedRows.map((row) => row.message).join('; '));
         }
         return;
       }
@@ -1184,19 +1258,20 @@ export function EdtsZone({
       }
     }
     const ops = resolveModifyOps(current.target, current.topic, current.selectedMembers, current.branchEdits);
-    setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: true, error: null } : prev));
+    setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
     const result = await modifyEdtAction({ topic: current.target.topic, ...ops });
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      const failedSummary = summarizeFailedResults(result.data.results);
-      if (failedSummary !== null) {
-        setDialog((prev) =>
-          prev.kind === 'modify' ? { ...prev, submitting: false, error: `Some changes could not be applied — ${failedSummary}` } : prev,
-        );
+      // Story 2.25: structured rows — note `current.branchEdits` (read by openBranchEdit
+      // below) is never cleared on failure, so a "try a different branch" retry on one of
+      // these rows naturally reopens pre-filled with the value that just got rejected.
+      const failedRows = summarizeFailedResults(result.data.results);
+      if (failedRows.length > 0) {
+        setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: false, failedRows } : prev));
         // Log failed action
         if (focusedEdt) {
-          await logEdtAction(focusedEdt.ulid, 'modify', 'failed', failedSummary);
+          await logEdtAction(focusedEdt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
         }
         return;
       }
@@ -1226,10 +1301,14 @@ export function EdtsZone({
     }
   }
 
-  function openBranchEdit(current: ModifyDialogState, repoPath: string) {
+  function openBranchEdit(current: ModifyDialogState, repoPath: string, options: { autoSubmitOnConfirm?: boolean } = {}) {
     const existing =
       current.branchEdits[repoPath] ?? current.target.members.find((member) => member.repoPath === repoPath)?.branch ?? '';
-    setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchEdit: { repoPath, value: existing, error: null } } : prev));
+    setDialog((prev) =>
+      prev.kind === 'modify'
+        ? { ...prev, branchEdit: { repoPath, value: existing, error: null, autoSubmitOnConfirm: options.autoSubmitOnConfirm } }
+        : prev,
+    );
   }
 
   // Story 2.22: the branch-setup step's own field input — base-branch text, the naming-mode
@@ -1430,19 +1509,24 @@ export function EdtsZone({
         );
         return;
       }
+      // Review patch (story 2.9): validated against the trimmed value above — persist that
+      // same trimmed value, not the raw one, so accidental leading/trailing whitespace never
+      // reaches `modifyEdt`'s git layer as part of the branch name.
+      const trimmed = branchEdit.value.trim();
+      const nextBranchEdits = { ...current.branchEdits, [branchEdit.repoPath]: trimmed };
       setDialog((prev) => {
         if (prev.kind !== 'modify' || prev.branchEdit === null) {
           return prev;
         }
-        return {
-          ...prev,
-          // Review patch (story 2.9): validated against the trimmed value above — persist
-          // that same trimmed value, not the raw one, so accidental leading/trailing
-          // whitespace never reaches `modifyEdt`'s git layer as part of the branch name.
-          branchEdits: { ...prev.branchEdits, [prev.branchEdit.repoPath]: branchEdit.value.trim() },
-          branchEdit: null,
-        };
+        return { ...prev, branchEdits: nextBranchEdits, branchEdit: null };
       });
+      // Story 2.25: a branch edit opened via the "try a different branch" retry action
+      // re-runs submitModify immediately on confirm (Boundaries) — built from `current` plus
+      // the just-staged edit rather than re-reading state, since setDialog above hasn't
+      // committed yet.
+      if (branchEdit.autoSubmitOnConfirm) {
+        void submitModify({ ...current, branchEdits: nextBranchEdits, branchEdit: null });
+      }
       return;
     }
     setDialog((prev) => {
@@ -1457,6 +1541,26 @@ export function EdtsZone({
     if (current.branchEdit !== null) {
       handleBranchEditInput(current, current.branchEdit, input, key);
       return;
+    }
+    // Story 2.25: "try a different branch" — an Enter while a failedRows row carries a
+    // registered action reopens the same branch-edit affordance a member row's own Enter
+    // already opens (openBranchEdit), pre-filled from `branchEdits[repoPath]` — never
+    // cleared on failure, so this is exactly the value that just got rejected. Confirming it
+    // re-runs submitModify via the existing member-checklist Enter dispatch below (unchanged),
+    // never a full-dialog restart. Takes priority over the form's other Enter handling below
+    // (topic-edit resubmit, members-list nav dispatch) whenever a resolvable failure is
+    // showing, since retrying it is the only sensible next step.
+    if (key.return && !current.submitting) {
+      const retryRow = findRetryableFailedRow(current.failedRows);
+      if (retryRow !== undefined) {
+        const repoPath =
+          candidates.find((candidate) => candidate.service === retryRow.service)?.path ??
+          current.target.members.find((member) => member.service === retryRow.service)?.repoPath;
+        if (repoPath !== undefined) {
+          openBranchEdit(current, repoPath, { autoSubmitOnConfirm: true });
+          return;
+        }
+      }
     }
     if (key.tab) {
       setDialog((prev) => (prev.kind === 'modify' ? { ...prev, formFocus: cycleFormFocus(prev.formFocus) } : prev));
@@ -1530,15 +1634,18 @@ export function EdtsZone({
     if (current.submitting) {
       return;
     }
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null } : prev));
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
     const result = await modifyEdtAction({ topic: current.edt.topic, addMembers: [], removeMembers: [current.repoPath], setBranches: [] });
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      const failedSummary = summarizeFailedResults(result.data.results);
-      if (failedSummary !== null) {
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, error: failedSummary } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedSummary);
+      // Story 2.25: structured rows — Never boundary: remove-from-edt never touches a
+      // branch, so a row here never carries branch-owned-by-other-edt in practice (and even
+      // if it somehow did, this call site never wires a retry action for it).
+      const failedRows = summarizeFailedResults(result.data.results);
+      if (failedRows.length > 0) {
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, failedRows } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
         return;
       }
       setDialog({ kind: 'none' });
@@ -1554,7 +1661,12 @@ export function EdtsZone({
     if (current.submitting) {
       return;
     }
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null } : prev));
+    // Story 2.25: kept around across the whole submit (including on failure) so a "try a
+    // different branch" retry can reopen the branch-edit sub-dialog pre-filled with the
+    // value that just got rejected, not the member's still-current branch.
+    setDialog((prev) =>
+      prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null, failedRows: [], lastAttemptedBranch: branch } : prev,
+    );
     const result = await modifyEdtAction({
       topic: current.edt.topic,
       addMembers: [],
@@ -1564,10 +1676,10 @@ export function EdtsZone({
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      const failedSummary = summarizeFailedResults(result.data.results);
-      if (failedSummary !== null) {
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchEdit: null, error: failedSummary } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedSummary);
+      const failedRows = summarizeFailedResults(result.data.results);
+      if (failedRows.length > 0) {
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchEdit: null, failedRows } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
         return;
       }
       setDialog({ kind: 'none' });
@@ -1629,6 +1741,24 @@ export function EdtsZone({
       }
       return;
     }
+    // Story 2.25: "try a different branch" — reopens the branch-edit sub-dialog pre-filled
+    // with `lastAttemptedBranch` (the value that just got rejected, tracked separately since
+    // this dialog's own branchEdit sub-state is cleared once a submit is in flight), rather
+    // than openServiceActionsBranchEdit's normal "still-current member branch" pre-fill.
+    // Confirming it re-runs submitServiceActionsBranchChange via the existing branch-edit
+    // Enter handling above, unchanged — never a full-dialog restart. Takes priority over the
+    // SERVICE_ACTION_MENU_ITEMS dispatch below whenever a resolvable failure is showing.
+    if (key.return && !current.submitting) {
+      const retryRow = findRetryableFailedRow(current.failedRows);
+      if (retryRow !== undefined) {
+        setDialog((prev) =>
+          prev.kind === 'service-actions'
+            ? { ...prev, branchEdit: { repoPath: prev.repoPath, value: prev.lastAttemptedBranch ?? '', error: null } }
+            : prev,
+        );
+        return;
+      }
+    }
     const jump = resolveSelectionJump(key);
     if (jump !== null) {
       setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: jumpSelection(jump, SERVICE_ACTION_MENU_ITEMS.length) } : prev));
@@ -1661,7 +1791,7 @@ export function EdtsZone({
       return;
     }
     const branch = current.value.trim();
-    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: true, error: null } : prev));
+    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
     const result = await modifyEdtAction({
       topic: current.edt.topic,
       addMembers: [current.repoPath],
@@ -1671,10 +1801,14 @@ export function EdtsZone({
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      const failedSummary = summarizeFailedResults(result.data.results);
-      if (failedSummary !== null) {
-        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, error: failedSummary } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedSummary);
+      // Story 2.25: `current.value` (the attempted branch, re-read by handleAddToEdtInput
+      // below) is never cleared on failure — the dialog's single text field already stays
+      // pre-filled with the value that just got rejected, so "try a different branch" here
+      // is just the existing Enter-to-resubmit flow, nothing extra to wire.
+      const failedRows = summarizeFailedResults(result.data.results);
+      if (failedRows.length > 0) {
+        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
         return;
       }
       setDialog({ kind: 'none' });
@@ -1998,7 +2132,7 @@ export function EdtsZone({
                   : null}
               </>
             )}
-            {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+            {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Creating…" /> : null}
           </Box>
         </ModalDialog>
@@ -2020,7 +2154,7 @@ export function EdtsZone({
                 <Text color={colors.text}>[Enter] confirm  [Esc] cancel</Text>
               </>
             )}
-            {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+            {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Switching…" /> : null}
           </Box>
         </ModalDialog>
@@ -2055,7 +2189,7 @@ export function EdtsZone({
                       );
                     })
                   : null}
-                {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+                {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
                 {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
               </>
             )}
@@ -2083,7 +2217,7 @@ export function EdtsZone({
                     selected={index === dialog.cursor}
                   />
                 ))}
-                {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+                {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
                 {dialog.submitting ? <DimAnnotation text="Working…" /> : null}
               </>
             )}
@@ -2096,7 +2230,7 @@ export function EdtsZone({
           <Box flexDirection="column">
             <Text color={colors.text}>Add {dialog.serviceName} to "{dialog.edt.topic}"</Text>
             <TextInputLine label="Branch" value={dialog.value} focused />
-            {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+            {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Adding…" /> : null}
           </Box>
         </ModalDialog>

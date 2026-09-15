@@ -1445,6 +1445,353 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
+  // Story 2.25 -----------------------------------------------------------------------------
+  // "Assisted resolution" for the one registered failure code, branch-owned-by-other-edt —
+  // a per-repo structured line (never joined), an inline "[Enter] try a different branch"
+  // affordance, and confirming the reopened branch-edit re-runs the same submit function.
+  it('matrix: branch-owned-by-other-edt in Modify shows "try a different branch"; retry reopens pre-filled and re-submits', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    const modifyCalls: ModifyEdtParams[] = [];
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyCalls.push(params);
+        if (modifyCalls.length === 1) {
+          return {
+            ok: true,
+            data: {
+              ulid: 'active-ulid',
+              topic: 'active-edt',
+              results: [
+                {
+                  service: 'svc-a',
+                  outcome: 'failed',
+                  detail: {
+                    code: 'branch-owned-by-other-edt',
+                    message: 'Branch "feature-y" is already registered as a different EDT\'s own branch',
+                  },
+                },
+              ],
+            },
+          };
+        }
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open modify
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // open branch-edit for svc-a (pre-filled "main")
+      for (let i = 0; i < 'main'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-y');
+      await press(instance, stdin, KEYS.enter); // commit the branch edit, back to the form
+      // Still members-focus, cursor still on svc-a's (still checked+editable) row — Tab back
+      // to topic-focus first so this next Enter submits rather than reopening the branch edit.
+      await press(instance, stdin, KEYS.tab); // members -> topic
+      await press(instance, stdin, KEYS.enter); // submit (topic-focus Enter) -> collision
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(1);
+      expect(modifyCalls[0]?.setBranches).toEqual([{ repoPath: '/repos/a', branch: 'feature-y' }]);
+      // Per-repo line, never a `; `-joined string — svc-a is the only failed row here so a
+      // joined-vs-structured distinction isn't directly observable, but the affordance text
+      // proves the structured path (a joined string never carried a `[Enter]` hint).
+      expect(stdout.output).toContain('svc-a');
+      expect(stdout.output).toContain('already registered as a different EDT');
+      expect(stdout.output).toContain('[Enter] try a different branch');
+
+      // Choosing it reopens the existing branch-edit affordance, pre-filled with the value
+      // that just got rejected — not a blank field, not the original "main".
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('Branch for /repos/a');
+      const outputAfterReopen = stdout.output;
+      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Branch for /repos/a'))).toContain('feature-y');
+
+      // Edit to a different branch and confirm — re-runs submitModify directly (the same
+      // submit function), not a full-dialog restart back through topic/members.
+      for (let i = 0; i < 'feature-y'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-z');
+      await press(instance, stdin, KEYS.enter);
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(2);
+      expect(modifyCalls[1]?.setBranches).toEqual([{ repoPath: '/repos/a', branch: 'feature-z' }]);
+      // Second submit succeeded — dialog closed, no leftover MODIFY EDT chrome. `output`
+      // accumulates every frame ever written (including the dialog's own earlier frames), so
+      // only the *last* rendered frame (sliced from the base view's always-present "EDTS"
+      // header, the same technique app-shell.interaction.test.tsx's own lastFrame() uses) can
+      // tell whether the dialog is still showing right now.
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('EDTS'));
+      expect(lastFrame).not.toContain('MODIFY EDT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('matrix: branch-owned-by-other-edt in service-actions "Change branch" shows the retry affordance; retry reopens pre-filled and re-submits', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    const modifyCalls: ModifyEdtParams[] = [];
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyCalls.push(params);
+        if (modifyCalls.length === 1) {
+          return {
+            ok: true,
+            data: {
+              ulid: 'active-ulid',
+              topic: 'active-edt',
+              results: [
+                {
+                  service: 'svc-a',
+                  outcome: 'failed',
+                  detail: { code: 'branch-owned-by-other-edt', message: 'Branch "main-y" is already registered as a different EDT\'s own branch' },
+                },
+              ],
+            },
+          };
+        }
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
+      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
+      await type(instance, stdin, '-y');
+      await press(instance, stdin, KEYS.enter); // confirm -> collision
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(1);
+      expect(stdout.output).toContain('svc-a');
+      expect(stdout.output).toContain('[Enter] try a different branch');
+
+      // Retry reopens the branch-edit sub-dialog pre-filled with the rejected value.
+      await press(instance, stdin, KEYS.enter);
+      const outputAfterReopen = stdout.output;
+      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Branch for svc-a'))).toContain('main-y');
+
+      for (let i = 0; i < 'main-y'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'main-z');
+      await press(instance, stdin, KEYS.enter); // confirm -> re-runs submitServiceActionsBranchChange
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(2);
+      expect(modifyCalls[1]?.setBranches).toEqual([{ repoPath: '/repos/a', branch: 'main-z' }]);
+      // See the Modify retry test above for why this reads the last frame, not the whole
+      // accumulated `output`.
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('EDTS'));
+      expect(lastFrame).not.toContain('SERVICE ACTIONS');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('matrix: branch-owned-by-other-edt in Add-to-EDT shows the retry affordance; the already-focused field re-submits on Enter', async () => {
+    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    const modifyCalls: ModifyEdtParams[] = [];
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyCalls.push(params);
+        if (modifyCalls.length === 1) {
+          return {
+            ok: true,
+            data: {
+              ulid: 'active-ulid',
+              topic: 'active-edt',
+              results: [
+                {
+                  service: 'svc-b',
+                  outcome: 'failed',
+                  detail: { code: 'branch-owned-by-other-edt', message: 'Branch "feature-y" is already registered as a different EDT\'s own branch' },
+                },
+              ],
+            },
+          };
+        }
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services -> other-services
+      await press(instance, stdin, KEYS.enter); // open Add to EDT (pre-filled "feature-y")
+      await press(instance, stdin, KEYS.enter); // confirm -> collision
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(1);
+      expect(stdout.output).toContain('[Enter] try a different branch');
+      // The field already shows the rejected value — no separate "reopen" step needed.
+      expect(stdout.output).toContain('feature-y');
+
+      for (let i = 0; i < 'feature-y'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-z');
+      await press(instance, stdin, KEYS.enter); // re-runs submitAddToEdt with the new value
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(2);
+      expect(modifyCalls[1]?.setBranches).toEqual([{ repoPath: '/repos/b', branch: 'feature-z' }]);
+      // See the Modify retry test above for why this reads the last frame, not the whole
+      // accumulated `output`.
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('EDTS'));
+      expect(lastFrame).not.toContain('ADD TO EDT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Never boundary: Create/Switch never wire the retry action, even for this exact code —
+  // resolveMemberBranch never passes edtId to assertAllowedBranch at create time, and
+  // switchActiveEdt carries no per-member branch override to retry into. Both still get the
+  // plain structured line, matching the "no registered action" treatment for an unregistered
+  // code (AC2).
+  it('matrix: branch-owned-by-other-edt inside a Create result renders a plain line — no retry affordance', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => ({
+        ok: true,
+        data: {
+          ulid: 'new-ulid',
+          topic: 'demo',
+          results: [
+            {
+              service: 'svc-a',
+              outcome: 'failed',
+              detail: { code: 'branch-owned-by-other-edt', message: 'Branch "demo" is already registered as a different EDT\'s own branch' },
+            },
+          ],
+        },
+      }),
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step
+      await press(instance, stdin, KEYS.enter); // confirm
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('svc-a');
+      expect(stdout.output).toContain('already registered as a different EDT');
+      expect(stdout.output).not.toContain('[Enter] try a different branch');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('matrix: branch-owned-by-other-edt inside a Switch result renders a plain line — no retry affordance', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => ({
+        ok: true,
+        data: {
+          ulid: 'target-ulid',
+          topic: 'other',
+          wasInterrupted: false,
+          results: [
+            {
+              service: 'svc-a',
+              outcome: 'failed',
+              detail: { code: 'branch-owned-by-other-edt', message: 'Branch "other" is already registered as a different EDT\'s own branch' },
+            },
+          ],
+        },
+      }),
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open switch-confirm
+      await press(instance, stdin, KEYS.enter); // confirm switch
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('svc-a');
+      expect(stdout.output).toContain('already registered as a different EDT');
+      expect(stdout.output).not.toContain('[Enter] try a different branch');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   // Review fix: no test previously exercised Escape/cancel for either new dialog, or backing
   // out of the branch-edit sub-view via Escape.
   it('Escape cancels the EDT SERVICES contextual menu without calling modifyEdt', async () => {
