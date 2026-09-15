@@ -2,9 +2,10 @@
 title: 'EDT Zone — Structured Per-Repo Failure Display & Branch-Collision State'
 type: 'feature'
 created: '2026-09-14'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
 context: []
+baseline_commit: 'cc753180eb34bf2c6af0b14a0eb4d80899911197'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -54,12 +55,12 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `failed-result-list.tsx` -- new `FailedResultRow`/`AssistedAction`/`resolveAssistedAction`/`FailedResultList` -- the extensible registry + shared renderer
-- [ ] `edts-zone.tsx` -- `summarizeFailedResults` → returns `FailedResultRow[]` -- structured data, no joined string
-- [ ] `edts-zone.tsx` -- all 6 call sites + 5 dialog state types gain `failedRows` -- consistent shape everywhere
-- [ ] `edts-zone.tsx` -- wire retry-on-action for Modify/service-actions-branch-change/add-to-edt only -- matches the Never boundary
-- [ ] `edts-zone.tsx` render -- swap `DimAnnotation` for `FailedResultList` at the 5 dialog render sites when `failedRows` non-empty
-- [ ] Extend `edts-zone.test.tsx`/`.interaction.test.tsx`; new `failed-result-list.test.tsx` for the I/O matrix
+- [x] `failed-result-list.tsx` -- new `FailedResultRow`/`AssistedAction`/`resolveAssistedAction`/`FailedResultList` -- the extensible registry + shared renderer
+- [x] `edts-zone.tsx` -- `summarizeFailedResults` → returns `FailedResultRow[]` -- structured data, no joined string
+- [x] `edts-zone.tsx` -- all 6 call sites + 5 dialog state types gain `failedRows` -- consistent shape everywhere
+- [x] `edts-zone.tsx` -- wire retry-on-action for Modify/service-actions-branch-change/add-to-edt only -- matches the Never boundary
+- [x] `edts-zone.tsx` render -- swap `DimAnnotation` for `FailedResultList` at the 5 dialog render sites when `failedRows` non-empty
+- [x] Extend `edts-zone.test.tsx`/`.interaction.test.tsx`; new `failed-result-list.test.tsx` for the I/O matrix
 
 **Acceptance Criteria:**
 - Given any of the 6 partial-failure call sites, when it completes with failed rows, then each renders its own `service: message` line, never a `; `-joined string.
@@ -83,3 +84,63 @@ Write order note: this story is sequenced to land before 2.22/2.24's own branch-
 
 **Manual checks:**
 - Force a switch/modify/add-to-edt collision (register the same branch under two EDTs) → per-repo lines, "try a different branch" on the collision row for modify/add-to-edt/service-actions paths, plain line for switch. Trigger an unrelated failure (e.g. missing manifest) → plain line, no action, on every call site including the 3 wired ones.
+
+## Suggested Review Order
+
+**The extensible registry + shared renderer**
+
+- Entry point: the registry mapping a failure `code` to an optional guided action, plus the row list it decides.
+  [`failed-result-list.tsx:28`](../../../src/adapters/driving/tui/shared/components/failed-result-list.tsx#L28)
+
+- `hasOwnProperty` guard (review patch) — a plain lookup would resolve an inherited `Object.prototype` key as a false-positive action.
+  [`failed-result-list.tsx:32`](../../../src/adapters/driving/tui/shared/components/failed-result-list.tsx#L32)
+
+- Renders one line per row, growing an inline `[Enter] <label>` hint only when the code resolves.
+  [`failed-result-list.tsx:54`](../../../src/adapters/driving/tui/shared/components/failed-result-list.tsx#L54)
+
+**Structured data, never a joined string**
+
+- `summarizeFailedResults` now returns `FailedResultRow[]` instead of a `; `-joined string.
+  [`edts-zone.tsx:440`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L440)
+
+- `stripAssistedActionCodes` enforces the Never boundary: Create/Switch rows never resolve to an action, even for the collision code.
+  [`edts-zone.tsx:457`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L457)
+
+- `findRetryableFailedRow` (review patch) — the "first row with a registered action" lookup shared by both retry handlers below.
+  [`edts-zone.tsx:463`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L463)
+
+**"Try a different branch" retry wiring**
+
+- `autoSubmitOnConfirm` distinguishes a retry-opened branch edit (auto-resubmits) from a normal member-row edit (stages only).
+  [`edts-zone.tsx:734`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L734)
+
+- Modify's Enter dispatcher: reopens the branch-edit sub-view pre-filled with the rejected value, takes priority whenever a retryable row exists.
+  [`edts-zone.tsx:1554`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1554)
+
+- Confirming a retry-opened branch edit re-runs `submitModify` immediately instead of just staging the value.
+  [`edts-zone.tsx:1527`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1527)
+
+- Service-actions' Enter dispatcher: same retry pattern, pre-filled from `lastAttemptedBranch` since this dialog's own sub-state clears on submit.
+  [`edts-zone.tsx:1752`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1752)
+
+**Dialog state and render-site wiring (repetitive across 5 dialogs)**
+
+- `failedRows` added alongside each dialog's existing `error` field, which keeps its validation/full-failure role unchanged.
+  [`edts-zone.tsx:699`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L699)
+
+- Render sites swap `DimAnnotation` for `FailedResultList` whenever `failedRows` is non-empty.
+  [`edts-zone.tsx:2135`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L2135)
+
+- Barrel export for the new shared component.
+  [`components/index.ts:31`](../../../src/adapters/driving/tui/shared/components/index.ts#L31)
+
+**Tests**
+
+- Registry/render coverage for the new component: empty list, multi-row, and the inline-hint gating.
+  [`failed-result-list.test.tsx:20`](../../../src/adapters/driving/tui/shared/components/failed-result-list.test.tsx#L20)
+
+- Unit coverage for `summarizeFailedResults`'s new structured return type.
+  [`edts-zone.test.tsx:714`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L714)
+
+- Real-keypress matrix coverage: retry flows for Modify/service-actions/Add-to-EDT, plus the Create/Switch "no action" cases.
+  [`edts-zone.interaction.test.tsx:1448`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1448)

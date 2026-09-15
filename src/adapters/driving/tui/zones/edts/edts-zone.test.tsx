@@ -712,18 +712,33 @@ describe('resolveCandidateListState', () => {
 });
 
 describe('summarizeFailedResults', () => {
-  it('returns null when every row succeeded', () => {
-    expect(summarizeFailedResults([{ service: 'a', outcome: 'added' }])).toBeNull();
-    expect(summarizeFailedResults([])).toBeNull();
+  // Story 2.25: returns a structured FailedResultRow[] now — never a `; `-joined string.
+  it('returns an empty array when every row succeeded', () => {
+    expect(summarizeFailedResults([{ service: 'a', outcome: 'added' }])).toEqual([]);
+    expect(summarizeFailedResults([])).toEqual([]);
   });
 
-  it('joins every failed row\'s service and detail message', () => {
-    const summary = summarizeFailedResults([
+  it('returns one row per failed result, carrying the code and message through as-is', () => {
+    const rows = summarizeFailedResults([
       { service: 'a', outcome: 'added' },
       { service: 'b', outcome: 'failed', detail: { code: 'shared-branch-rejected', message: 'Branch "development" is shared/protected' } },
       { service: 'c', outcome: 'failed' },
     ]);
-    expect(summary).toBe('b: Branch "development" is shared/protected; c');
+    expect(rows).toEqual([
+      { service: 'b', code: 'shared-branch-rejected', message: 'Branch "development" is shared/protected' },
+      { service: 'c', message: 'Failed' },
+    ]);
+  });
+
+  it('surfaces the real branch-owned-by-other-edt code as-is, for resolveAssistedAction to key off', () => {
+    const rows = summarizeFailedResults([
+      {
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'branch-owned-by-other-edt', message: 'Branch "feature-x" is already registered as a different EDT\'s own branch' },
+      },
+    ]);
+    expect(rows[0]?.code).toBe('branch-owned-by-other-edt');
   });
 });
 
