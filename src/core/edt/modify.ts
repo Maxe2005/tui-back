@@ -11,9 +11,16 @@
 // Story 2.2/2.3/2.4 semantics are re-used inline (shared-branch gate, protected-switch,
 // branch-scope safety). Every core use-case returns the `{ok,data}`/`{ok,error}` envelope
 // (AD-3). NodeNext `.js` imports; imports-first.
+//
+// `modifyEdt` itself is a straight-line sequence of 4 pre-lock steps (add members / remove
+// members / set branches / rename branches — each its own private helper below) followed by
+// the lock-held assembly-and-write. Each step function returns its own slice of the final
+// `results` list plus whatever the later steps or the lock-held assembly need from it; only
+// step 1 (a registry.list() call) can fail the whole use-case outright, so it alone returns a
+// `Result` the caller propagates.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
-import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
@@ -108,247 +115,349 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     }
   }
 
-  // Pre-lock: collect per-op results for git-touching ops.
-  // We do git writes outside the lock (same precedent as create/switch), then under the
-  // lock we only assemble the final entry and write edts.yaml.
-  const results: ModifyEdtResult[] = [];
-  // Review patch (story 2.9): adds/branch-changes were computed into `results` above but
-  // never fed back into the registry entry written under the lock below — the write only
-  // ever applied the deterministic topic rename + removals. These two arrays carry the
-  // *successful* outcomes' data forward so the lock section can actually persist them.
-  const addedMembers: EdtMember[] = [];
-  const branchChanges: Array<{ repoPath: string; branch: string }> = [];
+  // Pre-lock: collect per-op results for git-touching ops. We do git writes outside the lock
+  // (same precedent as create/switch), then under the lock we only assemble the final entry
+  // and write edts.yaml.
+  //
+  // ---- 1. Add members (pre-lock: registered/duplicate checks only for pending, branch-required for unmatched) ----
+  const addStep = await resolveMemberAdditions({ addMembers, setBranches, registry, target });
+  if (!addStep.ok) {
+    return addStep;
+  }
+  const { results: addResults, pendingAdds, rejectedAddPaths } = addStep.data;
 
-  // Story 2.24: pendingAdds — addMembers entries with a matching setBranches entry defer branch
-  // resolution entirely to step 3 (no currentBranch / assertAllowedBranch here). Unmatched
-  // entries fail fast with branch-required.
-  const setBranchesByPath = new Map(setBranches.map(({ repoPath, branch }) => [resolve(repoPath), branch]));
-  const pendingAdds = new Set<string>();
+  // ---- 2. Remove members (pre-logic, validated under lock) ----
+  const removeResults = resolveMemberRemovals(removeMembers);
+
+  // ---- 3. Set branches (pre-lock: gate + protected-switch git) ----
+  const branchStep = await resolveBranchAssignments({ setBranches, rejectedAddPaths, pendingAdds, target, git, manifest });
+
+  // ---- 4. Rename branches (pre-lock: resolve oldName from this EDT's own membership, gate,
+  // git.renameBranch) ----
+  const renameStep = await resolveBranchRenames({ renameBranches, target, git, manifest });
+
+  const results: ModifyEdtResult[] = [...addResults, ...removeResults, ...branchStep.results, ...renameStep.results];
+  const addedMembers = branchStep.addedMembers;
+  const branchChanges = [...branchStep.branchChanges, ...renameStep.branchChanges];
+
+  // ---- Under per-resource advisory lock (AD-9): assemble final entry and write edts.yaml ----
+  const written = await persistModifiedEntry({
+    edtRegistry,
+    edtRegistryResourceKey,
+    lock,
+    target,
+    preLockEntries: edtListed.data,
+    renameTo,
+    removeMembers,
+    addedMembers,
+    branchChanges,
+  });
+  if (!written.ok) {
+    return written;
+  }
+
+  return ok({ ulid: target.ulid, topic: renameTo !== undefined ? renameTo : trimmedTopic, results });
+}
+
+// ---- Step 1: add members ----------------------------------------------------------------
+// Story 2.24: pendingAdds — addMembers entries with a matching setBranches entry defer branch
+// resolution entirely to step 3 (no currentBranch / assertAllowedBranch here). Unmatched
+// entries fail fast with branch-required.
+interface MemberAdditions {
+  results: ModifyEdtResult[];
   // Story 2.24 code review: a resolved path step 1 already rejected (invalid-member /
   // duplicate-member) must not also be processed by step 3 — a raw caller can combine
   // --add-member for an invalid/duplicate path with --set-branch for that same path, and
   // without this, step 3 would still run assertAllowedBranch/checkout against it, producing a
   // second, possibly conflicting result row and a real git checkout on a path already
   // declared invalid.
+  rejectedAddPaths: Set<string>;
+  pendingAdds: Set<string>;
+}
+
+async function resolveMemberAdditions(params: {
+  addMembers: string[];
+  setBranches: Array<{ repoPath: string; branch: string }>;
+  registry: RegistryPort;
+  target: EdtRegistryEntry;
+}): Promise<Result<MemberAdditions>> {
+  const { addMembers, setBranches, registry, target } = params;
+  const results: ModifyEdtResult[] = [];
   const rejectedAddPaths = new Set<string>();
+  const pendingAdds = new Set<string>();
 
-  // ---- 1. Add members (pre-lock: registered/duplicate checks only for pending, branch-required for unmatched) ----
-  if (addMembers.length > 0) {
-    const registered = await registry.list();
-    if (!registered.ok) {
-      return registered;
-    }
-    const registeredPaths = new Set(registered.data.map((rawPath) => resolve(rawPath)));
+  if (addMembers.length === 0) {
+    return ok({ results, rejectedAddPaths, pendingAdds });
+  }
 
-    for (const memberPath of addMembers) {
-      const resolved = resolve(memberPath);
-      if (!registeredPaths.has(resolved)) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: 'invalid-member', message: `Member is not a registered managed repo: ${resolved}` },
-        });
-        rejectedAddPaths.add(resolved);
-        continue;
-      }
+  const setBranchesByPath = new Map(setBranches.map(({ repoPath, branch }) => [resolve(repoPath), branch]));
+  const registered = await registry.list();
+  if (!registered.ok) {
+    return registered;
+  }
+  const registeredPaths = new Set(registered.data.map((rawPath) => resolve(rawPath)));
 
-      // Duplicate check: skip if member already in target EDT
-      const alreadyAdded = target.members.some((m) => resolve(m.repoPath) === resolved);
-      if (alreadyAdded) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: 'duplicate-member', message: `Member ${resolved} is already in the EDT's member list` },
-        });
-        rejectedAddPaths.add(resolved);
-        continue;
-      }
-
-      // Story 2.24: if a matching setBranches entry exists, defer entirely to step 3 — no
-      // currentBranch / assertAllowedBranch here. Otherwise fail with branch-required.
-      if (setBranchesByPath.has(resolved)) {
-        pendingAdds.add(resolved);
-        continue;
-      }
-
+  for (const memberPath of addMembers) {
+    const resolved = resolve(memberPath);
+    if (!registeredPaths.has(resolved)) {
       results.push({
         service: resolved,
         outcome: 'failed',
-        detail: { code: 'branch-required', message: `no branch specified for new member ${resolved}; call with a matching setBranches entry` },
+        detail: { code: 'invalid-member', message: `Member is not a registered managed repo: ${resolved}` },
       });
+      rejectedAddPaths.add(resolved);
+      continue;
     }
-  }
 
-  // ---- 2. Remove members (pre-logic, validated under lock) ----
-  // No git writes; just note the removals. Under the lock we'll validate members exist
-  // and actually remove them from the registry entry.
-  if (removeMembers.length > 0) {
-    // We'll mark each as removed in results; the actual registry edit happens under lock.
-    for (const memberPath of removeMembers) {
+    // Duplicate check: skip if member already in target EDT
+    const alreadyAdded = target.members.some((m) => resolve(m.repoPath) === resolved);
+    if (alreadyAdded) {
       results.push({
-        service: memberPath,
-        outcome: 'removed',
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: 'duplicate-member', message: `Member ${resolved} is already in the EDT's member list` },
       });
+      rejectedAddPaths.add(resolved);
+      continue;
     }
+
+    // Story 2.24: if a matching setBranches entry exists, defer entirely to step 3 — no
+    // currentBranch / assertAllowedBranch here. Otherwise fail with branch-required.
+    if (setBranchesByPath.has(resolved)) {
+      pendingAdds.add(resolved);
+      continue;
+    }
+
+    results.push({
+      service: resolved,
+      outcome: 'failed',
+      detail: { code: 'branch-required', message: `no branch specified for new member ${resolved}; call with a matching setBranches entry` },
+    });
   }
 
-  // ---- 3. Set branches (pre-lock: gate + protected-switch git) ----
-  // Story 2.24: for pendingAdds (addMembers with matching setBranches), a successful checkout
-  // also promotes into addedMembers (not just branchChanges) so the lock-time assembly picks
-  // it up as a genuinely new member.
-  if (setBranches.length > 0) {
-    for (const { repoPath, branch } of setBranches) {
-      const resolved = resolve(repoPath);
+  return ok({ results, rejectedAddPaths, pendingAdds });
+}
 
-      // Story 2.24 code review: this resolved path already has a failure result from step 1
-      // (invalid-member/duplicate-member) — never process it a second time here.
-      if (rejectedAddPaths.has(resolved)) {
-        continue;
-      }
+// ---- Step 2: remove members -------------------------------------------------------------
+// No git writes; just note the removals. Under the lock we'll validate members exist and
+// actually remove them from the registry entry.
+function resolveMemberRemovals(removeMembers: string[]): ModifyEdtResult[] {
+  return removeMembers.map((memberPath) => ({ service: memberPath, outcome: 'removed' as const }));
+}
 
-      // Gate: shared-branch + cross-EDT ownership (AD-8)
-      const allowed = await git.assertAllowedBranch(resolved, branch, target.ulid);
-      if (!allowed.ok) {
+// ---- Step 3: set branches ----------------------------------------------------------------
+// Story 2.24: for pendingAdds (addMembers with matching setBranches), a successful checkout
+// also promotes into addedMembers (not just branchChanges) so the lock-time assembly picks it
+// up as a genuinely new member.
+interface BranchAssignments {
+  results: ModifyEdtResult[];
+  // Review patch (story 2.9): adds/branch-changes were computed pre-lock but must be fed back
+  // into the registry entry written under the lock — the write only ever applies the
+  // deterministic topic rename + removals on its own. These two arrays carry the *successful*
+  // outcomes' data forward so the lock section can actually persist them.
+  addedMembers: EdtMember[];
+  branchChanges: Array<{ repoPath: string; branch: string }>;
+}
+
+async function resolveBranchAssignments(params: {
+  setBranches: Array<{ repoPath: string; branch: string }>;
+  rejectedAddPaths: Set<string>;
+  pendingAdds: Set<string>;
+  target: EdtRegistryEntry;
+  git: GitPort;
+  manifest: ManifestPort;
+}): Promise<BranchAssignments> {
+  const { setBranches, rejectedAddPaths, pendingAdds, target, git, manifest } = params;
+  const results: ModifyEdtResult[] = [];
+  const addedMembers: EdtMember[] = [];
+  const branchChanges: Array<{ repoPath: string; branch: string }> = [];
+
+  for (const { repoPath, branch } of setBranches) {
+    const resolved = resolve(repoPath);
+
+    // Story 2.24 code review: this resolved path already has a failure result from step 1
+    // (invalid-member/duplicate-member) — never process it a second time here.
+    if (rejectedAddPaths.has(resolved)) {
+      continue;
+    }
+
+    // Gate: shared-branch + cross-EDT ownership (AD-8)
+    const allowed = await git.assertAllowedBranch(resolved, branch, target.ulid);
+    if (!allowed.ok) {
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: allowed.error.code, message: allowed.error.message },
+      });
+      continue;
+    }
+
+    // Protected-switch: stash-if-dirty → checkout → restore (Story 2.4)
+    const dirty = await git.hasUncommittedChanges(resolved);
+    if (!dirty.ok) {
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: dirty.error.code, message: dirty.error.message },
+      });
+      continue;
+    }
+    if (dirty.data) {
+      const stashed = await git.stashSave(resolved, `tui-back:${target.ulid}`);
+      if (!stashed.ok) {
         results.push({
           service: resolved,
           outcome: 'failed',
-          detail: { code: allowed.error.code, message: allowed.error.message },
+          detail: { code: stashed.error.code, message: stashed.error.message },
         });
         continue;
-      }
-
-      // Protected-switch: stash-if-dirty → checkout → restore (Story 2.4)
-      const dirty = await git.hasUncommittedChanges(resolved);
-      if (!dirty.ok) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: dirty.error.code, message: dirty.error.message },
-        });
-        continue;
-      }
-      if (dirty.data) {
-        const stashed = await git.stashSave(resolved, `tui-back:${target.ulid}`);
-        if (!stashed.ok) {
-          results.push({
-            service: resolved,
-            outcome: 'failed',
-            detail: { code: stashed.error.code, message: stashed.error.message },
-          });
-          continue;
-        }
-      }
-
-      const checkedOut = await git.checkout(resolved, branch);
-      if (!checkedOut.ok) {
-        // Attempt to restore the stash that was saved earlier, so the repo isn't left
-        // with a permanent stash that won't be popped.
-        await git.restoreStash(resolved, `tui-back:${target.ulid}`);
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: checkedOut.error.code, message: checkedOut.error.message },
-        });
-        continue;
-      }
-
-      // Restore the EDT's own stash (message-tagged)
-      const restored = await git.restoreStash(resolved, `tui-back:${target.ulid}`);
-      if (!restored.ok) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: restored.error.code, message: restored.error.message },
-        });
-        continue;
-      }
-
-      // Determine service from manifest. Story 2.24 code review: a pendingAdds repo (a
-      // brand-new member) falls back to the full resolved path on a manifest-load failure —
-      // matching the old step-1 behavior for new members — while an existing member's branch
-      // change keeps the pre-existing basename fallback (resolved.split('/').pop()).
-      const isPendingAdd = pendingAdds.has(resolved);
-      const { service } = await (async () => {
-        const loaded = await manifest.load(resolved);
-        if (loaded.ok) {
-          return { service: loaded.data.service };
-        }
-        return { service: isPendingAdd ? resolved : resolved.split('/').pop() || resolved };
-      })();
-      // Story 2.24: if this setBranches entry corresponds to a pending add, record as 'added'
-      // and promote into addedMembers; otherwise it's a branch change for an existing member.
-      if (isPendingAdd) {
-        results.push({
-          service,
-          outcome: 'added',
-          newBranch: branch,
-        });
-        addedMembers.push({ service, repoPath: resolved, branch });
-      } else {
-        results.push({
-          service,
-          outcome: 'branch-changed',
-          newBranch: branch,
-        });
-        branchChanges.push({ repoPath: resolved, branch });
       }
     }
-  }
 
-  // ---- 4. Rename branches (pre-lock: resolve oldName from this EDT's own membership, gate,
-  // git.renameBranch) ----
-  // Story 2.26: mirrors step 3's shape exactly, but the git write is a rename (`git branch
-  // -m`), never a checkout — the member is, by construction, already on oldName (its own
-  // currently registered branch), so renaming it in place needs no stash/checkout dance.
-  // `oldName` is never taken from the caller: resolving it from `target.members` (the
-  // pre-lock snapshot, same as every other step here) is what makes this safe against a
-  // caller passing an arbitrary/stale branch name as "the thing to rename".
-  if (renameBranches.length > 0) {
-    for (const { repoPath, newName } of renameBranches) {
-      const resolved = resolve(repoPath);
+    const checkedOut = await git.checkout(resolved, branch);
+    if (!checkedOut.ok) {
+      // Attempt to restore the stash that was saved earlier, so the repo isn't left
+      // with a permanent stash that won't be popped.
+      await git.restoreStash(resolved, `tui-back:${target.ulid}`);
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: checkedOut.error.code, message: checkedOut.error.message },
+      });
+      continue;
+    }
 
-      const member = target.members.find((m) => resolve(m.repoPath) === resolved);
-      if (member === undefined) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: 'invalid-member', message: `Cannot rename: ${resolved} is not a member of this EDT` },
-        });
-        continue;
-      }
-      const oldName = member.branch;
+    // Restore the EDT's own stash (message-tagged)
+    const restored = await git.restoreStash(resolved, `tui-back:${target.ulid}`);
+    if (!restored.ok) {
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: restored.error.code, message: restored.error.message },
+      });
+      continue;
+    }
 
-      const allowed = await git.assertAllowedBranch(resolved, newName, target.ulid);
-      if (!allowed.ok) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: allowed.error.code, message: allowed.error.message },
-        });
-        continue;
-      }
-
-      const renamed = await git.renameBranch(resolved, oldName, newName);
-      if (!renamed.ok) {
-        results.push({
-          service: resolved,
-          outcome: 'failed',
-          detail: { code: renamed.error.code, message: renamed.error.message },
-        });
-        continue;
-      }
-
+    // Determine service from manifest. Story 2.24 code review: a pendingAdds repo (a
+    // brand-new member) falls back to the full resolved path on a manifest-load failure —
+    // matching the old step-1 behavior for new members — while an existing member's branch
+    // change keeps the pre-existing basename fallback (resolved.split('/').pop()).
+    const isPendingAdd = pendingAdds.has(resolved);
+    const { service } = await (async () => {
       const loaded = await manifest.load(resolved);
-      const service = loaded.ok ? loaded.data.service : resolved.split('/').pop() || resolved;
-      results.push({ service, outcome: 'branch-changed', newBranch: newName });
-      // Same branchChanges array setBranches already populates — lock-time assembly already
-      // applies it against the final member set, no new persistence path (Boundaries).
-      branchChanges.push({ repoPath: resolved, branch: newName });
+      if (loaded.ok) {
+        return { service: loaded.data.service };
+      }
+      return { service: isPendingAdd ? resolved : resolved.split('/').pop() || resolved };
+    })();
+    // Story 2.24: if this setBranches entry corresponds to a pending add, record as 'added'
+    // and promote into addedMembers; otherwise it's a branch change for an existing member.
+    if (isPendingAdd) {
+      results.push({
+        service,
+        outcome: 'added',
+        newBranch: branch,
+      });
+      addedMembers.push({ service, repoPath: resolved, branch });
+    } else {
+      results.push({
+        service,
+        outcome: 'branch-changed',
+        newBranch: branch,
+      });
+      branchChanges.push({ repoPath: resolved, branch });
     }
   }
 
-  // ---- Under per-resource advisory lock (AD-9): assemble final entry and write edts.yaml ----
-  const written = await withActionLock(lock, edtRegistryResourceKey, async () => {
+  return { results, addedMembers, branchChanges };
+}
+
+// ---- Step 4: rename branches --------------------------------------------------------------
+// Story 2.26: mirrors step 3's shape exactly, but the git write is a rename (`git branch -m`),
+// never a checkout — the member is, by construction, already on oldName (its own currently
+// registered branch), so renaming it in place needs no stash/checkout dance. `oldName` is
+// never taken from the caller: resolving it from `target.members` (the pre-lock snapshot, same
+// as every other step here) is what makes this safe against a caller passing an
+// arbitrary/stale branch name as "the thing to rename".
+interface BranchRenames {
+  results: ModifyEdtResult[];
+  // Same branchChanges shape step 3 populates — lock-time assembly applies both against the
+  // final member set uniformly, no second persistence path (Boundaries).
+  branchChanges: Array<{ repoPath: string; branch: string }>;
+}
+
+async function resolveBranchRenames(params: {
+  renameBranches: Array<{ repoPath: string; newName: string }>;
+  target: EdtRegistryEntry;
+  git: GitPort;
+  manifest: ManifestPort;
+}): Promise<BranchRenames> {
+  const { renameBranches, target, git, manifest } = params;
+  const results: ModifyEdtResult[] = [];
+  const branchChanges: Array<{ repoPath: string; branch: string }> = [];
+
+  for (const { repoPath, newName } of renameBranches) {
+    const resolved = resolve(repoPath);
+
+    const member = target.members.find((m) => resolve(m.repoPath) === resolved);
+    if (member === undefined) {
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: 'invalid-member', message: `Cannot rename: ${resolved} is not a member of this EDT` },
+      });
+      continue;
+    }
+    const oldName = member.branch;
+
+    const allowed = await git.assertAllowedBranch(resolved, newName, target.ulid);
+    if (!allowed.ok) {
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: allowed.error.code, message: allowed.error.message },
+      });
+      continue;
+    }
+
+    const renamed = await git.renameBranch(resolved, oldName, newName);
+    if (!renamed.ok) {
+      results.push({
+        service: resolved,
+        outcome: 'failed',
+        detail: { code: renamed.error.code, message: renamed.error.message },
+      });
+      continue;
+    }
+
+    const loaded = await manifest.load(resolved);
+    const service = loaded.ok ? loaded.data.service : resolved.split('/').pop() || resolved;
+    results.push({ service, outcome: 'branch-changed', newBranch: newName });
+    branchChanges.push({ repoPath: resolved, branch: newName });
+  }
+
+  return { results, branchChanges };
+}
+
+// ---- Lock-held assembly and write --------------------------------------------------------
+async function persistModifiedEntry(params: {
+  edtRegistry: EdtRegistryPort;
+  edtRegistryResourceKey: string;
+  lock: LockPort;
+  target: EdtRegistryEntry;
+  // The pre-lock snapshot (`edtListed.data` in modifyEdt) — the rename-uniqueness re-check
+  // below intentionally re-uses this same snapshot rather than the freshly re-read list a few
+  // lines down, exactly as the pre-extraction code did; preserved verbatim rather than
+  // "fixed" as part of this readability-only refactor.
+  preLockEntries: readonly EdtRegistryEntry[];
+  renameTo: string | undefined;
+  removeMembers: string[];
+  addedMembers: EdtMember[];
+  branchChanges: Array<{ repoPath: string; branch: string }>;
+}): Promise<Result<void>> {
+  const { edtRegistry, edtRegistryResourceKey, lock, target, preLockEntries, renameTo, removeMembers, addedMembers, branchChanges } = params;
+
+  return withActionLock(lock, edtRegistryResourceKey, async () => {
     // Re-read the authoritative list
     const reListed = await edtRegistry.list();
     if (!reListed.ok) {
@@ -357,7 +466,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
 
     // Re-check rename uniqueness under lock (race-safe)
     if (renameTo !== undefined) {
-      if (edtListed.data.some((entry) => entry.topic === renameTo && entry.ulid !== target.ulid)) {
+      if (preLockEntries.some((entry) => entry.topic === renameTo && entry.ulid !== target.ulid)) {
         return err('edt-topic-exists', `An EDT with topic "${renameTo}" already exists`);
       }
     }
@@ -420,11 +529,6 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
 
     return ok(undefined);
   });
-  if (!written.ok) {
-    return written;
-  }
-
-  return ok({ ulid: target.ulid, topic: renameTo !== undefined ? renameTo : trimmedTopic, results });
 }
 
 // Story 2.26 -----------------------------------------------------------------------------
