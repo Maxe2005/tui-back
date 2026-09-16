@@ -90,11 +90,11 @@ development_status:
   2-19-global-settings-screen: done
   2-20-top-bar-footer-hint-accuracy-fixes: done
   2-21-edt-zone-multi-splitter-layout-keyboard-resize-mode: done
-  2-22-edt-creation-mandatory-branch-creation-ui: review
-  2-23-visible-text-input-cursor-edt-zone-text-fields: in-progress
-  2-24-modify-edt-mandatory-branch-on-add-no-more-silent-default: review
-  2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: review
-  2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current: review
+  2-22-edt-creation-mandatory-branch-creation-ui: done
+  2-23-visible-text-input-cursor-edt-zone-text-fields: done
+  2-24-modify-edt-mandatory-branch-on-add-no-more-silent-default: done
+  2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: done
+  2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current: done
   2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: backlog
   2-28-registry-manifest-semantic-validation: backlog
   2-29-delete-an-edt: backlog
