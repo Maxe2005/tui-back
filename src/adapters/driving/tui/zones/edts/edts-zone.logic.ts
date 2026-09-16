@@ -584,14 +584,19 @@ export function resolveCandidateListState(
   return candidateCount === 0 ? 'empty' : 'ready';
 }
 
-// A row is branch-editable whenever it's currently checked — an unchecked row's branch edit
-// would be dropped at submit anyway (editing it first is confusing, not useful). Story 2.24
-// widens this from "existing member only" to include a not-yet-member candidate too: checking
-// it auto-stages a branchEdits entry (suggestBranchForNewMember), so Enter on that row now has
-// a real staged branch to open the same branch-edit sub-dialog on. No longer needs `target` —
-// membership no longer matters, only whether the row is currently checked.
-export function canEditMemberBranch(repoPath: string, selectedMembers: readonly string[]): boolean {
-  return selectedMembers.includes(repoPath);
+// A row is branch-editable whenever it's currently checked AND it wasn't already a member when
+// the dialog opened — an unchecked row's branch edit would be dropped at submit anyway (editing
+// it first is confusing, not useful), and an already-a-member row has nothing new to stage via
+// this checklist's Enter (its branch is instead changed via the EDT SERVICES row's own "Change
+// branch for this EDT" contextual menu). Story 2.24 widened this from "existing member only" to
+// include a not-yet-member candidate too: checking it auto-stages a branchEdits entry
+// (suggestBranchForNewMember), so Enter on that row now has a real staged branch to open the
+// same branch-edit sub-dialog on. Story 2.26 amendment: re-adds membership awareness (dropped by
+// 2.24's own code review) via `originalMemberPaths` — the dialog-open-time membership snapshot —
+// specifically to exclude already-checked existing members, whose checklist cursor otherwise
+// almost never lands anywhere Enter submits the form.
+export function canEditMemberBranch(repoPath: string, selectedMembers: readonly string[], originalMemberPaths: ReadonlySet<string>): boolean {
+  return selectedMembers.includes(repoPath) && !originalMemberPaths.has(repoPath);
 }
 
 export type ModifyEnterAction = { type: 'submit' } | { type: 'edit-branch'; repoPath: string };
@@ -599,14 +604,15 @@ export type ModifyEnterAction = { type: 'submit' } | { type: 'edit-branch'; repo
 // Members-focus Enter is contextual: on a branch-editable row it opens the branch-edit
 // dialog; everywhere else (topic-focus always, or a members-focus row that isn't
 // branch-editable) it submits the whole form — Enter always confirms *something* (UX-DR8),
-// never a dead key. No longer needs `target` — canEditMemberBranch itself dropped it (story
-// 2.24 code review), and nothing else here consults it.
+// never a dead key. Story 2.26 amendment: threads `originalMemberPaths` through to
+// canEditMemberBranch so an already-a-member row (checked or not) always submits instead.
 export function resolveModifyEnterAction(
   formFocus: FormFocus,
   selectedMembers: readonly string[],
   focusedPath: string | undefined,
+  originalMemberPaths: ReadonlySet<string>,
 ): ModifyEnterAction {
-  if (formFocus === 'members' && focusedPath !== undefined && canEditMemberBranch(focusedPath, selectedMembers)) {
+  if (formFocus === 'members' && focusedPath !== undefined && canEditMemberBranch(focusedPath, selectedMembers, originalMemberPaths)) {
     return { type: 'edit-branch', repoPath: focusedPath };
   }
   return { type: 'submit' };

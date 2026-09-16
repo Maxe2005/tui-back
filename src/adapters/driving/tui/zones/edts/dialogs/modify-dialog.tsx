@@ -314,7 +314,8 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
       }
       if (key.return) {
         const path = deps.candidates[current.memberCursor]?.path;
-        const action = resolveModifyEnterAction('members', current.selectedMembers, path);
+        const originalMemberPaths = new Set(current.target.members.map((member) => member.repoPath));
+        const action = resolveModifyEnterAction('members', current.selectedMembers, path, originalMemberPaths);
         if (action.type === 'edit-branch') {
           openBranchPickerForModify(current, action.repoPath);
         } else {
@@ -335,6 +336,23 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
   return { handleModifyDialogInput };
 }
 
+// Story 2.26 amendment: while a branch-picker session is open, the title names the service it's
+// for — otherwise it's easy to lose track of which member the picker is editing. Lookup order
+// mirrors the retry-resolution precedent above (candidates, then existing members) — purely a
+// consistency convention, since an existing member resolves to the same `service` value from
+// either source. Extracted out of ModifyDialogView's render purely for readability — no
+// behavior change.
+function resolveModifyDialogTitle(dialog: ModifyDialogState, candidates: readonly ServiceBranchDivergence[]): string {
+  if (dialog.branchPicker === null) {
+    return 'MODIFY EDT';
+  }
+  const branchPicker = dialog.branchPicker;
+  const branchPickerService =
+    candidates.find((candidate) => candidate.path === branchPicker.repoPath)?.service ??
+    dialog.target.members.find((member) => member.repoPath === branchPicker.repoPath)?.service;
+  return branchPickerService !== undefined ? `MODIFY EDT — branch for ${branchPickerService}` : 'MODIFY EDT';
+}
+
 export function ModifyDialogView({
   dialog,
   candidates,
@@ -344,8 +362,9 @@ export function ModifyDialogView({
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
 }) {
+  const title = resolveModifyDialogTitle(dialog, candidates);
   return (
-    <ModalDialog title="MODIFY EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
         {dialog.branchPicker !== null ? (
           <BranchPicker

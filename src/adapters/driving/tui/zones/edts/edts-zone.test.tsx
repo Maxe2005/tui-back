@@ -743,58 +743,72 @@ describe('summarizeFailedResults', () => {
 });
 
 describe('canEditMemberBranch', () => {
-  // Story 2.24 code review: canEditMemberBranch dropped its unused `target` param — it never
-  // consulted membership, only whether the row is currently checked.
-  it('is true only for an existing member that is still checked', () => {
-    expect(canEditMemberBranch('/repos/a', ['/repos/a'])).toBe(true);
+  // Story 2.26 amendment: re-adds membership awareness via `originalMemberPaths` (dialog-open-
+  // time membership snapshot) — dropped by 2.24's own code review, but needed so an
+  // already-a-member row's checklist Enter submits the form instead of reopening the picker.
+  it('is false for an existing member that is still checked (story 2.26 amendment)', () => {
+    expect(canEditMemberBranch('/repos/a', ['/repos/a'], new Set(['/repos/a']))).toBe(false);
   });
 
   it('is false for an existing member that was unchecked', () => {
-    expect(canEditMemberBranch('/repos/a', [])).toBe(false);
+    expect(canEditMemberBranch('/repos/a', [], new Set(['/repos/a']))).toBe(false);
   });
 
   // Story 2.24: widened to also cover a not-yet-member candidate — checking it now
   // auto-stages a branch (suggestBranchForNewMember), so Enter on it opens the same
   // branch-edit sub-dialog an existing member's row already uses.
   it('is true for a freshly-checked path that is not yet an existing member (story 2.24)', () => {
-    expect(canEditMemberBranch('/repos/new', ['/repos/new'])).toBe(true);
+    expect(canEditMemberBranch('/repos/new', ['/repos/new'], new Set(['/repos/a']))).toBe(true);
   });
 
   it('is false for a not-yet-existing member that is not checked', () => {
-    expect(canEditMemberBranch('/repos/new', [])).toBe(false);
+    expect(canEditMemberBranch('/repos/new', [], new Set(['/repos/a']))).toBe(false);
+  });
+
+  // Brand-new EDT case: the dialog opens with zero pre-existing members, so every checked row
+  // is branch-editable via Enter — none of them can collide with an empty originalMemberPaths.
+  it('is true for a checked row when originalMemberPaths is empty (brand-new EDT)', () => {
+    expect(canEditMemberBranch('/repos/a', ['/repos/a'], new Set())).toBe(true);
   });
 });
 
 describe('resolveModifyEnterAction', () => {
-  // Story 2.24 code review: resolveModifyEnterAction dropped its `target` param too — it
-  // only ever forwarded it to canEditMemberBranch, which no longer accepts it.
-  it('opens branch-edit on a branch-editable members-focus row', () => {
-    expect(resolveModifyEnterAction('members', ['/repos/a'], '/repos/a')).toEqual({
-      type: 'edit-branch',
-      repoPath: '/repos/a',
-    });
+  // Story 2.26 amendment: an already-a-member row that's still checked now submits — its
+  // checklist Enter is no longer branch-editable (canEditMemberBranch above).
+  it('submits on an already-a-member members-focus row, even when checked (story 2.26 amendment)', () => {
+    expect(resolveModifyEnterAction('members', ['/repos/a'], '/repos/a', new Set(['/repos/a']))).toEqual({ type: 'submit' });
   });
 
   it('submits when topic-focused, regardless of the focused member row', () => {
-    expect(resolveModifyEnterAction('topic', ['/repos/a'], '/repos/a')).toEqual({ type: 'submit' });
+    expect(resolveModifyEnterAction('topic', ['/repos/a'], '/repos/a', new Set(['/repos/a']))).toEqual({ type: 'submit' });
   });
 
   it('submits when members-focused but the row is unchecked', () => {
-    expect(resolveModifyEnterAction('members', [], '/repos/a')).toEqual({ type: 'submit' });
+    expect(resolveModifyEnterAction('members', [], '/repos/a', new Set(['/repos/a']))).toEqual({ type: 'submit' });
   });
 
   // Story 2.24: a freshly-checked not-yet-member row is now branch-editable too — Enter
   // opens the same branch-edit sub-dialog (its staged branch auto-fills via
-  // suggestBranchForNewMember on check).
+  // suggestBranchForNewMember on check). Story 2.26 amendment: this is exactly the case
+  // `originalMemberPaths` must still allow through.
   it('opens branch-edit on a freshly-checked not-yet-member row (story 2.24)', () => {
-    expect(resolveModifyEnterAction('members', ['/repos/new'], '/repos/new')).toEqual({
+    expect(resolveModifyEnterAction('members', ['/repos/new'], '/repos/new', new Set(['/repos/a']))).toEqual({
       type: 'edit-branch',
       repoPath: '/repos/new',
     });
   });
 
   it('submits when there is no focused row at all (empty candidate list)', () => {
-    expect(resolveModifyEnterAction('members', [], undefined)).toEqual({ type: 'submit' });
+    expect(resolveModifyEnterAction('members', [], undefined, new Set(['/repos/a']))).toEqual({ type: 'submit' });
+  });
+
+  // Brand-new EDT case: originalMemberPaths is empty, so a checked row is always
+  // branch-editable via Enter.
+  it('opens branch-edit on a checked row when originalMemberPaths is empty (brand-new EDT)', () => {
+    expect(resolveModifyEnterAction('members', ['/repos/a'], '/repos/a', new Set())).toEqual({
+      type: 'edit-branch',
+      repoPath: '/repos/a',
+    });
   });
 });
 
