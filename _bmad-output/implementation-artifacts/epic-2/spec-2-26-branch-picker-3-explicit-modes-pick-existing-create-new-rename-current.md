@@ -2,7 +2,8 @@
 title: 'Branch-Picker — 3 Explicit Modes (Pick Existing / Create New / Rename Current)'
 type: 'feature'
 created: '2026-09-14'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: 'e119fdb531ce900855f61449e10f3b1c09188571'
 review_loop_iteration: 0
 context: []
 ---
@@ -60,14 +61,14 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `core/ports/git.ts` -- add `listBranches`/`renameBranch` to `GitPort` -- new capabilities the picker needs
-- [ ] `adapters/driven/git/index.ts` -- implement both (for-each-ref; gate+exists-checks+`git branch -m`) -- backing git plumbing, reuses `branch-exists`
-- [ ] `core/edt/modify.ts` -- `renameBranches` param + pre-lock step feeding `branchChanges`; `createMemberBranch` export -- rename-current/inline-rename support, create-new's pre-step
-- [ ] `store/app-store.ts` -- `ModifyEdtParams.renameBranches` pass-through; `listBranches`/`createMemberBranch` store actions -- plumbing, keeps `deps.git` core-only
-- [ ] `shared/components/branch-picker.tsx` -- new component: mode switch, filterable list (base-branch + pick-existing, one widget), other-members sub-list, inline rename -- the shared UI
-- [ ] `shared/components/failed-result-list.tsx` -- register `branch-exists` → "try a different name" -- second assisted action
-- [ ] `zones/edts/edts-zone.tsx` -- swap all 3 `branchEdit` sub-dialogs for `<BranchPicker>`, extend `resolveModifyOps`/each submit function for `BranchPickerOutcome` -- closes the 3 blind-free-text entry points
-- [ ] Extend `modify.test.ts`, `adapters/driven/git/index.test.ts`, new `branch-picker.test.tsx`, `failed-result-list.test.tsx`, `edts-zone.test.tsx`/`.interaction.test.tsx` for the I/O matrix
+- [x] `core/ports/git.ts` -- add `listBranches`/`renameBranch` to `GitPort` -- new capabilities the picker needs
+- [x] `adapters/driven/git/index.ts` -- implement both (for-each-ref; gate+exists-checks+`git branch -m`) -- backing git plumbing, reuses `branch-exists`
+- [x] `core/edt/modify.ts` -- `renameBranches` param + pre-lock step feeding `branchChanges`; `createMemberBranch` export -- rename-current/inline-rename support, create-new's pre-step
+- [x] `store/app-store.ts` -- `ModifyEdtParams.renameBranches` pass-through; `listBranches`/`createMemberBranch` store actions -- plumbing, keeps `deps.git` core-only
+- [x] `shared/components/branch-picker.tsx` -- new component: mode switch, filterable list (base-branch + pick-existing, one widget), other-members sub-list, inline rename -- the shared UI
+- [x] `shared/components/failed-result-list.tsx` -- register `branch-exists` → "try a different name" -- second assisted action
+- [x] `zones/edts/edts-zone.tsx` -- swap all 3 `branchEdit` sub-dialogs for `<BranchPicker>`, extend `resolveModifyOps`/each submit function for `BranchPickerOutcome` -- closes the 3 blind-free-text entry points
+- [x] Extend `modify.test.ts`, `adapters/driven/git/index.test.ts`, new `branch-picker.test.tsx`, `failed-result-list.test.tsx`, `edts-zone.test.tsx`/`.interaction.test.tsx` for the I/O matrix
 
 **Acceptance Criteria:**
 - Given any of the 3 entry points, when the branch step opens, then it shows the 3-way mode switch, `Tab`-cycled, defaulting to Create new with today's suggestion pre-filled.
@@ -86,6 +87,38 @@ context: []
 
 Written assuming 2.23/2.24/2.25 have landed (epics.md sequences this story after all three); their real components/registry are referenced by name above rather than re-specified.
 
+**Implementation addendum (not in the original Code Map, resolved during build):**
+
+- **`renameMemberBranch`/`listMemberBranches`** (`core/edt/modify.ts`) — two more thin `deps.git`
+  wrappers, alongside `createMemberBranch`, that the Code Map's app-store.ts bullet didn't name
+  individually. Needed for the same reason `createMemberBranch` exists: the store's new
+  `listBranches`/`renameBranch` actions must still never call `deps.git` directly (Design
+  Notes' own stated invariant) — a bare `deps.git.listBranches(repoPath)` in `app-store.ts`
+  would have broken that without a matching core export to call instead.
+- **Routing a `rename` outcome — `renameBranches` param vs. a direct `renameBranch` pre-step:**
+  the frozen Boundaries text is explicit that `modifyEdt`'s own `renameBranches` step "resolve[s]
+  the member's current registered branch as `oldName`" — it can only ever be correct when
+  `repoPath` is *already* a member of this EDT (only then does `target.members` have a branch to
+  resolve). That holds for Rename current everywhere it's offered (Modify's per-member step,
+  service-actions) and for Pick-existing's row-rename at those same two entry points, so those
+  route through `renameBranches` — one call to `modifyEdt` (Modify: staged into a sibling
+  `branchRenames` map alongside `branchEdits`, never both for the same repoPath, since renaming
+  the current branch needs no checkout; service-actions: `renameBranches` on the same call as its
+  existing submit). It structurally cannot hold at Add-to-EDT (not yet a member — nothing in
+  `target.members` to resolve `oldName` from), so Pick-existing's row-rename there takes a direct
+  `renameMemberBranch` pre-step instead (mirroring Create-new's `createMemberBranch` pre-step),
+  then feeds the renamed name into the same `addMembers`+`setBranches` call.
+- **Retry (`branch-exists`/`branch-owned-by-other-edt`)** — the first pass always reopened onto
+  Create-new's name field regardless of which mode produced the original outcome; review
+  (blind-hunter, edge-case-hunter) flagged this as contradicting the frozen matrix's "reopens the
+  relevant field" for a failed `rename` outcome (it would silently *create* a new branch instead
+  of correcting the rename). Fixed: Modify and service-actions now track whether the failed
+  attempt was a `rename` (via `branchRenames[repoPath]` / `lastAttemptedRenameOldName`) and route
+  retry to `field: 'rename'` with the correct `oldName` in that case, `field: 'create-name'`
+  otherwise (`set`/`create` failures still retry through Create-new, matching the only scenario
+  the original interaction tests exercise). Add-to-EDT never reopens a fresh retry session at
+  all (keeps the same picker state after a failed submit), so it needed no change.
+
 ## Verification
 
 **Commands:**
@@ -95,3 +128,73 @@ Written assuming 2.23/2.24/2.25 have landed (epics.md sequences this story after
 
 **Manual checks:**
 - TUI: open each of the 3 entry points — mode switch defaults to Create new with a suggestion; `Tab` reaches Pick existing (filter narrows a real branch list) and Rename current (pre-selected, absent at Add-to-EDT); pick a branch and confirm; rename a picked branch and confirm; create a brand-new name and confirm; force a `branch-exists` and a `branch-owned-by-other-edt` collision — each shows its own assisted action and the retry re-submits correctly.
+
+## Suggested Review Order
+
+**Shared branch-picker component**
+
+- Entry point: the mode-cycling/field reducer every entry point dispatches into — start here to see the whole interaction model in one place.
+  [`branch-picker.tsx:175`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L175)
+
+- Review-fix: Tab away from an open other-members sub-list and back now closes it, so Enter submits instead of "picking" (edge-case-hunter finding).
+  [`branch-picker.tsx:194`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L194)
+
+- Retry re-enters this same reducer's state shape — reopens Rename current/Pick-existing's rename sub-view or Create-new, depending on the caller's `field`.
+  [`branch-picker.tsx:105`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L105)
+
+- Presentational half — one filterable-list widget reused for both Create-new's base-branch field and Pick-existing's list.
+  [`branch-picker.tsx:378`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L378)
+
+**GitPort: listBranches/renameBranch**
+
+- Port contract — the two new capabilities the picker needs, local-only by design.
+  [`ports/git.ts:75`](../../../src/core/ports/git.ts#L75)
+
+- Review-fix: renaming a branch to its own current name is now a no-op success (was a false `branch-exists`) — order matters, checked only once `oldName` is confirmed to exist.
+  [`git/index.ts:404`](../../../src/adapters/driven/git/index.ts#L404)
+
+**Core modifyEdt: renameBranches step and thin wrappers**
+
+- Pre-lock step: resolves `oldName` from this EDT's own membership only, gates it, calls `git.renameBranch`, feeds the existing `branchChanges` array.
+  [`modify.ts:306`](../../../src/core/edt/modify.ts#L306)
+
+- `createMemberBranch`/`renameMemberBranch`/`listMemberBranches` — thin `deps.git` wrappers keeping the store's new actions off `deps.git` directly.
+  [`modify.ts:444`](../../../src/core/edt/modify.ts#L444)
+
+**EDTs-zone: 3 entry-point integration (where most review fixes landed)**
+
+- Review-fix: staging a `set`/`create`/`rename` outcome now clears the sibling map for the same repoPath — the two maps could previously both carry an entry (blind-hunter + edge-case-hunter, both independently caught this).
+  [`edts-zone.tsx:1463`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1463)
+
+- Review-fix: Modify's collision retry now routes to the picker's rename field (with the correct `oldName`) when the failed attempt was itself a rename, instead of always forcing Create-new.
+  [`edts-zone.tsx:1734`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1734)
+
+- Same retry-routing fix, service-actions' "Change branch for this EDT" side — tracks `lastAttemptedRenameOldName` alongside the existing `lastAttemptedBranch`.
+  [`edts-zone.tsx:1863`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1863)
+
+- Review-fix: Add-to-EDT's key handler now passes the real deduplicated other-members' branch list instead of a hardcoded `[]` — the "[↓] other members' branches" hint now actually works.
+  [`edts-zone.tsx:2072`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L2072)
+
+- Review-fix: the branch-list fetch effect is now keyed on `repoPath`/`branchesStatus` (primitives) instead of the picker session object, so it fires once per session-open rather than on every keystroke.
+  [`edts-zone.tsx:1134`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1134)
+
+**Failure UI: branch-exists registry entry**
+
+- Second `ASSISTED_ACTIONS` entry alongside 2.25's `branch-owned-by-other-edt`, reusing the same per-repo structured rendering.
+  [`failed-result-list.tsx:34`](../../../src/adapters/driving/tui/shared/components/failed-result-list.tsx#L34)
+
+**Store wiring**
+
+- Three new actions wrapping the core exports above — never `deps.git` directly, matching every other use-case call in this file.
+  [`app-store.ts:672`](../../../src/adapters/driving/tui/store/app-store.ts#L672)
+
+**Peripherals**
+
+- New component tests: mode cycling, filtering, every outcome, retry, and the two review-fix regressions above.
+  [`branch-picker.test.tsx`](../../../src/adapters/driving/tui/shared/components/branch-picker.test.tsx)
+
+- New end-to-end coverage added during review: Modify/service-actions Rename-current reaching `renameBranches` (not `setBranches`), and a real `branch-exists` collision surfacing "try a different name" in context.
+  [`edts-zone.interaction.test.tsx:1745`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1745)
+
+- New store-level tests verifying the real `deps.git` wiring behind `listBranches`/`createMemberBranch`/`renameBranch`/`renameBranches`.
+  [`app-store.test.ts:656`](../../../src/adapters/driving/tui/store/app-store.test.ts#L656)

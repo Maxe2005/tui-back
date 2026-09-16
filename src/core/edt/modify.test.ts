@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ulid as generateUlid } from 'ulid';
 import { stringify } from 'yaml';
-import { modifyEdt } from './modify.js';
+import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches } from './modify.js';
 import type { ModifyEdtResult, ModifyEdtData } from './modify.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { ManifestPort } from '../ports/manifest.js';
@@ -75,6 +75,9 @@ function makeMockGit(): any {
     stashSave: async (repoPath: string, message: string) => ok(undefined),
     checkout: async (repoPath: string, branchName: string) => ok(undefined),
     restoreStash: async (repoPath: string, message: string) => ok(undefined),
+    createBranch: async (repoPath: string, branchName: string, baseBranch: string) => ok(undefined),
+    renameBranch: async (repoPath: string, oldName: string, newName: string) => ok(undefined),
+    listBranches: async (repoPath: string) => ok(['development', 'feature-x']),
   };
 }
 
@@ -432,5 +435,250 @@ describe('modifyEdt — unit / matrix', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('invalid-argument');
     }
+  });
+});
+
+// Story 2.26 --------------------------------------------------------------------------------
+describe('modifyEdt — renameBranches (story 2.26)', () => {
+  it('renames an existing member\'s own currently-registered branch and records the change', async () => {
+    resetEdtStore();
+    const renameCalls: Array<{ repoPath: string; oldName: string; newName: string }> = [];
+    const git = makeMockGit();
+    git.renameBranch = async (repoPath: string, oldName: string, newName: string) => {
+      renameCalls.push({ repoPath, oldName, newName });
+      return ok(undefined);
+    };
+    const manifest = makeMockManifest();
+    const updateCalls: Array<{ ulid: string; patch: any }> = [];
+
+    const result = await modifyEdt({
+      edtRegistry: {
+        list: async () => ok([
+          {
+            ulid: '01JTEST000000000000010',
+            topic: 'demo',
+            createdAt: '2026-08-18T00:00:00.000Z',
+            status: 'active',
+            members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+          },
+        ]),
+        add: async () => ok(undefined),
+        setStatus: async () => ok(undefined),
+        update: async (ulid: string, patch: any) => {
+          updateCalls.push({ ulid, patch });
+          return ok(undefined);
+        },
+      } as any,
+      registry: makeMockRegistry(),
+      manifest,
+      git,
+      lock: {
+        acquire: async () => ok({ ok: true, data: { release: async () => ok(undefined) } }),
+        peek: async () => ok({ ok: true, data: { locked: false } }),
+        release: async () => ok(undefined),
+      } as any,
+      edtRegistryResourceKey: '/dev/null',
+      topic: 'demo',
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [],
+      renameBranches: [{ repoPath: '/repos/a', newName: 'feature-renamed' }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(1);
+      expect(result.data.results[0]).toMatchObject({ outcome: 'branch-changed', newBranch: 'feature-renamed' });
+    }
+    // oldName is resolved from this EDT's own membership — never taken from the caller.
+    expect(renameCalls).toEqual([{ repoPath: '/repos/a', oldName: 'main', newName: 'feature-renamed' }]);
+    // Lock-time assembly applied it: the persisted member now carries the new branch.
+    expect(updateCalls[0]?.patch.members).toEqual([{ service: 'svc-a', repoPath: '/repos/a', branch: 'feature-renamed' }]);
+  });
+
+  it('fails invalid-member for a repoPath that is not (yet) a member — never resolves an oldName out of thin air', async () => {
+    resetEdtStore();
+    const git = makeMockGit();
+    const manifest = makeMockManifest();
+
+    const result = await modifyEdt({
+      edtRegistry: {
+        list: async () => ok([{ ulid: '01JTEST000000000000011', topic: 'demo', createdAt: '2026-08-18T00:00:00.000Z', status: 'active', members: [] }]),
+        add: async () => ok(undefined),
+        setStatus: async () => ok(undefined),
+        update: async () => ok(undefined),
+      } as any,
+      registry: makeMockRegistry(),
+      manifest,
+      git,
+      lock: {
+        acquire: async () => ok({ ok: true, data: { release: async () => ok(undefined) } }),
+        peek: async () => ok({ ok: true, data: { locked: false } }),
+        release: async () => ok(undefined),
+      } as any,
+      edtRegistryResourceKey: '/dev/null',
+      topic: 'demo',
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [],
+      renameBranches: [{ repoPath: '/repos/not-a-member', newName: 'feature-y' }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(1);
+      expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'invalid-member' } });
+    }
+  });
+
+  it('gates the new name the same way setBranches does (shared/protected -> shared-branch-rejected, no git.renameBranch call)', async () => {
+    resetEdtStore();
+    const renameCalls: string[] = [];
+    const git = makeMockGit();
+    git.renameBranch = async (repoPath: string) => {
+      renameCalls.push(repoPath);
+      return ok(undefined);
+    };
+    const manifest = makeMockManifest();
+
+    const result = await modifyEdt({
+      edtRegistry: {
+        list: async () => ok([
+          {
+            ulid: '01JTEST000000000000012',
+            topic: 'demo',
+            createdAt: '2026-08-18T00:00:00.000Z',
+            status: 'active',
+            members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+          },
+        ]),
+        add: async () => ok(undefined),
+        setStatus: async () => ok(undefined),
+        update: async () => ok(undefined),
+      } as any,
+      registry: makeMockRegistry(),
+      manifest,
+      git,
+      lock: {
+        acquire: async () => ok({ ok: true, data: { release: async () => ok(undefined) } }),
+        peek: async () => ok({ ok: true, data: { locked: false } }),
+        release: async () => ok(undefined),
+      } as any,
+      edtRegistryResourceKey: '/dev/null',
+      topic: 'demo',
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [],
+      renameBranches: [{ repoPath: '/repos/a', newName: 'development' }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'shared-branch-rejected' } });
+    }
+    expect(renameCalls).toEqual([]);
+  });
+
+  it('a git.renameBranch failure (e.g. branch-exists) is isolated to that repo\'s result row', async () => {
+    resetEdtStore();
+    const git = makeMockGit();
+    git.renameBranch = async () => err('branch-exists', 'Branch "feature-renamed" already exists');
+    const manifest = makeMockManifest();
+
+    const result = await modifyEdt({
+      edtRegistry: {
+        list: async () => ok([
+          {
+            ulid: '01JTEST000000000000013',
+            topic: 'demo',
+            createdAt: '2026-08-18T00:00:00.000Z',
+            status: 'active',
+            members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+          },
+        ]),
+        add: async () => ok(undefined),
+        setStatus: async () => ok(undefined),
+        update: async () => ok(undefined),
+      } as any,
+      registry: makeMockRegistry(),
+      manifest,
+      git,
+      lock: {
+        acquire: async () => ok({ ok: true, data: { release: async () => ok(undefined) } }),
+        peek: async () => ok({ ok: true, data: { locked: false } }),
+        release: async () => ok(undefined),
+      } as any,
+      edtRegistryResourceKey: '/dev/null',
+      topic: 'demo',
+      addMembers: [],
+      removeMembers: [],
+      setBranches: [],
+      renameBranches: [{ repoPath: '/repos/a', newName: 'feature-renamed' }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'branch-exists' } });
+    }
+  });
+});
+
+describe('createMemberBranch (story 2.26)', () => {
+  it('delegates straight to git.createBranch', async () => {
+    const calls: Array<{ repoPath: string; branchName: string; baseBranch: string }> = [];
+    const git: any = {
+      createBranch: async (repoPath: string, branchName: string, baseBranch: string) => {
+        calls.push({ repoPath, branchName, baseBranch });
+        return ok(undefined);
+      },
+    };
+
+    const result = await createMemberBranch({ git, repoPath: '/repos/a', branchName: 'feature-x', baseBranch: 'development' });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(calls).toEqual([{ repoPath: '/repos/a', branchName: 'feature-x', baseBranch: 'development' }]);
+  });
+
+  it('propagates a git.createBranch failure verbatim', async () => {
+    const git: any = { createBranch: async () => err('branch-exists', 'Branch "feature-x" already exists') };
+
+    const result = await createMemberBranch({ git, repoPath: '/repos/a', branchName: 'feature-x', baseBranch: 'development' });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-exists' } });
+  });
+});
+
+describe('renameMemberBranch (story 2.26)', () => {
+  it('delegates straight to git.renameBranch', async () => {
+    const calls: Array<{ repoPath: string; oldName: string; newName: string }> = [];
+    const git: any = {
+      renameBranch: async (repoPath: string, oldName: string, newName: string) => {
+        calls.push({ repoPath, oldName, newName });
+        return ok(undefined);
+      },
+    };
+
+    const result = await renameMemberBranch({ git, repoPath: '/repos/a', oldName: 'feature-x', newName: 'feature-y' });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(calls).toEqual([{ repoPath: '/repos/a', oldName: 'feature-x', newName: 'feature-y' }]);
+  });
+
+  it('propagates a git.renameBranch failure verbatim', async () => {
+    const git: any = { renameBranch: async () => err('branch-missing', 'Branch "feature-x" does not exist') };
+
+    const result = await renameMemberBranch({ git, repoPath: '/repos/a', oldName: 'feature-x', newName: 'feature-y' });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-missing' } });
+  });
+});
+
+describe('listMemberBranches (story 2.26)', () => {
+  it('delegates straight to git.listBranches', async () => {
+    const git: any = { listBranches: async (repoPath: string) => ok(repoPath === '/repos/a' ? ['development', 'feature-x'] : []) };
+
+    const result = await listMemberBranches(git, '/repos/a');
+
+    expect(result).toEqual({ ok: true, data: ['development', 'feature-x'] });
   });
 });

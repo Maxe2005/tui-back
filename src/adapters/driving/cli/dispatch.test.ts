@@ -177,6 +177,8 @@ describe('subcommand registry guards', () => {
       restoreStash: async () => ok(undefined),
       branchExistsLocally: async () => ok(true),
       fetch: async () => ok(undefined),
+      listBranches: async () => ok([]),
+      renameBranch: async () => ok(undefined),
     };
 
     return buildSubcommands({

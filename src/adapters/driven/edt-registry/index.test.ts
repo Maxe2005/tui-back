@@ -285,6 +285,8 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       restoreStash: async () => ok(undefined),
       branchExistsLocally: async () => ok(true),
       fetch: async () => ok(undefined),
+      listBranches: async () => ok([]),
+      renameBranch: async () => ok(undefined),
       ...overrides,
     };
   }

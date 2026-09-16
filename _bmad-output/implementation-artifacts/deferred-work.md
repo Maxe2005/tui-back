@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: review of 2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current (2026-09-16)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
+  summary: `FilterableBranchList` has no truncation, pagination, or scroll handling — a repo with a large number of local branches renders every match with no windowing, which can overflow the terminal.
+  evidence: `src/adapters/driving/tui/shared/components/branch-picker.tsx`'s `FilterableBranchList` maps over every filtered branch unconditionally. Surfaced incidentally by review (blind-hunter); not required by the story's frozen scope, which specifies filtering but not a branch-count ceiling. **Track:** windowing/scroll pass once real branch counts make it a felt problem, ideally alongside the EDTs-zone list's own pre-existing lack of windowing (see 2-9's deferred entry above).
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
+  summary: When `listBranches` fails (`branchesStatus === 'error'`), switching to Pick-existing silently renders an empty list indistinguishable from "this repo has no other branches" — no error indication or retry/refetch affordance.
+  evidence: `src/adapters/driving/tui/shared/components/branch-picker.tsx` shows "Failed to load branches." at the top level but nothing blocks entering Pick-existing mode with `branches` still `[]`. Surfaced incidentally by review (blind-hunter); the frozen spec doesn't address the `listBranches`-failure UX. **Track:** decide the desired error-state UX (disable Pick-existing entirely vs. show the error inline in the list) next time this component is touched.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
+  summary: `GitPort.renameBranch`'s check-then-act sequence (`showRef(newName)`, `showRef(oldName)`, then `git branch -m`) has an inherent TOCTOU gap — a ref deleted/created externally between checks and the actual rename isn't handled or tested.
+  evidence: `src/adapters/driven/git/index.ts`'s `renameBranch`. Surfaced incidentally by review (blind-hunter); the same check-then-act shape already exists in this codebase's pre-existing `createBranch`, so this isn't a risk newly introduced by this story. **Track:** address at the `GitPort` level (e.g. atomic rename with race detection) if it's ever hit in practice, covering both `createBranch` and `renameBranch` together.
+
 ## Deferred from: dev of 2-9-edts-zone-create-switch-modify (2026-08-20)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md`

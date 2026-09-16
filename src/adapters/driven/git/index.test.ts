@@ -25,6 +25,8 @@ import {
   deleteBranch,
   fetchBranch,
   hasUncommittedChanges,
+  listBranches,
+  renameBranch,
   restoreStash,
   stashSave,
 } from './index.js';
@@ -725,6 +727,93 @@ async function makeGitRepoOriginAndClone(): Promise<{ origin: string; clone: str
   return { origin, clone };
 }
 
+describe('listBranches', () => {
+  it('lists every local branch, local-only (never refs/remotes/...)', async () => {
+    const { clone } = await makeGitRepoOriginAndClone();
+    expect(runGit(clone, ['branch', 'feat/local-only']).status).toBe(0);
+
+    const result = await listBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toContain('development');
+      expect(result.data).toContain('feat/local-only');
+      // Never a remote-tracking ref, even one that exists (origin/development, set up by the
+      // clone) — Boundaries: "listBranches stays local-only, mirrors branchExistsLocally".
+      expect(result.data.some((branch) => branch.includes('origin/'))).toBe(false);
+    }
+  });
+
+  it('reports a controlled git error when the branch list cannot be read (not a git repo)', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    const result = await listBranches(dir);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-list-branches-error' } });
+  });
+});
+
+describe('renameBranch', () => {
+  it('renames a local branch ref via git branch -m', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/new');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(repo, 'feat/old')).toBe(false);
+    expect(branchExists(repo, 'feat/new')).toBe(true);
+  });
+
+  it('rejects an already-existing newName with branch-exists (reuses createBranch\'s exact code)', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+    expect(runGit(repo, ['branch', 'feat/taken']).status).toBe(0);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/taken');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-exists' } });
+    // Neither ref was touched by the rejected rename.
+    expect(branchExists(repo, 'feat/old')).toBe(true);
+  });
+
+  it('rejects a missing oldName with a distinct branch-missing code', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await renameBranch(manifest, repo, 'feat/does-not-exist', 'feat/new');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-missing' } });
+  });
+
+  it('treats renaming a branch to its own current name as a no-op success, not branch-exists', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/old');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(repo, 'feat/old')).toBe(true);
+  });
+
+  it('still rejects a same-name rename with branch-missing when oldName does not actually exist', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await renameBranch(manifest, repo, 'feat/does-not-exist', 'feat/does-not-exist');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-missing' } });
+  });
+
+  it('rejects a newName that is a shared/protected branch before any git invocation', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'development');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(repo, 'feat/old')).toBe(true);
+  });
+});
+
 describe('fetchBranch', () => {
   it('fetches a branch from origin into a same-named local branch without checking it out', async () => {
     const { clone } = await makeGitRepoOriginAndClone();
@@ -809,5 +898,21 @@ describe('createGitPort', () => {
       error: { code: 'branch-owned-by-other-edt' },
     });
     expect(await port.assertAllowedBranch(repo, 'feat/taken', 'edt-other')).toEqual({ ok: true, data: undefined });
+  });
+
+  it('wires listBranches/renameBranch (story 2.26) behind the factory pattern', async () => {
+    const repo = await makeGitRepo();
+    const port = createGitPort(manifest);
+    expect(runGit(repo, ['branch', 'feat/x']).status).toBe(0);
+
+    const listed = await port.listBranches(repo);
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.data).toContain('feat/x');
+    }
+
+    expect(await port.renameBranch(repo, 'feat/x', 'feat/y')).toEqual({ ok: true, data: undefined });
+    expect(branchExists(repo, 'feat/x')).toBe(false);
+    expect(branchExists(repo, 'feat/y')).toBe(true);
   });
 });

@@ -68,4 +68,14 @@ export interface GitPort {
   // repo's manifest sharedBranch. Never used for a member's own branch (spec: a missing
   // member branch is reported failed, never auto-fetched).
   fetch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // Story 2.26: the branch-picker's candidate source for both its filterable-list widget's
+  // uses (base-branch candidates for Create new, target-branch candidates for Pick existing).
+  // Local-only, mirroring branchExistsLocally's scope (Boundaries: "Remote-branch listing —
+  // listBranches stays local-only") — never fetches, never lists remote-tracking refs.
+  listBranches(repoPath: string): Promise<Result<string[]>>;
+  // Story 2.26: renames a local branch ref (`git branch -m`) — backs both Pick existing's
+  // per-row inline-rename action and Rename current. Internally gates the *new* name via
+  // assertAllowedBranch (no edtId, mirroring createBranch's own gate) before touching git, so
+  // a rename can never land on a shared/protected branch name any more than a create can.
+  renameBranch(repoPath: string, oldName: string, newName: string): Promise<Result<void>>;
 }

@@ -56,6 +56,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     restoreStash: vi.fn(async () => ok(undefined)),
     branchExistsLocally: vi.fn(async () => ok(true)),
     fetch: vi.fn(async () => ok(undefined)),
+    listBranches: vi.fn(async () => ok([])),
+    renameBranch: vi.fn(async () => ok(undefined)),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
@@ -603,6 +605,8 @@ describe("app store", () => {
         restoreStash: vi.fn(async () => ok(undefined)),
         branchExistsLocally: vi.fn(async () => ok(true)),
         fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok([])),
+        renameBranch: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -630,6 +634,8 @@ describe("app store", () => {
         restoreStash: vi.fn(async () => ok(undefined)),
         branchExistsLocally: vi.fn(async () => ok(true)),
         fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok([])),
+        renameBranch: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -643,6 +649,133 @@ describe("app store", () => {
       expect(git.createBranch).not.toHaveBeenCalled();
       // NO_BRANCH_CREATION's create:false path reuses the member's current branch instead.
       expect(git.currentBranch).toHaveBeenCalledWith("/repo/a");
+    });
+  });
+
+  // Story 2.26: the branch-picker's own store actions and modifyEdt's renameBranches param
+  // wrap real core exports (createMemberBranch/renameMemberBranch/listMemberBranches, and
+  // modifyEdtUseCase itself) — every interaction test exercising the picker instead replaces
+  // these actions wholesale via store.setState(...), so nothing else in the suite verifies
+  // that the real wiring below actually reaches deps.git with the right arguments in order.
+  describe("branch-picker store actions (story 2.26)", () => {
+    it("listBranches forwards repoPath to git.listBranches and returns its result unchanged", async () => {
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("main")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok(["main", "feature-x"])),
+        renameBranch: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ git }));
+
+      const result = await store.getState().listBranches("/repo/a");
+
+      expect(result).toEqual({ ok: true, data: ["main", "feature-x"] });
+      expect(git.listBranches).toHaveBeenCalledWith("/repo/a");
+    });
+
+    it("createMemberBranch forwards repoPath/branchName/baseBranch to git.createBranch in that order", async () => {
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("main")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok([])),
+        renameBranch: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ git }));
+
+      const result = await store.getState().createMemberBranch("/repo/a", "feature-new", "development");
+
+      expect(result).toEqual({ ok: true, data: undefined });
+      expect(git.createBranch).toHaveBeenCalledWith("/repo/a", "feature-new", "development");
+    });
+
+    it("renameBranch forwards repoPath/oldName/newName to git.renameBranch in that order", async () => {
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("main")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok([])),
+        renameBranch: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ git }));
+
+      const result = await store.getState().renameBranch("/repo/a", "feature-old", "feature-new");
+
+      expect(result).toEqual({ ok: true, data: undefined });
+      expect(git.renameBranch).toHaveBeenCalledWith("/repo/a", "feature-old", "feature-new");
+    });
+
+    it("modifyEdt forwards a non-empty renameBranches param through to modifyEdtUseCase (reaches git.renameBranch)", async () => {
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("main")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok([])),
+        renameBranch: vi.fn(async () => ok(undefined)),
+      };
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () =>
+          ok([
+            {
+              ulid: "edt-1",
+              topic: "demo",
+              createdAt: "2026-08-19T00:00:00.000Z",
+              status: "active" as const,
+              members: [{ service: "svc-a", repoPath: "/repo/a", branch: "main" }],
+            },
+          ]),
+        ),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ git, edtRegistry }));
+
+      const result = await store.getState().modifyEdt({
+        topic: "demo",
+        addMembers: [],
+        removeMembers: [],
+        setBranches: [],
+        renameBranches: [{ repoPath: "/repo/a", newName: "feature-renamed" }],
+      });
+
+      expect(result.ok).toBe(true);
+      // oldName ("main") is resolved by the core use case from this EDT's own membership —
+      // proves renameBranches actually reached modifyEdtUseCase, not just accepted and dropped.
+      expect(git.renameBranch).toHaveBeenCalledWith("/repo/a", "main", "feature-renamed");
     });
   });
 

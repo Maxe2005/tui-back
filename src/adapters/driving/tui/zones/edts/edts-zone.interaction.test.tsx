@@ -223,20 +223,82 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter);
       // Tab: topic-input -> member-checklist.
       await press(instance, stdin, KEYS.tab);
-      // Enter on the one member row (existing + checked) opens its branch-edit dialog.
+      // Enter on the one member row (existing + checked) opens the shared branch-picker
+      // (story 2.26), pre-selected onto Create new. Tab once more reaches Rename current
+      // (this member has a current branch: "main") — the simplest way to stage a value for an
+      // *existing* member without any store-action round-trip (a 'set'/'create' outcome would
+      // need listBranches/createMemberBranch mocked too).
       await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.tab);
+      for (let i = 0; i < 'main'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
       await type(instance, stdin, 'feature-y');
-      await press(instance, stdin, KEYS.enter); // commit the branch edit, back to the form
+      await press(instance, stdin, KEYS.enter); // commit the rename, back to the form
 
-      // Space unchecks that same member — the branch edit just staged for it must be
-      // dropped before it ever reaches modifyEdt (a real `git checkout` on a repo the
-      // developer just told the form to drop).
+      // Space unchecks that same member — the rename just staged for it must be dropped
+      // before it ever reaches modifyEdt (a real `git branch -m` on a repo the developer just
+      // told the form to drop).
       await press(instance, stdin, KEYS.space);
       await press(instance, stdin, KEYS.enter); // submit
 
       expect(modifyParams).toBeDefined();
       expect(modifyParams?.setBranches).toEqual([]);
+      expect(modifyParams?.renameBranches).toEqual([]);
       expect(modifyParams?.removeMembers).toEqual(['/repos/a']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Rename current on a still-selected existing member reaches modifyEdt via renameBranches, not setBranches (story 2.26 verification gap)', async () => {
+    const store = createAppStore();
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyParams: ModifyEdtParams | undefined;
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open modify
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // open the branch-picker for svc-a (Create new by default)
+      await press(instance, stdin, KEYS.tab); // Create new -> Rename current (this member has a current branch: "main")
+      for (let i = 0; i < 'main'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-renamed');
+      await press(instance, stdin, KEYS.enter); // commit the rename, back to the form
+
+      // Member stays checked (never toggled) — Tab back to topic-focus so this next Enter
+      // submits the whole form rather than reopening the picker.
+      await press(instance, stdin, KEYS.tab); // members -> topic
+      await press(instance, stdin, KEYS.enter); // submit
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyParams).toBeDefined();
+      expect(modifyParams?.setBranches).toEqual([]);
+      expect(modifyParams?.renameBranches).toEqual([{ repoPath: '/repos/a', newName: 'feature-renamed' }]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -273,22 +335,23 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter); // open modify
       await press(instance, stdin, KEYS.tab); // topic -> members
-      await press(instance, stdin, KEYS.enter); // open branch-edit for the one member (pre-filled with "main")
+      await press(instance, stdin, KEYS.enter); // open the branch-picker for the one member
+      await press(instance, stdin, KEYS.tab); // Create new -> Rename current (pre-filled with "main")
       // Clear the pre-filled value down to empty.
       for (let i = 0; i < 'main'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
-      await press(instance, stdin, KEYS.enter); // submit the empty branch-edit value
+      await press(instance, stdin, KEYS.enter); // submit the empty rename value
 
       expect(stdout.output).toContain('Branch name must not be empty');
-      // Still in the branch-edit sub-dialog, not back at the form and not submitted.
+      // Still in the branch-picker sub-view, not back at the form and not submitted.
       expect(modifyCalls).toBe(0);
 
       // Typing a valid value now and confirming still works — the rejection didn't wedge
       // the dialog: the same Enter that failed on an empty value now commits successfully.
       const outputLengthBeforeRetry = stdout.output.length;
       await type(instance, stdin, 'feature-z');
-      await press(instance, stdin, KEYS.enter); // commit the branch edit, back to the form
+      await press(instance, stdin, KEYS.enter); // commit the rename, back to the form
       expect(stdout.output.slice(outputLengthBeforeRetry)).not.toContain('Branch name must not be empty');
     } finally {
       instance.unmount();
@@ -1119,6 +1182,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      // Story 2.26: Pick existing over the repo's own real branch list is the simplest path
+      // to a plain 'set' outcome (no store-action pre-step, unlike Create new/Rename current).
+      listBranches: async () => ({ ok: true, data: ['main-y'] }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyParams = params;
         return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
@@ -1134,17 +1200,75 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab); // edts -> edt-services
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
-      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
-      await type(instance, stdin, '-y'); // pre-filled with "main" -> "main-y"
-      await press(instance, stdin, KEYS.enter); // confirm
+      await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new default)
+      await instance.waitUntilRenderFlush(); // let listBranches resolve
+      await press(instance, stdin, KEYS.tab); // Create new -> Rename current
+      await press(instance, stdin, KEYS.tab); // Rename current -> Pick existing
+      await type(instance, stdin, 'main-y');
+      await press(instance, stdin, KEYS.enter); // select + confirm, one submit
 
       expect(modifyParams).toEqual({
         topic: 'active-edt',
         addMembers: [],
         removeMembers: [],
         setBranches: [{ repoPath: '/repos/a', branch: 'main-y' }],
+        renameBranches: [],
       });
       expect(loggedOutcome).toBe('success');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Change branch for this EDT via Rename current reaches modifyEdt via renameBranches, not setBranches (story 2.26 verification gap)', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyParams: ModifyEdtParams | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      listBranches: async () => ({ ok: true, data: [] }),
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
+      await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new default)
+      await instance.waitUntilRenderFlush(); // let listBranches resolve
+      await press(instance, stdin, KEYS.tab); // Create new -> Rename current (stays here, unlike the setBranches test above)
+      for (let i = 0; i < 'main'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-renamed');
+      await press(instance, stdin, KEYS.enter); // confirm the rename, one submit
+
+      expect(modifyParams).toEqual({
+        topic: 'active-edt',
+        addMembers: [],
+        removeMembers: [],
+        setBranches: [],
+        renameBranches: [{ repoPath: '/repos/a', newName: 'feature-renamed' }],
+      });
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1182,7 +1306,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down);
-      await press(instance, stdin, KEYS.enter); // open branch-edit, pre-filled "main"
+      await press(instance, stdin, KEYS.enter); // open the branch-picker
+      await press(instance, stdin, KEYS.tab); // Create new -> Rename current, pre-filled "main"
       for (let i = 0; i < 'main'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
@@ -1254,6 +1379,11 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      // Story 2.26: Pick existing (one Tab away from the picker's Create-new default, since
+      // Add-to-EDT never offers Rename current) over the repo's own real branch list lets this
+      // test confirm the pre-filled candidate with a single select+confirm — no store-action
+      // pre-step (no `createMemberBranch` mock needed) unlike Create-new's own path.
+      listBranches: async () => ({ ok: true, data: ['feature-y'] }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyParams = params;
         return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
@@ -1269,10 +1399,12 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab); // edts -> edt-services
       await press(instance, stdin, KEYS.tab); // edt-services -> other-services
       await press(instance, stdin, KEYS.enter); // open Add to EDT on the one row
+      await instance.waitUntilRenderFlush(); // let listBranches resolve
       expect(stdout.output).toContain('ADD TO EDT');
       expect(stdout.output).toContain('feature-y'); // pre-filled with the row's current branch
 
-      await press(instance, stdin, KEYS.enter); // confirm, branch left as pre-filled
+      await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
+      await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm
 
       expect(modifyParams).toEqual({
         topic: 'active-edt',
@@ -1301,6 +1433,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      listBranches: async () => ({ ok: true, data: ['feature-y'] }),
       modifyEdt: async (): Promise<Result<ModifyEdtData>> => ({
         ok: true,
         data: {
@@ -1322,7 +1455,10 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open Add to EDT
-      await press(instance, stdin, KEYS.enter); // confirm
+      await instance.waitUntilRenderFlush(); // let listBranches resolve
+      await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
+      await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm
+      await instance.waitUntilRenderFlush();
 
       expect(stdout.output).toContain('shared/protected');
       expect(loggedOutcome).toBe('failed');
@@ -1410,6 +1546,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (): Promise<Result<ModifyEdtData>> => ({
         ok: true,
         data: {
@@ -1431,7 +1568,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab); // edts -> edt-services
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
-      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
+      await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new: base field focused first)
+      await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       await type(instance, stdin, '-y');
       await press(instance, stdin, KEYS.enter); // confirm
       // A second flush — same reason as the Remove-from-EDT partial-failure test above.
@@ -1468,6 +1606,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      // Story 2.26: Create new's pre-step for a brand-new name — mocked to succeed so the
+      // picker's staging (and the retry's own re-staging) reaches modifyEdt at all.
+      createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyCalls.push(params);
         if (modifyCalls.length === 1) {
@@ -1498,14 +1639,15 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter); // open modify
       await press(instance, stdin, KEYS.tab); // topic -> members
-      await press(instance, stdin, KEYS.enter); // open branch-edit for svc-a (pre-filled "main")
+      await press(instance, stdin, KEYS.enter); // open the branch-picker for svc-a (Create new: base field focused first)
+      await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       for (let i = 0; i < 'main'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'feature-y');
-      await press(instance, stdin, KEYS.enter); // commit the branch edit, back to the form
+      await press(instance, stdin, KEYS.enter); // commit (create pre-step + stage), back to the form
       // Still members-focus, cursor still on svc-a's (still checked+editable) row — Tab back
-      // to topic-focus first so this next Enter submits rather than reopening the branch edit.
+      // to topic-focus first so this next Enter submits rather than reopening the picker.
       await press(instance, stdin, KEYS.tab); // members -> topic
       await press(instance, stdin, KEYS.enter); // submit (topic-focus Enter) -> collision
       await instance.waitUntilRenderFlush();
@@ -1519,12 +1661,13 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       expect(stdout.output).toContain('already registered as a different EDT');
       expect(stdout.output).toContain('[Enter] try a different branch');
 
-      // Choosing it reopens the existing branch-edit affordance, pre-filled with the value
-      // that just got rejected — not a blank field, not the original "main".
+      // Choosing it reopens the shared branch-picker directly onto its Create-new name field,
+      // pre-filled with the value that just got rejected — not a blank field, not the
+      // original "main".
       await press(instance, stdin, KEYS.enter);
-      expect(stdout.output).toContain('Branch for /repos/a');
+      expect(stdout.output).toContain('Name: feature-y');
       const outputAfterReopen = stdout.output;
-      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Branch for /repos/a'))).toContain('feature-y');
+      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Name:'))).toContain('feature-y');
 
       // Edit to a different branch and confirm — re-runs submitModify directly (the same
       // submit function), not a full-dialog restart back through topic/members.
@@ -1550,6 +1693,96 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
+  it('matrix: branch-exists in Modify shows "try a different name"; retry reopens pre-filled and re-submits (story 2.26, no prior end-to-end coverage)', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    const modifyCalls: ModifyEdtParams[] = [];
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createMemberBranch: async () => ({ ok: true, data: undefined }),
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyCalls.push(params);
+        if (modifyCalls.length === 1) {
+          return {
+            ok: true,
+            data: {
+              ulid: 'active-ulid',
+              topic: 'active-edt',
+              results: [
+                {
+                  service: 'svc-a',
+                  outcome: 'failed',
+                  detail: { code: 'branch-exists', message: 'Branch "feature-y" already exists in /repos/a' },
+                },
+              ],
+            },
+          };
+        }
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open modify
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // open the branch-picker for svc-a (Create new: base field focused first)
+      await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
+      for (let i = 0; i < 'main'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-y');
+      await press(instance, stdin, KEYS.enter); // commit (create pre-step + stage), back to the form
+      await press(instance, stdin, KEYS.tab); // members -> topic
+      await press(instance, stdin, KEYS.enter); // submit (topic-focus Enter) -> collision
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(1);
+      expect(stdout.output).toContain('svc-a');
+      expect(stdout.output).toContain('already exists');
+      // The affordance can line-wrap inside the fixed-width dialog box in the fake TTY (unlike
+      // the shorter "try a different branch" text elsewhere in this file) — strip box-drawing
+      // borders and collapse whitespace/newlines before matching the phrase.
+      const flattened = stdout.output.replace(/[─-╿]/g, ' ').replace(/\s+/g, ' ');
+      expect(flattened).toContain('[Enter] try a different name');
+
+      // Retry reopens the shared branch-picker directly onto its Create-new name field,
+      // pre-filled with the value that just collided — proving the second registry entry's
+      // affordance actually drives the picker in context, not just the isolated label unit
+      // test in failed-result-list.test.tsx.
+      await press(instance, stdin, KEYS.enter);
+      const outputAfterReopen = stdout.output;
+      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Name:'))).toContain('feature-y');
+
+      for (let i = 0; i < 'feature-y'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'feature-z');
+      await press(instance, stdin, KEYS.enter);
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyCalls).toHaveLength(2);
+      expect(modifyCalls[1]?.setBranches).toEqual([{ repoPath: '/repos/a', branch: 'feature-z' }]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('matrix: branch-owned-by-other-edt in service-actions "Change branch" shows the retry affordance; retry reopens pre-filled and re-submits', async () => {
     const active = edt({
       ulid: 'active-ulid',
@@ -1569,6 +1802,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      // Story 2.26: Create new's pre-step for a brand-new name — mocked to succeed so the
+      // picker's staging (and the retry's own re-staging) reaches modifyEdt at all.
+      createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyCalls.push(params);
         if (modifyCalls.length === 1) {
@@ -1597,7 +1833,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab); // edts -> edt-services
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
-      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
+      await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new: base field focused first)
+      await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       await type(instance, stdin, '-y');
       await press(instance, stdin, KEYS.enter); // confirm -> collision
       await instance.waitUntilRenderFlush();
@@ -1606,16 +1843,17 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       expect(stdout.output).toContain('svc-a');
       expect(stdout.output).toContain('[Enter] try a different branch');
 
-      // Retry reopens the branch-edit sub-dialog pre-filled with the rejected value.
+      // Retry reopens the shared branch-picker directly onto its Create-new name field,
+      // pre-filled with the rejected value.
       await press(instance, stdin, KEYS.enter);
       const outputAfterReopen = stdout.output;
-      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Branch for svc-a'))).toContain('main-y');
+      expect(outputAfterReopen.slice(outputAfterReopen.lastIndexOf('Name:'))).toContain('main-y');
 
       for (let i = 0; i < 'main-y'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'main-z');
-      await press(instance, stdin, KEYS.enter); // confirm -> re-runs submitServiceActionsBranchChange
+      await press(instance, stdin, KEYS.enter); // confirm -> re-runs submitServiceActionsBranchOutcome
       await instance.waitUntilRenderFlush();
 
       expect(modifyCalls).toHaveLength(2);
@@ -1644,6 +1882,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      // Story 2.26: Create new's pre-step for the picker's default suggestion — mocked to
+      // succeed so the flow reaches modifyEdt, which is what actually rejects the name here.
+      createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyCalls.push(params);
         if (modifyCalls.length === 1) {
@@ -1671,7 +1912,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.tab); // edts -> edt-services -> other-services
-      await press(instance, stdin, KEYS.enter); // open Add to EDT (pre-filled "feature-y")
+      await press(instance, stdin, KEYS.enter); // open Add to EDT (Create new: base field focused, name pre-filled "feature-y")
+      await press(instance, stdin, KEYS.enter); // advance base -> name
       await press(instance, stdin, KEYS.enter); // confirm -> collision
       await instance.waitUntilRenderFlush();
 
@@ -1874,8 +2116,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // -> Change branch
-      await press(instance, stdin, KEYS.enter); // open the branch-edit sub-dialog
-      expect(stdout.output).toContain('Branch for svc-a');
+      await press(instance, stdin, KEYS.enter); // open the shared branch-picker
+      expect(stdout.output).toContain('[Tab] switch mode');
 
       // Only the output *written since* Escape proves the menu is back in the *current*
       // render, not merely present somewhere earlier in the accumulated log (same technique
@@ -1920,17 +2162,18 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open Add to EDT
+      await instance.waitUntilRenderFlush(); // let the picker's own listBranches() settle first
       expect(stdout.output).toContain('ADD TO EDT');
 
-      // Only the output *written since* Escape proves the dialog is gone from the *current*
-      // render (same technique as the two tests above and the story 2.9 suite's own
-      // "rejects an empty branch-edit value inline" test).
-      const outputLengthBeforeEscape = stdout.output.length;
       await pressEscape(instance, stdin);
-      const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
 
       expect(modifyCalls).toBe(0);
-      expect(outputSinceEscape).not.toContain('ADD TO EDT');
+      // Story 2.26: the picker's own async branches-fetch settling can still land a render
+      // shortly around the same time as Escape's, so — same technique as the Modify/
+      // service-actions retry tests above — only the *last* rendered frame (not every write
+      // since a captured point in time) can reliably tell whether the dialog is still showing.
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('EDTS'));
+      expect(lastFrame).not.toContain('ADD TO EDT');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

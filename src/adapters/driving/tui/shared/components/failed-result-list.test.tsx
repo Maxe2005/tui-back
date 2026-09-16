@@ -7,6 +7,13 @@ describe('resolveAssistedAction', () => {
     expect(resolveAssistedAction('branch-owned-by-other-edt')).toEqual({ label: 'try a different branch' });
   });
 
+  // Story 2.26: the second registry entry — branch-exists (adapters/driven/git/index.ts's
+  // createBranch/renameBranch) -> "try a different name", backing the branch-picker's
+  // Create-new and rename retry flows.
+  it('resolves branch-exists to the "try a different name" action', () => {
+    expect(resolveAssistedAction('branch-exists')).toEqual({ label: 'try a different name' });
+  });
+
   it('returns null for an unregistered code', () => {
     expect(resolveAssistedAction('shared-branch-rejected')).toBeNull();
     expect(resolveAssistedAction('no .tui-back.yaml found')).toBeNull();
@@ -55,5 +62,12 @@ describe('FailedResultList', () => {
     expect(output).toContain('[Enter] try a different branch');
     // Exactly one affordance — the other two rows' codes don't resolve to any action.
     expect(output.split('[Enter] try a different branch')).toHaveLength(2);
+  });
+
+  it('grows the "try a different name" affordance for a branch-exists row', async () => {
+    const output = await renderToString(
+      <FailedResultList rows={[{ service: 'svc-a', code: 'branch-exists', message: 'Branch "feature-x" already exists' }]} />,
+    );
+    expect(output).toContain('[Enter] try a different name');
   });
 });
