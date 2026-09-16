@@ -61,6 +61,12 @@ import { err, ok, type Result } from '../result.js';
 export interface CreateBranchOptions {
   create: boolean;
   base: string;
+  // Story 2.27: per-member base-branch override — the TUI forces one of these when selected
+  // members' manifest-declared sharedBranch values diverge (never inferred/guessed, always
+  // an explicit developer choice). `bases[member]` wins over `base` for that member when
+  // present; optional and purely additive, so every pre-2.27 caller (CLI, existing tests)
+  // that never sets it keeps applying `base` uniformly, unchanged.
+  bases?: Record<string, string>;
   mode: 'grouped' | 'individual';
   // Branch name per member repoPath. Grouped mode: the same shared name for every member.
   // Individual mode: one name per member. Keys must be the member paths as passed in
@@ -330,7 +336,10 @@ async function resolveMemberBranch(
     return { service, outcome: 'existing-branch', branch: current.data };
   }
 
-  const created = await git.createBranch(member, options.names[member], options.base);
+  // Code review (story 2.27): `??` alone would pass an explicit empty-string `bases[member]`
+  // straight to git as an empty base ref instead of falling back to `options.base` — `||`
+  // treats an empty override the same as an absent one.
+  const created = await git.createBranch(member, options.names[member], options.bases?.[member] || options.base);
   if (created.ok) {
     return { service, outcome: 'created', branch: options.names[member] };
   }

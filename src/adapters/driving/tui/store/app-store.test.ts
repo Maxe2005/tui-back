@@ -264,6 +264,7 @@ describe("app store", () => {
           service: "svc-a",
           path: "/repo/a",
           isMember: false,
+          sharedBranch: "development",
           branch: "feat/a",
           ahead: 2,
           behind: 0,

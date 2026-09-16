@@ -351,6 +351,15 @@ export type BranchPickerProps = {
   branches: readonly string[];
   branchesStatus: 'loading' | 'ready' | 'error';
   otherMemberBranches: readonly string[];
+  // Code review (story 2.27): Create-EDT's base-branch step repurposes "Create new" mode's Name
+  // field to mean "the base branch itself" — that session never creates a new branch (see
+  // create-dialog.tsx's applyBaseBranchOutcome), so the mode's own nested "base to create the
+  // new branch from" sub-field is dead chrome there. When true, hides that nested field and
+  // relabels the remaining one "Base branch" instead of "Name" — but only while it isn't
+  // focused, so the already-accepted Tab-cycle rough edge (baseFocused resets to true) still
+  // falls back to the original, fully-functional two-field render rather than a focus with
+  // nothing shown. Every other call site omits this prop and is unaffected.
+  hideNestedBaseField?: boolean;
 };
 
 // The one filterable-list widget (Boundaries: "a second filterable-list component" is
@@ -375,7 +384,7 @@ function FilterableBranchList({ matches, highlightedIndex }: { matches: readonly
   );
 }
 
-export function BranchPicker({ state, branches, branchesStatus, otherMemberBranches }: BranchPickerProps) {
+export function BranchPicker({ state, branches, branchesStatus, otherMemberBranches, hideNestedBaseField = false }: BranchPickerProps) {
   const modes: BranchPickerMode[] = state.hasCurrentBranch
     ? ['pick-existing', 'create-new', 'rename-current']
     : ['pick-existing', 'create-new'];
@@ -391,14 +400,18 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
 
       {state.mode === 'create-new' ? (
         <Box flexDirection="column">
-          <TextInputLine label="Base branch" value={state.baseBranch} focused={state.baseFocused} />
-          {state.baseFocused ? (
-            <FilterableBranchList
-              matches={matchBranchesByPrefix(state.baseBranch, branches)}
-              highlightedIndex={matchBranchesByPrefix(state.baseBranch, branches).indexOf(state.baseBranch)}
-            />
-          ) : null}
-          <TextInputLine label="Name" value={state.nameValue} focused={!state.baseFocused} />
+          {hideNestedBaseField && !state.baseFocused ? null : (
+            <>
+              <TextInputLine label="Base branch" value={state.baseBranch} focused={state.baseFocused} />
+              {state.baseFocused ? (
+                <FilterableBranchList
+                  matches={matchBranchesByPrefix(state.baseBranch, branches)}
+                  highlightedIndex={matchBranchesByPrefix(state.baseBranch, branches).indexOf(state.baseBranch)}
+                />
+              ) : null}
+            </>
+          )}
+          <TextInputLine label={hideNestedBaseField ? 'Base branch' : 'Name'} value={state.nameValue} focused={!state.baseFocused} />
           {otherMemberBranches.length > 0 ? (
             <Box flexDirection="column" paddingLeft={2}>
               <Text color={colors['text-dim']}>

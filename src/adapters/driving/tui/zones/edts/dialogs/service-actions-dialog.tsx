@@ -2,6 +2,7 @@
 // branch for this EDT" / disabled "Restart") opened by Enter — extracted from edts-zone.tsx
 // (see that file's header for why).
 import { Box, Text, type Key } from 'ink';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
 import type { AppState } from '../../../store/app-store.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
@@ -29,6 +30,9 @@ export type ServiceActionsDialogDeps = {
   loadEdtsBranches: AppState['loadEdtsBranches'];
   logEdtAction: AppState['logEdtAction'];
   createMemberBranchAction: AppState['createMemberBranch'];
+  // Story 2.27: needed to look up this repoPath's own manifest-declared sharedBranch, used as
+  // the picker's "Create new" default base branch (never DEFAULT_BASE_BRANCH).
+  candidates: readonly ServiceBranchDivergence[];
 };
 
 export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDeps) {
@@ -118,8 +122,13 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
     options: { retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string } } = {},
   ) {
     const currentBranch = current.edt.members.find((member) => member.repoPath === current.repoPath)?.branch ?? '';
+    // Code review (story 2.27): fall back to this member's own current branch, not '', if the
+    // candidate lookup misses — never DEFAULT_BASE_BRANCH, but never blank either (this
+    // dialog's "Create new" confirm performs a real git write).
+    const defaultBaseBranch = deps.candidates.find((candidate) => candidate.path === current.repoPath)?.sharedBranch || currentBranch;
     const session = createPickerSession(current.repoPath, {
       suggestedName: currentBranch,
+      defaultBaseBranch,
       hasCurrentBranch: true,
       currentBranch,
       retry: options.retry,

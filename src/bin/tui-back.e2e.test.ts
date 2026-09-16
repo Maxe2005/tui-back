@@ -528,7 +528,7 @@ describe('tui-back edts (black-box, story 2.6)', () => {
       ok: true,
       data: {
         services: [
-          { service: 'route-explorer', path: repo, isMember: false, branch: 'development', ahead: 1, behind: 0, status: 'current' },
+          { service: 'route-explorer', path: repo, isMember: false, sharedBranch: 'development', branch: 'development', ahead: 1, behind: 0, status: 'current' },
         ],
         unreachable: [],
         errors: [],
@@ -548,7 +548,7 @@ describe('tui-back edts (black-box, story 2.6)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     expect(parsed.data.services).toEqual([
-      { service: 'route-explorer', path: repo, isMember: false, branch: 'development', ahead: null, behind: null, status: 'no-upstream' },
+      { service: 'route-explorer', path: repo, isMember: false, sharedBranch: 'development', branch: 'development', ahead: null, behind: null, status: 'no-upstream' },
     ]);
   });
 
