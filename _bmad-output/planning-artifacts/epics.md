@@ -40,6 +40,7 @@ FR-20: A developer can fire a request against any route discovered via FR-19, wi
 FR-21: A developer can save a request (method, path, body, headers), and when re-firing a saved request, can further customize it before sending — then either overwrite the original saved request or save the customized version as a new one.
 FR-22: Firing a request (saved or ad hoc) surfaces its response and the relevant aggregated logs for the affected services in the same place, immediately after — with the affected-service set learned progressively per route rather than pre-configured.
 FR-23: A developer's saved requests form one global library, not siloed per EDT; each EDT can independently hide individual saved requests from its own view and mark others as favorites (per-EDT or global).
+FR-24 (added 2026-09-16, Sprint Change Proposal): A developer can delete an EDT they no longer need, choosing per member service whether to leave its branch alone or delete it too — informed by that branch's merge status (into its `sharedBranch`) and any uncommitted work — with deletion blocked while the EDT is active and blocked per-service when the branch is also registered as another EDT's own branch for that repo.
 
 ### NonFunctional Requirements
 
@@ -92,7 +93,7 @@ UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` t
 UX-DR17: Implement the two-layer outcome-message voice pattern across every zone — a dry/factual primary line sufficient on its own, with an optional `dim-annotation` wink line that is never required and never folded into the primary line; raw stderr/stack traces always stay one action away, never fully hidden.
 UX-DR18: Implement the resizable list/detail split as the primary content layout within each zone (roughly 2:3 list:detail ratio), per `{components.splitter}`. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the EDT zone becomes the first "multi-splitter zone" (Story 2.7's already-anticipated concept) — 3 internal boundaries (EDT selector/EDT SERVICES/OTHER SERVICES) in addition to the list/detail split.
 UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (active EDT + member health + last group-update timestamp + default "enter last EDT" action), "no EDT yet" first-run prompt, and background-event badge surfacing while on Dashboard.
-UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21).
+UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21). Amended 2026-09-16 (Sprint Change Proposal): adds "EDT deleted" (per-service branch-disposition confirmation, active-EDT-blocked, cross-EDT branch-collision-blocked-per-service — Story 2.29), "EDT quick-pick" (filterable list for `edt-switch`/`edt-modify` with no argument, including its own "no matching EDT" state — Story 2.30), and "Create from existing EDT" (member checklist pre-seeded from a root EDT, root-branch-derived base-branch suggestion — Story 2.31) as new named states.
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart.
 UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes).
@@ -104,6 +105,8 @@ UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism correct
 UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14; reveal mechanism corrected 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `:` command-entry bar — a `modal-dialog` instance with a text input; no command list shows on open. `Tab` on an empty input shows the full command grid (UX-DR30); `Tab` on a non-empty input autocompletes on a single match, completes to the longest common prefix when several matches share one, or (when already at that prefix) requires a second `Tab` within a short window to reveal the matching-commands grid. `Enter` runs an exact match and closes the bar, `Esc` cancels without executing, and an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently.
 
 UX-DR30 (added 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `command-grid` component — a multi-column, arrow-navigable browser for the command bar's matching commands (UX-DR29), column-major left-to-right layout with a configurable max rows per column, trailing `…` truncation when the full grid exceeds the display width, and horizontal scrolling at either extremity to reveal columns hidden by that truncation. `Down` from the input enters the grid (landing top-of-first-column); `Up` from a column's top row returns to the input; `Enter` or any typed character exits back to the input (completing or resuming edit, respectively).
+
+UX-DR29 amended 2026-09-16 (Sprint Change Proposal): the registered command set grows to include `edt-delete` (Story 2.29), `edt-create-from` (Story 2.31), and a `registry validate` action inside the existing `registry` screen rather than a new top-level command (Story 2.28) — same command-bar mechanism, no new UI pattern.
 
 UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level.
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
@@ -119,6 +122,7 @@ FR-6: Epic 2 - Switch the active EDT without data loss
 FR-7: Epic 2 - An EDT never claims a shared branch
 FR-8: Epic 2 - Non-member managed repos stay on development
 FR-9: Epic 2 - Branch and divergence visibility
+FR-24: Epic 2 - Delete an EDT (added 2026-09-16, Sprint Change Proposal — Story 2.29)
 FR-10: Epic 3 - Run a group update, EDT-scoped or all-repos
 FR-11: Epic 3 - Assisted resolution of merge conflicts / dirty state
 FR-12: Epic 3 - Per-service migration failure handling
@@ -1571,6 +1575,148 @@ So that I always know which of these three things I'm actually doing, and don't 
 **Then** it gains a `renameBranches?: Array<{ repoPath: string; newName: string }>` param (mirrors `setBranches`'s shape), a new pre-lock step calling `git.renameBranch` after the existing `assertAllowedBranch` gate, and updates the EDT registry entry's `branch` field for that member on success — a distinct operation from `setBranches` (which switches to an *existing* branch; this one renames the *current* one)
 
 **Implementation notes:** new shared component `shared/components/branch-picker.tsx`, following Story 2.23's `text-input-line.tsx` precedent — hosts the 3-way mode switch, delegates to `text-input-line` for two of its three modes; the "Pick existing" list item gains a secondary action (rename) alongside select, both driving the same underlying `renameBranch` + `setBranches`/`addMembers` submit path. "Create new"'s base-branch picker reuses the exact same filterable-list sub-component as "Pick existing" (two call sites of one list widget: base-branch candidates vs. target-branch candidates). The other-members'-branch-names sub-list needs no new port method — derived from data the dialog already has loaded. The filterable list itself reuses whatever filter-as-you-type mechanism already exists elsewhere in the app if one does (verify at implementation time) rather than introducing a second one. `core/ports/git.ts` gains `listBranches`/`renameBranch`, implemented in `adapters/driven/git`. EDT creation (Story 2.22) is not required to adopt "Pick existing"/"Rename current" by this story — it has no "current" branch to rename and creation's own suggested-default flow already covers the common case; extending it is a natural, explicitly-flagged follow-up, not required here.
+
+> Amended 2026-09-16 (Sprint Change Proposal): closes a confirmed blocking bug found in real usage — Modify's member-checklist Enter routed to the branch-picker for any checked row (nearly always every row, since existing members start checked), with no visible indication of which service the open picker session was even for, making it practically impossible to reach `submitModify` without already knowing the undocumented "Tab to Topic, then Enter" escape hatch. Two new ACs, none removed (branch not yet `done`, so this is a direct edit, not a reopening):
+>
+> **Given** a branch-picker session is open in the Modify dialog **When** rendered **Then** the `ModalDialog`'s title changes from `MODIFY EDT` to `MODIFY EDT — branch for <service>` for the duration of the session, reverting once it closes.
+>
+> **Given** the members-list cursor is on a row that is already a member of this EDT **When** `Enter` is pressed **Then** the whole form submits (`submitModify`) — changing an *existing* member's branch from Modify goes through the EDT SERVICES pane's own "Change branch for this EDT" action (Story 2.18), not this checklist. **Given** the cursor is on a row newly checked this session (not yet a member) **When** `Enter` is pressed **Then** the branch-picker opens for it, unchanged (mandatory per Story 2.24).
+
+### Story 2.27: EDT Creation — Branch-Picker Reuse & Manifest-Aware Base-Branch Default
+
+> Added 2026-09-16 (Sprint Change Proposal): closes the explicitly-flagged follow-up from Story 2.26's own implementation notes ("EDT creation is not required to adopt Pick existing/Rename current by this story ... a natural, explicitly-flagged follow-up") — and, per real-usage diagnosis, the actual root cause of Create-EDT hard-failing whenever a repo's real shared branch isn't literally named `development`.
+
+As a developer, I want the Create-EDT dialog's branch-setup step to use the same searchable branch-picker as Modify, defaulting to each repo's own manifest-declared shared branch instead of a hardcoded `development`, so that creating an EDT never fails on a made-up default and I can pick a real base branch the same way everywhere in the app.
+
+**Acceptance Criteria:**
+
+**Given** the create-EDT dialog's branch-setup step **When** it renders **Then** the base-branch field uses the shared `BranchPicker` (Pick existing / Create new — no Rename current) instead of a raw `<Text>` field, consistent with Modify/service-actions/add-to-edt.
+
+**Given** the branch-name field(s) (grouped or individual) **When** rendered **Then** they use `TextInputLine` (closing the Story 2.23 gap — today they're the only EDT-zone text fields still on raw `<Text>`, with no visible cursor).
+
+**Given** `core/edt/list.ts`'s `listEdtBranchesDivergence` use-case **When** it builds each row **Then** `ServiceBranchDivergence` includes `sharedBranch: string`, sourced from the manifest already loaded for that repo — no new port.
+
+**Given** every base-branch default in the EDT zone (Create's branch-setup step, and the existing `BranchPicker`'s "Create new" mode in Modify/service-actions/add-to-edt) **When** exactly one repo is in play **Then** the suggested base branch is that repo's own `sharedBranch`, never the hardcoded `DEFAULT_BASE_BRANCH` constant.
+
+**Given** Create in grouped naming mode with ≥2 selected members **When** their manifests' `sharedBranch` values are unanimous **Then** that shared value is the suggested base branch. **When** they diverge **Then** grouped naming mode stays available for the branch *name*, but the base-branch field is forced into a per-member picker — never silently defaulting to `development` or picking one member's value arbitrarily.
+
+**Given** any base-branch suggestion **When** shown **Then** it stays fully editable — never forced, same convention as every other suggested default in this zone (Story 2.22).
+
+**Implementation notes:** `DEFAULT_BASE_BRANCH` (`edt-slice.ts`) stops being read as the branch *suggestion* source anywhere in the EDT zone. `create-dialog.tsx` gains its own `BranchPicker` session, mirroring `openBranchPickerForModify`'s shape but scoped to `CreateDialogState`; the "one base branch per member when `sharedBranch` diverges" case needs a small per-member base-branch record, analogous to `branchNames`'s existing per-member shape. Depends on Story 2.26's `BranchPicker`/`listBranches` and Story 2.23's `TextInputLine` (both already shipped).
+
+### Story 2.28: Registry — Manifest Semantic Validation
+
+> Added 2026-09-16 (Sprint Change Proposal): the manifest loader (Story 1.4) already rejects a schema-invalid `.tui-back.yaml`; nothing checks that a schema-*valid* manifest's declared values are actually real — e.g. a `sharedBranch` that doesn't exist in the repo. Extends the registry screen (Story 2.11) rather than adding a new command/screen.
+
+As a developer, I want to validate that my registered repos' manifests are not just schema-correct but actually consistent with the repo's real state, so that a typo'd or stale `sharedBranch` surfaces before it causes a confusing failure elsewhere in the tool.
+
+**Acceptance Criteria:**
+
+**Given** the REPO REGISTRY screen (Story 2.11) **When** open **Then** a new action ("Validate registered repos") is available alongside scan/register, operating on every path already in `registry.yaml`.
+
+**Given** validation runs **When** it completes **Then** each registered, manifest-valid repo shows a per-repo outcome (valid / invalid + reason), rendered via the same structured per-repo list convention as Story 2.25's `FailedResultList`.
+
+**Given** the `sharedBranch` check specifically **When** a repo's manifest declares one **Then** the tool verifies it exists (locally, or fetchable from the configured remote) via `GitPort`, reporting `invalid: sharedBranch "<name>" not found` when it doesn't.
+
+**Given** the check mechanism **When** implemented **Then** it is a small, extensible per-check registry — this story registers exactly one real check (`sharedBranch` existence); a future check is a registry entry, not a rewrite, mirroring Story 2.25's `resolveAssistedAction` pattern.
+
+**Given** a repo whose manifest already fails to *load* (schema-invalid) **When** validation runs **Then** that repo is reported using its existing load-error message — this story never re-implements schema validation, only adds semantic checks on top of an already-loadable manifest.
+
+**Implementation notes:** new core use-case `core/scripts/validate-registry.ts`, same shape as `list-repos.ts`. CLI subcommand `tui-back registry validate` for script/CLI parity (AD-2); TUI wires it as a new `RegistryScreenPhase` in `repo-registry-screen.tsx`.
+
+### Story 2.29: Delete an EDT
+
+> Added 2026-09-16 (Sprint Change Proposal): new PRD FR-24 (§4.2) — no existing FR covers removing an EDT record. Per-service branch disposition (leave / delete) informed by merge status and uncommitted-work detection, following the same "detect → guided choice → act" shape as every other assisted-resolution mechanic in this app.
+
+As a developer, I want to delete an EDT I no longer need, choosing per member service whether to leave its branch alone or delete it too, so that finished or abandoned work doesn't accumulate stale EDTs and orphaned branches I have to clean up by hand.
+
+**Acceptance Criteria:**
+
+**Given** the EDT selector **When** the developer triggers delete on a *non-active* EDT (via a new `edt-delete` command, or a contextual action on the focused EDT row) **Then** a confirmation dialog opens listing every member service with its branch, merge status (merged into that repo's `sharedBranch` / not merged), and uncommitted-work status.
+
+**Given** the target EDT is the currently *active* one **When** delete is attempted **Then** it is rejected with a clear message to switch away first — never auto-switched on the developer's behalf.
+
+**Given** the per-service disposition list **When** rendered **Then** each row defaults to "Leave branch as-is" except a service whose branch is both merged into its `sharedBranch` and clean, which defaults to "Delete branch" — every row stays independently toggleable, the defaults are a suggestion, never forced.
+
+**Given** a service's branch is chosen for deletion, is merged and clean **When** the delete runs **Then** it's a plain `git branch -d`.
+
+**Given** a service's branch is chosen for deletion, is unmerged and/or has uncommitted work **When** the delete runs **Then** it force-deletes (`git branch -D`) — never silently downgraded to "leave alone" because it looked risky; the confirmation dialog's merge/uncommitted status is exactly what lets the developer make that call knowingly.
+
+**Given** a service's branch chosen for deletion is *also* registered as another EDT's own branch for that repo **When** the delete runs **Then** that specific branch deletion is rejected (structured per-repo failure, Story 2.25's display) — the EDT record itself is still deleted, and every other selected service's branch deletion proceeds independently.
+
+**Given** the EDT record deletion itself **When** it completes **Then** the EDT's SQLite file (`XDG_DATA_HOME/tui-back/edts/<ulid>.db`) is removed and it no longer appears anywhere in the EDT list — no soft-delete/undo in v1.
+
+**Implementation notes:** `core/ports/git.ts` gains `isBranchMerged(repoPath, branch, into)` and `deleteBranch(repoPath, branch, force)`, gated through the centralized branch-scope-safety adapter (AD-8) — refuses a shared/protected branch outright. New core use-case `core/edt/delete.ts`. CLI: `tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>...]`. TUI: new `edt-delete` command bar entry plus a new `EdtDialogState` kind (`dialogs/delete-dialog.tsx`).
+
+### Story 2.30: EDT Quick-Pick — Filterable List for `edt-switch` / `edt-modify`
+
+> Added 2026-09-16 (Sprint Change Proposal): closes a gap in Story 2.15 (`done`) — its own ACs describe a quick-pick list for both commands invoked with no argument; today `edt-switch` jumps to "the first non-active EDT" and `edt-modify` opens whichever EDT row happens to be focused, neither shows a list to choose from.
+
+As a developer, I want `edt-switch` and `edt-modify` (typed with no argument) to show a filterable list of EDTs I can search and pick from, so that I don't have to already know or guess which EDT is "first" or "currently focused" before the right dialog opens.
+
+**Acceptance Criteria:**
+
+**Given** the command bar, `edt-switch` run with no argument **When** it executes **Then** a quick-pick opens: a text filter (prefix match, case-insensitive, same convention as `matchCommands`/`matchBranchesByPrefix`) over every *non-active* EDT's topic, with an arrow-navigable filtered list below it.
+
+**Given** the quick-pick (switch mode) **When** an EDT is selected (`Enter`) **Then** the switch-confirm dialog opens pre-targeted at it, unchanged from today's pre-targeted-by-topic path.
+
+**Given** the command bar, `edt-modify` run with no argument **When** it executes **Then** the same quick-pick opens (mode: modify), filtering over *every* EDT (active included).
+
+**Given** the quick-pick (modify mode) **When** an EDT is selected **Then** the modify dialog opens pre-targeted at it, unchanged from today's pre-targeted-by-topic path.
+
+**Given** the quick-pick, any mode **When** `Esc` is pressed **Then** it closes without opening anything, back to no dialog.
+
+**Given** the quick-pick's filter matches exactly zero EDTs **When** rendered **Then** it shows an explicit "no matching EDT" state, never a silently-empty list.
+
+**Given** `edt-switch <topic>`/`edt-modify <topic>` (topic supplied) **When** run **Then** behavior is unchanged — the quick-pick only replaces the no-argument path.
+
+**Implementation notes:** new shared component, `shared/components/edt-quick-pick.tsx` (or a generalized version of `branch-picker.tsx`'s `FilterableBranchList`, reused rather than duplicated). New `EdtDialogState` kind `'quick-pick'` with a `mode: 'switch' | 'modify'` field; `edts-zone.tsx`'s `currentEdtAction` effect (today: "first non-active EDT" / "focused EDT" fallbacks) opens this dialog instead when no topic was given.
+
+### Story 2.31: `edt-create-from` — Clone an EDT's Membership as a Creation Starting Point
+
+> Added 2026-09-16 (Sprint Change Proposal): new command, built on Story 2.30's quick-pick (root-EDT selection) and Story 2.27's `BranchPicker`-based branch-setup step (per-member base branch). Treated as a consequence of existing FR-3 (member selection, still manual/editable), not a new FR.
+
+As a developer, I want to create a new EDT starting from an existing one's member services (with the ability to add or remove some), where every inherited service's new branch is based on that service's *current* branch in the root EDT, so that I can spin off a continuation of in-progress work without losing the branch context it was building on.
+
+**Acceptance Criteria:**
+
+**Given** the command bar, `edt-create-from` run with no argument **When** executed **Then** Story 2.30's quick-pick opens (any EDT selectable) to choose the root EDT.
+
+**Given** `edt-create-from <topic>` **When** `<topic>` matches an existing EDT **Then** it's pre-targeted directly, skipping the quick-pick; no match shows an inline "EDT not found" error.
+
+**Given** a root EDT is resolved **When** the create dialog opens **Then** the member checklist is pre-checked with exactly the root EDT's current members — still a normal, fully-editable `checkbox-list-item` list (add/remove any service).
+
+**Given** the branch-setup step (Story 2.27) **When** a selected member *was* a member of the root EDT and naming mode reaches "Create new" for it **Then** the suggested base branch is that member's own *current* branch in the root EDT (not `sharedBranch`, not `development`) — Story 2.27's `sharedBranch`-aware default applies only to members that were *not* in the root EDT.
+
+**Given** a selected member that was *not* part of the root EDT **When** the branch-setup step renders **Then** it falls back to Story 2.27's normal `sharedBranch`-aware default — unchanged.
+
+**Given** the pre-filled base-branch suggestion **When** shown **Then** it stays fully editable, same convention as every other suggestion in this zone.
+
+**Given** the new EDT's topic **When** entered **Then** it follows the normal uniqueness rule (FR-3) — never auto-derived from the root EDT's topic, always typed fresh.
+
+**Implementation notes:** `initialCreateDialog` gains an optional `seedFromEdt: EdtRegistryEntry` parameter that pre-populates `selectedMembers` and a per-member `rootBranch` record consulted by the branch-setup step's base-branch suggestion logic (extends Story 2.27's per-member base-branch path). New `commands.ts` entry `edt-create-from`. Depends on Story 2.27 and Story 2.30 — sequence after both.
+
+### Story 2.32: `TextInputLine` — Cursor Navigation & App-Wide Adoption
+
+> Added 2026-09-16 (Sprint Change Proposal): closes an explicitly-flagged Story 2.23 follow-up ("no mid-string cursor movement is introduced by this story ... flagged as a possible follow-up, not blocking"). Scope widened, at Max's request, to unify the command-bar and registry-screen's own separate hand-rolled text fields onto the same component and editing primitive, leaving exactly one text-input implementation in the codebase.
+
+As a developer, I want every text field built on `TextInputLine` — including the command bar and the registry screen's root-path field — to let me move the cursor with Left/Right/Home/End and edit at that position, so that fixing a typo in the middle of a branch name or topic doesn't mean clearing and retyping the whole field.
+
+**Acceptance Criteria:**
+
+**Given** `nextTextInputValue` **When** extended **Then** it operates on `{ value: string; cursor: number }` instead of a bare `string` — `Left`/`Right` move the cursor (clamped to `[0, value.length]`), `Home`/`End` jump to start/end, typed characters insert at the cursor, `Backspace`/`Delete` remove at the cursor (before/after respectively) — every existing non-cursor key behavior is unchanged.
+
+**Given** `TextInputLine` **When** rendered focused **Then** the cursor glyph appears at the `cursor` position within `value`, not always at the end — a `cursor` prop defaulting to `value.length` keeps every existing caller that doesn't pass one visually unchanged.
+
+**Given** every EDT-zone field currently driving a `TextInputLine` **When** this story lands **Then** their state shape gains the paired `cursor` field and their key-dispatch calls route through the extended `nextTextInputValue`.
+
+**Given** the command bar's own input (`command-bar.tsx`) **When** this story lands **Then** it renders via `TextInputLine` (label-less/prefix mode) instead of its own hand-rolled cursor rendering, and its own key handling calls the same extended `nextTextInputValue`; autocomplete/grid behavior (Story 2.17) is unaffected.
+
+**Given** the registry screen's root-path field (`repo-registry-screen.tsx`) **When** this story lands **Then** it renders via `TextInputLine` (`label="Root path"`) instead of its own `typeRootInputChar`/`backspaceRootInput` pair.
+
+**Given** `TextInputLine` **When** used without a `label` (the command bar's case) **Then** it renders the value/cursor alone, no `"undefined: "` or empty-label artifact — `label?: string` becomes optional.
+
+**Implementation notes:** every `CreateDialogState`/`ModifyDialogState`/`ServiceActionsDialogState`/`AddToEdtDialogState`/`BranchPickerState` field that today is a bare `string` and drives a `TextInputLine` gains a sibling `cursor` (exact shape decided at implementation time, consistently across all of them). `branch-picker.tsx`'s own local `applyTextInput`/`TextEditKey` re-implementation gets the same cursor extension in parallel, not via import (avoids the import-cycle it was written to avoid). Sequence command-bar/registry-screen migrations after the EDT-zone fields are done, so the extended `nextTextInputValue` contract is proven first where it has the most callers.
 
 ## Epic 3: Group Update & Migrations
 

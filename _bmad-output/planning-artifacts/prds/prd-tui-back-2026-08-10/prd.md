@@ -188,6 +188,31 @@ Every managed service is displayed with its current branch and how far that bran
 - A branch with no configured upstream, or checked while offline, shows an explicit "no upstream" / "unknown (offline)" state rather than a numeric value.
 - This applies to every managed service, EDT member or not — including the ones FR-8 keeps on `development`.
 
+#### FR-24: Delete an EDT
+
+> Added 2026-09-16 (Sprint Change Proposal, Story 2.29). No FR before this one covered removing
+> an EDT record itself — FR-5 only covers modifying an existing one. Numbered FR-24 (next
+> available, following FR-23) though it belongs functionally to §4.2 alongside FR-3–FR-9.
+
+A developer can delete an EDT they no longer need, choosing per member service whether to leave
+its git branch alone or delete it too — informed by that branch's merge status (into the repo's
+configured shared branch) and whether it carries uncommitted work.
+
+**Consequences (testable):**
+- Deleting an EDT while it is the active one is rejected with a clear message to switch away
+  first — the tool never auto-switches on the developer's behalf to make room for a deletion.
+- The per-service branch-disposition choice ("leave as-is" / "delete, including any uncommitted
+  work") is independent per member service, defaulting to "leave as-is" except for a branch that
+  is both fully merged into its shared branch and has no uncommitted work, which defaults to
+  "delete" — every default stays developer-overridable, never forced.
+- A branch chosen for deletion that is also registered as a *different* EDT's own branch for that
+  same repo is not deleted — reported per-service as a distinct failure — while the EDT record
+  itself is still deleted and every other selected service's branch deletion proceeds
+  independently.
+- Deleting an EDT removes its persisted record entirely; no undo/soft-delete is offered, matching
+  the same "developer's explicit action in the moment, no automated recovery" bar every other
+  destructive git action in this tool already meets (Constraints and Guardrails).
+
 ---
 
 ### 4.3 Repo Lifecycle: Group Update & Migrations
@@ -406,7 +431,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 ### 6.1 In Scope
 
 - Standalone-script core architecture + per-repo manifest/module system (§4.1).
-- EDT workspace management: create (with optional branch creation), modify after creation, protected switch, non-member-repo branch enforcement, branch/divergence visibility (§4.2).
+- EDT workspace management: create (with optional branch creation), modify after creation, protected switch, non-member-repo branch enforcement, branch/divergence visibility, delete with per-service branch disposition (§4.2, FR-24 added 2026-09-16).
 - Group update — EDT-scoped and all-repos modes, the latter behind a confirmation gate — with assisted conflict/migration-failure resolution (§4.3).
 - `shared-types` propagation module, including its `npm run v` publish flow (§4.4).
 - Aggregated log observability, filterable by service/text/level, with inline health (§4.5).

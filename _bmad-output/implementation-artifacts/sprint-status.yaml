@@ -43,6 +43,10 @@
 generated: 2026-08-11
 last_updated: 2026-09-16
 project: tui-back
+# 2026-09-16: Sprint Change Proposal (sprint-change-proposal-2026-09-16.md) appended stories
+# 2-27..2-32 to epic-2 and amended story 2-26 in place (still `review`) — see that proposal for
+# the full rationale (functional review of the EDT-management surface + a confirmed blocking bug
+# in Create/Modify branch selection).
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -91,6 +95,12 @@ development_status:
   2-24-modify-edt-mandatory-branch-on-add-no-more-silent-default: review
   2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: review
   2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current: review
+  2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: backlog
+  2-28-registry-manifest-semantic-validation: backlog
+  2-29-delete-an-edt: backlog
+  2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: backlog
+  2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
+  2-32-text-input-line-cursor-navigation-app-wide-adoption: backlog
   epic-2-retrospective: optional
 
   epic-3: backlog

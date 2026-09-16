@@ -13,6 +13,45 @@ Status values: `à trier` (not yet looked at) / `story ouverte (2.xx)` / `pas un
 
 <!-- Entries below, newest first. -->
 
+## 2026-09-16 — Create and Modify both dead-end when setting branches; impossible to complete
+
+**Status:** story ouverte (2.26 amendment, 2.27) — see `sprint-change-proposal-2026-09-16.md`
+
+**Reported:** Functional pass over Stories 2.22-2.26 (2.22/2.24/2.25/2.26 `review`, 2.23
+`in-progress`) alongside a list of new capability requests. Two of the eight points turned out to
+be this same underlying blocker, tested on both Create and Modify.
+
+**Tested — Create:** Creating an EDT, selecting services, reaching the branch-setup step.
+
+**Observed:** An error appears because the default base branch `development` was chosen but
+doesn't exist in the target repo(s) — there is no way to search/pick a real branch, only a free
+-text field seeded with a hardcoded default.
+
+**Code trace (confirms this is the root cause, not a one-off):** `DEFAULT_BASE_BRANCH =
+'development'` (`edt-slice.ts:27`) is sent to `createEdtAction` unchecked — `create-dialog.tsx`'s
+branch-setup step never adopted Story 2.26's `BranchPicker`, and no base-branch default anywhere
+in the EDT zone reads a repo's manifest `sharedBranch`.
+
+**Tested — Modify:** Opening Modify, checking member services, picking a branch for one, then
+trying to finish.
+
+**Observed:** After selecting services, it's unclear *which* service's branch is being edited when
+the branch-picker opens (no service name shown), and there's no way to set the same branch for
+several newly-added members at once. Once a branch is confirmed, the dialog returns to the member
+-selection screen — and this repeats indefinitely; the dialog can never be completed from there.
+
+**Code trace:** `BranchPicker`/`ModifyDialogView` never render which `repoPath`/service the open
+session is for. `resolveModifyEnterAction` (`edts-zone.logic.ts:604`) routes `Enter` on the
+members list to "open the branch picker" for *any* currently-checked row — since existing members
+start checked, the cursor almost never lands on a row where `Enter` submits; the only way out is
+the undocumented "Tab to Topic, then Enter" path.
+
+**Resolution:** Story 2.26 amended in place (2 new ACs: branch-picker session names its target
+service in the modal title; members-list `Enter` only opens the branch-picker for a newly-checked,
+not-yet-member row — an already-a-member row submits the form instead). Story 2.27 (new) gives
+Create the same `BranchPicker` plus a manifest-`sharedBranch`-aware base-branch default, closing
+the Create-side blocker. See `sprint-change-proposal-2026-09-16.md` for the full analysis.
+
 ## 2026-08-27 — Branch editing needs 3 explicit modes (pick existing w/ search, create new, rename current)
 
 **Status:** story ouverte (2.26) — see `sprint-change-proposal-2026-08-28-2.md`
