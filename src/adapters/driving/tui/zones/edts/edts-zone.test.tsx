@@ -10,8 +10,8 @@ import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { NO_BRANCH_CREATION } from '../../store/app-store.js';
+import { EdtsZone } from './edts-zone.js';
 import {
-  EdtsZone,
   advanceCreateFormFocus,
   appendHint,
   buildCreateBranchOptions,
@@ -46,7 +46,7 @@ import {
   validateBranchEditValue,
   validateCreateBranchFields,
   BRANCH_MAX_WIDTH,
-} from './edts-zone.js';
+} from './edts-zone.logic.js';
 
 function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
   return {
