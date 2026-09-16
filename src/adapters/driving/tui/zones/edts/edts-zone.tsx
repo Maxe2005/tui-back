@@ -29,7 +29,7 @@ import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../shared/components/branch-picker.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { FailedResultList, type FailedResultRow } from '../../shared/components/failed-result-list.js';
+import { FailedResultList } from '../../shared/components/failed-result-list.js';
 import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
@@ -64,19 +64,18 @@ import {
   resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
-  SERVICE_ACTION_MENU_ITEMS,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
   toggleMemberSelection,
   validateBranchEditValue,
-  type AddToEdtDialogState,
   type BranchPickerSession,
   type EdtDialogState,
   type ModifyDialogState,
-  type ServiceActionsDialogState,
 } from './edts-zone.logic.js';
+import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
 import { createCreateDialogHandlers, CreateDialogView } from './dialogs/create-dialog.js';
+import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
 
 export function EdtsZone({
@@ -691,264 +690,23 @@ export function EdtsZone({
     setDialog((prev) => (prev.kind === 'modify' ? { ...prev, topic: nextTextInputValue(prev.topic, input, key) } : prev));
   }
 
-  // Story 2.18: EDT SERVICES row contextual menu — "Remove from EDT" ------------------------
-  async function submitRemoveFromEdt(current: ServiceActionsDialogState) {
-    if (current.submitting) {
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
-    const result = await modifyEdtAction({ topic: current.edt.topic, addMembers: [], removeMembers: [current.repoPath], setBranches: [] });
-    if (result.ok) {
-      void loadEdts();
-      void loadEdtsBranches();
-      // Story 2.25: structured rows — Never boundary: remove-from-edt never touches a
-      // branch, so a row here never carries branch-owned-by-other-edt in practice (and even
-      // if it somehow did, this call site never wires a retry action for it).
-      const failedRows = summarizeFailedResults(result.data.results);
-      if (failedRows.length > 0) {
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, failedRows } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
-        return;
-      }
-      setDialog({ kind: 'none' });
-      await logEdtAction(current.edt.ulid, 'modify', 'success', `Removed ${current.serviceName} from EDT "${current.edt.topic}"`);
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, error: result.error.message } : prev));
-    await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
-  }
-
-  // Story 2.18: EDT SERVICES row contextual menu — "Change branch for this EDT" -------------
-  // Story 2.26: applies a confirmed BranchPickerOutcome for Service-actions' "Change branch for
-  // this EDT" — always an *existing* member (this menu only opens from an EDT-services row), so
-  // a 'rename' outcome always routes through modifyEdt's own renameBranches param, never a
-  // direct pre-step. 'create' still needs its own eager pre-step (branch creation has no
-  // membership semantics of its own — Design Notes) before the usual setBranches submit; a
-  // pre-step failure folds into this same failedRows/FailedResultList display, never a second
-  // error UI (Boundaries), by synthesizing the row directly instead of calling modifyEdtAction.
-  async function submitServiceActionsBranchOutcome(current: ServiceActionsDialogState, outcome: BranchPickerOutcome) {
-    if (current.submitting) {
-      return;
-    }
-    const attempted = outcome.kind === 'rename' ? outcome.newName : outcome.kind === 'create' ? outcome.branchName : outcome.branch;
-    const attemptedRenameOldName = outcome.kind === 'rename' ? outcome.oldName : null;
-    setDialog((prev) =>
-      prev.kind === 'service-actions'
-        ? { ...prev, submitting: true, error: null, failedRows: [], lastAttemptedBranch: attempted, lastAttemptedRenameOldName: attemptedRenameOldName }
-        : prev,
-    );
-
-    if (outcome.kind === 'create') {
-      const created = await createMemberBranchAction(current.repoPath, outcome.branchName, outcome.baseBranch);
-      if (!created.ok) {
-        const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: created.error.code, message: created.error.message }];
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchPicker: null, failedRows } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', created.error.message);
-        return;
-      }
-    }
-
-    const result = await modifyEdtAction({
-      topic: current.edt.topic,
-      addMembers: [],
-      removeMembers: [],
-      setBranches: outcome.kind === 'rename' ? [] : [{ repoPath: current.repoPath, branch: attempted }],
-      renameBranches: outcome.kind === 'rename' ? [{ repoPath: current.repoPath, newName: outcome.newName }] : [],
-    });
-    if (result.ok) {
-      void loadEdts();
-      void loadEdtsBranches();
-      const failedRows = summarizeFailedResults(result.data.results);
-      if (failedRows.length > 0) {
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchPicker: null, failedRows } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
-        return;
-      }
-      setDialog({ kind: 'none' });
-      await logEdtAction(current.edt.ulid, 'modify', 'success', `Changed branch for ${current.serviceName} to "${attempted}"`);
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchPicker: null, error: result.error.message } : prev));
-    await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
-  }
-
-  function openServiceActionsBranchPicker(
-    current: ServiceActionsDialogState,
-    options: { retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string } } = {},
-  ) {
-    const currentBranch = current.edt.members.find((member) => member.repoPath === current.repoPath)?.branch ?? '';
-    const session = createPickerSession(current.repoPath, {
-      suggestedName: currentBranch,
-      hasCurrentBranch: true,
-      currentBranch,
-      retry: options.retry,
-    });
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: session } : prev));
-  }
-
-  function handleServiceActionsBranchPickerInput(current: ServiceActionsDialogState, session: BranchPickerSession, input: string, key: Key) {
-    if (key.escape && current.submitting) {
-      // Review fix (story 2.18, carried over): never tear down the picker while a submit is
-      // in flight.
-      return;
-    }
-    const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
-    if (result.type === 'cancel') {
-      setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: null } : prev));
-      return;
-    }
-    if (result.type === 'submit') {
-      void submitServiceActionsBranchOutcome(current, result.outcome);
-      return;
-    }
-    setDialog((prev) =>
-      prev.kind === 'service-actions' && prev.branchPicker !== null ? { ...prev, branchPicker: { ...prev.branchPicker, state: result.state } } : prev,
-    );
-  }
-
-  // Boundary/Design Notes: the two new direct-action flows (this contextual menu's "Change
-  // branch" and the Add-to-EDT dialog below) open the branch picker straight from the
-  // row-level Enter handler — they never route through resolveModifyEnterAction/
-  // canEditMemberBranch (the big Modify dialog's own member-checklist Enter dispatch), so
-  // that check's existing restriction (member of target EDT AND currently checked) simply
-  // doesn't apply here: it's bypassed, not loosened.
-  function handleServiceActionsInput(current: ServiceActionsDialogState, input: string, key: Key) {
-    if (current.branchPicker !== null) {
-      handleServiceActionsBranchPickerInput(current, current.branchPicker, input, key);
-      return;
-    }
-    if (key.escape) {
-      if (!current.submitting) {
-        setDialog({ kind: 'none' });
-      }
-      return;
-    }
-    // Story 2.25/2.26: "try a different branch"/"try a different name" — reopens the branch
-    // picker pre-filled with `lastAttemptedBranch` (the value that just got rejected, tracked
-    // separately since this dialog's own branchPicker sub-state is cleared once a submit is in
-    // flight), rather than openServiceActionsBranchPicker's normal "still-current member
-    // branch" pre-fill. Confirming it re-runs submitServiceActionsBranchOutcome via the same
-    // picker dispatch above, unchanged — never a full-dialog restart. Takes priority over the
-    // SERVICE_ACTION_MENU_ITEMS dispatch below whenever a resolvable failure is showing.
-    if (key.return && !current.submitting) {
-      const retryRow = findRetryableFailedRow(current.failedRows);
-      if (retryRow !== undefined) {
-        const retry =
-          current.lastAttemptedRenameOldName !== null
-            ? { field: 'rename' as const, value: current.lastAttemptedBranch ?? '', oldName: current.lastAttemptedRenameOldName }
-            : { field: 'create-name' as const, value: current.lastAttemptedBranch ?? '' };
-        openServiceActionsBranchPicker(current, { retry });
-        return;
-      }
-    }
-    const jump = resolveSelectionJump(key);
-    if (jump !== null) {
-      setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: jumpSelection(jump, SERVICE_ACTION_MENU_ITEMS.length) } : prev));
-      return;
-    }
-    const direction = resolveSelectionDirection(key);
-    if (direction !== null) {
-      setDialog((prev) =>
-        prev.kind === 'service-actions' ? { ...prev, cursor: moveSelection(prev.cursor, direction, SERVICE_ACTION_MENU_ITEMS.length) } : prev,
-      );
-      return;
-    }
-    if (key.return) {
-      const item = SERVICE_ACTION_MENU_ITEMS[current.cursor];
-      if (item === undefined || item.disabled) {
-        // Restart is rendered disabled — Enter on it never dispatches (Boundaries).
-        return;
-      }
-      if (current.cursor === 0) {
-        void submitRemoveFromEdt(current);
-      } else {
-        openServiceActionsBranchPicker(current);
-      }
-    }
-  }
-
-  // Story 2.18: OTHER SERVICES row's Add-to-EDT dialog --------------------------------------
-  // Story 2.26: never a member yet, so a 'rename' outcome can never route through modifyEdt's
-  // own renameBranches param (nothing there to resolve `oldName` from) — it always takes the
-  // direct renameMemberBranch pre-step instead, mirroring 'create's own eager pre-step.
-  async function submitAddToEdtOutcome(current: AddToEdtDialogState, outcome: BranchPickerOutcome) {
-    if (current.submitting) {
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
-
-    let branch: string;
-    if (outcome.kind === 'set') {
-      branch = outcome.branch;
-    } else if (outcome.kind === 'create') {
-      const created = await createMemberBranchAction(current.repoPath, outcome.branchName, outcome.baseBranch);
-      if (!created.ok) {
-        const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: created.error.code, message: created.error.message }];
-        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', created.error.message);
-        return;
-      }
-      branch = outcome.branchName;
-    } else {
-      const renamed = await renameBranchAction(current.repoPath, outcome.oldName, outcome.newName);
-      if (!renamed.ok) {
-        const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: renamed.error.code, message: renamed.error.message }];
-        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', renamed.error.message);
-        return;
-      }
-      branch = outcome.newName;
-    }
-
-    const result = await modifyEdtAction({
-      topic: current.edt.topic,
-      addMembers: [current.repoPath],
-      removeMembers: [],
-      setBranches: [{ repoPath: current.repoPath, branch }],
-    });
-    if (result.ok) {
-      void loadEdts();
-      void loadEdtsBranches();
-      const failedRows = summarizeFailedResults(result.data.results);
-      if (failedRows.length > 0) {
-        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
-        await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
-        return;
-      }
-      setDialog({ kind: 'none' });
-      await logEdtAction(current.edt.ulid, 'modify', 'success', `Added ${current.serviceName} to EDT "${current.edt.topic}" on branch "${branch}"`);
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, error: result.error.message } : prev));
-    await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
-  }
-
-  function handleAddToEdtInput(current: AddToEdtDialogState, input: string, key: Key) {
-    if (current.submitting) {
-      return;
-    }
-    // Story 2.25/2.26: "try a different branch"/"try a different name" — the picker's own
-    // field is never cleared on failure (createPickerSession's suggestion/retry-prefill
-    // persist across a failed submit), so retrying here is just the normal picker Enter flow;
-    // nothing extra to wire, unlike Modify/service-actions (which reopen a fresh session).
-    if (current.branchPicker === null) {
-      return;
-    }
-    const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key);
-    if (result.type === 'cancel') {
-      setDialog({ kind: 'none' });
-      return;
-    }
-    if (result.type === 'submit') {
-      void submitAddToEdtOutcome(current, result.outcome);
-      return;
-    }
-    setDialog((prev) =>
-      prev.kind === 'add-to-edt' && prev.branchPicker !== null ? { ...prev, branchPicker: { ...prev.branchPicker, state: result.state } } : prev,
-    );
-  }
+  const { handleServiceActionsInput } = createServiceActionsDialogHandlers({
+    setDialog,
+    modifyEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    createMemberBranchAction,
+  });
+  const { handleAddToEdtInput } = createAddToEdtDialogHandlers({
+    setDialog,
+    modifyEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    createMemberBranchAction,
+    renameBranchAction,
+  });
 
   useInput((input, key) => {
     if (dialog.kind === 'create') {
@@ -1239,56 +997,9 @@ export function EdtsZone({
         </ModalDialog>
       ) : null}
 
-      {dialog.kind === 'service-actions' ? (
-        <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
-          <Box flexDirection="column">
-            <Text color={colors.text}>{dialog.serviceName}</Text>
-            {dialog.branchPicker !== null ? (
-              <>
-                <BranchPicker
-                  state={dialog.branchPicker.state}
-                  branches={dialog.branchPicker.branches}
-                  branchesStatus={dialog.branchPicker.branchesStatus}
-                  otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
-                />
-                {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-                {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
-              </>
-            ) : (
-              <>
-                {SERVICE_ACTION_MENU_ITEMS.map((item, index) => (
-                  <ListRow
-                    key={item.label}
-                    label={item.label}
-                    meta={item.disabled ? 'Available with Epic 5' : undefined}
-                    selected={index === dialog.cursor}
-                  />
-                ))}
-                {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-                {dialog.submitting ? <DimAnnotation text="Working…" /> : null}
-              </>
-            )}
-          </Box>
-        </ModalDialog>
-      ) : null}
+      {dialog.kind === 'service-actions' ? <ServiceActionsDialogView dialog={dialog} /> : null}
 
-      {dialog.kind === 'add-to-edt' ? (
-        <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
-          <Box flexDirection="column">
-            <Text color={colors.text}>Add {dialog.serviceName} to "{dialog.edt.topic}"</Text>
-            {dialog.branchPicker !== null ? (
-              <BranchPicker
-                state={dialog.branchPicker.state}
-                branches={dialog.branchPicker.branches}
-                branchesStatus={dialog.branchPicker.branchesStatus}
-                otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
-              />
-            ) : null}
-            {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-            {dialog.submitting ? <DimAnnotation text="Adding…" /> : null}
-          </Box>
-        </ModalDialog>
-      ) : null}
+      {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} /> : null}
     </Box>
   );
 }
