@@ -56,7 +56,6 @@ import {
   initialServiceActionsDialog,
   initialSwitchDialog,
   isBranchStepFocus,
-  isSwitchBlockedError,
   jumpSelection,
   moveSelection,
   type NamingMode,
@@ -84,8 +83,8 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
   type ServiceActionsDialogState,
-  type SwitchDialogState,
 } from './edts-zone.logic.js';
+import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
 
 export function EdtsZone({
   useStore = useAppStore,
@@ -378,6 +377,20 @@ export function EdtsZone({
     }
   }, [focusedEdt, edtActionLogStatus, loadEdtActionLog, lastLoadedEdtUlid]);
 
+  // Story 2.26 refactor: each dialog's own submit/input-handling logic lives in its own file
+  // under dialogs/ (see edts-zone.tsx's header) — these factories close over this render's own
+  // values (deps object recreated every render, same as the handlers it replaces were), so
+  // behavior is unchanged; only the code's location moved.
+  const { handleSwitchDialogInput } = createSwitchDialogHandlers({
+    setDialog,
+    switchEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    setCurrentEdtAction,
+    focusedEdt,
+  });
+
   function openEdtAction() {
     const target = edtsRows[clampedEdtsSelected];
     if (target === undefined) {
@@ -452,53 +465,6 @@ export function EdtsZone({
       if (focusedEdt) {
         await logEdtAction(focusedEdt.ulid, 'create', 'failed', result.error.message);
       }
-    }
-  }
-
-  async function handleSwitchConfirm(current: SwitchDialogState, force: boolean) {
-    // Guard against re-entrancy the same way handleCreateSubmit/handleModifySubmit already do.
-    if (current.submitting) {
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
-    const result = await switchEdtAction({ topic: current.target.topic, force });
-    if (result.ok) {
-      void loadEdts();
-      void loadEdtsBranches();
-      // Story 2.25: structured rows — Never boundary: switchActiveEdt carries no per-member
-      // branch override, so no row here ever gets a retry action wired, even one whose code
-      // happens to be branch-owned-by-other-edt (AC2's "no registered action" treatment).
-      // stripAssistedActionCodes enforces that at render time too, not just in the key
-      // dispatcher.
-      const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
-      if (failedRows.length > 0) {
-        setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: false, failedRows } : prev));
-        // Log failed action
-        if (focusedEdt) {
-          await logEdtAction(focusedEdt.ulid, 'switch', 'failed', failedRows.map((row) => row.message).join('; '));
-        }
-        return;
-      }
-      setDialog({ kind: 'none' });
-      // Log successful action
-      if (focusedEdt) {
-        await logEdtAction(focusedEdt.ulid, 'switch', 'success', `Switched to EDT "${current.target.topic}"${force ? ' (forced)' : ''}`);
-      }
-      return;
-    }
-    // switch-blocked-action-in-progress is surfaced as an explicit block/prompt
-    // (force-or-cancel); any other failure stays in switch-confirm with the error shown
-    // inline — never a silent return to the EDT list.
-    if (!force && isSwitchBlockedError(result.error.code)) {
-      setDialog((prev) =>
-        prev.kind === 'switch-confirm' ? { ...prev, submitting: false, blocked: true, error: result.error.message } : prev,
-      );
-      return;
-    }
-    setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: false, error: result.error.message } : prev));
-    // Log failed action
-    if (focusedEdt) {
-      await logEdtAction(focusedEdt.ulid, 'switch', 'failed', result.error.message);
     }
   }
 
@@ -848,19 +814,6 @@ export function EdtsZone({
       return;
     }
     setDialog((prev) => (prev.kind === 'create' ? { ...prev, topic: nextTextInputValue(prev.topic, input, key) } : prev));
-  }
-
-  function handleSwitchDialogInput(current: SwitchDialogState, _input: string, key: Key) {
-    if (key.escape) {
-      if (!current.submitting) {
-        setDialog({ kind: 'none' });
-        setCurrentEdtAction(null);
-      }
-      return;
-    }
-    if (key.return) {
-      void handleSwitchConfirm(current, current.blocked);
-    }
   }
 
   function handleModifyDialogInput(current: ModifyDialogState, input: string, key: Key) {
@@ -1529,27 +1482,7 @@ export function EdtsZone({
         </ModalDialog>
       ) : null}
 
-      {dialog.kind === 'switch-confirm' ? (
-        <ModalDialog title="SWITCH EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
-          <Box flexDirection="column">
-            {dialog.blocked ? (
-              <>
-                <Text color={colors.warning}>
-                  Cannot switch away: an action is in progress on the current EDT.
-                </Text>
-                <Text color={colors.text}>[Enter] force switch anyway  [Esc] cancel</Text>
-              </>
-            ) : (
-              <>
-                <Text color={colors.text}>Switch to "{dialog.target.topic}"?</Text>
-                <Text color={colors.text}>[Enter] confirm  [Esc] cancel</Text>
-              </>
-            )}
-            {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-            {dialog.submitting ? <DimAnnotation text="Switching…" /> : null}
-          </Box>
-        </ModalDialog>
-      ) : null}
+      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} /> : null}
 
       {dialog.kind === 'modify' ? (
         <ModalDialog title="MODIFY EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
