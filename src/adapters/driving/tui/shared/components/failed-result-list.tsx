@@ -25,8 +25,13 @@ export type AssistedAction = {
 };
 
 // The extensible registry (Boundaries: "Record<string, AssistedAction>, one entry today").
+// Story 2.26 adds a second entry: `branch-exists` (adapters/driven/git/index.ts's
+// createBranch/renameBranch — the branch-picker's Create-new and rename flows both reuse
+// createBranch's exact code, per that story's Boundaries) -> "try a different name", reopening
+// the picker's name/rename field pre-filled with the collided value.
 const ASSISTED_ACTIONS: Record<string, AssistedAction> = {
   'branch-owned-by-other-edt': { label: 'try a different branch' },
+  'branch-exists': { label: 'try a different name' },
 };
 
 export function resolveAssistedAction(code: string | undefined): AssistedAction | null {

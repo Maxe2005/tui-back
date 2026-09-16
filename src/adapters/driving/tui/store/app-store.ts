@@ -12,6 +12,9 @@ import {
 } from '../../../../core/edt/switch.js';
 import {
   modifyEdt as modifyEdtUseCase,
+  createMemberBranch as createMemberBranchUseCase,
+  renameMemberBranch as renameMemberBranchUseCase,
+  listMemberBranches as listMemberBranchesUseCase,
   type ModifyEdtData,
 } from '../../../../core/edt/modify.js';
 import {
@@ -101,6 +104,9 @@ export type ModifyEdtParams = {
   removeMembers: string[];
   setBranches: Array<{ repoPath: string; branch: string }>;
   renameTo?: string;
+  // Story 2.26: mirrors setBranches's shape — see core/edt/modify.ts's ModifyEdtParams for the
+  // full semantics (always renames a member's own currently-registered branch).
+  renameBranches?: Array<{ repoPath: string; newName: string }>;
 };
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
@@ -243,6 +249,14 @@ export type AppState = {
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
+  // Story 2.26: the shared branch-picker's own two capabilities, wrapping core/edt/modify.ts's
+  // listMemberBranches/createMemberBranch exports (never `deps.git` directly — Design Notes).
+  // `renameBranch` backs the picker's Pick-existing row-rename pre-step at Add-to-EDT, the one
+  // entry point where modifyEdt's own `renameBranches` param structurally cannot apply (no
+  // existing membership to resolve `oldName` from).
+  listBranches: (repoPath: string) => Promise<Result<string[]>>;
+  createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
+  renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<Result<void>>;
   // Story 2.9: set by a zone while one of its own dialogs/forms has captured keyboard input
   // (create/switch-confirm/modify/branch-edit) — gates AppShell's global shortcuts (`?`,
   // zone mnemonics, `/`, `:`, `q`) so a typed character (including `?`) never leaks through
@@ -643,6 +657,7 @@ export function createAppStore(deps?: AppStoreDeps) {
         removeMembers: params.removeMembers,
         setBranches: params.setBranches,
         renameTo: params.renameTo,
+        renameBranches: params.renameBranches,
       });
       if (result.ok) {
         // Story 2.13: a member add/remove may target the active EDT — reload gated-tab
@@ -653,6 +668,24 @@ export function createAppStore(deps?: AppStoreDeps) {
         void get().loadTabVisibility();
       }
       return result;
+    },
+    listBranches: async (repoPath) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return listMemberBranchesUseCase(deps.git, repoPath);
+    },
+    createMemberBranch: async (repoPath, branchName, baseBranch) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return createMemberBranchUseCase({ git: deps.git, repoPath, branchName, baseBranch });
+    },
+    renameBranch: async (repoPath, oldName, newName) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return renameMemberBranchUseCase({ git: deps.git, repoPath, oldName, newName });
     },
     zoneInputCaptured: false,
     setZoneInputCaptured: (value) => set({ zoneInputCaptured: value }),

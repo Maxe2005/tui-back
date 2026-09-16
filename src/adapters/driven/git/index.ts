@@ -45,6 +45,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     restoreStash: (repoPath, message) => restoreStash(repoPath, message),
     branchExistsLocally: (repoPath, branchName) => branchExistsLocally(repoPath, branchName),
     fetch: (repoPath, branchName) => fetchBranch(repoPath, branchName),
+    listBranches: (repoPath) => listBranches(repoPath),
+    renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
   };
 }
 
@@ -370,6 +372,72 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
   });
   if (result.status !== 0) {
     return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.26 — the branch-picker's candidate source: `refs/heads/` only (local-only, never
+// `refs/remotes/...`), mirroring branchExistsLocally's local-only scope. One branch name per
+// line; blank lines (a trailing newline on the last ref) are filtered out.
+export async function listBranches(repoPath: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    return err('git-list-branches-error', `git for-each-ref failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  const branches = String(result.stdout)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  return ok(branches);
+}
+
+// Story 2.26 — renames a local branch ref. Gates the *new* name the same way createBranch
+// gates its own target (assertAllowedBranch, no edtId — a rename lands a branchName exactly
+// like a create does, so it must pass the identical shared-branch check). Reuses createBranch's
+// exact 'branch-exists' code when newName is already taken (Boundaries: "reuse createBranch's
+// exact code") so FailedResultList's registry entry for it applies uniformly regardless of
+// which git write produced the collision. A missing oldName is a distinct, new failure mode
+// ('branch-missing') — never silently folded into 'branch-exists' or a generic git error.
+export async function renameBranch(
+  manifest: ManifestPort,
+  repoPath: string,
+  oldName: string,
+  newName: string,
+): Promise<Result<void>> {
+  const allowed = await assertAllowedBranch(manifest, repoPath, newName);
+  if (!allowed.ok) {
+    return allowed;
+  }
+
+  const source = showRef(repoPath, oldName);
+  if (source.kind === 'missing') {
+    return err('branch-missing', `Branch "${oldName}" does not exist in ${repoPath}`);
+  }
+  if (source.kind === 'error') {
+    return err('git-rename-branch-error', `Cannot verify branch state in ${repoPath}: ${source.detail}`);
+  }
+
+  // Renaming a branch to its own current name is a no-op success, not a collision — checked
+  // only once oldName is confirmed to actually exist, so a genuinely missing branch still
+  // surfaces as branch-missing rather than a false no-op success.
+  if (oldName === newName) {
+    return ok(undefined);
+  }
+
+  const target = showRef(repoPath, newName);
+  if (target.kind === 'exists') {
+    return err('branch-exists', `Branch "${newName}" already exists in ${repoPath}`);
+  }
+  if (target.kind === 'error') {
+    return err('git-rename-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
+  }
+
+  const renamed = spawnSync('git', ['branch', '-m', '--', oldName, newName], { cwd: repoPath, encoding: 'utf8' });
+  if (renamed.status !== 0) {
+    return err('git-rename-branch-error', `git branch -m failed in ${repoPath}: ${spawnFailureDetail(renamed)}`);
   }
   return ok(undefined);
 }

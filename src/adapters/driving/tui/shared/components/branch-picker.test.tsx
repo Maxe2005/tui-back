@@ -1,0 +1,295 @@
+import { describe, it, expect } from 'vitest';
+import {
+  BranchPicker,
+  applyBranchPickerRetry,
+  createBranchPickerState,
+  cycleBranchPickerMode,
+  handleBranchPickerKey,
+  matchBranchesByPrefix,
+  type BranchPickerState,
+} from './index.js';
+import { renderToString } from './render-to-string.js';
+
+function baseState(overrides: Partial<BranchPickerState> = {}): BranchPickerState {
+  return {
+    ...createBranchPickerState({
+      suggestedName: 'feature-suggested',
+      defaultBaseBranch: 'development',
+      hasCurrentBranch: true,
+      currentBranch: 'main',
+    }),
+    ...overrides,
+  };
+}
+
+describe('cycleBranchPickerMode', () => {
+  it('cycles Pick existing -> Create new -> Rename current -> Pick existing when a current branch exists', () => {
+    expect(cycleBranchPickerMode('pick-existing', true)).toBe('create-new');
+    expect(cycleBranchPickerMode('create-new', true)).toBe('rename-current');
+    expect(cycleBranchPickerMode('rename-current', true)).toBe('pick-existing');
+  });
+
+  it('skips Rename current entirely when there is no current branch to rename (Add-to-EDT)', () => {
+    expect(cycleBranchPickerMode('pick-existing', false)).toBe('create-new');
+    expect(cycleBranchPickerMode('create-new', false)).toBe('pick-existing');
+  });
+});
+
+describe('matchBranchesByPrefix', () => {
+  it('case-insensitive prefix match, same convention as matchCommands', () => {
+    expect(matchBranchesByPrefix('feat', ['feature-x', 'FEATURE-Y', 'main', 'development'])).toEqual(['feature-x', 'FEATURE-Y']);
+  });
+
+  it('an empty query matches every branch', () => {
+    expect(matchBranchesByPrefix('', ['a', 'b'])).toEqual(['a', 'b']);
+  });
+
+  it('matches nothing when no branch shares the prefix', () => {
+    expect(matchBranchesByPrefix('zzz', ['a', 'b'])).toEqual([]);
+  });
+});
+
+describe('createBranchPickerState', () => {
+  it('defaults to Create new, pre-filled with the suggestion (Boundaries: "defaults to Create new")', () => {
+    const state = createBranchPickerState({
+      suggestedName: 'feature-suggested',
+      defaultBaseBranch: 'development',
+      hasCurrentBranch: true,
+      currentBranch: 'main',
+    });
+    expect(state.mode).toBe('create-new');
+    expect(state.nameValue).toBe('feature-suggested');
+    expect(state.baseBranch).toBe('development');
+    expect(state.baseFocused).toBe(true);
+  });
+});
+
+describe('handleBranchPickerKey — mode cycling (Tab)', () => {
+  it('Tab cycles the mode switch', () => {
+    const state = baseState();
+    const result = handleBranchPickerKey(state, [], [], '', { tab: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.mode).toBe('rename-current');
+      // Pre-selected onto the current branch, skipping the picking step (Boundaries).
+      expect(result.state.renameSub).toEqual({ oldName: 'main', value: 'main', error: null });
+    }
+  });
+
+  it('Tab from Rename current wraps back to Pick existing', () => {
+    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'main', error: null } });
+    const result = handleBranchPickerKey(state, [], [], '', { tab: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.mode).toBe('pick-existing');
+      expect(result.state.renameSub).toBeNull();
+    }
+  });
+
+  it('Tab never offers Rename current when there is no current branch (Add-to-EDT)', () => {
+    const state = baseState({ hasCurrentBranch: false, currentBranch: '' });
+    const result = handleBranchPickerKey(state, [], [], '', { tab: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.mode).toBe('pick-existing');
+    }
+  });
+});
+
+describe('handleBranchPickerKey — Create new', () => {
+  it('Enter on the base-branch field advances to the name field without submitting', () => {
+    const state = baseState();
+    const result = handleBranchPickerKey(state, [], [], '', { return: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.baseFocused).toBe(false);
+    }
+  });
+
+  it('typing edits the currently-focused field only', () => {
+    const state = baseState({ baseFocused: true, baseBranch: '' });
+    const result = handleBranchPickerKey(state, [], [], 'd', {});
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.baseBranch).toBe('d');
+      expect(result.state.nameValue).toBe('feature-suggested');
+    }
+  });
+
+  it('Enter on the name field submits a create outcome with the trimmed name and base branch', () => {
+    const state = baseState({ baseFocused: false, baseBranch: 'development', nameValue: 'feature-x' });
+    const result = handleBranchPickerKey(state, [], [], '', { return: true });
+    expect(result).toEqual({ type: 'submit', outcome: { kind: 'create', branchName: 'feature-x', baseBranch: 'development' } });
+  });
+
+  it('rejects an empty name inline, never submits', () => {
+    const state = baseState({ baseFocused: false, nameValue: '' });
+    const result = handleBranchPickerKey(state, [], [], '', { return: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.error).toBe('Branch name must not be empty');
+    }
+  });
+
+  it('down-arrow on the name field opens the other-members sub-list; Enter there fills the field without submitting', () => {
+    const state = baseState({ baseFocused: false, nameValue: 'feature-x' });
+    const opened = handleBranchPickerKey(state, [], ['shared-feature', 'other-feature'], '', { downArrow: true });
+    expect(opened.type).toBe('update');
+    if (opened.type !== 'update') return;
+    expect(opened.state.nameSubListOpen).toBe(true);
+    expect(opened.state.nameSubListCursor).toBe(0);
+
+    const picked = handleBranchPickerKey(opened.state, [], ['shared-feature', 'other-feature'], '', { return: true });
+    expect(picked.type).toBe('update');
+    if (picked.type === 'update') {
+      expect(picked.state.nameValue).toBe('shared-feature');
+      expect(picked.state.nameSubListOpen).toBe(false);
+    }
+  });
+
+  it('Escape closes an open sub-list without cancelling the whole picker', () => {
+    const state = baseState({ baseFocused: false, nameSubListOpen: true });
+    const result = handleBranchPickerKey(state, [], ['a'], '', { escape: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.nameSubListOpen).toBe(false);
+    }
+  });
+});
+
+describe('handleBranchPickerKey — Pick existing', () => {
+  function pickState(overrides: Partial<BranchPickerState> = {}): BranchPickerState {
+    return baseState({ mode: 'pick-existing', pickQuery: '', pickCursor: 0, ...overrides });
+  }
+
+  it('typing filters the branch list (case-insensitive prefix)', () => {
+    const state = pickState();
+    const result = handleBranchPickerKey(state, ['feature-x', 'main'], [], 'f', {});
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.pickQuery).toBe('f');
+      expect(matchBranchesByPrefix(result.state.pickQuery, ['feature-x', 'main'])).toEqual(['feature-x']);
+    }
+  });
+
+  it('select+confirm sets that branch — no branch created', () => {
+    const state = pickState({ pickCursor: 0 });
+    const result = handleBranchPickerKey(state, ['feature-x', 'main'], [], '', { return: true });
+    expect(result).toEqual({ type: 'submit', outcome: { kind: 'set', branch: 'feature-x' } });
+  });
+
+  it('Ctrl+R on a row opens its inline rename field, pre-filled with the selected branch', () => {
+    const state = pickState({ pickCursor: 1 });
+    const result = handleBranchPickerKey(state, ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub).toEqual({ oldName: 'shared-feature', value: 'shared-feature', error: null });
+    }
+  });
+
+  it('confirming the rename field submits a rename outcome in one step', () => {
+    const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'shared-feature-v2', error: null } });
+    const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { return: true });
+    expect(result).toEqual({ type: 'submit', outcome: { kind: 'rename', oldName: 'shared-feature', newName: 'shared-feature-v2' } });
+  });
+
+  it('rejects an empty rename value inline', () => {
+    const state = pickState({ renameSub: { oldName: 'shared-feature', value: '', error: null } });
+    const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { return: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub?.error).toBe('Branch name must not be empty');
+    }
+  });
+
+  it('Escape from the rename sub-view returns to the list, not a full cancel', () => {
+    const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'x', error: null } });
+    const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { escape: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub).toBeNull();
+    }
+  });
+});
+
+describe('handleBranchPickerKey — Rename current', () => {
+  it('pre-selected onto the current branch, confirming submits a rename outcome', () => {
+    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'feature-renamed', error: null } });
+    const result = handleBranchPickerKey(state, [], [], '', { return: true });
+    expect(result).toEqual({ type: 'submit', outcome: { kind: 'rename', oldName: 'main', newName: 'feature-renamed' } });
+  });
+
+  it('rejects an emptied value inline, never submits', () => {
+    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: '', error: null } });
+    const result = handleBranchPickerKey(state, [], [], '', { return: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub?.error).toBe('Branch name must not be empty');
+    }
+  });
+});
+
+describe('handleBranchPickerKey — cancel', () => {
+  it('Escape from the top level (no sub-view open) cancels the whole picker', () => {
+    const state = baseState();
+    expect(handleBranchPickerKey(state, [], [], '', { escape: true })).toEqual({ type: 'cancel' });
+  });
+});
+
+describe('applyBranchPickerRetry', () => {
+  it('a "try a different name" retry reopens Create new\'s name field pre-filled with the collided value', () => {
+    const state = baseState({ mode: 'pick-existing' });
+    const retried = applyBranchPickerRetry(state, { field: 'create-name', value: 'feature-collided' });
+    expect(retried.mode).toBe('create-new');
+    expect(retried.baseFocused).toBe(false);
+    expect(retried.nameValue).toBe('feature-collided');
+  });
+
+  it('a "try a different branch" retry reopens the rename field pre-filled with the collided value', () => {
+    const state = baseState({ mode: 'pick-existing' });
+    const retried = applyBranchPickerRetry(state, { field: 'rename', value: 'feature-collided', oldName: 'main' });
+    expect(retried.mode).toBe('rename-current');
+    expect(retried.renameSub).toEqual({ oldName: 'main', value: 'feature-collided', error: null });
+  });
+});
+
+describe('BranchPicker rendering', () => {
+  it('shows the 3-way mode switch defaulting to Create new, with the suggestion pre-filled', async () => {
+    const state = createBranchPickerState({
+      suggestedName: 'feature-suggested',
+      defaultBaseBranch: 'development',
+      hasCurrentBranch: true,
+      currentBranch: 'main',
+    });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={['development']} branchesStatus="ready" otherMemberBranches={[]} />,
+    );
+    expect(output).toContain('[Create new]');
+    expect(output).toContain('Pick existing');
+    expect(output).toContain('Rename current');
+    expect(output).toContain('Base branch: development');
+    expect(output).toContain('Name: feature-suggested');
+  });
+
+  it('never offers Rename current when there is no current branch (Add-to-EDT)', async () => {
+    const state = createBranchPickerState({
+      suggestedName: 'feature-suggested',
+      defaultBaseBranch: 'development',
+      hasCurrentBranch: false,
+      currentBranch: '',
+    });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={[]} branchesStatus="ready" otherMemberBranches={[]} />,
+    );
+    expect(output).not.toContain('Rename current');
+  });
+
+  it('renders the filtered branch list in Pick existing mode', async () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'feat' });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={['feature-x', 'main']} branchesStatus="ready" otherMemberBranches={[]} />,
+    );
+    expect(output).toContain('feature-x');
+    expect(output).not.toContain('main');
+  });
+});

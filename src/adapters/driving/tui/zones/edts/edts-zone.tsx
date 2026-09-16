@@ -24,6 +24,14 @@ import type { NavigationKey } from '../../keybindings/index.js';
 import { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION, useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
+import {
+  BranchPicker,
+  applyBranchPickerRetry,
+  createBranchPickerState,
+  handleBranchPickerKey,
+  type BranchPickerOutcome,
+  type BranchPickerState,
+} from '../../shared/components/branch-picker.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { FailedResultList, resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
@@ -637,17 +645,26 @@ export interface ResolvedModifyOps {
   addMembers: string[];
   removeMembers: string[];
   setBranches: Array<{ repoPath: string; branch: string }>;
+  renameBranches: Array<{ repoPath: string; newName: string }>;
   renameTo?: string;
 }
 
 // The modify form's submit-op derivation, extracted as a pure function so the boundary rule
 // ("drop any staged branch-edit for a member no longer in the current selection") is
 // directly unit-testable without an async submit round-trip.
+//
+// Story 2.26: `branchRenames` is a sibling of `branchEdits` (never overlapping — see
+// stageBranchPickerOutcome's comment: a "Rename current"/Pick-existing-rename outcome on an
+// *existing* member stages into branchRenames only, never also into branchEdits, since
+// modifyEdt's renameBranches step alone both renames the ref and records the branch change —
+// no checkout needed). Same drop-if-unselected rule as setBranches: a rename staged for a
+// since-unchecked member must never reach modifyEdt either.
 export function resolveModifyOps(
   target: EdtRegistryEntry,
   topic: string,
   selectedMembers: readonly string[],
   branchEdits: Readonly<Record<string, string>>,
+  branchRenames: Readonly<Record<string, string>> = {},
 ): ResolvedModifyOps {
   const originalPaths = new Set(target.members.map((member) => member.repoPath));
   const selectedPaths = new Set(selectedMembers);
@@ -672,6 +689,10 @@ export function resolveModifyOps(
   }
   const setBranches = Array.from(branchEditsForSelected.entries()).map(([repoPath, branch]) => ({ repoPath, branch }));
 
+  const renameBranches = Object.entries(branchRenames)
+    .filter(([path]) => selectedPaths.has(path))
+    .map(([repoPath, newName]) => ({ repoPath, newName }));
+
   const trimmedTopic = topic.trim();
   const renameTo = trimmedTopic !== '' && trimmedTopic !== target.topic ? trimmedTopic : undefined;
 
@@ -679,6 +700,7 @@ export function resolveModifyOps(
     addMembers,
     removeMembers,
     setBranches,
+    renameBranches,
     ...(renameTo !== undefined ? { renameTo } : {}),
   };
 }
@@ -720,17 +742,19 @@ type SwitchDialogState = {
   blocked: boolean;
 };
 
-type BranchEditState = {
+// Story 2.26: a live branch-picker session, opened over any of the 3 non-creation branch-entry
+// points in place of the old free-text BranchEditState sub-dialog. `branches`/`branchesStatus`
+// are this repoPath's own `listBranches()` result (fetched once, when the session opens —
+// mirrors the rest of this file's "fetched on open, not continuously re-synced" convention).
+type BranchPickerSession = {
   repoPath: string;
-  value: string;
-  error: string | null;
-  // Story 2.25: set only when this branch-edit sub-view was opened by the "try a different
-  // branch" retry action (Modify's version of it — service-actions/add-to-edt already
-  // resubmit on confirm unconditionally, so they need no equivalent flag) — confirming it
-  // re-runs submitModify immediately (Boundaries: "confirming re-runs the same submit
-  // function ... not a full-dialog restart"), unlike a normal member-row branch edit, which
-  // only stages the value pending a later, separate submit (other members may still need
-  // checking/unchecking first).
+  state: BranchPickerState;
+  branches: string[];
+  branchesStatus: 'loading' | 'ready' | 'error';
+  // Story 2.25's retry mechanism, carried over: set only when this session was opened by the
+  // "try a different name"/"try a different branch" assisted action — confirming it re-runs
+  // the owning dialog's own submit immediately (Modify: submitModify; service-actions/
+  // add-to-edt already resubmit on every confirm unconditionally, so they never set this).
   autoSubmitOnConfirm?: boolean;
 };
 
@@ -742,7 +766,12 @@ type ModifyDialogState = {
   selectedMembers: readonly string[];
   memberCursor: number;
   branchEdits: Readonly<Record<string, string>>;
-  branchEdit: BranchEditState | null;
+  // Story 2.26: a rename staged for an *existing* member (Rename current, or Pick-existing's
+  // row-rename landing on that member's own branch) — sibling of branchEdits, never
+  // overlapping it (see resolveModifyOps). A not-yet-member's rename outcome instead lands in
+  // branchEdits directly, after an eager renameMemberBranch pre-step (stageBranchPickerOutcome).
+  branchRenames: Readonly<Record<string, string>>;
+  branchPicker: BranchPickerSession | null;
   submitting: boolean;
   error: string | null;
   failedRows: FailedResultRow[];
@@ -765,28 +794,32 @@ type ServiceActionsDialogState = {
   repoPath: string;
   serviceName: string;
   cursor: number;
-  branchEdit: BranchEditState | null;
+  branchPicker: BranchPickerSession | null;
   submitting: boolean;
   error: string | null;
   failedRows: FailedResultRow[];
   // Story 2.25: the branch value last attempted via submitServiceActionsBranchChange — kept
   // around (never cleared, including on failure) purely so a "try a different branch" retry
-  // can reopen the branch-edit sub-dialog pre-filled with the value that just got rejected,
+  // can reopen the branch-picker session pre-filled with the value that just got rejected,
   // rather than the member's still-current branch.
   lastAttemptedBranch: string | null;
+  // Story 2.26: set only when the failed attempt was a 'rename' outcome (its oldName) — lets a
+  // retry reopen onto the picker's actual originating field (rename) instead of always forcing
+  // Create-new, which would otherwise try to *create* a branch when the user meant to rename.
+  lastAttemptedRenameOldName: string | null;
 };
 
-// Story 2.18: the OTHER SERVICES row's Add-to-EDT dialog opened by Enter — a single
-// branch-edit text input, pre-filled with the service's current branch
-// (ServiceBranchDivergence.branch), editable; confirm calls modifyEdt with both `addMembers`
-// and `setBranches` for the same repoPath in one call (core/edt/modify.ts already composes
-// these correctly — see Design Notes).
+// Story 2.18: the OTHER SERVICES row's Add-to-EDT dialog opened by Enter — story 2.26 replaces
+// its single free-text field with the shared branch-picker, opened immediately (there is no
+// "current branch" step to gate behind here, so the picker *is* the dialog's whole branch
+// step); confirm calls modifyEdt with both `addMembers` and `setBranches` for the same repoPath
+// in one call (core/edt/modify.ts already composes these correctly — see Design Notes).
 type AddToEdtDialogState = {
   kind: 'add-to-edt';
   edt: EdtRegistryEntry;
   repoPath: string;
   serviceName: string;
-  value: string;
+  branchPicker: BranchPickerSession | null;
   error: string | null;
   failedRows: FailedResultRow[];
   submitting: boolean;
@@ -833,7 +866,8 @@ function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {
     selectedMembers: target.members.map((member) => member.repoPath),
     memberCursor: 0,
     branchEdits: {},
-    branchEdit: null,
+    branchRenames: {},
+    branchPicker: null,
     submitting: false,
     error: null,
     failedRows: [],
@@ -847,12 +881,39 @@ function initialServiceActionsDialog(edt: EdtRegistryEntry, repoPath: string, se
     repoPath,
     serviceName,
     cursor: 0,
-    branchEdit: null,
+    branchPicker: null,
     submitting: false,
     error: null,
     failedRows: [],
     lastAttemptedBranch: null,
+    lastAttemptedRenameOldName: null,
   };
+}
+
+// Story 2.26: opens a fresh branch-picker session for repoPath — `branches`/`branchesStatus`
+// start empty/'loading'; the zone's own effect (below, mirroring loadEdtsBranches' "fetch once
+// on the relevant state change" convention) fetches listBranches(repoPath) once and fills them
+// in, regardless of which of the 3 entry points created this session.
+function createPickerSession(
+  repoPath: string,
+  options: {
+    suggestedName: string;
+    hasCurrentBranch: boolean;
+    currentBranch: string;
+    retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string };
+    autoSubmitOnConfirm?: boolean;
+  },
+): BranchPickerSession {
+  let state = createBranchPickerState({
+    suggestedName: options.suggestedName,
+    defaultBaseBranch: DEFAULT_BASE_BRANCH,
+    hasCurrentBranch: options.hasCurrentBranch,
+    currentBranch: options.currentBranch,
+  });
+  if (options.retry !== undefined) {
+    state = applyBranchPickerRetry(state, options.retry);
+  }
+  return { repoPath, state, branches: [], branchesStatus: 'loading', autoSubmitOnConfirm: options.autoSubmitOnConfirm };
 }
 
 function initialAddToEdtDialog(
@@ -866,7 +927,15 @@ function initialAddToEdtDialog(
     edt,
     repoPath,
     serviceName,
-    value: currentBranch ?? '',
+    // Story 2.26: the picker is this dialog's whole branch step (Boundaries: "never at
+    // Add-to-EDT" only rules out Rename current — the picker itself opens immediately here,
+    // defaulting to Create new pre-filled with the candidate's own current git branch, exactly
+    // as the old free-text field used to).
+    branchPicker: createPickerSession(repoPath, {
+      suggestedName: currentBranch ?? '',
+      hasCurrentBranch: false,
+      currentBranch: '',
+    }),
     error: null,
     failedRows: [],
     submitting: false,
@@ -912,6 +981,12 @@ export function EdtsZone({
   const createEdtAction = useStore((state) => state.createEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
   const modifyEdtAction = useStore((state) => state.modifyEdt);
+  // Story 2.26: the shared branch-picker's own store actions (Design Notes: `deps.git` is
+  // still never touched directly from this zone — these wrap core/edt/modify.ts's
+  // listMemberBranches/createMemberBranch/renameMemberBranch exports).
+  const listBranchesAction = useStore((state) => state.listBranches);
+  const createMemberBranchAction = useStore((state) => state.createMemberBranch);
+  const renameBranchAction = useStore((state) => state.renameBranch);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const requestQuit = useStore((state) => state.requestQuit);
   // Story 2.14 review fix: Ink dispatches every keypress to every mounted `useInput` hook
@@ -1047,6 +1122,49 @@ export function EdtsZone({
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+
+  // Story 2.26: fetches a branch-picker session's own listBranches(repoPath) once, whenever a
+  // session opens (any of the 3 entry points, via createPickerSession's branchesStatus:
+  // 'loading' seed) — never re-fetched on every render, mirroring loadEdtsBranches' own
+  // "fetched on the relevant change, not continuously re-synced" convention. A stale response
+  // (the picker closed, or a different repoPath's session opened, before this resolved) is
+  // dropped rather than applied.
+  const activeBranchPicker =
+    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' ? dialog.branchPicker : null;
+  // Keyed on repoPath/branchesStatus (primitives) rather than the activeBranchPicker object
+  // itself — that object is freshly spread on every keystroke inside the picker (session.state
+  // updates), which would otherwise re-fire this effect (and spawn a new listBranches() git
+  // call) on every keystroke typed while still 'loading', instead of once per session-open.
+  const activeBranchPickerRepoPath = activeBranchPicker?.repoPath ?? null;
+  const activeBranchPickerStatus = activeBranchPicker?.branchesStatus ?? null;
+  useEffect(() => {
+    if (activeBranchPickerRepoPath === null || activeBranchPickerStatus !== 'loading') {
+      return;
+    }
+    let cancelled = false;
+    const repoPath = activeBranchPickerRepoPath;
+    void (async () => {
+      const result = await listBranchesAction(repoPath);
+      if (cancelled) {
+        return;
+      }
+      setDialog((prev) => {
+        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt') {
+          return prev;
+        }
+        if (prev.branchPicker === null || prev.branchPicker.repoPath !== repoPath || prev.branchPicker.branchesStatus !== 'loading') {
+          return prev;
+        }
+        return {
+          ...prev,
+          branchPicker: { ...prev.branchPicker, branches: result.ok ? result.data : [], branchesStatus: result.ok ? 'ready' : 'error' },
+        };
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBranchPickerRepoPath, activeBranchPickerStatus, listBranchesAction]);
 
   // Story 2.15: handle command-triggered dialogs via currentEdtAction state.
   // When a command sets currentEdtAction, open the corresponding dialog.
@@ -1257,15 +1375,16 @@ export function EdtsZone({
         }
       }
     }
-    const ops = resolveModifyOps(current.target, current.topic, current.selectedMembers, current.branchEdits);
+    const ops = resolveModifyOps(current.target, current.topic, current.selectedMembers, current.branchEdits, current.branchRenames);
     setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
     const result = await modifyEdtAction({ topic: current.target.topic, ...ops });
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      // Story 2.25: structured rows — note `current.branchEdits` (read by openBranchEdit
-      // below) is never cleared on failure, so a "try a different branch" retry on one of
-      // these rows naturally reopens pre-filled with the value that just got rejected.
+      // Story 2.25: structured rows — note `current.branchEdits`/`branchRenames` (read by
+      // openBranchPickerForModify below) are never cleared on failure, so a "try a different
+      // branch"/"try a different name" retry on one of these rows naturally reopens pre-filled
+      // with the value that just got rejected.
       const failedRows = summarizeFailedResults(result.data.results);
       if (failedRows.length > 0) {
         setDialog((prev) => (prev.kind === 'modify' ? { ...prev, submitting: false, failedRows } : prev));
@@ -1288,6 +1407,7 @@ export function EdtsZone({
         const addPaths = new Set(ops.addMembers);
         const actualBranchChanges = ops.setBranches.filter((entry) => !addPaths.has(entry.repoPath));
         if (actualBranchChanges.length > 0) changes.push(`changed ${actualBranchChanges.length} branch(es)`);
+        if (ops.renameBranches.length > 0) changes.push(`renamed ${ops.renameBranches.length} branch(es)`);
         if (ops.renameTo) changes.push(`renamed to "${ops.renameTo}"`);
         const detail = changes.length > 0 ? changes.join(', ') : 'no changes';
         await logEdtAction(focusedEdt.ulid, 'modify', 'success', detail);
@@ -1301,13 +1421,115 @@ export function EdtsZone({
     }
   }
 
-  function openBranchEdit(current: ModifyDialogState, repoPath: string, options: { autoSubmitOnConfirm?: boolean } = {}) {
-    const existing =
-      current.branchEdits[repoPath] ?? current.target.members.find((member) => member.repoPath === repoPath)?.branch ?? '';
+  // Story 2.26: opens the shared branch-picker over `repoPath`, replacing the old free-text
+  // branch-edit sub-dialog. `hasCurrentBranch`/`currentBranch` come from this EDT's own
+  // membership — an existing member offers Rename current (pre-selected onto its own branch);
+  // a not-yet-member candidate (newly checked in the checklist) never does (Boundaries).
+  function openBranchPickerForModify(
+    current: ModifyDialogState,
+    repoPath: string,
+    options: { retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string }; autoSubmitOnConfirm?: boolean } = {},
+  ) {
+    const member = current.target.members.find((candidate) => candidate.repoPath === repoPath);
+    const hasCurrentBranch = member !== undefined;
+    const currentBranch = member?.branch ?? '';
+    const suggestion =
+      current.branchEdits[repoPath] ?? current.branchRenames[repoPath] ?? currentBranch ?? suggestBranchForNewMember(current.target.members, current.topic);
+    const session = createPickerSession(repoPath, {
+      suggestedName: suggestion,
+      hasCurrentBranch,
+      currentBranch,
+      retry: options.retry,
+      autoSubmitOnConfirm: options.autoSubmitOnConfirm,
+    });
+    setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchPicker: session } : prev));
+  }
+
+  // Story 2.26: applies a confirmed BranchPickerOutcome for Modify's per-member step. Unlike
+  // service-actions/add-to-edt (immediate submit), Modify only *stages* the result — other
+  // members may still need checking/unchecking before the whole form is submitted — except
+  // when this session was opened by the "try a different name"/"try a different branch" retry
+  // action, which re-runs submitModify immediately (Boundaries: "confirming re-runs the same
+  // submit function ... not a full-dialog restart").
+  //
+  // 'rename' on an *existing* member stages into branchRenames only (modifyEdt's renameBranches
+  // step alone both renames the ref and records the new branch — no checkout needed, so
+  // branchEdits must never also carry it, or step 3's setBranches would try to check out a
+  // branch that doesn't exist by the old name any more before step 4 has renamed it). 'rename'
+  // on a not-yet-member candidate has no "current registered branch" for modifyEdt's own
+  // renameBranches step to resolve (it isn't a member yet) — so it's applied eagerly here via a
+  // direct renameMemberBranch pre-step, then staged into branchEdits like any other setBranches
+  // target (a real checkout is still needed for a brand-new member).
+  async function stageModifyBranchPickerOutcome(current: ModifyDialogState, repoPath: string, outcome: BranchPickerOutcome) {
+    const session = current.branchPicker;
+    const autoSubmit = session?.autoSubmitOnConfirm ?? false;
+
+    const finish = (branchEdits: Record<string, string>, branchRenames: Record<string, string>) => {
+      setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchEdits, branchRenames, branchPicker: null } : prev));
+      if (autoSubmit) {
+        void submitModify({ ...current, branchEdits, branchRenames, branchPicker: null });
+      }
+    };
+    const fail = (message: string) => {
+      setDialog((prev) =>
+        prev.kind === 'modify' && prev.branchPicker !== null
+          ? { ...prev, branchPicker: { ...prev.branchPicker, state: { ...prev.branchPicker.state, error: message } } }
+          : prev,
+      );
+    };
+    // branchEdits/branchRenames are siblings that must never both carry the same repoPath (see
+    // the field comments above) — staging into one always clears any stale entry in the other,
+    // so re-opening the picker for the same repo and staging a different-kind outcome can't
+    // leave both maps populated for it.
+    const withoutRepoPath = (record: Readonly<Record<string, string>>): Record<string, string> => {
+      if (!(repoPath in record)) {
+        return record;
+      }
+      const next = { ...record };
+      delete next[repoPath];
+      return next;
+    };
+
+    if (outcome.kind === 'set') {
+      finish({ ...current.branchEdits, [repoPath]: outcome.branch }, withoutRepoPath(current.branchRenames));
+      return;
+    }
+    if (outcome.kind === 'create') {
+      const created = await createMemberBranchAction(repoPath, outcome.branchName, outcome.baseBranch);
+      if (!created.ok) {
+        fail(created.error.message);
+        return;
+      }
+      finish({ ...current.branchEdits, [repoPath]: outcome.branchName }, withoutRepoPath(current.branchRenames));
+      return;
+    }
+    // outcome.kind === 'rename'
+    const isExistingMember = current.target.members.some((member) => member.repoPath === repoPath);
+    if (isExistingMember) {
+      finish(withoutRepoPath(current.branchEdits), { ...current.branchRenames, [repoPath]: outcome.newName });
+      return;
+    }
+    const renamed = await renameBranchAction(repoPath, outcome.oldName, outcome.newName);
+    if (!renamed.ok) {
+      fail(renamed.error.message);
+      return;
+    }
+    finish({ ...current.branchEdits, [repoPath]: outcome.newName }, withoutRepoPath(current.branchRenames));
+  }
+
+  function handleModifyBranchPickerInput(current: ModifyDialogState, session: BranchPickerSession, input: string, key: Key) {
+    const otherMemberBranches = Array.from(new Set(current.target.members.map((member) => member.branch)));
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    if (result.type === 'cancel') {
+      setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchPicker: null } : prev));
+      return;
+    }
+    if (result.type === 'submit') {
+      void stageModifyBranchPickerOutcome(current, session.repoPath, result.outcome);
+      return;
+    }
     setDialog((prev) =>
-      prev.kind === 'modify'
-        ? { ...prev, branchEdit: { repoPath, value: existing, error: null, autoSubmitOnConfirm: options.autoSubmitOnConfirm } }
-        : prev,
+      prev.kind === 'modify' && prev.branchPicker !== null ? { ...prev, branchPicker: { ...prev.branchPicker, state: result.state } } : prev,
     );
   }
 
@@ -1404,7 +1626,7 @@ export function EdtsZone({
       }
       // Story 2.22: Escape from inside the branch-setup step steps back to the member
       // checklist (e.g. to change the selection) rather than tearing down the whole dialog —
-      // the same "back", never a dead end, convention modifyEdt's branchEdit sub-view already
+      // the same "back", never a dead end, convention Modify's own branch-picker sub-view
       // uses for its own Escape.
       if (isBranchStepFocus(current.formFocus)) {
         setDialog((prev) => (prev.kind === 'create' ? { ...prev, formFocus: 'members' } : prev));
@@ -1496,58 +1718,16 @@ export function EdtsZone({
     }
   }
 
-  function handleBranchEditInput(current: ModifyDialogState, branchEdit: BranchEditState, input: string, key: Key) {
-    if (key.escape) {
-      setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchEdit: null } : prev));
-      return;
-    }
-    if (key.return) {
-      const validationError = validateBranchEditValue(branchEdit.value);
-      if (validationError !== null) {
-        setDialog((prev) =>
-          prev.kind === 'modify' && prev.branchEdit ? { ...prev, branchEdit: { ...prev.branchEdit, error: validationError } } : prev,
-        );
-        return;
-      }
-      // Review patch (story 2.9): validated against the trimmed value above — persist that
-      // same trimmed value, not the raw one, so accidental leading/trailing whitespace never
-      // reaches `modifyEdt`'s git layer as part of the branch name.
-      const trimmed = branchEdit.value.trim();
-      const nextBranchEdits = { ...current.branchEdits, [branchEdit.repoPath]: trimmed };
-      setDialog((prev) => {
-        if (prev.kind !== 'modify' || prev.branchEdit === null) {
-          return prev;
-        }
-        return { ...prev, branchEdits: nextBranchEdits, branchEdit: null };
-      });
-      // Story 2.25: a branch edit opened via the "try a different branch" retry action
-      // re-runs submitModify immediately on confirm (Boundaries) — built from `current` plus
-      // the just-staged edit rather than re-reading state, since setDialog above hasn't
-      // committed yet.
-      if (branchEdit.autoSubmitOnConfirm) {
-        void submitModify({ ...current, branchEdits: nextBranchEdits, branchEdit: null });
-      }
-      return;
-    }
-    setDialog((prev) => {
-      if (prev.kind !== 'modify' || prev.branchEdit === null) {
-        return prev;
-      }
-      return { ...prev, branchEdit: { ...prev.branchEdit, value: nextTextInputValue(prev.branchEdit.value, input, key), error: null } };
-    });
-  }
-
   function handleModifyDialogInput(current: ModifyDialogState, input: string, key: Key) {
-    if (current.branchEdit !== null) {
-      handleBranchEditInput(current, current.branchEdit, input, key);
+    if (current.branchPicker !== null) {
+      handleModifyBranchPickerInput(current, current.branchPicker, input, key);
       return;
     }
-    // Story 2.25: "try a different branch" — an Enter while a failedRows row carries a
-    // registered action reopens the same branch-edit affordance a member row's own Enter
-    // already opens (openBranchEdit), pre-filled from `branchEdits[repoPath]` — never
-    // cleared on failure, so this is exactly the value that just got rejected. Confirming it
-    // re-runs submitModify via the existing member-checklist Enter dispatch below (unchanged),
-    // never a full-dialog restart. Takes priority over the form's other Enter handling below
+    // Story 2.25/2.26: "try a different branch"/"try a different name" — an Enter while a
+    // failedRows row carries a registered action reopens the branch picker over that repoPath
+    // (openBranchPickerForModify), pre-filled from the value that just got rejected. Confirming
+    // it re-runs submitModify via stageModifyBranchPickerOutcome's autoSubmit path, never a
+    // full-dialog restart. Takes priority over the form's other Enter handling below
     // (topic-edit resubmit, members-list nav dispatch) whenever a resolvable failure is
     // showing, since retrying it is the only sensible next step.
     if (key.return && !current.submitting) {
@@ -1557,7 +1737,23 @@ export function EdtsZone({
           candidates.find((candidate) => candidate.service === retryRow.service)?.path ??
           current.target.members.find((member) => member.service === retryRow.service)?.repoPath;
         if (repoPath !== undefined) {
-          openBranchEdit(current, repoPath, { autoSubmitOnConfirm: true });
+          // branchEdits/branchRenames are mutually exclusive per repoPath (see
+          // stageModifyBranchPickerOutcome) — a populated branchRenames entry means the failed
+          // attempt was a 'rename' outcome, so retry must reopen onto the rename field (not
+          // Create-new, which would try to *create* a branch instead of renaming one).
+          const failedRename = current.branchRenames[repoPath];
+          const retry =
+            failedRename !== undefined
+              ? {
+                  field: 'rename' as const,
+                  value: failedRename,
+                  oldName: current.target.members.find((member) => member.repoPath === repoPath)?.branch,
+                }
+              : { field: 'create-name' as const, value: current.branchEdits[repoPath] ?? '' };
+          openBranchPickerForModify(current, repoPath, {
+            retry,
+            autoSubmitOnConfirm: true,
+          });
           return;
         }
       }
@@ -1613,7 +1809,7 @@ export function EdtsZone({
         const path = candidates[current.memberCursor]?.path;
         const action = resolveModifyEnterAction('members', current.selectedMembers, path);
         if (action.type === 'edit-branch') {
-          openBranchEdit(current, action.repoPath);
+          openBranchPickerForModify(current, action.repoPath);
         } else {
           void submitModify(current);
         }
@@ -1657,82 +1853,103 @@ export function EdtsZone({
   }
 
   // Story 2.18: EDT SERVICES row contextual menu — "Change branch for this EDT" -------------
-  async function submitServiceActionsBranchChange(current: ServiceActionsDialogState, branch: string) {
+  // Story 2.26: applies a confirmed BranchPickerOutcome for Service-actions' "Change branch for
+  // this EDT" — always an *existing* member (this menu only opens from an EDT-services row), so
+  // a 'rename' outcome always routes through modifyEdt's own renameBranches param, never a
+  // direct pre-step. 'create' still needs its own eager pre-step (branch creation has no
+  // membership semantics of its own — Design Notes) before the usual setBranches submit; a
+  // pre-step failure folds into this same failedRows/FailedResultList display, never a second
+  // error UI (Boundaries), by synthesizing the row directly instead of calling modifyEdtAction.
+  async function submitServiceActionsBranchOutcome(current: ServiceActionsDialogState, outcome: BranchPickerOutcome) {
     if (current.submitting) {
       return;
     }
-    // Story 2.25: kept around across the whole submit (including on failure) so a "try a
-    // different branch" retry can reopen the branch-edit sub-dialog pre-filled with the
-    // value that just got rejected, not the member's still-current branch.
+    const attempted = outcome.kind === 'rename' ? outcome.newName : outcome.kind === 'create' ? outcome.branchName : outcome.branch;
+    const attemptedRenameOldName = outcome.kind === 'rename' ? outcome.oldName : null;
     setDialog((prev) =>
-      prev.kind === 'service-actions' ? { ...prev, submitting: true, error: null, failedRows: [], lastAttemptedBranch: branch } : prev,
+      prev.kind === 'service-actions'
+        ? { ...prev, submitting: true, error: null, failedRows: [], lastAttemptedBranch: attempted, lastAttemptedRenameOldName: attemptedRenameOldName }
+        : prev,
     );
+
+    if (outcome.kind === 'create') {
+      const created = await createMemberBranchAction(current.repoPath, outcome.branchName, outcome.baseBranch);
+      if (!created.ok) {
+        const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: created.error.code, message: created.error.message }];
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchPicker: null, failedRows } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', created.error.message);
+        return;
+      }
+    }
+
     const result = await modifyEdtAction({
       topic: current.edt.topic,
       addMembers: [],
       removeMembers: [],
-      setBranches: [{ repoPath: current.repoPath, branch }],
+      setBranches: outcome.kind === 'rename' ? [] : [{ repoPath: current.repoPath, branch: attempted }],
+      renameBranches: outcome.kind === 'rename' ? [{ repoPath: current.repoPath, newName: outcome.newName }] : [],
     });
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
       const failedRows = summarizeFailedResults(result.data.results);
       if (failedRows.length > 0) {
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchEdit: null, failedRows } : prev));
+        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchPicker: null, failedRows } : prev));
         await logEdtAction(current.edt.ulid, 'modify', 'failed', failedRows.map((row) => row.message).join('; '));
         return;
       }
       setDialog({ kind: 'none' });
-      await logEdtAction(current.edt.ulid, 'modify', 'success', `Changed branch for ${current.serviceName} to "${branch}"`);
+      await logEdtAction(current.edt.ulid, 'modify', 'success', `Changed branch for ${current.serviceName} to "${attempted}"`);
       return;
     }
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchEdit: null, error: result.error.message } : prev));
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, branchPicker: null, error: result.error.message } : prev));
     await logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
   }
 
-  function openServiceActionsBranchEdit(current: ServiceActionsDialogState) {
-    const existing = current.edt.members.find((member) => member.repoPath === current.repoPath)?.branch ?? '';
-    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchEdit: { repoPath: current.repoPath, value: existing, error: null } } : prev));
+  function openServiceActionsBranchPicker(
+    current: ServiceActionsDialogState,
+    options: { retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string } } = {},
+  ) {
+    const currentBranch = current.edt.members.find((member) => member.repoPath === current.repoPath)?.branch ?? '';
+    const session = createPickerSession(current.repoPath, {
+      suggestedName: currentBranch,
+      hasCurrentBranch: true,
+      currentBranch,
+      retry: options.retry,
+    });
+    setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: session } : prev));
   }
 
-  function handleServiceActionsBranchEditInput(current: ServiceActionsDialogState, branchEdit: BranchEditState, input: string, key: Key) {
-    if (key.escape) {
-      // Review fix (story 2.18): guard against tearing down the branch-edit sub-view while a
-      // submit is in flight, same as handleServiceActionsInput's and handleAddToEdtInput's own
-      // Escape guards.
-      if (!current.submitting) {
-        setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchEdit: null } : prev));
-      }
+  function handleServiceActionsBranchPickerInput(current: ServiceActionsDialogState, session: BranchPickerSession, input: string, key: Key) {
+    if (key.escape && current.submitting) {
+      // Review fix (story 2.18, carried over): never tear down the picker while a submit is
+      // in flight.
       return;
     }
-    if (key.return) {
-      const validationError = validateBranchEditValue(branchEdit.value);
-      if (validationError !== null) {
-        setDialog((prev) =>
-          prev.kind === 'service-actions' && prev.branchEdit ? { ...prev, branchEdit: { ...prev.branchEdit, error: validationError } } : prev,
-        );
-        return;
-      }
-      void submitServiceActionsBranchChange(current, branchEdit.value.trim());
+    const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    if (result.type === 'cancel') {
+      setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: null } : prev));
       return;
     }
-    setDialog((prev) => {
-      if (prev.kind !== 'service-actions' || prev.branchEdit === null) {
-        return prev;
-      }
-      return { ...prev, branchEdit: { ...prev.branchEdit, value: nextTextInputValue(prev.branchEdit.value, input, key), error: null } };
-    });
+    if (result.type === 'submit') {
+      void submitServiceActionsBranchOutcome(current, result.outcome);
+      return;
+    }
+    setDialog((prev) =>
+      prev.kind === 'service-actions' && prev.branchPicker !== null ? { ...prev, branchPicker: { ...prev.branchPicker, state: result.state } } : prev,
+    );
   }
 
   // Boundary/Design Notes: the two new direct-action flows (this contextual menu's "Change
-  // branch" and the Add-to-EDT dialog below) open their branch-edit text input straight from
-  // the row-level Enter handler — they never route through resolveModifyEnterAction/
+  // branch" and the Add-to-EDT dialog below) open the branch picker straight from the
+  // row-level Enter handler — they never route through resolveModifyEnterAction/
   // canEditMemberBranch (the big Modify dialog's own member-checklist Enter dispatch), so
   // that check's existing restriction (member of target EDT AND currently checked) simply
   // doesn't apply here: it's bypassed, not loosened.
   function handleServiceActionsInput(current: ServiceActionsDialogState, input: string, key: Key) {
-    if (current.branchEdit !== null) {
-      handleServiceActionsBranchEditInput(current, current.branchEdit, input, key);
+    if (current.branchPicker !== null) {
+      handleServiceActionsBranchPickerInput(current, current.branchPicker, input, key);
       return;
     }
     if (key.escape) {
@@ -1741,21 +1958,21 @@ export function EdtsZone({
       }
       return;
     }
-    // Story 2.25: "try a different branch" — reopens the branch-edit sub-dialog pre-filled
-    // with `lastAttemptedBranch` (the value that just got rejected, tracked separately since
-    // this dialog's own branchEdit sub-state is cleared once a submit is in flight), rather
-    // than openServiceActionsBranchEdit's normal "still-current member branch" pre-fill.
-    // Confirming it re-runs submitServiceActionsBranchChange via the existing branch-edit
-    // Enter handling above, unchanged — never a full-dialog restart. Takes priority over the
+    // Story 2.25/2.26: "try a different branch"/"try a different name" — reopens the branch
+    // picker pre-filled with `lastAttemptedBranch` (the value that just got rejected, tracked
+    // separately since this dialog's own branchPicker sub-state is cleared once a submit is in
+    // flight), rather than openServiceActionsBranchPicker's normal "still-current member
+    // branch" pre-fill. Confirming it re-runs submitServiceActionsBranchOutcome via the same
+    // picker dispatch above, unchanged — never a full-dialog restart. Takes priority over the
     // SERVICE_ACTION_MENU_ITEMS dispatch below whenever a resolvable failure is showing.
     if (key.return && !current.submitting) {
       const retryRow = findRetryableFailedRow(current.failedRows);
       if (retryRow !== undefined) {
-        setDialog((prev) =>
-          prev.kind === 'service-actions'
-            ? { ...prev, branchEdit: { repoPath: prev.repoPath, value: prev.lastAttemptedBranch ?? '', error: null } }
-            : prev,
-        );
+        const retry =
+          current.lastAttemptedRenameOldName !== null
+            ? { field: 'rename' as const, value: current.lastAttemptedBranch ?? '', oldName: current.lastAttemptedRenameOldName }
+            : { field: 'create-name' as const, value: current.lastAttemptedBranch ?? '' };
+        openServiceActionsBranchPicker(current, { retry });
         return;
       }
     }
@@ -1780,18 +1997,44 @@ export function EdtsZone({
       if (current.cursor === 0) {
         void submitRemoveFromEdt(current);
       } else {
-        openServiceActionsBranchEdit(current);
+        openServiceActionsBranchPicker(current);
       }
     }
   }
 
   // Story 2.18: OTHER SERVICES row's Add-to-EDT dialog --------------------------------------
-  async function submitAddToEdt(current: AddToEdtDialogState) {
+  // Story 2.26: never a member yet, so a 'rename' outcome can never route through modifyEdt's
+  // own renameBranches param (nothing there to resolve `oldName` from) — it always takes the
+  // direct renameMemberBranch pre-step instead, mirroring 'create's own eager pre-step.
+  async function submitAddToEdtOutcome(current: AddToEdtDialogState, outcome: BranchPickerOutcome) {
     if (current.submitting) {
       return;
     }
-    const branch = current.value.trim();
     setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
+
+    let branch: string;
+    if (outcome.kind === 'set') {
+      branch = outcome.branch;
+    } else if (outcome.kind === 'create') {
+      const created = await createMemberBranchAction(current.repoPath, outcome.branchName, outcome.baseBranch);
+      if (!created.ok) {
+        const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: created.error.code, message: created.error.message }];
+        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', created.error.message);
+        return;
+      }
+      branch = outcome.branchName;
+    } else {
+      const renamed = await renameBranchAction(current.repoPath, outcome.oldName, outcome.newName);
+      if (!renamed.ok) {
+        const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: renamed.error.code, message: renamed.error.message }];
+        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
+        await logEdtAction(current.edt.ulid, 'modify', 'failed', renamed.error.message);
+        return;
+      }
+      branch = outcome.newName;
+    }
+
     const result = await modifyEdtAction({
       topic: current.edt.topic,
       addMembers: [current.repoPath],
@@ -1801,10 +2044,6 @@ export function EdtsZone({
     if (result.ok) {
       void loadEdts();
       void loadEdtsBranches();
-      // Story 2.25: `current.value` (the attempted branch, re-read by handleAddToEdtInput
-      // below) is never cleared on failure — the dialog's single text field already stays
-      // pre-filled with the value that just got rejected, so "try a different branch" here
-      // is just the existing Enter-to-resubmit flow, nothing extra to wire.
       const failedRows = summarizeFailedResults(result.data.results);
       if (failedRows.length > 0) {
         setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
@@ -1820,22 +2059,29 @@ export function EdtsZone({
   }
 
   function handleAddToEdtInput(current: AddToEdtDialogState, input: string, key: Key) {
-    if (key.escape) {
-      if (!current.submitting) {
-        setDialog({ kind: 'none' });
-      }
+    if (current.submitting) {
       return;
     }
-    if (key.return) {
-      const validationError = validateBranchEditValue(current.value);
-      if (validationError !== null) {
-        setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, error: validationError } : prev));
-        return;
-      }
-      void submitAddToEdt(current);
+    // Story 2.25/2.26: "try a different branch"/"try a different name" — the picker's own
+    // field is never cleared on failure (createPickerSession's suggestion/retry-prefill
+    // persist across a failed submit), so retrying here is just the normal picker Enter flow;
+    // nothing extra to wire, unlike Modify/service-actions (which reopen a fresh session).
+    if (current.branchPicker === null) {
       return;
     }
-    setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, value: nextTextInputValue(prev.value, input, key), error: null } : prev));
+    const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
+    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key);
+    if (result.type === 'cancel') {
+      setDialog({ kind: 'none' });
+      return;
+    }
+    if (result.type === 'submit') {
+      void submitAddToEdtOutcome(current, result.outcome);
+      return;
+    }
+    setDialog((prev) =>
+      prev.kind === 'add-to-edt' && prev.branchPicker !== null ? { ...prev, branchPicker: { ...prev.branchPicker, state: result.state } } : prev,
+    );
   }
 
   useInput((input, key) => {
@@ -2163,11 +2409,13 @@ export function EdtsZone({
       {dialog.kind === 'modify' ? (
         <ModalDialog title="MODIFY EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
           <Box flexDirection="column">
-            {dialog.branchEdit !== null ? (
-              <>
-                <TextInputLine label={`Branch for ${dialog.branchEdit.repoPath}`} value={dialog.branchEdit.value} focused />
-                {dialog.branchEdit.error ? <DimAnnotation text={dialog.branchEdit.error} /> : null}
-              </>
+            {dialog.branchPicker !== null ? (
+              <BranchPicker
+                state={dialog.branchPicker.state}
+                branches={dialog.branchPicker.branches}
+                branchesStatus={dialog.branchPicker.branchesStatus}
+                otherMemberBranches={Array.from(new Set(dialog.target.members.map((member) => member.branch)))}
+              />
             ) : (
               <>
                 <TextInputLine label="Topic" value={dialog.topic} focused={dialog.formFocus === 'topic'} />
@@ -2175,7 +2423,7 @@ export function EdtsZone({
                 {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
                 {candidateState === 'ready'
                   ? candidates.map((candidate, index) => {
-                      const branch = dialog.branchEdits[candidate.path] ??
+                      const branch = dialog.branchRenames[candidate.path] ?? dialog.branchEdits[candidate.path] ??
                         dialog.target.members.find((member) => member.repoPath === candidate.path)?.branch;
                       return (
                         <Box key={candidate.path}>
@@ -2201,10 +2449,15 @@ export function EdtsZone({
         <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
           <Box flexDirection="column">
             <Text color={colors.text}>{dialog.serviceName}</Text>
-            {dialog.branchEdit !== null ? (
+            {dialog.branchPicker !== null ? (
               <>
-                <TextInputLine label={`Branch for ${dialog.serviceName}`} value={dialog.branchEdit.value} focused />
-                {dialog.branchEdit.error ? <DimAnnotation text={dialog.branchEdit.error} /> : null}
+                <BranchPicker
+                  state={dialog.branchPicker.state}
+                  branches={dialog.branchPicker.branches}
+                  branchesStatus={dialog.branchPicker.branchesStatus}
+                  otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
+                />
+                {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
                 {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
               </>
             ) : (
@@ -2229,7 +2482,14 @@ export function EdtsZone({
         <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
           <Box flexDirection="column">
             <Text color={colors.text}>Add {dialog.serviceName} to "{dialog.edt.topic}"</Text>
-            <TextInputLine label="Branch" value={dialog.value} focused />
+            {dialog.branchPicker !== null ? (
+              <BranchPicker
+                state={dialog.branchPicker.state}
+                branches={dialog.branchPicker.branches}
+                branchesStatus={dialog.branchPicker.branchesStatus}
+                otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
+              />
+            ) : null}
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Adding…" /> : null}
           </Box>

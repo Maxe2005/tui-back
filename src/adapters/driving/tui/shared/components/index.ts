@@ -41,4 +41,20 @@ export {
 } from './list-detail-split.js';
 export { ZonePlaceholder } from './zone-placeholder.js';
 export type { ZonePlaceholderProps } from './zone-placeholder.js';
+export {
+  BranchPicker,
+  cycleBranchPickerMode,
+  matchBranchesByPrefix,
+  createBranchPickerState,
+  applyBranchPickerRetry,
+  handleBranchPickerKey,
+} from './branch-picker.js';
+export type {
+  BranchPickerMode,
+  BranchPickerOutcome,
+  BranchPickerState,
+  BranchPickerRenameSub,
+  BranchPickerProps,
+  BranchPickerKeyResult,
+} from './branch-picker.js';
 

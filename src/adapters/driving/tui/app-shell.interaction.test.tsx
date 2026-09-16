@@ -60,6 +60,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     restoreStash: vi.fn(async () => ok(undefined)),
     branchExistsLocally: vi.fn(async () => ok(true)),
     fetch: vi.fn(async () => ok(undefined)),
+    listBranches: vi.fn(async () => ok([])),
+    renameBranch: vi.fn(async () => ok(undefined)),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),

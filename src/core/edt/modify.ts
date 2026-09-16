@@ -45,6 +45,15 @@ export interface ModifyEdtParams {
   removeMembers: string[];
   setBranches: Array<{ repoPath: string; branch: string }>;
   renameTo?: string;
+  // Story 2.26: mirrors setBranches's shape — each entry renames the *member's own currently
+  // registered branch* to newName (oldName is never taken from the caller; it's always
+  // resolved from this EDT's own membership below) and adopts newName as that member's branch
+  // going forward. Populated by the branch-picker's "Rename current" mode (Modify's per-member
+  // step, Service-actions) and its Pick-existing-row rename action when the picked row already
+  // is this member's own branch — never usable for a not-yet-member repoPath (there is no
+  // "current registered branch" to resolve), which is exactly why Rename current is never
+  // offered at Add-to-EDT (Boundaries).
+  renameBranches?: Array<{ repoPath: string; newName: string }>;
 }
 
 export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyEdtData>> {
@@ -60,6 +69,7 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     removeMembers,
     setBranches,
     renameTo,
+    renameBranches = [],
   } = params;
 
   const trimmedTopic = topic.trim();
@@ -79,7 +89,12 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
   }
 
   // At least one operation required
-  const hasOp = addMembers.length > 0 || removeMembers.length > 0 || setBranches.length > 0 || (renameTo !== undefined);
+  const hasOp =
+    addMembers.length > 0 ||
+    removeMembers.length > 0 ||
+    setBranches.length > 0 ||
+    renameBranches.length > 0 ||
+    renameTo !== undefined;
   if (!hasOp) {
     return err('invalid-argument', 'At least one operation required: --add-member, --remove-member, --set-branch, or --rename-to');
   }
@@ -280,6 +295,58 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     }
   }
 
+  // ---- 4. Rename branches (pre-lock: resolve oldName from this EDT's own membership, gate,
+  // git.renameBranch) ----
+  // Story 2.26: mirrors step 3's shape exactly, but the git write is a rename (`git branch
+  // -m`), never a checkout — the member is, by construction, already on oldName (its own
+  // currently registered branch), so renaming it in place needs no stash/checkout dance.
+  // `oldName` is never taken from the caller: resolving it from `target.members` (the
+  // pre-lock snapshot, same as every other step here) is what makes this safe against a
+  // caller passing an arbitrary/stale branch name as "the thing to rename".
+  if (renameBranches.length > 0) {
+    for (const { repoPath, newName } of renameBranches) {
+      const resolved = resolve(repoPath);
+
+      const member = target.members.find((m) => resolve(m.repoPath) === resolved);
+      if (member === undefined) {
+        results.push({
+          service: resolved,
+          outcome: 'failed',
+          detail: { code: 'invalid-member', message: `Cannot rename: ${resolved} is not a member of this EDT` },
+        });
+        continue;
+      }
+      const oldName = member.branch;
+
+      const allowed = await git.assertAllowedBranch(resolved, newName, target.ulid);
+      if (!allowed.ok) {
+        results.push({
+          service: resolved,
+          outcome: 'failed',
+          detail: { code: allowed.error.code, message: allowed.error.message },
+        });
+        continue;
+      }
+
+      const renamed = await git.renameBranch(resolved, oldName, newName);
+      if (!renamed.ok) {
+        results.push({
+          service: resolved,
+          outcome: 'failed',
+          detail: { code: renamed.error.code, message: renamed.error.message },
+        });
+        continue;
+      }
+
+      const loaded = await manifest.load(resolved);
+      const service = loaded.ok ? loaded.data.service : resolved.split('/').pop() || resolved;
+      results.push({ service, outcome: 'branch-changed', newBranch: newName });
+      // Same branchChanges array setBranches already populates — lock-time assembly already
+      // applies it against the final member set, no new persistence path (Boundaries).
+      branchChanges.push({ repoPath: resolved, branch: newName });
+    }
+  }
+
   // ---- Under per-resource advisory lock (AD-9): assemble final entry and write edts.yaml ----
   const written = await withActionLock(lock, edtRegistryResourceKey, async () => {
     // Re-read the authoritative list
@@ -358,4 +425,52 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
   }
 
   return ok({ ulid: target.ulid, topic: renameTo !== undefined ? renameTo : trimmedTopic, results });
+}
+
+// Story 2.26 -----------------------------------------------------------------------------
+// The branch-picker's Create-new pre-step, at all 3 non-creation entry points (Modify's
+// per-member step, Service-actions, Add-to-EDT): a thin wrapper around git.createBranch,
+// deliberately kept outside modifyEdt's own params (Design Notes) — branch *creation* has no
+// membership semantics of its own, unlike setBranches/renameBranches, which both describe how
+// membership/registration should change. Gated exactly the same way git.createBranch already
+// gates internally (assertAllowedBranch, no edtId) — nothing extra to do here.
+export interface CreateMemberBranchParams {
+  git: GitPort;
+  repoPath: string;
+  branchName: string;
+  baseBranch: string;
+}
+
+export async function createMemberBranch(params: CreateMemberBranchParams): Promise<Result<void>> {
+  const { git, repoPath, branchName, baseBranch } = params;
+  return git.createBranch(repoPath, branchName, baseBranch);
+}
+
+// The branch-picker's Pick-existing row-rename pre-step for a not-yet-member repoPath
+// (Add-to-EDT): modifyEdt's own `renameBranches` param can only ever resolve `oldName` from
+// this EDT's *existing* membership (see the pre-lock step above), which structurally cannot
+// include a repoPath that isn't a member yet — there is nothing there to resolve. This thin
+// wrapper around git.renameBranch (mirrors createMemberBranch immediately above) lets the
+// picker rename an arbitrary picked branch and adopt the renamed result as the new member's
+// branch via the entry point's own existing addMembers+setBranches call, one submit, exactly
+// like Create-new's pre-step feeds a freshly created branch into that same call.
+export interface RenameMemberBranchParams {
+  git: GitPort;
+  repoPath: string;
+  oldName: string;
+  newName: string;
+}
+
+export async function renameMemberBranch(params: RenameMemberBranchParams): Promise<Result<void>> {
+  const { git, repoPath, oldName, newName } = params;
+  return git.renameBranch(repoPath, oldName, newName);
+}
+
+// The branch-picker's candidate source (both the base-branch and Pick-existing lists) — a
+// thin wrapper around git.listBranches, kept here (not called as `deps.git.listBranches`
+// straight from the TUI store) so the store's own new action preserves the one consistent
+// rule this codebase already follows: deps.git is never called directly from the TUI layer,
+// only through a core export (Design Notes).
+export async function listMemberBranches(git: GitPort, repoPath: string): Promise<Result<string[]>> {
+  return git.listBranches(repoPath);
 }
