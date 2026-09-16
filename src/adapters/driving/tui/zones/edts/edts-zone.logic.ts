@@ -10,7 +10,6 @@ import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
-import { DEFAULT_BASE_BRANCH } from '../../store/app-store.js';
 
 // A fixed max width (the spec's "ellipsizes past a fixed max width") — generous enough for
 // most feature-branch naming conventions while keeping the list column narrow. The full,
@@ -340,34 +339,89 @@ export function prefillBranchNames(
   return { branchName, branchNames: nextNames };
 }
 
+// Story 2.27 -----------------------------------------------------------------------------
+// Base-branch suggestions are manifest-driven, never the hardcoded DEFAULT_BASE_BRANCH
+// literal (Boundaries: "DEFAULT_BASE_BRANCH stops being read as a suggestion source anywhere
+// in the EDT zone"). `candidates` is the same flat ServiceBranchDivergence[] pool the create
+// dialog already receives — each row now carries its own repo's manifest-declared
+// `sharedBranch` (core/edt/list.ts).
+export function suggestBaseBranchFor(path: string, candidates: readonly ServiceBranchDivergence[]): string {
+  return candidates.find((candidate) => candidate.path === path)?.sharedBranch ?? '';
+}
+
+// I/O matrix: "single repo" and "grouped, unanimous" both suggest one shared value and keep a
+// single base-branch field; "grouped, diverging" and "individual naming, diverging" force a
+// per-member field instead — decoupled from `NamingMode` (grouped naming can still coexist
+// with a per-member *base*, matrix row 3). <=1 member never diverges by definition.
+export type BaseBranchMode = 'shared' | 'per-member';
+
+export function resolveBaseBranchMode(selectedMembers: readonly string[], candidates: readonly ServiceBranchDivergence[]): BaseBranchMode {
+  const sharedBranches = selectedMembers.map((path) => suggestBaseBranchFor(path, candidates));
+  if (sharedBranches.length <= 1) {
+    return 'shared';
+  }
+  const first = sharedBranches[0];
+  return sharedBranches.every((value) => value === first) ? 'shared' : 'per-member';
+}
+
+// Mirrors prefillBranchNames' own touched-tracking convention exactly (Design Notes): an
+// untouched field keeps tracking its manifest suggestion on every call; a touched field (the
+// developer's own edit, including clearing it to '') is never resurrected. Fired at the same
+// trigger points prefillBranchNames already is (a member is newly selected, or the
+// branch-setup step is (re-)entered) — see create-dialog.tsx.
+export function prefillBaseBranches(
+  selectedMembers: readonly string[],
+  candidates: readonly ServiceBranchDivergence[],
+  baseBranch: string,
+  baseBranches: Readonly<Record<string, string>>,
+  baseBranchTouched: boolean,
+  baseBranchesTouched: Readonly<Record<string, boolean>>,
+): { baseBranch: string; baseBranches: Record<string, string> } {
+  const nextBaseBranches = { ...baseBranches };
+  for (const path of selectedMembers) {
+    if (!baseBranchesTouched[path]) {
+      nextBaseBranches[path] = suggestBaseBranchFor(path, candidates);
+    }
+  }
+  const first = selectedMembers[0];
+  const suggestion = first !== undefined ? suggestBaseBranchFor(first, candidates) : '';
+  return { baseBranch: baseBranchTouched ? baseBranch : suggestion, baseBranches: nextBaseBranches };
+}
+
 // Boundary: "submitCreate always builds a real CreateBranchOptions when >=1 member selected
 // ... zero members still pass NO_BRANCH_CREATION (core's param is mandatory)." Returns the
 // app-store's own NO_BRANCH_CREATION constant verbatim for the zero-member case so there is
 // exactly one canonical "no branch creation" value in the codebase, never a second literal
 // copy drifting out of sync with it.
+//
+// Story 2.27: `baseBranches` (per-member, always fully populated for every selected member —
+// see prefillBaseBranches) replaces the old single `baseBranch: string` parameter as the
+// authoritative base-branch source, feeding core's new optional `bases` map (core/edt/create.ts)
+// so a diverging per-member base-branch choice actually reaches `git.createBranch` per member,
+// never collapsed into one shared value. `base` (top-level, required by core) falls back to
+// the first selected member's own base for backward-compatible callers that only read it.
 export function buildCreateBranchOptions(
   selectedMembers: readonly string[],
-  baseBranch: string,
   namingMode: NamingMode,
   branchName: string,
   branchNames: Readonly<Record<string, string>>,
+  baseBranches: Readonly<Record<string, string>>,
   noBranchCreation: CreateBranchOptions,
 ): CreateBranchOptions {
   if (selectedMembers.length === 0) {
     return noBranchCreation;
   }
-  if (namingMode === 'grouped') {
-    const names: Record<string, string> = {};
-    for (const path of selectedMembers) {
-      names[path] = branchName;
-    }
-    return { create: true, base: baseBranch, mode: 'grouped', names };
-  }
   const names: Record<string, string> = {};
   for (const path of selectedMembers) {
-    names[path] = branchNames[path] ?? '';
+    names[path] = namingMode === 'grouped' ? branchName : (branchNames[path] ?? '');
   }
-  return { create: true, base: baseBranch, mode: 'individual', names };
+  const bases: Record<string, string> = {};
+  for (const path of selectedMembers) {
+    bases[path] = baseBranches[path] ?? '';
+  }
+  const firstPath = selectedMembers[0];
+  const base = firstPath !== undefined ? (bases[firstPath] ?? '') : '';
+  return { create: true, base, bases, mode: namingMode, names };
 }
 
 // Boundary: "Empty required branch-name field blocks confirm via validateBranchEditValue
@@ -375,14 +429,25 @@ export function buildCreateBranchOptions(
 // applies at all). Grouped validates the one shared field; individual validates every
 // selected member's own field, first failure wins (mirrors resolveMemberBranch's
 // deterministic caller-order iteration elsewhere in this file's Design Notes).
+//
+// Story 2.27: also validates every selected member's own base-branch field — reuses
+// validateBranchEditValue as-is (Boundaries), same "first failure wins" convention, checked
+// before the name field(s) so a blank base branch is never silently passed through as ''.
 export function validateCreateBranchFields(
   namingMode: NamingMode,
   selectedMembers: readonly string[],
   branchName: string,
   branchNames: Readonly<Record<string, string>>,
+  baseBranches: Readonly<Record<string, string>> = {},
 ): string | null {
   if (selectedMembers.length === 0) {
     return null;
+  }
+  for (const path of selectedMembers) {
+    const baseFieldError = validateBranchEditValue(baseBranches[path] ?? '');
+    if (baseFieldError !== null) {
+      return `Base branch: ${baseFieldError}`;
+    }
   }
   if (namingMode === 'grouped') {
     return validateBranchEditValue(branchName);
@@ -697,7 +762,22 @@ export type CreateDialogState = {
   // folding into `error` above, which keeps its own validation/full-failure use unchanged.
   failedRows: FailedResultRow[];
   // Story 2.22: the mandatory branch-setup step's own fields — see CreateFormFocus above.
+  // Story 2.27: baseBranch/baseBranches are manifest-driven suggestions (never
+  // DEFAULT_BASE_BRANCH) — baseBranch is the single shared value shown/edited when
+  // resolveBaseBranchMode is 'shared'; baseBranches (per-member, mirrors branchNames' own
+  // shape/touched-tracking convention exactly) is the authoritative source `submitCreate`
+  // always reads from, kept in sync with `baseBranch` for every selected member whenever the
+  // shared field is confirmed (see create-dialog.tsx's applyBaseBranchOutcome).
   baseBranch: string;
+  baseBranches: Readonly<Record<string, string>>;
+  baseBranchIndex: number; // which per-member base-branch field is live, when forced per-member
+  baseBranchTouched: boolean;
+  baseBranchesTouched: Readonly<Record<string, boolean>>;
+  // Story 2.27: the base-branch field's own live BranchPicker sub-session (Pick existing /
+  // Create new only — createPickerSession is always called with hasCurrentBranch: false here,
+  // Boundaries: "no Rename current, since nothing exists yet"). null only transiently, between
+  // formFocus becoming 'branch-base' and the opening handler seeding a fresh session.
+  branchPicker: BranchPickerSession | null;
   namingMode: NamingMode;
   branchName: string; // grouped mode's single shared field
   branchNames: Readonly<Record<string, string>>; // individual mode: repoPath -> name
@@ -820,7 +900,15 @@ export function initialCreateDialog(): CreateDialogState {
     submitting: false,
     error: null,
     failedRows: [],
-    baseBranch: DEFAULT_BASE_BRANCH,
+    // Story 2.27: no member is selected yet, so there is nothing to suggest a base branch
+    // from — prefillBaseBranches (fired on the first member selection / step entry) is what
+    // actually seeds a manifest-driven value, never a hardcoded literal here.
+    baseBranch: '',
+    baseBranches: {},
+    baseBranchIndex: 0,
+    baseBranchTouched: false,
+    baseBranchesTouched: {},
+    branchPicker: null,
     namingMode: 'grouped',
     branchName: '',
     branchNames: {},
@@ -870,11 +958,16 @@ export function initialServiceActionsDialog(edt: EdtRegistryEntry, repoPath: str
 // Story 2.26: opens a fresh branch-picker session for repoPath — `branches`/`branchesStatus`
 // start empty/'loading'; the zone's own effect (mirroring loadEdtsBranches' "fetch once on the
 // relevant state change" convention) fetches listBranches(repoPath) once and fills them in,
-// regardless of which of the 3 entry points created this session.
+// regardless of which entry point created this session.
+// Story 2.27: `defaultBaseBranch` is now a required caller-supplied value (never this file's
+// own DEFAULT_BASE_BRANCH import) — every call site sources it from the repo's own
+// manifest-declared sharedBranch (Boundaries: "DEFAULT_BASE_BRANCH stops being read as a
+// suggestion source anywhere in the EDT zone ... createPickerSession()").
 export function createPickerSession(
   repoPath: string,
   options: {
     suggestedName: string;
+    defaultBaseBranch: string;
     hasCurrentBranch: boolean;
     currentBranch: string;
     retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string };
@@ -883,7 +976,7 @@ export function createPickerSession(
 ): BranchPickerSession {
   let state = createBranchPickerState({
     suggestedName: options.suggestedName,
-    defaultBaseBranch: DEFAULT_BASE_BRANCH,
+    defaultBaseBranch: options.defaultBaseBranch,
     hasCurrentBranch: options.hasCurrentBranch,
     currentBranch: options.currentBranch,
   });
@@ -898,6 +991,7 @@ export function initialAddToEdtDialog(
   repoPath: string,
   serviceName: string,
   currentBranch: string | null,
+  sharedBranch: string,
 ): AddToEdtDialogState {
   return {
     kind: 'add-to-edt',
@@ -910,6 +1004,8 @@ export function initialAddToEdtDialog(
     // as the old free-text field used to).
     branchPicker: createPickerSession(repoPath, {
       suggestedName: currentBranch ?? '',
+      // Story 2.27: manifest-driven, not DEFAULT_BASE_BRANCH — this repo's own sharedBranch.
+      defaultBaseBranch: sharedBranch,
       hasCurrentBranch: false,
       currentBranch: '',
     }),

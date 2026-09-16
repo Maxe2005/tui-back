@@ -104,7 +104,7 @@ describe('listEdtBranchesDivergence', () => {
       ok: true,
       data: {
         services: [
-          { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'feat/a', ahead: 2, behind: 1, status: 'current' },
+          { service: 'svc-a', path: '/repo/a', isMember: false, sharedBranch: 'development', branch: 'feat/a', ahead: 2, behind: 1, status: 'current' },
         ],
         unreachable: [],
         errors: [],
@@ -129,7 +129,7 @@ describe('listEdtBranchesDivergence', () => {
 
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.services).toEqual([
-      { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'feat/a', ahead: null, behind: null, status: 'no-upstream' },
+      { service: 'svc-a', path: '/repo/a', isMember: false, sharedBranch: 'development', branch: 'feat/a', ahead: null, behind: null, status: 'no-upstream' },
     ]);
   });
 
@@ -154,6 +154,7 @@ describe('listEdtBranchesDivergence', () => {
         service: 'svc-a',
         path: '/repo/a',
         isMember: false,
+        sharedBranch: 'development',
         branch: 'feat/a',
         ahead: null,
         behind: null,
@@ -183,6 +184,7 @@ describe('listEdtBranchesDivergence', () => {
         service: 'svc-a',
         path: '/repo/a',
         isMember: false,
+        sharedBranch: 'development',
         branch: null,
         ahead: null,
         behind: null,
@@ -228,7 +230,16 @@ describe('listEdtBranchesDivergence', () => {
 
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.services).toEqual([
-      { service: 'svc-kept-on-development', path: '/repo/kept-on-development', isMember: false, branch: 'development', ahead: 0, behind: 0, status: 'current' },
+      {
+        service: 'svc-kept-on-development',
+        path: '/repo/kept-on-development',
+        isMember: false,
+        sharedBranch: 'development',
+        branch: 'development',
+        ahead: 0,
+        behind: 0,
+        status: 'current',
+      },
     ]);
   });
 
@@ -320,6 +331,31 @@ describe('listEdtBranchesDivergence', () => {
     });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'state-read-error' } });
+  });
+
+  // Story 2.27: threads each repo's own manifest-declared sharedBranch through, uniformly for
+  // member and non-member alike — the value the EDT zone's every base-branch suggestion now
+  // derives from instead of a hardcoded 'development' literal.
+  it("threads the repo's own manifest-declared sharedBranch through, never a hardcoded literal", async () => {
+    const registry = fakeRegistry(['/repo/a', '/repo/b']);
+    const manifest = fakeManifest({
+      load: vi.fn(async (path: string) =>
+        ok({ ...manifestFor(path), sharedBranch: path === '/repo/a' ? 'main' : 'master' }),
+      ),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest,
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    const byPath = new Map(result.data.services.map((s) => [s.path, s.sharedBranch]));
+    expect(byPath.get('/repo/a')).toBe('main');
+    expect(byPath.get('/repo/b')).toBe('master');
   });
 
   it('propagates an edtRegistry.list() failure once an active EDT is set', async () => {

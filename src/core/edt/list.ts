@@ -29,6 +29,11 @@ export interface ServiceBranchDivergence {
   service: string;
   path: string;
   isMember: boolean;
+  // Story 2.27: the repo's own manifest-declared shared/protected branch — threaded through so
+  // every base-branch suggestion in the EDT zone can be manifest-aware instead of a hardcoded
+  // 'development' literal. Sourced straight from the manifest already loaded per repo below
+  // (no new port, no second read).
+  sharedBranch: string;
   // null exactly when status !== 'current' — no numeric value is ever fabricated (the
   // spec's Never clause) — including when the branch name itself could not be determined
   // (e.g. detached HEAD), which also folds into 'unknown-offline'.
@@ -118,7 +123,7 @@ export async function listEdtBranchesDivergence(
     }
 
     const isMember = activeMemberPaths.has(path);
-    services.push(await readServiceDivergence(git, loaded.data.service, path, isMember));
+    services.push(await readServiceDivergence(git, loaded.data.service, path, isMember, loaded.data.sharedBranch));
   }
 
   return ok({ services, unreachable, errors });
@@ -129,6 +134,7 @@ async function readServiceDivergence(
   service: string,
   path: string,
   isMember: boolean,
+  sharedBranch: string,
 ): Promise<ServiceBranchDivergence> {
   const branchResult = await git.currentBranch(path);
   if (!branchResult.ok) {
@@ -139,6 +145,7 @@ async function readServiceDivergence(
       service,
       path,
       isMember,
+      sharedBranch,
       branch: null,
       ahead: null,
       behind: null,
@@ -150,17 +157,18 @@ async function readServiceDivergence(
 
   const divergence = await git.aheadBehind(path);
   if (divergence.ok) {
-    return { service, path, isMember, branch, ahead: divergence.data.ahead, behind: divergence.data.behind, status: 'current' };
+    return { service, path, isMember, sharedBranch, branch, ahead: divergence.data.ahead, behind: divergence.data.behind, status: 'current' };
   }
 
   if (divergence.error.code === 'no-upstream') {
-    return { service, path, isMember, branch, ahead: null, behind: null, status: 'no-upstream' };
+    return { service, path, isMember, sharedBranch, branch, ahead: null, behind: null, status: 'no-upstream' };
   }
 
   return {
     service,
     path,
     isMember,
+    sharedBranch,
     branch,
     ahead: null,
     behind: null,

@@ -127,8 +127,16 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
     const currentBranch = member?.branch ?? '';
     const suggestion =
       current.branchEdits[repoPath] ?? current.branchRenames[repoPath] ?? currentBranch ?? suggestBranchForNewMember(current.target.members, current.topic);
+    // Story 2.27: the picker's "Create new" default base branch is this repo's own
+    // manifest-declared sharedBranch (deps.candidates carries it — core/edt/list.ts), never
+    // DEFAULT_BASE_BRANCH. Code review: if the candidate lookup misses (e.g. candidates still
+    // loading), fall back to this member's own current branch rather than '' — a blank
+    // suggestion regresses versus the pre-story guaranteed-non-empty default, and this dialog's
+    // "Create new" confirm really does perform a git write (unlike Create-EDT's own picker).
+    const defaultBaseBranch = deps.candidates.find((candidate) => candidate.path === repoPath)?.sharedBranch || currentBranch;
     const session = createPickerSession(repoPath, {
       suggestedName: suggestion,
+      defaultBaseBranch,
       hasCurrentBranch,
       currentBranch,
       retry: options.retry,

@@ -210,8 +210,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -285,7 +285,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -336,8 +336,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -381,7 +381,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -524,8 +524,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -589,8 +589,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'feature-shared', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'feature-shared', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -639,7 +639,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -674,7 +674,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -746,7 +746,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -785,7 +785,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -826,8 +826,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [],
       edtsStatus: 'idle',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'development', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'development', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {
@@ -877,7 +877,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -889,7 +889,13 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await type(instance, stdin, 'Fix Auth Bug');
       await press(instance, stdin, KEYS.tab); // topic -> members
       await press(instance, stdin, KEYS.space); // select the one candidate
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step (>=1 member selected)
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step: opens the shared
+      // BranchPicker over the base-branch field (Create new mode, story 2.27), pre-filled from
+      // svc-a's own manifest-declared sharedBranch — never DEFAULT_BASE_BRANCH.
+      expect(stdout.output).toContain('Base branch:');
+      expect(stdout.output).toContain('Base branch: development');
+
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
 
       expect(stdout.output).toContain('Base branch: development');
       expect(stdout.output).toContain('Naming: Grouped');
@@ -907,7 +913,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -934,8 +940,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [],
       edtsStatus: 'idle',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -954,12 +960,15 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.space); // select svc-a
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step
-      await press(instance, stdin, KEYS.enter); // confirm — pre-filled grouped name still applies
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step (opens the shared
+      // base-branch picker — both members' sharedBranch is unanimous 'development')
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
+      await press(instance, stdin, KEYS.enter); // confirm the whole form — pre-filled grouped name still applies
 
       expect(createParams?.branchOptions).toEqual({
         create: true,
         base: 'development',
+        bases: { '/repos/a': 'development', '/repos/b': 'development' },
         mode: 'grouped',
         names: { '/repos/a': 'demo', '/repos/b': 'demo' },
       });
@@ -976,8 +985,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [],
       edtsStatus: 'idle',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1006,8 +1015,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.space); // select svc-a
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b
-      await press(instance, stdin, KEYS.tab); // members -> branch-base
-      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the shared
+      // base-branch picker — both members' sharedBranch is unanimous 'development')
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.space); // toggle grouped -> individual
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name (svc-a's field, pre-filled "demo")
       await type(instance, stdin, '-a');
@@ -1021,6 +1031,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       expect(createParams?.branchOptions).toEqual({
         create: true,
         base: 'development',
+        bases: { '/repos/a': 'development', '/repos/b': 'development' },
         mode: 'individual',
         names: { '/repos/a': 'demo-a', '/repos/b': 'demo-b' },
       });
@@ -1034,13 +1045,260 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  // Story 2.27 — I/O matrix "Grouped, diverging": grouped naming stays available for the
+  // branch *name*, but a diverging sharedBranch among the selected members forces the
+  // base-branch field into a per-member picker, each independently suggested/editable and
+  // threaded through to core as a real per-member `bases` map.
+  it('grouped naming + diverging sharedBranch: base-branch is forced per-member, each pre-filled from its own manifest', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'master' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (svc-a's own picker, "main")
+
+      expect(stdout.output).toContain('Base branch for svc-a:');
+      expect(stdout.output).toContain('Base branch: main');
+
+      await press(instance, stdin, KEYS.enter); // confirm svc-a -> opens svc-b's own picker ("master")
+
+      expect(stdout.output).toContain('Base branch for svc-b:');
+      expect(stdout.output).toContain('Base branch: master');
+
+      await press(instance, stdin, KEYS.enter); // confirm svc-b -> both done, advances to branch-mode
+      await press(instance, stdin, KEYS.enter); // confirm the whole form (grouped naming still applies)
+
+      expect(createParams?.branchOptions).toEqual({
+        create: true,
+        base: 'main',
+        bases: { '/repos/a': 'main', '/repos/b': 'master' },
+        mode: 'grouped',
+        names: { '/repos/a': 'demo', '/repos/b': 'demo' },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 2.27 — I/O matrix "Individual naming, diverging sharedBranch": the per-member
+  // base-branch resolution is naming-mode-agnostic (resolveBaseBranchMode/prefillBaseBranches
+  // never look at namingMode), but the matrix names this combination explicitly, so it gets its
+  // own end-to-end coverage rather than relying solely on the grouped-diverging test above.
+  it('individual naming + diverging sharedBranch: base-branch stays forced per-member, names stay independently editable', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'master' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (svc-a's own picker, "main")
+
+      expect(stdout.output).toContain('Base branch for svc-a:');
+      expect(stdout.output).toContain('Base branch: main');
+
+      await press(instance, stdin, KEYS.enter); // confirm svc-a -> opens svc-b's own picker ("master")
+
+      expect(stdout.output).toContain('Base branch for svc-b:');
+      expect(stdout.output).toContain('Base branch: master');
+
+      await press(instance, stdin, KEYS.enter); // confirm svc-b -> both done, advances to branch-mode
+      await press(instance, stdin, KEYS.space); // toggle grouped -> individual
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name (svc-a's field, pre-filled "demo")
+      await type(instance, stdin, '-a');
+      await press(instance, stdin, KEYS.tab); // svc-a's field -> svc-b's field (pre-filled "demo")
+      await type(instance, stdin, '-b');
+      await press(instance, stdin, KEYS.enter); // confirm
+
+      expect(createParams?.branchOptions).toEqual({
+        create: true,
+        base: 'main',
+        bases: { '/repos/a': 'main', '/repos/b': 'master' },
+        mode: 'individual',
+        names: { '/repos/a': 'demo-a', '/repos/b': 'demo-b' },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 2.27 code review (patch): a direct Enter-to-submit from the members checklist (never
+  // visiting the branch-base step UI) relies on the checklist's own Space-toggle handler to
+  // seed baseBranch/baseBranches via prefillBaseBranches — every other interaction test reaches
+  // submitCreate via the branch-base step first, so this specific prefill-on-select wiring was
+  // otherwise never exercised end-to-end.
+  it('direct Enter-to-submit from the members checklist (skipping branch-base) still carries the manifest-derived base branch', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'release' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a (seeds baseBranch from its sharedBranch)
+      await press(instance, stdin, KEYS.enter); // Enter directly from the checklist — never Tabs into branch-base
+      await instance.waitUntilRenderFlush();
+
+      expect(createParams?.branchOptions).toEqual({
+        create: true,
+        base: 'release',
+        bases: { '/repos/a': 'release' },
+        mode: 'grouped',
+        names: { '/repos/a': 'demo' },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 2.27 code review (patch): every other test for the new base-branch picker routing
+  // (handleCreateBaseBranchInput) only drives the default Create-new + Enter-confirm path —
+  // this covers Tab-cycling into Pick existing, the routing's other real branch.
+  it('base-branch picker: Tab into Pick existing and confirm a listed branch feeds it through to submit', async () => {
+    const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      listBranches: async () => ({ ok: true, data: ['develop'] }),
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (Create new, pre-filled "main")
+      await instance.waitUntilRenderFlush(); // let listBranches resolve
+
+      await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
+      expect(stdout.output).toContain('[Pick existing]');
+
+      await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm "develop"
+      await press(instance, stdin, KEYS.enter); // confirm branch-mode (grouped naming, "demo" pre-filled)
+      await press(instance, stdin, KEYS.enter); // submit
+
+      expect(createParams?.branchOptions).toEqual({
+        create: true,
+        base: 'develop',
+        bases: { '/repos/a': 'develop' },
+        mode: 'grouped',
+        names: { '/repos/a': 'demo' },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 2.27 code review (patch): Escape mid the base-branch picker is the routing's other
+  // untested branch — it must step back to the member checklist, the same convention every
+  // other branch-step field's own Escape already uses (create-dialog.tsx's handleCreateInput).
+  it('base-branch picker: Escape steps back to the member checklist, never tearing down the dialog', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the picker)
+
+      const lastFrameWhileOpen = stdout.output.slice(stdout.output.lastIndexOf('CREATE EDT'));
+      expect(lastFrameWhileOpen).toContain('Naming:');
+
+      await pressEscape(instance, stdin); // cancel the picker, back to the member checklist
+
+      const lastFrameAfterClose = stdout.output.slice(stdout.output.lastIndexOf('CREATE EDT'));
+      expect(lastFrameAfterClose).toContain('Topic:');
+      expect(lastFrameAfterClose).not.toContain('Naming:');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('an emptied required branch-name field blocks confirm — no core call, dialog stays open', async () => {
     const store = createAppStore();
     let createCalls = 0;
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1056,8 +1314,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await type(instance, stdin, 'demo');
       await press(instance, stdin, KEYS.tab); // topic -> members
       await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
-      await press(instance, stdin, KEYS.tab); // members -> branch-base
-      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
       for (let i = 0; i < 'demo'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
@@ -1091,8 +1349,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [],
       edtsStatus: 'idle',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1109,8 +1367,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await type(instance, stdin, 'demo');
       await press(instance, stdin, KEYS.tab); // topic -> members
       await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
-      await press(instance, stdin, KEYS.tab); // members -> branch-base
-      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
       for (let i = 0; i < 'demo'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
@@ -1123,8 +1381,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       const beforeSecondSelection = stdout.output.length;
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b too
-      await press(instance, stdin, KEYS.tab); // members -> branch-base
-      await press(instance, stdin, KEYS.tab); // branch-base -> branch-mode
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name
 
       // Every frame rendered since the clear must never show the resurrected suggestion.
@@ -1176,7 +1434,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1252,7 +1510,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [target],
       edtsStatus: 'idle',
       activeEdt: null,
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1298,8 +1556,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1342,7 +1600,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1389,7 +1647,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1447,7 +1705,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1501,7 +1759,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1547,7 +1805,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1586,7 +1844,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1640,7 +1898,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1697,7 +1955,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1753,7 +2011,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1795,6 +2053,62 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
+  // Story 2.27 code review (patch): the picker's "Create new" default base branch for
+  // service-actions' real git-write flow is this repo's own manifest-declared sharedBranch,
+  // never DEFAULT_BASE_BRANCH — asserts the actual `base` argument delivered to
+  // createMemberBranch, using a sharedBranch that differs from 'development' so this is
+  // distinguishable from the old hardcoded literal (every pre-existing fixture used
+  // 'development', identical to the literal, so a regression there wouldn't have failed any
+  // test).
+  it('service-actions Change-branch Create-new confirm-without-editing sends the manifest sharedBranch as base', async () => {
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let createdBase: string | undefined;
+    const store = createAppStore();
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'release' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createMemberBranch: async (_repoPath, _branchName, baseBranch) => {
+        createdBase = baseBranch;
+        return { ok: true, data: undefined };
+      },
+      modifyEdt: async (): Promise<Result<ModifyEdtData>> => ({
+        ok: true,
+        data: { ulid: 'active-ulid', topic: 'active-edt', results: [] },
+      }),
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.enter); // open the contextual menu
+      await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
+      await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new: base field
+      // focused first, pre-filled from svc-a's own manifest sharedBranch, "release")
+
+      expect(stdout.output).toContain('Base branch: release');
+
+      await press(instance, stdin, KEYS.enter); // confirm base without editing -> advance to name (pre-filled "main")
+      await press(instance, stdin, KEYS.enter); // confirm name without editing -> submit
+      await instance.waitUntilRenderFlush();
+
+      expect(createdBase).toBe('release');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   // Story 2.25 -----------------------------------------------------------------------------
   // "Assisted resolution" for the one registered failure code, branch-owned-by-other-edt —
   // a per-repo structured line (never joined), an inline "[Enter] try a different branch"
@@ -1817,8 +2131,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -1929,8 +2243,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2022,7 +2336,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2102,7 +2416,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2176,7 +2490,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -2202,8 +2516,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await type(instance, stdin, 'demo');
       await press(instance, stdin, KEYS.tab); // topic -> members
       await press(instance, stdin, KEYS.space); // select svc-a
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step
-      await press(instance, stdin, KEYS.enter); // confirm
+      await press(instance, stdin, KEYS.tab); // members -> branch-setup step (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
+      await press(instance, stdin, KEYS.enter); // confirm the whole form
       await instance.waitUntilRenderFlush();
 
       expect(stdout.output).toContain('svc-a');
@@ -2275,7 +2590,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2324,7 +2639,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2370,7 +2685,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2418,7 +2733,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       // No members -> EDT SERVICES is empty; the one service is a non-member, so it lands in
       // OTHER SERVICES instead.
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2454,7 +2769,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       activeEdt: 'active-ulid',
       // The one service is a member of the selected EDT -> OTHER SERVICES is empty.
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},

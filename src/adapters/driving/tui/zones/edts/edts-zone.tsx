@@ -23,7 +23,7 @@ import { useEffect, useState } from 'react';
 import { Box, Text, useInput, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { DEFAULT_BASE_BRANCH, useAppStore, type AppStore } from '../../store/app-store.js';
+import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
@@ -190,7 +190,7 @@ export function EdtsZone({
       if (svc === undefined) {
         return { kind: 'none' };
       }
-      return initialAddToEdtDialog(target, svc.path, svc.service, svc.branch);
+      return initialAddToEdtDialog(target, svc.path, svc.service, svc.branch, svc.sharedBranch);
     }
     return initialModifyDialog(target);
   });
@@ -242,13 +242,18 @@ export function EdtsZone({
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
   // Story 2.26: fetches a branch-picker session's own listBranches(repoPath) once, whenever a
-  // session opens (any of the 3 entry points, via createPickerSession's branchesStatus:
+  // session opens (any of the entry points, via createPickerSession's branchesStatus:
   // 'loading' seed) — never re-fetched on every render, mirroring loadEdtsBranches' own
   // "fetched on the relevant change, not continuously re-synced" convention. A stale response
   // (the picker closed, or a different repoPath's session opened, before this resolved) is
   // dropped rather than applied.
+  // Story 2.27: extended to also key off dialog.kind === 'create' — the create-EDT dialog's
+  // own base-branch step now opens the same kind of session and needs its own listBranches
+  // fetch through this exact effect, not a second parallel one.
   const activeBranchPicker =
-    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' ? dialog.branchPicker : null;
+    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' || dialog.kind === 'create'
+      ? dialog.branchPicker
+      : null;
   // Keyed on repoPath/branchesStatus (primitives) rather than the activeBranchPicker object
   // itself — that object is freshly spread on every keystroke inside the picker (session.state
   // updates), which would otherwise re-fire this effect (and spawn a new listBranches() git
@@ -267,7 +272,7 @@ export function EdtsZone({
         return;
       }
       setDialog((prev) => {
-        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt') {
+        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt' && prev.kind !== 'create') {
           return prev;
         }
         if (prev.branchPicker === null || prev.branchPicker.repoPath !== repoPath || prev.branchPicker.branchesStatus !== 'loading') {
@@ -408,6 +413,7 @@ export function EdtsZone({
     loadEdtsBranches,
     logEdtAction,
     createMemberBranchAction,
+    candidates,
   });
   const { handleAddToEdtInput } = createAddToEdtDialogHandlers({
     setDialog,
@@ -500,7 +506,7 @@ export function EdtsZone({
     if (key.return) {
       const service = otherServices[clampedOtherServicesSelected];
       if (service !== undefined && focusedEdt !== undefined) {
-        setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch));
+        setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch, service.sharedBranch));
       }
     }
   // Story 2.21: while Ctrl+W resize-mode owns input (AppShell's own useInput dispatches

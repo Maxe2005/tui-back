@@ -32,12 +32,15 @@ import {
   nextTextInputValue,
   partitionServicesByEdtMembership,
   prefillBranchNames,
+  prefillBaseBranches,
+  resolveBaseBranchMode,
   resolveCandidateListState,
   resolveActionHint,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
+  suggestBaseBranchFor,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
@@ -68,6 +71,7 @@ function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranc
     ahead: 0,
     behind: 0,
     status: 'current',
+    sharedBranch: 'development',
     ...overrides,
   };
 }
@@ -610,45 +614,118 @@ describe('prefillBranchNames (story 2.22)', () => {
   });
 });
 
-describe('buildCreateBranchOptions (story 2.22)', () => {
+describe('buildCreateBranchOptions (story 2.22, signature updated story 2.27)', () => {
   it('zero members -> the exact NO_BRANCH_CREATION value (core param is mandatory)', () => {
-    expect(buildCreateBranchOptions([], 'main', 'grouped', 'unused', {}, NO_BRANCH_CREATION)).toBe(NO_BRANCH_CREATION);
+    expect(buildCreateBranchOptions([], 'grouped', 'unused', {}, {}, NO_BRANCH_CREATION)).toBe(NO_BRANCH_CREATION);
   });
 
-  it('grouped mode: the identical name for every selected member', () => {
-    expect(buildCreateBranchOptions(['/a', '/b'], 'development', 'grouped', 'feature-x', {}, NO_BRANCH_CREATION)).toEqual({
+  it('grouped mode: the identical name for every selected member, per-member bases threaded through', () => {
+    expect(
+      buildCreateBranchOptions(['/a', '/b'], 'grouped', 'feature-x', {}, { '/a': 'development', '/b': 'development' }, NO_BRANCH_CREATION),
+    ).toEqual({
       create: true,
       base: 'development',
+      bases: { '/a': 'development', '/b': 'development' },
       mode: 'grouped',
       names: { '/a': 'feature-x', '/b': 'feature-x' },
     });
   });
 
-  it('individual mode: a per-repoPath name map', () => {
+  it('individual mode: a per-repoPath name map, and a per-repoPath base map (diverging sharedBranch)', () => {
     expect(
-      buildCreateBranchOptions(['/a', '/b'], 'development', 'individual', 'unused', { '/a': 'feature-a', '/b': 'feature-b' }, NO_BRANCH_CREATION),
+      buildCreateBranchOptions(
+        ['/a', '/b'],
+        'individual',
+        'unused',
+        { '/a': 'feature-a', '/b': 'feature-b' },
+        { '/a': 'main', '/b': 'master' },
+        NO_BRANCH_CREATION,
+      ),
     ).toEqual({
       create: true,
-      base: 'development',
+      base: 'main',
+      bases: { '/a': 'main', '/b': 'master' },
       mode: 'individual',
       names: { '/a': 'feature-a', '/b': 'feature-b' },
     });
   });
 });
 
-describe('validateCreateBranchFields (story 2.22)', () => {
+describe('validateCreateBranchFields (story 2.22, base-branch validation added story 2.27)', () => {
   it('zero members: nothing to validate', () => {
-    expect(validateCreateBranchFields('grouped', [], '', {})).toBeNull();
+    expect(validateCreateBranchFields('grouped', [], '', {}, {})).toBeNull();
   });
 
-  it('grouped mode: rejects an empty shared field', () => {
-    expect(validateCreateBranchFields('grouped', ['/a'], '', {})).toBe('Branch name must not be empty');
-    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {})).toBeNull();
+  it('grouped mode: rejects an empty shared name field', () => {
+    expect(validateCreateBranchFields('grouped', ['/a'], '', {}, { '/a': 'development' })).toBe('Branch name must not be empty');
+    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {}, { '/a': 'development' })).toBeNull();
   });
 
   it('individual mode: rejects if any selected member is missing a name', () => {
-    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a' })).toBe('Branch name must not be empty');
-    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a', '/b': 'feature-b' })).toBeNull();
+    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a' }, { '/a': 'development', '/b': 'development' })).toBe(
+      'Branch name must not be empty',
+    );
+    expect(
+      validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a', '/b': 'feature-b' }, { '/a': 'development', '/b': 'development' }),
+    ).toBeNull();
+  });
+
+  it('rejects an empty base-branch field before ever checking the name field(s)', () => {
+    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {}, { '/a': '' })).toBe('Base branch: Branch name must not be empty');
+  });
+});
+
+describe('resolveBaseBranchMode (story 2.27)', () => {
+  it('a single selected member is always "shared"', () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
+    expect(resolveBaseBranchMode(['/a'], candidates)).toBe('shared');
+  });
+
+  it('>=2 members with a unanimous sharedBranch stay "shared"', () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'main' })];
+    expect(resolveBaseBranchMode(['/a', '/b'], candidates)).toBe('shared');
+  });
+
+  it('>=2 members with a diverging sharedBranch are forced "per-member"', () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'master' })];
+    expect(resolveBaseBranchMode(['/a', '/b'], candidates)).toBe('per-member');
+  });
+});
+
+describe('suggestBaseBranchFor (story 2.27)', () => {
+  it("suggests the repo's own manifest-declared sharedBranch, never a hardcoded literal", () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
+    expect(suggestBaseBranchFor('/a', candidates)).toBe('main');
+  });
+
+  it('falls back to an empty string when the path is not among the known candidates', () => {
+    expect(suggestBaseBranchFor('/unknown', [])).toBe('');
+  });
+});
+
+describe('prefillBaseBranches (story 2.27)', () => {
+  it('single repo: fills the shared field from that repo\'s own sharedBranch when untouched', () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
+    expect(prefillBaseBranches(['/a'], candidates, '', {}, false, {})).toEqual({
+      baseBranch: 'main',
+      baseBranches: { '/a': 'main' },
+    });
+  });
+
+  it('never overwrites a value the developer already typed (touched)', () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
+    expect(prefillBaseBranches(['/a'], candidates, 'my-custom-base', {}, true, {})).toEqual({
+      baseBranch: 'my-custom-base',
+      baseBranches: { '/a': 'main' },
+    });
+  });
+
+  it('fills every untouched selected member from its own sharedBranch, leaves touched entries untouched', () => {
+    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'master' })];
+    expect(prefillBaseBranches(['/a', '/b'], candidates, '', { '/a': 'kept' }, false, { '/a': true })).toEqual({
+      baseBranch: 'main',
+      baseBranches: { '/a': 'kept', '/b': 'master' },
+    });
   });
 });
 

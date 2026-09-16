@@ -372,6 +372,22 @@ describe('createEdt — branch creation enabled', () => {
       ['/repo/b', 'feat/x', 'main'],
     ]);
   });
+
+  // Story 2.27: `bases[member]` overrides the top-level `base` for that member only — the
+  // per-member base-branch shape the EDT-creation TUI now feeds when selected members'
+  // manifest-declared sharedBranch values diverge (edts-zone.logic.ts's buildCreateBranchOptions).
+  it('a per-member `bases` entry wins over the top-level `base` for that member, leaving others on `base`', async () => {
+    const params = await makeParams({
+      branchOptions: { ...GROUPED, base: 'main', bases: { '/repo/a': 'master' } },
+    });
+
+    await createEdt(params);
+
+    expect(calls(params.git.createBranch)).toEqual([
+      ['/repo/a', 'feat/x', 'master'],
+      ['/repo/b', 'feat/x', 'main'],
+    ]);
+  });
 });
 
 describe('createEdt — per-service failure isolation (AC3)', () => {
