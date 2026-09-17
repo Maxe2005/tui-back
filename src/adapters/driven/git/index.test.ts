@@ -24,7 +24,9 @@ import {
   currentBranch,
   deleteBranch,
   fetchBranch,
+  hasStash,
   hasUncommittedChanges,
+  isBranchMerged,
   listBranches,
   renameBranch,
   restoreStash,
@@ -149,6 +151,7 @@ function fakeEdtRegistry(entries: EdtRegistryEntry[]): EdtRegistryPort {
     list: async () => ok(entries),
     setStatus: async () => ok(undefined),
     update: async () => ok(undefined),
+    remove: async () => ok(undefined),
   };
 }
 
@@ -235,6 +238,7 @@ describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
       list: async () => ({ ok: false, error: { code: 'edt-registry-invalid-format', message: 'bad shape' } }),
       setStatus: async () => ok(undefined),
       update: async () => ok(undefined),
+      remove: async () => ok(undefined),
     };
 
     const result = await assertAllowedBranch(manifest, repo, 'feat/x', 'edt-mine', edtRegistry);
@@ -517,20 +521,47 @@ describe('spawn failure diagnostics (status === null)', () => {
 });
 
 describe('deleteBranch', () => {
-  it('deletes an existing non-shared branch ref', async () => {
+  it('deletes an existing non-shared branch ref (force: true -> git branch -D)', async () => {
     const repo = await makeGitRepo();
     expect(runGit(repo, ['branch', 'feat/x']).status).toBe(0);
 
-    const result = await deleteBranch(manifest, repo, 'feat/x');
+    const result = await deleteBranch(manifest, repo, 'feat/x', true);
 
     expect(result).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/x')).toBe(false);
   });
 
+  // Story 2.29: force: false selects `git branch -d`, which refuses to delete a branch not
+  // yet merged into the current HEAD — surfaced as a controlled git-delete-branch-error,
+  // never a throw, and the ref survives untouched.
+  it('force: false (-d) refuses to delete an unmerged branch, leaving the ref intact', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/unmerged']).status).toBe(0);
+    await writeFile(join(repo, 'unmerged.txt'), 'x');
+    runGit(repo, ['add', 'unmerged.txt']);
+    expect(runGit(repo, ['commit', '-m', 'unmerged work']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+
+    const result = await deleteBranch(manifest, repo, 'feat/unmerged', false);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-delete-branch-error' } });
+    expect(branchExists(repo, 'feat/unmerged')).toBe(true);
+  });
+
+  it('force: false (-d) deletes a branch already merged into HEAD', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
+
+    const result = await deleteBranch(manifest, repo, 'feat/merged', false);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(repo, 'feat/merged')).toBe(false);
+  });
+
   it('treats a missing branch as a no-op success (idempotent rollback)', async () => {
     const repo = await makeGitRepo();
 
-    const result = await deleteBranch(manifest, repo, 'feat/never-created');
+    const result = await deleteBranch(manifest, repo, 'feat/never-created', true);
 
     expect(result).toEqual({ ok: true, data: undefined });
   });
@@ -538,7 +569,7 @@ describe('deleteBranch', () => {
   it('rejects a built-in shared branch before any git invocation', async () => {
     const repo = await makeGitRepo();
 
-    const result = await deleteBranch(manifest, repo, 'development');
+    const result = await deleteBranch(manifest, repo, 'development', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     expect(branchExists(repo, 'development')).toBe(true);
@@ -547,7 +578,7 @@ describe('deleteBranch', () => {
   it('rejects a branch name equal to the repo manifest sharedBranch', async () => {
     const repo = await makeGitRepo('staging');
 
-    const result = await deleteBranch(manifest, repo, 'staging');
+    const result = await deleteBranch(manifest, repo, 'staging', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
   });
@@ -555,7 +586,7 @@ describe('deleteBranch', () => {
   it('rejects a shared branch without touching git at all (manifest-only dir, not a git repo)', async () => {
     const dir = await makeDirWithManifestOnly();
 
-    const result = await deleteBranch(manifest, dir, 'prod');
+    const result = await deleteBranch(manifest, dir, 'prod', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
   });
@@ -564,9 +595,41 @@ describe('deleteBranch', () => {
     const repo = await makeGitRepo();
     await rm(join(repo, '.tui-back.yaml'), { force: true });
 
-    const result = await deleteBranch(manifest, repo, 'feat/x');
+    const result = await deleteBranch(manifest, repo, 'feat/x', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+});
+
+// Story 2.29 — local-only ancestor check backing the EDT-delete use-case's -d/-D decision.
+describe('isBranchMerged', () => {
+  it('reports true when branchName is an ancestor of into (merged, no divergent commits)', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
+
+    const result = await isBranchMerged(repo, 'feat/merged', 'development');
+
+    expect(result).toEqual({ ok: true, data: true });
+  });
+
+  it('reports false when branchName has commits development does not have (unmerged)', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/unmerged']).status).toBe(0);
+    await writeFile(join(repo, 'unmerged.txt'), 'x');
+    runGit(repo, ['add', 'unmerged.txt']);
+    expect(runGit(repo, ['commit', '-m', 'unmerged work']).status).toBe(0);
+
+    const result = await isBranchMerged(repo, 'feat/unmerged', 'development');
+
+    expect(result).toEqual({ ok: true, data: false });
+  });
+
+  it('reports a controlled git error for a non-existent ref, never a throw', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await isBranchMerged(repo, 'feat/does-not-exist', 'development');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-base-error' } });
   });
 });
 
@@ -683,6 +746,44 @@ describe('stashSave / restoreStash', () => {
     const result = await stashSave(dir, 'tui-back:x');
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-stash-error' } });
+  });
+});
+
+// Story 2.29 — hasStash: the non-destructive existence check backing the EDT-delete
+// use-case's corrected clean-detection (Design Notes: a member's own `tui-back:<edtUlid>`
+// stash signals real uncommitted work belonging to that member, independent of whatever the
+// repo's working tree currently has checked out). Built on the same findStashRef
+// list-and-match logic restoreStash already used — never pops anything.
+describe('hasStash', () => {
+  it('reports true when a stash tagged with the given tag exists, without popping it', async () => {
+    const repo = await makeGitRepo();
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked']).status).toBe(0);
+    await writeFile(join(repo, 'tracked.txt'), 'dirty');
+    expect((await stashSave(repo, 'tui-back:01ULIDEXAMPLE')).ok).toBe(true);
+
+    const result = await hasStash(repo, 'tui-back:01ULIDEXAMPLE');
+
+    expect(result).toEqual({ ok: true, data: true });
+    // Never destructive: the stash is still present afterwards.
+    expect(runGit(repo, ['stash', 'list']).stdout).toContain('01ULIDEXAMPLE');
+  });
+
+  it('reports false when no stash matches the tag (absent-tag case)', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await hasStash(repo, 'tui-back:no-such-tag');
+
+    expect(result).toEqual({ ok: true, data: false });
+  });
+
+  it('reports a controlled error when git stash list fails (not a git repo)', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    const result = await hasStash(dir, 'tui-back:x');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-stash-list-error' } });
   });
 });
 
@@ -856,8 +957,23 @@ describe('createGitPort', () => {
     expect(await port.currentBranch(repo)).toEqual({ ok: true, data: 'development' });
     expect(await port.createBranch(repo, 'feat/port', 'development')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/port')).toBe(true);
-    expect(await port.deleteBranch(repo, 'feat/port')).toEqual({ ok: true, data: undefined });
+    expect(await port.deleteBranch(repo, 'feat/port', true)).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/port')).toBe(false);
+  });
+
+  it('wires isBranchMerged (story 2.29) behind the factory pattern', async () => {
+    const repo = await makeGitRepo();
+    const port = createGitPort(manifest);
+    expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
+
+    expect(await port.isBranchMerged(repo, 'feat/merged', 'development')).toEqual({ ok: true, data: true });
+  });
+
+  it('wires hasStash (story 2.29) behind the factory pattern', async () => {
+    const repo = await makeGitRepo();
+    const port = createGitPort(manifest);
+
+    expect(await port.hasStash(repo, 'tui-back:no-such-tag')).toEqual({ ok: true, data: false });
   });
 
   it('wires aheadBehind (story 2.6) behind the factory pattern', async () => {

@@ -380,6 +380,8 @@ it('shouldQuit returns true for q', () => {
         createEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         switchEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         modifyEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        deleteEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        resolveMemberDeleteStatuses: async () => [],
         listBranches: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         createMemberBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         renameBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
@@ -396,6 +398,7 @@ it('shouldQuit returns true for q', () => {
         openEdtCreateDialog: () => {},
         openEdtSwitchDialog: () => {},
         openEdtModifyDialog: () => {},
+        openEdtDeleteDialog: () => {},
         logEdtAction: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);

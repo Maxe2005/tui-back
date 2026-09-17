@@ -15,7 +15,14 @@ import {
   type ModifyEdtData,
 } from '../../../../../core/edt/modify.js';
 import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
+import {
+  deleteEdt as deleteEdtUseCase,
+  resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,
+  type DeleteEdtData,
+  type MemberDeleteStatus,
+  type MemberDisposition,
+} from '../../../../../core/edt/delete.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
 import type { Result } from '../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
@@ -61,9 +68,15 @@ export type ModifyEdtParams = {
   renameBranches?: Array<{ repoPath: string; newName: string }>;
 };
 
+// Story 2.29: mirrors ModifyEdtParams' own shape.
+export type DeleteEdtParams = {
+  topic: string;
+  dispositions: Record<string, MemberDisposition>;
+};
+
 // Story 2.15: EDT action state for in-progress actions shown in the detail pane.
 export type EdtActionState = {
-  type: 'create' | 'switch' | 'modify';
+  type: 'create' | 'switch' | 'modify' | 'delete';
   target: string; // EDT topic or "new EDT" for create
   startedAt: string; // ISO timestamp
 };
@@ -124,6 +137,16 @@ export type EdtSlice = {
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
+  // Story 2.29: mirrors createEdt/switchEdt/modifyEdt's own call shape — the delete dialog's
+  // confirm calls core/edt/delete.ts's deleteEdt in-process (AD-2), never via the CLI.
+  deleteEdt: (params: DeleteEdtParams) => Promise<Result<DeleteEdtData>>;
+  // Story 2.29: the delete-confirm dialog's per-member merge/clean status fetch (mirrors
+  // listMemberBranches' thin-wrapper precedent — deps.git/manifest are never called directly
+  // from the TUI layer, only through a core export). Never fails outright: a per-member read
+  // failure folds into that member's own statusError field instead (core/edt/delete.ts).
+  // `edtUlid` is the target EDT's own ulid (the one being deleted) — needed for the
+  // corrected clean-detection's `tui-back:<edtUlid>` tagged-stash check (Design Notes).
+  resolveMemberDeleteStatuses: (edtUlid: string, members: readonly EdtMember[]) => Promise<MemberDeleteStatus[]>;
   // Story 2.26: the shared branch-picker's own two capabilities, wrapping core/edt/modify.ts's
   // listMemberBranches/createMemberBranch exports (never `deps.git` directly — Design Notes).
   // `renameBranch` backs the picker's Pick-existing row-rename pre-step at Add-to-EDT, the one
@@ -144,6 +167,7 @@ export type EdtSlice = {
   openEdtCreateDialog: () => void;
   openEdtSwitchDialog: (fullQuery: string) => void;
   openEdtModifyDialog: (fullQuery: string) => void;
+  openEdtDeleteDialog: (fullQuery: string) => void;
   // Story 2.15: logs an EDT action to the per-EDT SQLite action_log table.
   logEdtAction: (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => Promise<void>;
 };
@@ -310,6 +334,31 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       return result;
     },
+    // Note: unlike createEdt/switchEdt/modifyEdt, a successful delete never targets the active
+    // EDT (rejected upfront by the use-case itself) and never adds/removes an active member —
+    // so there is nothing for loadTabVisibility to recompute here.
+    deleteEdt: async (params) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return deleteEdtUseCase({
+        edtRegistry: deps.edtRegistry,
+        edtRegistryResourceKey: deps.edtRegistryResourceKey,
+        manifest: deps.manifest,
+        git: deps.git,
+        lock: deps.lock,
+        state: deps.state,
+        edtsBaseDir: deps.edtsBaseDir,
+        topic: params.topic,
+        dispositions: params.dispositions,
+      });
+    },
+    resolveMemberDeleteStatuses: async (edtUlid, members) => {
+      if (!deps) {
+        return [];
+      }
+      return resolveMemberDeleteStatusesUseCase(deps.git, deps.manifest, edtUlid, members);
+    },
     listBranches: async (repoPath) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
@@ -378,6 +427,14 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       const topic = parts.length > 1 ? parts.slice(1).join(' ') : null;
       set({ currentEdtAction: { type: 'modify', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
       // The edts-zone will handle showing the quick-pick or pre-targeted modify dialog
+    },
+    openEdtDeleteDialog: (fullQuery: string) => {
+      // Parse optional topic from query: "edt-delete [topic]"
+      const parts = fullQuery.trim().split(/\s+/);
+      const topic = parts.length > 1 ? parts.slice(1).join(' ') : null;
+      set({ currentEdtAction: { type: 'delete', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
+      // The edts-zone will handle opening the pre-targeted delete-confirm dialog, enforcing
+      // the reject-if-active check at open time.
     },
     // Story 2.15: log EDT action to per-EDT SQLite
     logEdtAction: async (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => {

@@ -15,12 +15,14 @@ import {
   advanceCreateFormFocus,
   appendHint,
   buildCreateBranchOptions,
+  buildDeleteMemberRows,
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
   formatAvailableActionsHint,
   formatEdtActionHistory,
   formatEdtDetail,
+  formatDeleteMemberMeta,
   formatEdtRowMeta,
   formatIssuesSummary,
   formatServiceDetail,
@@ -819,6 +821,44 @@ describe('summarizeFailedResults', () => {
   });
 });
 
+// Review fix (story 2.29): statusError must thread through buildDeleteMemberRows into the
+// rendered row, and formatDeleteMemberMeta must annotate it rather than rendering a
+// plausible-looking-but-untrustworthy merged/clean label.
+describe('buildDeleteMemberRows / formatDeleteMemberMeta (story 2.29 review fix — statusError)', () => {
+  it('threads statusError through from MemberDeleteStatus to DeleteMemberRow', () => {
+    const rows = buildDeleteMemberRows([
+      { repoPath: '/repo/a', service: 'svc-a', branch: 'feat/a', merged: true, clean: true, statusError: 'no manifest' },
+      { repoPath: '/repo/b', service: 'svc-b', branch: 'feat/b', merged: true, clean: true },
+    ]);
+
+    expect(rows[0]?.statusError).toBe('no manifest');
+    expect(rows[1]?.statusError).toBeUndefined();
+  });
+
+  it('formatDeleteMemberMeta appends the "status unknown" annotation only when statusError is set', () => {
+    const clean = formatDeleteMemberMeta({
+      repoPath: '/repo/a',
+      service: 'svc-a',
+      branch: 'feat/a',
+      merged: true,
+      clean: true,
+      disposition: 'leave',
+    });
+    const withStatusError = formatDeleteMemberMeta({
+      repoPath: '/repo/a',
+      service: 'svc-a',
+      branch: 'feat/a',
+      merged: true,
+      clean: true,
+      disposition: 'leave',
+      statusError: 'no manifest',
+    });
+
+    expect(clean).toBe('feat/a — merged, clean');
+    expect(withStatusError).toBe('feat/a — merged, clean (status unknown — defaulted to leave)');
+  });
+});
+
 describe('canEditMemberBranch', () => {
   // Story 2.26 amendment: re-adds membership awareness via `originalMemberPaths` (dialog-open-
   // time membership snapshot) — dropped by 2.24's own code review, but needed so an
@@ -1293,6 +1333,77 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('SWITCH EDT');
     expect(output).toContain('force switch');
     expect(output).toContain('cancel');
+  });
+
+  // Story 2.29: the delete-confirm dialog lists every member with branch, merge status, and
+  // uncommitted-work status (acceptance criteria).
+  it('AC (2.29): the delete-confirm dialog lists every member with branch, merge, and uncommitted-work status', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [
+        edtEntry({
+          topic: 'other-work',
+          members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'feat/x' }],
+        }),
+      ],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="delete-confirm" />);
+    expect(output).toContain('DELETE EDT');
+    expect(output).toContain('other-work');
+    expect(output).toContain('api-gateway');
+    expect(output).toContain('feat/x');
+  });
+
+  // Review fix (story 2.29): a member row whose merged/clean status couldn't be established
+  // (a manifest/git read failed) must say so explicitly rather than rendering a
+  // plausible-looking-but-untrustworthy "merged/unmerged, clean/uncommitted work" label.
+  it('AC (2.29 review fix): a member row with a statusError renders the "status unknown" annotation', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [
+        edtEntry({
+          topic: 'other-work',
+          members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'feat/x' }],
+        }),
+      ],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="delete-confirm-status-error" />);
+    expect(output).toContain('DELETE EDT');
+    expect(output).toContain('api-gateway');
+    expect(output).toContain('status unknown — defaulted to leave');
+  });
+
+  // I/O matrix: "Delete the active EDT" -> rejected before any write, clear message, never
+  // auto-switched — only [Esc] cancel is ever offered.
+  it('AC (2.29): deleting the active EDT is rejected with a clear message, no confirm affordance', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-work' })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="delete-confirm-rejected" />);
+    expect(output).toContain('DELETE EDT');
+    expect(output).toContain('active-work');
+    expect(output).toContain('active EDT');
+    expect(output).toContain('cancel');
+    expect(output).not.toContain('confirm');
   });
 
   it('AC3: the modify form shows the topic, and every candidate service checked/unchecked per current membership', async () => {
