@@ -55,6 +55,8 @@ export type BranchPickerOutcome =
 export type BranchPickerRenameSub = {
   oldName: string;
   value: string;
+  // Story 2.32: value's own caret position — mirrors every other field's paired cursor here.
+  cursor: number;
   error: string | null;
 };
 
@@ -64,12 +66,20 @@ export type BranchPickerState = {
   currentBranch: string;
   // Create new
   baseBranch: string;
+  // Story 2.32: baseBranch's own caret position.
+  baseBranchCursor: number;
   baseFocused: boolean; // true: base-branch field focused; false: name field focused
   nameValue: string;
+  // Story 2.32: nameValue's own caret position.
+  nameValueCursor: number;
   nameSubListOpen: boolean;
   nameSubListCursor: number;
   // Pick existing
   pickQuery: string;
+  // Story 2.32: pickQuery's own caret position — named distinctly from `pickCursor` below
+  // (Boundaries: "new cursor names must not collide with existing cursor row-selection
+  // fields ... BranchPickerState.pickCursor").
+  pickQueryCursor: number;
   pickCursor: number;
   // Pick-existing's row-rename sub-view, and Rename current's own (only) field — same shape,
   // since "Rename current" is defined as "the exact pick-then-rename mechanism ... pre-selected
@@ -89,11 +99,14 @@ export function createBranchPickerState(params: {
     hasCurrentBranch: params.hasCurrentBranch,
     currentBranch: params.currentBranch,
     baseBranch: params.defaultBaseBranch,
+    baseBranchCursor: params.defaultBaseBranch.length,
     baseFocused: true,
     nameValue: params.suggestedName,
+    nameValueCursor: params.suggestedName.length,
     nameSubListOpen: false,
     nameSubListCursor: 0,
     pickQuery: '',
+    pickQueryCursor: 0,
     pickCursor: 0,
     renameSub: null,
     error: null,
@@ -102,24 +115,33 @@ export function createBranchPickerState(params: {
 
 // Reopens the picker pre-filled with a collided value after a `branch-exists`/
 // `branch-owned-by-other-edt` failure (I/O matrix: "Reopens the relevant field, re-submits").
+// Story 2.32: a programmatic overwrite — the reopened field's cursor resets to the collided
+// value's length (Always: "Programmatic value overwrites ... reset cursor to value.length").
 export function applyBranchPickerRetry(
   state: BranchPickerState,
   retry: { field: 'create-name' | 'rename'; value: string; oldName?: string },
 ): BranchPickerState {
   if (retry.field === 'create-name') {
-    return { ...state, mode: 'create-new', baseFocused: false, nameValue: retry.value, error: null };
+    return { ...state, mode: 'create-new', baseFocused: false, nameValue: retry.value, nameValueCursor: retry.value.length, error: null };
   }
   return {
     ...state,
     mode: state.hasCurrentBranch && retry.oldName === state.currentBranch ? 'rename-current' : 'pick-existing',
-    renameSub: { oldName: retry.oldName ?? state.renameSub?.oldName ?? state.currentBranch, value: retry.value, error: null },
+    renameSub: {
+      oldName: retry.oldName ?? state.renameSub?.oldName ?? state.currentBranch,
+      value: retry.value,
+      cursor: retry.value.length,
+      error: null,
+    },
   };
 }
 
 // A minimal, local re-implementation of edts-zone.tsx's nextTextInputValue (deliberately not
 // imported from there: edts-zone.tsx imports this module, and this module must never import
 // back from it — a cycle). Same defensive behavior: every non-character key is filtered out
-// before it ever reaches the value.
+// before it ever reaches the value. Story 2.32: retargeted to `{value, cursor}` in/out, in
+// lockstep with nextTextInputValue's own retargeting — Left/Right/Home/End now move `cursor`
+// (clamped to [0, value.length]) and Backspace/Delete/typed-char apply at `cursor`.
 type TextEditKey = {
   backspace?: boolean;
   delete?: boolean;
@@ -136,29 +158,47 @@ type TextEditKey = {
   meta?: boolean;
 };
 
-function applyTextInput(current: string, input: string, key: TextEditKey): string {
-  if (key.backspace || key.delete) {
-    return current.slice(0, -1);
+type TextEditState = { value: string; cursor: number };
+
+function applyTextInput(current: TextEditState, input: string, key: TextEditKey): TextEditState {
+  const { value, cursor } = current;
+  // Code review fix: ctrl/meta must stay fully inert even when combined with an arrow/Home/
+  // End/Backspace/Delete flag — checked first, mirroring edts-zone.logic.ts's own
+  // nextTextInputValue fix, so Ctrl/Meta+<key> never moves or edits the caret here either.
+  if (key.ctrl || key.meta) {
+    return current;
   }
-  if (
-    key.return ||
-    key.escape ||
-    key.tab ||
-    key.upArrow ||
-    key.downArrow ||
-    key.leftArrow ||
-    key.rightArrow ||
-    key.home ||
-    key.end ||
-    key.ctrl ||
-    key.meta
-  ) {
+  if (key.leftArrow) {
+    return { value, cursor: Math.max(0, cursor - 1) };
+  }
+  if (key.rightArrow) {
+    return { value, cursor: Math.min(value.length, cursor + 1) };
+  }
+  if (key.home) {
+    return { value, cursor: 0 };
+  }
+  if (key.end) {
+    return { value, cursor: value.length };
+  }
+  if (key.backspace) {
+    if (cursor === 0) {
+      return current;
+    }
+    return { value: value.slice(0, cursor - 1) + value.slice(cursor), cursor: cursor - 1 };
+  }
+  if (key.delete) {
+    if (cursor >= value.length) {
+      return current;
+    }
+    return { value: value.slice(0, cursor) + value.slice(cursor + 1), cursor };
+  }
+  if (key.return || key.escape || key.tab || key.upArrow || key.downArrow) {
     return current;
   }
   if (input.length === 0) {
     return current;
   }
-  return current + input;
+  return { value: value.slice(0, cursor) + input + value.slice(cursor), cursor: cursor + input.length };
 }
 
 export type BranchPickerKeyResult =
@@ -202,7 +242,7 @@ export function handleBranchPickerKey(
         state: {
           ...state,
           mode: nextMode,
-          renameSub: { oldName: state.currentBranch, value: state.currentBranch, error: null },
+          renameSub: { oldName: state.currentBranch, value: state.currentBranch, cursor: state.currentBranch.length, error: null },
           nameSubListOpen: false,
           nameSubListCursor: 0,
           error: null,
@@ -244,16 +284,30 @@ function handleCreateNewKey(
       const dir = key.downArrow ? 1 : -1;
       const idx = matches.indexOf(state.baseBranch);
       const nextIdx = ((idx === -1 ? 0 : idx) + dir + matches.length) % matches.length;
-      return { type: 'update', state: { ...state, baseBranch: matches[nextIdx] } };
+      const nextBaseBranch = matches[nextIdx];
+      // Story 2.32: cycling through suggestions is a programmatic overwrite — the caret jumps
+      // to the new value's end (Always: "Programmatic value overwrites ... reset cursor to
+      // value.length"), same as every other suggestion/retry reseed in this file.
+      return { type: 'update', state: { ...state, baseBranch: nextBaseBranch, baseBranchCursor: nextBaseBranch.length } };
     }
-    return { type: 'update', state: { ...state, baseBranch: applyTextInput(state.baseBranch, input, key) } };
+    const editedBase = applyTextInput({ value: state.baseBranch, cursor: state.baseBranchCursor }, input, key);
+    return { type: 'update', state: { ...state, baseBranch: editedBase.value, baseBranchCursor: editedBase.cursor } };
   }
 
   // Name field focused
   if (state.nameSubListOpen) {
     if (key.return) {
       const picked = otherMemberBranches[state.nameSubListCursor];
-      return { type: 'update', state: { ...state, nameValue: picked ?? state.nameValue, nameSubListOpen: false } };
+      const nextNameValue = picked ?? state.nameValue;
+      return {
+        type: 'update',
+        state: {
+          ...state,
+          nameValue: nextNameValue,
+          nameValueCursor: picked !== undefined ? nextNameValue.length : state.nameValueCursor,
+          nameSubListOpen: false,
+        },
+      };
     }
     if (key.downArrow || key.upArrow) {
       if (otherMemberBranches.length === 0) {
@@ -275,7 +329,8 @@ function handleCreateNewKey(
     }
     return { type: 'submit', outcome: { kind: 'create', branchName: trimmed, baseBranch: state.baseBranch.trim() } };
   }
-  return { type: 'update', state: { ...state, nameValue: applyTextInput(state.nameValue, input, key), error: null } };
+  const editedName = applyTextInput({ value: state.nameValue, cursor: state.nameValueCursor }, input, key);
+  return { type: 'update', state: { ...state, nameValue: editedName.value, nameValueCursor: editedName.cursor, error: null } };
 }
 
 function handlePickExistingKey(
@@ -294,9 +349,13 @@ function handlePickExistingKey(
       }
       return { type: 'submit', outcome: { kind: 'rename', oldName: state.renameSub.oldName, newName: trimmed } };
     }
+    const editedRename = applyTextInput({ value: state.renameSub.value, cursor: state.renameSub.cursor }, input, key);
     return {
       type: 'update',
-      state: { ...state, renameSub: { ...state.renameSub, value: applyTextInput(state.renameSub.value, input, key), error: null } },
+      state: {
+        ...state,
+        renameSub: { ...state.renameSub, value: editedRename.value, cursor: editedRename.cursor, error: null },
+      },
     };
   }
 
@@ -307,7 +366,10 @@ function handlePickExistingKey(
     if (highlighted === undefined) {
       return { type: 'update', state };
     }
-    return { type: 'update', state: { ...state, renameSub: { oldName: highlighted, value: highlighted, error: null } } };
+    return {
+      type: 'update',
+      state: { ...state, renameSub: { oldName: highlighted, value: highlighted, cursor: highlighted.length, error: null } },
+    };
   }
 
   if (key.downArrow || key.upArrow) {
@@ -325,11 +387,19 @@ function handlePickExistingKey(
     }
     return { type: 'submit', outcome: { kind: 'set', branch } };
   }
-  return { type: 'update', state: { ...state, pickQuery: applyTextInput(state.pickQuery, input, key), pickCursor: 0, error: null } };
+  const editedQuery = applyTextInput({ value: state.pickQuery, cursor: state.pickQueryCursor }, input, key);
+  // Code review fix: a pure caret move (Left/Right/Home/End) leaves pickQuery's *value*
+  // unchanged — the highlighted row must survive it. Only an actual filter-text change
+  // (typing/Backspace/Delete) re-derives the match list and resets pickCursor to the top.
+  const nextPickCursor = editedQuery.value === state.pickQuery ? state.pickCursor : 0;
+  return {
+    type: 'update',
+    state: { ...state, pickQuery: editedQuery.value, pickQueryCursor: editedQuery.cursor, pickCursor: nextPickCursor, error: null },
+  };
 }
 
 function handleRenameCurrentKey(state: BranchPickerState, input: string, key: TextEditKey): BranchPickerKeyResult {
-  const sub = state.renameSub ?? { oldName: state.currentBranch, value: state.currentBranch, error: null };
+  const sub = state.renameSub ?? { oldName: state.currentBranch, value: state.currentBranch, cursor: state.currentBranch.length, error: null };
   if (key.return) {
     const trimmed = sub.value.trim();
     if (trimmed === '') {
@@ -337,7 +407,11 @@ function handleRenameCurrentKey(state: BranchPickerState, input: string, key: Te
     }
     return { type: 'submit', outcome: { kind: 'rename', oldName: sub.oldName, newName: trimmed } };
   }
-  return { type: 'update', state: { ...state, renameSub: { ...sub, value: applyTextInput(sub.value, input, key), error: null } } };
+  const editedSub = applyTextInput({ value: sub.value, cursor: sub.cursor }, input, key);
+  return {
+    type: 'update',
+    state: { ...state, renameSub: { ...sub, value: editedSub.value, cursor: editedSub.cursor, error: null } },
+  };
 }
 
 const MODE_LABELS: Record<BranchPickerMode, string> = {
@@ -402,7 +476,7 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
         <Box flexDirection="column">
           {hideNestedBaseField && !state.baseFocused ? null : (
             <>
-              <TextInputLine label="Base branch" value={state.baseBranch} focused={state.baseFocused} />
+              <TextInputLine label="Base branch" value={state.baseBranch} cursor={state.baseBranchCursor} focused={state.baseFocused} />
               {state.baseFocused ? (
                 <FilterableBranchList
                   matches={matchBranchesByPrefix(state.baseBranch, branches)}
@@ -411,7 +485,12 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
               ) : null}
             </>
           )}
-          <TextInputLine label={hideNestedBaseField ? 'Base branch' : 'Name'} value={state.nameValue} focused={!state.baseFocused} />
+          <TextInputLine
+            label={hideNestedBaseField ? 'Base branch' : 'Name'}
+            value={state.nameValue}
+            cursor={state.nameValueCursor}
+            focused={!state.baseFocused}
+          />
           {otherMemberBranches.length > 0 ? (
             <Box flexDirection="column" paddingLeft={2}>
               <Text color={colors['text-dim']}>
@@ -433,12 +512,12 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
       {state.mode === 'pick-existing' ? (
         state.renameSub !== null ? (
           <Box flexDirection="column">
-            <TextInputLine label={`Rename "${state.renameSub.oldName}" to`} value={state.renameSub.value} focused />
+            <TextInputLine label={`Rename "${state.renameSub.oldName}" to`} value={state.renameSub.value} cursor={state.renameSub.cursor} focused />
             {state.renameSub.error ? <DimAnnotation text={state.renameSub.error} /> : null}
           </Box>
         ) : (
           <Box flexDirection="column">
-            <TextInputLine label="Filter" value={state.pickQuery} focused />
+            <TextInputLine label="Filter" value={state.pickQuery} cursor={state.pickQueryCursor} focused />
             <FilterableBranchList matches={matchBranchesByPrefix(state.pickQuery, branches)} highlightedIndex={state.pickCursor} />
             <Text color={colors['text-dim']}>[Enter] set branch  [Ctrl+R] rename this branch</Text>
           </Box>
@@ -450,6 +529,7 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
           <TextInputLine
             label={`Rename "${state.renameSub?.oldName ?? state.currentBranch}" to`}
             value={state.renameSub?.value ?? state.currentBranch}
+            cursor={state.renameSub?.cursor ?? state.currentBranch.length}
             focused
           />
           {state.renameSub?.error ? <DimAnnotation text={state.renameSub.error} /> : null}

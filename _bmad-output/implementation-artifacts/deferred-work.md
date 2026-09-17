@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
+  summary: Cursor indexing throughout `TextInputLine`'s slicing, `nextTextInputValue`, and `branch-picker.tsx`'s local `applyTextInput` operates on raw UTF-16 code units with no surrogate-pair/combining-mark awareness, so mid-string cursor positioning (new in this story) can land between the two halves of a surrogate pair or split a combining sequence for any free-text field containing non-ASCII characters (the topic field especially).
+  evidence: `src/adapters/driving/tui/shared/components/text-input-line.tsx`'s `value.slice(position, position + 1)` and both `nextTextInputValue` (`edts-zone.logic.ts`) and `applyTextInput` (`branch-picker.tsx`)'s Left/Right/Backspace/Delete all index by raw string length/slice, never by code point. Surfaced incidentally by review (blind-hunter + edge-case-hunter); pre-story `TextInputLine` had no mid-string positioning at all (trailing-only), so this specific failure mode is new, but a full fix (code-point-aware stepping via `Array.from`/`Intl.Segmenter`) is non-trivial and out of this story's frozen scope. **Track:** revisit if a real topic/branch name with emoji or combining characters is ever observed hitting this.
+
+## Deferred from: planning of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
+  summary: Migrate `command-bar.tsx`'s query input and `repo-registry-screen.tsx`'s root-path field onto the now-cursor-aware `TextInputLine`/`nextTextInputValue` (replacing their own hand-rolled `typeCommandQueryChar`/`backspaceCommandQuery` and `typeRootInputChar`/`backspaceRootInput` pairs), plus making `TextInputLine`'s `label` prop optional for the command bar's label-less rendering.
+  evidence: the full story 2.32 spec (core cursor primitive + EDT-zone/branch-picker adoption + these two migrations + optional label) measured ~2503 tokens, well past the 1600-token scope-standard threshold. The story's own implementation notes already sequence these two migrations after the EDT-zone/branch-picker work ("Sequence command-bar/registry-screen migrations after the EDT-zone fields are done, so the extended `nextTextInputValue` contract is proven first where it has the most callers"), making this a natural, low-risk split point rather than an artificial one.
+
 ## Deferred from: review of 2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current (2026-09-16)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
