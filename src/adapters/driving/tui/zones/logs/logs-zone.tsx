@@ -353,7 +353,6 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                 </Box>
               ))}
-              <DimAnnotation text="[Space] toggle  [Enter] preview  [Ctrl+A] select/deselect all" />
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
@@ -365,13 +364,18 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                 </Box>
               ))}
-              <DimAnnotation text="[Space] toggle  [Enter] preview" />
-              <DimAnnotation
-                text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}  [o] stdout ${
-                  visibility.showStdout ? 'on' : 'off'
-                }  [p] stderr ${visibility.showStderr ? 'on' : 'off'}  [w] ${visibility.wrapLines ? 'wrap' : 'truncate'}`}
-              />
-              <DimAnnotation text="[Ctrl+↑/↓] scroll focused pane  [c] clear focused pane" />
+
+              <Box flexDirection="column" marginTop={spacing['section-gap']}>
+                <DimAnnotation text="[Space] toggle" />
+                <DimAnnotation text="[Enter] preview" />
+                <DimAnnotation text="[Ctrl+A] toggle all" />
+                <DimAnnotation text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`} />
+                <DimAnnotation text={`[o] stdout ${visibility.showStdout ? 'on' : 'off'}`} />
+                <DimAnnotation text={`[p] stderr ${visibility.showStderr ? 'on' : 'off'}`} />
+                <DimAnnotation text={`[w] ${visibility.wrapLines ? 'wrap' : 'truncate'}`} />
+                <DimAnnotation text="[Ctrl+↑/↓] scroll pane" />
+                <DimAnnotation text="[c] clear focused pane" />
+              </Box>
             </Box>
 
             <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
