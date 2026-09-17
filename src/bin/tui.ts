@@ -9,6 +9,7 @@ import {
 } from "../adapters/driving/tui/single-instance.js";
 import { loadManifest } from "../adapters/driven/manifest/index.js";
 import { createContainerPort } from "../adapters/driven/container/index.js";
+import { createMigrationPort } from "../adapters/driven/migration/index.js";
 import { createGitPort } from "../adapters/driven/git/index.js";
 import { createLockPort } from "../adapters/driven/lock/index.js";
 import {
@@ -90,6 +91,7 @@ const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
+const migration = createMigrationPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 // Story 2.11: the repo registry screen reuses Story 1.5's registerRepo use-case as-is
@@ -108,6 +110,7 @@ const store = createAppStore({
   manifest,
   git,
   container,
+  migration,
   edtRegistry,
   state,
   lock: actionLock,

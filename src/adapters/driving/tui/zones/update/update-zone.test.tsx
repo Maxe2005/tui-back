@@ -48,6 +48,21 @@ describe('formatUpdateRow', () => {
     ).toBe('✖ svc-a — failed (git-pull-error): line one line two line three');
   });
 
+  it('surfaces the story 3.2 migrate phase: a migration-failed row names the command and its error output', () => {
+    expect(
+      formatUpdateRow({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: {
+          code: 'migration-failed',
+          message: 'Repo /repo/a migration "npm run migration:run" failed: relation "users" does not exist',
+        },
+      }),
+    ).toBe(
+      '✖ svc-a — failed (migration-failed): Repo /repo/a migration "npm run migration:run" failed: relation "users" does not exist',
+    );
+  });
+
   it('degrades gracefully when a row carries no detail', () => {
     expect(formatUpdateRow({ service: 'svc-a', outcome: 'skipped' })).toBe('○ svc-a — skipped (skipped)');
     expect(formatUpdateRow({ service: 'svc-a', outcome: 'failed' })).toBe('✖ svc-a — failed (failed)');

@@ -362,3 +362,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-1-group-update-pull-restart-edt-scoped.md`
   summary: The dirty-worktree pre-check in `groupUpdate`'s per-member flow is a non-atomic time-of-check — uncommitted changes or a branch switch landing between the check, fetch, merge, and restart are not serialized by any per-repo primitive.
   evidence: `src/core/scripts/group-update.ts`'s `hasUncommittedChanges` gate runs before the pull/merge/restart sequence with no lock held on the repo itself (same check-then-act shape as the pre-existing `GitPort` operations). Tolerable in practice — `git merge` refuses when it would overwrite dirty files — and fixing it needs a per-repo mutual-exclusion primitive that does not exist yet. **Track:** revisit if a concurrent-edit-during-update incident is ever observed, together with the analogous `GitPort` check-then-act gaps.
+
+## Deferred from: code review of 3-2-run-migrations-as-part-of-the-group-update (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-2-run-migrations-as-part-of-the-group-update.md`
+  summary: `runMigration` spawns the migration command with no timeout or kill guard, so a hanging migration (e.g. waiting on a DB lock or stdin) blocks its service's update — and the TUI event loop — indefinitely.
+  evidence: `src/adapters/driven/migration/index.ts` calls `spawnSync` with no `timeout` option, the same no-timeout shape as the pre-existing git/container adapters; choosing a timeout value and kill semantics is a human intent decision, not a trivial fix. **Track:** decide a timeout/kill policy (ideally once, across git/container/migration spawns) before or during story 3.5, which owns migration failure UX.

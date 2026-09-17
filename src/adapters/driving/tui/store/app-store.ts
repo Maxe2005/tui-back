@@ -12,6 +12,7 @@ import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
 import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../core/ports/state.js';
@@ -56,6 +57,10 @@ export type AppStoreDeps = {
   // `useAppStore` default below) keeps working unwired; runGroupUpdate degrades to an
   // explicit error state rather than throwing when it is missing.
   container?: ContainerPort;
+  // Story 3.2: the migration-run port the Update zone's runGroupUpdate closes over (the
+  // manifest `migrationCommand` runs between pull/merge and restart). Same optionality
+  // contract as `container` above — runGroupUpdate requires both before starting a run.
+  migration?: MigrationPort;
 };
 
 export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice;

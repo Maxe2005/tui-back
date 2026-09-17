@@ -11,13 +11,15 @@
 // (`action-in-progress`) surfaces as `update-already-running`, never the raw lock code.
 //
 // Per-repo flow: `currentBranch` must equal the member's recorded branch (anything else
-// is an `unexpected-branch` failure with no git write and no restart) → dirty check
-// (`skipped`) → equals `sharedBranch` ? `pull` : (`fetch` shared branch,
+// is an `unexpected-branch` failure with no git write, no migration, and no restart) →
+// dirty check (`skipped`) → equals `sharedBranch` ? `pull` : (`fetch` shared branch,
 // `assertAllowedBranch` on the member branch, `mergeBranch`); on a `merge-conflict`
 // (or a conflicting pull that leaves the repo mid-merge), `git merge --abort` restores
 // the pre-run HEAD (abort cancels only the attempted merge, never developer work — full
-// guided handling arrives in story 3.4). Dirty worktrees are detected and reported only,
-// never stashed or fixed.
+// guided handling arrives in story 3.4). Story 3.2 inserts the migrate phase next (the
+// manifest's `migrationCommand`, skipped without error when undeclared; a failure is a
+// `migration-failed` row with no restart) → `container.restart`. Dirty worktrees are
+// detected and reported only, never stashed or fixed.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
@@ -25,6 +27,7 @@ import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
+import type { MigrationPort } from '../ports/migration.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
 
@@ -56,11 +59,12 @@ export interface GroupUpdateParams {
   manifest: ManifestPort;
   git: GitPort;
   container: ContainerPort;
+  migration: MigrationPort;
   lock: LockPort;
 }
 
 export async function groupUpdate(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
-  const { edtRegistry, state, manifest, git, container, lock } = params;
+  const { edtRegistry, state, manifest, git, container, migration, lock } = params;
 
   const currentActive = await state.readActiveEdt();
   if (!currentActive.ok) {
@@ -107,7 +111,7 @@ export async function groupUpdate(params: GroupUpdateParams): Promise<Result<Gro
       });
       const results: GroupUpdateRepoResult[] = [];
       for (const member of members) {
-        results.push(await updateMember(manifest, git, container, active.ulid, member));
+        results.push(await updateMember(manifest, git, container, migration, active.ulid, member));
       }
       // A fully successful run clears a previously set `interrupted` status so the re-run
       // offer doesn't persist forever: results exist and none failed (a `skipped` row
@@ -151,6 +155,7 @@ async function updateMember(
   manifest: ManifestPort,
   git: GitPort,
   container: ContainerPort,
+  migration: MigrationPort,
   edtUlid: string,
   member: { service: string; repoPath: string; branch: string },
 ): Promise<GroupUpdateRepoResult> {
@@ -160,7 +165,7 @@ async function updateMember(
   if (!loaded.ok) {
     return failed(service, loaded.error);
   }
-  const { container: containerName, sharedBranch } = loaded.data;
+  const { container: containerName, sharedBranch, migrationCommand } = loaded.data;
 
   const current = await git.currentBranch(repoPath);
   if (!current.ok) {
@@ -221,6 +226,22 @@ async function updateMember(
         return failConflicted(service, git, repoPath, merged.error);
       }
       return failed(service, merged.error);
+    }
+  }
+
+  // Story 3.2 — the migrate phase runs between the pull/merge and the restart: the
+  // manifest-declared `migrationCommand` (skipped without error when absent or blank) runs
+  // with the repo as its working directory. A failing migration keeps the repo on its
+  // merged code but skips the restart — a `failed` row with `migration-failed` detail
+  // naming the service (via the row), the command, and the error output — and never blocks
+  // or rolls back the other services (each failure short-circuits only its own service).
+  if (migrationCommand !== undefined && migrationCommand.trim() !== '') {
+    const migrated = await migration.run(repoPath, migrationCommand);
+    if (!migrated.ok) {
+      return failed(service, {
+        code: 'migration-failed',
+        message: `Repo ${repoPath} migration "${migrationCommand}" failed: ${migrated.error.message}`,
+      });
     }
   }
 
