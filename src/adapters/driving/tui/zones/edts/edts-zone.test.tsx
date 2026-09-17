@@ -454,40 +454,63 @@ describe('cycleFormFocus', () => {
   });
 });
 
-describe('nextTextInputValue', () => {
-  it('appends a typed character', () => {
-    expect(nextTextInputValue('ab', 'c', {})).toBe('abc');
+describe('nextTextInputValue (story 2.32: {value, cursor} shape, real cursor navigation)', () => {
+  it('appends a typed character at the end when cursor trails the value', () => {
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, 'c', {})).toEqual({ value: 'abc', cursor: 3 });
   });
 
-  it('backspaces the last character', () => {
-    expect(nextTextInputValue('abc', '', { backspace: true })).toBe('ab');
-    expect(nextTextInputValue('abc', '', { delete: true })).toBe('ab');
+  it('inserts a typed character mid-string at cursor (I/O matrix: "Mid-string insert")', () => {
+    expect(nextTextInputValue({ value: 'abd', cursor: 2 }, 'c', {})).toEqual({ value: 'abcd', cursor: 3 });
+  });
+
+  it('backspaces the character before cursor (I/O matrix: "Backspace")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { backspace: true })).toEqual({ value: 'acd', cursor: 1 });
+  });
+
+  it('backspace at cursor 0 is a no-op (I/O matrix: "cursor:0 -> no-op")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 0 }, '', { backspace: true })).toEqual({ value: 'abcd', cursor: 0 });
   });
 
   it('leaves an empty value unchanged on backspace', () => {
-    expect(nextTextInputValue('', '', { backspace: true })).toBe('');
+    expect(nextTextInputValue({ value: '', cursor: 0 }, '', { backspace: true })).toEqual({ value: '', cursor: 0 });
   });
 
-  it('ignores return/escape/tab/arrows/ctrl/meta — never appended as text', () => {
-    expect(nextTextInputValue('ab', '\r', { return: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '\x1b', { escape: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { tab: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { upArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { downArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { leftArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { rightArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { home: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { end: true })).toBe('ab');
-    expect(nextTextInputValue('ab', 'c', { ctrl: true })).toBe('ab');
-    expect(nextTextInputValue('ab', 'c', { meta: true })).toBe('ab');
+  it('deletes the character after cursor, cursor unchanged (I/O matrix: "Delete")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { delete: true })).toEqual({ value: 'abd', cursor: 2 });
+  });
+
+  it('delete at cursor:len is a no-op (I/O matrix: "cursor:len -> no-op")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 4 }, '', { delete: true })).toEqual({ value: 'abcd', cursor: 4 });
+  });
+
+  it('Left/Right move cursor, clamped to [0, value.length] (I/O matrix: "Left/Right clamp")', () => {
+    expect(nextTextInputValue({ value: 'ab', cursor: 0 }, '', { leftArrow: true })).toEqual({ value: 'ab', cursor: 0 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, '', { rightArrow: true })).toEqual({ value: 'ab', cursor: 2 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { leftArrow: true })).toEqual({ value: 'ab', cursor: 0 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { rightArrow: true })).toEqual({ value: 'ab', cursor: 2 });
+  });
+
+  it('Home/End jump to the start/end (I/O matrix: "Home/End")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { home: true })).toEqual({ value: 'abcd', cursor: 0 });
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { end: true })).toEqual({ value: 'abcd', cursor: 4 });
+  });
+
+  it('ignores return/escape/tab/up/down/ctrl/meta — never appended as text, cursor unchanged', () => {
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '\r', { return: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '\x1b', { escape: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { tab: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { upArrow: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { downArrow: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, 'c', { ctrl: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, 'c', { meta: true })).toEqual({ value: 'ab', cursor: 1 });
   });
 
   it('ignores an empty input with no matching key flag (defensive no-op)', () => {
-    expect(nextTextInputValue('ab', '', {})).toBe('ab');
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, '', {})).toEqual({ value: 'ab', cursor: 2 });
   });
 
   it('appends a space character (Space is a valid topic character, not a checkbox toggle here)', () => {
-    expect(nextTextInputValue('ab', ' ', {})).toBe('ab ');
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, ' ', {})).toEqual({ value: 'ab ', cursor: 3 });
   });
 });
 

@@ -58,6 +58,29 @@ export type CreateDialogDeps = {
   candidates: readonly ServiceBranchDivergence[];
 };
 
+// Story 2.32: prefillBranchNames overwrites branchName/branchNames for any *untouched* field —
+// its own paired cursor(s) must follow along, per the story's own Always boundary ("programmatic
+// value overwrites ... reset cursor to value.length"). A touched field is never rewritten by
+// prefillBranchNames in the first place, so its cursor stays put here too — this only ever
+// resets the cursor of a field whose value prefillBranchNames itself just changed.
+function withPrefillCursors(
+  prev: CreateDialogState,
+  filled: { branchName: string; branchNames: Record<string, string> },
+): { branchNameCursor: number; branchNameCursors: Record<string, number> } {
+  const branchNameCursor = prev.branchNameTouched ? prev.branchNameCursor : filled.branchName.length;
+  // Code review fix: rebuilt from scratch over filled.branchNames' own key set — the same
+  // wholesale-replacement convention branchNames itself is assigned with below — rather than
+  // spreading prev.branchNameCursors forward, which would let a path's cursor entry outlive
+  // that path's own branchNames entry (e.g. a deselected member) and accumulate for the
+  // dialog's lifetime.
+  const branchNameCursors: Record<string, number> = {};
+  for (const path of Object.keys(filled.branchNames)) {
+    const value = filled.branchNames[path] ?? '';
+    branchNameCursors[path] = prev.branchNamesTouched[path] ? (prev.branchNameCursors[path] ?? value.length) : value.length;
+  }
+  return { branchNameCursor, branchNameCursors };
+}
+
 export function createCreateDialogHandlers(deps: CreateDialogDeps) {
   async function submitCreate(current: CreateDialogState) {
     if (current.submitting) {
@@ -272,29 +295,46 @@ export function createCreateDialogHandlers(deps: CreateDialogDeps) {
             prev.branchNameTouched,
             prev.branchNamesTouched,
           );
-          return { ...prev, namingMode: nextMode, branchName: filled.branchName, branchNames: filled.branchNames, branchNameIndex: 0 };
+          return {
+            ...prev,
+            namingMode: nextMode,
+            branchName: filled.branchName,
+            branchNames: filled.branchNames,
+            branchNameIndex: 0,
+            ...withPrefillCursors(prev, filled),
+          };
         });
       }
       return;
     }
     // formFocus === 'branch-name'. Touched only flips true when the developer's own edit
-    // actually changes the value (review fix, story 2.22) — a no-op keypress (e.g. an arrow
-    // key nextTextInputValue itself ignores) never freezes a field out of future auto-fill.
+    // actually changes the *value* (review fix, story 2.22) — a pure cursor move (Left/Right/
+    // Home/End, story 2.32) or a no-op keypress never freezes a field out of future auto-fill.
     if (current.namingMode === 'grouped') {
-      const next = nextTextInputValue(current.branchName, input, key);
-      if (next === current.branchName) {
+      const next = nextTextInputValue({ value: current.branchName, cursor: current.branchNameCursor }, input, key);
+      if (next.value === current.branchName && next.cursor === current.branchNameCursor) {
         return;
       }
-      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, branchName: next, branchNameTouched: true } : prev));
+      deps.setDialog((prev) =>
+        prev.kind === 'create'
+          ? {
+              ...prev,
+              branchName: next.value,
+              branchNameCursor: next.cursor,
+              branchNameTouched: next.value !== current.branchName ? true : prev.branchNameTouched,
+            }
+          : prev,
+      );
       return;
     }
     const path = current.selectedMembers[current.branchNameIndex];
     if (path === undefined) {
       return;
     }
-    const existing = current.branchNames[path] ?? '';
-    const next = nextTextInputValue(existing, input, key);
-    if (next === existing) {
+    const existingValue = current.branchNames[path] ?? '';
+    const existingCursor = current.branchNameCursors[path] ?? existingValue.length;
+    const next = nextTextInputValue({ value: existingValue, cursor: existingCursor }, input, key);
+    if (next.value === existingValue && next.cursor === existingCursor) {
       return;
     }
     deps.setDialog((prev) => {
@@ -303,8 +343,9 @@ export function createCreateDialogHandlers(deps: CreateDialogDeps) {
       }
       return {
         ...prev,
-        branchNames: { ...prev.branchNames, [path]: next },
-        branchNamesTouched: { ...prev.branchNamesTouched, [path]: true },
+        branchNames: { ...prev.branchNames, [path]: next.value },
+        branchNameCursors: { ...prev.branchNameCursors, [path]: next.cursor },
+        branchNamesTouched: next.value !== existingValue ? { ...prev.branchNamesTouched, [path]: true } : prev.branchNamesTouched,
       };
     });
   }
@@ -343,6 +384,7 @@ export function createCreateDialogHandlers(deps: CreateDialogDeps) {
           branchNames: filled.branchNames,
           baseBranch: baseFilled.baseBranch,
           baseBranches: baseFilled.baseBranches,
+          ...withPrefillCursors(prev, filled),
         };
         // Opens a fresh base-branch picker session every time this step is (re-)entered.
         return focus === 'branch-base' ? openBaseBranchPickerAt(next, 0) : next;
@@ -433,6 +475,7 @@ export function createCreateDialogHandlers(deps: CreateDialogDeps) {
               branchNames: filled.branchNames,
               baseBranch: baseFilled.baseBranch,
               baseBranches: baseFilled.baseBranches,
+              ...withPrefillCursors(prev, filled),
             };
           });
         }
@@ -449,7 +492,13 @@ export function createCreateDialogHandlers(deps: CreateDialogDeps) {
       void submitCreate(current);
       return;
     }
-    deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, topic: nextTextInputValue(prev.topic, input, key) } : prev));
+    deps.setDialog((prev) => {
+      if (prev.kind !== 'create') {
+        return prev;
+      }
+      const next = nextTextInputValue({ value: prev.topic, cursor: prev.topicCursor }, input, key);
+      return { ...prev, topic: next.value, topicCursor: next.cursor };
+    });
   }
 
   return { handleCreateInput };
@@ -510,15 +559,22 @@ export function CreateDialogView({
               toggle
             </Text>
             {dialog.namingMode === 'grouped' ? (
-              <TextInputLine label="Branch name" value={dialog.branchName} focused={dialog.formFocus === 'branch-name'} />
+              <TextInputLine
+                label="Branch name"
+                value={dialog.branchName}
+                cursor={dialog.branchNameCursor}
+                focused={dialog.formFocus === 'branch-name'}
+              />
             ) : (
               dialog.selectedMembers.map((path, index) => {
                 const label = candidates.find((candidate) => candidate.path === path)?.service ?? path;
+                const value = dialog.branchNames[path] ?? '';
                 return (
                   <TextInputLine
                     key={path}
                     label={label}
-                    value={dialog.branchNames[path] ?? ''}
+                    value={value}
+                    cursor={dialog.branchNameCursors[path] ?? value.length}
                     focused={dialog.formFocus === 'branch-name' && index === dialog.branchNameIndex}
                   />
                 );
@@ -527,7 +583,7 @@ export function CreateDialogView({
           </>
         ) : (
           <>
-            <TextInputLine label="Topic" value={dialog.topic} focused={dialog.formFocus === 'topic'} />
+            <TextInputLine label="Topic" value={dialog.topic} cursor={dialog.topicCursor} focused={dialog.formFocus === 'topic'} />
             {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
             {candidateState === 'error' ? <Text color={colors.error}>Failed to load services — cannot show candidates.</Text> : null}
             {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}

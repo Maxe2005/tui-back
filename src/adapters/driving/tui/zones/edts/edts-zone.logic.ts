@@ -186,29 +186,58 @@ export type TextEditKey = {
   meta?: boolean;
 };
 
-export function nextTextInputValue(current: string, input: string, key: TextEditKey): string {
-  if (key.backspace || key.delete) {
-    return current.slice(0, -1);
+// Story 2.32: the controlled value/caret pair every `TextInputLine`-driving field now carries —
+// paired sibling of the bare-string field it replaces, exactly like the existing
+// `branchNamesTouched` paired-map convention (Code Map).
+export type TextInputState = {
+  value: string;
+  cursor: number;
+};
+
+// Story 2.32: retargeted from a bare-string interpreter to `{value, cursor}` in, `{value,
+// cursor}` out — Left/Right/Home/End now actually move `cursor` (clamped to [0, value.length])
+// instead of being silent no-ops, and Backspace/Delete/typed-char apply at `cursor` rather than
+// always at the end. Every other key stays exactly as inert as before.
+export function nextTextInputValue(current: TextInputState, input: string, key: TextEditKey): TextInputState {
+  const { value, cursor } = current;
+  // Code review fix: ctrl/meta must stay fully inert even when combined with an arrow/Home/
+  // End/Backspace/Delete flag (Ink reports Ctrl+Left etc. with both set) — checked first, before
+  // any of the new navigation/edit branches below, so Ctrl/Meta+<key> never moves or edits the
+  // caret, matching every other key's pre-story no-op behavior.
+  if (key.ctrl || key.meta) {
+    return current;
   }
-  if (
-    key.return ||
-    key.escape ||
-    key.tab ||
-    key.upArrow ||
-    key.downArrow ||
-    key.leftArrow ||
-    key.rightArrow ||
-    key.home ||
-    key.end ||
-    key.ctrl ||
-    key.meta
-  ) {
+  if (key.leftArrow) {
+    return { value, cursor: Math.max(0, cursor - 1) };
+  }
+  if (key.rightArrow) {
+    return { value, cursor: Math.min(value.length, cursor + 1) };
+  }
+  if (key.home) {
+    return { value, cursor: 0 };
+  }
+  if (key.end) {
+    return { value, cursor: value.length };
+  }
+  if (key.backspace) {
+    if (cursor === 0) {
+      return current;
+    }
+    return { value: value.slice(0, cursor - 1) + value.slice(cursor), cursor: cursor - 1 };
+  }
+  if (key.delete) {
+    if (cursor >= value.length) {
+      return current;
+    }
+    return { value: value.slice(0, cursor) + value.slice(cursor + 1), cursor };
+  }
+  if (key.return || key.escape || key.tab || key.upArrow || key.downArrow) {
     return current;
   }
   if (input.length === 0) {
     return current;
   }
-  return current + input;
+  return { value: value.slice(0, cursor) + input + value.slice(cursor), cursor: cursor + input.length };
 }
 
 // The checkbox-list-item pure toggle (Space): member selection for the create/modify forms.
@@ -752,6 +781,8 @@ export function resolveModifyOps(
 export type CreateDialogState = {
   kind: 'create';
   topic: string;
+  // Story 2.32: topic's own caret position — see TextInputState/nextTextInputValue above.
+  topicCursor: number;
   formFocus: CreateFormFocus;
   selectedMembers: readonly string[];
   memberCursor: number;
@@ -780,8 +811,15 @@ export type CreateDialogState = {
   branchPicker: BranchPickerSession | null;
   namingMode: NamingMode;
   branchName: string; // grouped mode's single shared field
+  // Story 2.32: branchName's own caret position, reset to branchName.length by every
+  // programmatic overwrite (prefillBranchNames on an untouched field) — see
+  // create-dialog.tsx's withPrefillCursors.
+  branchNameCursor: number;
   branchNames: Readonly<Record<string, string>>; // individual mode: repoPath -> name
   branchNameIndex: number; // individual mode's currently-focused per-member field
+  // Story 2.32: branchNames' own paired-map of per-path caret positions — mirrors
+  // branchNamesTouched's own paired-map convention exactly.
+  branchNameCursors: Readonly<Record<string, number>>;
   // Review fix (story 2.22): tracks whether the developer's own edit has ever actually
   // changed a field's value — the only thing that permanently opts a field out of
   // prefillBranchNames' auto-fill (see that function's own doc comment). Never reset once
@@ -819,6 +857,8 @@ export type ModifyDialogState = {
   kind: 'modify';
   target: EdtRegistryEntry;
   topic: string;
+  // Story 2.32: topic's own caret position — see TextInputState/nextTextInputValue above.
+  topicCursor: number;
   formFocus: FormFocus;
   selectedMembers: readonly string[];
   memberCursor: number;
@@ -894,6 +934,7 @@ export function initialCreateDialog(): CreateDialogState {
   return {
     kind: 'create',
     topic: '',
+    topicCursor: 0,
     formFocus: 'topic',
     selectedMembers: [],
     memberCursor: 0,
@@ -911,8 +952,10 @@ export function initialCreateDialog(): CreateDialogState {
     branchPicker: null,
     namingMode: 'grouped',
     branchName: '',
+    branchNameCursor: 0,
     branchNames: {},
     branchNameIndex: 0,
+    branchNameCursors: {},
     branchNameTouched: false,
     branchNamesTouched: {},
   };
@@ -927,6 +970,7 @@ export function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState
     kind: 'modify',
     target,
     topic: target.topic,
+    topicCursor: target.topic.length,
     formFocus: 'topic',
     selectedMembers: target.members.map((member) => member.repoPath),
     memberCursor: 0,

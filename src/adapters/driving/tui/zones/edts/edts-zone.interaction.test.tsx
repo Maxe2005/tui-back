@@ -708,6 +708,43 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  it('story 2.32: Left/Backspace edit the topic field at the caret through a real keypress round-trip, not always at the end', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // AC1: zero EDTs -> the create prompt auto-opens, topic-focused by default.
+      await type(instance, stdin, 'abd'); // cursor trails at 3
+      await press(instance, stdin, KEYS.left); // cursor -> 2
+      // Mid-string insert (I/O matrix): typing 'c' at cursor 2 in "abd" must produce "abcd" —
+      // if Left had stayed a no-op (pre-story behavior), this would append at the end instead,
+      // producing "abdc".
+      await type(instance, stdin, 'c');
+      expect(stdout.output).toContain('Topic: abcd');
+      expect(stdout.output).not.toContain('Topic: abdc');
+
+      await press(instance, stdin, KEYS.home); // cursor -> 0
+      await press(instance, stdin, KEYS.backspace); // cursor:0 -> no-op (I/O matrix)
+      expect(stdout.output).toContain('Topic: abcd');
+
+      await press(instance, stdin, KEYS.end); // cursor -> 4 (value.length)
+      await press(instance, stdin, KEYS.backspace); // removes 'd' before cursor
+      expect(stdout.output).toContain('Topic: abc');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('a zone dialog sets zoneInputCaptured so a typed "?" never opens global help while it is open', async () => {
     const store = createAppStore();
     store.setState({
@@ -902,6 +939,60 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       // suggestBranchNameFromTopic('Fix Auth Bug') -> 'fix-auth-bug', pre-filled without ever
       // typing into the field.
       expect(stdout.output).toContain('Branch name: fix-auth-bug');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.32 (code review): a pure cursor move on the branch-name field never freezes it out of topic-slug auto-fill', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'Fix Auth Bug');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a -> branchName auto-fills 'fix-auth-bug' (untouched)
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // confirm base-branch picker -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name, focused: 'fix-auth-bug'
+      expect(stdout.output).toContain('Branch name: fix-auth-bug');
+
+      // A pure caret move — no typing — must never mark the field touched (only an actual
+      // value change may opt it out of future auto-fill, per prefillBranchNames' own
+      // doc comment and this story's Boundaries).
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.home);
+
+      await press(instance, stdin, KEYS.tab); // branch-name (grouped) -> wraps back to topic
+
+      // Clear and retype the topic — a genuinely new topic slug only shows up in the
+      // branch-name field if it's still untouched. Captured *after* the assertion above (which
+      // legitimately saw "fix-auth-bug" earlier) so the "never resurrected" check below only
+      // looks at frames rendered from here on.
+      const beforeRetype = stdout.output.length;
+      for (let i = 0; i < 'Fix Auth Bug'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'New Auth');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.tab); // members -> branch-base: re-triggers prefillBranchNames
+
+      // If the earlier cursor-only move had wrongly set branchNameTouched, every frame from
+      // here on would still read 'fix-auth-bug' (frozen) instead of picking up the new topic's
+      // slug.
+      expect(stdout.output).toContain('Branch name: new-auth');
+      expect(stdout.output.slice(beforeRetype)).not.toContain('Branch name: fix-auth-bug');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
