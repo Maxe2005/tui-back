@@ -49,7 +49,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     updateErrorCode: null,
     updateUlid: null,
     runGroupUpdate: async () => {
-      if (!deps || !deps.container) {
+      if (!deps || !deps.container || !deps.migration) {
         set({
           updateStatus: 'error',
           updateError: 'No ports wired into the TUI store',
@@ -85,6 +85,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           manifest: deps.manifest,
           git: deps.git,
           container: deps.container,
+          migration: deps.migration,
           lock: deps.lock,
         });
         if (result.ok) {

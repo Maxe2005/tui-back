@@ -9,6 +9,7 @@ import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js'
 import type { GitPort } from '../../../../../core/ports/git.js';
 import type { LockPort } from '../../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
@@ -87,6 +88,9 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const container: ContainerPort = {
     restart: vi.fn(async () => ok(undefined)),
   };
+  const migration: MigrationPort = {
+    run: vi.fn(async () => ok({ output: '' })),
+  };
   const settings: SettingsPort = {
     load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
     save: vi.fn(async () => ok(undefined)),
@@ -96,6 +100,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     manifest,
     git,
     container,
+    migration,
     edtRegistry,
     state,
     lock,
@@ -163,6 +168,17 @@ describe('update slice', () => {
     const deps = fakeDeps();
     const { container: _dropped, ...withoutContainer } = deps;
     const store = createAppStore(withoutContainer);
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('runGroupUpdate degrades to an explicit error when the migration port is missing', async () => {
+    const deps = fakeDeps();
+    const { migration: _dropped, ...withoutMigration } = deps;
+    const store = createAppStore(withoutMigration);
 
     await store.getState().runGroupUpdate();
 

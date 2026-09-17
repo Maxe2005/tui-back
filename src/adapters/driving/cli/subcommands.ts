@@ -15,6 +15,7 @@ import { groupUpdate } from '../../../core/scripts/group-update.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
@@ -45,6 +46,7 @@ export function buildSubcommands(deps: {
   edtRegistryResourceKey: string;
   git: GitPort;
   container: ContainerPort;
+  migration: MigrationPort;
   state: StatePort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
@@ -131,9 +133,11 @@ export function buildSubcommands(deps: {
     {
       name: 'update',
       usage: UPDATE_USAGE,
-      // Story 3.1: the EDT-scoped group update — bare invocation only. No migrations step
-      // (story 3.2), no all-repos mode or --all flag (story 3.3): any flag is an explicit
-      // invalid-argument rejection, never silently ignored.
+      // Story 3.2: the EDT-scoped group update now runs each member's manifest-declared
+      // `migrationCommand` between its pull/merge and its container restart (skipped
+      // without error when undeclared). Still bare invocation only — no all-repos mode or
+      // --all flag (story 3.3): any flag is an explicit invalid-argument rejection, never
+      // silently ignored.
       run: async (args) =>
         args.length === 0
           ? groupUpdate({
@@ -142,6 +146,7 @@ export function buildSubcommands(deps: {
               manifest: deps.manifest,
               git: deps.git,
               container: deps.container,
+              migration: deps.migration,
               lock: deps.lock,
             })
           : err('invalid-argument', `Usage: ${UPDATE_USAGE}`),

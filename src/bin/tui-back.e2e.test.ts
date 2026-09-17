@@ -1327,9 +1327,21 @@ describe('tui-back edt switch (black-box)', () => {
   });
 });
 
-describe('tui-back update (black-box, story 3.1)', () => {
+describe('tui-back update (black-box, stories 3.1-3.2)', () => {
   function createEnv(xdg: string) {
     return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  // The shared manifestYaml fixture declares `migrationCommand: npm run migration:run`,
+  // which has no package.json to run against in these fixtures — and story 3.2 executes
+  // the declared command for real. Update members therefore rewrite the origin manifest
+  // to the variant the case exercises before it is committed and cloned.
+  function manifestYamlWithMigration(migrationCommand: string | null): string {
+    const lines = ['service: route-explorer', 'container: route-explorer'];
+    if (migrationCommand !== null) {
+      lines.push(`migrationCommand: "${migrationCommand}"`);
+    }
+    return [...lines, 'sharedBranch: development', 'modules: {}'].join('\n');
   }
 
   async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
@@ -1351,8 +1363,11 @@ describe('tui-back update (black-box, story 3.1)', () => {
   // A member repo cloned from its own origin, sitting on a feature branch behind the
   // origin's development — the "member on feature branch, behind shared branch, clean
   // tree" matrix row. The clone carries a committed manifest, so the tree starts clean.
-  async function makeBehindMember(): Promise<{ origin: string; repo: string }> {
+  // `migrationCommand` selects the committed manifest variant: a shell command the update
+  // really executes (default `true`), or null for a manifest declaring no migrations.
+  async function makeBehindMember(migrationCommand: string | null = 'true'): Promise<{ origin: string; repo: string }> {
     const origin = await makeGitRepo();
+    await writeFile(join(origin, '.tui-back.yaml'), manifestYamlWithMigration(migrationCommand));
     commitManifest(origin);
     const repo = await mkdtemp(join(tmpdir(), 'tui-back-e2e-clone-'));
     tmpDirs.push(repo);
@@ -1413,7 +1428,9 @@ describe('tui-back update (black-box, story 3.1)', () => {
   it('a conflicting member fails with merge-conflict back at its pre-run HEAD while the other still reports updated (AC4)', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
-    const a = await makeBehindMember();
+    // The conflicted member declares a marker-writing migration: its absence afterwards
+    // proves the migration never ran for a member that never cleared pull/merge.
+    const a = await makeBehindMember('touch should-not-run.txt');
     const b = await makeBehindMember();
     // Conflicting change on the same file the origin advanced, committed on the member side.
     await writeFile(join(a.repo, 'shared.txt'), 'member side');
@@ -1435,6 +1452,8 @@ describe('tui-back update (black-box, story 3.1)', () => {
     // The conflicting repo is back at its pre-run HEAD with no merge in progress.
     expect(runGit(a.repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);
     expect(runGit(a.repo, ['rev-parse', '--verify', 'MERGE_HEAD']).status).not.toBe(0);
+    // Its migration never ran: the row kept merge-conflict and no marker file exists.
+    await expect(access(join(a.repo, 'should-not-run.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('a dirty member is skipped with dirty-worktree detail, untouched, while the other updates', async () => {
@@ -1457,6 +1476,99 @@ describe('tui-back update (black-box, story 3.1)', () => {
     // The dirty repo was never merged: the origin's advance is still not an ancestor.
     const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
     expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).not.toBe(0);
+  });
+
+  it('runs each member migrationCommand after pull/merge: marker files prove it ran, both updated (story 3.2 AC1)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('touch migrated.txt');
+    const b = await makeBehindMember('touch migrated.txt');
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([
+      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated' },
+    ]);
+    // Both members merged AND migrated: the origin advance is an ancestor and the
+    // migration's marker file exists in each working tree.
+    for (const { origin, repo } of [a, b]) {
+      const originHead = runGit(origin, ['rev-parse', 'development']).stdout.trim();
+      expect(runGit(repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).toBe(0);
+      await expect(access(join(repo, 'migrated.txt'))).resolves.toBeUndefined();
+    }
+  });
+
+  it('skips the migration step without error when no migrationCommand is declared (story 3.2 AC2)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember(null);
+    const b = await makeBehindMember(null);
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([
+      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated' },
+    ]);
+  });
+
+  it('a failing migration fails only that service with migration-failed detail while the other still reports updated (story 3.2 AC3)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('echo migration-boom >&2; exit 3');
+    const b = await makeBehindMember('touch migrated.txt');
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'updated' });
+    expect(data.results[0].service).toBe('route-explorer');
+    expect(data.results[0].outcome).toBe('failed');
+    expect(data.results[0].detail.code).toBe('migration-failed');
+    // The detail names the command and carries the error output.
+    expect(data.results[0].detail.message).toContain('echo migration-boom >&2; exit 3');
+    expect(data.results[0].detail.message).toContain('migration-boom');
+    // The failed repo stays on its merged code (migration runs after pull/merge).
+    const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
+    expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).toBe(0);
+    // The healthy member merged and migrated.
+    await expect(access(join(b.repo, 'migrated.txt'))).resolves.toBeUndefined();
+  });
+
+  it('a dirty member never runs its migration and keeps dirty-worktree while the other updates (story 3.2 AC4)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('touch should-not-run.txt');
+    const b = await makeBehindMember();
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([
+      { service: 'route-explorer', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
+      { service: 'route-explorer', outcome: 'updated' },
+    ]);
+    // The dirty repo was never merged and never migrated.
+    const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
+    expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).not.toBe(0);
+    await expect(access(join(a.repo, 'should-not-run.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('rejects any flag — bare update only, no --all (story 3.3)', async () => {
