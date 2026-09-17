@@ -356,3 +356,21 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default.md`
   summary: The spec's own `## Spec Change Log` section is empty even though its Design Notes "Implementation addendum" documents a materially new core API surface (`CreateBranchOptions.bases`, a change to `resolveMemberBranch`) that was not in the original frozen Code Map.
   evidence: `spec-2-27-...md`'s `## Spec Change Log` section has no entries; the addendum under `## Design Notes` reads like exactly the content that section exists for. **Track:** process note for spec hygiene — no code impact.
+
+## Deferred from: code review of 2-29-delete-an-edt (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `delete-dialog.tsx` never calls `logEdtAction` for the active-EDT-rejection path, unlike every sibling EDT dialog (create/switch/modify/add-to-edt/service-actions), which all log an equivalent rejection.
+  evidence: the dialog's own in-code comment justifies skipping the log for the *successful*/partial-failure paths (the EDT's SQLite file, which hosts the action log, is already gone by then per AD-7) but that reasoning does not extend to the `rejected` (active-EDT) state, where the file is still present and untouched. Intent is genuinely ambiguous — the frozen spec never mentions action-log behavior for delete — so this wasn't treated as a blocking bad_spec finding. **Track:** get an explicit human call on whether a delete rejection should be logged, next time this dialog or the action-log convention is touched.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `edt-delete <topic>` gives zero feedback when `<topic>` matches no registered EDT — the dialog-opening effect just closes silently (`setDialog({ kind: 'none' })`).
+  evidence: `edts-zone.tsx`'s `currentEdtAction` effect already behaves identically for `edt-switch <topic>`/`edt-modify <topic>` with an unmatched topic — a pre-existing, story-independent convention this story's `delete` branch simply mirrors rather than introduces. **Track:** revisit for all three commands together next time this effect is touched; arguably riskier for a destructive action than for switch/modify.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `delete-dialog.tsx`'s `submitDelete` (and every sibling confirm dialog's own submit handler) reads `current.submitting` from the closure captured at call time rather than freshly from state, so two `Enter` keypresses arriving before the first `setDialog({submitting: true})` update is observed could invoke the delete action twice concurrently.
+  evidence: `switch-dialog.tsx`'s `handleSwitchConfirm` guards re-entrancy the exact same way (`current.submitting`, not a synchronous ref) — a pre-existing pattern across every confirm-style EDT dialog, not specific to this story, and each real keypress is processed by Ink's `useInput` one at a time in practice. **Track:** if this is ever observed in practice (e.g. key-repeat, programmatic double-dispatch), switch every confirm dialog to a synchronous `useRef` in-flight guard together.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `tui-back edt delete <topic>` cannot delete an EDT whose topic literally begins with `--` — the positional-argument parser treats any leading-`--` token as an unknown option, with no `--` end-of-options escape hatch.
+  evidence: `runEdtDelete` (`src/adapters/driving/cli/subcommands.ts`) parses `<topic>` as the first non-flag token, per this story's own approved spec/Code Map (`tui-back edt delete <topic> [--branches ...]`, deliberately positional unlike `create`/`switch`/`modify`'s `--topic`/`--to` flags) — changing the argument shape now would be a disruptive, low-value change for an unlikely topic name. **Track:** add a `--` end-of-options convention if this is ever hit in practice.
