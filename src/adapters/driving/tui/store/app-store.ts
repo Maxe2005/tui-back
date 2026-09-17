@@ -7,6 +7,7 @@
 // adapter (zones, command-bar, app-shell) imports.
 import { create } from 'zustand';
 import type { UseBoundStore, StoreApi } from 'zustand';
+import type { DockerPort } from '../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
 import type { LockPort } from '../../../../core/ports/lock.js';
@@ -18,12 +19,14 @@ import { createNavigationSlice, type NavigationSlice } from './slices/navigation
 import { createEdtSlice, type EdtSlice } from './slices/edt-slice.js';
 import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice.js';
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
+import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
 export type { CreateEdtParams, SwitchEdtParams, ModifyEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
 export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/edt-slice.js';
 export type { RegistryOutcome, RegistryRegisterResult } from './slices/registry-slice.js';
 export type { SettingsUpdate } from './slices/settings-slice.js';
+export type { LogsPaneData } from './slices/logs-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
@@ -48,9 +51,12 @@ export type AppStoreDeps = {
   registryResourceKey: string;
   // Story 2.19: the settings screen's persistence port (zod-validated settings.yaml).
   settings: SettingsPort;
+  // Story 5.1: the Logs zone's Docker touchpoint (AD-1/AD-2) — wrapped by a single
+  // LogsManager instance the logs slice creates and closes over (see that file's header).
+  docker: DockerPort;
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & LogsSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -58,6 +64,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createEdtSlice(deps)(...args),
     ...createRegistrySlice(deps)(...args),
     ...createSettingsSlice(deps)(...args),
+    ...createLogsSlice(deps)(...args),
   }));
 }
 
