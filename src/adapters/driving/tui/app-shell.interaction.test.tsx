@@ -17,6 +17,7 @@ import type { Manifest, ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
+import type { DockerPort } from '../../../core/ports/docker.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
@@ -83,6 +84,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
     save: vi.fn(async () => ok(undefined)),
   };
+  const docker: DockerPort = {
+    streamLogs: vi.fn(() => () => {}),
+    fetchLogsBefore: vi.fn(async () => ok([])),
+  };
   return {
     registry,
     manifest,
@@ -94,6 +99,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     edtRegistryResourceKey: '/tmp/edts.yaml',
     edtsBaseDir: '/tmp/edts',
     settings,
+    docker,
     ...overrides,
   };
 }
@@ -1135,7 +1141,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
+      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500 } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1311,7 +1317,40 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 9 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: 500 },
       });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Up/Down on the Logs tab adjusts settings.logs.bufferSize live and persists via updateSettings (story 5.1 AC: "new stream afterward uses the new buffer size")', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs
+
+      await press(instance, stdin, KEYS.up);
+
+      expect(store.getState().settings.logs.bufferSize).toBe(550);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: 550 },
+      });
+
+      // A typed digit is a quick preset (digit x 100).
+      await press(instance, stdin, '3');
+      expect(store.getState().settings.logs.bufferSize).toBe(300);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1337,6 +1376,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+        logs: { bufferSize: 500 },
       });
     } finally {
       instance.unmount();
@@ -1368,6 +1408,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
+        logs: { bufferSize: 500 },
       });
     } finally {
       instance.unmount();
