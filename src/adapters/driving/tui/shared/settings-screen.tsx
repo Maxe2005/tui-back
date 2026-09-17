@@ -278,6 +278,13 @@ export function SettingsScreen({
         void updateSettings({ logs: { bufferSize: adjustLogBufferSize(settings.logs.bufferSize, 'down') } });
         return;
       }
+      // Space toggles startWithHistory (Up/Down are already claimed by the buffer-size field
+      // above — this tab has no row cursor to disambiguate which field a given key targets,
+      // so each field gets its own dedicated key instead).
+      if (input === ' ') {
+        void updateSettings({ logs: { startWithHistory: !settings.logs.startWithHistory } });
+        return;
+      }
       const digit = parseLogBufferSizeDigit(input);
       if (digit !== null) {
         void updateSettings({ logs: { bufferSize: digit } });
@@ -387,6 +394,14 @@ export function SettingsScreen({
             </Text>
             <DimAnnotation text={`Up/Down to adjust by ${LOG_BUFFER_SIZE_STEP}, or type a digit (1-9) for a quick preset (x100).`} />
             <DimAnnotation text="Applies to new streams only — already-running panes keep their current buffer size." />
+
+            <Box marginTop={spacing['section-gap']}>
+              <CheckboxListItem
+                label="Start streaming with the most recent history"
+                state={settings.logs.startWithHistory ? 'checked' : 'unchecked'}
+              />
+            </Box>
+            <DimAnnotation text="Space to toggle. Checked: a pane opens already showing recent history (like Ctrl+Up in the grid) instead of a blank page waiting for new lines." />
           </Box>
         ) : null}
 

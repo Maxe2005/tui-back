@@ -800,7 +800,7 @@ describe("app store", () => {
             settings: {
               commandPalette: { gridMaxRows: 12 },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
-              logs: { bufferSize: 500 },
+              logs: { bufferSize: 500, startWithHistory: false },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
           }),
@@ -814,7 +814,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         commandPalette: { gridMaxRows: 12 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
     });
@@ -863,7 +863,7 @@ describe("app store", () => {
       expect(save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 15 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
     });
 
@@ -873,7 +873,7 @@ describe("app store", () => {
         settings: {
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
-          logs: { bufferSize: 500 },
+          logs: { bufferSize: 500, startWithHistory: false },
         },
       });
 
@@ -882,7 +882,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
     });
 
@@ -892,7 +892,7 @@ describe("app store", () => {
         settings: {
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"] },
-          logs: { bufferSize: 500 },
+          logs: { bufferSize: 500, startWithHistory: false },
         },
       });
 
@@ -901,7 +901,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
     });
 
@@ -1006,7 +1006,7 @@ describe("app store", () => {
         settings: {
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 500 },
+          logs: { bufferSize: 500, startWithHistory: false },
         },
         warning: null,
       });
@@ -1319,7 +1319,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]).toBeUndefined();
   });
 
-  it("loadOlderLogsPane prepends older lines and bumps scrollOffset to preserve the viewport (I/O matrix SCROLLBACK_RELOAD)", async () => {
+  it("loadOlderLogsPane on a pane that started genuinely empty pins scrollOffset to 0 — the newest of the just-fetched history — rather than overshooting past every line just loaded (review fix)", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1331,6 +1331,29 @@ describe("logs slice (story 5.1)", () => {
     await store.getState().loadOlderLogsPane("/repo/a");
 
     expect(store.getState().logsPanes["/repo/a"]?.lines).toEqual([olderLine]);
+    expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(0);
+  });
+
+  it("loadOlderLogsPane on a pane that already had visible lines bumps scrollOffset to preserve the viewport (I/O matrix SCROLLBACK_RELOAD)", async () => {
+    const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
+    let fetchOlder = false;
+    const docker: DockerPort = {
+      streamLogs: vi.fn((_container, onLine) => {
+        onLine({ timestamp: "2026-01-01T00:00:00.000Z", stream: "stdout", text: "live" });
+        return () => {};
+      }),
+      fetchLogsBefore: vi.fn(async () => {
+        fetchOlder = true;
+        return ok([olderLine]);
+      }),
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    expect(fetchOlder).toBe(false);
+
+    await store.getState().loadOlderLogsPane("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.lines).toHaveLength(2);
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(1);
   });
 
@@ -1367,6 +1390,68 @@ describe("logs slice (story 5.1)", () => {
     await store.getState().loadOlderLogsPane("/repo/a");
 
     expect(store.getState().logsPanes["/repo/a"]?.noMoreHistory).toBe(true);
+  });
+
+  it("subscribeLogsPane leaves a fresh pane empty by default (settings.logs.startWithHistory: false) — never fetches history on its own", async () => {
+    const fetchLogsBefore = vi.fn(async () => ok([{ timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" }]));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore,
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    expect(fetchLogsBefore).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.lines).toEqual([]);
+  });
+
+  it("subscribeLogsPane immediately loads the most recent history when settings.logs.startWithHistory is true (Settings tab, review fix)", async () => {
+    const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([olderLine])),
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    store.setState((state) => ({ settings: { ...state.settings, logs: { ...state.settings.logs, startWithHistory: true } } }));
+
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    expect(docker.fetchLogsBefore).toHaveBeenCalledWith("ctr-a", expect.any(String), DEFAULT_SETTINGS.logs.bufferSize);
+    expect(store.getState().logsPanes["/repo/a"]?.lines).toEqual([olderLine]);
+    expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(0);
+  });
+
+  it("clearLogsPane wipes buffered lines/noMoreHistory/scrollOffset but leaves the live stream running", async () => {
+    const streamed: { onLine: (line: { timestamp: string; stream: "stdout" | "stderr"; text: string }) => void } = {
+      onLine: () => {},
+    };
+    const stop = vi.fn();
+    const docker: DockerPort = {
+      streamLogs: vi.fn((_container, onLine) => {
+        streamed.onLine = onLine;
+        return stop;
+      }),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    streamed.onLine({ timestamp: "2026-01-01T00:00:00.000Z", stream: "stdout", text: "hello" });
+    expect(store.getState().logsPanes["/repo/a"]?.lines).toHaveLength(1);
+
+    store.getState().clearLogsPane("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]).toMatchObject({ lines: [], noMoreHistory: false, scrollOffset: 0 });
+    // The subscription itself is untouched — clearing is a display wipe, not a teardown.
+    expect(stop).not.toHaveBeenCalled();
+
+    streamed.onLine({ timestamp: "2026-01-01T00:00:01.000Z", stream: "stdout", text: "world" });
+    expect(store.getState().logsPanes["/repo/a"]?.lines.map((l) => l.text)).toEqual(["world"]);
+  });
+
+  it("clearLogsPane is a safe no-op for a repoPath with no active pane", () => {
+    const store = createAppStore(fakeDeps());
+    expect(() => store.getState().clearLogsPane("/repo/never-subscribed")).not.toThrow();
   });
 
   it("setLogsPaneScrollOffset clamps to [0, lines.length - 1]", async () => {

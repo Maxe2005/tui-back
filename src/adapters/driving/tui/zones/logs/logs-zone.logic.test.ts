@@ -8,10 +8,13 @@ import {
   filterVisibleLines,
   formatLogLine,
   isAtOldestLine,
+  isSelectAllKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
+  resolveFullscreenScrollDirection,
   resolvePaneScrollDirection,
-  resolveSelectAllAction,
+  resolvePostLoadScrollOffset,
+  resolveSelectAllToggle,
   resolveVisibilityToggleKey,
   sliceVisibleWindow,
   toggleVisibilityFlag,
@@ -119,12 +122,31 @@ describe('adjustScrollOffset / isAtOldestLine', () => {
   it('isAtOldestLine is true once the offset reaches lineCount - 1', () => {
     expect(isAtOldestLine(4, 5)).toBe(true);
     expect(isAtOldestLine(3, 5)).toBe(false);
-    expect(isAtOldestLine(0, 0)).toBe(false);
+  });
+
+  it('isAtOldestLine is true for a genuinely empty pane too — its normal starting state, and the case that must still trigger the first scrollback fetch (review fix)', () => {
+    expect(isAtOldestLine(0, 0)).toBe(true);
+  });
+});
+
+describe('resolvePostLoadScrollOffset', () => {
+  it('preserves the visible viewport when the pane already had lines before the fetch', () => {
+    // 3 lines were on screen (offset 2 into a 3-line buffer); 4 older lines get prepended —
+    // offset must grow by exactly the prepended count so the same lines stay in view.
+    expect(resolvePostLoadScrollOffset(2, 3, 4, 7)).toBe(6);
+  });
+
+  it('falls back to the buffer-length delta when appended undercounts a live line that arrived mid-fetch', () => {
+    expect(resolvePostLoadScrollOffset(1, 2, 1, 5)).toBe(4);
+  });
+
+  it('pins to 0 (the newest fetched line) when the pane started genuinely empty, instead of overshooting past every line just loaded', () => {
+    expect(resolvePostLoadScrollOffset(0, 0, 4, 4)).toBe(0);
   });
 });
 
 describe('resolvePaneScrollDirection', () => {
-  it('requires ctrl — plain arrows are not a pane scroll', () => {
+  it('requires ctrl — plain arrows are not a pane scroll (the grid view: bare arrows already move sub-focus between panes)', () => {
     expect(resolvePaneScrollDirection({ upArrow: true })).toBeNull();
     expect(resolvePaneScrollDirection({ ctrl: true, upArrow: true })).toBe('up');
     expect(resolvePaneScrollDirection({ ctrl: true, downArrow: true })).toBe('down');
@@ -135,37 +157,75 @@ describe('resolvePaneScrollDirection', () => {
   });
 });
 
-describe('resolveSelectAllAction', () => {
-  it('Ctrl+A (no shift) is select-all', () => {
-    expect(resolveSelectAllAction('a', { ctrl: true })).toBe('select-all');
+describe('resolveFullscreenScrollDirection', () => {
+  it('accepts a bare arrow — fullscreen has no sub-focus grid to disambiguate from (review fix)', () => {
+    expect(resolveFullscreenScrollDirection({ upArrow: true })).toBe('up');
+    expect(resolveFullscreenScrollDirection({ downArrow: true })).toBe('down');
   });
 
-  it('Ctrl+Shift+A is deselect-all', () => {
-    expect(resolveSelectAllAction('a', { ctrl: true, shift: true })).toBe('deselect-all');
-    // Ink reports the shifted letter's own case too — still recognized regardless of case.
-    expect(resolveSelectAllAction('A', { ctrl: true, shift: true })).toBe('deselect-all');
+  it('also accepts Ctrl+arrow, so existing muscle memory keeps working', () => {
+    expect(resolveFullscreenScrollDirection({ upArrow: true, ctrl: true })).toBe('up');
   });
 
-  it('is null without ctrl, or for a different letter', () => {
-    expect(resolveSelectAllAction('a', {})).toBeNull();
-    expect(resolveSelectAllAction('b', { ctrl: true })).toBeNull();
+  it('returns null for a non-arrow key', () => {
+    expect(resolveFullscreenScrollDirection({})).toBeNull();
+  });
+});
+
+describe('isSelectAllKey', () => {
+  it('is true for Ctrl+A, case-insensitively', () => {
+    expect(isSelectAllKey('a', { ctrl: true })).toBe(true);
+    expect(isSelectAllKey('A', { ctrl: true })).toBe(true);
+  });
+
+  it('is false without ctrl, or for a different letter', () => {
+    expect(isSelectAllKey('a', {})).toBe(false);
+    expect(isSelectAllKey('b', { ctrl: true })).toBe(false);
+  });
+});
+
+describe('resolveSelectAllToggle', () => {
+  // Review fix, user-reported: Ctrl+Shift+A (the old, separate deselect-all shortcut) is
+  // unreachable on virtually every real terminal — Ctrl+letter combos never carry shift
+  // information at the byte level. One shortcut now does both, based on current selection.
+  it('resolves to select-all when not everything is currently selected', () => {
+    expect(resolveSelectAllToggle(['/a', '/b'], [])).toBe('select-all');
+    expect(resolveSelectAllToggle(['/a', '/b'], ['/a'])).toBe('select-all');
+  });
+
+  it('resolves to deselect-all once every listed path is already selected', () => {
+    expect(resolveSelectAllToggle(['/a', '/b'], ['/a', '/b'])).toBe('deselect-all');
+    // Extra, unrelated selections elsewhere don't prevent this — only the listed paths matter.
+    expect(resolveSelectAllToggle(['/a', '/b'], ['/a', '/b', '/c'])).toBe('deselect-all');
+  });
+
+  it('resolves to select-all (a harmless no-op) for an empty list', () => {
+    expect(resolveSelectAllToggle([], [])).toBe('select-all');
   });
 });
 
 describe('resolveVisibilityToggleKey / toggleVisibilityFlag', () => {
-  it('maps t/o/e to their own toggle, and anything else to null', () => {
+  it('maps t/o/p/w to their own toggle, and anything else (including the old "e" binding) to null', () => {
     expect(resolveVisibilityToggleKey('t')).toBe('timestamp');
     expect(resolveVisibilityToggleKey('o')).toBe('stdout');
-    expect(resolveVisibilityToggleKey('e')).toBe('stderr');
+    expect(resolveVisibilityToggleKey('p')).toBe('stderr');
+    expect(resolveVisibilityToggleKey('w')).toBe('wrap');
+    // 'e' was freed up (review fix) — it collided with the Edts zone's own tab mnemonic.
+    expect(resolveVisibilityToggleKey('e')).toBeNull();
     expect(resolveVisibilityToggleKey('x')).toBeNull();
   });
 
   it('toggles only the targeted flag, independently of the others', () => {
     const flipped = toggleVisibilityFlag(DEFAULT_VISIBILITY_FLAGS, 'stdout');
-    expect(flipped).toEqual({ showTimestamps: true, showStdout: false, showStderr: true });
+    expect(flipped).toEqual({ showTimestamps: true, showStdout: false, showStderr: true, wrapLines: false });
 
     const flippedAgain = toggleVisibilityFlag(flipped, 'stdout');
     expect(flippedAgain).toEqual(DEFAULT_VISIBILITY_FLAGS);
+  });
+
+  it('toggles wrapLines independently of the show* flags', () => {
+    const flipped = toggleVisibilityFlag(DEFAULT_VISIBILITY_FLAGS, 'wrap');
+    expect(flipped).toEqual({ showTimestamps: true, showStdout: true, showStderr: true, wrapLines: true });
   });
 });
 
@@ -176,11 +236,11 @@ describe('filterVisibleLines', () => {
   ];
 
   it('drops stdout lines when showStdout is false', () => {
-    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: false, showStderr: true })).toEqual([lines[1]]);
+    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: false, showStderr: true, wrapLines: false })).toEqual([lines[1]]);
   });
 
   it('drops stderr lines when showStderr is false', () => {
-    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: true, showStderr: false })).toEqual([lines[0]]);
+    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: true, showStderr: false, wrapLines: false })).toEqual([lines[0]]);
   });
 
   it('keeps everything when both are shown', () => {

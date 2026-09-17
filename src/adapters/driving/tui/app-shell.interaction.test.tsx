@@ -373,6 +373,194 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
   });
 });
 
+describe('AppShell Logs zone pane-grid arrow ownership (story 5.1 review fix)', () => {
+  // Ink dispatches every keypress to every mounted `useInput` hook regardless of z-order —
+  // with the Logs zone active and its own pane-focus on the grid (Left/Right/Up/Down move
+  // sub-focus between panes there), the very same Left/Right keypress used to also reach
+  // this global Left/Right zone-switch (story 2.12) and switch the active zone out from
+  // under the grid before the user ever saw their sub-focus move. Neither
+  // logs-zone.interaction.test.tsx (mounts LogsZone alone, never AppShell) nor
+  // app-shell.test.tsx (renderToString's fake stdin never emits real keypresses) could catch
+  // this — only a real-keypress round-trip through both components together can.
+  function seedLogsStore(overrides: Record<string, unknown> = {}) {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'logs',
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        {
+          service: 'api-gateway',
+          path: '/repos/api-gateway',
+          isMember: false,
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          status: 'current',
+          sharedBranch: 'development',
+        },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      ...overrides,
+    });
+    return store;
+  }
+
+  it('Right no longer switches the active zone while Logs pane sub-focus owns the arrows', async () => {
+    const store = seedLogsStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.space); // select the one service, so an active pane exists
+      await press(instance, stdin, KEYS.tab); // other-list -> panes
+      expect(store.getState().logsPaneGridArrowsActive).toBe(true);
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('logs');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Right still switches the active zone normally once pane focus cycles back off the grid', async () => {
+    const store = seedLogsStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.tab); // other-list -> panes
+      await press(instance, stdin, KEYS.tab); // panes -> edt-list (cycle wraps)
+      expect(store.getState().logsPaneGridArrowsActive).toBe(false);
+
+      await press(instance, stdin, KEYS.right);
+
+      // 'routes' is the next zone after 'logs' in ZONES order.
+      expect(store.getState().activeZone).toBe('routes');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('clears logsPaneGridArrowsActive on unmount — leaving the Logs zone never leaves global arrow-switch inert', async () => {
+    const store = seedLogsStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.tab); // -> panes
+      expect(store.getState().logsPaneGridArrowsActive).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+    expect(store.getState().logsPaneGridArrowsActive).toBe(false);
+  });
+});
+
+describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
+  // Real docker wiring (unlike seedLogsStore above, which uses a bare createAppStore() —
+  // subscribeLogsPane no-ops without deps, so it never populates logsPanes with real lines)
+  // is needed here to prove `c` actually wipes buffered lines without touching the stream.
+  function seedLogsStoreWithDocker(docker: DockerPort) {
+    const store = createAppStore(fakeDeps({ docker }));
+    store.setState({
+      activeZone: 'logs',
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        {
+          service: 'api-gateway',
+          path: '/repos/api-gateway',
+          isMember: false,
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          status: 'current',
+          sharedBranch: 'development',
+        },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    return store;
+  }
+
+  it('c clears the sub-focused pane\'s buffered lines in the grid without stopping its stream', async () => {
+    const streamed: { onLine: (line: { timestamp: string; stream: 'stdout' | 'stderr'; text: string }) => void } = {
+      onLine: () => {},
+    };
+    const stop = vi.fn();
+    const docker: DockerPort = {
+      streamLogs: vi.fn((_container, onLine) => {
+        streamed.onLine = onLine;
+        return stop;
+      }),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+    };
+    const store = seedLogsStoreWithDocker(docker);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.space); // select api-gateway, starts its stream
+      await press(instance, stdin, KEYS.tab); // other-list -> panes
+      streamed.onLine({ timestamp: '2026-01-01T00:00:00.000Z', stream: 'stdout', text: 'hello' });
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toHaveLength(1);
+
+      await press(instance, stdin, 'c');
+
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toEqual([]);
+      // The subscription itself is untouched — clearing is a display wipe, not a teardown.
+      expect(stop).not.toHaveBeenCalled();
+      streamed.onLine({ timestamp: '2026-01-01T00:00:01.000Z', stream: 'stdout', text: 'world' });
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines.map((l) => l.text)).toEqual(['world']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('c clears the fullscreen preview\'s pane too', async () => {
+    const streamed: { onLine: (line: { timestamp: string; stream: 'stdout' | 'stderr'; text: string }) => void } = {
+      onLine: () => {},
+    };
+    const docker: DockerPort = {
+      streamLogs: vi.fn((_container, onLine) => {
+        streamed.onLine = onLine;
+        return () => {};
+      }),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+    };
+    const store = seedLogsStoreWithDocker(docker);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.enter); // ad hoc fullscreen preview on api-gateway
+      streamed.onLine({ timestamp: '2026-01-01T00:00:00.000Z', stream: 'stdout', text: 'hello' });
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toHaveLength(1);
+
+      await press(instance, stdin, 'c');
+
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toEqual([]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
 describe('AppShell manifest-gated tab visibility (story 2.13)', () => {
   it('skips an omitted tab entirely during Right arrow-nav wrap traversal', async () => {
     const store = createAppStore();
@@ -1141,7 +1329,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500 } },
+      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1317,7 +1505,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 9 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
     } finally {
       instance.unmount();
@@ -1345,12 +1533,44 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 550 },
+        logs: { bufferSize: 550, startWithHistory: false },
       });
 
       // A typed digit is a quick preset (digit x 100).
       await press(instance, stdin, '3');
       expect(store.getState().settings.logs.bufferSize).toBe(300);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the Logs tab toggles settings.logs.startWithHistory live and persists via updateSettings, independently of bufferSize (review fix)', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs
+
+      await press(instance, stdin, KEYS.space);
+
+      expect(store.getState().settings.logs.startWithHistory).toBe(true);
+      expect(store.getState().settings.logs.bufferSize).toBe(DEFAULT_SETTINGS.logs.bufferSize);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: DEFAULT_SETTINGS.logs.bufferSize, startWithHistory: true },
+      });
+
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.logs.startWithHistory).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1376,7 +1596,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
     } finally {
       instance.unmount();
@@ -1408,7 +1628,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
-        logs: { bufferSize: 500 },
+        logs: { bufferSize: 500, startWithHistory: false },
       });
     } finally {
       instance.unmount();

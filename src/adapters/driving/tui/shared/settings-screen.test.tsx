@@ -232,12 +232,26 @@ describe('SettingsScreen (story 2.19)', () => {
 
   it('renders the live bufferSize value and hints on the Logs tab (story 5.1)', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
     expect(output).toContain('Log buffer size');
     expect(output).toContain('750');
     expect(output).toContain(`Up/Down to adjust by ${LOG_BUFFER_SIZE_STEP}`);
     expect(output).toContain('Applies to new streams only');
+  });
+
+  it('renders the startWithHistory checkbox on the Logs tab, checked/unchecked to match the live setting (review fix)', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false } } });
+    const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const uncheckedLine = unchecked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
+    expect(uncheckedLine).toContain('[ ]');
+    expect(unchecked).toContain('Space to toggle');
+
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true } } });
+    const checked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const checkedLine = checked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
+    expect(checkedLine).toContain('[x]');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list (AC6)', async () => {

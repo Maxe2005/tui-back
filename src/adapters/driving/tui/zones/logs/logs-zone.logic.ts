@@ -106,13 +106,37 @@ export function adjustScrollOffset(current: number, direction: 'up' | 'down', li
 
 // I/O matrix SCROLLBACK_RELOAD: "User scrolls a pane to its oldest buffered line" — the
 // trigger for fetching more history. True once the offset can't go any further up without
-// more lines existing to scroll into.
+// more lines existing to scroll into. A genuinely empty pane (lineCount === 0) counts as
+// vacuously "at the oldest line" too — this is the pane's *normal* starting state (the live
+// tail deliberately starts empty, per DockerPort's `--since now`), so without this branch
+// Ctrl+Up could never trigger the very first scrollback fetch a freshly opened, currently
+// quiet service needs (review fix: previously always false for an empty pane, silently
+// eating the keypress).
 export function isAtOldestLine(offset: number, lineCount: number): boolean {
-  return lineCount > 0 && offset >= lineCount - 1;
+  return lineCount === 0 || offset >= lineCount - 1;
+}
+
+// Boundaries: "scroll position preserved" after a scrollback reload — but that only makes
+// sense when there was already visible content anchoring the viewport. A pane that started
+// genuinely empty has no prior viewport to preserve; pinning it back to offset 0 instead
+// shows the newest lines of whatever history was just fetched, rather than the previous
+// formula's `currentOffset + appended` overshooting straight past every line just loaded
+// (review fix — see isAtOldestLine's own header for why an empty pane reaches this at all).
+// `newLineCount` (the manager's own post-fetch `entry.lines.length`) is taken alongside
+// `appended` — not `appended` alone — as a defensive upper bound against a live line arriving
+// from the tail while the older-lines fetch was still in flight.
+export function resolvePostLoadScrollOffset(currentOffset: number, beforeCount: number, appended: number, newLineCount: number): number {
+  if (beforeCount === 0) {
+    return 0;
+  }
+  return currentOffset + Math.max(appended, newLineCount - beforeCount, 0);
 }
 
 type PaneScrollKey = { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean };
 
+// Requires ctrl in the grid view — Up/Down there is already claimed by movePaneSubFocus (2D
+// movement between panes), so a bare arrow has to keep meaning "change focused pane" and
+// Ctrl+Up/Down disambiguates "scroll the focused pane instead".
 export function resolvePaneScrollDirection(key: PaneScrollKey): 'up' | 'down' | null {
   if (!key.ctrl) {
     return null;
@@ -126,25 +150,57 @@ export function resolvePaneScrollDirection(key: PaneScrollKey): 'up' | 'down' | 
   return null;
 }
 
-// Boundaries: "Ctrl+A / Ctrl+Shift+A select/deselect all EDT-list services (EDT list only)".
-// Ink delivers a ctrl+letter combo as `input === '<letter>'` with `key.ctrl: true` (confirmed
-// against ink's own parser — see app-shell.tsx's shouldEnterResizeMode for the same
-// convention); `key.shift` distinguishes the plain and shift-modified combos.
-type SelectAllKey = { ctrl?: boolean; shift?: boolean };
-
-export type SelectAllAction = 'select-all' | 'deselect-all' | null;
-
-export function resolveSelectAllAction(input: string, key: SelectAllKey): SelectAllAction {
-  if (!key.ctrl || input.toLowerCase() !== 'a') {
-    return null;
+// Review fix: fullscreen has no sub-focus grid to disambiguate from (there's only ever the
+// one pane), so the Ctrl requirement above was never actually load-bearing there — it was
+// just inherited by reusing resolvePaneScrollDirection for both views. Plain Up/Down is
+// simpler and reads fine with nothing else in fullscreen contending for those keys; ctrl is
+// accepted too (never rejected) so existing Ctrl+Up/Down muscle memory still works.
+export function resolveFullscreenScrollDirection(key: { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean }): 'up' | 'down' | null {
+  if (key.upArrow) {
+    return 'up';
   }
-  return key.shift ? 'deselect-all' : 'select-all';
+  if (key.downArrow) {
+    return 'down';
+  }
+  return null;
 }
 
-// Boundaries: "the zone can toggle timestamp/stdout/stderr visibility independently (t/o/e)
-// without reconnecting the stream" — a pure display filter over the already-buffered lines,
-// never touching the subscription itself.
-export type VisibilityToggle = 'timestamp' | 'stdout' | 'stderr';
+// Boundaries (amended, user-reported review fix): originally "Ctrl+A / Ctrl+Shift+A
+// select/deselect all EDT-list services" — Ctrl+Shift+A turned out unreachable on virtually
+// every real terminal. A `Ctrl+letter` combo is delivered over the wire as a single control
+// byte (0x01-0x1A) that carries no shift information at all — confirmed against Ink's own
+// parser (parse-keypress.js's ctrl+letter branch sets `key.ctrl` but never `key.shift`), so
+// Ctrl+A and Ctrl+Shift+A are indistinguishable there; only a terminal that both supports and
+// negotiates the newer Kitty keyboard protocol could tell them apart, and this app doesn't
+// even opt into that protocol (bin/tui.ts's `render()` call). Ctrl+A now toggles instead: one
+// reliable shortcut that flips to deselect-all once everything is already selected, rather
+// than needing a second, unreachable one.
+type SelectAllKey = { ctrl?: boolean };
+
+export function isSelectAllKey(input: string, key: SelectAllKey): boolean {
+  return key.ctrl === true && input.toLowerCase() === 'a';
+}
+
+export type SelectAllAction = 'select-all' | 'deselect-all';
+
+// `allPaths` is whichever list is currently visible (e.g. the EDT-members list, filtered by
+// the active EDT) — flips to deselect-all only once every one of those paths is already in
+// `selected`; an empty `allPaths` (nothing to select) resolves to select-all too, but that's
+// harmless since selecting an empty list is itself a no-op.
+export function resolveSelectAllToggle(allPaths: readonly string[], selected: readonly string[]): SelectAllAction {
+  const isAllSelected = allPaths.length > 0 && allPaths.every((path) => selected.includes(path));
+  return isAllSelected ? 'deselect-all' : 'select-all';
+}
+
+// Boundaries: "the zone can toggle timestamp/stdout/stderr visibility, and log-line
+// wrap/truncate, independently (t/o/p/w) without reconnecting the stream" — a pure display
+// filter over the already-buffered lines, never touching the subscription itself.
+// `stderr` was originally bound to 'e' — changed to 'p' (review fix) since 'e' collides with
+// the Edts zone's own tab mnemonic (zones.ts): pressing it while in the Logs zone toggled
+// stderr here *and* switched AppShell's active zone to Edts on the same keypress, for the
+// same "every mounted useInput hook gets the same event" reason documented on
+// logsPaneGridArrowsActive in navigation-slice.ts.
+export type VisibilityToggle = 'timestamp' | 'stdout' | 'stderr' | 'wrap';
 
 export function resolveVisibilityToggleKey(input: string): VisibilityToggle | null {
   if (input === 't') {
@@ -153,13 +209,16 @@ export function resolveVisibilityToggleKey(input: string): VisibilityToggle | nu
   if (input === 'o') {
     return 'stdout';
   }
-  if (input === 'e') {
+  if (input === 'p') {
     return 'stderr';
+  }
+  if (input === 'w') {
+    return 'wrap';
   }
   return null;
 }
 
-export type VisibilityFlags = { showTimestamps: boolean; showStdout: boolean; showStderr: boolean };
+export type VisibilityFlags = { showTimestamps: boolean; showStdout: boolean; showStderr: boolean; wrapLines: boolean };
 
 export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityToggle): VisibilityFlags {
   if (toggle === 'timestamp') {
@@ -168,10 +227,17 @@ export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityT
   if (toggle === 'stdout') {
     return { ...flags, showStdout: !flags.showStdout };
   }
-  return { ...flags, showStderr: !flags.showStderr };
+  if (toggle === 'stderr') {
+    return { ...flags, showStderr: !flags.showStderr };
+  }
+  return { ...flags, wrapLines: !flags.wrapLines };
 }
 
-export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true };
+// wrapLines defaults false — every pane (grid and fullscreen alike) truncates long lines
+// with an ellipsis until the user opts into wrapping, matching the grid view's existing,
+// deliberate `truncate-end` choice (fullscreen previously wrapped by default only because no
+// `wrap` prop was ever passed there, not because of any documented Design Notes decision).
+export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true, wrapLines: false };
 
 export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityFlags): LogLine[] {
   return lines.filter((line) => (line.stream === 'stdout' ? flags.showStdout : flags.showStderr));

@@ -159,7 +159,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  it('Ctrl+A selects every row currently in the EDT-members list (EDT list only)', async () => {
+  it('Ctrl+A selects every row currently in the EDT-members list, then a second press deselects all (review fix: replaces the unreachable Ctrl+Shift+A)', async () => {
+    // A `Ctrl+letter` combo is a single control byte at the wire level — it never carries
+    // shift information (confirmed against Ink's own parser), so Ctrl+A and Ctrl+Shift+A were
+    // indistinguishable on virtually every real terminal, making the old, separate
+    // deselect-all shortcut unreachable in practice (user-reported). Ctrl+A now toggles.
     const store = seedStore({
       edts: [
         {
@@ -180,8 +184,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       await instance.waitUntilRenderFlush();
       // paneFocus already defaults to 'edt-list' — Ctrl+A is byte 0x01.
       await press(instance, stdin, '\x01');
-
       expect(store.getState().logsEdtSelected.sort()).toEqual(['/repos/api-gateway', '/repos/route-explorer']);
+
+      await press(instance, stdin, '\x01');
+
+      expect(store.getState().logsEdtSelected).toEqual([]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

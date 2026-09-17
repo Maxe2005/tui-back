@@ -355,7 +355,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500 } },
+        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -386,6 +386,8 @@ it('shouldQuit returns true for q', () => {
         renameBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         zoneInputCaptured: false,
         setZoneInputCaptured: () => {},
+        logsPaneGridArrowsActive: false,
+        setLogsPaneGridArrowsActive: () => {},
         quitRequested: false,
         requestQuit: () => {},
         // Story 2.15: EDT action state
@@ -413,6 +415,7 @@ it('shouldQuit returns true for q', () => {
         subscribeLogsPane: async () => {},
         unsubscribeLogsPane: () => {},
         loadOlderLogsPane: async () => {},
+        clearLogsPane: () => {},
         setLogsPaneScrollOffset: () => {},
         stopAllLogsPanes: () => {},
       };

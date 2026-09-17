@@ -27,6 +27,12 @@ export interface Settings {
   // doc comment) — a change here never resizes an already-running stream.
   logs: {
     bufferSize: number;
+    // When true, subscribing to a service's logs immediately loads its most recent history
+    // (the same fetch a manual scrollback-to-oldest — Ctrl+Up in the grid, Up/Down in
+    // fullscreen — would trigger) instead of starting the pane on a genuinely empty buffer and
+    // waiting for the live tail to produce its first new line. Default false preserves the
+    // pre-existing "starts empty" behavior.
+    startWithHistory: boolean;
   };
 }
 
@@ -39,7 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   edts: { hiddenActionHints: [], hiddenActionTypes: [] },
   // Story 5.1's Boundaries: "a per-service in-memory ring buffer sized by
   // settings.logs.bufferSize (default 500 lines)".
-  logs: { bufferSize: 500 },
+  logs: { bufferSize: 500, startWithHistory: false },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/

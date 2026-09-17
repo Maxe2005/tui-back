@@ -27,10 +27,12 @@ import {
   filterVisibleLines,
   formatLogLine,
   isAtOldestLine,
+  isSelectAllKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
+  resolveFullscreenScrollDirection,
   resolvePaneScrollDirection,
-  resolveSelectAllAction,
+  resolveSelectAllToggle,
   resolveVisibilityToggleKey,
   sliceVisibleWindow,
   toggleVisibilityFlag,
@@ -74,12 +76,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const subscribeLogsPane = useStore((state) => state.subscribeLogsPane);
   const unsubscribeLogsPane = useStore((state) => state.unsubscribeLogsPane);
   const loadOlderLogsPane = useStore((state) => state.loadOlderLogsPane);
+  const clearLogsPane = useStore((state) => state.clearLogsPane);
   const setLogsPaneScrollOffset = useStore((state) => state.setLogsPaneScrollOffset);
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const resizeMode = useStore((state) => state.resizeMode);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
+  const setLogsPaneGridArrowsActive = useStore((state) => state.setLogsPaneGridArrowsActive);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -162,6 +166,17 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
+  // Review fix (story 5.1): AppShell's own Left/Right global zone-switch (story 2.12) fires
+  // on the very same keypress as this zone's own `useInput` below — Ink dispatches to every
+  // mounted hook, not just this one — so without this flag, moving pane sub-focus with
+  // Left/Right always switched the active zone out from under the grid instead. Only set
+  // while pane focus actually owns the arrows (fullscreen already captures everything via
+  // zoneInputCaptured above, so this stays false there).
+  useEffect(() => {
+    setLogsPaneGridArrowsActive(paneFocus === 'panes' && !dialogOpen);
+  }, [paneFocus, dialogOpen, setLogsPaneGridArrowsActive]);
+  useEffect(() => () => setLogsPaneGridArrowsActive(false), [setLogsPaneGridArrowsActive]);
+
   const windowSize = useWindowSize();
   const gridAvailableWidth = Math.max(windowSize.columns - LIST_COLUMN_WIDTH - spacing['pane-padding-x'], 20);
   const gridAvailableHeight = Math.max(windowSize.rows - CHROME_ROWS, 5);
@@ -190,9 +205,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           closeLogsFullscreen();
           return;
         }
-        const scrollDirection = resolvePaneScrollDirection(key);
+        const scrollDirection = resolveFullscreenScrollDirection(key);
         if (scrollDirection !== null) {
           handlePaneScroll(logsFullscreenTarget, scrollDirection);
+          return;
+        }
+        if (input === 'c') {
+          clearLogsPane(logsFullscreenTarget);
           return;
         }
         const toggle = resolveVisibilityToggleKey(input);
@@ -214,13 +233,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       }
 
       if (paneFocus === 'edt-list') {
-        const selectAll = resolveSelectAllAction(input, key);
-        if (selectAll === 'select-all') {
-          selectAllLogsEdtServices(edtServices.map((service) => service.path));
-          return;
-        }
-        if (selectAll === 'deselect-all') {
-          deselectAllLogsEdtServices();
+        if (isSelectAllKey(input, key)) {
+          const edtPaths = edtServices.map((service) => service.path);
+          if (resolveSelectAllToggle(edtPaths, logsEdtSelected) === 'select-all') {
+            selectAllLogsEdtServices(edtPaths);
+          } else {
+            deselectAllLogsEdtServices();
+          }
           return;
         }
         const jump = resolveSelectionJump(key);
@@ -290,6 +309,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         setSubFocus((current) => movePaneSubFocus(current, direction, layout.cols, activePanes.length));
         return;
       }
+      if (input === 'c') {
+        const focused = activePanes[subFocus];
+        if (focused !== undefined) {
+          clearLogsPane(focused.path);
+        }
+        return;
+      }
       if (key.return) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
@@ -327,7 +353,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                 </Box>
               ))}
-              <DimAnnotation text="[Space] toggle  [Enter] preview  [Ctrl+A] all  [Ctrl+Shift+A] none" />
+              <DimAnnotation text="[Space] toggle  [Enter] preview  [Ctrl+A] select/deselect all" />
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
@@ -343,8 +369,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               <DimAnnotation
                 text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}  [o] stdout ${
                   visibility.showStdout ? 'on' : 'off'
-                }  [e] stderr ${visibility.showStderr ? 'on' : 'off'}`}
+                }  [p] stderr ${visibility.showStderr ? 'on' : 'off'}  [w] ${visibility.wrapLines ? 'wrap' : 'truncate'}`}
               />
+              <DimAnnotation text="[Ctrl+↑/↓] scroll focused pane  [c] clear focused pane" />
             </Box>
 
             <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
@@ -451,7 +478,7 @@ function LogsPaneView({
         <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
       ) : null}
       {windowLines.map((line, index) => (
-        <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap="truncate-end">
+        <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
           {formatLogLine(line, visibility.showTimestamps)}
         </Text>
       ))}
@@ -491,11 +518,11 @@ function FullscreenPane({
         <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
       ) : null}
       {windowLines.map((line, index) => (
-        <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text}>
+        <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
           {formatLogLine(line, visibility.showTimestamps)}
         </Text>
       ))}
-      <DimAnnotation text="[Esc] back  [Ctrl+↑/↓] scroll  [t/o/e] toggle timestamps/stdout/stderr" />
+      <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate" />
     </Box>
   );
 }

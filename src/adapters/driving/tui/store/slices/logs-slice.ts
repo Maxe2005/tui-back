@@ -12,9 +12,10 @@
 // single DockerPort wired into AppStoreDeps.
 import type { StateCreator } from 'zustand';
 import { createLogsManager, type LogsManager } from '../../../../../core/logs/index.js';
-import { loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
+import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import { resolvePostLoadScrollOffset } from '../../zones/logs/logs-zone.logic.js';
 
 export type LogsPaneErrorState = { code: string; message: string } | null;
 
@@ -66,6 +67,9 @@ export type LogsSlice = {
   subscribeLogsPane: (repoPath: string, service: string) => Promise<void>;
   unsubscribeLogsPane: (repoPath: string) => void;
   loadOlderLogsPane: (repoPath: string) => Promise<void>;
+  // Wipes a pane's buffered/displayed lines (a display "clear", like a shell's `clear`) —
+  // the stream itself keeps running, so a new line still appears immediately afterward.
+  clearLogsPane: (repoPath: string) => void;
   setLogsPaneScrollOffset: (repoPath: string, offset: number) => void;
   // Tears down every currently-active pane's subscription (killing its docker child process,
   // if any). Normal zone-unmount teardown already stops each pane individually; this is the
@@ -81,135 +85,19 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // pre-5.1 `createAppStore()` call (tests included) keeps working unwired.
   const logsManager: LogsManager | null = deps ? createLogsManager(deps.docker) : null;
 
-  return (set, get) => ({
-    logsEdtSelected: [],
-    logsOtherSelected: [],
-    logsFullscreenTarget: null,
-    logsFullscreenServiceName: null,
-    logsPanes: {},
-
-    toggleLogsEdtSelection: (repoPath) =>
-      set((state) => ({
-        logsEdtSelected: state.logsEdtSelected.includes(repoPath)
-          ? state.logsEdtSelected.filter((candidate) => candidate !== repoPath)
-          : [...state.logsEdtSelected, repoPath],
-      })),
-    toggleLogsOtherSelection: (repoPath) =>
-      set((state) => ({
-        logsOtherSelected: state.logsOtherSelected.includes(repoPath)
-          ? state.logsOtherSelected.filter((candidate) => candidate !== repoPath)
-          : [...state.logsOtherSelected, repoPath],
-      })),
-    selectAllLogsEdtServices: (repoPaths) => set({ logsEdtSelected: [...repoPaths] }),
-    deselectAllLogsEdtServices: () => set({ logsEdtSelected: [] }),
-    openLogsFullscreen: (repoPath, serviceName) => set({ logsFullscreenTarget: repoPath, logsFullscreenServiceName: serviceName }),
-    closeLogsFullscreen: () => set({ logsFullscreenTarget: null, logsFullscreenServiceName: null }),
-
-    subscribeLogsPane: async (repoPath, service) => {
-      if (!deps || !logsManager) {
-        return;
-      }
-      set((state) => ({
-        logsPanes: { ...state.logsPanes, [repoPath]: state.logsPanes[repoPath] ?? emptyPane(repoPath, service) },
-      }));
-      if (logsManager.isSubscribed(repoPath)) {
-        // Already streaming (e.g. a fullscreen preview opened on an already-selected row) —
-        // nothing new to start.
-        return;
-      }
-      const manifestResult = await deps.manifest.load(repoPath);
-      if (!manifestResult.ok) {
-        set((state) => ({
-          logsPanes: {
-            ...state.logsPanes,
-            [repoPath]: {
-              ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)),
-              streamError: { code: manifestResult.error.code, message: manifestResult.error.message },
-            },
-          },
-        }));
-        return;
-      }
-      const bufferSize = get().settings.logs.bufferSize;
-      const mirror = () => {
-        const entry = logsManager.getEntry(repoPath);
-        set((state) => ({
-          logsPanes: {
-            ...state.logsPanes,
-            [repoPath]: {
-              ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)),
-              lines: entry.lines,
-              streamError: entry.streamError,
-              noMoreHistory: entry.noMoreHistory,
-            },
-          },
-        }));
-      };
-      const result = subscribeLogs({
-        manager: logsManager,
-        key: repoPath,
-        container: manifestResult.data.container,
-        bufferSize,
-        onUpdate: mirror,
-      });
-      if (!result.ok) {
-        set((state) => ({
-          logsPanes: {
-            ...state.logsPanes,
-            [repoPath]: { ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)), streamError: result.error },
-          },
-        }));
-        return;
-      }
-      // Reflects whatever the manager already knows synchronously (in practice still empty
-      // for a brand-new subscription, but keeps this action total/idempotent either way).
-      mirror();
-    },
-
-    unsubscribeLogsPane: (repoPath) => {
-      if (!logsManager) {
-        return;
-      }
-      unsubscribeLogs({ manager: logsManager, key: repoPath });
-      set((state) => {
-        if (!(repoPath in state.logsPanes)) {
-          return {};
-        }
-        const next = { ...state.logsPanes };
-        delete next[repoPath];
-        return { logsPanes: next };
-      });
-    },
-
-    loadOlderLogsPane: async (repoPath) => {
-      if (!deps || !logsManager) {
-        return;
-      }
+  return (set, get) => {
+    // Shared by loadOlderLogsPane and subscribeLogsPane's own startWithHistory fetch
+    // (Settings tab, story 5.1 review fix) — both are "fetch the next bufferSize older lines
+    // and prepend them" over an already-subscribed key, differing only in when they're
+    // invoked (a manual scrollback-to-oldest vs. automatically right after a fresh
+    // subscription).
+    async function loadOlder(repoPath: string, container: string): Promise<void> {
       const pane = get().logsPanes[repoPath];
-      if (!pane) {
-        return;
-      }
-      const manifestResult = await deps.manifest.load(repoPath);
-      if (!manifestResult.ok) {
-        // Previously a bare `return` — zero feedback, and every subsequent scroll-to-edge kept
-        // silently no-oping the same way forever. Surfaces the failure the same way every other
-        // manifest-load failure in this file does (review fix).
-        set((state) => {
-          const current = state.logsPanes[repoPath];
-          if (!current) {
-            return {};
-          }
-          return {
-            logsPanes: {
-              ...state.logsPanes,
-              [repoPath]: { ...current, streamError: { code: manifestResult.error.code, message: manifestResult.error.message } },
-            },
-          };
-        });
+      if (!pane || !logsManager) {
         return;
       }
       const beforeCount = pane.lines.length;
-      const result = await loadOlderLogs({ manager: logsManager, key: repoPath, container: manifestResult.data.container });
+      const result = await loadOlderLogs({ manager: logsManager, key: repoPath, container });
       const entry = logsManager.getEntry(repoPath);
       set((state) => {
         const current = state.logsPanes[repoPath];
@@ -224,33 +112,189 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
               ...current,
               lines: entry.lines,
               noMoreHistory: entry.noMoreHistory,
-              // Preserves the visible viewport (I/O matrix: "scroll position preserved") — the
-              // same lines that were on screen stay on screen once older ones are prepended.
-              scrollOffset: current.scrollOffset + Math.max(appended, entry.lines.length - beforeCount, 0),
+              // Preserves the visible viewport (I/O matrix: "scroll position preserved") for a
+              // pane that already had visible lines — or, for a pane that started genuinely
+              // empty, pins to the newest of the just-fetched history instead (review fix; see
+              // resolvePostLoadScrollOffset's own header).
+              scrollOffset: resolvePostLoadScrollOffset(current.scrollOffset, beforeCount, appended, entry.lines.length),
             },
           },
         };
       });
-    },
+    }
 
-    setLogsPaneScrollOffset: (repoPath, offset) =>
-      set((state) => {
-        const current = state.logsPanes[repoPath];
-        if (!current) {
-          return {};
+    return {
+      logsEdtSelected: [],
+      logsOtherSelected: [],
+      logsFullscreenTarget: null,
+      logsFullscreenServiceName: null,
+      logsPanes: {},
+
+      toggleLogsEdtSelection: (repoPath) =>
+        set((state) => ({
+          logsEdtSelected: state.logsEdtSelected.includes(repoPath)
+            ? state.logsEdtSelected.filter((candidate) => candidate !== repoPath)
+            : [...state.logsEdtSelected, repoPath],
+        })),
+      toggleLogsOtherSelection: (repoPath) =>
+        set((state) => ({
+          logsOtherSelected: state.logsOtherSelected.includes(repoPath)
+            ? state.logsOtherSelected.filter((candidate) => candidate !== repoPath)
+            : [...state.logsOtherSelected, repoPath],
+        })),
+      selectAllLogsEdtServices: (repoPaths) => set({ logsEdtSelected: [...repoPaths] }),
+      deselectAllLogsEdtServices: () => set({ logsEdtSelected: [] }),
+      openLogsFullscreen: (repoPath, serviceName) => set({ logsFullscreenTarget: repoPath, logsFullscreenServiceName: serviceName }),
+      closeLogsFullscreen: () => set({ logsFullscreenTarget: null, logsFullscreenServiceName: null }),
+
+      subscribeLogsPane: async (repoPath, service) => {
+        if (!deps || !logsManager) {
+          return;
         }
-        const clamped = Math.min(Math.max(offset, 0), Math.max(current.lines.length - 1, 0));
-        return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, scrollOffset: clamped } } };
-      }),
+        set((state) => ({
+          logsPanes: { ...state.logsPanes, [repoPath]: state.logsPanes[repoPath] ?? emptyPane(repoPath, service) },
+        }));
+        if (logsManager.isSubscribed(repoPath)) {
+          // Already streaming (e.g. a fullscreen preview opened on an already-selected row) —
+          // nothing new to start.
+          return;
+        }
+        const manifestResult = await deps.manifest.load(repoPath);
+        if (!manifestResult.ok) {
+          set((state) => ({
+            logsPanes: {
+              ...state.logsPanes,
+              [repoPath]: {
+                ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)),
+                streamError: { code: manifestResult.error.code, message: manifestResult.error.message },
+              },
+            },
+          }));
+          return;
+        }
+        const bufferSize = get().settings.logs.bufferSize;
+        const mirror = () => {
+          const entry = logsManager.getEntry(repoPath);
+          set((state) => ({
+            logsPanes: {
+              ...state.logsPanes,
+              [repoPath]: {
+                ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)),
+                lines: entry.lines,
+                streamError: entry.streamError,
+                noMoreHistory: entry.noMoreHistory,
+              },
+            },
+          }));
+        };
+        const result = subscribeLogs({
+          manager: logsManager,
+          key: repoPath,
+          container: manifestResult.data.container,
+          bufferSize,
+          onUpdate: mirror,
+        });
+        if (!result.ok) {
+          set((state) => ({
+            logsPanes: {
+              ...state.logsPanes,
+              [repoPath]: { ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)), streamError: result.error },
+            },
+          }));
+          return;
+        }
+        // Reflects whatever the manager already knows synchronously (in practice still empty
+        // for a brand-new subscription, but keeps this action total/idempotent either way).
+        mirror();
+        // Settings tab, story 5.1 review fix: "start streaming with the most recent history"
+        // opts a fresh subscription into the exact same fetch a manual scrollback-to-oldest
+        // (Ctrl+Up in the grid, Up/Down in fullscreen) would trigger, instead of leaving the
+        // pane on a genuinely empty buffer until the live tail produces its first new line.
+        // Only reachable here, past the `isSubscribed` early-return above, so re-selecting an
+        // already-streaming pane (or opening fullscreen on one) never re-fetches history.
+        if (get().settings.logs.startWithHistory) {
+          await loadOlder(repoPath, manifestResult.data.container);
+        }
+      },
 
-    stopAllLogsPanes: () => {
-      if (!logsManager) {
-        return;
-      }
-      for (const repoPath of Object.keys(get().logsPanes)) {
+      unsubscribeLogsPane: (repoPath) => {
+        if (!logsManager) {
+          return;
+        }
         unsubscribeLogs({ manager: logsManager, key: repoPath });
-      }
-      set({ logsPanes: {} });
-    },
-  });
+        set((state) => {
+          if (!(repoPath in state.logsPanes)) {
+            return {};
+          }
+          const next = { ...state.logsPanes };
+          delete next[repoPath];
+          return { logsPanes: next };
+        });
+      },
+
+      loadOlderLogsPane: async (repoPath) => {
+        if (!deps || !logsManager) {
+          return;
+        }
+        const pane = get().logsPanes[repoPath];
+        if (!pane) {
+          return;
+        }
+        const manifestResult = await deps.manifest.load(repoPath);
+        if (!manifestResult.ok) {
+          // Previously a bare `return` — zero feedback, and every subsequent scroll-to-edge kept
+          // silently no-oping the same way forever. Surfaces the failure the same way every other
+          // manifest-load failure in this file does (review fix).
+          set((state) => {
+            const current = state.logsPanes[repoPath];
+            if (!current) {
+              return {};
+            }
+            return {
+              logsPanes: {
+                ...state.logsPanes,
+                [repoPath]: { ...current, streamError: { code: manifestResult.error.code, message: manifestResult.error.message } },
+              },
+            };
+          });
+          return;
+        }
+        await loadOlder(repoPath, manifestResult.data.container);
+      },
+
+      clearLogsPane: (repoPath) => {
+        if (!logsManager) {
+          return;
+        }
+        clearLogs({ manager: logsManager, key: repoPath });
+        set((state) => {
+          const current = state.logsPanes[repoPath];
+          if (!current) {
+            return {};
+          }
+          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, lines: [], noMoreHistory: false, scrollOffset: 0 } } };
+        });
+      },
+
+      setLogsPaneScrollOffset: (repoPath, offset) =>
+        set((state) => {
+          const current = state.logsPanes[repoPath];
+          if (!current) {
+            return {};
+          }
+          const clamped = Math.min(Math.max(offset, 0), Math.max(current.lines.length - 1, 0));
+          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, scrollOffset: clamped } } };
+        }),
+
+      stopAllLogsPanes: () => {
+        if (!logsManager) {
+          return;
+        }
+        for (const repoPath of Object.keys(get().logsPanes)) {
+          unsubscribeLogs({ manager: logsManager, key: repoPath });
+        }
+        set({ logsPanes: {} });
+      },
+    };
+  };
 }

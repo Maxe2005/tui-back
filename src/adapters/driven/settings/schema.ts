@@ -49,6 +49,7 @@ export const settingsSchema: z.ZodType<Settings> = z
     logs: z
       .object({
         bufferSize: z.number().int().min(MIN_LOG_BUFFER_SIZE).max(MAX_LOG_BUFFER_SIZE),
+        startWithHistory: z.boolean().optional().default(DEFAULT_SETTINGS.logs.startWithHistory),
       })
       .strict()
       .optional()
