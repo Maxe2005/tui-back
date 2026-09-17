@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
+import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
@@ -30,6 +31,7 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
 // branch for a repo) when a call site passes an edtId — switchActiveEdt is the first such
 // call site; create.ts's existing (no-edtId) calls are unaffected.
 const git = createGitPort({ load: loadManifest }, edtRegistry);
+const container = createContainerPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 
@@ -51,6 +53,7 @@ const subcommands = buildSubcommands({
   edtRegistry,
   edtRegistryResourceKey: edtRegistryFile,
   git,
+  container,
   state,
 });
 

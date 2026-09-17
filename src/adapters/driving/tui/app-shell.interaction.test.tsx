@@ -60,6 +60,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     restoreStash: vi.fn(async () => ok(undefined)),
     branchExistsLocally: vi.fn(async () => ok(true)),
     fetch: vi.fn(async () => ok(undefined)),
+    pull: vi.fn(async () => ok(undefined)),
+    mergeBranch: vi.fn(async () => ok(undefined)),
+    abortMerge: vi.fn(async () => ok(undefined)),
+    isMergeInProgress: vi.fn(async () => ok(false)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
   };

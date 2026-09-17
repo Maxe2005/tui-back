@@ -20,7 +20,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -486,14 +486,14 @@ describe('tui-back scan (black-box)', () => {
 });
 
 describe('tui-back --help (black-box)', () => {
-  it('lists every registered command, including edts and edt, exit 0', () => {
+  it('lists every registered command, including edts, edt, and update, exit 0', () => {
     const { status, stdout } = runCli(['--help']);
 
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update']);
   });
 });
 
@@ -1324,5 +1324,199 @@ describe('tui-back edt switch (black-box)', () => {
     expect(backToAData.wasInterrupted).toBe(true);
     const edtsAfterReturn = await readEdtsYaml(xdg);
     expect(edtsAfterReturn.edts.find((e) => e.ulid === ulidA)?.status).toBe('active');
+  });
+});
+
+describe('tui-back update (black-box, story 3.1)', () => {
+  function createEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
+    for (const repo of repos) {
+      expect(runCli(['register', repo], env).status).toBe(0);
+    }
+  }
+
+  // A stub `docker` on PATH so container restarts succeed deterministically without a real
+  // runtime — the adapter's whole contract is the exit-code taxonomy, covered against the
+  // real `docker` absence by the driven adapter's own tests.
+  async function makeDockerStub(): Promise<string> {
+    const stubDir = await mkdtemp(join(tmpdir(), 'tui-back-e2e-docker-'));
+    tmpDirs.push(stubDir);
+    await writeFile(join(stubDir, 'docker'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    return stubDir;
+  }
+
+  // A member repo cloned from its own origin, sitting on a feature branch behind the
+  // origin's development — the "member on feature branch, behind shared branch, clean
+  // tree" matrix row. The clone carries a committed manifest, so the tree starts clean.
+  async function makeBehindMember(): Promise<{ origin: string; repo: string }> {
+    const origin = await makeGitRepo();
+    commitManifest(origin);
+    const repo = await mkdtemp(join(tmpdir(), 'tui-back-e2e-clone-'));
+    tmpDirs.push(repo);
+    expect(spawnSync('git', ['clone', origin, repo], { encoding: 'utf8' }).status).toBe(0);
+    runGit(repo, ['config', 'user.email', 'e2e@tui-back.test']);
+    runGit(repo, ['config', 'user.name', 'tui-back e2e']);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    // Advance the shared branch on the origin only — the member is now behind.
+    await writeFile(join(origin, 'shared.txt'), 'shared change');
+    runGit(origin, ['add', 'shared.txt']);
+    expect(runGit(origin, ['commit', '-m', 'advance shared']).status).toBe(0);
+    return { origin, repo };
+  }
+
+  async function createAndSwitchEdt(env: NodeJS.ProcessEnv, topic: string, members: string[]): Promise<string> {
+    const created = runCli(['edt', 'create', '--topic', topic, ...members.flatMap((m) => ['--member', m])], env);
+    expect(created.status).toBe(0);
+    const ulid = JSON.parse(created.stdout.trim()).data.ulid as string;
+    expect(runCli(['edt', 'switch', '--to', topic], env).status).toBe(0);
+    return ulid;
+  }
+
+  function withDocker(env: NodeJS.ProcessEnv, stubDir: string): NodeJS.ProcessEnv {
+    return { ...env, PATH: `${stubDir}${delimiter}${process.env.PATH}` };
+  }
+
+  it('brings two behind members up to date: one JSON line, both updated, exit 0 (AC1)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    const b = await makeBehindMember();
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        ulid: expect.any(String),
+        topic: 'demo',
+        results: [
+          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated' },
+        ],
+      },
+    });
+    // Both members now contain the origin's shared-branch advance.
+    for (const { origin, repo } of [a, b]) {
+      const originHead = runGit(origin, ['rev-parse', 'development']).stdout.trim();
+      expect(runGit(repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).toBe(0);
+    }
+  });
+
+  it('a conflicting member fails with merge-conflict back at its pre-run HEAD while the other still reports updated (AC4)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    const b = await makeBehindMember();
+    // Conflicting change on the same file the origin advanced, committed on the member side.
+    await writeFile(join(a.repo, 'shared.txt'), 'member side');
+    runGit(a.repo, ['add', 'shared.txt']);
+    expect(runGit(a.repo, ['commit', '-m', 'member change']).status).toBe(0);
+    const headBefore = runGit(a.repo, ['rev-parse', 'HEAD']).stdout.trim();
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    const data = JSON.parse(stdout.trim()).data;
+    expect(data.results).toEqual([
+      { service: 'route-explorer', outcome: 'failed', detail: expect.objectContaining({ code: 'merge-conflict' }) },
+      { service: 'route-explorer', outcome: 'updated' },
+    ]);
+    // The conflicting repo is back at its pre-run HEAD with no merge in progress.
+    expect(runGit(a.repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);
+    expect(runGit(a.repo, ['rev-parse', '--verify', 'MERGE_HEAD']).status).not.toBe(0);
+  });
+
+  it('a dirty member is skipped with dirty-worktree detail, untouched, while the other updates', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    const b = await makeBehindMember();
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([
+      { service: 'route-explorer', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
+      { service: 'route-explorer', outcome: 'updated' },
+    ]);
+    // The dirty repo was never merged: the origin's advance is still not an ancestor.
+    const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
+    expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).not.toBe(0);
+  });
+
+  it('rejects any flag — bare update only, no --all (story 3.3)', async () => {
+    const xdg = await makeTempDir();
+
+    for (const args of [['update', '--all'], ['update', '--force'], ['update', 'extra']]) {
+      const { status, stdout } = runCli(args, createEnv(xdg));
+
+      expect(status).toBe(1);
+      expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+  });
+
+  it('fails with no-active-edt when no EDT is active', async () => {
+    const xdg = await makeTempDir();
+
+    const { status, stdout } = runCli(['update'], createEnv(xdg));
+
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
+  });
+
+  it('reports a zero-member EDT as an explicit no-op with a note, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    // Empty the EDT via modify — creation itself always requires >=1 member.
+    expect(runCli(['edt', 'modify', '--topic', 'demo', '--remove-member', a.repo], env).status).toBe(0);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.results).toEqual([]);
+    expect(typeof parsed.data.note).toBe('string');
+    expect(parsed.data.note.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a second run while one holds the lock with update-already-running (AC2)', { timeout: 30000 }, async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    // Simulate an in-progress group update holding the global key (a real run finishes in
+    // milliseconds — too fast to race black-box — so the held lock is constructed directly,
+    // mirroring the edt-switch lock test above).
+    const lockDir = join(xdg, 'tui-back', 'locks');
+    const lockPath = lockPathFor(lockDir, 'group-update');
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, timestamp: Date.now() }), 'utf8');
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
   });
 });

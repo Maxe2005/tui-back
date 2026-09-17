@@ -45,6 +45,10 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     restoreStash: (repoPath, message) => restoreStash(repoPath, message),
     branchExistsLocally: (repoPath, branchName) => branchExistsLocally(repoPath, branchName),
     fetch: (repoPath, branchName) => fetchBranch(repoPath, branchName),
+    pull: (repoPath) => pullBranch(repoPath),
+    isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
+    mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
+    abortMerge: (repoPath) => abortMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
     renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
   };
@@ -376,6 +380,70 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
   return ok(undefined);
 }
 
+// Story 3.1 — `git pull --ff-only` on the current branch. Only ever called for a member
+// that already sits on its manifest sharedBranch (the merge path below would be a
+// self-merge), mirroring the switch.ts precedent that pulls of the shared branch carry no
+// write-gate. `--ff-only` never merges and never rebases (a diverged branch is a clean
+// `git-pull-error`, never a surprise merge commit), and `GIT_TERMINAL_PROMPT=0` keeps a
+// credential-requiring remote from hanging on an interactive prompt. Together with
+// `--no-edit` on the merge path, no git invocation here can open an editor or prompt.
+export async function pullBranch(repoPath: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['pull', '--ff-only'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  if (result.status !== 0) {
+    return err('git-pull-error', `git pull --ff-only failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.1 — `git merge` of the already-fetched shared branch into the member's own
+// current branch, never a rebase. `--no-edit` keeps the merge non-interactive (no editor).
+// A conflicting merge is distinguished by MERGE_HEAD existing afterwards (the merge is
+// still in progress) — locale-independent, unlike matching git's own CONFLICT marker in
+// its human-readable output — so the caller can abort and report `merge-conflict` instead
+// of a generic merge failure.
+export async function mergeBranch(repoPath: string, branch: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['merge', '--no-edit', branch], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    const merging = await isMergeInProgress(repoPath);
+    if (merging.ok && merging.data) {
+      return err('merge-conflict', `git merge ${branch} conflicts in ${repoPath}: ${spawnFailureDetail(result)}`);
+    }
+    return err('git-merge-error', `git merge ${branch} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.1 — `git merge --abort` cancels the in-progress merge, restoring the pre-run
+// HEAD. Abort cancels only the attempted merge, never developer work.
+export async function abortMerge(repoPath: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['merge', '--abort'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-merge-abort-error', `git merge --abort failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// A failed `git merge` (or `git pull`) that leaves MERGE_HEAD behind is a conflicting
+// merge still in progress (the caller's abortMerge target); any other failure (unknown
+// branch, not a git repo, ...) leaves no MERGE_HEAD. `git rev-parse --verify --quiet`
+// exit-code taxonomy: 0 exists, 1 missing, anything else (except an unspawnable git,
+// status === null, which is a real environment failure) reads as missing — the merge
+// already failed, so this is only a classifier, never the reported error.
+export async function isMergeInProgress(repoPath: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (result.status === null) {
+    return err('git-merge-check-error', `Cannot check merge state in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(result.status === 0);
+}
+
 // Story 2.26 — the branch-picker's candidate source: `refs/heads/` only (local-only, never
 // `refs/remotes/...`), mirroring branchExistsLocally's local-only scope. One branch name per
 // line; blank lines (a trailing newline on the last ref) are filtered out.
@@ -460,7 +528,10 @@ function spawnFailureDetail(result: { status: number | null; stderr: string; err
     const code = spawnError?.code;
     return typeof message === 'string' && message !== '' ? message : (typeof code === 'string' ? code : 'unknown error');
   }
-  return String(result.stderr).trim();
+  // Some git failures exit non-zero with blank stderr — fall back to the exit status so
+  // the message never ends with a blank cause.
+  const stderr = String(result.stderr).trim();
+  return stderr !== '' ? stderr : `exit ${String(result.status)}`;
 }
 
 function showRef(repoPath: string, branchName: string): ShowRefOutcome {

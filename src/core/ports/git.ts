@@ -68,6 +68,24 @@ export interface GitPort {
   // repo's manifest sharedBranch. Never used for a member's own branch (spec: a missing
   // member branch is reported failed, never auto-fetched).
   fetch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // Story 3.1: plain `git pull` on the current branch — used only when a member already sits
+  // on its manifest sharedBranch (the merge path below would be a self-merge). Follows the
+  // switch.ts precedent: pulls of the shared branch carry no write-gate.
+  pull(repoPath: string): Promise<Result<void>>;
+  // Story 3.1 (review): true while a conflicting merge *or* pull is still in progress
+  // (MERGE_HEAD exists) — lets the group-update use-case abort a conflicting `git pull`
+  // back to the pre-run HEAD the same way it aborts a conflicting merge. An unresolvable
+  // check (git itself unspawnable) is the only failure mode; anything else reads as
+  // "no merge in progress", never a throw.
+  isMergeInProgress(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.1: `git merge <branch>` of the (already fetched) shared branch into the member's
+  // own current branch — never a rebase. A conflicting merge surfaces as `merge-conflict`
+  // (distinct from any other `git-merge-error`); the caller aborts via abortMerge below so
+  // the repo lands back at its pre-run HEAD.
+  mergeBranch(repoPath: string, branch: string): Promise<Result<void>>;
+  // Story 3.1: `git merge --abort` — cancels an in-progress conflicting merge, restoring the
+  // pre-run HEAD. Never discards developer work: abort only cancels the attempted merge.
+  abortMerge(repoPath: string): Promise<Result<void>>;
   // Story 2.26: the branch-picker's candidate source for both its filterable-list widget's
   // uses (base-branch candidates for Create new, target-branch candidates for Pick existing).
   // Local-only, mirroring branchExistsLocally's scope (Boundaries: "Remote-branch listing —

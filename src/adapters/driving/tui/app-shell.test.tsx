@@ -87,9 +87,10 @@ describe('AppShell', () => {
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
       // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
-      // (see edts-zone.test.tsx for its own coverage) — every other zone is still the
-      // placeholder these two literal strings come from.
-      if (zone.id !== 'edts') {
+      // (see edts-zone.test.tsx for its own coverage). Story 3.1: same for Update
+      // (see update-zone.test.tsx) — every other zone is still the placeholder these
+      // two literal strings come from.
+      if (zone.id !== 'edts' && zone.id !== 'update') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
@@ -397,6 +398,17 @@ it('shouldQuit returns true for q', () => {
         openEdtSwitchDialog: () => {},
         openEdtModifyDialog: () => {},
         logEdtAction: async () => {},
+        // Story 3.1: Update zone run state
+        updateStatus: 'idle',
+        updateResults: [],
+        updateNote: null,
+        updateTopic: null,
+        updateError: null,
+        updateErrorCode: null,
+        updateUlid: null,
+        runGroupUpdate: async () => {},
+        markUpdateInterrupted: async () => {},
+        clearUpdate: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

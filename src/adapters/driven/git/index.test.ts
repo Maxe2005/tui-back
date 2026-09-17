@@ -16,6 +16,7 @@ import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { loadManifest } from '../manifest/index.js';
 import {
   aheadBehind,
+  abortMerge,
   assertAllowedBranch,
   branchExistsLocally,
   checkoutBranch,
@@ -25,7 +26,10 @@ import {
   deleteBranch,
   fetchBranch,
   hasUncommittedChanges,
+  isMergeInProgress,
   listBranches,
+  mergeBranch,
+  pullBranch,
   renameBranch,
   restoreStash,
   stashSave,
@@ -843,6 +847,205 @@ describe('fetchBranch', () => {
   });
 });
 
+// Story 3.1 — plain `git pull` on the current branch, only for a member already sitting on
+// its shared branch.
+describe('pullBranch', () => {
+  it('pulls new upstream commits into the current branch', async () => {
+    const { origin, clone } = await makeOriginAndClone();
+    commit(origin, 'upstream-only commit');
+
+    const result = await pullBranch(clone);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 0, behind: 0 } });
+  });
+
+  it('is a no-op success when already up to date', async () => {
+    const { clone } = await makeOriginAndClone();
+
+    expect(await pullBranch(clone)).toEqual({ ok: true, data: undefined });
+  });
+
+  it('reports a controlled error when there is no origin remote', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await pullBranch(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
+  });
+
+  it('rejects a diverged shared branch with git-pull-error (never merges, never rebases)', async () => {
+    const { origin, clone } = await makeOriginAndClone();
+    commit(origin, 'upstream-only commit');
+    // A local-only commit on the same branch diverges it — --ff-only refuses.
+    commit(clone, 'local-only commit');
+
+    const result = await pullBranch(clone);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
+    // Neither side moved: no merge commit was created to paper over the divergence.
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 1 } });
+  });
+});
+
+// Story 3.1 — `git merge` of the fetched shared branch into the member's own branch, never
+// a rebase; conflicts surface as `merge-conflict` so the caller can abort.
+describe('mergeBranch', () => {
+  // A feature branch behind development with no overlapping change — merges cleanly.
+  async function makeBehindRepo(): Promise<string> {
+    const repo = await makeCleanGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'shared.txt'), 'shared change');
+    runGit(repo, ['add', 'shared.txt']);
+    expect(runGit(repo, ['commit', '-m', 'advance shared']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    return repo;
+  }
+
+  it('merges the shared branch into the member branch', async () => {
+    const repo = await makeBehindRepo();
+
+    const result = await mergeBranch(repo, 'development');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(runGit(repo, ['merge-base', '--is-ancestor', 'development', 'feat/member']).status).toBe(0);
+  });
+
+  it('is a no-op success when the member already contains the shared branch', async () => {
+    const repo = await makeCleanGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+
+    const result = await mergeBranch(repo, 'development');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+  });
+
+  it('surfaces a conflicting merge as merge-conflict, leaving the merge in progress for the caller to abort', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+
+    const result = await mergeBranch(repo, 'development');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'merge-conflict' } });
+    // The merge is still in progress — MERGE_HEAD exists — so abortMerge has work to do.
+    expect(runGit(repo, ['rev-parse', '--verify', 'MERGE_HEAD']).status).toBe(0);
+  });
+
+  it('reports a non-conflict failure as git-merge-error (never merge-conflict)', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await mergeBranch(repo, 'feat/does-not-exist');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-error' } });
+  });
+});
+
+// Story 3.1 — `git merge --abort` restores the pre-run HEAD after a conflicting merge.
+describe('abortMerge', () => {
+  it('cancels an in-progress conflicting merge, restoring the pre-run HEAD', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    const headBefore = runGit(repo, ['rev-parse', 'HEAD']).stdout.trim();
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+
+    const result = await abortMerge(repo);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(runGit(repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);
+    expect(runGit(repo, ['rev-parse', '--verify', 'MERGE_HEAD']).status).not.toBe(0);
+  });
+
+  it('reports a controlled error when no merge is in progress', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await abortMerge(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
+  });
+
+  it('falls back to the exit status when git fails with blank stderr (review)', async () => {
+    const repo = await makeCleanGitRepo();
+    const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+    const shimDir = await mkdtemp(join(tmpdir(), 'tui-back-git-shim-blank-'));
+    tmpDirs.push(shimDir);
+    const shimPath = join(shimDir, 'git');
+    // A shim `git` that fails only the `merge --abort` subcommand with zero output
+    // (forwarding every other subcommand to the real binary), exercising the exact
+    // "non-zero exit, blank stderr" branch for real.
+    await writeFile(
+      shimPath,
+      `#!/bin/sh\nif [ "$1" = "merge" ] && [ "$2" = "--abort" ]; then\n  exit 1\nfi\nexec "${realGit}" "$@"\n`,
+      { mode: 0o755 },
+    );
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${shimDir}${delimiter}${originalPath}`;
+    try {
+      const result = await abortMerge(repo);
+      expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
+      if (!result.ok) {
+        expect(result.error.message).toContain('exit 1');
+      }
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+});
+
+// Story 3.1 (review) — the MERGE_HEAD classifier the group-update pull path uses to tell
+// a conflicting pull (abort + merge-conflict) from any other pull failure.
+describe('isMergeInProgress', () => {
+  it('reports true while a conflicting merge is in progress', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: true });
+
+    expect((await abortMerge(repo)).ok).toBe(true);
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('reports false when no merge is in progress', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+  });
+});
+
 describe('createGitPort', () => {
   it('wires all four pre-2.4 methods behind the factory pattern', async () => {
     const repo = await makeGitRepo();
@@ -898,6 +1101,20 @@ describe('createGitPort', () => {
       error: { code: 'branch-owned-by-other-edt' },
     });
     expect(await port.assertAllowedBranch(repo, 'feat/taken', 'edt-other')).toEqual({ ok: true, data: undefined });
+  });
+
+  it('wires the story 3.1 methods (pull, mergeBranch, abortMerge) behind the factory pattern', async () => {
+    const repo = await makeCleanGitRepo();
+    const port = createGitPort(manifest);
+    expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
+
+    // feat/x already contains development — a merge no-op success.
+    expect(await port.mergeBranch(repo, 'development')).toEqual({ ok: true, data: undefined });
+    // No merge in progress — abort reports a controlled error.
+    expect(await port.abortMerge(repo)).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
+    expect(await port.isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+    // No origin remote — pull reports a controlled error, never a throw.
+    expect(await port.pull(repo)).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
   });
 
   it('wires listBranches/renameBranch (story 2.26) behind the factory pattern', async () => {
