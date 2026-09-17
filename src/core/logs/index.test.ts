@@ -186,6 +186,40 @@ describe('createLogsManager', () => {
     expect(result).toEqual({ ok: true, data: { appended: 0 } });
   });
 
+  it('clear() wipes buffered lines without touching the live subscription — new lines keep arriving', () => {
+    const docker = fakeDocker();
+    const manager = createLogsManager(docker);
+    manager.subscribe('svc-a', 'ctr-a', 500, () => {});
+    docker.emitLine('ctr-a', line('one'));
+    docker.emitLine('ctr-a', line('two'));
+
+    manager.clear('svc-a');
+
+    expect(manager.getEntry('svc-a').lines).toEqual([]);
+    expect(manager.isSubscribed('svc-a')).toBe(true);
+    expect(docker.stopped).toEqual([]);
+
+    docker.emitLine('ctr-a', line('three'));
+    expect(manager.getEntry('svc-a').lines.map((l) => l.text)).toEqual(['three']);
+  });
+
+  it('clear() resets noMoreHistory — a fresh scrollback attempt can fetch again', async () => {
+    const docker = fakeDocker({ fetchLogsBefore: vi.fn(async () => ok([])) });
+    const manager = createLogsManager(docker);
+    manager.subscribe('svc-a', 'ctr-a', 500, () => {});
+    await manager.loadOlder('svc-a', 'ctr-a');
+    expect(manager.getEntry('svc-a').noMoreHistory).toBe(true);
+
+    manager.clear('svc-a');
+
+    expect(manager.getEntry('svc-a').noMoreHistory).toBe(false);
+  });
+
+  it('clear() for an unknown key is a harmless no-op', () => {
+    const manager = createLogsManager(fakeDocker());
+    expect(() => manager.clear('nope')).not.toThrow();
+  });
+
   it('bufferSize is captured per-subscription: a later subscribe() with a different size never resizes a still-running one', () => {
     const docker = fakeDocker();
     const manager = createLogsManager(docker);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../result.js';
 import type { LogsManager } from './index.js';
-import { loadOlderLogs, subscribeLogs, unsubscribeLogs } from './use-cases.js';
+import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from './use-cases.js';
 
 function fakeManager(overrides: Partial<LogsManager> = {}): LogsManager {
   return {
@@ -10,6 +10,7 @@ function fakeManager(overrides: Partial<LogsManager> = {}): LogsManager {
     isSubscribed: vi.fn(() => false),
     getEntry: vi.fn(() => ({ lines: [], streamError: null, noMoreHistory: false })),
     loadOlder: vi.fn(async () => ok({ appended: 0 })),
+    clear: vi.fn(),
     ...overrides,
   };
 }
@@ -45,5 +46,16 @@ describe('loadOlderLogs', () => {
 
     expect(result).toEqual({ ok: true, data: { appended: 3 } });
     expect(manager.loadOlder).toHaveBeenCalledWith('svc-a', 'ctr-a');
+  });
+});
+
+describe('clearLogs', () => {
+  it('delegates to manager.clear and always returns ok', () => {
+    const manager = fakeManager();
+
+    const result = clearLogs({ manager, key: 'svc-a' });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(manager.clear).toHaveBeenCalledWith('svc-a');
   });
 });

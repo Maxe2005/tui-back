@@ -40,3 +40,13 @@ export interface LoadOlderLogsParams {
 export function loadOlderLogs(params: LoadOlderLogsParams): Promise<Result<{ appended: number }>> {
   return params.manager.loadOlder(params.key, params.container);
 }
+
+export interface ClearLogsParams {
+  manager: LogsManager;
+  key: string;
+}
+
+export function clearLogs(params: ClearLogsParams): Result<void> {
+  params.manager.clear(params.key);
+  return ok(undefined);
+}

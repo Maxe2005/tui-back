@@ -66,6 +66,14 @@ export interface LogsManager {
   // own comment for why. Returns `ok({ appended: 0 })` for an unknown key too, rather than an
   // error, since "load older for a key nobody subscribed to" has nothing meaningful to do.
   loadOlder(key: string, container: string): Promise<Result<{ appended: number }>>;
+  // Wipes this key's buffered lines (a display "clear", like a shell's `clear`/Ctrl+L) without
+  // touching its live subscription — the stream keeps running and future lines keep arriving
+  // normally. Also resets `noMoreHistory`: clearing conceptually forgets everything this pane
+  // ever loaded, including "there's nothing further back", so a subsequent scrollback should
+  // be free to try fetching history again rather than staying stuck at a pre-clear edge. A key
+  // nobody subscribed to is a no-op, same idempotent-on-unknown-key convention as
+  // unsubscribe/loadOlder above.
+  clear(key: string): void;
 }
 
 function readStreamError(entry: InternalEntry): DockerErrorLike | null {
@@ -174,6 +182,14 @@ export function createLogsManager(docker: DockerPort): LogsManager {
       }
       entry.lines = [...newLines, ...entry.lines];
       return ok({ appended: newLines.length });
+    },
+    clear(key) {
+      const entry = entries.get(key);
+      if (!entry) {
+        return;
+      }
+      entry.lines = [];
+      entry.noMoreHistory = false;
     },
   };
 }
