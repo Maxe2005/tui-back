@@ -10,35 +10,43 @@ import { renderToString } from './components/render-to-string.js';
 import {
   HIDEABLE_ACTION_HINTS,
   HIDEABLE_ACTION_TYPES,
+  LOG_BUFFER_SIZE_STEP,
   MAX_GRID_MAX_ROWS,
+  MAX_LOG_BUFFER_SIZE,
   MIN_GRID_MAX_ROWS,
+  MIN_LOG_BUFFER_SIZE,
   SETTINGS_GROUPS,
   SETTINGS_TABS,
   SettingsScreen,
   adjustGridMaxRows,
+  adjustLogBufferSize,
   clampGridMaxRows,
+  clampLogBufferSize,
   moveHintCursor,
   nextSettingsTab,
   parseGridMaxRowsDigit,
+  parseLogBufferSizeDigit,
   resolveSettingsTabState,
   toggleHiddenHint,
 } from './settings-screen.js';
 
 describe('nextSettingsTab (AC1)', () => {
-  it('cycles General -> EDTs -> Command Palette -> General going forward', () => {
+  it('cycles General -> EDTs -> Command Palette -> Logs -> General going forward', () => {
     expect(nextSettingsTab('general', 1)).toBe('edts');
     expect(nextSettingsTab('edts', 1)).toBe('command-palette');
-    expect(nextSettingsTab('command-palette', 1)).toBe('general');
+    expect(nextSettingsTab('command-palette', 1)).toBe('logs');
+    expect(nextSettingsTab('logs', 1)).toBe('general');
   });
 
   it('cycles the same order in reverse going backward', () => {
-    expect(nextSettingsTab('general', -1)).toBe('command-palette');
+    expect(nextSettingsTab('general', -1)).toBe('logs');
+    expect(nextSettingsTab('logs', -1)).toBe('command-palette');
     expect(nextSettingsTab('command-palette', -1)).toBe('edts');
     expect(nextSettingsTab('edts', -1)).toBe('general');
   });
 
   it('SETTINGS_TABS is declared in exactly that order', () => {
-    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette']);
+    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs']);
   });
 });
 
@@ -90,6 +98,41 @@ describe('parseGridMaxRowsDigit (I/O matrix "Adjust grid rows")', () => {
     expect(parseGridMaxRowsDigit('a')).toBeNull();
     expect(parseGridMaxRowsDigit('12')).toBeNull();
     expect(parseGridMaxRowsDigit('')).toBeNull();
+  });
+});
+
+describe('clampLogBufferSize / adjustLogBufferSize (story 5.1)', () => {
+  it('clamps to the minimum', () => {
+    expect(clampLogBufferSize(0)).toBe(MIN_LOG_BUFFER_SIZE);
+    expect(clampLogBufferSize(-5)).toBe(MIN_LOG_BUFFER_SIZE);
+  });
+
+  it('clamps to the maximum', () => {
+    expect(clampLogBufferSize(1_000_000)).toBe(MAX_LOG_BUFFER_SIZE);
+  });
+
+  it('adjustLogBufferSize steps by LOG_BUFFER_SIZE_STEP', () => {
+    expect(adjustLogBufferSize(500, 'up')).toBe(500 + LOG_BUFFER_SIZE_STEP);
+    expect(adjustLogBufferSize(500, 'down')).toBe(500 - LOG_BUFFER_SIZE_STEP);
+  });
+
+  it('adjustLogBufferSize never drops below the minimum or exceeds the maximum', () => {
+    expect(adjustLogBufferSize(MIN_LOG_BUFFER_SIZE, 'down')).toBe(MIN_LOG_BUFFER_SIZE);
+    expect(adjustLogBufferSize(MAX_LOG_BUFFER_SIZE, 'up')).toBe(MAX_LOG_BUFFER_SIZE);
+  });
+});
+
+describe('parseLogBufferSizeDigit (story 5.1)', () => {
+  it('parses a single digit 1-9 as a x100 preset', () => {
+    expect(parseLogBufferSizeDigit('5')).toBe(500);
+    expect(parseLogBufferSizeDigit('1')).toBe(100);
+  });
+
+  it('rejects 0, non-digit, or multi-character input', () => {
+    expect(parseLogBufferSizeDigit('0')).toBeNull();
+    expect(parseLogBufferSizeDigit('a')).toBeNull();
+    expect(parseLogBufferSizeDigit('12')).toBeNull();
+    expect(parseLogBufferSizeDigit('')).toBeNull();
   });
 });
 
@@ -145,6 +188,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('General');
     expect(output).toContain('EDTs');
     expect(output).toContain('Command Palette');
+    expect(output).toContain('Logs');
     expect(output).toContain('No general settings yet.');
   });
 
@@ -184,6 +228,16 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Command grid max rows:');
     expect(output).toContain('12');
     expect(output).toContain('Up/Down to adjust, or type a digit (1-9).');
+  });
+
+  it('renders the live bufferSize value and hints on the Logs tab (story 5.1)', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750 } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    expect(output).toContain('Log buffer size');
+    expect(output).toContain('750');
+    expect(output).toContain(`Up/Down to adjust by ${LOG_BUFFER_SIZE_STEP}`);
+    expect(output).toContain('Applies to new streams only');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list (AC6)', async () => {

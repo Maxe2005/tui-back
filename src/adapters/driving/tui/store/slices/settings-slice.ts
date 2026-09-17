@@ -19,6 +19,8 @@ import type { AppState, AppStoreDeps } from '../app-store.js';
 export type SettingsUpdate = {
   commandPalette?: Partial<Settings['commandPalette']>;
   edts?: Partial<Settings['edts']>;
+  // Story 5.1: same shallow-merge convention as the two fields above.
+  logs?: Partial<Settings['logs']>;
 };
 
 export type SettingsSlice = {
@@ -78,6 +80,7 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
       const next: Settings = {
         commandPalette: { ...current.commandPalette, ...partial.commandPalette },
         edts: { ...current.edts, ...partial.edts },
+        logs: { ...current.logs, ...partial.logs },
       };
       // Optimistic: applies to the live store immediately, before persistence even starts
       // (Boundaries: "every change applies to the live store and persists to disk

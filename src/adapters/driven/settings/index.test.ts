@@ -72,6 +72,7 @@ describe('loadSettings', () => {
         settings: {
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
+          logs: { bufferSize: 500 },
         },
         warning: null,
       },
@@ -117,6 +118,45 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('commandPalette.gridMaxRows');
   });
 
+  it('falls back to defaults with a field-naming warning when logs.bufferSize exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 5001\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.bufferSize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.bufferSize is below the lower bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 49\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.bufferSize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.bufferSize is not an integer', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 1.5\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.bufferSize');
+  });
+
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -149,6 +189,7 @@ describe('loadSettings', () => {
         settings: {
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+          logs: { bufferSize: 500 },
         },
         warning: null,
       },
@@ -173,6 +214,7 @@ describe('saveSettings', () => {
     const settings = {
       commandPalette: { gridMaxRows: 10 },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
+      logs: { bufferSize: 500 },
     };
 
     const result = await saveSettings(file, settings);
@@ -189,11 +231,13 @@ describe('saveSettings', () => {
     await saveSettings(file, {
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      logs: { bufferSize: 500 },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      logs: { bufferSize: 500 },
     });
   });
 });
@@ -206,6 +250,7 @@ describe('createSettingsPort', () => {
     const settings = {
       commandPalette: { gridMaxRows: 5 },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
+      logs: { bufferSize: 500 },
     };
 
     await port.save(settings);

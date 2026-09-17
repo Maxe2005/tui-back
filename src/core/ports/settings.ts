@@ -20,6 +20,14 @@ export interface Settings {
     // second, independent settings group on the EDTs tab alongside hiddenActionHints above.
     hiddenActionTypes: string[];
   };
+  // Story 5.1: the Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) —
+  // how many lines each active pane's LogsManager entry keeps from the live tail before
+  // dropping the oldest. Never persisted to the buffer itself (AD-11: in memory only); this
+  // setting only controls its capacity. Captured once per subscription (see LogsManager's own
+  // doc comment) — a change here never resizes an already-running stream.
+  logs: {
+    bufferSize: number;
+  };
 }
 
 // Single source of truth for every default value — reused by the driven adapter's zod schema
@@ -29,6 +37,9 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   commandPalette: { gridMaxRows: 8 },
   edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+  // Story 5.1's Boundaries: "a per-service in-memory ring buffer sized by
+  // settings.logs.bufferSize (default 500 lines)".
+  logs: { bufferSize: 500 },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
@@ -37,6 +48,15 @@ export const DEFAULT_SETTINGS: Settings = {
 // Up/Down/typed-digit input in range live) so the two can never drift apart.
 export const MIN_GRID_MAX_ROWS = 1;
 export const MAX_GRID_MAX_ROWS = 99;
+
+// logs.bufferSize's valid range — shared by the zod schema (adapters/driven/settings/schema.ts)
+// and the settings screen's own clamp (adapters/driving/tui/shared/settings-screen.tsx), same
+// "single source of truth for both" convention as MIN/MAX_GRID_MAX_ROWS above. 50 is small
+// enough to be a deliberate, memory-conscious choice; 5000 is generous enough for a genuinely
+// chatty service without letting a hand-edited settings.yaml balloon every pane's ring buffer
+// unboundedly.
+export const MIN_LOG_BUFFER_SIZE = 50;
+export const MAX_LOG_BUFFER_SIZE = 5000;
 
 export interface SettingsLoadResult {
   settings: Settings;
