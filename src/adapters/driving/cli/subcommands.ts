@@ -11,6 +11,8 @@ import { createEdt } from '../../../core/edt/create.js';
 import { switchActiveEdt } from '../../../core/edt/switch.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
+import { groupUpdate } from '../../../core/scripts/group-update.js';
+import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
@@ -31,6 +33,7 @@ const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}`;
+const UPDATE_USAGE = 'tui-back update';
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -41,6 +44,7 @@ export function buildSubcommands(deps: {
   edtRegistry: EdtRegistryPort;
   edtRegistryResourceKey: string;
   git: GitPort;
+  container: ContainerPort;
   state: StatePort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
@@ -123,6 +127,24 @@ export function buildSubcommands(deps: {
         const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
         return err('invalid-argument', `Unknown edt action: ${label}. Usage:\n${EDT_USAGE}`);
       },
+    },
+    {
+      name: 'update',
+      usage: UPDATE_USAGE,
+      // Story 3.1: the EDT-scoped group update — bare invocation only. No migrations step
+      // (story 3.2), no all-repos mode or --all flag (story 3.3): any flag is an explicit
+      // invalid-argument rejection, never silently ignored.
+      run: async (args) =>
+        args.length === 0
+          ? groupUpdate({
+              edtRegistry: deps.edtRegistry,
+              state: deps.state,
+              manifest: deps.manifest,
+              git: deps.git,
+              container: deps.container,
+              lock: deps.lock,
+            })
+          : err('invalid-argument', `Usage: ${UPDATE_USAGE}`),
     },
   ];
   assertUniqueSubcommandNames(subcommands);
