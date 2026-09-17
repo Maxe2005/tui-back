@@ -247,16 +247,54 @@ export function formatLogLine(line: LogLine, showTimestamps: boolean): string {
   return showTimestamps ? `[${line.timestamp}] ${line.text}` : line.text;
 }
 
-// The scrolled-into-view window a pane actually renders: `visibleCount` lines ending
-// `offset` lines back from the tail. Used by both the grid pane and the fullscreen view (the
-// latter simply gets a larger `visibleCount`).
-export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, visibleCount: number): T[] {
-  if (lines.length === 0 || visibleCount <= 0) {
+// The scrolled-into-view window a pane actually renders: as many lines as fit within
+// `rowBudget` terminal rows, ending `offset` lines back from the tail. `getRowCount` reports
+// how many terminal rows a given line actually occupies once rendered — 1 for every line by
+// default (matching a plain count-based window), but the caller passes a wrap-aware one (see
+// computeLineRowCount) so a wrapped multi-row line "spends" more of the budget than a
+// truncated single-row one.
+//
+// User-reported review fix: this used to just slice the last N *lines* regardless of how many
+// terminal *rows* they'd render as. That was fine in truncate mode (1 line == 1 row) but wrong
+// under wrap: switching truncate -> wrap could render more rows than the pane had (silently
+// clipped by the pane's own `overflow="hidden"`), and wrap -> truncate collapsed the same N
+// lines into far fewer rows than the pane's height, leaving a blank gap at the bottom until a
+// scroll happened to pick a different (but still fixed-count) window. Sizing the window by
+// actual row cost keeps the pane always filled edge-to-edge, in both modes, on every toggle —
+// no scroll needed to "recalculate".
+export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBudget: number, getRowCount: (line: T) => number = () => 1): T[] {
+  if (lines.length === 0 || rowBudget <= 0) {
     return [];
   }
   const end = Math.max(lines.length - offset, 0);
-  const start = Math.max(end - visibleCount, 0);
+  let start = end;
+  let usedRows = 0;
+  while (start > 0) {
+    const rows = getRowCount(lines[start - 1] as T);
+    if (usedRows + rows > rowBudget) {
+      break;
+    }
+    usedRows += rows;
+    start -= 1;
+  }
+  // A single line whose own row cost alone exceeds the whole budget (e.g. a very long line
+  // under wrap in a short pane) must still render something rather than leaving the pane
+  // fully blank — it simply overflows and gets clipped by the pane's own `overflow="hidden"`.
+  if (start === end && end > 0) {
+    start = end - 1;
+  }
   return lines.slice(start, end);
+}
+
+// How many terminal rows a single formatted log line will actually render as. Truncated lines
+// (wrap === false) always cost exactly 1 row (Ink's `truncate-end` never wraps). Wrapped lines
+// cost `ceil(text.length / width)`, floored at 1 so even an empty line still takes a row.
+export function computeLineRowCount(text: string, width: number, wrap: boolean): number {
+  if (!wrap) {
+    return 1;
+  }
+  const safeWidth = Math.max(width, 1);
+  return Math.max(Math.ceil(text.length / safeWidth), 1);
 }
 
 // Boundaries: "Any manifest service can be streamed, not only active-EDT members" — a service

@@ -4,6 +4,7 @@ import {
   DEFAULT_VISIBILITY_FLAGS,
   adjustScrollOffset,
   computeGridLayout,
+  computeLineRowCount,
   cycleLogsPaneFocus,
   filterVisibleLines,
   formatLogLine,
@@ -274,5 +275,36 @@ describe('sliceVisibleWindow', () => {
   it('returns an empty array for an empty buffer or a non-positive visibleCount', () => {
     expect(sliceVisibleWindow([], 0, 5)).toEqual([]);
     expect(sliceVisibleWindow(values, 0, 0)).toEqual([]);
+  });
+
+  it('packs more short (1-row) lines into the same row budget than long (multi-row) ones — the fix for "w" leaving a blank gap', () => {
+    // 5 short lines, each costing 1 row: a 4-row budget fits 4 of them.
+    const shortRowCost = () => 1;
+    expect(sliceVisibleWindow(values, 0, 4, shortRowCost)).toEqual([2, 3, 4, 5]);
+
+    // Same 5 lines, but each now costs 2 rows (e.g. wrapped): the same 4-row budget only fits 2.
+    const longRowCost = () => 2;
+    expect(sliceVisibleWindow(values, 0, 4, longRowCost)).toEqual([4, 5]);
+  });
+
+  it('still renders the single oldest line even when its own row cost alone exceeds the budget', () => {
+    expect(sliceVisibleWindow(values, 0, 1, () => 5)).toEqual([5]);
+  });
+});
+
+describe('computeLineRowCount', () => {
+  it('always costs exactly 1 row when wrap is off, regardless of length', () => {
+    expect(computeLineRowCount('a'.repeat(200), 40, false)).toBe(1);
+    expect(computeLineRowCount('', 40, false)).toBe(1);
+  });
+
+  it('costs ceil(length / width) rows when wrap is on', () => {
+    expect(computeLineRowCount('a'.repeat(80), 40, true)).toBe(2);
+    expect(computeLineRowCount('a'.repeat(81), 40, true)).toBe(3);
+    expect(computeLineRowCount('short', 40, true)).toBe(1);
+  });
+
+  it('floors at 1 row even for an empty line under wrap', () => {
+    expect(computeLineRowCount('', 40, true)).toBe(1);
   });
 });

@@ -22,6 +22,7 @@ import {
 import {
   adjustScrollOffset,
   computeGridLayout,
+  computeLineRowCount,
   cycleLogsPaneFocus,
   DEFAULT_VISIBILITY_FLAGS,
   filterVisibleLines,
@@ -53,6 +54,10 @@ const LIST_COLUMN_WIDTH = 32;
 // worth of content each pane's own scroll window keeps in view.
 const CHROME_ROWS = 8;
 const PANE_CHROME_ROWS = 3;
+// A grid pane's content width is its cell width minus its own border (1 col each side) and
+// paddingX={1} (1 col each side) — needed to know how many terminal rows a wrapped line will
+// actually take (see computeLineRowCount).
+const GRID_PANE_CHROME_COLS = 4;
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const services = useStore((state) => state.edtsBranches);
@@ -182,7 +187,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const gridAvailableHeight = Math.max(windowSize.rows - CHROME_ROWS, 5);
   const layout = computeGridLayout(activePanes.length, gridAvailableWidth, gridAvailableHeight);
   const paneVisibleLines = Math.max(layout.cellHeight - PANE_CHROME_ROWS, 1);
+  const paneContentWidth = Math.max(layout.cellWidth - GRID_PANE_CHROME_COLS, 1);
   const fullscreenVisibleLines = Math.max(windowSize.rows - CHROME_ROWS, 3);
+  const fullscreenContentWidth = Math.max(windowSize.columns - spacing['pane-padding-x'] * 2, 1);
 
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
     const pane = logsPanes[repoPath];
@@ -334,6 +341,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           pane={logsPanes[logsFullscreenTarget]}
           visibility={visibility}
           visibleLines={fullscreenVisibleLines}
+          contentWidth={fullscreenContentWidth}
         />
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
@@ -387,6 +395,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   logsPanes={logsPanes}
                   layout={layout}
                   visibleLines={paneVisibleLines}
+                  contentWidth={paneContentWidth}
                   visibility={visibility}
                   subFocused={paneFocus === 'panes' ? subFocus : -1}
                 />
@@ -404,6 +413,7 @@ function LogsGrid({
   logsPanes,
   layout,
   visibleLines,
+  contentWidth,
   visibility,
   subFocused,
 }: {
@@ -411,6 +421,7 @@ function LogsGrid({
   logsPanes: Record<string, LogsPaneData>;
   layout: GridLayout;
   visibleLines: number;
+  contentWidth: number;
   visibility: VisibilityFlags;
   subFocused: number;
 }) {
@@ -432,6 +443,7 @@ function LogsGrid({
                 pane={logsPanes[service.path]}
                 visibility={visibility}
                 visibleLines={visibleLines}
+                contentWidth={contentWidth}
                 focused={index === subFocused}
               />
             );
@@ -447,16 +459,20 @@ function LogsPaneView({
   pane,
   visibility,
   visibleLines,
+  contentWidth,
   focused,
 }: {
   service: ServiceBranchDivergence;
   pane: LogsPaneData | undefined;
   visibility: VisibilityFlags;
   visibleLines: number;
+  contentWidth: number;
   focused: boolean;
 }) {
   const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, visibleLines);
+  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, visibleLines, (line) =>
+    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), contentWidth, visibility.wrapLines),
+  );
   // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
   // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
   // both stdout and stderr is misleadingly told the stream itself is empty (review fix).
@@ -495,6 +511,7 @@ function FullscreenPane({
   pane,
   visibility,
   visibleLines,
+  contentWidth,
 }: {
   // Captured directly at the point fullscreen was opened (store's logsFullscreenServiceName)
   // rather than re-derived via a live `rows.find(...)` lookup, which can miss (e.g. a
@@ -504,9 +521,12 @@ function FullscreenPane({
   pane: LogsPaneData | undefined;
   visibility: VisibilityFlags;
   visibleLines: number;
+  contentWidth: number;
 }) {
   const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, visibleLines);
+  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, visibleLines, (line) =>
+    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), contentWidth, visibility.wrapLines),
+  );
   // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
   // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
   // both stdout and stderr is misleadingly told the stream itself is empty (review fix).
