@@ -5,6 +5,7 @@
 // React import, per the file's original Design Notes ("every keystroke behavior ... a
 // standalone pure function, unit-tested directly").
 import type { CreateBranchOptions } from '../../../../../core/edt/create.js';
+import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
@@ -564,7 +565,7 @@ export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): str
 // working unchanged.
 export function formatEdtActionHistory(
   actionLog: Array<{ id: string; timestamp: string; actionType: string; outcome: 'success' | 'failed'; detail: string }>,
-  inProgressAction: { type: 'create' | 'switch' | 'modify'; target: string; startedAt: string } | null,
+  inProgressAction: { type: 'create' | 'switch' | 'modify' | 'delete'; target: string; startedAt: string } | null,
   hiddenActionTypes: readonly string[] = [],
 ): string {
   const lines: string[] = [];
@@ -922,13 +923,109 @@ export type AddToEdtDialogState = {
   submitting: boolean;
 };
 
+// Story 2.29 -----------------------------------------------------------------------------
+// The delete-EDT confirm dialog's per-member row: branch, merge status, and uncommitted-work
+// status (acceptance criteria), plus the row's own independently-toggleable disposition.
+export type DeleteMemberRow = {
+  repoPath: string;
+  service: string;
+  branch: string;
+  merged: boolean;
+  clean: boolean;
+  disposition: MemberDisposition;
+  // Review fix (story 2.29): set when core/edt/delete.ts's resolveMemberDeleteStatuses
+  // couldn't establish this member's real merged/clean status (a manifest or git read
+  // failed) — the row still renders (never blocks the dialog from opening) and defaults to
+  // 'leave' (defaultDispositionFor's own safe fallback), but the merged/clean values shown
+  // are not to be trusted, so formatDeleteMemberMeta annotates the row instead of rendering
+  // a plausible-looking but possibly-wrong status silently.
+  statusError?: string;
+};
+
+export type DeleteDialogState = {
+  kind: 'delete-confirm';
+  target: EdtRegistryEntry;
+  // null while the per-member merge/clean statuses are still being fetched (mirrors the
+  // branch-picker's own "fetched once, on open" convention) — never rendered with computed
+  // defaults until they resolve. Never populated at all when `rejected` is true (nothing to
+  // disposition — the dialog never gets that far).
+  memberRows: DeleteMemberRow[] | null;
+  memberCursor: number;
+  submitting: boolean;
+  error: string | null;
+  failedRows: FailedResultRow[];
+  // Boundary: "The active EDT can never be deleted: reject before any git/file write ...
+  // never auto-switched." This fires at dialog-open time (edts-zone.tsx), before any member
+  // status is even fetched — a rejected dialog shows only the error message; Esc is the only
+  // way out, no confirm affordance is ever offered.
+  rejected: boolean;
+};
+
+export function initialDeleteDialog(target: EdtRegistryEntry, isActive: boolean): DeleteDialogState {
+  if (isActive) {
+    return {
+      kind: 'delete-confirm',
+      target,
+      memberRows: [],
+      memberCursor: 0,
+      submitting: false,
+      error: `Cannot delete "${target.topic}" — it is the active EDT. Switch away from it first.`,
+      failedRows: [],
+      rejected: true,
+    };
+  }
+  return {
+    kind: 'delete-confirm',
+    target,
+    memberRows: null,
+    memberCursor: 0,
+    submitting: false,
+    error: null,
+    failedRows: [],
+    rejected: false,
+  };
+}
+
+// Boundary: "Per-member disposition defaults to 'Leave branch as-is', except a branch both
+// merged into its sharedBranch and clean, which defaults to 'Delete branch'; every row stays
+// independently toggleable." Reuses core/edt/delete.ts's defaultDispositionFor as the single
+// source of truth for that rule (never a second, TUI-only copy of it).
+export function buildDeleteMemberRows(statuses: readonly MemberDeleteStatus[]): DeleteMemberRow[] {
+  return statuses.map((status) => ({
+    repoPath: status.repoPath,
+    service: status.service,
+    branch: status.branch,
+    merged: status.merged,
+    clean: status.clean,
+    disposition: defaultDispositionFor(status),
+    ...(status.statusError !== undefined ? { statusError: status.statusError } : {}),
+  }));
+}
+
+export function toggleDeleteDisposition(rows: readonly DeleteMemberRow[], index: number): DeleteMemberRow[] {
+  return rows.map((row, i) => (i === index ? { ...row, disposition: row.disposition === 'delete' ? 'leave' : 'delete' } : row));
+}
+
+// The confirm dialog's per-row meta text: branch + merge status + uncommitted-work status
+// (acceptance criteria: "lists every member with branch, merge status, and uncommitted-work
+// status").
+export function formatDeleteMemberMeta(row: DeleteMemberRow): string {
+  const mergeLabel = row.merged ? 'merged' : 'unmerged';
+  const cleanLabel = row.clean ? 'clean' : 'uncommitted work';
+  const base = `${row.branch} — ${mergeLabel}, ${cleanLabel}`;
+  // Review fix (story 2.29): the merged/clean values above are not to be trusted when a
+  // status read failed — say so explicitly rather than rendering a plausible-looking status.
+  return row.statusError !== undefined ? `${base} (status unknown — defaulted to leave)` : base;
+}
+
 export type EdtDialogState =
   | { kind: 'none' }
   | CreateDialogState
   | SwitchDialogState
   | ModifyDialogState
   | ServiceActionsDialogState
-  | AddToEdtDialogState;
+  | AddToEdtDialogState
+  | DeleteDialogState;
 
 export function initialCreateDialog(): CreateDialogState {
   return {

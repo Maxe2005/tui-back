@@ -62,12 +62,15 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     fetch: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
     list: vi.fn(async () => ok([] as EdtRegistryEntry[])),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
   };
   const state: StatePort = {
     readActiveEdt: vi.fn(async () => ok(null)),
@@ -1465,6 +1468,7 @@ describe('AppShell edts load activation (story 2.20)', () => {
       ),
       setStatus: vi.fn(async () => ok(undefined)),
       update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
     };
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok('01JXXXXX1AAAAAAAAAAAAAAAAA')),
@@ -1635,6 +1639,7 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
       ),
       setStatus: vi.fn(async () => ok(undefined)),
       update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry }));
     store.getState().setActiveZone('edts');
@@ -1795,6 +1800,7 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
       ),
       setStatus: vi.fn(async () => ok(undefined)),
       update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state, edtRegistry }));
     store.getState().setActiveZone('edts');

@@ -20,7 +20,7 @@ import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
-export type { CreateEdtParams, SwitchEdtParams, ModifyEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
+export type { CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
 export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/edt-slice.js';
 export type { RegistryOutcome, RegistryRegisterResult } from './slices/registry-slice.js';
 export type { SettingsUpdate } from './slices/settings-slice.js';

@@ -14,6 +14,14 @@
 // cross-EDT half: when passed (with an EdtRegistryPort wired into the adapter), it also
 // rejects a branch already registered as a *different* EDT's own branch for that repo —
 // existing (no-`edtId`) call sites (createBranch/deleteBranch, create.ts) are unaffected.
+//
+// Story 2.29 (delete an EDT): `deleteBranch` widens with a required `force` flag — the
+// delete use-case always decides `-d` (merged+clean) vs. `-D` (force) itself from real,
+// freshly-read git state, never trusting a caller's stale/optimistic guess. Every existing
+// call site (create.ts's rollback path) now passes `force: true` explicitly, preserving its
+// pre-2.29 `-D` rollback behavior exactly. `isBranchMerged` is new: an ordinary (non-gated)
+// local read used only to decide *how* to delete a branch that was already independently
+// authorized for deletion — never itself a safety gate, so it takes no edtId/manifest args.
 import type { Result } from '../result.js';
 
 export interface GitPort {
@@ -25,8 +33,18 @@ export interface GitPort {
   assertAllowedBranch(repoPath: string, branchName: string, edtId?: string): Promise<Result<void>>;
   createBranch(repoPath: string, branchName: string, baseBranch: string): Promise<Result<void>>;
   // Deletes a branch ref that this tool created (rollback path: a failed EDT creation must
-  // not leave orphaned branch refs behind). Shares createBranch's shared-branch gate.
-  deleteBranch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // not leave orphaned branch refs behind) or that a developer explicitly chose to delete
+  // (story 2.29's EDT-delete flow). Shares createBranch's shared-branch gate. `force` selects
+  // `git branch -d` (false — refuses an unmerged branch) vs. `-D` (true — unconditional) at
+  // the git-invocation level; the caller (not this method) is responsible for having already
+  // decided which is appropriate (e.g. via isBranchMerged + hasUncommittedChanges).
+  deleteBranch(repoPath: string, branchName: string, force: boolean): Promise<Result<void>>;
+  // Story 2.29: true when branchName is already merged into `into` (`git merge-base
+  // --is-ancestor branchName into`) — local-only, no fetch. Used by the EDT-delete use-case
+  // to decide `-d` vs `-D`, and by its caller (the TUI) to compute a member row's
+  // delete-by-default disposition. Never a safety gate itself — it never rejects anything and
+  // takes no edtId, unlike assertAllowedBranch.
+  isBranchMerged(repoPath: string, branchName: string, into: string): Promise<Result<boolean>>;
   currentBranch(repoPath: string): Promise<Result<string>>;
   // Story 2.6 (FR-9): { ahead, behind } counts of the current branch relative to its
   // configured upstream (git's own branch.<name>.remote/merge tracking config — never a
@@ -62,6 +80,13 @@ export interface GitPort {
   // safe even if the developer's own unrelated stashes exist). A no-op success when no
   // matching stash exists: not every switch pops one, only a return into an EDT that owns one.
   restoreStash(repoPath: string, message: string): Promise<Result<void>>;
+  // Story 2.29: true iff a stash whose message contains `tag` exists in repoPath — the same
+  // message-substring match restoreStash uses, but non-destructive (existence only, never
+  // pops). Backs the EDT-delete use-case's corrected clean-detection: a member's own
+  // `tui-back:<edtUlid>` stash (the tag switch.ts writes when switching *away* from that EDT)
+  // signals real, still-uncommitted work belonging to that member's own branch, independent
+  // of whatever repoPath's working tree currently happens to have checked out.
+  hasStash(repoPath: string, tag: string): Promise<Result<boolean>>;
   branchExistsLocally(repoPath: string, branchName: string): Promise<Result<boolean>>;
   // Fetches branchName from origin into a same-named local branch (`git fetch origin
   // branch:branch`) — used only when branchExistsLocally reported false for a non-member

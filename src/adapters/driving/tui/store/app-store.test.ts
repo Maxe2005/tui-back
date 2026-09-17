@@ -58,12 +58,15 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     fetch: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
     list: vi.fn(async () => ok([] as EdtRegistryEntry[])),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
   };
   const state: StatePort = {
     readActiveEdt: vi.fn(async () => ok(null)),
@@ -515,6 +518,7 @@ describe("app store", () => {
         ),
         setStatus: vi.fn(async () => ok(undefined)),
         update: vi.fn(async () => ok(undefined)),
+        remove: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtRegistry }));
       const loadTabVisibility = vi.fn(async () => {});
@@ -553,6 +557,7 @@ describe("app store", () => {
         ),
         setStatus: vi.fn(async () => ok(undefined)),
         update: vi.fn(async () => ok(undefined)),
+        remove: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtRegistry }));
       const loadTabVisibility = vi.fn(async () => {});
@@ -588,6 +593,119 @@ describe("app store", () => {
     });
   });
 
+  // Story 2.29: delete an EDT.
+  describe("deleteEdt / resolveMemberDeleteStatuses / openEdtDeleteDialog (story 2.29)", () => {
+    function fakeTarget(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
+      return {
+        ulid: "edt-1",
+        topic: "demo",
+        createdAt: "2026-08-19T00:00:00.000Z",
+        status: "inactive",
+        members: [{ service: "svc-a", repoPath: "/repo/a", branch: "feat/a" }],
+        ...overrides,
+      };
+    }
+
+    it("deleteEdt removes the registry entry for a non-active EDT", async () => {
+      const target = fakeTarget();
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok([target])),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+        remove: vi.fn(async () => ok(undefined)),
+      };
+      const edtsBaseDir = await makeEdtsBaseDir();
+      const store = createAppStore(fakeDeps({ edtRegistry, edtsBaseDir }));
+
+      const result = await store.getState().deleteEdt({ topic: "demo", dispositions: {} });
+
+      expect(result).toMatchObject({ ok: true, data: { ulid: "edt-1", topic: "demo", results: [{ outcome: "left" }] } });
+      expect(edtRegistry.remove).toHaveBeenCalledWith("edt-1");
+    });
+
+    it("deleteEdt rejects the active EDT with edt-delete-active-rejected, never removing the entry", async () => {
+      const target = fakeTarget();
+      const edtRegistry: EdtRegistryPort = {
+        add: vi.fn(async () => ok(undefined)),
+        list: vi.fn(async () => ok([target])),
+        setStatus: vi.fn(async () => ok(undefined)),
+        update: vi.fn(async () => ok(undefined)),
+        remove: vi.fn(async () => ok(undefined)),
+      };
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok("edt-1")),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok(null)),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+      const result = await store.getState().deleteEdt({ topic: "demo", dispositions: {} });
+
+      expect(result).toMatchObject({ ok: false, error: { code: "edt-delete-active-rejected" } });
+      expect(edtRegistry.remove).not.toHaveBeenCalled();
+    });
+
+    it("deleteEdt on an unwired store degrades to store-not-wired, never throwing", async () => {
+      const store = createAppStore();
+
+      const result = await store.getState().deleteEdt({ topic: "demo", dispositions: {} });
+
+      expect(result).toMatchObject({ ok: false, error: { code: "store-not-wired" } });
+    });
+
+    it("resolveMemberDeleteStatuses computes merged/clean per member via git/manifest, never calling deps.git directly from the TUI layer", async () => {
+      const git: GitPort = {
+        assertAllowedBranch: vi.fn(async () => ok(undefined)),
+        createBranch: vi.fn(async () => ok(undefined)),
+        deleteBranch: vi.fn(async () => ok(undefined)),
+        currentBranch: vi.fn(async () => ok("feat/a")),
+        aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+        checkout: vi.fn(async () => ok(undefined)),
+        hasUncommittedChanges: vi.fn(async () => ok(false)),
+        stashSave: vi.fn(async () => ok(undefined)),
+        restoreStash: vi.fn(async () => ok(undefined)),
+        branchExistsLocally: vi.fn(async () => ok(true)),
+        fetch: vi.fn(async () => ok(undefined)),
+        listBranches: vi.fn(async () => ok([])),
+        renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
+      };
+      const store = createAppStore(fakeDeps({ git }));
+
+      const result = await store.getState().resolveMemberDeleteStatuses("target-ulid", [{ service: "svc-a", repoPath: "/repo/a", branch: "feat/a" }]);
+
+      expect(result).toEqual([{ repoPath: "/repo/a", service: "svc-a", branch: "feat/a", merged: true, clean: true }]);
+      expect(git.isBranchMerged).toHaveBeenCalledWith("/repo/a", "feat/a", "development");
+    });
+
+    it("resolveMemberDeleteStatuses on an unwired store returns an empty array, never throwing", async () => {
+      const store = createAppStore();
+
+      const result = await store.getState().resolveMemberDeleteStatuses("target-ulid", [{ service: "svc-a", repoPath: "/repo/a", branch: "feat/a" }]);
+
+      expect(result).toEqual([]);
+    });
+
+    it("openEdtDeleteDialog sets currentEdtAction with type 'delete' and the parsed topic", () => {
+      const store = createAppStore(fakeDeps());
+
+      store.getState().openEdtDeleteDialog("edt-delete my-topic");
+
+      expect(store.getState().currentEdtAction).toMatchObject({ type: "delete", target: "my-topic" });
+    });
+
+    it("openEdtDeleteDialog with no topic sets target to 'select EDT'", () => {
+      const store = createAppStore(fakeDeps());
+
+      store.getState().openEdtDeleteDialog("edt-delete");
+
+      expect(store.getState().currentEdtAction).toMatchObject({ type: "delete", target: "select EDT" });
+    });
+  });
+
   // Story 2.22: the create-EDT dialog now always builds and supplies its own
   // CreateBranchOptions — the store must forward exactly what it's given through to
   // core/edt/create.ts rather than silently substituting its own hardcoded default.
@@ -608,6 +726,8 @@ describe("app store", () => {
         fetch: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -637,6 +757,8 @@ describe("app store", () => {
         fetch: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -674,6 +796,8 @@ describe("app store", () => {
         fetch: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok(["main", "feature-x"])),
         renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -698,6 +822,8 @@ describe("app store", () => {
         fetch: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -722,6 +848,8 @@ describe("app store", () => {
         fetch: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -746,6 +874,8 @@ describe("app store", () => {
         fetch: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
+        isBranchMerged: vi.fn(async () => ok(true)),
+        hasStash: vi.fn(async () => ok(false)),
       };
       const edtRegistry: EdtRegistryPort = {
         add: vi.fn(async () => ok(undefined)),
@@ -762,6 +892,7 @@ describe("app store", () => {
         ),
         setStatus: vi.fn(async () => ok(undefined)),
         update: vi.fn(async () => ok(undefined)),
+        remove: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ git, edtRegistry }));
 

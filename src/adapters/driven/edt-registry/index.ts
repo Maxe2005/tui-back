@@ -27,6 +27,7 @@
      list: () => listEdtRegistry(edtRegistryFile),
      setStatus: (ulid, status) => setEdtStatus(edtRegistryFile, ulid, status),
      update: (ulid, patch) => updateEdtEntry(edtRegistryFile, ulid, patch),
+     remove: (ulid) => removeEdtRegistryEntry(edtRegistryFile, ulid),
      logAction: (ulid, actionType, outcome, detail) => logEdtAction(edtsBaseDir, ulid, actionType, outcome, detail),
      getActionLog: (ulid, limit) => getEdtActionLog(edtsBaseDir, ulid, limit),
    };
@@ -140,7 +141,36 @@
    return ok(undefined);
  }
  
- // Story 2.4: read/find/replace/write, mirroring addEdtRegistryEntry's shape above. Used to
+ // Story 2.29: read/find/filter/write, mirroring updateEdtEntry's shape — removes ulid's entry
+// entirely (no soft-delete/undo, per the story's Boundaries). Fails with edt-not-found if
+// ulid isn't registered, without writing anything.
+async function removeEdtRegistryEntry(edtRegistryFile: string, ulid: string): Promise<Result<void>> {
+  const ensured = await ensureEdtRegistryDir(edtRegistryFile);
+  if (!ensured.ok) {
+    return ensured;
+  }
+
+  const listed = await listEdtRegistry(edtRegistryFile);
+  if (!listed.ok) {
+    return listed;
+  }
+
+  if (!listed.data.some((candidate) => candidate.ulid === ulid)) {
+    return err('edt-not-found', `No EDT registered with ulid ${ulid}`);
+  }
+
+  const remaining = listed.data.filter((candidate) => candidate.ulid !== ulid);
+
+  try {
+    await writeFile(edtRegistryFile, stringify({ edts: remaining }), 'utf8');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return err('edt-registry-write-error', `Failed to write EDT registry file ${edtRegistryFile}: ${detail}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.4: read/find/replace/write, mirroring addEdtRegistryEntry's shape above. Used to
  // flip an EDT's status (active/inactive/interrupted) during a switch.
  async function setEdtStatus(edtRegistryFile: string, ulid: string, status: EdtStatus): Promise<Result<void>> {
    const ensured = await ensureEdtRegistryDir(edtRegistryFile);

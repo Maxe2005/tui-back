@@ -47,6 +47,7 @@ function fakeEdtRegistry(entries: EdtRegistryEntry[] = [], overrides: Partial<Ed
     list: vi.fn(async () => ok(entries)),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -76,6 +77,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     fetch: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
     ...overrides,
   };
 }

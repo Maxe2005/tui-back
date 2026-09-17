@@ -36,13 +36,15 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     assertAllowedBranch: (repoPath, branchName, edtId) =>
       assertAllowedBranch(manifest, repoPath, branchName, edtId, edtRegistry),
     createBranch: (repoPath, branchName, baseBranch) => createBranch(manifest, repoPath, branchName, baseBranch),
-    deleteBranch: (repoPath, branchName) => deleteBranch(manifest, repoPath, branchName),
+    deleteBranch: (repoPath, branchName, force) => deleteBranch(manifest, repoPath, branchName, force),
+    isBranchMerged: (repoPath, branchName, into) => isBranchMerged(repoPath, branchName, into),
     currentBranch: (repoPath) => currentBranch(repoPath),
     aheadBehind: (repoPath) => aheadBehind(repoPath),
     checkout: (repoPath, branchName) => checkoutBranch(repoPath, branchName),
     hasUncommittedChanges: (repoPath) => hasUncommittedChanges(repoPath),
     stashSave: (repoPath, message) => stashSave(repoPath, message),
     restoreStash: (repoPath, message) => restoreStash(repoPath, message),
+    hasStash: (repoPath, tag) => hasStash(repoPath, tag),
     branchExistsLocally: (repoPath, branchName) => branchExistsLocally(repoPath, branchName),
     fetch: (repoPath, branchName) => fetchBranch(repoPath, branchName),
     listBranches: (repoPath) => listBranches(repoPath),
@@ -138,14 +140,17 @@ export async function createBranch(
 }
 
 // Deletes a branch ref (rollback path — story 2.2 review: a failed EDT creation must not
-// leave orphaned branch refs in member repos). Delegates to assertAllowedBranch first, same
+// leave orphaned branch refs in member repos — and story 2.29's EDT-delete flow, for a member
+// branch a developer explicitly chose to delete). Delegates to assertAllowedBranch first, same
 // as createBranch: a shared/protected target is rejected before any `git` invocation, and a
 // repo whose manifest cannot load gets no git write at all. A missing branch is a no-op
-// success (idempotent rollback).
+// success (idempotent rollback). Story 2.29: `force` selects `-d` (refuses an unmerged branch)
+// vs. `-D` (unconditional) — the caller decides which, this method never second-guesses it.
 export async function deleteBranch(
   manifest: ManifestPort,
   repoPath: string,
   branchName: string,
+  force: boolean,
 ): Promise<Result<void>> {
   const allowed = await assertAllowedBranch(manifest, repoPath, branchName);
   if (!allowed.ok) {
@@ -160,11 +165,29 @@ export async function deleteBranch(
     return err('git-delete-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
   }
 
-  const deleted = spawnSync('git', ['branch', '-D', '--', branchName], { cwd: repoPath, encoding: 'utf8' });
+  const flag = force ? '-D' : '-d';
+  const deleted = spawnSync('git', ['branch', flag, '--', branchName], { cwd: repoPath, encoding: 'utf8' });
   if (deleted.status !== 0) {
-    return err('git-delete-branch-error', `git branch -D failed in ${repoPath}: ${spawnFailureDetail(deleted)}`);
+    return err('git-delete-branch-error', `git branch ${flag} failed in ${repoPath}: ${spawnFailureDetail(deleted)}`);
   }
   return ok(undefined);
+}
+
+// Story 2.29 — true when branchName is already merged into `into`
+// (`git merge-base --is-ancestor branchName into`), local-only, no fetch. Exit-code taxonomy
+// (git-merge-base(1)): 0 = branchName is an ancestor of into (merged), 1 = it is not
+// (unmerged) — both are real, successful answers, never a Result error; anything else
+// (missing ref, not a git repo, ...) is a genuine git error. Never a safety gate itself: it
+// takes no edtId/manifest and never rejects anything, unlike assertAllowedBranch.
+export async function isBranchMerged(repoPath: string, branchName: string, into: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['merge-base', '--is-ancestor', branchName, into], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status === 0) {
+    return ok(true);
+  }
+  if (result.status === 1) {
+    return ok(false);
+  }
+  return err('git-merge-base-error', `git merge-base --is-ancestor failed in ${repoPath}: ${spawnFailureDetail(result)}`);
 }
 
 export async function currentBranch(repoPath: string): Promise<Result<string>> {
@@ -327,29 +350,55 @@ export async function stashSave(repoPath: string, message: string): Promise<Resu
   return ok(undefined);
 }
 
-// Story 2.4 — Finds the stash entry whose subject contains `message` (git renders a
-// `-m`-tagged push as "On <branch>: <message>", so a substring match is exactly right — not
-// stack position, so this is safe even if the developer's own unrelated stashes exist) and
-// pops it. No matching stash is a no-op success: not every switch pops one, only a return
-// into an EDT that owns one.
+// Story 2.4 (extracted for story 2.29 — see findStashRef below) — Finds the stash entry
+// whose subject contains `message` (git renders a `-m`-tagged push as "On <branch>:
+// <message>", so a substring match is exactly right — not stack position, so this is safe
+// even if the developer's own unrelated stashes exist) and pops it. No matching stash is a
+// no-op success: not every switch pops one, only a return into an EDT that owns one.
 export async function restoreStash(repoPath: string, message: string): Promise<Result<void>> {
+  const found = await findStashRef(repoPath, message);
+  if (!found.ok) {
+    return found;
+  }
+  if (found.data === null) {
+    return ok(undefined);
+  }
+
+  const popped = spawnSync('git', ['stash', 'pop', found.data], { cwd: repoPath, encoding: 'utf8' });
+  if (popped.status !== 0) {
+    return err('git-stash-pop-error', `git stash pop ${found.data} failed in ${repoPath}: ${spawnFailureDetail(popped)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.29 — the list-and-match-by-message-substring logic restoreStash has always used
+// (above), extracted so `hasStash` can reuse it non-destructively: existence only, never
+// pops. Returns the stash ref (e.g. `stash@{0}`) of the first match, or null when none of
+// repoPath's stashes carry `tag` in their subject.
+export async function findStashRef(repoPath: string, tag: string): Promise<Result<string | null>> {
   const list = spawnSync('git', ['stash', 'list', '--format=%gd %s'], { cwd: repoPath, encoding: 'utf8' });
   if (list.status !== 0) {
     return err('git-stash-list-error', `git stash list failed in ${repoPath}: ${spawnFailureDetail(list)}`);
   }
 
   const lines = String(list.stdout).split('\n').filter((line) => line.trim() !== '');
-  const match = lines.find((line) => line.includes(message));
+  const match = lines.find((line) => line.includes(tag));
   if (match === undefined) {
-    return ok(undefined);
+    return ok(null);
   }
+  return ok(match.slice(0, match.indexOf(' ')));
+}
 
-  const ref = match.slice(0, match.indexOf(' '));
-  const popped = spawnSync('git', ['stash', 'pop', ref], { cwd: repoPath, encoding: 'utf8' });
-  if (popped.status !== 0) {
-    return err('git-stash-pop-error', `git stash pop ${ref} failed in ${repoPath}: ${spawnFailureDetail(popped)}`);
+// Story 2.29 — non-destructive existence check backing the EDT-delete use-case's corrected
+// clean-detection (Design Notes): true iff a stash tagged `tag` exists in repoPath. Never
+// pops anything, unlike restoreStash — this is a read used to decide a member's own
+// delete-disposition default/force-vs-not, not to act on the stash itself.
+export async function hasStash(repoPath: string, tag: string): Promise<Result<boolean>> {
+  const found = await findStashRef(repoPath, tag);
+  if (!found.ok) {
+    return found;
   }
-  return ok(undefined);
+  return ok(found.data !== null);
 }
 
 // Story 2.4 — reuses showRef's exit-code taxonomy (0 exists / 1 missing / other real error).

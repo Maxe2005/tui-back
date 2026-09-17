@@ -1326,3 +1326,108 @@ describe('tui-back edt switch (black-box)', () => {
     expect(edtsAfterReturn.edts.find((e) => e.ulid === ulidA)?.status).toBe('active');
   });
 });
+
+describe('tui-back edt delete (black-box, story 2.29)', () => {
+  function createEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
+    for (const repo of repos) {
+      expect(runCli(['register', repo], env).status).toBe(0);
+    }
+  }
+
+  async function readEdtsYaml(xdg: string): Promise<{ edts: Array<{ ulid: string; topic: string; status: string }> }> {
+    return parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
+  }
+
+  it('fails upfront with edt-not-found for an unregistered topic, touching no repo', async () => {
+    const xdg = await makeTempDir();
+
+    const result = runCli(['edt', 'delete', 'no-such-topic'], createEnv(xdg));
+
+    expect(result.status).toBe(1);
+    const parsed = JSON.parse(result.stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('edt-not-found');
+  });
+
+  it('rejects deleting the active EDT, never touching a member branch or the registry entry (AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const repo = await makeGitRepo();
+    await registerRepos([repo], env);
+    const created = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
+      env,
+    );
+    expect(created.status).toBe(0);
+    expect(runCli(['edt', 'switch', '--to', 'demo'], env).status).toBe(0);
+
+    const deleted = runCli(['edt', 'delete', 'demo'], env);
+
+    expect(deleted.status).toBe(1);
+    const parsed = JSON.parse(deleted.stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('edt-delete-active-rejected');
+    expect(branchExists(repo, 'feat/demo')).toBe(true);
+    expect((await readEdtsYaml(xdg)).edts.some((e) => e.topic === 'demo')).toBe(true);
+  });
+
+  it('deletes the EDT record and its SQLite file, leaving a member branch untouched by default (AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const repo = await makeGitRepo();
+    await registerRepos([repo], env);
+    const created = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
+      env,
+    );
+    expect(created.status).toBe(0);
+    const ulid = JSON.parse(created.stdout.trim()).data.ulid;
+
+    const deleted = runCli(['edt', 'delete', 'demo'], env);
+
+    expect(deleted.status).toBe(0);
+    const parsed = JSON.parse(deleted.stdout.trim());
+    expect(parsed.data).toMatchObject({ ulid, topic: 'demo', results: [{ outcome: 'left' }] });
+    expect((await readEdtsYaml(xdg)).edts.some((e) => e.topic === 'demo')).toBe(false);
+    await expect(access(join(xdg, 'tui-back', 'edts', `${ulid}.db`))).rejects.toMatchObject({ code: 'ENOENT' });
+    // Omitting --branches for the member leaves its branch untouched (AC).
+    expect(branchExists(repo, 'feat/demo')).toBe(true);
+  });
+
+  it('deletes a member branch when --branches <repoPath>=delete is passed (AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const repo = await makeGitRepo();
+    await registerRepos([repo], env);
+    const created = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
+      env,
+    );
+    expect(created.status).toBe(0);
+
+    const deleted = runCli(['edt', 'delete', 'demo', '--branches', `${repo}=delete`], env);
+
+    expect(deleted.status).toBe(0);
+    const parsed = JSON.parse(deleted.stdout.trim());
+    expect(parsed.data.results).toEqual([{ service: 'route-explorer', outcome: 'deleted' }]);
+    expect(branchExists(repo, 'feat/demo')).toBe(false);
+  });
+
+  it('reports invalid-argument for a missing topic or a malformed --branches value', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const missingTopic = runCli(['edt', 'delete'], env);
+    expect(JSON.parse(missingTopic.stdout.trim()).error.code).toBe('invalid-argument');
+
+    const malformed = runCli(['edt', 'delete', 'demo', '--branches', 'no-equals-sign'], env);
+    expect(JSON.parse(malformed.stdout.trim()).error.code).toBe('invalid-argument');
+
+    const badDisposition = runCli(['edt', 'delete', 'demo', '--branches', '/repo/a=maybe'], env);
+    expect(JSON.parse(badDisposition.stdout.trim()).error.code).toBe('invalid-argument');
+  });
+});

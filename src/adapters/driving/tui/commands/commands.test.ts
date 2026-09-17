@@ -72,6 +72,10 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(COMMANDS.find((c) => c.name === 'edt-modify')).toBeDefined();
   });
 
+  it('registers the edt-delete command', () => {
+    expect(COMMANDS.find((c) => c.name === 'edt-delete')).toBeDefined();
+  });
+
   it('registers the settings command', () => {
     expect(COMMANDS.find((c) => c.name === 'settings')).toBeDefined();
   });
@@ -129,6 +133,20 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     modifyCmd.run(fakeStore, 'edt-modify my-topic');
 
     expect(calls).toEqual(['edt-modify my-topic']);
+  });
+
+  it('the edt-delete command calls openEdtDeleteDialog with full query', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openEdtDeleteDialog: (query: string) => calls.push(query),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const deleteCmd = COMMANDS.find((c) => c.name === 'edt-delete')!;
+    deleteCmd.run(fakeStore, 'edt-delete my-topic');
+
+    expect(calls).toEqual(['edt-delete my-topic']);
   });
 
   it('the settings command calls the store\'s openSettingsScreen action', () => {

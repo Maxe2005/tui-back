@@ -143,6 +143,71 @@ describe('edt-registry setStatus()', () => {
   });
 });
 
+// Story 2.29: remove() is a read/find/filter/write, mirroring updateEdtEntry's shape above —
+// removes the matching entry entirely (no soft-delete/undo, per the story's Boundaries).
+describe('edt-registry remove()', () => {
+  it('removes only the matching entry, leaving others and their fields untouched', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const entryA = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'a',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [{ service: 'route-explorer', repoPath: '/repos/a', branch: 'feat/x' }],
+    };
+    const entryB = {
+      ulid: '01JXXXXX2BBBBBBBBBBBBBBBBB',
+      topic: 'b',
+      createdAt: '2026-08-18T01:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entryA, entryB] }));
+    const port = createEdtRegistryPort(file, edtsBaseDir);
+
+    const result = await port.remove(entryA.ulid);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({ ok: true, data: [entryB] });
+  });
+
+  it('fails with edt-not-found for an unregistered ulid, without writing anything', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file, edtsBaseDir);
+
+    const result = await port.remove('01JNOTFOUND0000000000000');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    expect(await port.list()).toEqual({ ok: true, data: [entry] });
+  });
+
+  it('removing the last remaining entry leaves a valid, empty registry', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const entry = {
+      ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active',
+      members: [],
+    };
+    await writeFile(file, stringify({ edts: [entry] }));
+    const port = createEdtRegistryPort(file, edtsBaseDir);
+
+    const result = await port.remove(entry.ulid);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.list()).toEqual({ ok: true, data: [] });
+  });
+});
+
 // Story 2.5: update() is a read/find/replace/write, mirroring setStatus's shape.
 describe('edt-registry update()', () => {
   it('updates only the topic', async () => {
@@ -287,6 +352,8 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       fetch: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
+      isBranchMerged: async () => ok(true),
+      hasStash: async () => ok(false),
       ...overrides,
     };
   }

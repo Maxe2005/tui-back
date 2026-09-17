@@ -34,6 +34,10 @@ export const COMMANDS: readonly Command[] = [
     name: 'edt-modify',
     run: (useStore, fullQuery) => useStore.getState().openEdtModifyDialog(fullQuery),
   },
+  {
+    name: 'edt-delete',
+    run: (useStore, fullQuery) => useStore.getState().openEdtDeleteDialog(fullQuery),
+  },
   // Story 2.19: the settings screen is reachable exclusively through this registered
   // command (mirrors `registry`'s own precedent) — never bound to a raw keypress.
   {
