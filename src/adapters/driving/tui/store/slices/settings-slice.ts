@@ -17,6 +17,7 @@ import type { AppState, AppStoreDeps } from '../app-store.js';
 // changing, never the sub-object's other, untouched field. Never a deep-merge below this one
 // level, though — the two sub-objects each stay flat.
 export type SettingsUpdate = {
+  general?: Partial<Settings['general']>;
   commandPalette?: Partial<Settings['commandPalette']>;
   edts?: Partial<Settings['edts']>;
   // Story 5.1: same shallow-merge convention as the two fields above.
@@ -78,6 +79,7 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
       settingsVersion += 1;
       const current = get().settings;
       const next: Settings = {
+        general: { ...current.general, ...partial.general },
         commandPalette: { ...current.commandPalette, ...partial.commandPalette },
         edts: { ...current.edts, ...partial.edts },
         logs: { ...current.logs, ...partial.logs },
