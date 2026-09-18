@@ -21,7 +21,8 @@ const EXPECTED = [
   ['/', 'Open filter within the current zone'],
   [':', 'Open command entry'],
   ['?', 'Open the keybinding-help screen'],
-  ['q', 'Quit (confirms first if a run is in progress)'],
+  ['q', "Quit (confirms first if a run is in progress; disable in :settings' General tab)"],
+  [':quit', "Quit, regardless of the 'q' shortcut setting"],
   [
     'd / e / u / l / r / s',
     'Switch directly to Dashboard / EDTs / Update / Logs / Routes / shared-types',
@@ -33,7 +34,7 @@ const EXPECTED = [
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 13 canonical bindings in documented order (AC2, story 2.12)', () => {
+  it('lists exactly the 14 canonical bindings in documented order (AC2, story 2.12)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),

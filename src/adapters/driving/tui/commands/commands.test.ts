@@ -76,6 +76,10 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(COMMANDS.find((c) => c.name === 'settings')).toBeDefined();
   });
 
+  it('registers the quit command', () => {
+    expect(COMMANDS.find((c) => c.name === 'quit')).toBeDefined();
+  });
+
   it('the registry command calls the store\'s openRegistryScreen action — no core/ports import', () => {
     const calls: string[] = [];
     const fakeStore = {
@@ -143,5 +147,35 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     settingsCmd.run(fakeStore, '');
 
     expect(calls).toEqual(['openSettingsScreen']);
+  });
+
+  it('the quit command calls requestQuit', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        runInProgress: false,
+        requestQuit: () => calls.push('requestQuit'),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const quitCmd = COMMANDS.find((c) => c.name === 'quit')!;
+    quitCmd.run(fakeStore, '');
+
+    expect(calls).toEqual(['requestQuit']);
+  });
+
+  it('the quit command is a no-op while a run is in progress, mirroring shouldQuit\'s own guard', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        runInProgress: true,
+        requestQuit: () => calls.push('requestQuit'),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const quitCmd = COMMANDS.find((c) => c.name === 'quit')!;
+    quitCmd.run(fakeStore, '');
+
+    expect(calls).toEqual([]);
   });
 });
