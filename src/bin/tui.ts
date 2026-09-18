@@ -26,6 +26,7 @@ import {
   createSettingsPort,
   resolveSettingsFile,
 } from "../adapters/driven/settings/index.js";
+import { createDockerPort } from "../adapters/driven/docker/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 
 if (!process.stdin.isTTY) {
@@ -101,6 +102,9 @@ const actionLock = createLockPort(lockDir);
 // zod-validated like the manifest/registry, independent of every EDT/global SQLite store.
 const settingsFile = resolveSettingsFile(xdg);
 const settings = createSettingsPort(settingsFile);
+// Story 5.1: the Logs zone's Docker touchpoint — no XDG/lock wiring needed (DockerPort has no
+// persisted state of its own; the Logs zone's ring buffers live only in memory, per-process).
+const docker = createDockerPort();
 const store = createAppStore({
   registry,
   manifest,
@@ -112,6 +116,7 @@ const store = createAppStore({
   edtRegistryResourceKey: edtRegistryFile,
   edtsBaseDir,
   settings,
+  docker,
 });
 const onQuit = async () => {
   if (tuiLock) {
@@ -120,9 +125,47 @@ const onQuit = async () => {
   process.exit(0);
 };
 
+// Story 5.1 review fix: normal zone-unmount teardown already stops every active
+// `docker logs -f` subscription (see logs-zone.tsx's own unmount effect), but an abnormal exit
+// (an uncaught crash, Ctrl+C, a `kill`) bypasses React's unmount path entirely and would
+// otherwise orphan any still-running docker child processes indefinitely. Stopping every active
+// LogsManager subscription here, on every exit path, closes that gap regardless of how the
+// process is going down.
+let stoppedLogsPanes = false;
+const stopAllLogsPanes = () => {
+  if (stoppedLogsPanes) {
+    return;
+  }
+  stoppedLogsPanes = true;
+  try {
+    store.getState().stopAllLogsPanes();
+  } catch {
+    // Best-effort on the way out — never block the process from actually exiting.
+  }
+};
+process.on("exit", stopAllLogsPanes);
+// `process.on('exit', ...)` alone only covers a process that was already going to exit on its
+// own (a crash, an explicit process.exit() elsewhere). Registering a SIGINT/SIGTERM listener
+// suppresses Node's own default terminate-on-signal behavior, so each handler here must also
+// call process.exit() itself once cleanup is done, or the process would hang forever instead
+// of actually terminating.
+process.on("SIGINT", () => {
+  stopAllLogsPanes();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  stopAllLogsPanes();
+  process.exit(143);
+});
+
 try {
   render(createElement(AppShell, { useStore: store, onQuit }), {
-    exitOnCtrlC: true,
+    // User-reported (story 5.1 follow-up): Ink's own exitOnCtrlC swallows every Ctrl+C
+    // keypress before any zone's useInput ever sees it (ink/hooks/use-input.js: "If app is
+    // supposed to exit on Ctrl+C, skip input listeners") — incompatible with the Logs zone's
+    // Ctrl+C "clear every open pane" shortcut. `q` (app-shell.tsx's shouldQuit) is the app's
+    // real quit key; Ctrl+C is no longer a second one.
+    exitOnCtrlC: false,
     alternateScreen: true,
   });
 } catch (error) {

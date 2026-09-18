@@ -6,7 +6,9 @@ import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
   MAX_GRID_MAX_ROWS,
+  MAX_LOG_BUFFER_SIZE,
   MIN_GRID_MAX_ROWS,
+  MIN_LOG_BUFFER_SIZE,
   type Settings,
 } from '../../../core/ports/settings.js';
 
@@ -36,5 +38,21 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.edts),
+    // Story 5.1: keeps a corrupt/out-of-range settings.yaml non-blocking (existing guarantee).
+    // Per this file's own `.strict()` + `.default()`-per-top-level-key convention, an invalid
+    // `logs.bufferSize` does not just reset this `logs` block — the whole top-level `.strict()`
+    // object fails validation as one unit, so *every* top-level key (commandPalette, edts, logs)
+    // falls back to DEFAULT_SETTINGS, exactly like an invalid commandPalette.gridMaxRows or an
+    // unknown top-level field does elsewhere in this schema (see index.test.ts's "falls back to
+    // defaults with a field-naming warning..." tests, all of which assert the *entire*
+    // DEFAULT_SETTINGS, not just one block).
+    logs: z
+      .object({
+        bufferSize: z.number().int().min(MIN_LOG_BUFFER_SIZE).max(MAX_LOG_BUFFER_SIZE),
+        startWithHistory: z.boolean().optional().default(DEFAULT_SETTINGS.logs.startWithHistory),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.logs),
   })
   .strict();

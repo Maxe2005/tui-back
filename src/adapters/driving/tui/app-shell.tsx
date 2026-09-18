@@ -338,7 +338,12 @@ export function AppShell({
         return;
       }
 
-      const arrowZoneId = resolveZoneArrowSwitch(key, activeZone, reachable);
+      // Story 5.1 fix: while the Logs zone's pane grid owns Left/Right/Up/Down for sub-focus
+      // movement, this global Left/Right zone-switch must stay inert — otherwise every
+      // mounted `useInput` hook (Ink dispatches to all of them, not just the topmost) fires
+      // on the same keypress and the zone switches out from under the pane grid before its
+      // own handler's `setSubFocus` even matters.
+      const arrowZoneId = state.logsPaneGridArrowsActive ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;

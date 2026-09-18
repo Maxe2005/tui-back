@@ -356,3 +356,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default.md`
   summary: The spec's own `## Spec Change Log` section is empty even though its Design Notes "Implementation addendum" documents a materially new core API surface (`CreateBranchOptions.bases`, a change to `resolveMemberBranch`) that was not in the original frozen Code Map.
   evidence: `spec-2-27-...md`'s `## Spec Change Log` section has no entries; the addendum under `## Design Notes` reads like exactly the content that section exists for. **Track:** process note for spec hygiene — no code impact.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-1-aggregated-live-log-stream.md`
+  summary: No automatic reconnect/retry when a live log stream dies mid-flight (`streamError` surfaced via `onUpdate`) — the only recovery path is manually deselecting and reselecting the same service, with no UI hint that this is expected.
+  evidence: `LogsManager.subscribe` never retries after the adapter reports a mid-stream failure; the only way to re-run `docker.streamLogs` for that key is a fresh `subscribeLogsPane` call, triggered today only by a selection toggle. **Track:** design a reconnect/backoff strategy alongside story 5.3's health-status work, since automatic recovery is conceptually adjacent to health monitoring and out of story 5.1's frozen scope.

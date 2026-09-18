@@ -34,17 +34,20 @@ import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
   MAX_GRID_MAX_ROWS,
+  MAX_LOG_BUFFER_SIZE,
   MIN_GRID_MAX_ROWS,
+  MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette'];
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
   edts: 'EDTs',
   'command-palette': 'Command Palette',
+  logs: 'Logs',
 };
 
 // AC1: Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General
@@ -100,6 +103,31 @@ export function parseGridMaxRowsDigit(input: string): number | null {
     return null;
   }
   return clampGridMaxRows(Number(input));
+}
+
+// Logs tab (story 5.1): settings.logs.bufferSize, reusing the exact clamp/adjust/parse-digit/
+// render idiom the Command Palette tab established above for gridMaxRows. Scaled for a much
+// wider range (50-5000 vs. 1-99): Up/Down steps by LOG_BUFFER_SIZE_STEP rather than 1 (a
+// single-line step would take dozens of keypresses to cross the range), and a typed digit
+// 1-9 is a quick preset (digit x 100, e.g. '5' -> 500) rather than the literal digit — the
+// same "single keystroke sets a sane value directly" spirit as parseGridMaxRowsDigit, just
+// rescaled to a range where the literal digit itself is never a meaningful buffer size.
+export const LOG_BUFFER_SIZE_STEP = 50;
+export { MIN_LOG_BUFFER_SIZE, MAX_LOG_BUFFER_SIZE };
+
+export function clampLogBufferSize(value: number): number {
+  return Math.min(Math.max(value, MIN_LOG_BUFFER_SIZE), MAX_LOG_BUFFER_SIZE);
+}
+
+export function adjustLogBufferSize(current: number, direction: 'up' | 'down'): number {
+  return clampLogBufferSize(current + (direction === 'up' ? LOG_BUFFER_SIZE_STEP : -LOG_BUFFER_SIZE_STEP));
+}
+
+export function parseLogBufferSizeDigit(input: string): number | null {
+  if (!/^[1-9]$/.test(input)) {
+    return null;
+  }
+  return clampLogBufferSize(Number(input) * 100);
 }
 
 // EDTs tab: the hideable per-context action hints (story 2.18's formatAvailableActionsHint).
@@ -241,6 +269,30 @@ export function SettingsScreen({
       return;
     }
 
+    if (tab === 'logs') {
+      if (key.upArrow) {
+        void updateSettings({ logs: { bufferSize: adjustLogBufferSize(settings.logs.bufferSize, 'up') } });
+        return;
+      }
+      if (key.downArrow) {
+        void updateSettings({ logs: { bufferSize: adjustLogBufferSize(settings.logs.bufferSize, 'down') } });
+        return;
+      }
+      // Space toggles startWithHistory (Up/Down are already claimed by the buffer-size field
+      // above — this tab has no row cursor to disambiguate which field a given key targets,
+      // so each field gets its own dedicated key instead).
+      if (input === ' ') {
+        void updateSettings({ logs: { startWithHistory: !settings.logs.startWithHistory } });
+        return;
+      }
+      const digit = parseLogBufferSizeDigit(input);
+      if (digit !== null) {
+        void updateSettings({ logs: { bufferSize: digit } });
+        return;
+      }
+      return;
+    }
+
     if (tab !== 'edts') {
       return;
     }
@@ -332,6 +384,24 @@ export function SettingsScreen({
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Up/Down to adjust, or type a digit (1-9)." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>
+              Log buffer size (lines per pane): <Text color={colors.accent}>{settings.logs.bufferSize}</Text>
+            </Text>
+            <DimAnnotation text={`Up/Down to adjust by ${LOG_BUFFER_SIZE_STEP}, or type a digit (1-9) for a quick preset (x100).`} />
+            <DimAnnotation text="Applies to new streams only — already-running panes keep their current buffer size." />
+
+            <Box marginTop={spacing['section-gap']}>
+              <CheckboxListItem
+                label="Start streaming with the most recent history"
+                state={settings.logs.startWithHistory ? 'checked' : 'unchecked'}
+              />
+            </Box>
+            <DimAnnotation text="Space to toggle. Checked: a pane opens already showing recent history (like Ctrl+Up in the grid) instead of a blank page waiting for new lines." />
           </Box>
         ) : null}
 

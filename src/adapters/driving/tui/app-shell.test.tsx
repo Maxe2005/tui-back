@@ -87,9 +87,10 @@ describe('AppShell', () => {
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
       // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
-      // (see edts-zone.test.tsx for its own coverage) — every other zone is still the
-      // placeholder these two literal strings come from.
-      if (zone.id !== 'edts') {
+      // (see edts-zone.test.tsx for its own coverage). Story 5.1: Logs is likewise real
+      // content now (see logs-zone.test.tsx) — every other zone is still the placeholder
+      // these two literal strings come from.
+      if (zone.id !== 'edts' && zone.id !== 'logs') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
@@ -354,7 +355,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
+        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -385,6 +386,8 @@ it('shouldQuit returns true for q', () => {
         renameBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         zoneInputCaptured: false,
         setZoneInputCaptured: () => {},
+        logsPaneGridArrowsActive: false,
+        setLogsPaneGridArrowsActive: () => {},
         quitRequested: false,
         requestQuit: () => {},
         // Story 2.15: EDT action state
@@ -397,6 +400,24 @@ it('shouldQuit returns true for q', () => {
         openEdtSwitchDialog: () => {},
         openEdtModifyDialog: () => {},
         logEdtAction: async () => {},
+        // Story 5.1: Logs zone state
+        logsEdtSelected: [],
+        logsOtherSelected: [],
+        logsFullscreenTarget: null,
+        logsFullscreenServiceName: null,
+        logsPanes: {},
+        toggleLogsEdtSelection: () => {},
+        toggleLogsOtherSelection: () => {},
+        selectAllLogsEdtServices: () => {},
+        deselectAllLogsEdtServices: () => {},
+        openLogsFullscreen: () => {},
+        closeLogsFullscreen: () => {},
+        subscribeLogsPane: async () => {},
+        unsubscribeLogsPane: () => {},
+        loadOlderLogsPane: async () => {},
+        clearLogsPane: () => {},
+        setLogsPaneScrollOffset: () => {},
+        stopAllLogsPanes: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
