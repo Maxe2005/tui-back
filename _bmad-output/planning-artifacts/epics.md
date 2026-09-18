@@ -33,7 +33,7 @@ FR-13: A developer can publish a new `shared-types` version through the tool, wh
 FR-14: The tool shows, for the active EDT's member services, which are on the version most recently published from the active EDT's own `shared-types` branch (resolved via git ancestry, never the global-max version across unrelated branches) and which aren't (amended 2026-08-24).
 FR-15: A developer can propagate the new `shared-types` version to some or all of the active EDT's eligible member services in one action.
 FR-16: A developer can view a single, live, aggregated log stream from every service in the active EDT, or a chosen subset.
-FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it.
+FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it (amended 2026-09-18, Sprint Change Proposal, Story 5.4: extends to recall of previously used text/regex filters, per scope, not just new filtering mechanics).
 FR-18: Service health (up / down / restarting) is visible inline with the log view.
 FR-19: For any managed repo whose manifest activates a route-explorer module, the tool lists the routes that module's scanner discovers for that repo.
 FR-20: A developer can fire a request against any route discovered via FR-19, with authentication for protected routes handled automatically in dev mode.
@@ -95,7 +95,7 @@ UX-DR18: Implement the resizable list/detail split as the primary content layout
 UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (active EDT + member health + last group-update timestamp + default "enter last EDT" action), "no EDT yet" first-run prompt, and background-event badge surfacing while on Dashboard.
 UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21). Amended 2026-09-16 (Sprint Change Proposal): adds "EDT deleted" (per-service branch-disposition confirmation, active-EDT-blocked, cross-EDT branch-collision-blocked-per-service — Story 2.29), "EDT quick-pick" (filterable list for `edt-switch`/`edt-modify` with no argument, including its own "no matching EDT" state — Story 2.30), and "Create from existing EDT" (member checklist pre-seeded from a root EDT, root-branch-derived base-branch suggestion — Story 2.31) as new named states.
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
-UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart.
+UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): adds filter-history browsing (arrow-recall and grid-browser, see UX-DR32) as a new named state.
 UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes).
 UX-DR24: Implement shared-types zone states — no-members explicit state, publish-in-progress per-step status with spinner, publish-step-failure detail + resume-from-failed-step re-trigger, propagation status (on-latest-for-this-branch vs. behind, resolved live via git ancestry, never a global-max version — amended 2026-08-24), publish-success chaining immediately into a propagation offer, propagation-in-progress/per-service-failure independent retriability, and quit-mid-run confirmation with resume offer.
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
@@ -104,11 +104,13 @@ UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11; command mechanism
 UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism corrected 2026-08-25 after a review loopback): Implement zone arrow navigation — `Left`/`Right` directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends, always available with no form/overlay capturing input. No focus mode; `Tab` is untouched.
 UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14; reveal mechanism corrected 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `:` command-entry bar — a `modal-dialog` instance with a text input; no command list shows on open. `Tab` on an empty input shows the full command grid (UX-DR30); `Tab` on a non-empty input autocompletes on a single match, completes to the longest common prefix when several matches share one, or (when already at that prefix) requires a second `Tab` within a short window to reveal the matching-commands grid. `Enter` runs an exact match and closes the bar, `Esc` cancels without executing, and an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently.
 
-UX-DR30 (added 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `command-grid` component — a multi-column, arrow-navigable browser for the command bar's matching commands (UX-DR29), column-major left-to-right layout with a configurable max rows per column, trailing `…` truncation when the full grid exceeds the display width, and horizontal scrolling at either extremity to reveal columns hidden by that truncation. `Down` from the input enters the grid (landing top-of-first-column); `Up` from a column's top row returns to the input; `Enter` or any typed character exits back to the input (completing or resuming edit, respectively).
+UX-DR30 (added 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `command-grid` component — a multi-column, arrow-navigable browser for the command bar's matching commands (UX-DR29), column-major left-to-right layout with a configurable max rows per column, trailing `…` truncation when the full grid exceeds the display width, and horizontal scrolling at either extremity to reveal columns hidden by that truncation. `Down` from the input enters the grid (landing top-of-first-column); `Up` from a column's top row returns to the input; `Enter` or any typed character exits back to the input (completing or resuming edit, respectively). Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the component is generalized and reused for the filter-history grid browser (UX-DR32) — a second, independent instance with its own rows-per-column setting.
 
 UX-DR29 amended 2026-09-16 (Sprint Change Proposal): the registered command set grows to include `edt-delete` (Story 2.29), `edt-create-from` (Story 2.31), and a `registry validate` action inside the existing `registry` screen rather than a new top-level command (Story 2.28) — same command-bar mechanism, no new UI pattern.
 
-UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level.
+UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the Logs tab, which previously had no row cursor (`Up`/`Down` claimed exclusively by `bufferSize`), grows to 4+ fields plus history-clear actions and gains its own row-cursor navigation model, mirroring the EDTs tab's group-list precedent.
+
+UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history.
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
 ### FR Coverage Map
@@ -2030,6 +2032,60 @@ So that I never need a separate health check step and a failing service is never
 **Given** a restart completes
 **When** the service comes back up
 **Then** its health badge updates to reflect the new state, glyph+color paired per Story 1.9's status-badge rule
+
+### Story 5.4: Filter History Recall
+
+> Added 2026-09-18 (Sprint Change Proposal): new capability for the filter editor (Story 5.2) — recall the last N text/regex filters used, per scope (global / per-service), instead of retyping them. Introduces the first *persisted* data tied to filters — Story 5.2's "ephemeral, never persisted" boundary continues to apply to the live/active filter state; history is a distinct concept (a record of past commits) and is explicitly exempted. Also reworks the Logs tab of `:settings` to a row-cursor navigation model to accommodate the new fields and history-clear actions.
+
+As a developer,
+I want the filter editor to remember and let me recall the recent text/regex filters I've used,
+So that I don't have to retype filters I've already used, across services and across sessions.
+
+**Acceptance Criteria:**
+
+**Given** a filter editor (global or per-service)
+**When** a filter is committed (`Enter`, compiles successfully, non-empty query)
+**Then** it's pushed to the front of that exact scope+mode's history (global vs. that specific service; text vs. regex — two independent lists per scope), moved-to-front instead of duplicated if identical to the current top entry, trimmed to the configured maximum size N
+
+**Given** the developer is typing a fresh draft in the editor
+**When** `↑` is pressed
+**Then** the input is replaced by the most recent entry of that exact scope+mode's history, and the in-progress draft is preserved for later
+
+**Given** the developer is browsing history via `↑`
+**When** `↑` is pressed again
+**Then** it moves to the next-older entry, up to the oldest (position N); `↑` at the oldest entry is a no-op
+
+**Given** the developer is browsing history via `↑`/`↓`
+**When** `↓` is pressed
+**Then** it moves toward more recent entries, and one more `↓` from the most-recent entry restores the original draft exactly as it stood before browsing began
+
+**Given** the developer is browsing history (arrow-recall or the grid below)
+**When** a printable character or Backspace is pressed
+**Then** browsing stops, the original draft is restored, and that keypress is applied on top of it (same one-key resume as if it had never left the draft)
+
+**Given** the developer is on their own draft (not browsing)
+**When** `↓` is pressed
+**Then** the same column-major, arrow-navigable grid browser used by the command palette (`command-bar.tsx`, UX-DR30) opens, listing every entry of that scope+mode's history, its rows-per-column governed by its own setting (below) — not `commandPalette.gridMaxRows`; `Enter` recalls the highlighted entry into the input, `Esc` closes the bar entirely
+
+**Given** the `:settings` Logs tab
+**When** the developer adjusts "filter history size" (`settings.logs.filterHistorySize`, mirrors `logs.bufferSize`'s clamp/adjust idiom)
+**Then** a history already at that size drops its oldest entry on the next new one
+
+**Given** the `:settings` Logs tab
+**When** the developer adjusts "filter history grid rows" (`settings.logs.filterHistoryGridMaxRows`, mirrors `commandPalette.gridMaxRows` exactly but as its own independent value)
+**Then** the history grid browser's rows-per-column follows it
+
+**Given** the `:settings` Logs tab
+**When** the developer wants to clear history
+**Then** they can clear the global filter history, or a specific service's filter history, independently — never clearing more than what's targeted
+
+**Given** the Logs tab now has 4+ fields plus history-clear actions
+**When** the tab is navigated
+**Then** it gains a row cursor (`Up`/`Down` moves between fields, mirrors the EDTs tab's group-list idiom) — `bufferSize`/`startWithHistory`'s existing no-row-cursor scheme is reworked so every field stays reachable unambiguously
+
+**Given** the app is restarted
+**When** the filter editor is reopened
+**Then** previously recorded history is still available — persisted to disk (unlike the live filter state itself, which stays ephemeral per Story 5.2's boundary)
 
 ## Epic 6: Route Explorer
 
