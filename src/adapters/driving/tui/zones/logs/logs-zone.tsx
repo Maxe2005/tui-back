@@ -823,7 +823,9 @@ function LogsPaneView({
       borderColor={focused ? colors.accent : colors.border}
       paddingX={1}
     >
-      <Text bold={focused} color={focused ? colors.accent : colors.text} wrap="truncate-end">
+      {/* User-reported: always bold (not just when sub-focused) so a service name stands out
+          from its own log text at a glance, in a grid where several panes are visible at once. */}
+      <Text bold color={focused ? colors.accent : colors.text} wrap="truncate-end">
         {service.service}
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
