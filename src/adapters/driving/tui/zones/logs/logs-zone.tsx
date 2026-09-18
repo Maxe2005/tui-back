@@ -360,7 +360,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       // whether it was opened from the grid or fullscreen (Code Map: "extend useInput in
       // both the grid ... and fullscreen ... branches for /`/`f`/`g`/Escape-clear + editor
       // text capture") — checked first so it works from either view. Tab toggles text/regex
-      // mode; Left/Right cycle the level restriction.
+      // mode; Ctrl+Left/Right cycle the level restriction (user-reported: bare Left/Right used
+      // to do this, but that's the same key a text cursor would use — Ctrl disambiguates it as
+      // a level change rather than caret movement).
       //
       // Review fix: TextInputLine (reused by LogFilterEditor) always renders "[Enter] confirm
       // [Esc] cancel" while focused, but Escape and Enter used to be treated identically here
@@ -387,7 +389,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           applyFilterEditorDraft({ ...filterEditor, mode: toggleFilterMode(filterEditor.mode) });
           return;
         }
-        if (key.leftArrow || key.rightArrow) {
+        if (key.ctrl && (key.leftArrow || key.rightArrow)) {
           applyFilterEditorDraft({ ...filterEditor, level: cycleFilterLevel(filterEditor.level, key.rightArrow ? 'next' : 'previous') });
           return;
         }
@@ -933,7 +935,7 @@ function LogFilterEditor({ editor, serviceName }: { editor: FilterEditorState; s
       <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused />
       <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
-      <DimAnnotation text="[Tab] text/regex  [←/→] level  [Enter/Esc] done" />
+      <DimAnnotation text="[Tab] text/regex  [Ctrl+←/→] level  [Enter/Esc] done" />
     </ModalDialog>
   );
 }

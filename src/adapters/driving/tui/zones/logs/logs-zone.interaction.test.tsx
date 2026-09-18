@@ -265,9 +265,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2: Left/Right cycle the editor's level restriction (no dedicated Boundaries key
-  // binding is named for this — see logs-zone.logic.ts's cycleFilterLevel/LOG_FILTER_LEVEL_CYCLE).
-  it('the filter editor cycles its level restriction with Right/Left', async () => {
+  // Story 5.2 (user-reported): Ctrl+Left/Right cycle the editor's level restriction — Ctrl
+  // disambiguates it from a bare arrow, which a text cursor would otherwise claim (no
+  // dedicated Boundaries key binding is named for this — see logs-zone.logic.ts's
+  // cycleFilterLevel/LOG_FILTER_LEVEL_CYCLE).
+  it('the filter editor cycles its level restriction with Ctrl+Right/Ctrl+Left', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -276,17 +278,41 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       await press(instance, stdin, '/');
       expect(stdout.output).toContain('Level: ALL');
 
-      await press(instance, stdin, KEYS.right);
+      await press(instance, stdin, KEYS.ctrlRight);
       expect(stdout.output).toContain('Level: ERROR');
 
-      await press(instance, stdin, KEYS.right);
+      await press(instance, stdin, KEYS.ctrlRight);
       expect(stdout.output).toContain('Level: WARN');
 
       // Review fix: this test's own name promised Right *and* Left, but only ever pressed
       // Right — Left must cycle the same restriction backward (WARN -> ERROR).
-      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.ctrlLeft);
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
       expect(lastFrame).toContain('Level: ERROR');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // User-reported: bare Left/Right used to cycle the level restriction, colliding with where a
+  // text cursor would naturally live — now they're inert (Ctrl+Left/Right above is the only
+  // binding), and since arrow-key input carries no printable character, they don't leak into
+  // the query text either.
+  it('bare Left/Right no longer cycle the level restriction or alter the query', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'boom');
+      await press(instance, stdin, KEYS.right);
+      await press(instance, stdin, KEYS.left);
+
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Level: ALL');
+      expect(lastFrame).toContain('Text: boom');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
