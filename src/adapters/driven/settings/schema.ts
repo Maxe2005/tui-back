@@ -14,6 +14,13 @@ import {
 
 export const settingsSchema: z.ZodType<Settings> = z
   .object({
+    general: z
+      .object({
+        quitShortcutEnabled: z.boolean().optional().default(DEFAULT_SETTINGS.general.quitShortcutEnabled),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.general),
     commandPalette: z
       .object({
         gridMaxRows: z.number().int().min(MIN_GRID_MAX_ROWS).max(MAX_GRID_MAX_ROWS),

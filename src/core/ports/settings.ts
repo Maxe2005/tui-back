@@ -10,6 +10,13 @@
 import type { Result } from '../result.js';
 
 export interface Settings {
+  // The `q` keybinding (quit the app; see keybindings.ts and app-shell.tsx's shouldQuit) is
+  // global and not tied to any zone, so it lives on the General tab rather than under a more
+  // specific settings group. Quitting stays reachable through the `:quit` command regardless
+  // of this flag (Boundaries: only the raw `q` keypress is gated, never the command).
+  general: {
+    quitShortcutEnabled: boolean;
+  };
   commandPalette: {
     gridMaxRows: number;
   };
@@ -41,6 +48,8 @@ export interface Settings {
 // the TUI store's initial state (before the first loadSettings() resolves, and for any
 // pre-2.19 `createAppStore()` call left unwired in a test).
 export const DEFAULT_SETTINGS: Settings = {
+  // Default true preserves the pre-existing behavior for anyone who never opens :settings.
+  general: { quitShortcutEnabled: true },
   commandPalette: { gridMaxRows: 8 },
   edts: { hiddenActionHints: [], hiddenActionTypes: [] },
   // Story 5.1's Boundaries: "a per-service in-memory ring buffer sized by
