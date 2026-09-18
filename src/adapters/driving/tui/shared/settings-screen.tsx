@@ -248,6 +248,15 @@ export function SettingsScreen({
       return;
     }
 
+    if (tab === 'general') {
+      // Space toggles quitShortcutEnabled — General has no row cursor yet, mirroring the Logs
+      // tab's single dedicated-key convention for a lone checkbox field.
+      if (input === ' ') {
+        void updateSettings({ general: { quitShortcutEnabled: !settings.general.quitShortcutEnabled } });
+      }
+      return;
+    }
+
     if (tab === 'command-palette') {
       if (key.upArrow) {
         void updateSettings({
@@ -373,9 +382,14 @@ export function SettingsScreen({
 
         {settingsWarning ? <DimAnnotation text={settingsWarning} /> : null}
 
-        {/* AC2: General renders validly with zero settings defined — never an error. */}
         {tab === 'general' ? (
-          <Text color={colors['text-dim']}>No general settings yet.</Text>
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Enable 'q' to quit"
+              state={settings.general.quitShortcutEnabled ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="Space to toggle. Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
+          </Box>
         ) : null}
 
         {tab === 'command-palette' ? (

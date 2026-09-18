@@ -70,6 +70,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
           logs: { bufferSize: 500, startWithHistory: false },
@@ -157,6 +158,19 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('logs.bufferSize');
   });
 
+  it('falls back to defaults with a field-naming warning when general.quitShortcutEnabled is not a boolean', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'general:\n  quitShortcutEnabled: "nope"\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('general.quitShortcutEnabled');
+  });
+
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -187,6 +201,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
           logs: { bufferSize: 500, startWithHistory: false },
@@ -211,9 +226,33 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
           logs: { bufferSize: 750, startWithHistory: false },
+        },
+        warning: null,
+      },
+    });
+  });
+
+  it('loads a pre-existing file with no general block — defaults quitShortcutEnabled to true, keeps other fields', async () => {
+    // Mirrors the hiddenActionTypes/startWithHistory precedents above: a settings.yaml written
+    // before this field existed has no `general:` block at all.
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'commandPalette:\n  gridMaxRows: 12\n');
+
+    const result = await loadSettings(file);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          general: { quitShortcutEnabled: true },
+          commandPalette: { gridMaxRows: 12 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          logs: { bufferSize: 500, startWithHistory: false },
         },
         warning: null,
       },
@@ -236,6 +275,7 @@ describe('saveSettings', () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'settings.yaml');
     const settings = {
+      general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 10 },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
       logs: { bufferSize: 500, startWithHistory: false },
@@ -253,12 +293,14 @@ describe('saveSettings', () => {
     await saveSettings(file, DEFAULT_SETTINGS);
 
     await saveSettings(file, {
+      general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
       logs: { bufferSize: 500, startWithHistory: false },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
+      general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
       logs: { bufferSize: 500, startWithHistory: false },
@@ -272,6 +314,7 @@ describe('createSettingsPort', () => {
     const file = join(root, 'settings.yaml');
     const port = createSettingsPort(file);
     const settings = {
+      general: { quitShortcutEnabled: false },
       commandPalette: { gridMaxRows: 5 },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
       logs: { bufferSize: 500, startWithHistory: false },

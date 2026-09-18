@@ -355,7 +355,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
+        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -422,6 +422,9 @@ it('shouldQuit returns true for q', () => {
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
       expect(shouldQuit('j', {}, minimalState)).toBe(false);
+      expect(
+        shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false } } }),
+      ).toBe(false);
     });
   });
 });

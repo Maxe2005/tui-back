@@ -64,7 +64,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'q',
-    description: 'Quit (confirms first if a run is in progress)',
+    description: "Quit (confirms first if a run is in progress; disable in :settings' General tab)",
+  },
+  {
+    keys: ':quit',
+    description: 'Quit, regardless of the \'q\' shortcut setting',
   },
   {
     keys: 'd / e / u / l / r / s',

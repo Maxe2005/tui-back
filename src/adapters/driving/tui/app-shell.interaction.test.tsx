@@ -891,6 +891,41 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
+  it('the :quit command requests a quit through the store — reachable regardless of the "q" shortcut setting', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...store.getState().settings, general: { quitShortcutEnabled: false } } });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'quit');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().quitRequested).toBe(true);
+      expect(store.getState().commandBarOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the :quit command is a no-op while a run is in progress', async () => {
+    const store = createAppStore();
+    store.setState({ runInProgress: true });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'quit');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().quitRequested).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('Tab leaves the input unchanged on zero matches — never guesses at a command', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
@@ -1324,12 +1359,12 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
   });
 
   it('gridMaxRows from the settings screen is live in the command bar\'s grid layout', async () => {
-    // 5 registered commands (registry, edt-create, edt-switch, edt-modify, settings), grouped
-    // column-major with maxRows=2 -> 3 columns of [2, 2, 1] — directly observable in the
-    // rendered COMMAND grid without needing to stub extra commands.
+    // 6 registered commands (registry, edt-create, edt-switch, edt-modify, settings, quit),
+    // grouped column-major with maxRows=2 -> 3 columns of [2, 2, 2] — directly observable in
+    // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
+      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1339,9 +1374,9 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
       const lines = stdout.output.split('\n');
       // Column 0 = [registry, edt-create], column 1 = [edt-switch, edt-modify], column 2 =
-      // [settings] (maxRows=2). Row 0 of the grid renders column-0-row-0 and column-1-row-0
+      // [settings, quit] (maxRows=2). Row 0 of the grid renders column-0-row-0 and column-1-row-0
       // on the SAME terminal line ("registry" + "edt-switch"); "edt-create" (column 0's row
-      // 1) lands on the NEXT line instead. A single-column-of-5 layout (the pre-2.19 default,
+      // 1) lands on the NEXT line instead. A single-column-of-6 layout (the pre-2.19 default,
       // maxRows=8) would instead put every command on its own line, with "edt-create"
       // sharing no line with "registry" either way — the positive signal here is
       // "edt-switch" sharing registry's line, which only maxRows=2 grouping produces.
@@ -1373,7 +1408,36 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settingsScreenOpen).toBe(true);
       expect(stdout.output).toContain('SETTINGS');
-      expect(stdout.output).toContain('No general settings yet.');
+      expect(stdout.output).toContain("Enable 'q' to quit");
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the General tab toggles settings.general.quitShortcutEnabled and persists via updateSettings', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ' ');
+
+      expect(store.getState().settings.general.quitShortcutEnabled).toBe(false);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: false },
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: 500, startWithHistory: false },
+      });
+
+      await press(instance, stdin, ' ');
+      expect(store.getState().settings.general.quitShortcutEnabled).toBe(true);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1403,7 +1467,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      expect(stdout.output).toContain('No general settings yet.');
+      expect(stdout.output).toContain("Enable 'q' to quit");
 
       await press(instance, stdin, KEYS.tab);
       // Amended 2026-08-28: the EDTs tab now opens on its group list, not the flat checkbox
@@ -1415,7 +1479,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(stdout.output).toContain('Command grid max rows:');
 
       await press(instance, stdin, KEYS.tab);
-      expect(stdout.output).toContain('No general settings yet.');
+      expect(stdout.output).toContain("Enable 'q' to quit");
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1503,6 +1567,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.commandPalette.gridMaxRows).toBe(9);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 9 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
         logs: { bufferSize: 500, startWithHistory: false },
@@ -1531,6 +1596,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.logs.bufferSize).toBe(550);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
         logs: { bufferSize: 550, startWithHistory: false },
@@ -1564,6 +1630,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(store.getState().settings.logs.startWithHistory).toBe(true);
       expect(store.getState().settings.logs.bufferSize).toBe(DEFAULT_SETTINGS.logs.bufferSize);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
         logs: { bufferSize: DEFAULT_SETTINGS.logs.bufferSize, startWithHistory: true },
@@ -1594,6 +1661,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edts']);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
         logs: { bufferSize: 500, startWithHistory: false },
@@ -1626,6 +1694,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['create']);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
         logs: { bufferSize: 500, startWithHistory: false },

@@ -798,6 +798,7 @@ describe("app store", () => {
         load: vi.fn(async () =>
           ok({
             settings: {
+              general: { quitShortcutEnabled: true },
               commandPalette: { gridMaxRows: 12 },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
               logs: { bufferSize: 500, startWithHistory: false },
@@ -812,6 +813,7 @@ describe("app store", () => {
       await store.getState().loadSettings();
 
       expect(store.getState().settings).toEqual({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 12 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
         logs: { bufferSize: 500, startWithHistory: false },
@@ -861,6 +863,7 @@ describe("app store", () => {
       await updatePromise;
 
       expect(save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 15 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
         logs: { bufferSize: 500, startWithHistory: false },
@@ -871,6 +874,7 @@ describe("app store", () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
           logs: { bufferSize: 500, startWithHistory: false },
@@ -880,6 +884,7 @@ describe("app store", () => {
       await store.getState().updateSettings({ edts: { hiddenActionHints: ["other-services"] } });
 
       expect(store.getState().settings).toEqual({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [] },
         logs: { bufferSize: 500, startWithHistory: false },
@@ -890,6 +895,7 @@ describe("app store", () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"] },
           logs: { bufferSize: 500, startWithHistory: false },
@@ -899,6 +905,7 @@ describe("app store", () => {
       await store.getState().updateSettings({ edts: { hiddenActionTypes: ["create", "modify"] } });
 
       expect(store.getState().settings).toEqual({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"] },
         logs: { bufferSize: 500, startWithHistory: false },
@@ -1004,6 +1011,7 @@ describe("app store", () => {
       // newer update already applied above.
       resolveLoad?.({
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
           logs: { bufferSize: 500, startWithHistory: false },
