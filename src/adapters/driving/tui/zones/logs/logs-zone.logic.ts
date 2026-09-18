@@ -8,6 +8,7 @@
 // are generic, already-exported pure functions with no EDT-specific coupling — reused as-is
 // from edts-zone.logic.ts rather than re-implemented here (Code Map: "reuse
 // partitionServicesByEdtMembership shape").
+import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 
@@ -287,14 +288,29 @@ export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBu
 }
 
 // How many terminal rows a single formatted log line will actually render as. Truncated lines
-// (wrap === false) always cost exactly 1 row (Ink's `truncate-end` never wraps). Wrapped lines
-// cost `ceil(text.length / width)`, floored at 1 so even an empty line still takes a row.
+// (wrap === false) always cost exactly 1 row (Ink's `truncate-end` never wraps).
+//
+// User-reported review fix: wrapped lines used to cost `ceil(text.length / width)` — a naive
+// character count that assumes every character occupies one visible column. Real log lines
+// routinely carry ANSI colour escapes (docker/compose output is colourized by default), whose
+// bytes count toward `.length` but occupy zero terminal columns; a heavily-coloured line could
+// read as needing 2-3x the rows it actually renders as. That inflated cost made
+// sliceVisibleWindow stop selecting lines far short of the pane's real budget, leaving a large
+// blank gap at the bottom in wrap mode specifically (truncate mode's fixed 1-row cost was never
+// affected) that persisted no matter how far back the user scrolled. Word-wrapping itself also
+// isn't just `ceil(length / width)` — it can't split mid-word, so it costs a few rows more than
+// that division implies even for plain ASCII text.
+//
+// Delegating to `wrap-ansi` with the exact same options Ink's own Text component uses for
+// `wrap="wrap"` (see ink/build/wrap-text.js) makes this an exact match rather than another
+// approximation: same ANSI-aware width accounting, same word-break rules, same hard-wrap
+// fallback for a single token wider than the pane.
 export function computeLineRowCount(text: string, width: number, wrap: boolean): number {
   if (!wrap) {
     return 1;
   }
   const safeWidth = Math.max(width, 1);
-  return Math.max(Math.ceil(text.length / safeWidth), 1);
+  return wrapAnsi(text, safeWidth, { trim: false, hard: true }).split('\n').length;
 }
 
 // Boundaries: "Any manifest service can be streamed, not only active-EDT members" — a service

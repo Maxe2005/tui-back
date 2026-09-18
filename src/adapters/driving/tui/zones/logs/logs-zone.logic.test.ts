@@ -307,4 +307,30 @@ describe('computeLineRowCount', () => {
   it('floors at 1 row even for an empty line under wrap', () => {
     expect(computeLineRowCount('', 40, true)).toBe(1);
   });
+
+  // Review fix (user-reported): computeLineRowCount used to divide the raw string length by
+  // width, so an ANSI colour escape's bytes (invisible on screen) inflated the cost right along
+  // with the visible text — a heavily-coloured line could report needing 2-3x the rows it
+  // actually renders as. That made sliceVisibleWindow stop far short of the pane's real budget,
+  // leaving a blank gap at the bottom in wrap mode that no fix to the pane's own row budget
+  // could close. Delegating to wrap-ansi (the same library, same options, Ink's own Text
+  // component uses for wrap="wrap") makes the cost ANSI-aware, matching what Ink actually
+  // renders exactly rather than approximating it.
+  it('does not let ANSI colour escapes inflate the row cost beyond the visible text', () => {
+    const plain = 'word0 word1 word2 word3 word4 word5 word6 word7';
+    const colored = plain
+      .split(' ')
+      .map((word, index) => `\x1b[3${(index % 7) + 1}m${word}\x1b[0m`)
+      .join(' ');
+    expect(computeLineRowCount(colored, 40, true)).toBe(computeLineRowCount(plain, 40, true));
+  });
+
+  it('costs more rows than a naive length/width division for word-wrapped (space-separated) text', () => {
+    // Word-wrap can't split mid-word, so it trades some trailing whitespace per row for never
+    // breaking a word — costing a bit more than the naive division a truncated/hard-wrapped
+    // single token would (covered by the 'a'.repeat cases above).
+    const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(' ');
+    const naiveEstimate = Math.ceil(text.length / 10);
+    expect(computeLineRowCount(text, 10, true)).toBeGreaterThan(naiveEstimate);
+  });
 });
