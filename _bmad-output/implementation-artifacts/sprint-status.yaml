@@ -120,7 +120,7 @@ development_status:
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-aggregated-live-log-stream: review
+  5-1-aggregated-live-log-stream: done
   5-2-filter-the-aggregated-stream: backlog
   5-3-inline-service-health-restart-control: backlog
   epic-5-retrospective: optional
