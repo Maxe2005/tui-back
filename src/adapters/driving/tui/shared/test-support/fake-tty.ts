@@ -88,4 +88,9 @@ export const KEYS = {
   // Story 2.21: Ctrl+letter comes over the wire as its codepoint-1..26 control byte
   // (ink's parse-keypress.js) — Ctrl+W is 'w' (0x77) - 'a' (0x61) + 1 = 0x17.
   ctrlW: '\x17',
+  // Story 5.2 (review fix): Ctrl+Left/Right (unlike Ctrl+letter) is a CSI sequence with an
+  // explicit modifier parameter — xterm's own encoding, `5` = 1 + ctrl's bit (4) — which ink's
+  // parse-keypress.js decodes into `key.ctrl: true` alongside `key.leftArrow`/`key.rightArrow`.
+  ctrlLeft: '\x1b[1;5D',
+  ctrlRight: '\x1b[1;5C',
 } as const;

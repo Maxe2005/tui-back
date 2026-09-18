@@ -1,30 +1,44 @@
 import { describe, expect, it } from 'vitest';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
+  applyLogFilters,
+  compileLogFilter,
+  cycleFilterLevel,
+  DEFAULT_LOG_FILTER,
+  DEFAULT_PANE_GLOBAL_FILTER_ENGAGED,
   DEFAULT_PANE_WRAP,
   DEFAULT_VISIBILITY_FLAGS,
   adjustScrollOffset,
   computeGridLayout,
   computeLineRowCount,
   cycleLogsPaneFocus,
+  detectLogLevel,
   filterVisibleLines,
+  formatLogFilterSpec,
   formatLogLine,
   isAtOldestLine,
   isClearAllLogsKey,
+  isPaneEngagedInGlobalFilter,
   isPaneWrapped,
   isSelectAllKey,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
+  resolveFilterClearTarget,
   resolveFullscreenScrollDirection,
   resolvePaneScrollDirection,
   resolvePostLoadScrollOffset,
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
+  setPaneGlobalFilterEngagement,
+  setPaneLogFilter,
   sliceVisibleWindow,
   toggleAllPanesWrapFlag,
+  toggleFilterMode,
+  toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
+  type LogFilterSpec,
 } from './logs-zone.logic.js';
 
 describe('cycleLogsPaneFocus', () => {
@@ -373,5 +387,212 @@ describe('computeLineRowCount', () => {
     const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(' ');
     const naiveEstimate = Math.ceil(text.length / 10);
     expect(computeLineRowCount(text, 10, true)).toBeGreaterThan(naiveEstimate);
+  });
+});
+
+// Story 5.2: the two-tier text/regex/level filter over already-buffered lines.
+describe('detectLogLevel', () => {
+  it('matches ERROR/WARN/INFO/DEBUG case-insensitively', () => {
+    expect(detectLogLevel('2026-01-01 ERROR something broke')).toBe('ERROR');
+    expect(detectLogLevel('warn: retrying')).toBe('WARN');
+    expect(detectLogLevel('[INFO] starting up')).toBe('INFO');
+    expect(detectLogLevel('Debug values here')).toBe('DEBUG');
+  });
+
+  it('returns null when no level token is present', () => {
+    expect(detectLogLevel('plain line with no level tag')).toBeNull();
+  });
+
+  it('does not match a level substring embedded inside a larger word', () => {
+    expect(detectLogLevel('errorprone module loaded')).toBeNull();
+  });
+});
+
+describe('compileLogFilter', () => {
+  const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
+
+  it('text mode: case-insensitive substring match; an empty query passes everything', () => {
+    const compiled = compileLogFilter({ mode: 'text', query: 'boom', level: null });
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect(compiled.test(line('a BOOM happened'))).toBe(true);
+      expect(compiled.test(line('all quiet'))).toBe(false);
+    }
+    const emptyQuery = compileLogFilter(DEFAULT_LOG_FILTER);
+    expect(emptyQuery.ok).toBe(true);
+    if (emptyQuery.ok) {
+      expect(emptyQuery.test(line('anything'))).toBe(true);
+    }
+  });
+
+  it('regex mode: compiles and matches a valid pattern', () => {
+    const compiled = compileLogFilter({ mode: 'regex', query: '^\\d+ms$', level: null });
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect(compiled.test(line('120ms'))).toBe(true);
+      expect(compiled.test(line('120 ms'))).toBe(false);
+    }
+  });
+
+  it('regex mode: an invalid pattern fails to compile with an inline error, never throws', () => {
+    expect(() => compileLogFilter({ mode: 'regex', query: '(unterminated', level: null })).not.toThrow();
+    const compiled = compileLogFilter({ mode: 'regex', query: '(unterminated', level: null });
+    expect(compiled.ok).toBe(false);
+    if (!compiled.ok) {
+      expect(compiled.error.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('level restriction: a line with no detectable level is excluded once any level restriction is active', () => {
+    const compiled = compileLogFilter({ mode: 'text', query: '', level: 'ERROR' });
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect(compiled.test(line('ERROR disk full'))).toBe(true);
+      expect(compiled.test(line('WARN low disk'))).toBe(false);
+      expect(compiled.test(line('no level tag at all'))).toBe(false);
+    }
+  });
+
+  it('combines text and level restrictions with AND', () => {
+    const compiled = compileLogFilter({ mode: 'text', query: 'disk', level: 'ERROR' });
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect(compiled.test(line('ERROR disk full'))).toBe(true);
+      expect(compiled.test(line('ERROR network down'))).toBe(false);
+      expect(compiled.test(line('WARN disk almost full'))).toBe(false);
+    }
+  });
+});
+
+describe('applyLogFilters', () => {
+  const lines: LogLine[] = [
+    { timestamp: 't1', stream: 'stdout', text: 'ERROR disk full' },
+    { timestamp: 't2', stream: 'stdout', text: 'INFO all fine' },
+    { timestamp: 't3', stream: 'stderr', text: 'WARN disk almost full' },
+  ];
+
+  it('passes everything when both global and own are null', () => {
+    expect(applyLogFilters(lines, null, null)).toEqual(lines);
+  });
+
+  it('I/O matrix PANE_OPT_OUT: a disengaged pane (global passed as null) ignores the global filter entirely', () => {
+    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
+    // Engaged: only "disk" lines survive.
+    expect(applyLogFilters(lines, global, null)).toEqual([lines[0], lines[2]]);
+    // Disengaged (caller passes null in global's place): every line survives regardless.
+    expect(applyLogFilters(lines, null, null)).toEqual(lines);
+  });
+
+  it('I/O matrix COMBINED_AND: a global text filter and an own level filter both apply — a line must satisfy both', () => {
+    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
+    const own: LogFilterSpec = { mode: 'text', query: '', level: 'ERROR' };
+    expect(applyLogFilters(lines, global, own)).toEqual([lines[0]]);
+  });
+
+  it('an own filter alone (no global) still applies', () => {
+    const own: LogFilterSpec = { mode: 'text', query: '', level: 'WARN' };
+    expect(applyLogFilters(lines, null, own)).toEqual([lines[2]]);
+  });
+});
+
+describe('isPaneEngagedInGlobalFilter / toggleGlobalFilterEngagement / setPaneGlobalFilterEngagement', () => {
+  it('defaults an untouched pane (or a null repoPath) to engaged (Boundaries: engaged by default)', () => {
+    expect(DEFAULT_PANE_GLOBAL_FILTER_ENGAGED).toBe(true);
+    expect(isPaneEngagedInGlobalFilter({}, '/repo/a')).toBe(true);
+    expect(isPaneEngagedInGlobalFilter({}, null)).toBe(true);
+  });
+
+  it('toggleGlobalFilterEngagement flips only the targeted repoPath', () => {
+    const disengaged = toggleGlobalFilterEngagement({}, '/repo/a');
+    expect(disengaged).toEqual({ '/repo/a': false });
+    expect(isPaneEngagedInGlobalFilter(disengaged, '/repo/b')).toBe(true);
+
+    const reengaged = toggleGlobalFilterEngagement(disengaged, '/repo/a');
+    expect(reengaged).toEqual({ '/repo/a': true });
+  });
+
+  it('setPaneGlobalFilterEngagement sets an explicit value rather than toggling — a repeated disengage stays a no-op', () => {
+    const once = setPaneGlobalFilterEngagement({}, '/repo/a', false);
+    expect(once).toEqual({ '/repo/a': false });
+    const again = setPaneGlobalFilterEngagement(once, '/repo/a', false);
+    expect(again).toEqual({ '/repo/a': false });
+  });
+});
+
+describe('setPaneLogFilter', () => {
+  it('sets a spec for the targeted repoPath, independent of others', () => {
+    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null };
+    const next = setPaneLogFilter({}, '/repo/a', spec);
+    expect(next).toEqual({ '/repo/a': spec });
+  });
+
+  it('clears (removes the key) when given null', () => {
+    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null };
+    const withFilter = setPaneLogFilter({}, '/repo/a', spec);
+    const cleared = setPaneLogFilter(withFilter, '/repo/a', null);
+    expect(cleared).toEqual({});
+    expect(Object.prototype.hasOwnProperty.call(cleared, '/repo/a')).toBe(false);
+  });
+});
+
+describe('cycleFilterLevel / toggleFilterMode', () => {
+  it('cycles null -> ERROR -> WARN -> INFO -> DEBUG -> null going forward', () => {
+    let level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | null = null;
+    const seen: ('ERROR' | 'WARN' | 'INFO' | 'DEBUG' | null)[] = [level];
+    for (let i = 0; i < 4; i += 1) {
+      level = cycleFilterLevel(level, 'next');
+      seen.push(level);
+    }
+    expect(seen).toEqual([null, 'ERROR', 'WARN', 'INFO', 'DEBUG']);
+    expect(cycleFilterLevel(level, 'next')).toBeNull();
+  });
+
+  it('cycles backward with "previous"', () => {
+    expect(cycleFilterLevel(null, 'previous')).toBe('DEBUG');
+    expect(cycleFilterLevel('ERROR', 'previous')).toBeNull();
+  });
+
+  it('toggleFilterMode flips text <-> regex', () => {
+    expect(toggleFilterMode('text')).toBe('regex');
+    expect(toggleFilterMode('regex')).toBe('text');
+  });
+});
+
+describe('formatLogFilterSpec', () => {
+  it('renders mode, a quoted query, and no level suffix by default', () => {
+    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: null })).toBe('text "boom"');
+    expect(formatLogFilterSpec({ mode: 'regex', query: '^ERR', level: null })).toBe('regex "^ERR"');
+  });
+
+  it('renders an empty query as "(any)"', () => {
+    expect(formatLogFilterSpec({ mode: 'text', query: '', level: null })).toBe('text (any)');
+  });
+
+  it('appends the level restriction, when set, as a trailing bracketed suffix', () => {
+    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: 'ERROR' })).toBe('text "boom" [ERROR]');
+    expect(formatLogFilterSpec({ mode: 'text', query: '', level: 'WARN' })).toBe('text (any) [WARN]');
+  });
+});
+
+describe('resolveFilterClearTarget', () => {
+  // I/O matrix ESCAPE_PANE: "Esc, pane sub-focused, own filter set -> that pane's own filter
+  // clears; engagement/global unaffected".
+  it('targets the pane\'s own filter when sub-focused with an own filter set', () => {
+    expect(resolveFilterClearTarget(true, '/repo/a', true)).toEqual({ scope: 'pane-own', repoPath: '/repo/a' });
+  });
+
+  it('targets pane-disengage when sub-focused with no own filter set', () => {
+    expect(resolveFilterClearTarget(true, '/repo/a', false)).toEqual({ scope: 'pane-disengage', repoPath: '/repo/a' });
+  });
+
+  // I/O matrix ESCAPE_LIST: "Esc, list-focused, global filter active -> Global filter clears;
+  // disengaged panes stay disengaged (unaffected)".
+  it('targets global when not sub-focused (list-focus), regardless of any own filter', () => {
+    expect(resolveFilterClearTarget(false, '/repo/a', true)).toEqual({ scope: 'global' });
+    expect(resolveFilterClearTarget(false, null, false)).toEqual({ scope: 'global' });
+  });
+
+  it('targets global when sub-focused but no real pane is under it (repoPath null)', () => {
+    expect(resolveFilterClearTarget(true, null, false)).toEqual({ scope: 'global' });
   });
 });

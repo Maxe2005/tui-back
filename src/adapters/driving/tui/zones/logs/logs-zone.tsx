@@ -8,8 +8,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, measureElement, Text, useInput, useWindowSize, type DOMElement } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { LogLine } from '../../../../../core/ports/docker.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
 import {
@@ -21,28 +24,42 @@ import {
 } from '../edts/edts-zone.logic.js';
 import {
   adjustScrollOffset,
+  applyLogFilters,
+  compileLogFilter,
   computeGridLayout,
   computeLineRowCount,
+  cycleFilterLevel,
   cycleLogsPaneFocus,
+  DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
   filterVisibleLines,
+  formatLogFilterSpec,
   formatLogLine,
   isAtOldestLine,
   isClearAllLogsKey,
+  isPaneEngagedInGlobalFilter,
   isPaneWrapped,
   isSelectAllKey,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
+  resolveFilterClearTarget,
   resolveFullscreenScrollDirection,
   resolvePaneScrollDirection,
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
+  setPaneGlobalFilterEngagement,
+  setPaneLogFilter,
   sliceVisibleWindow,
   toggleAllPanesWrapFlag,
+  toggleFilterMode,
+  toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
   type GridLayout,
+  type LogFilterMode,
+  type LogFilterSpec,
+  type LogLevel,
   type LogsPaneFocus,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
@@ -73,6 +90,36 @@ const GRID_PANE_CHROME_COLS = 4;
 // measures the pane's own content box for real, post-render, via Ink's `measureElement` — the
 // estimate above now only seeds the very first paint (before Yoga has computed a layout to
 // measure), and every commit after that self-corrects to the pane's true row/column budget.
+
+// Story 5.2: the filter editor's in-progress draft — `/` opens one with scope 'global',
+// `f` with scope 'pane' (repoPath set to whichever pane owns it). `error` mirrors whatever
+// compileLogFilter last returned for this exact draft (Design Notes: recomputed live on every
+// keystroke, never just on submit) — it never blocks the draft from being edited further, it
+// only blocks that particular (mode, query, level) combination from being committed into
+// `globalFilter`/`paneFilters` (see applyFilterEditorDraft below).
+type FilterEditorState = {
+  scope: 'global' | 'pane';
+  repoPath: string | null;
+  mode: LogFilterMode;
+  query: string;
+  level: LogLevel | null;
+  error: string | null;
+  // Review fix: the spec that was in effect for this scope at the moment the editor opened —
+  // restored verbatim on Escape (a true cancel) so a reused widget whose own hint text reads
+  // "[Enter] confirm  [Esc] cancel" actually behaves that way, instead of Escape and Enter both
+  // just closing the editor and leaving whatever last compiled cleanly while typing applied.
+  preOpen: LogFilterSpec;
+};
+
+// Review fix: shared by applyFilterEditorDraft's commit path and the Escape-cancel path below
+// — a spec deep-equal to DEFAULT_LOG_FILTER (empty query, no level restriction, either mode)
+// is a no-op filter and must never be stored as an explicit paneFilters[repoPath] entry (that
+// would leave the "pane filter: on" annotation/hasOwnFilter check seeing a filter that isn't
+// actually filtering anything).
+function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
+  return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
+}
+
 function useElementSize(): readonly [{ current: DOMElement | null }, { width: number; height: number } | null] {
   const ref = useRef<DOMElement | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
@@ -140,6 +187,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // (keyed by repoPath) so 'w' can target just the sub-focused/fullscreen pane, with Ctrl+W as
   // the explicit "apply to every open pane" escape hatch (see isWrapAllLogsKey).
   const [paneWrap, setPaneWrap] = useState<Record<string, boolean>>({});
+  // Story 5.2: the global filter every pane is engaged with by default (Boundaries: "one
+  // global LogFilterSpec every pane is engaged with by default, and an optional per-pane
+  // LogFilterSpec"), the per-pane engagement flags ('g' opts a single pane out), and each
+  // pane's own filter ('f'). None of these are persisted (Never: "Persist any filter to
+  // settings.ts or disk — ephemeral UI state only").
+  const [globalFilter, setGlobalFilter] = useState<LogFilterSpec>(DEFAULT_LOG_FILTER);
+  const [paneFilterEngaged, setPaneFilterEngaged] = useState<Record<string, boolean>>({});
+  const [paneFilters, setPaneFilters] = useState<Record<string, LogFilterSpec>>({});
+  const [filterEditor, setFilterEditor] = useState<FilterEditorState | null>(null);
 
   const clampedEdtCursor = edtServices.length === 0 ? 0 : Math.min(edtCursor, edtServices.length - 1);
   const clampedOtherCursor = otherServices.length === 0 ? 0 : Math.min(otherCursor, otherServices.length - 1);
@@ -196,7 +252,10 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setSubFocus((current) => reindexPaneSubFocus(current, activePanes.length));
   }, [activePanes.length]);
 
-  const dialogOpen = logsFullscreenTarget !== null;
+  // Story 5.2: the filter editor is a modal too — every existing dialogOpen consumer
+  // (zoneInputCaptured, logsPaneGridArrowsActive) must treat it the same as fullscreen, since
+  // both capture the entire keystroke stream while open.
+  const dialogOpen = logsFullscreenTarget !== null || filterEditor !== null;
   useEffect(() => {
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
@@ -225,10 +284,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
     const pane = logsPanes[repoPath];
     // Scroll math (and the "at oldest line" history-fetch trigger below) must be computed
-    // against the *visible* (stdout/stderr-filtered) line count, not the pane's raw buffered
-    // `lines.length` — otherwise, with a stream toggled off, scroll position and the
-    // oldest-line trigger diverge from what's actually rendered (review fix).
-    const visibleLineCount = pane ? filterVisibleLines(pane.lines, visibility).length : 0;
+    // against the *visible* (stdout/stderr- and story-5.2-filtered) line count, not the
+    // pane's raw buffered `lines.length` — otherwise, with a stream toggled off or a filter
+    // narrowing what's shown, scroll position and the oldest-line trigger diverge from what's
+    // actually rendered (review fix, extended by story 5.2 to the new filter layer).
+    const engagedGlobal = isPaneEngagedInGlobalFilter(paneFilterEngaged, repoPath) ? globalFilter : null;
+    const ownFilter = paneFilters[repoPath] ?? null;
+    const visibleLineCount = pane ? applyLogFilters(filterVisibleLines(pane.lines, visibility), engagedGlobal, ownFilter).length : 0;
     const nextOffset = adjustScrollOffset(pane?.scrollOffset ?? 0, direction, visibleLineCount);
     setLogsPaneScrollOffset(repoPath, nextOffset);
     if (direction === 'up' && isAtOldestLine(nextOffset, visibleLineCount) && pane && !pane.noMoreHistory) {
@@ -236,11 +298,128 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     }
   }
 
+  // Story 5.2: opens the filter-editor modal — `/` (global, any Logs-zone focus) or `f`
+  // (pane, sub-focused grid pane / fullscreen only). Pre-fills the draft from whichever spec
+  // is already active for that scope, so re-opening an already-filtered pane/global scope
+  // shows what's currently applied rather than resetting it.
+  function openGlobalFilterEditor(): void {
+    setFilterEditor({
+      scope: 'global',
+      repoPath: null,
+      mode: globalFilter.mode,
+      query: globalFilter.query,
+      level: globalFilter.level,
+      error: null,
+      preOpen: globalFilter,
+    });
+  }
+  function openPaneFilterEditor(repoPath: string): void {
+    const existing = paneFilters[repoPath] ?? DEFAULT_LOG_FILTER;
+    setFilterEditor({ scope: 'pane', repoPath, mode: existing.mode, query: existing.query, level: existing.level, error: null, preOpen: existing });
+  }
+
+  // Story 5.2 (Design Notes): "compileLogFilter recomputes on every editor keystroke (not
+  // just submit) so the inline regex error appears/clears live". The draft itself always
+  // updates (so typed characters/level cycles are never lost); the actual applied
+  // globalFilter/paneFilters state only ever advances to a draft that compiles cleanly
+  // (Boundaries: "the previously-active filter ... stays in effect" on an invalid regex).
+  function applyFilterEditorDraft(next: FilterEditorState): void {
+    const spec: LogFilterSpec = { mode: next.mode, query: next.query, level: next.level };
+    const compiled = compileLogFilter(spec);
+    if (!compiled.ok) {
+      setFilterEditor({ ...next, error: compiled.error });
+      return;
+    }
+    if (next.scope === 'global') {
+      setGlobalFilter(spec);
+      setFilterEditor({ ...next, error: null });
+      return;
+    }
+    const repoPath = next.repoPath;
+    if (repoPath === null) {
+      // Review fix: `scope === 'pane' && repoPath === null` is currently unreachable
+      // (openPaneFilterEditor always sets repoPath) but the type still permits it — rather than
+      // silently discarding a compiled spec with no feedback, surface it as an editor error.
+      setFilterEditor({ ...next, error: 'no pane targeted' });
+      return;
+    }
+    // Review fix: committing a vacuous spec (deep-equal to DEFAULT_LOG_FILTER, e.g. after
+    // backspacing the query back to empty) as an explicit paneFilters[repoPath] entry left a
+    // no-op-but-present key — both the "pane filter: on" annotation and
+    // resolveFilterClearTarget's `hasOwnFilter` check key off entry *presence*, not content, so
+    // the pane kept reading as filtered even though its effective filter was a no-op. Passing
+    // `null` instead removes the key exactly like the explicit-clear path (Escape /
+    // resolveFilterClearTarget) already does.
+    setPaneFilters((current) => setPaneLogFilter(current, repoPath, isDefaultLogFilterSpec(spec) ? null : spec));
+    setFilterEditor({ ...next, error: null });
+  }
+
   useInput(
     (input, key) => {
+      // Story 5.2: the filter editor captures every keystroke while open, regardless of
+      // whether it was opened from the grid or fullscreen (Code Map: "extend useInput in
+      // both the grid ... and fullscreen ... branches for /`/`f`/`g`/Escape-clear + editor
+      // text capture") — checked first so it works from either view. Tab toggles text/regex
+      // mode; Ctrl+Left/Right cycle the level restriction (user-reported: bare Left/Right used
+      // to do this, but that's the same key a text cursor would use — Ctrl disambiguates it as
+      // a level change rather than caret movement).
+      //
+      // Review fix: TextInputLine (reused by LogFilterEditor) always renders "[Enter] confirm
+      // [Esc] cancel" while focused, but Escape and Enter used to be treated identically here
+      // — neither one actually reverted anything. Escape now restores the scope's pre-open
+      // spec (captured in filterEditor.preOpen) — a true cancel; Enter just closes the editor,
+      // keeping whatever is currently committed — a true confirm.
+      if (filterEditor !== null) {
+        if (key.escape) {
+          if (filterEditor.scope === 'global') {
+            setGlobalFilter(filterEditor.preOpen);
+          } else if (filterEditor.repoPath !== null) {
+            const repoPath = filterEditor.repoPath;
+            const preOpen = filterEditor.preOpen;
+            setPaneFilters((current) => setPaneLogFilter(current, repoPath, isDefaultLogFilterSpec(preOpen) ? null : preOpen));
+          }
+          setFilterEditor(null);
+          return;
+        }
+        if (key.return) {
+          setFilterEditor(null);
+          return;
+        }
+        if (key.tab) {
+          applyFilterEditorDraft({ ...filterEditor, mode: toggleFilterMode(filterEditor.mode) });
+          return;
+        }
+        if (key.ctrl && (key.leftArrow || key.rightArrow)) {
+          applyFilterEditorDraft({ ...filterEditor, level: cycleFilterLevel(filterEditor.level, key.rightArrow ? 'next' : 'previous') });
+          return;
+        }
+        if (key.backspace || key.delete) {
+          applyFilterEditorDraft({ ...filterEditor, query: filterEditor.query.slice(0, -1) });
+          return;
+        }
+        if (!key.ctrl && !key.meta && !key.upArrow && !key.downArrow && input.length > 0) {
+          applyFilterEditorDraft({ ...filterEditor, query: filterEditor.query + input });
+        }
+        return;
+      }
+
       if (logsFullscreenTarget !== null) {
         if (key.escape) {
           closeLogsFullscreen();
+          return;
+        }
+        // Story 5.2: `/`/`f`/`g` — same bare-key-scopes-to-one-pane idiom as `c`/`w` below,
+        // fullscreen's one pane standing in for "the sub-focused grid pane".
+        if (input === '/') {
+          openGlobalFilterEditor();
+          return;
+        }
+        if (input === 'f') {
+          openPaneFilterEditor(logsFullscreenTarget);
+          return;
+        }
+        if (input === 'g') {
+          setPaneFilterEngaged((current) => toggleGlobalFilterEngagement(current, logsFullscreenTarget));
           return;
         }
         const scrollDirection = resolveFullscreenScrollDirection(key);
@@ -273,6 +452,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         return;
       }
 
+      // Story 5.2 (Boundaries): "`/` (any Logs-zone focus) opens the editor for the global
+      // filter" — focus-independent, so it's checked ahead of the per-list dispatch below,
+      // mirroring how Tab is handled just above.
+      if (input === '/') {
+        openGlobalFilterEditor();
+        return;
+      }
+
       // "Apply to all open logs" — every currently-active pane (any list focus), never
       // reachable in fullscreen (that branch already returned above).
       if (isClearAllLogsKey(input, key)) {
@@ -290,6 +477,27 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       const toggle = resolveVisibilityToggleKey(input);
       if (toggle !== null) {
         setVisibility((current) => toggleVisibilityFlag(current, toggle));
+        return;
+      }
+
+      // Story 5.2 (Boundaries): "Escape, when no editor is open: if a pane is sub-focused in
+      // the grid ... clears that pane's own filter if set, else disengages it from the
+      // global filter; if no pane is sub-focused (list-focus), clears the global filter
+      // entirely." resolveFilterClearTarget is the pure resolver; this just dispatches its
+      // result. No prior Escape binding exists outside fullscreen (handled above), so this is
+      // the first and only Escape handling reached here.
+      if (key.escape) {
+        const focused = paneFocus === 'panes' ? activePanes[subFocus] : undefined;
+        const repoPath = focused?.path ?? null;
+        const hasOwnFilter = repoPath !== null && paneFilters[repoPath] !== undefined;
+        const target = resolveFilterClearTarget(paneFocus === 'panes', repoPath, hasOwnFilter);
+        if (target.scope === 'global') {
+          setGlobalFilter(DEFAULT_LOG_FILTER);
+        } else if (target.scope === 'pane-own') {
+          setPaneFilters((current) => setPaneLogFilter(current, target.repoPath, null));
+        } else {
+          setPaneFilterEngaged((current) => setPaneGlobalFilterEngagement(current, target.repoPath, false));
+        }
         return;
       }
 
@@ -384,6 +592,24 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
+      // Story 5.2 (Boundaries): "`f` (bare, same scope as `g`) opens a filter-editor modal
+      // for that pane's own filter" / "`g` (bare, sub-focused grid pane or fullscreen pane)
+      // toggles that one pane's engagement with the global filter" — same bare-key-scopes-
+      // to-one-pane idiom as `c`/`w` above.
+      if (input === 'f') {
+        const focused = activePanes[subFocus];
+        if (focused !== undefined) {
+          openPaneFilterEditor(focused.path);
+        }
+        return;
+      }
+      if (input === 'g') {
+        const focused = activePanes[subFocus];
+        if (focused !== undefined) {
+          setPaneFilterEngaged((current) => toggleGlobalFilterEngagement(current, focused.path));
+        }
+        return;
+      }
       if (key.return) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
@@ -398,12 +624,16 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       {logsFullscreenTarget !== null ? (
         <FullscreenPane
+          repoPath={logsFullscreenTarget}
           serviceName={logsFullscreenServiceName}
           pane={logsPanes[logsFullscreenTarget]}
           visibility={visibility}
           wrapLines={isPaneWrapped(paneWrap, logsFullscreenTarget)}
           visibleLines={fullscreenVisibleLines}
           contentWidth={fullscreenContentWidth}
+          globalFilter={globalFilter}
+          engaged={isPaneEngagedInGlobalFilter(paneFilterEngaged, logsFullscreenTarget)}
+          ownFilter={paneFilters[logsFullscreenTarget] ?? null}
         />
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
@@ -447,6 +677,10 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 <DimAnnotation text="[Ctrl+C] clear all panes" />
                 <DimAnnotation text="[w] wrap/truncate focused pane" />
                 <DimAnnotation text="[Ctrl+W] wrap/truncate all panes" />
+                <DimAnnotation text="[/] edit global filter" />
+                <DimAnnotation text="[f] edit focused pane's filter" />
+                <DimAnnotation text="[g] toggle focused pane's global filter" />
+                <DimAnnotation text="[Esc] clear filter (pane -> engagement -> global)" />
               </Box>
             </Box>
 
@@ -463,12 +697,18 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   visibility={visibility}
                   paneWrap={paneWrap}
                   subFocused={paneFocus === 'panes' ? subFocus : -1}
+                  globalFilter={globalFilter}
+                  paneFilterEngaged={paneFilterEngaged}
+                  paneFilters={paneFilters}
                 />
               )}
             </Box>
           </Box>
         </Box>
       )}
+      {filterEditor !== null ? (
+        <LogFilterEditor editor={filterEditor} serviceName={filterEditor.repoPath !== null ? (rows.find((row) => row.path === filterEditor.repoPath)?.service ?? null) : null} />
+      ) : null}
     </Box>
   );
 }
@@ -482,6 +722,9 @@ function LogsGrid({
   visibility,
   paneWrap,
   subFocused,
+  globalFilter,
+  paneFilterEngaged,
+  paneFilters,
 }: {
   panes: ServiceBranchDivergence[];
   logsPanes: Record<string, LogsPaneData>;
@@ -491,6 +734,9 @@ function LogsGrid({
   visibility: VisibilityFlags;
   paneWrap: Record<string, boolean>;
   subFocused: number;
+  globalFilter: LogFilterSpec;
+  paneFilterEngaged: Record<string, boolean>;
+  paneFilters: Record<string, LogFilterSpec>;
 }) {
   const cols = Math.max(layout.cols, 1);
   const rowsOfPanes: ServiceBranchDivergence[][] = [];
@@ -513,6 +759,9 @@ function LogsGrid({
                 visibleLines={visibleLines}
                 contentWidth={contentWidth}
                 focused={index === subFocused}
+                globalFilter={globalFilter}
+                engaged={isPaneEngagedInGlobalFilter(paneFilterEngaged, service.path)}
+                ownFilter={paneFilters[service.path] ?? null}
               />
             );
           })}
@@ -520,6 +769,16 @@ function LogsGrid({
       ))}
     </Box>
   );
+}
+
+// Boundaries: "A pane's effective filter is (engaged ? global : pass) AND (own ?? pass)" —
+// shared by LogsPaneView and FullscreenPane (both call applyLogFilters the same way, right
+// after filterVisibleLines, same layer 5.1's stdout/stderr toggle already lives on).
+function resolveEffectiveLines(pane: LogsPaneData | undefined, visibility: VisibilityFlags, globalFilter: LogFilterSpec, engaged: boolean, ownFilter: LogFilterSpec | null): LogLine[] {
+  if (!pane) {
+    return [];
+  }
+  return applyLogFilters(filterVisibleLines(pane.lines, visibility), engaged ? globalFilter : null, ownFilter);
 }
 
 function LogsPaneView({
@@ -530,6 +789,9 @@ function LogsPaneView({
   visibleLines,
   contentWidth,
   focused,
+  globalFilter,
+  engaged,
+  ownFilter,
 }: {
   service: ServiceBranchDivergence;
   pane: LogsPaneData | undefined;
@@ -538,17 +800,21 @@ function LogsPaneView({
   visibleLines: number;
   contentWidth: number;
   focused: boolean;
+  globalFilter: LogFilterSpec;
+  engaged: boolean;
+  ownFilter: LogFilterSpec | null;
 }) {
   const [contentRef, measuredSize] = useElementSize();
   const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
   const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
-  const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
+  const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
   const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
     computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
   );
-  // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
-  // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
-  // both stdout and stderr is misleadingly told the stream itself is empty (review fix).
+  // A pane with buffered lines that the current stdout/stderr/story-5.2 filters happen to
+  // hide entirely must read differently from "no lines have arrived yet" — otherwise a user
+  // who toggled off both stdout and stderr, or set an aggressive filter, is misleadingly told
+  // the stream itself is empty (review fix, story 5.1; extended to the new filter layer).
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   return (
     <Box
@@ -562,11 +828,19 @@ function LogsPaneView({
       borderColor={focused ? colors.accent : colors.border}
       paddingX={1}
     >
-      <Text bold={focused} color={focused ? colors.accent : colors.text} wrap="truncate-end">
+      {/* User-reported: always bold (not just when sub-focused) so a service name stands out
+          from its own log text at a glance, in a grid where several panes are visible at once. */}
+      <Text bold color={focused ? colors.accent : colors.text} wrap="truncate-end">
         {service.service}
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
+      {!engaged ? (
+        <DimAnnotation text="global filter: off" />
+      ) : !isDefaultLogFilterSpec(globalFilter) ? (
+        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
+      ) : null}
+      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
           <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
@@ -582,13 +856,18 @@ function LogsPaneView({
 }
 
 function FullscreenPane({
+  repoPath,
   serviceName,
   pane,
   visibility,
   wrapLines,
   visibleLines,
   contentWidth,
+  globalFilter,
+  engaged,
+  ownFilter,
 }: {
+  repoPath: string;
   // Captured directly at the point fullscreen was opened (store's logsFullscreenServiceName)
   // rather than re-derived via a live `rows.find(...)` lookup, which can miss (e.g. a
   // transient services-list load error while the preview is open) and silently fall back to a
@@ -599,17 +878,21 @@ function FullscreenPane({
   wrapLines: boolean;
   visibleLines: number;
   contentWidth: number;
+  globalFilter: LogFilterSpec;
+  engaged: boolean;
+  ownFilter: LogFilterSpec | null;
 }) {
   const [contentRef, measuredSize] = useElementSize();
   const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
   const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
-  const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
+  const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
   const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
     computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
   );
-  // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
-  // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
-  // both stdout and stderr is misleadingly told the stream itself is empty (review fix).
+  // A pane with buffered lines that the current stdout/stderr/story-5.2 filters happen to
+  // hide entirely must read differently from "no lines have arrived yet" — otherwise a user
+  // who toggled off both stdout and stderr, or set an aggressive filter, is misleadingly told
+  // the stream itself is empty (review fix, story 5.1; extended to the new filter layer).
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
@@ -618,6 +901,12 @@ function FullscreenPane({
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
+      {!engaged ? (
+        <DimAnnotation text="global filter: off" />
+      ) : !isDefaultLogFilterSpec(globalFilter) ? (
+        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
+      ) : null}
+      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
           <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
@@ -629,6 +918,24 @@ function FullscreenPane({
         ))}
       </Box>
       <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate" />
+      <DimAnnotation text="[/] global filter  [f] pane filter  [g] toggle global engagement" />
     </Box>
+  );
+}
+
+// Story 5.2: renders whichever scope's editor is open — one shared component/validation for
+// both `/` (global) and `f` (pane), per Boundaries ("Both editors share one component and
+// validation"). Purely presentational, mirroring ModalDialog's other call sites — all the
+// actual keystroke handling lives in LogsZone's own useInput (Code Map: never a
+// component-owned useInput here, same convention as BranchPicker/TextInputLine).
+function LogFilterEditor({ editor, serviceName }: { editor: FilterEditorState; serviceName: string | null }) {
+  const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
+  return (
+    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
+      <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused />
+      <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
+      {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
+      <DimAnnotation text="[Tab] text/regex  [Ctrl+←/→] level  [Enter/Esc] done" />
+    </ModalDialog>
   );
 }
