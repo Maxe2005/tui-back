@@ -151,7 +151,7 @@ export function shouldOpenCommand(input: string): boolean {
 }
 
 export function shouldQuit(input: string, _key: { escape?: boolean }, state: AppState): boolean {
-  return input === 'q' && !state.runInProgress;
+  return input === 'q' && !state.runInProgress && state.settings.general.quitShortcutEnabled;
 }
 
 export function AppShell({
