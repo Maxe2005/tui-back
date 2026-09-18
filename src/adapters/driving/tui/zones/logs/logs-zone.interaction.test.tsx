@@ -330,11 +330,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       // No own filter yet — open the pane's editor and type a query that compiles cleanly.
       await press(instance, stdin, 'f');
       await press(instance, stdin, 'boom');
-      expect(stdout.output).toContain('pane filter: on');
+      expect(stdout.output).toContain('pane filter: text "boom"');
 
       await pressEscape(instance, stdin);
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
-      expect(lastFrame).not.toContain('pane filter: on');
+      expect(lastFrame).not.toContain('pane filter:');
       expect(lastFrame).not.toContain('PANE LOG FILTER');
     } finally {
       instance.unmount();
@@ -355,11 +355,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
 
       await press(instance, stdin, 'f');
       await press(instance, stdin, 'boom');
-      expect(stdout.output).toContain('pane filter: on');
+      expect(stdout.output).toContain('pane filter: text "boom"');
 
       await press(instance, stdin, KEYS.enter);
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
-      expect(lastFrame).toContain('pane filter: on');
+      expect(lastFrame).toContain('pane filter: text "boom"');
       expect(lastFrame).not.toContain('PANE LOG FILTER');
     } finally {
       instance.unmount();
@@ -392,11 +392,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (review fix): the "pane filter: on" annotation and resolveFilterClearTarget's
+  // Story 5.2 (review fix): the "pane filter: ..." annotation and resolveFilterClearTarget's
   // hasOwnFilter check both key off entry *presence* in paneFilters, not content — committing a
   // vacuous draft (query backspaced to empty) must remove the entry, not leave a no-op-but-
   // present one behind.
-  it('backspacing a pane filter\'s query back to empty removes the "pane filter: on" annotation', async () => {
+  it('backspacing a pane filter\'s query back to empty removes the "pane filter: ..." annotation', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -408,7 +408,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       await press(instance, stdin, 'f');
       await press(instance, stdin, 'boom');
       await press(instance, stdin, KEYS.enter); // confirm, close the editor
-      expect(stdout.output).toContain('pane filter: on');
+      expect(stdout.output).toContain('pane filter: text "boom"');
 
       // Reopen the same pane's editor and backspace the query back to empty.
       await press(instance, stdin, 'f');
@@ -419,7 +419,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       await press(instance, stdin, KEYS.enter); // confirm the now-empty draft, close
 
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
-      expect(lastFrame).not.toContain('pane filter: on');
+      expect(lastFrame).not.toContain('pane filter:');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -468,6 +468,10 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       expect(lastFrame).toContain('banana line');
       expect(lastFrame).not.toContain('apple line');
       expect(lastFrame).not.toContain('cherry line');
+      // User-reported: an engaged pane with an active global filter shows what that filter
+      // actually is, not just a boolean — so a pane's own annotation and the editor draft
+      // never disagree about what's being applied.
+      expect(lastFrame).toContain('global filter: text "banana"');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

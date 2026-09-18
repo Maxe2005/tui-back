@@ -14,6 +14,7 @@ import {
   cycleLogsPaneFocus,
   detectLogLevel,
   filterVisibleLines,
+  formatLogFilterSpec,
   formatLogLine,
   isAtOldestLine,
   isClearAllLogsKey,
@@ -554,6 +555,22 @@ describe('cycleFilterLevel / toggleFilterMode', () => {
   it('toggleFilterMode flips text <-> regex', () => {
     expect(toggleFilterMode('text')).toBe('regex');
     expect(toggleFilterMode('regex')).toBe('text');
+  });
+});
+
+describe('formatLogFilterSpec', () => {
+  it('renders mode, a quoted query, and no level suffix by default', () => {
+    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: null })).toBe('text "boom"');
+    expect(formatLogFilterSpec({ mode: 'regex', query: '^ERR', level: null })).toBe('regex "^ERR"');
+  });
+
+  it('renders an empty query as "(any)"', () => {
+    expect(formatLogFilterSpec({ mode: 'text', query: '', level: null })).toBe('text (any)');
+  });
+
+  it('appends the level restriction, when set, as a trailing bracketed suffix', () => {
+    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: 'ERROR' })).toBe('text "boom" [ERROR]');
+    expect(formatLogFilterSpec({ mode: 'text', query: '', level: 'WARN' })).toBe('text (any) [WARN]');
   });
 });
 

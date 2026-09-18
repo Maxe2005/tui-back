@@ -33,6 +33,7 @@ import {
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
   filterVisibleLines,
+  formatLogFilterSpec,
   formatLogLine,
   isAtOldestLine,
   isClearAllLogsKey,
@@ -830,8 +831,12 @@ function LogsPaneView({
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
-      {!engaged ? <DimAnnotation text="global filter: off" /> : null}
-      {ownFilter !== null ? <DimAnnotation text="pane filter: on" /> : null}
+      {!engaged ? (
+        <DimAnnotation text="global filter: off" />
+      ) : !isDefaultLogFilterSpec(globalFilter) ? (
+        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
+      ) : null}
+      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
           <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
@@ -892,8 +897,12 @@ function FullscreenPane({
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
-      {!engaged ? <DimAnnotation text="global filter: off" /> : null}
-      {ownFilter !== null ? <DimAnnotation text="pane filter: on" /> : null}
+      {!engaged ? (
+        <DimAnnotation text="global filter: off" />
+      ) : !isDefaultLogFilterSpec(globalFilter) ? (
+        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
+      ) : null}
+      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
           <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>

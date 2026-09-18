@@ -412,6 +412,16 @@ export function toggleFilterMode(mode: LogFilterMode): LogFilterMode {
   return mode === 'text' ? 'regex' : 'text';
 }
 
+// A short human-readable rendering of a filter spec, e.g. `text "boom"`, `regex (any) [ERROR]`
+// — used on the pane/fullscreen annotations so a user can tell *what* is filtering a pane
+// without reopening its editor (user-reported: the boolean "pane filter: on" annotation alone
+// didn't say what the filter actually was).
+export function formatLogFilterSpec(spec: LogFilterSpec): string {
+  const queryPart = spec.query === '' ? '(any)' : `"${spec.query}"`;
+  const levelPart = spec.level !== null ? ` [${spec.level}]` : '';
+  return `${spec.mode} ${queryPart}${levelPart}`;
+}
+
 // Boundaries: "Escape, when no editor is open: if a pane is sub-focused in the grid (not
 // fullscreen), clears that pane's own filter if set, else disengages it from the global
 // filter; if no pane is sub-focused (list-focus), clears the global filter entirely." Pure
