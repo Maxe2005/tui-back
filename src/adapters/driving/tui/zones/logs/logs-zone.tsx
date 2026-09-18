@@ -5,8 +5,8 @@
 // fullscreen) checked first, every keystroke decision delegated to a pure function from
 // logs-zone.logic.ts (or reused as-is from edts-zone.logic.ts where the logic is generic list
 // navigation, not EDT-specific — see that file's own header).
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Box, measureElement, Text, useInput, useWindowSize, type DOMElement } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -58,6 +58,28 @@ const PANE_CHROME_ROWS = 3;
 // paddingX={1} (1 col each side) — needed to know how many terminal rows a wrapped line will
 // actually take (see computeLineRowCount).
 const GRID_PANE_CHROME_COLS = 4;
+
+// User-reported review fix: CHROME_ROWS/PANE_CHROME_ROWS/GRID_PANE_CHROME_COLS above are only
+// ever rough guesses (their own comments say so) — real chrome varies per pane (an optional
+// streamError or "no more history" line adds a row; Yoga's flex-grow rounding hands some grid
+// rows one more terminal row than a plain `floor(height / rows)` division would). Guessing wrong
+// used to leave a permanent gap at the bottom of every pane, worst in wrap mode (its per-line
+// row-cost estimate in computeLineRowCount compounds the same guesswork). `useElementSize`
+// measures the pane's own content box for real, post-render, via Ink's `measureElement` — the
+// estimate above now only seeds the very first paint (before Yoga has computed a layout to
+// measure), and every commit after that self-corrects to the pane's true row/column budget.
+function useElementSize(): readonly [{ current: DOMElement | null }, { width: number; height: number } | null] {
+  const ref = useRef<DOMElement | null>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!ref.current) {
+      return;
+    }
+    const { width, height } = measureElement(ref.current);
+    setSize((current) => (current !== null && current.width === width && current.height === height ? current : { width, height }));
+  });
+  return [ref, size] as const;
+}
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const services = useStore((state) => state.edtsBranches);
@@ -469,9 +491,12 @@ function LogsPaneView({
   contentWidth: number;
   focused: boolean;
 }) {
+  const [contentRef, measuredSize] = useElementSize();
+  const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
+  const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
   const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, visibleLines, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), contentWidth, visibility.wrapLines),
+  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
+    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, visibility.wrapLines),
   );
   // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
   // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
@@ -494,14 +519,16 @@ function LogsPaneView({
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
-      {windowLines.length === 0 && !pane?.streamError ? (
-        <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
-      ) : null}
-      {windowLines.map((line, index) => (
-        <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
-          {formatLogLine(line, visibility.showTimestamps)}
-        </Text>
-      ))}
+      <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
+        {windowLines.length === 0 && !pane?.streamError ? (
+          <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
+        ) : null}
+        {windowLines.map((line, index) => (
+          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
+            {formatLogLine(line, visibility.showTimestamps)}
+          </Text>
+        ))}
+      </Box>
     </Box>
   );
 }
@@ -523,9 +550,12 @@ function FullscreenPane({
   visibleLines: number;
   contentWidth: number;
 }) {
+  const [contentRef, measuredSize] = useElementSize();
+  const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
+  const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
   const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, visibleLines, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), contentWidth, visibility.wrapLines),
+  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
+    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, visibility.wrapLines),
   );
   // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
   // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
@@ -538,14 +568,16 @@ function FullscreenPane({
       </Text>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
-      {windowLines.length === 0 && !pane?.streamError ? (
-        <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
-      ) : null}
-      {windowLines.map((line, index) => (
-        <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
-          {formatLogLine(line, visibility.showTimestamps)}
-        </Text>
-      ))}
+      <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
+        {windowLines.length === 0 && !pane?.streamError ? (
+          <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
+        ) : null}
+        {windowLines.map((line, index) => (
+          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
+            {formatLogLine(line, visibility.showTimestamps)}
+          </Text>
+        ))}
+      </Box>
       <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate" />
     </Box>
   );
