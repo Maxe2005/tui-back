@@ -704,7 +704,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           </Box>
         </Box>
       )}
-      {filterEditor !== null ? <LogFilterEditor editor={filterEditor} /> : null}
+      {filterEditor !== null ? (
+        <LogFilterEditor editor={filterEditor} serviceName={filterEditor.repoPath !== null ? (rows.find((row) => row.path === filterEditor.repoPath)?.service ?? null) : null} />
+      ) : null}
     </Box>
   );
 }
@@ -924,8 +926,8 @@ function FullscreenPane({
 // validation"). Purely presentational, mirroring ModalDialog's other call sites — all the
 // actual keystroke handling lives in LogsZone's own useInput (Code Map: never a
 // component-owned useInput here, same convention as BranchPicker/TextInputLine).
-function LogFilterEditor({ editor }: { editor: FilterEditorState }) {
-  const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : 'PANE LOG FILTER';
+function LogFilterEditor({ editor, serviceName }: { editor: FilterEditorState; serviceName: string | null }) {
+  const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
   return (
     <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
       <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused />

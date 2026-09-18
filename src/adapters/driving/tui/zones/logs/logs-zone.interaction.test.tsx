@@ -197,6 +197,9 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
 
       await press(instance, stdin, 'f');
       expect(stdout.output).toContain('PANE LOG FILTER');
+      // User-reported: the pane editor's title names which service it's editing, so it's
+      // never ambiguous which pane a "PANE LOG FILTER" popup belongs to.
+      expect(stdout.output).toContain('PANE LOG FILTER — api-gateway');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
