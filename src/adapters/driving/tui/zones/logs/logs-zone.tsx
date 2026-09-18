@@ -28,7 +28,10 @@ import {
   filterVisibleLines,
   formatLogLine,
   isAtOldestLine,
+  isClearAllLogsKey,
+  isPaneWrapped,
   isSelectAllKey,
+  isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
   resolveFullscreenScrollDirection,
@@ -36,6 +39,8 @@ import {
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
   sliceVisibleWindow,
+  toggleAllPanesWrapFlag,
+  togglePaneWrapFlag,
   toggleVisibilityFlag,
   type GridLayout,
   type LogsPaneFocus,
@@ -131,6 +136,10 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [otherCursor, setOtherCursor] = useState(0);
   const [subFocus, setSubFocus] = useState(0);
   const [visibility, setVisibility] = useState<VisibilityFlags>(DEFAULT_VISIBILITY_FLAGS);
+  // User-reported: wrap/truncate ('w') used to be one flag shared by every pane. Per-pane now
+  // (keyed by repoPath) so 'w' can target just the sub-focused/fullscreen pane, with Ctrl+W as
+  // the explicit "apply to every open pane" escape hatch (see isWrapAllLogsKey).
+  const [paneWrap, setPaneWrap] = useState<Record<string, boolean>>({});
 
   const clampedEdtCursor = edtServices.length === 0 ? 0 : Math.min(edtCursor, edtServices.length - 1);
   const clampedOtherCursor = otherServices.length === 0 ? 0 : Math.min(otherCursor, otherServices.length - 1);
@@ -239,8 +248,17 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           handlePaneScroll(logsFullscreenTarget, scrollDirection);
           return;
         }
+        // Ctrl+C/Ctrl+W ("apply to all open logs") are deliberately no-ops here — fullscreen
+        // has only the one pane, and the bare key below already covers it (user-reported).
+        if (key.ctrl && (input === 'c' || input === 'w')) {
+          return;
+        }
         if (input === 'c') {
           clearLogsPane(logsFullscreenTarget);
+          return;
+        }
+        if (input === 'w') {
+          setPaneWrap((current) => togglePaneWrapFlag(current, logsFullscreenTarget));
           return;
         }
         const toggle = resolveVisibilityToggleKey(input);
@@ -252,6 +270,20 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
 
       if (key.tab) {
         setPaneFocus((current) => cycleLogsPaneFocus(current));
+        return;
+      }
+
+      // "Apply to all open logs" — every currently-active pane (any list focus), never
+      // reachable in fullscreen (that branch already returned above).
+      if (isClearAllLogsKey(input, key)) {
+        for (const pane of activePanes) {
+          clearLogsPane(pane.path);
+        }
+        return;
+      }
+      if (isWrapAllLogsKey(input, key)) {
+        const paths = activePanes.map((pane) => pane.path);
+        setPaneWrap((current) => toggleAllPanesWrapFlag(current, paths));
         return;
       }
 
@@ -345,6 +377,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
+      if (input === 'w') {
+        const focused = activePanes[subFocus];
+        if (focused !== undefined) {
+          setPaneWrap((current) => togglePaneWrapFlag(current, focused.path));
+        }
+        return;
+      }
       if (key.return) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
@@ -362,6 +401,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           serviceName={logsFullscreenServiceName}
           pane={logsPanes[logsFullscreenTarget]}
           visibility={visibility}
+          wrapLines={isPaneWrapped(paneWrap, logsFullscreenTarget)}
           visibleLines={fullscreenVisibleLines}
           contentWidth={fullscreenContentWidth}
         />
@@ -402,9 +442,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 <DimAnnotation text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`} />
                 <DimAnnotation text={`[o] stdout ${visibility.showStdout ? 'on' : 'off'}`} />
                 <DimAnnotation text={`[p] stderr ${visibility.showStderr ? 'on' : 'off'}`} />
-                <DimAnnotation text={`[w] ${visibility.wrapLines ? 'wrap' : 'truncate'}`} />
                 <DimAnnotation text="[Ctrl+↑/↓] scroll pane" />
                 <DimAnnotation text="[c] clear focused pane" />
+                <DimAnnotation text="[Ctrl+C] clear all panes" />
+                <DimAnnotation text="[w] wrap/truncate focused pane" />
+                <DimAnnotation text="[Ctrl+W] wrap/truncate all panes" />
               </Box>
             </Box>
 
@@ -419,6 +461,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   visibleLines={paneVisibleLines}
                   contentWidth={paneContentWidth}
                   visibility={visibility}
+                  paneWrap={paneWrap}
                   subFocused={paneFocus === 'panes' ? subFocus : -1}
                 />
               )}
@@ -437,6 +480,7 @@ function LogsGrid({
   visibleLines,
   contentWidth,
   visibility,
+  paneWrap,
   subFocused,
 }: {
   panes: ServiceBranchDivergence[];
@@ -445,6 +489,7 @@ function LogsGrid({
   visibleLines: number;
   contentWidth: number;
   visibility: VisibilityFlags;
+  paneWrap: Record<string, boolean>;
   subFocused: number;
 }) {
   const cols = Math.max(layout.cols, 1);
@@ -464,6 +509,7 @@ function LogsGrid({
                 service={service}
                 pane={logsPanes[service.path]}
                 visibility={visibility}
+                wrapLines={isPaneWrapped(paneWrap, service.path)}
                 visibleLines={visibleLines}
                 contentWidth={contentWidth}
                 focused={index === subFocused}
@@ -480,6 +526,7 @@ function LogsPaneView({
   service,
   pane,
   visibility,
+  wrapLines,
   visibleLines,
   contentWidth,
   focused,
@@ -487,6 +534,7 @@ function LogsPaneView({
   service: ServiceBranchDivergence;
   pane: LogsPaneData | undefined;
   visibility: VisibilityFlags;
+  wrapLines: boolean;
   visibleLines: number;
   contentWidth: number;
   focused: boolean;
@@ -496,7 +544,7 @@ function LogsPaneView({
   const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
   const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
   const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, visibility.wrapLines),
+    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
   );
   // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
   // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
@@ -524,7 +572,7 @@ function LogsPaneView({
           <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
         ) : null}
         {windowLines.map((line, index) => (
-          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
+          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
             {formatLogLine(line, visibility.showTimestamps)}
           </Text>
         ))}
@@ -537,6 +585,7 @@ function FullscreenPane({
   serviceName,
   pane,
   visibility,
+  wrapLines,
   visibleLines,
   contentWidth,
 }: {
@@ -547,6 +596,7 @@ function FullscreenPane({
   serviceName: string | null;
   pane: LogsPaneData | undefined;
   visibility: VisibilityFlags;
+  wrapLines: boolean;
   visibleLines: number;
   contentWidth: number;
 }) {
@@ -555,7 +605,7 @@ function FullscreenPane({
   const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
   const lines = pane ? filterVisibleLines(pane.lines, visibility) : [];
   const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, visibility.wrapLines),
+    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
   );
   // A pane with buffered lines that the current stdout/stderr filters happen to hide entirely
   // must read differently from "no lines have arrived yet" — otherwise a user who toggled off
@@ -573,7 +623,7 @@ function FullscreenPane({
           <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
         ) : null}
         {windowLines.map((line, index) => (
-          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={visibility.wrapLines ? 'wrap' : 'truncate-end'}>
+          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
             {formatLogLine(line, visibility.showTimestamps)}
           </Text>
         ))}

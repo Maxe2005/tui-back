@@ -160,7 +160,12 @@ process.on("SIGTERM", () => {
 
 try {
   render(createElement(AppShell, { useStore: store, onQuit }), {
-    exitOnCtrlC: true,
+    // User-reported (story 5.1 follow-up): Ink's own exitOnCtrlC swallows every Ctrl+C
+    // keypress before any zone's useInput ever sees it (ink/hooks/use-input.js: "If app is
+    // supposed to exit on Ctrl+C, skip input listeners") — incompatible with the Logs zone's
+    // Ctrl+C "clear every open pane" shortcut. `q` (app-shell.tsx's shouldQuit) is the app's
+    // real quit key; Ctrl+C is no longer a second one.
+    exitOnCtrlC: false,
     alternateScreen: true,
   });
 } catch (error) {
