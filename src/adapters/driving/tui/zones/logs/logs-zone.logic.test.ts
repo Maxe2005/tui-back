@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
+  DEFAULT_PANE_WRAP,
   DEFAULT_VISIBILITY_FLAGS,
   adjustScrollOffset,
   computeGridLayout,
@@ -9,7 +10,10 @@ import {
   filterVisibleLines,
   formatLogLine,
   isAtOldestLine,
+  isClearAllLogsKey,
+  isPaneWrapped,
   isSelectAllKey,
+  isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
   resolveFullscreenScrollDirection,
@@ -18,6 +22,8 @@ import {
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
   sliceVisibleWindow,
+  toggleAllPanesWrapFlag,
+  togglePaneWrapFlag,
   toggleVisibilityFlag,
 } from './logs-zone.logic.js';
 
@@ -206,27 +212,23 @@ describe('resolveSelectAllToggle', () => {
 });
 
 describe('resolveVisibilityToggleKey / toggleVisibilityFlag', () => {
-  it('maps t/o/p/w to their own toggle, and anything else (including the old "e" binding) to null', () => {
+  it('maps t/o/p to their own toggle, and anything else (including the old "e" binding and "w", now per-pane) to null', () => {
     expect(resolveVisibilityToggleKey('t')).toBe('timestamp');
     expect(resolveVisibilityToggleKey('o')).toBe('stdout');
     expect(resolveVisibilityToggleKey('p')).toBe('stderr');
-    expect(resolveVisibilityToggleKey('w')).toBe('wrap');
     // 'e' was freed up (review fix) — it collided with the Edts zone's own tab mnemonic.
     expect(resolveVisibilityToggleKey('e')).toBeNull();
+    // 'w' moved to per-pane wrap state (togglePaneWrapFlag) — no longer a shared flag.
+    expect(resolveVisibilityToggleKey('w')).toBeNull();
     expect(resolveVisibilityToggleKey('x')).toBeNull();
   });
 
   it('toggles only the targeted flag, independently of the others', () => {
     const flipped = toggleVisibilityFlag(DEFAULT_VISIBILITY_FLAGS, 'stdout');
-    expect(flipped).toEqual({ showTimestamps: true, showStdout: false, showStderr: true, wrapLines: false });
+    expect(flipped).toEqual({ showTimestamps: true, showStdout: false, showStderr: true });
 
     const flippedAgain = toggleVisibilityFlag(flipped, 'stdout');
     expect(flippedAgain).toEqual(DEFAULT_VISIBILITY_FLAGS);
-  });
-
-  it('toggles wrapLines independently of the show* flags', () => {
-    const flipped = toggleVisibilityFlag(DEFAULT_VISIBILITY_FLAGS, 'wrap');
-    expect(flipped).toEqual({ showTimestamps: true, showStdout: true, showStderr: true, wrapLines: true });
   });
 });
 
@@ -237,15 +239,54 @@ describe('filterVisibleLines', () => {
   ];
 
   it('drops stdout lines when showStdout is false', () => {
-    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: false, showStderr: true, wrapLines: false })).toEqual([lines[1]]);
+    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: false, showStderr: true })).toEqual([lines[1]]);
   });
 
   it('drops stderr lines when showStderr is false', () => {
-    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: true, showStderr: false, wrapLines: false })).toEqual([lines[0]]);
+    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: true, showStderr: false })).toEqual([lines[0]]);
   });
 
   it('keeps everything when both are shown', () => {
     expect(filterVisibleLines(lines, DEFAULT_VISIBILITY_FLAGS)).toEqual(lines);
+  });
+});
+
+describe('isClearAllLogsKey / isWrapAllLogsKey', () => {
+  it('is true for Ctrl+C / Ctrl+W, case-insensitively', () => {
+    expect(isClearAllLogsKey('c', { ctrl: true })).toBe(true);
+    expect(isClearAllLogsKey('C', { ctrl: true })).toBe(true);
+    expect(isWrapAllLogsKey('w', { ctrl: true })).toBe(true);
+    expect(isWrapAllLogsKey('W', { ctrl: true })).toBe(true);
+  });
+
+  it('is false without ctrl, or for a different letter', () => {
+    expect(isClearAllLogsKey('c', {})).toBe(false);
+    expect(isClearAllLogsKey('w', { ctrl: true })).toBe(false);
+    expect(isWrapAllLogsKey('w', {})).toBe(false);
+    expect(isWrapAllLogsKey('c', { ctrl: true })).toBe(false);
+  });
+});
+
+describe('isPaneWrapped / togglePaneWrapFlag / toggleAllPanesWrapFlag', () => {
+  it('defaults an untouched pane (or a null repoPath) to DEFAULT_PANE_WRAP (truncate)', () => {
+    expect(DEFAULT_PANE_WRAP).toBe(false);
+    expect(isPaneWrapped({}, '/repo/a')).toBe(false);
+    expect(isPaneWrapped({}, null)).toBe(false);
+  });
+
+  it('togglePaneWrapFlag flips only the targeted repoPath', () => {
+    const flipped = togglePaneWrapFlag({}, '/repo/a');
+    expect(flipped).toEqual({ '/repo/a': true });
+    expect(isPaneWrapped(flipped, '/repo/b')).toBe(false);
+
+    const flippedBack = togglePaneWrapFlag(flipped, '/repo/a');
+    expect(flippedBack).toEqual({ '/repo/a': false });
+  });
+
+  it('toggleAllPanesWrapFlag flips every given repoPath independently of its current state', () => {
+    const current = { '/repo/a': true, '/repo/b': false };
+    const next = toggleAllPanesWrapFlag(current, ['/repo/a', '/repo/b', '/repo/c']);
+    expect(next).toEqual({ '/repo/a': false, '/repo/b': true, '/repo/c': true });
   });
 });
 

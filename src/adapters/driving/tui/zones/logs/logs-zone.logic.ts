@@ -193,15 +193,35 @@ export function resolveSelectAllToggle(allPaths: readonly string[], selected: re
   return isAllSelected ? 'deselect-all' : 'select-all';
 }
 
-// Boundaries: "the zone can toggle timestamp/stdout/stderr visibility, and log-line
-// wrap/truncate, independently (t/o/p/w) without reconnecting the stream" — a pure display
-// filter over the already-buffered lines, never touching the subscription itself.
+// User-reported: 'c'/'w' (clear/wrap) previously applied globally — clearing or re-wrapping
+// every open pane at once, even ones the user wasn't looking at. Ctrl+C/Ctrl+W mirror
+// isSelectAllKey's own Ctrl+letter shape to apply the same action to every active pane at
+// once, on demand, while the bare key stays scoped to whichever single pane is sub-focused
+// (or fullscreen). Requires ctrl for the same reason isSelectAllKey does: unambiguous,
+// intentional "do this everywhere" gesture distinct from the single-pane key.
+type LogsCtrlKey = { ctrl?: boolean };
+
+export function isClearAllLogsKey(input: string, key: LogsCtrlKey): boolean {
+  return key.ctrl === true && input.toLowerCase() === 'c';
+}
+
+export function isWrapAllLogsKey(input: string, key: LogsCtrlKey): boolean {
+  return key.ctrl === true && input.toLowerCase() === 'w';
+}
+
+// Boundaries: "the zone can toggle timestamp/stdout/stderr visibility ... independently (t/o/p)
+// without reconnecting the stream" — a pure display filter over the already-buffered lines,
+// never touching the subscription itself.
 // `stderr` was originally bound to 'e' — changed to 'p' (review fix) since 'e' collides with
 // the Edts zone's own tab mnemonic (zones.ts): pressing it while in the Logs zone toggled
 // stderr here *and* switched AppShell's active zone to Edts on the same keypress, for the
 // same "every mounted useInput hook gets the same event" reason documented on
 // logsPaneGridArrowsActive in navigation-slice.ts.
-export type VisibilityToggle = 'timestamp' | 'stdout' | 'stderr' | 'wrap';
+//
+// `wrap` (the 'w' key) used to live here too, toggling a single shared flag applied to every
+// pane. User-reported: wrap is now per-pane (see togglePaneWrapFlag/toggleAllPanesWrapFlag
+// below) since a single shared flag couldn't express "wrap just the pane I'm looking at".
+export type VisibilityToggle = 'timestamp' | 'stdout' | 'stderr';
 
 export function resolveVisibilityToggleKey(input: string): VisibilityToggle | null {
   if (input === 't') {
@@ -213,13 +233,10 @@ export function resolveVisibilityToggleKey(input: string): VisibilityToggle | nu
   if (input === 'p') {
     return 'stderr';
   }
-  if (input === 'w') {
-    return 'wrap';
-  }
   return null;
 }
 
-export type VisibilityFlags = { showTimestamps: boolean; showStdout: boolean; showStderr: boolean; wrapLines: boolean };
+export type VisibilityFlags = { showTimestamps: boolean; showStdout: boolean; showStderr: boolean };
 
 export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityToggle): VisibilityFlags {
   if (toggle === 'timestamp') {
@@ -228,17 +245,31 @@ export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityT
   if (toggle === 'stdout') {
     return { ...flags, showStdout: !flags.showStdout };
   }
-  if (toggle === 'stderr') {
-    return { ...flags, showStderr: !flags.showStderr };
-  }
-  return { ...flags, wrapLines: !flags.wrapLines };
+  return { ...flags, showStderr: !flags.showStderr };
 }
 
-// wrapLines defaults false — every pane (grid and fullscreen alike) truncates long lines
-// with an ellipsis until the user opts into wrapping, matching the grid view's existing,
-// deliberate `truncate-end` choice (fullscreen previously wrapped by default only because no
-// `wrap` prop was ever passed there, not because of any documented Design Notes decision).
-export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true, wrapLines: false };
+export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true };
+
+// Per-pane wrap/truncate state, keyed by repoPath — a pane absent from the map defaults to
+// truncate (matching the grid view's existing, deliberate `truncate-end` choice; fullscreen
+// previously wrapped by default only because no `wrap` prop was ever passed there, not
+// because of any documented Design Notes decision).
+export const DEFAULT_PANE_WRAP = false;
+
+export function isPaneWrapped(wrapByPath: Readonly<Record<string, boolean>>, repoPath: string | null): boolean {
+  if (repoPath === null) {
+    return DEFAULT_PANE_WRAP;
+  }
+  return wrapByPath[repoPath] ?? DEFAULT_PANE_WRAP;
+}
+
+export function togglePaneWrapFlag(wrapByPath: Readonly<Record<string, boolean>>, repoPath: string): Record<string, boolean> {
+  return { ...wrapByPath, [repoPath]: !isPaneWrapped(wrapByPath, repoPath) };
+}
+
+export function toggleAllPanesWrapFlag(wrapByPath: Readonly<Record<string, boolean>>, repoPaths: readonly string[]): Record<string, boolean> {
+  return repoPaths.reduce((next, repoPath) => togglePaneWrapFlag(next, repoPath), wrapByPath as Record<string, boolean>);
+}
 
 export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityFlags): LogLine[] {
   return lines.filter((line) => (line.stream === 'stdout' ? flags.showStdout : flags.showStderr));
