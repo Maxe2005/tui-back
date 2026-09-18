@@ -1635,6 +1635,42 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       await instance.waitUntilExit();
     }
   });
+
+  // Story 5.2 (Code Map): "app-shell.tsx:352 -- guard shouldOpenFilter dispatch with
+  // activeZone !== 'logs', same precedent as logsPaneGridArrowsActive" — the Logs zone now
+  // owns `/` itself (its own global-filter editor), so this app-wide stub must go inert while
+  // it's the active zone, the same double-dispatch hazard already solved for arrow keys.
+  it('the global "/" filter stub opens normally outside the Logs zone', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).not.toBe('logs');
+
+      await press(instance, stdin, '/');
+
+      expect(stdout.output).toContain('Filter input — wired in Epic 2+');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the global "/" filter stub stays inert while the Logs zone is active — it owns "/" itself', async () => {
+    const store = createAppStore();
+    store.setState({ activeZone: 'logs' });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+
+      expect(stdout.output).not.toContain('Filter input — wired in Epic 2+');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });
 
 describe('AppShell tabVisibility load activation (story 2.13 review fix)', () => {

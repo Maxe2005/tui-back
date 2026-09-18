@@ -2,7 +2,7 @@
 title: 'Filter the Aggregated Stream'
 type: 'feature'
 created: '2026-09-18'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 context: []
 baseline_commit: 'aa40c8edaec61b934399526f05acf2515be54b47'
@@ -58,11 +58,11 @@ baseline_commit: 'aa40c8edaec61b934399526f05acf2515be54b47'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `logs-zone.logic.ts` -- add filter types, `compileLogFilter`, `applyLogFilters`, engagement helpers, `resolveFilterClearTarget` -- pure, unit-testable core mirroring 5.1's wrap/visibility helper shape
-- [ ] `logs-zone.tsx` -- wire local filter state, extend `useInput` (grid + fullscreen), extend `dialogOpen`, compose filtering into both pane renderers, render `LogFilterEditor`, extend hints -- delivers the two-tier filter UI on 5.1's existing display-filter plumbing
-- [ ] `app-shell.tsx` -- guard `shouldOpenFilter` with `activeZone !== 'logs'` -- prevents the app-wide filter stub firing on the same `/` keystroke
-- [ ] `logs-zone.logic.test.ts` -- cover valid/invalid regex, level heuristic, AND-combination, engagement bypass, all three Escape targets
-- [ ] `logs-zone.test.tsx` / `logs-zone.interaction.test.tsx` -- `/`, `f`, `g` scoping and inline-error rendering
+- [x] `logs-zone.logic.ts` -- add filter types, `compileLogFilter`, `applyLogFilters`, engagement helpers, `resolveFilterClearTarget` -- pure, unit-testable core mirroring 5.1's wrap/visibility helper shape
+- [x] `logs-zone.tsx` -- wire local filter state, extend `useInput` (grid + fullscreen), extend `dialogOpen`, compose filtering into both pane renderers, render `LogFilterEditor`, extend hints -- delivers the two-tier filter UI on 5.1's existing display-filter plumbing
+- [x] `app-shell.tsx` -- guard `shouldOpenFilter` with `activeZone !== 'logs'` -- prevents the app-wide filter stub firing on the same `/` keystroke
+- [x] `logs-zone.logic.test.ts` -- cover valid/invalid regex, level heuristic, AND-combination, engagement bypass, all three Escape targets
+- [x] `logs-zone.test.tsx` / `logs-zone.interaction.test.tsx` -- `/`, `f`, `g` scoping and inline-error rendering
 
 **Acceptance Criteria:**
 - Given a live stream and an active filter (either scope), when new lines arrive, then the underlying subscription is untouched — filtering never resubscribes.
@@ -74,4 +74,54 @@ baseline_commit: 'aa40c8edaec61b934399526f05acf2515be54b47'
 Level heuristic excludes lines with no detected level once any level restriction is active — a deliberate trade-off (many container logs carry no level tag) accepted because the alternative (showing untagged lines regardless) would make an "errors only" filter silently leak unrelated noise back in.
 
 `compileLogFilter` recomputes on every editor keystroke (not just submit) so the inline regex error appears/clears live, matching `branch-picker.tsx`'s live-query-match feel rather than a submit-then-validate cycle.
+
+Escape while the editor is open reverts to the spec captured at open time (`FilterEditorState.preOpen`), matching the reused `TextInputLine` widget's own "[Esc] cancel" hint; Enter just closes the editor, keeping whatever last compiled cleanly.
+
+## Suggested Review Order
+
+**Filter core (types + compile + compose)**
+
+- Start here — the two-tier spec shape and the pure predicate every layer above builds on.
+  [`logs-zone.logic.ts:283`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L283)
+
+- Regex/text/level compile, catching a bad pattern instead of throwing.
+  [`logs-zone.logic.ts:312`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L312)
+
+- `(engaged ? global : pass) AND (own ?? pass)` composition, layered on 5.1's stdout/stderr filter.
+  [`logs-zone.logic.ts:344`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L344)
+
+- Escape's three-way scope resolver (pane-own / pane-disengage / global).
+  [`logs-zone.logic.ts:424`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L424)
+
+**Editor draft lifecycle (open/commit/cancel)**
+
+- Draft state shape, including the review-fix `preOpen` field that makes Escape a true cancel.
+  [`logs-zone.tsx:99`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L99)
+
+- Commits a draft only once it compiles cleanly; normalizes a vacuous spec to `null` (review fix) instead of leaving a no-op entry in `paneFilters`.
+  [`logs-zone.tsx:325`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L325)
+
+- Keystroke capture while the editor is open; Escape restores `preOpen`, Enter keeps the commit (review fix, split from a single combined branch).
+  [`logs-zone.tsx:369`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L369)
+
+- Editor modal rendering — shared by both scopes, mirrors `ModalDialog`/`TextInputLine`'s existing call sites.
+  [`logs-zone.tsx:916`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L916)
+
+**Pane rendering wiring**
+
+- Composes the two-tier filter with 5.1's visibility filter before the scroll window slice — the one place a reviewer can see the effective-filter formula actually applied.
+  [`logs-zone.tsx:772`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L772)
+
+**Cross-zone guard**
+
+- Guards the app-wide `/`-filter stub so it doesn't double-fire alongside the Logs zone's own `/` binding, same precedent as `logsPaneGridArrowsActive`.
+  [`app-shell.tsx:352`](../../../src/adapters/driving/tui/app-shell.tsx#L352)
+
+**Tests**
+
+- Filter core unit tests (compile, compose, engagement, Escape-target resolver).
+  [`logs-zone.logic.test.ts:391`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts#L391)
+
+- Real-keypress coverage, including the review-fix regression tests (cancel-reverts, editor-close, end-to-end line narrowing, literal `/`/`f`/`g` typed as text).
+  [`logs-zone.interaction.test.tsx:163`](../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx#L163)
 

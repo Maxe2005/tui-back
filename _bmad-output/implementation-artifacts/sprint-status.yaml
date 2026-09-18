@@ -42,6 +42,7 @@
 
 generated: 2026-08-11
 last_updated: 2026-09-18
+# 2026-09-18: Story 5-2 (filter the aggregated stream) moved to review after code-review + patch loop (bmad-build).
 # 2026-09-18: Story 5-2 (filter the aggregated stream) started (bmad-build).
 # 2026-09-17: Story 5-1 moved to review after code-review + patch loop (bmad-build); epic-5 lifted to in-progress.
 # 2026-09-16: Story 2-27 set to in-progress (bmad-build).
@@ -122,7 +123,7 @@ development_status:
 
   epic-5: in-progress
   5-1-aggregated-live-log-stream: done
-  5-2-filter-the-aggregated-stream: in-progress
+  5-2-filter-the-aggregated-stream: review
   5-3-inline-service-health-restart-control: backlog
   epic-5-retrospective: optional
 

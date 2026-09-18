@@ -275,6 +275,159 @@ export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityF
   return lines.filter((line) => (line.stream === 'stdout' ? flags.showStdout : flags.showStderr));
 }
 
+// Story 5.2: two-tier text/regex/level filter over already-buffered lines — a pure,
+// render-time transform layered on top of filterVisibleLines above (never touches the
+// subscription). See logs-zone.tsx's own `filterEditor` state for how these compose with the
+// UI (Design Notes: "compileLogFilter recomputes on every editor keystroke ... so the inline
+// regex error appears/clears live").
+export type LogFilterMode = 'text' | 'regex';
+export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+
+export type LogFilterSpec = {
+  mode: LogFilterMode;
+  query: string;
+  level: LogLevel | null;
+};
+
+export const DEFAULT_LOG_FILTER: LogFilterSpec = { mode: 'text', query: '', level: null };
+
+// Boundaries: "Level filtering has no source field (LogLine has no level) — matched via a
+// text heuristic (ERROR|WARN|INFO|DEBUG, case-insensitive) against line.text". Only the
+// *first* matching token counts — real log lines never carry more than one level tag, and
+// picking the first keeps this a total, order-independent function of the raw text.
+const LOG_LEVEL_PATTERN = /\b(ERROR|WARN|INFO|DEBUG)\b/i;
+
+export function detectLogLevel(text: string): LogLevel | null {
+  const match = LOG_LEVEL_PATTERN.exec(text);
+  return match === null ? null : (match[1].toUpperCase() as LogLevel);
+}
+
+// Boundaries: "An invalid regex ... shows an inline error in the editor and is never applied
+// ... never throws into the render tree" — `compileLogFilter` is the one place a malformed
+// pattern is ever allowed to throw (RegExp's own constructor), caught here and turned into a
+// typed failure the caller (the editor) surfaces as text, rather than letting it escape into
+// the render tree.
+export type CompiledLogFilter = { ok: true; test: (line: LogLine) => boolean } | { ok: false; error: string };
+
+export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
+  let textTest: (text: string) => boolean;
+  if (spec.mode === 'regex') {
+    if (spec.query === '') {
+      textTest = () => true;
+    } else {
+      let regex: RegExp;
+      try {
+        regex = new RegExp(spec.query, 'i');
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Invalid regular expression' };
+      }
+      textTest = (text) => regex.test(text);
+    }
+  } else {
+    const needle = spec.query.toLowerCase();
+    textTest = needle === '' ? () => true : (text) => text.toLowerCase().includes(needle);
+  }
+  const { level } = spec;
+  return {
+    ok: true,
+    test: (line) => textTest(line.text) && (level === null || detectLogLevel(line.text) === level),
+  };
+}
+
+// Boundaries: "A pane's effective filter is (engaged ? global : pass) AND (own ?? pass)" —
+// `global`/`own` are already resolved by the caller to `null` for whichever half of that
+// formula should pass everything (a disengaged pane passes `null` for `global`; a pane with
+// no own filter passes `null` for `own`). A spec that fails to compile is treated as
+// pass-through rather than thrown or silently hiding every line — defensive only, since the
+// zone (logs-zone.tsx) never commits an uncompilable spec into either `global`/`own` state in
+// the first place (compileLogFilter's own error path stops that at the editor).
+export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec | null, own: LogFilterSpec | null): LogLine[] {
+  const globalFilter = global !== null ? compileLogFilter(global) : null;
+  const ownFilter = own !== null ? compileLogFilter(own) : null;
+  return lines.filter((line) => {
+    if (globalFilter !== null && globalFilter.ok && !globalFilter.test(line)) {
+      return false;
+    }
+    if (ownFilter !== null && ownFilter.ok && !ownFilter.test(line)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// Per-pane engagement with the global filter, keyed by repoPath — mirrors isPaneWrapped/
+// togglePaneWrapFlag's own shape, but defaults to `true` (Boundaries: "one global ... every
+// pane is engaged with by default"), the inverse of wrap's own untouched-pane default.
+export const DEFAULT_PANE_GLOBAL_FILTER_ENGAGED = true;
+
+export function isPaneEngagedInGlobalFilter(engagedByPath: Readonly<Record<string, boolean>>, repoPath: string | null): boolean {
+  if (repoPath === null) {
+    return DEFAULT_PANE_GLOBAL_FILTER_ENGAGED;
+  }
+  return engagedByPath[repoPath] ?? DEFAULT_PANE_GLOBAL_FILTER_ENGAGED;
+}
+
+// The `g` key's toggle (an explicit flip, either direction).
+export function toggleGlobalFilterEngagement(engagedByPath: Readonly<Record<string, boolean>>, repoPath: string): Record<string, boolean> {
+  return { ...engagedByPath, [repoPath]: !isPaneEngagedInGlobalFilter(engagedByPath, repoPath) };
+}
+
+// Escape's own disengage step (resolveFilterClearTarget's 'pane-disengage' target) is a
+// one-way "set to disengaged", never a toggle — pressing Escape again on an already-disengaged
+// pane must stay a no-op, not re-engage it.
+export function setPaneGlobalFilterEngagement(
+  engagedByPath: Readonly<Record<string, boolean>>,
+  repoPath: string,
+  engaged: boolean,
+): Record<string, boolean> {
+  return { ...engagedByPath, [repoPath]: engaged };
+}
+
+export function setPaneLogFilter(
+  paneFilters: Readonly<Record<string, LogFilterSpec>>,
+  repoPath: string,
+  spec: LogFilterSpec | null,
+): Record<string, LogFilterSpec> {
+  if (spec === null) {
+    const next = { ...paneFilters };
+    delete next[repoPath];
+    return next;
+  }
+  return { ...paneFilters, [repoPath]: spec };
+}
+
+// The filter editor's Left/Right keys cycle a filter's level restriction through "no
+// restriction" and each of the four detectable levels.
+export const LOG_FILTER_LEVEL_CYCLE: readonly (LogLevel | null)[] = [null, 'ERROR', 'WARN', 'INFO', 'DEBUG'];
+
+export function cycleFilterLevel(current: LogLevel | null, direction: 'next' | 'previous'): LogLevel | null {
+  const idx = LOG_FILTER_LEVEL_CYCLE.indexOf(current);
+  const safeIdx = idx === -1 ? 0 : idx;
+  const delta = direction === 'next' ? 1 : -1;
+  const nextIdx = (safeIdx + delta + LOG_FILTER_LEVEL_CYCLE.length) % LOG_FILTER_LEVEL_CYCLE.length;
+  return LOG_FILTER_LEVEL_CYCLE[nextIdx];
+}
+
+export function toggleFilterMode(mode: LogFilterMode): LogFilterMode {
+  return mode === 'text' ? 'regex' : 'text';
+}
+
+// Boundaries: "Escape, when no editor is open: if a pane is sub-focused in the grid (not
+// fullscreen), clears that pane's own filter if set, else disengages it from the global
+// filter; if no pane is sub-focused (list-focus), clears the global filter entirely." Pure
+// resolver — logs-zone.tsx's useInput dispatches the returned target to the right setter.
+export type FilterClearTarget =
+  | { scope: 'pane-own'; repoPath: string }
+  | { scope: 'pane-disengage'; repoPath: string }
+  | { scope: 'global' };
+
+export function resolveFilterClearTarget(paneSubFocused: boolean, repoPath: string | null, hasOwnFilter: boolean): FilterClearTarget {
+  if (paneSubFocused && repoPath !== null) {
+    return hasOwnFilter ? { scope: 'pane-own', repoPath } : { scope: 'pane-disengage', repoPath };
+  }
+  return { scope: 'global' };
+}
+
 export function formatLogLine(line: LogLine, showTimestamps: boolean): string {
   return showTimestamps ? `[${line.timestamp}] ${line.text}` : line.text;
 }

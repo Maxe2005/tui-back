@@ -349,7 +349,11 @@ export function AppShell({
         return;
       }
 
-      if (shouldOpenFilter(input)) {
+      // Story 5.2: the Logs zone owns `/` itself (its own global-filter editor) while it's
+      // the active zone — without this guard, this app-wide filter stub would also fire on
+      // the same keystroke (Ink dispatches to every mounted `useInput` hook), the same
+      // double-dispatch hazard already solved for arrow keys via `logsPaneGridArrowsActive`.
+      if (activeZone !== 'logs' && shouldOpenFilter(input)) {
         setFilterOpen(true);
         return;
       }
