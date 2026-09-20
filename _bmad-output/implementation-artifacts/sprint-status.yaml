@@ -132,7 +132,7 @@ development_status:
   5-1-aggregated-live-log-stream: done
   5-2-filter-the-aggregated-stream: done
   5-3-inline-service-health-restart-control: backlog
-  5-4-filter-history-recall: review
+  5-4-filter-history-recall: done
   5-5-bound-list-filter-editor-height-to-the-terminal-window: backlog
   epic-5-retrospective: optional
 
