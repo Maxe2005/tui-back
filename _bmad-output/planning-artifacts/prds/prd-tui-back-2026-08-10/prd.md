@@ -392,6 +392,7 @@ A developer's saved requests (FR-21) form one global library, not siloed per EDT
 - **Extensibility (structural, not validated in v1).** The generic-core / module split (manifest-driven, FR-2) is enforced from day one — proven here on `shared-types` propagation and, per §4.6, on the route explorer too — so the tool can extend to a structurally different stack later. The second personal project persona is why this discipline exists, even though v1 doesn't prove it against them (see §5).
 - **Local state layout.** Config, per-EDT SQLite data, transient state (e.g. last-used EDT, log-view scroll position), and cache follow XDG Base Directory conventions (`XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME`) rather than a bespoke directory layout — cheap to do from day one, awkward to retrofit (research report).
 - **Single-instance enforcement.** A second running instance of the tool on the same machine is detected and blocked, since concurrent writers to the same EDT's SQLite file or the same repo's git working tree are unsafe and unhandled otherwise.
+- **NFR-7 — Rendering correctness** *(added 2026-09-20, Sprint Change Proposal, Story 5.5)*. No panel or list may render content taller than the terminal's actual available rows — Ink has no true scroll/overlay mechanism, so overflow desyncs its diff-render from the real terminal cursor and corrupts already-painted lines. Any zone with a data-dependent or user-configurable list length must bound/scroll it rather than assume it fits.
 
 ## Constraints and Guardrails
 
