@@ -2,7 +2,7 @@
 title: 'Filter History Recall'
 type: 'feature'
 created: '2026-09-19'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 context: []
 baseline_commit: '0f8e1679b27c6ac8368887d6fff9aebb6dec33c0'
@@ -69,15 +69,15 @@ baseline_commit: '0f8e1679b27c6ac8368887d6fff9aebb6dec33c0'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `core/ports/settings.ts` -- add the two new Logs settings + their MIN/MAX constants and defaults -- single source of truth for the zod schema and the settings screen's clamps
-- [ ] `core/ports/state.ts` + `adapters/driven/state/index.ts` + `schema.ts` -- add `filterHistory` read/write, schema field, per-field extraction -- durable storage for history, isolated from sibling-field corruption
-- [ ] `adapters/driven/state/index.test.ts` -- cover the new methods -- parity with existing state-port field coverage
-- [ ] `shared/command-bar.tsx` -- generalize the grid primitives with a `getLabel` accessor -- one reusable grid implementation for both the command bar and filter history
-- [ ] `zones/logs/logs-zone.logic.ts` -- add history push/dedup/trim and browse-transition pure functions -- unit-testable core, same shape as 5.2's filter helpers
-- [ ] `store/slices/logs-slice.ts` -- wire persisted `filterHistory` load/save -- makes history readable/clearable from both the Logs zone and the Settings screen
-- [ ] `zones/logs/logs-zone.tsx` -- extend `FilterEditorState`, wire arrow-recall + grid-open/select/close, call the push helper on commit -- delivers the recall UX on top of 5.2's editor
-- [ ] `shared/settings-screen.tsx` -- row-cursor rework of the Logs tab, add the two new fields and clear actions -- keeps every field reachable per the epic's amended UX-DR31
-- [ ] `zones/logs/logs-zone.logic.test.ts`, `logs-zone.interaction.test.tsx`, `settings-screen.test.tsx`, `command-bar.test.tsx` -- cover the new behavior in each file above
+- [x] `core/ports/settings.ts` -- add the two new Logs settings + their MIN/MAX constants and defaults -- single source of truth for the zod schema and the settings screen's clamps
+- [x] `core/ports/state.ts` + `adapters/driven/state/index.ts` + `schema.ts` -- add `filterHistory` read/write, schema field, per-field extraction -- durable storage for history, isolated from sibling-field corruption
+- [x] `adapters/driven/state/index.test.ts` -- cover the new methods -- parity with existing state-port field coverage
+- [x] `shared/command-bar.tsx` -- generalize the grid primitives with a `getLabel` accessor -- one reusable grid implementation for both the command bar and filter history
+- [x] `zones/logs/logs-zone.logic.ts` -- add history push/dedup/trim and browse-transition pure functions -- unit-testable core, same shape as 5.2's filter helpers
+- [x] `store/slices/logs-slice.ts` -- wire persisted `filterHistory` load/save -- makes history readable/clearable from both the Logs zone and the Settings screen
+- [x] `zones/logs/logs-zone.tsx` -- extend `FilterEditorState`, wire arrow-recall + grid-open/select/close, call the push helper on commit -- delivers the recall UX on top of 5.2's editor
+- [x] `shared/settings-screen.tsx` -- row-cursor rework of the Logs tab, add the two new fields and clear actions -- keeps every field reachable per the epic's amended UX-DR31
+- [x] `zones/logs/logs-zone.logic.test.ts`, `logs-zone.interaction.test.tsx`, `settings-screen.test.tsx`, `command-bar.test.tsx` -- cover the new behavior in each file above
 
 **Acceptance Criteria:**
 - Given a live stream and a developer browsing filter history, when arrow-recall or the grid browser is used, then the underlying Docker subscription is never touched — history browsing is a pure editor-draft transform, same as 5.2's filtering.
@@ -98,3 +98,82 @@ History entries store the query text only, never the level — level stays a liv
 - `npm test` -- expected: all suites pass, including new cases in the five files listed under Code Map
 - `npm run typecheck` -- expected: no type errors, including the generalized grid function signatures
 - `npm run depcheck` -- expected: no new dependency-direction violations (core ports still import nothing from adapters)
+
+## Suggested Review Order
+
+**History core (pure logic)**
+
+- Entry point — the scope+mode key shape and the push/dedup/trim rule everything above builds on.
+  [`logs-zone.logic.ts:519`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L519)
+
+- Front-push + top-only dedup + trim-to-N, the exact rule the I/O matrix's HISTORY_PUSH/DEDUP_TOP rows describe.
+  [`logs-zone.logic.ts:534`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L534)
+
+- Pure draft↔browsing transitions for `↑`/`↓` — the state machine the editor's arrow keys just drive.
+  [`logs-zone.logic.ts:549`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L549)
+
+**Filter editor wiring (arrow-recall, grid, Tab fix)**
+
+- `browsing` added to the editor's draft state — non-null exactly while `↑`/`↓` are recalling.
+  [`logs-zone.tsx:142`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L142)
+
+- Review-fix: Tab's mode toggle now resets `browsing` and restores the pre-browse draft, closing the stale-index-across-modes gap a reviewer found.
+  [`logs-zone.tsx:512`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L512)
+
+- `↑`/`↓` dispatch into the pure resolvers above; `↓` on an untouched draft opens the grid instead.
+  [`logs-zone.tsx:528`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L528)
+
+- Commit path — pushes into history only on a successful `Enter`, never on every keystroke.
+  [`logs-zone.tsx:501`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L501)
+
+- Grid-browser render — reuses the generalized command-bar layout instead of a second bespoke grid.
+  [`logs-zone.tsx:1122`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1122)
+
+**Generalized grid primitive**
+
+- `columnDisplayWidth` takes a `getLabel` accessor instead of `Command.name` — the one real behavioral dependency that made the grid `Command`-specific.
+  [`command-bar.tsx:175`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L175)
+
+- `layoutCommandGrid`/`groupCommandsByColumn`/`commandAtGridCursor` generalized to `<T>`, now shared by the command bar and the filter-history grid.
+  [`command-bar.tsx:190`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L190)
+
+**Persistence (StatePort + race-condition fix)**
+
+- `filterHistory` added to `StatePort` alongside `splitterRatios` — same shape, same contract.
+  [`state.ts:27`](../../../src/core/ports/state.ts#L27)
+
+- Read-merge-write under lock so a `filterHistory` write never clobbers `activeEdt`/`splitterRatios` (or vice versa).
+  [`index.ts:229`](../../../src/adapters/driven/state/index.ts#L229)
+
+- Review-fix: a commit/clear now awaits any in-flight initial load before touching `filterHistory`, closing a silent-data-loss race a reviewer found.
+  [`logs-slice.ts:390`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L390)
+
+- The guard itself — a load-in-progress promise, published synchronously so a same-tick commit can await it.
+  [`logs-slice.ts:356`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L356)
+
+**Settings (new fields + Logs tab rework)**
+
+- Two new settings, `MIN`/`MAX` constants and defaults, single source of truth for the schema and the tab's clamps.
+  [`settings.ts:92`](../../../src/core/ports/settings.ts#L92)
+
+- The Logs tab's new row-cursor model — mirrors the EDTs tab's group-list precedent so 6 fields/actions stay reachable.
+  [`settings-screen.tsx:243`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L243)
+
+- Per-service clear drill-down — the one row that mutates a different key (`repoPath`) than the rest of the tab.
+  [`settings-screen.tsx:387`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L387)
+
+**Store wiring**
+
+- History hydrated once at mount, same idiom as `loadSplitterRatios`.
+  [`app-shell.tsx:253`](../../../src/adapters/driving/tui/app-shell.tsx#L253)
+
+**Tests**
+
+- Race-condition regression — proves a commit/clear during the initial load no longer loses on-disk history.
+  [`app-store.test.ts`](../../../src/adapters/driving/tui/store/app-store.test.ts)
+
+- Full I/O-matrix + Tab-reset + grid-no-op + subscription-untouched coverage, real-keypress driven.
+  [`logs-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx)
+
+- Pure-function coverage for the history core and the new settings rows.
+  [`logs-zone.logic.test.ts`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts), [`settings-screen.test.tsx`](../../../src/adapters/driving/tui/shared/settings-screen.test.tsx)

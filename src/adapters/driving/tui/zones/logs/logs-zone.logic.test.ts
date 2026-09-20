@@ -38,6 +38,11 @@ import {
   toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
+  filterHistoryKeyString,
+  pushFilterHistoryEntry,
+  resolveHistoryBrowseDown,
+  resolveHistoryBrowseUp,
+  type FilterHistoryKey,
   type LogFilterSpec,
 } from './logs-zone.logic.js';
 
@@ -594,5 +599,91 @@ describe('resolveFilterClearTarget', () => {
 
   it('targets global when sub-focused but no real pane is under it (repoPath null)', () => {
     expect(resolveFilterClearTarget(true, null, false)).toEqual({ scope: 'global' });
+  });
+});
+
+// Story 5.4: filter history recall.
+describe('filterHistoryKeyString', () => {
+  it('encodes a global scope as "global:<mode>", ignoring repoPath', () => {
+    expect(filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' })).toBe('global:text');
+    expect(filterHistoryKeyString({ scope: 'global', repoPath: '/repos/a', mode: 'regex' })).toBe('global:regex');
+  });
+
+  it('encodes a pane scope as "service:<repoPath>:<mode>"', () => {
+    const key: FilterHistoryKey = { scope: 'pane', repoPath: '/repos/api-gateway', mode: 'text' };
+    expect(filterHistoryKeyString(key)).toBe('service:/repos/api-gateway:text');
+  });
+
+  it('gives global-text/global-regex and per-service-text/per-service-regex four distinct keys (Boundaries)', () => {
+    const keys = [
+      filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' }),
+      filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'regex' }),
+      filterHistoryKeyString({ scope: 'pane', repoPath: '/repos/a', mode: 'text' }),
+      filterHistoryKeyString({ scope: 'pane', repoPath: '/repos/a', mode: 'regex' }),
+    ];
+    expect(new Set(keys).size).toBe(4);
+  });
+});
+
+describe('pushFilterHistoryEntry (I/O matrix HISTORY_PUSH/DEDUP_TOP)', () => {
+  it('front-pushes a new query onto an empty list', () => {
+    expect(pushFilterHistoryEntry([], 'boom', 20)).toEqual(['boom']);
+  });
+
+  it('front-pushes a new query ahead of existing entries', () => {
+    expect(pushFilterHistoryEntry(['old'], 'new', 20)).toEqual(['new', 'old']);
+  });
+
+  it('moves an identical-to-top entry to the front without duplicating it (DEDUP_TOP)', () => {
+    expect(pushFilterHistoryEntry(['boom', 'other'], 'boom', 20)).toEqual(['boom', 'other']);
+  });
+
+  it('does not dedup an entry that matches a non-top entry (Boundaries only special-cases the current top)', () => {
+    expect(pushFilterHistoryEntry(['other', 'boom'], 'boom', 20)).toEqual(['boom', 'other', 'boom']);
+  });
+
+  it('trims to maxSize, dropping the oldest entries', () => {
+    expect(pushFilterHistoryEntry(['a', 'b', 'c'], 'd', 3)).toEqual(['d', 'a', 'b']);
+  });
+
+  it('never produces a negative-length slice for a degenerate maxSize', () => {
+    expect(pushFilterHistoryEntry(['a'], 'b', 0)).toEqual([]);
+  });
+});
+
+describe('resolveHistoryBrowseUp (I/O matrix ARROW_UP_OLDEST)', () => {
+  it('recalls the most-recent entry on an untouched draft, preserving the draft', () => {
+    const result = resolveHistoryBrowseUp('my-draft', null, ['newest', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'my-draft' } });
+  });
+
+  it('walks to older entries on further ↑ presses', () => {
+    const first = resolveHistoryBrowseUp('draft', null, ['newest', 'older', 'oldest']);
+    const second = resolveHistoryBrowseUp(first.query, first.browsing, ['newest', 'older', 'oldest']);
+    expect(second).toEqual({ query: 'older', browsing: { index: 1, savedDraft: 'draft' } });
+  });
+
+  it('is a no-op once already at the oldest entry', () => {
+    const browsing = { index: 2, savedDraft: 'draft' };
+    const result = resolveHistoryBrowseUp('oldest', browsing, ['newest', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'oldest', browsing });
+  });
+
+  it('is a no-op against an empty history', () => {
+    expect(resolveHistoryBrowseUp('draft', null, [])).toEqual({ query: 'draft', browsing: null });
+  });
+});
+
+describe('resolveHistoryBrowseDown (I/O matrix ARROW_DOWN_PAST_RECENT)', () => {
+  it('walks back toward the draft one entry at a time', () => {
+    const browsing = { index: 1, savedDraft: 'draft' };
+    const result = resolveHistoryBrowseDown(browsing, ['newest', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'draft' } });
+  });
+
+  it('restores the original draft exactly one ↓ past the most-recent entry, ending browsing', () => {
+    const browsing = { index: 0, savedDraft: 'my-original-draft' };
+    const result = resolveHistoryBrowseDown(browsing, ['newest', 'older']);
+    expect(result).toEqual({ query: 'my-original-draft', browsing: null });
   });
 });

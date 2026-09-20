@@ -8,22 +8,33 @@ import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
 import {
+  FILTER_HISTORY_SIZE_STEP,
   HIDEABLE_ACTION_HINTS,
   HIDEABLE_ACTION_TYPES,
   LOG_BUFFER_SIZE_STEP,
+  LOGS_SETTINGS_ROWS,
+  MAX_FILTER_HISTORY_GRID_MAX_ROWS,
+  MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
+  MIN_FILTER_HISTORY_GRID_MAX_ROWS,
+  MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   SETTINGS_GROUPS,
   SETTINGS_TABS,
   SettingsScreen,
+  adjustFilterHistoryGridMaxRows,
+  adjustFilterHistorySize,
   adjustGridMaxRows,
   adjustLogBufferSize,
+  clampFilterHistoryGridMaxRows,
+  clampFilterHistorySize,
   clampGridMaxRows,
   clampLogBufferSize,
   moveHintCursor,
   nextSettingsTab,
+  parseFilterHistoryGridMaxRowsDigit,
   parseGridMaxRowsDigit,
   parseLogBufferSizeDigit,
   resolveSettingsTabState,
@@ -136,6 +147,66 @@ describe('parseLogBufferSizeDigit (story 5.1)', () => {
   });
 });
 
+describe('clampFilterHistorySize / adjustFilterHistorySize (story 5.4)', () => {
+  it('clamps to the minimum', () => {
+    expect(clampFilterHistorySize(0)).toBe(MIN_FILTER_HISTORY_SIZE);
+    expect(clampFilterHistorySize(-5)).toBe(MIN_FILTER_HISTORY_SIZE);
+  });
+
+  it('clamps to the maximum', () => {
+    expect(clampFilterHistorySize(10_000)).toBe(MAX_FILTER_HISTORY_SIZE);
+  });
+
+  it('adjustFilterHistorySize steps by FILTER_HISTORY_SIZE_STEP', () => {
+    expect(adjustFilterHistorySize(20, 'up')).toBe(20 + FILTER_HISTORY_SIZE_STEP);
+    expect(adjustFilterHistorySize(20, 'down')).toBe(20 - FILTER_HISTORY_SIZE_STEP);
+  });
+
+  it('adjustFilterHistorySize never drops below the minimum or exceeds the maximum', () => {
+    expect(adjustFilterHistorySize(MIN_FILTER_HISTORY_SIZE, 'down')).toBe(MIN_FILTER_HISTORY_SIZE);
+    expect(adjustFilterHistorySize(MAX_FILTER_HISTORY_SIZE, 'up')).toBe(MAX_FILTER_HISTORY_SIZE);
+  });
+});
+
+describe('clampFilterHistoryGridMaxRows / adjustFilterHistoryGridMaxRows (story 5.4)', () => {
+  it('clamps to the minimum and maximum', () => {
+    expect(clampFilterHistoryGridMaxRows(0)).toBe(MIN_FILTER_HISTORY_GRID_MAX_ROWS);
+    expect(clampFilterHistoryGridMaxRows(1000)).toBe(MAX_FILTER_HISTORY_GRID_MAX_ROWS);
+  });
+
+  it('adjustFilterHistoryGridMaxRows increments/decrements by one, independent of commandPalette.gridMaxRows\' own constants', () => {
+    expect(adjustFilterHistoryGridMaxRows(8, 'up')).toBe(9);
+    expect(adjustFilterHistoryGridMaxRows(8, 'down')).toBe(7);
+    expect(MIN_FILTER_HISTORY_GRID_MAX_ROWS).toBe(MIN_GRID_MAX_ROWS);
+    expect(MAX_FILTER_HISTORY_GRID_MAX_ROWS).toBe(MAX_GRID_MAX_ROWS);
+  });
+});
+
+describe('parseFilterHistoryGridMaxRowsDigit (story 5.4)', () => {
+  it('parses a single digit 1-9 as the new value', () => {
+    expect(parseFilterHistoryGridMaxRowsDigit('5')).toBe(5);
+  });
+
+  it('rejects 0, non-digit, or multi-character input', () => {
+    expect(parseFilterHistoryGridMaxRowsDigit('0')).toBeNull();
+    expect(parseFilterHistoryGridMaxRowsDigit('a')).toBeNull();
+    expect(parseFilterHistoryGridMaxRowsDigit('12')).toBeNull();
+  });
+});
+
+describe('LOGS_SETTINGS_ROWS (story 5.4)', () => {
+  it('lists exactly the six Logs-tab fields, in this order', () => {
+    expect(LOGS_SETTINGS_ROWS).toEqual([
+      'bufferSize',
+      'startWithHistory',
+      'filterHistorySize',
+      'filterHistoryGridMaxRows',
+      'clear-global',
+      'clear-service',
+    ]);
+  });
+});
+
 describe('moveHintCursor', () => {
   it('moves down and up by one, clamped at both bounds', () => {
     expect(moveHintCursor(0, 'down', 3)).toBe(1);
@@ -244,25 +315,25 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Up/Down to adjust, or type a digit (1-9).');
   });
 
-  it('renders the live bufferSize value and hints on the Logs tab (story 5.1)', async () => {
+  it('renders the live bufferSize value and hints on the Logs tab (story 5.1, row-cursor hints amended story 5.4)', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
     expect(output).toContain('Log buffer size');
     expect(output).toContain('750');
-    expect(output).toContain(`Up/Down to adjust by ${LOG_BUFFER_SIZE_STEP}`);
+    expect(output).toContain(`±${LOG_BUFFER_SIZE_STEP} per press`);
     expect(output).toContain('Applies to new streams only');
   });
 
-  it('renders the startWithHistory checkbox on the Logs tab, checked/unchecked to match the live setting (review fix)', async () => {
+  it('renders the startWithHistory checkbox on the Logs tab, checked/unchecked to match the live setting (review fix, row-cursor amended story 5.4)', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
     const uncheckedLine = unchecked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(uncheckedLine).toContain('[ ]');
-    expect(unchecked).toContain('Space to toggle');
+    expect(unchecked).toContain('Space toggles a checkbox');
 
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
     const checked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
     const checkedLine = checked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(checkedLine).toContain('[x]');
@@ -312,5 +383,53 @@ describe('SettingsScreen (story 2.19)', () => {
     const visibleLine = lines.find((line) => line.includes('Create'));
     expect(hiddenLine).toContain('[x]');
     expect(visibleLine).toContain('[ ]');
+  });
+
+  // Story 5.4: the Logs tab's row-cursor rework.
+  it('renders every Logs-tab field as one row-cursor list, cursor on bufferSize by default', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    expect(output).toContain('Log buffer size');
+    expect(output).toContain('Start streaming with the most recent history');
+    expect(output).toContain('Filter history size');
+    expect(output).toContain('Filter history grid max rows');
+    expect(output).toContain('Clear global filter history');
+    expect(output).toContain("Clear a service's filter history");
+    const lines = output.split('\n');
+    const bufferSizeLine = lines.find((line) => line.includes('Log buffer size'));
+    expect(bufferSizeLine).toContain('›');
+  });
+
+  it('renders the live filterHistorySize/filterHistoryGridMaxRows values on the Logs tab (story 5.4)', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12 } },
+    });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const lines = output.split('\n');
+    const historySizeLine = lines.find((line) => line.includes('Filter history size'));
+    const gridMaxRowsLine = lines.find((line) => line.includes('Filter history grid max rows'));
+    expect(historySizeLine).toContain('30');
+    expect(gridMaxRowsLine).toContain('12');
+  });
+
+  it('drilled into "clear a service\'s history", lists every manifest service from edtsBranches (Boundaries: drilled into a list of manifest services)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [
+        { service: 'api-gateway', path: '/repos/api-gateway', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'route-explorer', path: '/repos/route-explorer', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+      ],
+    });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsClearServiceOpen />);
+    expect(output).toContain('api-gateway');
+    expect(output).toContain('route-explorer');
+    expect(output).not.toContain('Log buffer size');
+  });
+
+  it('drilled into "clear a service\'s history" with no services loaded yet, shows a non-blocking message rather than an empty list', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsClearServiceOpen />);
+    expect(output).toContain('No manifest services loaded yet.');
   });
 });

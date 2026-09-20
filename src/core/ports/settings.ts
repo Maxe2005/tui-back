@@ -40,6 +40,15 @@ export interface Settings {
     // waiting for the live tail to produce its first new line. Default false preserves the
     // pre-existing "starts empty" behavior.
     startWithHistory: boolean;
+    // Story 5.4: how many committed queries each independent (scope, mode) filter-history list
+    // (global-text, global-regex, and per-service-text/per-service-regex for every manifest
+    // service path — see StatePort.readFilterHistory/writeFilterHistory) keeps before trimming
+    // the oldest entry off the back.
+    filterHistorySize: number;
+    // Story 5.4: the filter-history grid browser's (`↓` on an untouched draft) own max-rows-
+    // per-column, independent of commandPalette.gridMaxRows (Boundaries) — a list of short
+    // query strings warrants its own default/range rather than reusing the command grid's.
+    filterHistoryGridMaxRows: number;
   };
 }
 
@@ -54,7 +63,10 @@ export const DEFAULT_SETTINGS: Settings = {
   edts: { hiddenActionHints: [], hiddenActionTypes: [] },
   // Story 5.1's Boundaries: "a per-service in-memory ring buffer sized by
   // settings.logs.bufferSize (default 500 lines)".
-  logs: { bufferSize: 500, startWithHistory: false },
+  // Story 5.4: filterHistorySize=20 comfortably covers a session's worth of committed filters
+  // per (scope, mode) list without state.json growing unbounded; filterHistoryGridMaxRows=8
+  // mirrors commandPalette.gridMaxRows' own default, unrelated as the two settings are.
+  logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
@@ -72,6 +84,19 @@ export const MAX_GRID_MAX_ROWS = 99;
 // unboundedly.
 export const MIN_LOG_BUFFER_SIZE = 50;
 export const MAX_LOG_BUFFER_SIZE = 5000;
+
+// logs.filterHistorySize's valid range (story 5.4) — same single-source-of-truth convention as
+// MIN/MAX_LOG_BUFFER_SIZE above, shared by the zod schema and the settings screen's own clamp.
+// 1 keeps the feature meaningful (a size of 0 would make history pointless); 200 is generous for
+// a list of short query strings without state.json growing unreasonably.
+export const MIN_FILTER_HISTORY_SIZE = 1;
+export const MAX_FILTER_HISTORY_SIZE = 200;
+
+// logs.filterHistoryGridMaxRows' valid range (story 5.4) — mirrors MIN/MAX_GRID_MAX_ROWS'
+// exact bounds, but kept as its own independent pair of constants (Boundaries: "independent of
+// commandPalette.gridMaxRows") since the two settings can drift apart on purpose.
+export const MIN_FILTER_HISTORY_GRID_MAX_ROWS = 1;
+export const MAX_FILTER_HISTORY_GRID_MAX_ROWS = 99;
 
 export interface SettingsLoadResult {
   settings: Settings;

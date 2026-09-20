@@ -5,8 +5,12 @@
 import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
+  MAX_FILTER_HISTORY_GRID_MAX_ROWS,
+  MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
+  MIN_FILTER_HISTORY_GRID_MAX_ROWS,
+  MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   type Settings,
@@ -57,6 +61,22 @@ export const settingsSchema: z.ZodType<Settings> = z
       .object({
         bufferSize: z.number().int().min(MIN_LOG_BUFFER_SIZE).max(MAX_LOG_BUFFER_SIZE),
         startWithHistory: z.boolean().optional().default(DEFAULT_SETTINGS.logs.startWithHistory),
+        // Story 5.4: same optional-with-default convention as startWithHistory above — a
+        // pre-5.4 settings.yaml's `logs:` block predates both fields entirely.
+        filterHistorySize: z
+          .number()
+          .int()
+          .min(MIN_FILTER_HISTORY_SIZE)
+          .max(MAX_FILTER_HISTORY_SIZE)
+          .optional()
+          .default(DEFAULT_SETTINGS.logs.filterHistorySize),
+        filterHistoryGridMaxRows: z
+          .number()
+          .int()
+          .min(MIN_FILTER_HISTORY_GRID_MAX_ROWS)
+          .max(MAX_FILTER_HISTORY_GRID_MAX_ROWS)
+          .optional()
+          .default(DEFAULT_SETTINGS.logs.filterHistoryGridMaxRows),
       })
       .strict()
       .optional()

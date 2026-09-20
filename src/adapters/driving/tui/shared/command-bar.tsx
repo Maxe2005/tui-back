@@ -144,12 +144,13 @@ export function resolveTabPress(
 
 // Column-major grouping: column 0 holds the first `maxRows` matches, column 1 the next
 // `maxRows`, and so on (Boundaries: "column-major, ≤ COMMAND_GRID_MAX_ROWS rows/column").
-export function groupCommandsByColumn(
-  matches: readonly Command[],
-  maxRows: number,
-): Command[][] {
+// Story 5.4: generalized to a generic `T` — the only real `Command`-specific access
+// (`columnDisplayWidth`'s `.name.length`, immediately below) already took a `getLabel`
+// accessor by the time this was touched, so `groupCommandsByColumn`/`commandAtGridCursor`
+// themselves never needed one; every existing call site keeps passing `Command[]` as `T`.
+export function groupCommandsByColumn<T>(matches: readonly T[], maxRows: number): T[][] {
   const rows = Math.max(1, maxRows);
-  const columns: Command[][] = [];
+  const columns: T[][] = [];
   for (let i = 0; i < matches.length; i += rows) {
     columns.push(matches.slice(i, i + rows));
   }
@@ -158,17 +159,21 @@ export function groupCommandsByColumn(
 
 export type GridTruncation = { left: boolean; right: boolean };
 
-export type CommandGridLayout = {
+export type CommandGridLayout<T> = {
   // Only the columns that actually fit `availableWidth` from `scrollOffset` onward — every
   // whole column, never a partial one (Boundaries: "only whole columns that fit render").
-  columns: readonly Command[][];
+  columns: readonly T[][];
   truncated: GridTruncation;
   // The (possibly clamped) scroll position this layout was actually computed from.
   scrollOffset: number;
 };
 
-function columnDisplayWidth(column: readonly Command[]): number {
-  return column.reduce((max, command) => Math.max(max, command.name.length), 0);
+// Review fix (story 5.4): exported so a second grid consumer (logs-zone.tsx's filter-history
+// browser) reuses this instead of reimplementing the same column-width reduction locally — per
+// the spec's Design Notes ("one reusable grid implementation ... rather than reimplementing the
+// same column-width/truncation math").
+export function columnDisplayWidth<T>(column: readonly T[], getLabel: (item: T) => string): number {
+  return column.reduce((max, item) => Math.max(max, getLabel(item).length), 0);
 }
 
 // Column-major layout + horizontal-scroll truncation (Boundaries: "column width = its longest
@@ -177,18 +182,24 @@ function columnDisplayWidth(column: readonly Command[]): number {
 // (Design Notes) — passed in fresh each render alongside `matches`/`maxRows`/`availableWidth`
 // so this stays a stateless projection; the returned `scrollOffset` is the clamped value the
 // layout was actually computed from.
-export function layoutCommandGrid(
-  matches: readonly Command[],
+//
+// Story 5.4: generalized with a `getLabel` accessor so the filter-history grid browser
+// (logs-zone.tsx) can reuse this over plain query strings (`getLabel = (s) => s`) rather than
+// reimplementing the same column-width/truncation math — every existing call site passes
+// `getLabel = (c) => c.name`.
+export function layoutCommandGrid<T>(
+  matches: readonly T[],
   maxRows: number,
   availableWidth: number,
+  getLabel: (item: T) => string,
   scrollOffset = 0,
-): CommandGridLayout {
+): CommandGridLayout<T> {
   const allColumns = groupCommandsByColumn(matches, maxRows);
   if (allColumns.length === 0) {
     return { columns: [], truncated: { left: false, right: false }, scrollOffset: 0 };
   }
 
-  const widths = allColumns.map(columnDisplayWidth);
+  const widths = allColumns.map((column) => columnDisplayWidth(column, getLabel));
   const totalWidth = widths.reduce((sum, width) => sum + width, 0) + GRID_COLUMN_GAP * (allColumns.length - 1);
 
   if (totalWidth <= availableWidth) {
@@ -307,11 +318,8 @@ export function moveGridCursorHorizontal(
 
 // Resolves the command under an absolute grid cursor position against the full (unsliced)
 // column grouping — `cursor.column` is an absolute index, independent of the currently
-// scrolled-into-view window.
-export function commandAtGridCursor(
-  columns: readonly (readonly Command[])[],
-  cursor: GridCursor,
-): Command | undefined {
+// scrolled-into-view window. Story 5.4: generalized to `T`, same as groupCommandsByColumn above.
+export function commandAtGridCursor<T>(columns: readonly (readonly T[])[], cursor: GridCursor): T | undefined {
   return columns[cursor.column]?.[cursor.row];
 }
 
@@ -342,7 +350,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   const { columns: terminalColumns } = useWindowSize();
   const availableWidth = Math.max(terminalColumns - MODAL_CHROME_WIDTH, MIN_GRID_WIDTH);
   const allColumns = groupCommandsByColumn(matches, gridMaxRows);
-  const layout = layoutCommandGrid(matches, gridMaxRows, availableWidth, scrollOffset);
+  const layout = layoutCommandGrid(matches, gridMaxRows, availableWidth, (command) => command.name, scrollOffset);
 
   const openGridAtOrigin = () => {
     setGridShown(true);
@@ -507,7 +515,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
             {layout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
             {layout.columns.map((column, columnIndex) => {
               const absoluteColumn = layout.scrollOffset + columnIndex;
-              const width = columnDisplayWidth(column);
+              const width = columnDisplayWidth(column, (command) => command.name);
               return (
                 <Box key={absoluteColumn} flexDirection="column" marginRight={GRID_COLUMN_GAP}>
                   {column.map((command, rowIndex) => {

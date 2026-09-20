@@ -15,7 +15,12 @@ import { createLogsManager, type LogsManager } from '../../../../../core/logs/in
 import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
-import { resolvePostLoadScrollOffset } from '../../zones/logs/logs-zone.logic.js';
+import {
+  filterHistoryKeyString,
+  pushFilterHistoryEntry,
+  resolvePostLoadScrollOffset,
+  type FilterHistoryKey,
+} from '../../zones/logs/logs-zone.logic.js';
 
 export type LogsPaneErrorState = { code: string; message: string } | null;
 
@@ -77,6 +82,29 @@ export type LogsSlice = {
   // child is never orphaned — wired into `process.on('exit'|'SIGINT'|'SIGTERM', ...)` in
   // src/bin/tui.ts (review fix).
   stopAllLogsPanes: () => void;
+
+  // Story 5.4: the filter-history lists, persisted to state.json (StatePort.readFilterHistory/
+  // writeFilterHistory) — keyed by filterHistoryKeyString's flat encoding of a FilterHistoryKey.
+  // Lives here (not zone-local state) so the Settings screen's clear actions and the Logs
+  // zone's arrow-recall/grid browser both read/mutate one source of truth (Design Notes) —
+  // mirrors why splitterRatios lives in navigation-slice.ts rather than being zone-local.
+  filterHistory: Record<string, string[]>;
+  // Hydrates filterHistory from state.json once at AppShell mount, mirroring
+  // loadSplitterRatios() — a missing/corrupt file (or an unwired store) silently keeps the
+  // empty-object default already seeded below (RESTART_PERSIST's own "empty history, never a
+  // crash" edge case).
+  loadFilterHistory: () => Promise<void>;
+  // Story 5.4 (I/O matrix HISTORY_PUSH/DEDUP_TOP): called by the Logs zone on a successful
+  // filter-editor commit (Enter, compiles, non-empty) — applies pushFilterHistoryEntry to the
+  // exact (scope, mode) list `key` identifies and persists the whole map immediately (no
+  // separate save step, mirroring setSplitterRatio's own convention).
+  commitFilterHistoryEntry: (key: FilterHistoryKey, query: string) => void;
+  // Story 5.4 (Boundaries): "clear global" only touches the two global lists (text + regex).
+  clearGlobalFilterHistory: () => void;
+  // Story 5.4 (Boundaries, I/O matrix CLEAR_SERVICE): "clear this service" only touches that
+  // one service's two lists (text + regex) — every other service and the global lists are
+  // untouched.
+  clearServiceFilterHistory: (repoPath: string) => void;
 };
 
 export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], LogsSlice> {
@@ -84,6 +112,34 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // "closure captured once, at store-creation time" convention. `deps` is optional so every
   // pre-5.1 `createAppStore()` call (tests included) keeps working unwired.
   const logsManager: LogsManager | null = deps ? createLogsManager(deps.docker) : null;
+
+  // Story 5.4: mirrors navigation-slice.ts's own splitterRatiosSaveChain/splitterRatiosVersion
+  // pair exactly — serializes writeFilterHistory calls so concurrent commits/clears land on
+  // disk in the order they were requested, and guards loadFilterHistory against overwriting a
+  // newer live change with a stale on-disk snapshot it started reading before that change
+  // landed.
+  let filterHistorySaveChain: Promise<void> = Promise.resolve();
+  let filterHistoryVersion = 0;
+  // Review fix: `filterHistoryVersion` alone only protects a *stale read* from clobbering a
+  // *newer write* — it does nothing for a write that fires while the very first
+  // loadFilterHistory() (AppShell's mount-time hydration) is still in flight. Without this,
+  // commitFilterHistoryEntry/clearGlobalFilterHistory/clearServiceFilterHistory would read the
+  // still-empty pre-load `filterHistory` map, apply their change to it, and persist that
+  // incomplete map wholesale — permanently discarding every other scope/service's history
+  // already on disk. Set for the duration of the one in-flight load; each of the three
+  // mutators awaits it (a no-op when null, so the common "no load in flight" case stays fully
+  // synchronous/optimistic, same as before this fix) before ever reading `get().filterHistory`.
+  let filterHistoryLoadPromise: Promise<void> | null = null;
+
+  function persistFilterHistory(next: Record<string, string[]>): void {
+    if (!deps) {
+      return;
+    }
+    const run = async () => {
+      await deps.state.writeFilterHistory(next);
+    };
+    filterHistorySaveChain = filterHistorySaveChain.then(run, run);
+  }
 
   return (set, get) => {
     // Shared by loadOlderLogsPane and subscribeLogsPane's own startWithHistory fetch
@@ -294,6 +350,98 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           unsubscribeLogs({ manager: logsManager, key: repoPath });
         }
         set({ logsPanes: {} });
+      },
+
+      filterHistory: {},
+      loadFilterHistory: async () => {
+        if (!deps) {
+          return;
+        }
+        // Review-fix convention (mirrors loadSplitterRatios): captured before the await — a
+        // commitFilterHistoryEntry/clear call landing while this read is still in flight bumps
+        // the version, and the stale result below must never clobber that newer live value.
+        const startVersion = filterHistoryVersion;
+        const promise = (async () => {
+          const result = await deps.state.readFilterHistory();
+          if (filterHistoryVersion !== startVersion) {
+            return;
+          }
+          if (!result.ok || result.data === null) {
+            // A genuine I/O error, or a fresh/pre-5.4 machine with nothing persisted yet: keep
+            // the empty-object default already seeded above (RESTART_PERSIST's "never a
+            // crash" edge case — every list simply starts empty).
+            return;
+          }
+          set({ filterHistory: result.data });
+        })();
+        // Review fix: published *before* awaiting, and only cleared once this exact call
+        // settles — a commit/clear that checks `filterHistoryLoadPromise` between now and
+        // then sees this in-flight read and waits for it, rather than racing ahead on the
+        // still-empty pre-load map.
+        filterHistoryLoadPromise = promise;
+        try {
+          await promise;
+        } finally {
+          if (filterHistoryLoadPromise === promise) {
+            filterHistoryLoadPromise = null;
+          }
+        }
+      },
+      commitFilterHistoryEntry: (key, query) => {
+        const run = async () => {
+          // Review fix: never read/persist `filterHistory` while the initial hydration is
+          // still in flight — awaiting here (a no-op when nothing is in flight, keeping the
+          // common case fully synchronous/optimistic) guarantees `get().filterHistory` below
+          // already reflects whatever was on disk before this commit's own read-modify-write.
+          if (filterHistoryLoadPromise) {
+            await filterHistoryLoadPromise;
+          }
+          filterHistoryVersion += 1;
+          const historyKey = filterHistoryKeyString(key);
+          const maxSize = get().settings.logs.filterHistorySize;
+          set((state) => ({
+            filterHistory: {
+              ...state.filterHistory,
+              [historyKey]: pushFilterHistoryEntry(state.filterHistory[historyKey] ?? [], query, maxSize),
+            },
+          }));
+          // Applies to the live store synchronously above, before persistence even starts —
+          // same "no separate save step" convention as setSplitterRatio.
+          persistFilterHistory(get().filterHistory);
+        };
+        void run();
+      },
+      clearGlobalFilterHistory: () => {
+        const run = async () => {
+          if (filterHistoryLoadPromise) {
+            await filterHistoryLoadPromise;
+          }
+          filterHistoryVersion += 1;
+          set((state) => {
+            const next = { ...state.filterHistory };
+            delete next[filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' })];
+            delete next[filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'regex' })];
+            return { filterHistory: next };
+          });
+          persistFilterHistory(get().filterHistory);
+        };
+        void run();
+      },
+      clearServiceFilterHistory: (repoPath) => {
+        const run = async () => {
+          if (filterHistoryLoadPromise) {
+            await filterHistoryLoadPromise;
+          }
+          filterHistoryVersion += 1;
+          set((state) => {
+            const next = { ...state.filterHistory };
+            delete next[filterHistoryKeyString({ scope: 'pane', repoPath, mode: 'text' })];
+            delete next[filterHistoryKeyString({ scope: 'pane', repoPath, mode: 'regex' })];
+            return { filterHistory: next };
+          });
+          persistFilterHistory(get().filterHistory);
+        };
+        void run();
       },
     };
   };

@@ -23,6 +23,17 @@ import {
   resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
 import {
+  columnDisplayWidth,
+  commandAtGridCursor,
+  groupCommandsByColumn,
+  layoutCommandGrid,
+  moveGridCursorHorizontal,
+  moveGridCursorVertical,
+  resolveGridHorizontalDirection,
+  resolveGridVerticalDirection,
+  type GridCursor,
+} from '../../shared/command-bar.js';
+import {
   adjustScrollOffset,
   applyLogFilters,
   compileLogFilter,
@@ -32,6 +43,7 @@ import {
   cycleLogsPaneFocus,
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
+  filterHistoryKeyString,
   filterVisibleLines,
   formatLogFilterSpec,
   formatLogLine,
@@ -45,6 +57,8 @@ import {
   reindexPaneSubFocus,
   resolveFilterClearTarget,
   resolveFullscreenScrollDirection,
+  resolveHistoryBrowseDown,
+  resolveHistoryBrowseUp,
   resolvePaneScrollDirection,
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
@@ -56,6 +70,8 @@ import {
   toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
+  type FilterHistoryBrowseState,
+  type FilterHistoryKey,
   type GridLayout,
   type LogFilterMode,
   type LogFilterSpec,
@@ -63,6 +79,17 @@ import {
   type LogsPaneFocus,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
+
+// Story 5.4: the filter-history grid browser's own layout budget — mirrors command-bar.tsx's
+// MODAL_CHROME_WIDTH/MIN_GRID_WIDTH (a `ModalDialog`'s own chrome plus a safety margin) since
+// this grid renders inside the same LogFilterEditor `ModalDialog`.
+const HISTORY_GRID_CHROME_WIDTH = 6;
+const HISTORY_GRID_MIN_WIDTH = 10;
+const HISTORY_GRID_COLUMN_GAP = 1;
+
+function historyEntryLabel(entry: string): string {
+  return entry;
+}
 
 // Reserves a fixed-width left column for the two lists — this zone has no persisted/resizable
 // splitter ratio (unlike every ListDetailSplit-based zone): the spec's Code Map/Design Notes
@@ -109,6 +136,10 @@ type FilterEditorState = {
   // "[Enter] confirm  [Esc] cancel" actually behaves that way, instead of Escape and Enter both
   // just closing the editor and leaving whatever last compiled cleanly while typing applied.
   preOpen: LogFilterSpec;
+  // Story 5.4: non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh
+  // open and whenever the draft is untouched/browsing has ended (snapped back to the draft, or
+  // walked past the most-recent entry). See resolveHistoryBrowseUp/Down (logs-zone.logic.ts).
+  browsing: FilterHistoryBrowseState | null;
 };
 
 // Review fix: shared by applyFilterEditorDraft's commit path and the Escape-cancel path below
@@ -163,6 +194,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const resizeMode = useStore((state) => state.resizeMode);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const setLogsPaneGridArrowsActive = useStore((state) => state.setLogsPaneGridArrowsActive);
+  // Story 5.4: the persisted filter-history lists, plus the setting driving the history grid
+  // browser's own max-rows-per-column (independent of commandPalette.gridMaxRows).
+  const filterHistory = useStore((state) => state.filterHistory);
+  const commitFilterHistoryEntry = useStore((state) => state.commitFilterHistoryEntry);
+  const filterHistoryGridMaxRows = useStore((state) => state.settings.logs.filterHistoryGridMaxRows);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -196,6 +232,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [paneFilterEngaged, setPaneFilterEngaged] = useState<Record<string, boolean>>({});
   const [paneFilters, setPaneFilters] = useState<Record<string, LogFilterSpec>>({});
   const [filterEditor, setFilterEditor] = useState<FilterEditorState | null>(null);
+  // Story 5.4: the history grid browser's own cursor/scroll — non-null exactly while the grid
+  // is open (`↓` on an untouched draft). Kept separate from FilterEditorState (Code Map) since
+  // it's a distinct, editor-local concern that only ever exists while filterEditor itself does.
+  const [historyGridCursor, setHistoryGridCursor] = useState<GridCursor | null>(null);
+  const [historyGridScroll, setHistoryGridScroll] = useState(0);
 
   const clampedEdtCursor = edtServices.length === 0 ? 0 : Math.min(edtCursor, edtServices.length - 1);
   const clampedOtherCursor = otherServices.length === 0 ? 0 : Math.min(otherCursor, otherServices.length - 1);
@@ -280,6 +321,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const paneContentWidth = Math.max(layout.cellWidth - GRID_PANE_CHROME_COLS, 1);
   const fullscreenVisibleLines = Math.max(windowSize.rows - CHROME_ROWS, 3);
   const fullscreenContentWidth = Math.max(windowSize.columns - spacing['pane-padding-x'] * 2, 1);
+  // Story 5.4: the history grid browser's own available width, mirroring command-bar.tsx's
+  // own `availableWidth` computation (this grid renders inside the same ModalDialog chrome).
+  const historyGridAvailableWidth = Math.max(windowSize.columns - HISTORY_GRID_CHROME_WIDTH, HISTORY_GRID_MIN_WIDTH);
 
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
     const pane = logsPanes[repoPath];
@@ -311,11 +355,32 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       level: globalFilter.level,
       error: null,
       preOpen: globalFilter,
+      browsing: null,
     });
+    setHistoryGridCursor(null);
   }
   function openPaneFilterEditor(repoPath: string): void {
     const existing = paneFilters[repoPath] ?? DEFAULT_LOG_FILTER;
-    setFilterEditor({ scope: 'pane', repoPath, mode: existing.mode, query: existing.query, level: existing.level, error: null, preOpen: existing });
+    setFilterEditor({
+      scope: 'pane',
+      repoPath,
+      mode: existing.mode,
+      query: existing.query,
+      level: existing.level,
+      error: null,
+      preOpen: existing,
+      browsing: null,
+    });
+    setHistoryGridCursor(null);
+  }
+
+  // Story 5.4: the exact (scope, mode) history list backing whichever editor is currently
+  // open — recomputed live off the store's `filterHistory` map, never cached in local state
+  // (so a commit from this same editor is immediately visible to the next arrow-recall/grid
+  // open in the same session).
+  function historyForEditor(editor: FilterEditorState): string[] {
+    const key: FilterHistoryKey = { scope: editor.scope, repoPath: editor.repoPath, mode: editor.mode };
+    return filterHistory[filterHistoryKeyString(key)] ?? [];
   }
 
   // Story 5.2 (Design Notes): "compileLogFilter recomputes on every editor keystroke (not
@@ -370,6 +435,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       // spec (captured in filterEditor.preOpen) — a true cancel; Enter just closes the editor,
       // keeping whatever is currently committed — a true confirm.
       if (filterEditor !== null) {
+        // Story 5.4 (I/O matrix GRID_OPEN_ESC): Esc always closes the *whole* filter-editor
+        // bar, even while the history grid is open on top of it — never just the grid.
         if (key.escape) {
           if (filterEditor.scope === 'global') {
             setGlobalFilter(filterEditor.preOpen);
@@ -379,26 +446,121 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
             setPaneFilters((current) => setPaneLogFilter(current, repoPath, isDefaultLogFilterSpec(preOpen) ? null : preOpen));
           }
           setFilterEditor(null);
+          setHistoryGridCursor(null);
           return;
         }
+
+        // Story 5.4: the history grid browser has its own key handling while open — Up/Down/
+        // Left/Right navigate it, Enter recalls the highlighted entry back into the draft and
+        // closes the grid (the editor itself stays open), and every other key (typing,
+        // backspace, Tab) is swallowed rather than leaking into the query underneath
+        // (Boundaries only defines Up/Down/Left/Right/Enter/Esc for the grid).
+        if (historyGridCursor !== null) {
+          const history = historyForEditor(filterEditor);
+          const columns = groupCommandsByColumn(history, filterHistoryGridMaxRows);
+          if (key.return) {
+            const entry = commandAtGridCursor(columns, historyGridCursor);
+            if (entry !== undefined) {
+              applyFilterEditorDraft({ ...filterEditor, query: entry, browsing: null });
+            }
+            setHistoryGridCursor(null);
+            return;
+          }
+          if (key.upArrow || key.downArrow) {
+            const columnLength = columns[historyGridCursor.column]?.length ?? 0;
+            const next = moveGridCursorVertical(historyGridCursor, resolveGridVerticalDirection(key), columnLength);
+            setHistoryGridCursor(next);
+            return;
+          }
+          if (key.leftArrow || key.rightArrow) {
+            const columnLengths = columns.map((column) => column.length);
+            const layout = layoutCommandGrid(
+              history,
+              filterHistoryGridMaxRows,
+              historyGridAvailableWidth,
+              historyEntryLabel,
+              historyGridScroll,
+            );
+            const { cursor, scrollOffset } = moveGridCursorHorizontal(
+              historyGridCursor,
+              resolveGridHorizontalDirection(key),
+              columnLengths,
+              layout.scrollOffset,
+              layout.columns.length,
+            );
+            setHistoryGridCursor(cursor);
+            setHistoryGridScroll(scrollOffset);
+          }
+          return;
+        }
+
         if (key.return) {
+          // Story 5.4 (I/O matrix HISTORY_PUSH): commit — a compiled, non-empty draft is
+          // pushed onto its exact (scope, mode) history list before the editor closes.
+          if (filterEditor.error === null && filterEditor.query !== '') {
+            commitFilterHistoryEntry(
+              { scope: filterEditor.scope, repoPath: filterEditor.repoPath, mode: filterEditor.mode },
+              filterEditor.query,
+            );
+          }
           setFilterEditor(null);
+          setHistoryGridCursor(null);
           return;
         }
         if (key.tab) {
-          applyFilterEditorDraft({ ...filterEditor, mode: toggleFilterMode(filterEditor.mode) });
+          // Review fix: text/regex are two distinct (scope, mode) history lists — flipping
+          // mode mid-recall must drop any in-progress browsing state (a stale `index`/
+          // `savedDraft` from the old mode's list would otherwise be reused against the new
+          // mode's different list on the next ↑/↓). Mirrors the same snap-back-to-draft idiom
+          // already applied to a printable char/Backspace while browsing: the recalled entry
+          // is discarded and the original (pre-browse) draft carries over into the new mode.
+          const baseQuery = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
+          applyFilterEditorDraft({ ...filterEditor, query: baseQuery, mode: toggleFilterMode(filterEditor.mode), browsing: null });
+          setHistoryGridCursor(null);
           return;
         }
         if (key.ctrl && (key.leftArrow || key.rightArrow)) {
           applyFilterEditorDraft({ ...filterEditor, level: cycleFilterLevel(filterEditor.level, key.rightArrow ? 'next' : 'previous') });
           return;
         }
-        if (key.backspace || key.delete) {
-          applyFilterEditorDraft({ ...filterEditor, query: filterEditor.query.slice(0, -1) });
+        // Story 5.4: arrow-recall. `↑` always browses (recalling the most-recent entry on an
+        // untouched draft, older ones on further presses); `↓` either walks back toward the
+        // draft while already browsing, or — on an untouched draft — opens the grid browser
+        // over the full history (a no-op when there's nothing to browse).
+        if (key.upArrow) {
+          const history = historyForEditor(filterEditor);
+          const result = resolveHistoryBrowseUp(filterEditor.query, filterEditor.browsing, history);
+          applyFilterEditorDraft({ ...filterEditor, query: result.query, browsing: result.browsing });
           return;
         }
-        if (!key.ctrl && !key.meta && !key.upArrow && !key.downArrow && input.length > 0) {
-          applyFilterEditorDraft({ ...filterEditor, query: filterEditor.query + input });
+        if (key.downArrow) {
+          if (filterEditor.browsing === null) {
+            const history = historyForEditor(filterEditor);
+            if (history.length > 0) {
+              setHistoryGridCursor({ column: 0, row: 0 });
+              setHistoryGridScroll(0);
+            }
+            return;
+          }
+          const history = historyForEditor(filterEditor);
+          const result = resolveHistoryBrowseDown(filterEditor.browsing, history);
+          applyFilterEditorDraft({ ...filterEditor, query: result.query, browsing: result.browsing });
+          return;
+        }
+        if (key.backspace || key.delete) {
+          // Story 5.4 (I/O matrix SNAP_BACK_TYPE): while browsing, Backspace snaps back to the
+          // saved draft with the backspace applied on top, rather than editing the recalled
+          // history entry in place.
+          const base = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
+          applyFilterEditorDraft({ ...filterEditor, query: base.slice(0, -1), browsing: null });
+          return;
+        }
+        if (!key.ctrl && !key.meta && input.length > 0) {
+          // Story 5.4 (I/O matrix SNAP_BACK_TYPE): any printable character while browsing
+          // snaps back to the draft with that keystroke applied on top — same one-key-resume
+          // idiom already used elsewhere in this editor.
+          const base = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
+          applyFilterEditorDraft({ ...filterEditor, query: base + input, browsing: null });
         }
         return;
       }
@@ -707,7 +869,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         </Box>
       )}
       {filterEditor !== null ? (
-        <LogFilterEditor editor={filterEditor} serviceName={filterEditor.repoPath !== null ? (rows.find((row) => row.path === filterEditor.repoPath)?.service ?? null) : null} />
+        <LogFilterEditor
+          editor={filterEditor}
+          serviceName={filterEditor.repoPath !== null ? (rows.find((row) => row.path === filterEditor.repoPath)?.service ?? null) : null}
+          history={historyForEditor(filterEditor)}
+          gridMaxRows={filterHistoryGridMaxRows}
+          gridCursor={historyGridCursor}
+          gridScrollOffset={historyGridScroll}
+          gridAvailableWidth={historyGridAvailableWidth}
+        />
       ) : null}
     </Box>
   );
@@ -928,14 +1098,67 @@ function FullscreenPane({
 // validation"). Purely presentational, mirroring ModalDialog's other call sites — all the
 // actual keystroke handling lives in LogsZone's own useInput (Code Map: never a
 // component-owned useInput here, same convention as BranchPicker/TextInputLine).
-function LogFilterEditor({ editor, serviceName }: { editor: FilterEditorState; serviceName: string | null }) {
+function LogFilterEditor({
+  editor,
+  serviceName,
+  history,
+  gridMaxRows,
+  gridCursor,
+  gridScrollOffset,
+  gridAvailableWidth,
+}: {
+  editor: FilterEditorState;
+  serviceName: string | null;
+  history: string[];
+  gridMaxRows: number;
+  gridCursor: GridCursor | null;
+  gridScrollOffset: number;
+  gridAvailableWidth: number;
+}) {
   const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
+  // Story 5.4: the history grid browser — reuses command-bar.tsx's generalized grid primitives
+  // over plain query strings (`getLabel = historyEntryLabel`, i.e. the identity function)
+  // rather than a shared visual component (Code Map: "with its own small JSX loop").
+  const gridLayout = gridCursor !== null ? layoutCommandGrid(history, gridMaxRows, gridAvailableWidth, historyEntryLabel, gridScrollOffset) : null;
   return (
     <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
-      <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused />
+      <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused={gridCursor === null} />
       <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
-      <DimAnnotation text="[Tab] text/regex  [Ctrl+←/→] level  [Enter/Esc] done" />
+      {gridCursor !== null && gridLayout !== null ? (
+        history.length === 0 ? (
+          <DimAnnotation text="No history for this filter yet." />
+        ) : (
+          <Box flexDirection="row">
+            {gridLayout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
+            {gridLayout.columns.map((column, columnIndex) => {
+              const absoluteColumn = gridLayout.scrollOffset + columnIndex;
+              const width = columnDisplayWidth(column, historyEntryLabel);
+              return (
+                <Box key={absoluteColumn} flexDirection="column" marginRight={HISTORY_GRID_COLUMN_GAP}>
+                  {column.map((entry, rowIndex) => {
+                    const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === rowIndex;
+                    return (
+                      <Text key={`${absoluteColumn}-${rowIndex}`} color={isCursor ? colors.accent : colors['text-dim']}>
+                        {isCursor ? '› ' : '  '}
+                        {entry.padEnd(width)}
+                      </Text>
+                    );
+                  })}
+                </Box>
+              );
+            })}
+            {gridLayout.truncated.right ? <Text color={colors['text-dim']}> …</Text> : null}
+          </Box>
+        )
+      ) : null}
+      <DimAnnotation
+        text={
+          gridCursor !== null
+            ? '[↑/↓/←/→] browse history  [Enter] recall  [Esc] close'
+            : '[Tab] text/regex  [Ctrl+←/→] level  [↑/↓] history  [Enter/Esc] done'
+        }
+      />
     </ModalDialog>
   );
 }

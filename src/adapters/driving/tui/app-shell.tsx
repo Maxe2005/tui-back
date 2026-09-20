@@ -200,6 +200,11 @@ export function AppShell({
   // EDTs zone's persisted boundary ratios are live before it ever renders, independent of
   // whether the EDTs zone is the first one visited.
   const loadSplitterRatios = useStore((state) => state.loadSplitterRatios);
+  // Story 5.4: same mount-once idiom — the Logs zone's filter editor and the Settings screen's
+  // Logs tab both read `store.filterHistory` unconditionally (arrow-recall/grid-browse and the
+  // clear actions), so the persisted lists must be live before either is ever opened
+  // (RESTART_PERSIST: "loaded from state.json on the next filter-editor open").
+  const loadFilterHistory = useStore((state) => state.loadFilterHistory);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
@@ -239,6 +244,13 @@ export function AppShell({
   // it ever renders.
   useEffect(() => {
     void loadSplitterRatios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Story 5.4 (I/O matrix RESTART_PERSIST): loaded once at app mount, same mount-once idiom as
+  // loadSplitterRatios above.
+  useEffect(() => {
+    void loadFilterHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

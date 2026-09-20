@@ -73,7 +73,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
-          logs: { bufferSize: 500, startWithHistory: false },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
         },
         warning: null,
       },
@@ -158,6 +158,67 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('logs.bufferSize');
   });
 
+  // Story 5.4: mirrors the logs.bufferSize bound tests above for the two new fields.
+  it('falls back to defaults with a field-naming warning when logs.filterHistorySize exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  filterHistorySize: 201\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.filterHistorySize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.filterHistorySize is below the lower bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  filterHistorySize: 0\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.filterHistorySize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.filterHistoryGridMaxRows exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  filterHistoryGridMaxRows: 100\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.filterHistoryGridMaxRows');
+  });
+
+  it('loads a pre-existing file whose logs block predates filterHistorySize/filterHistoryGridMaxRows — defaults just those fields, keeps bufferSize', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 750\n');
+
+    const result = await loadSettings(file);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          general: { quitShortcutEnabled: true },
+          commandPalette: { gridMaxRows: 8 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        },
+        warning: null,
+      },
+    });
+  });
+
   it('falls back to defaults with a field-naming warning when general.quitShortcutEnabled is not a boolean', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -204,7 +265,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
-          logs: { bufferSize: 500, startWithHistory: false },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
         },
         warning: null,
       },
@@ -229,7 +290,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 750, startWithHistory: false },
+          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
         },
         warning: null,
       },
@@ -252,7 +313,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 500, startWithHistory: false },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
         },
         warning: null,
       },
@@ -278,7 +339,7 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 10 },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
-      logs: { bufferSize: 500, startWithHistory: false },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
     };
 
     const result = await saveSettings(file, settings);
@@ -296,14 +357,14 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-      logs: { bufferSize: 500, startWithHistory: false },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-      logs: { bufferSize: 500, startWithHistory: false },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
     });
   });
 });
@@ -317,7 +378,7 @@ describe('createSettingsPort', () => {
       general: { quitShortcutEnabled: false },
       commandPalette: { gridMaxRows: 5 },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
-      logs: { bufferSize: 500, startWithHistory: false },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
     };
 
     await port.save(settings);
