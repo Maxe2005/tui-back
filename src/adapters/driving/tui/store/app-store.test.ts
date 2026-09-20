@@ -803,7 +803,7 @@ describe("app store", () => {
               general: { quitShortcutEnabled: true },
               commandPalette: { gridMaxRows: 12 },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
-              logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+              logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
           }),
@@ -818,7 +818,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 12 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
     });
@@ -868,7 +868,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 15 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     });
 
@@ -879,7 +879,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
       });
 
@@ -889,7 +889,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     });
 
@@ -900,7 +900,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"] },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
       });
 
@@ -910,7 +910,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     });
 
@@ -1016,7 +1016,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       });
@@ -1575,6 +1575,28 @@ describe("logs slice: filter history (story 5.4)", () => {
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "c");
 
     expect(store.getState().filterHistory["global:text"]).toEqual(["c", "b"]);
+  });
+
+  it("commitFilterHistoryEntry with filterHistoryDedup moves a repeat to the front without duplicating it", () => {
+    const store = createAppStore(fakeDeps());
+    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true } } }));
+
+    store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
+    store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "b");
+    store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
+
+    expect(store.getState().filterHistory["global:text"]).toEqual(["a", "b"]);
+  });
+
+  it("commitFilterHistoryEntry without filterHistoryDedup keeps the legacy duplicate", () => {
+    const store = createAppStore(fakeDeps());
+    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: false } } }));
+
+    store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
+    store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "b");
+    store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
+
+    expect(store.getState().filterHistory["global:text"]).toEqual(["a", "b", "a"]);
   });
 
   it("clearGlobalFilterHistory only touches the two global lists (Boundaries)", async () => {

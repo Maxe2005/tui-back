@@ -77,6 +77,7 @@ export const settingsSchema: z.ZodType<Settings> = z
           .max(MAX_FILTER_HISTORY_GRID_MAX_ROWS)
           .optional()
           .default(DEFAULT_SETTINGS.logs.filterHistoryGridMaxRows),
+        filterHistoryDedup: z.boolean().optional().default(DEFAULT_SETTINGS.logs.filterHistoryDedup),
       })
       .strict()
       .optional()

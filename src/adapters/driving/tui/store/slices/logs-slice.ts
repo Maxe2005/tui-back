@@ -399,10 +399,11 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           filterHistoryVersion += 1;
           const historyKey = filterHistoryKeyString(key);
           const maxSize = get().settings.logs.filterHistorySize;
+          const dedupEverywhere = get().settings.logs.filterHistoryDedup;
           set((state) => ({
             filterHistory: {
               ...state.filterHistory,
-              [historyKey]: pushFilterHistoryEntry(state.filterHistory[historyKey] ?? [], query, maxSize),
+              [historyKey]: pushFilterHistoryEntry(state.filterHistory[historyKey] ?? [], query, maxSize, dedupEverywhere),
             },
           }));
           // Applies to the live store synchronously above, before persistence even starts —

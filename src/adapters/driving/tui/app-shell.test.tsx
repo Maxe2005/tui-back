@@ -355,7 +355,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } },
+        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},

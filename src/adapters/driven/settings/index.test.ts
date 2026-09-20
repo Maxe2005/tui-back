@@ -73,7 +73,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -212,7 +212,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -265,7 +265,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -290,7 +290,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -313,7 +313,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -339,7 +339,7 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 10 },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     const result = await saveSettings(file, settings);
@@ -357,14 +357,14 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
   });
 });
@@ -378,7 +378,7 @@ describe('createSettingsPort', () => {
       general: { quitShortcutEnabled: false },
       commandPalette: { gridMaxRows: 5 },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     await port.save(settings);

@@ -642,6 +642,18 @@ describe('pushFilterHistoryEntry (I/O matrix HISTORY_PUSH/DEDUP_TOP)', () => {
     expect(pushFilterHistoryEntry(['other', 'boom'], 'boom', 20)).toEqual(['boom', 'other', 'boom']);
   });
 
+  it('with dedupEverywhere, moves a non-top repeat to the front keeping a single instance', () => {
+    expect(pushFilterHistoryEntry(['other', 'boom'], 'boom', 20, true)).toEqual(['boom', 'other']);
+  });
+
+  it('with dedupEverywhere, a top repeat stays a single instance', () => {
+    expect(pushFilterHistoryEntry(['boom', 'other'], 'boom', 20, true)).toEqual(['boom', 'other']);
+  });
+
+  it('with dedupEverywhere, removes every duplicate before front-pushing and trims', () => {
+    expect(pushFilterHistoryEntry(['a', 'b', 'a', 'c'], 'a', 3, true)).toEqual(['a', 'b', 'c']);
+  });
+
   it('trims to maxSize, dropping the oldest entries', () => {
     expect(pushFilterHistoryEntry(['a', 'b', 'c'], 'd', 3)).toEqual(['d', 'a', 'b']);
   });
@@ -672,6 +684,22 @@ describe('resolveHistoryBrowseUp (I/O matrix ARROW_UP_OLDEST)', () => {
   it('is a no-op against an empty history', () => {
     expect(resolveHistoryBrowseUp('draft', null, [])).toEqual({ query: 'draft', browsing: null });
   });
+
+  it('skips the most-recent entry when it equals the pre-filled draft (active filter), showing older values first', () => {
+    const result = resolveHistoryBrowseUp('active', null, ['active', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'older', browsing: { index: 1, savedDraft: 'active' } });
+  });
+
+  it('is a no-op when the whole history equals the draft', () => {
+    expect(resolveHistoryBrowseUp('only', null, ['only'])).toEqual({ query: 'only', browsing: null });
+  });
+
+  it('skips entries equal to the saved draft while walking older', () => {
+    const first = resolveHistoryBrowseUp('draft', null, ['newest', 'draft', 'oldest']);
+    expect(first).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'draft' } });
+    const second = resolveHistoryBrowseUp(first.query, first.browsing, ['newest', 'draft', 'oldest']);
+    expect(second).toEqual({ query: 'oldest', browsing: { index: 2, savedDraft: 'draft' } });
+  });
 });
 
 describe('resolveHistoryBrowseDown (I/O matrix ARROW_DOWN_PAST_RECENT)', () => {
@@ -685,5 +713,11 @@ describe('resolveHistoryBrowseDown (I/O matrix ARROW_DOWN_PAST_RECENT)', () => {
     const browsing = { index: 0, savedDraft: 'my-original-draft' };
     const result = resolveHistoryBrowseDown(browsing, ['newest', 'older']);
     expect(result).toEqual({ query: 'my-original-draft', browsing: null });
+  });
+
+  it('skips the most-recent entry on the way down when it equals the saved draft', () => {
+    const browsing = { index: 1, savedDraft: 'active' };
+    const result = resolveHistoryBrowseDown(browsing, ['active', 'older']);
+    expect(result).toEqual({ query: 'active', browsing: null });
   });
 });

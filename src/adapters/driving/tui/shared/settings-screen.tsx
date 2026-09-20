@@ -240,6 +240,7 @@ export type LogsSettingsGroupId =
   | 'start-with-history'
   | 'filter-history-size'
   | 'filter-history-grid'
+  | 'filter-history-dedup'
   | 'clear-history';
 
 export type LogsSettingsGroup = { id: LogsSettingsGroupId; label: string };
@@ -249,6 +250,7 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'start-with-history', label: 'Start with history' },
   { id: 'filter-history-size', label: 'Filter history size' },
   { id: 'filter-history-grid', label: 'Filter history grid' },
+  { id: 'filter-history-dedup', label: 'Filter history dedup' },
   { id: 'clear-history', label: 'Clear history' },
 ];
 
@@ -504,6 +506,13 @@ export function SettingsScreen({
         return;
       }
 
+      if (logsGroup === 'filter-history-dedup') {
+        if (input === ' ') {
+          void updateSettings({ logs: { filterHistoryDedup: !settings.logs.filterHistoryDedup } });
+        }
+        return;
+      }
+
       // logsGroup === null: the group-list level — Up/Down navigates, Enter drills in.
       if (key.upArrow) {
         setLogsGroupCursor((current) => moveHintCursor(current, 'up', LOGS_SETTINGS_GROUPS.length));
@@ -675,6 +684,16 @@ export function SettingsScreen({
               Filter history grid max rows: <Text color={colors.accent}>{settings.logs.filterHistoryGridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Left/Right: ±1 per press, or a typed digit (1-9). Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-history-dedup' ? (
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Dedup filter history (one instance per filter)"
+              state={settings.logs.filterHistoryDedup ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="Space to toggle. Checked: reusing a filter moves it to the most recent place instead of storing it twice. Esc for the group list." />
           </Box>
         ) : null}
 

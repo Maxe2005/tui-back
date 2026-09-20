@@ -49,6 +49,11 @@ export interface Settings {
     // per-column, independent of commandPalette.gridMaxRows (Boundaries) — a list of short
     // query strings warrants its own default/range rather than reusing the command grid's.
     filterHistoryGridMaxRows: number;
+    // When true, committing a query already present in its (scope, mode) history list moves
+    // it to the front instead of storing a second instance — each filter exists at most once
+    // per list. When false, the legacy top-only dedup applies (a non-top repeat is stored
+    // twice). Toggleable from the Logs settings tab.
+    filterHistoryDedup: boolean;
   };
 }
 
@@ -66,7 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Story 5.4: filterHistorySize=20 comfortably covers a session's worth of committed filters
   // per (scope, mode) list without state.json growing unbounded; filterHistoryGridMaxRows=8
   // mirrors commandPalette.gridMaxRows' own default, unrelated as the two settings are.
-  logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+  logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/

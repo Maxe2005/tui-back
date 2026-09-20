@@ -1366,7 +1366,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } },
+      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1435,7 +1435,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
         general: { quitShortcutEnabled: false },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
 
       await press(instance, stdin, ' ');
@@ -1572,7 +1572,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 9 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
       instance.unmount();
@@ -1607,7 +1607,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
-        logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
 
       // A typed digit is a quick preset (digit x 100), still while on the bufferSize row.
@@ -1648,6 +1648,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
           startWithHistory: true,
           filterHistorySize: 20,
           filterHistoryGridMaxRows: 8,
+          filterHistoryDedup: true,
         },
       });
 
@@ -1711,6 +1712,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       await press(instance, stdin, KEYS.down); // -> "Start with history"
       await press(instance, stdin, KEYS.down); // -> "Filter history size"
       await press(instance, stdin, KEYS.down); // -> "Filter history grid"
+      await press(instance, stdin, KEYS.down); // -> "Filter history dedup"
       await press(instance, stdin, KEYS.down); // -> "Clear history"
       await press(instance, stdin, KEYS.enter); // drill in (row cursor on clear-global)
 
@@ -1749,7 +1751,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
       instance.unmount();
@@ -1782,7 +1784,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
       instance.unmount();

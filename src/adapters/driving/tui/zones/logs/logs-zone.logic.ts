@@ -531,8 +531,19 @@ export function filterHistoryKeyString(key: FilterHistoryKey): string {
 // front instead of duplicating it when it's already the current top entry, then trims to
 // `maxSize`. Pure — the caller (the logs store slice) is responsible for only calling this on
 // an actual commit (Enter, compiles, non-empty) and for persisting the result.
-export function pushFilterHistoryEntry(history: readonly string[], query: string, maxSize: number): string[] {
-  const rest = history.length > 0 && history[0] === query ? history.slice(1) : history;
+//
+// User-reported: when `dedupEverywhere` is true (settings.logs.filterHistoryDedup), any
+// previous occurrence of `query` — not just the top entry — is removed first and the query
+// moves to the front, so each filter exists at most once per list. When false/omitted, the
+// legacy DEDUP_TOP-only behavior applies (a non-top duplicate is front-pushed as a second
+// instance).
+export function pushFilterHistoryEntry(
+  history: readonly string[],
+  query: string,
+  maxSize: number,
+  dedupEverywhere = false,
+): string[] {
+  const rest = dedupEverywhere ? history.filter((entry) => entry !== query) : history.length > 0 && history[0] === query ? history.slice(1) : history;
   return [query, ...rest].slice(0, Math.max(maxSize, 0));
 }
 
@@ -546,6 +557,13 @@ export type FilterHistoryBrowseResult = { query: string; browsing: FilterHistory
 // I/O matrix ARROW_UP_OLDEST: `↑` on an untouched draft recalls the most-recent entry
 // (preserving the draft as `savedDraft`); further `↑` walks older entries; `↑` already at the
 // oldest entry is a no-op (Boundaries). An empty history is a no-op too — nothing to recall.
+//
+// User-reported: the editor opens pre-filled with the currently-active filter, which is
+// usually also the history's most-recent entry — recalling it first forces two `↑` presses
+// before any different value appears. Any history entry equal to the draft being browsed
+// from is therefore skipped: on a fresh `↑` the most-recent entry is skipped when it equals
+// the current query, and while already browsing, entries equal to `savedDraft` are skipped
+// when walking older. Skipping past the end is a no-op.
 export function resolveHistoryBrowseUp(
   currentQuery: string,
   browsing: FilterHistoryBrowseState | null,
@@ -555,10 +573,20 @@ export function resolveHistoryBrowseUp(
     return { query: currentQuery, browsing };
   }
   if (browsing === null) {
-    return { query: history[0]!, browsing: { index: 0, savedDraft: currentQuery } };
+    let index = 0;
+    while (index < history.length && history[index] === currentQuery) {
+      index += 1;
+    }
+    if (index >= history.length) {
+      return { query: currentQuery, browsing };
+    }
+    return { query: history[index]!, browsing: { index, savedDraft: currentQuery } };
   }
-  const nextIndex = Math.min(browsing.index + 1, history.length - 1);
-  if (nextIndex === browsing.index) {
+  let nextIndex = browsing.index + 1;
+  while (nextIndex < history.length && history[nextIndex] === browsing.savedDraft) {
+    nextIndex += 1;
+  }
+  if (nextIndex >= history.length) {
     return { query: currentQuery, browsing };
   }
   return { query: history[nextIndex]!, browsing: { index: nextIndex, savedDraft: browsing.savedDraft } };
@@ -568,11 +596,18 @@ export function resolveHistoryBrowseUp(
 // `↓` past the most-recent entry (index 0) restores the original draft exactly and ends
 // browsing. Only ever called while already browsing (Boundaries: "↓ on an untouched draft ...
 // opens a ... grid browser" instead — see logs-zone.tsx's own dispatch).
+//
+// Mirrors the `↑` skip above: entries equal to `savedDraft` are never shown on the way back
+// down either — walking onto one restores the draft directly (ending browsing) instead of
+// displaying the same text twice.
 export function resolveHistoryBrowseDown(
   browsing: FilterHistoryBrowseState,
   history: readonly string[],
 ): FilterHistoryBrowseResult {
-  const prevIndex = browsing.index - 1;
+  let prevIndex = browsing.index - 1;
+  while (prevIndex >= 0 && history[prevIndex] === browsing.savedDraft) {
+    prevIndex -= 1;
+  }
   if (prevIndex < 0) {
     return { query: browsing.savedDraft, browsing: null };
   }

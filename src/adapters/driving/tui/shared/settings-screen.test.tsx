@@ -195,12 +195,13 @@ describe('parseFilterHistoryGridMaxRowsDigit (story 5.4)', () => {
 });
 
 describe('LOGS_SETTINGS_GROUPS (amended 2026-09-20)', () => {
-  it('lists exactly the five Logs-tab groups, in this order', () => {
+  it('lists exactly the six Logs-tab groups, in this order', () => {
     expect(LOGS_SETTINGS_GROUPS.map((group) => group.id)).toEqual([
       'buffer-size',
       'start-with-history',
       'filter-history-size',
       'filter-history-grid',
+      'filter-history-dedup',
       'clear-history',
     ]);
     expect(LOGS_SETTINGS_GROUPS.map((group) => group.label)).toEqual([
@@ -208,6 +209,7 @@ describe('LOGS_SETTINGS_GROUPS (amended 2026-09-20)', () => {
       'Start with history',
       'Filter history size',
       'Filter history grid',
+      'Filter history dedup',
       'Clear history',
     ]);
   });
@@ -323,7 +325,7 @@ describe('SettingsScreen (story 2.19)', () => {
 
   it('renders the live bufferSize value and hints when drilled into the "Buffer size" group (story 5.1, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="buffer-size" />);
     expect(output).toContain('Log buffer size');
     expect(output).toContain('750');
@@ -333,13 +335,13 @@ describe('SettingsScreen (story 2.19)', () => {
 
   it('renders the startWithHistory checkbox when drilled into the "Start with history" group, checked/unchecked to match the live setting (review fix, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } } });
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
     const uncheckedLine = unchecked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(uncheckedLine).toContain('[ ]');
     expect(unchecked).toContain('Space to toggle');
 
-    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } } });
     const checked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
     const checkedLine = checked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(checkedLine).toContain('[x]');
@@ -401,6 +403,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Start with history');
     expect(output).toContain('Filter history size');
     expect(output).toContain('Filter history grid');
+    expect(output).toContain('Filter history dedup');
     expect(output).toContain('Clear history');
     expect(output).not.toContain('Log buffer size (lines per pane)');
     expect(output).not.toContain('Clear global filter history');
@@ -412,7 +415,7 @@ describe('SettingsScreen (story 2.19)', () => {
   it('renders the live filterHistorySize value when drilled into the "Filter history size" group (story 5.4, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12 } },
+      settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12, filterHistoryDedup: true } },
     });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="filter-history-size" />);
     expect(output).toContain('Filter history size');
@@ -422,11 +425,24 @@ describe('SettingsScreen (story 2.19)', () => {
   it('renders the live filterHistoryGridMaxRows value when drilled into the "Filter history grid" group (story 5.4, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12 } },
+      settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12, filterHistoryDedup: true } },
     });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="filter-history-grid" />);
     expect(output).toContain('Filter history grid max rows');
     expect(output).toContain('12');
+  });
+
+  it('renders the filterHistoryDedup checkbox checked/unchecked to match the live setting', async () => {
+    const checked = createAppStore();
+    checked.setState({
+      settings: { ...DEFAULT_SETTINGS, logs: { ...DEFAULT_SETTINGS.logs, filterHistoryDedup: true } },
+    });
+    expect(await renderToString(<SettingsScreen useStore={checked} initialTab="logs" initialLogsGroup="filter-history-dedup" />)).toContain('[x]');
+    const unchecked = createAppStore();
+    unchecked.setState({
+      settings: { ...DEFAULT_SETTINGS, logs: { ...DEFAULT_SETTINGS.logs, filterHistoryDedup: false } },
+    });
+    expect(await renderToString(<SettingsScreen useStore={unchecked} initialTab="logs" initialLogsGroup="filter-history-dedup" />)).toContain('[ ]');
   });
 
   it('drilled into the "Clear history" group, lists both clear actions as a row-cursor list, cursor on clear-global by default', async () => {
