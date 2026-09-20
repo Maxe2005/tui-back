@@ -827,23 +827,40 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 </Box>
               ))}
 
-              <Box flexDirection="column" marginTop={spacing['section-gap']}>
-                <DimAnnotation text="[Space] toggle" />
-                <DimAnnotation text="[Enter] preview" />
-                <DimAnnotation text="[Ctrl+A] toggle all" />
-                <DimAnnotation text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`} />
-                <DimAnnotation text={`[o] stdout ${visibility.showStdout ? 'on' : 'off'}`} />
-                <DimAnnotation text={`[p] stderr ${visibility.showStderr ? 'on' : 'off'}`} />
-                <DimAnnotation text="[Ctrl+↑/↓] scroll pane" />
-                <DimAnnotation text="[c] clear focused pane" />
-                <DimAnnotation text="[Ctrl+C] clear all panes" />
-                <DimAnnotation text="[w] wrap/truncate focused pane" />
-                <DimAnnotation text="[Ctrl+W] wrap/truncate all panes" />
-                <DimAnnotation text="[/] edit global filter" />
-                <DimAnnotation text="[f] edit focused pane's filter" />
-                <DimAnnotation text="[g] toggle focused pane's global filter" />
-                <DimAnnotation text="[Esc] clear filter (pane -> engagement -> global)" />
-              </Box>
+              {/* Amended 2026-09-20 (crash/corruption fix): every one of these hints is a
+                  services-list keybinding (Space/Enter/Ctrl+A/t/o/p/Ctrl+↑↓/c/Ctrl+C/w/Ctrl+W)
+                  or opens the filter editor (`/`, `f`, `g`, Esc) — none of them are live once
+                  the editor itself has taken over input capture (see the `useInput` guard:
+                  "the filter editor captures every keystroke while open"). Rendering this
+                  15-line block unconditionally, stacked above LogFilterEditor's own modal
+                  (appended as a sibling below, not a true overlay — Ink has no absolute
+                  positioning), pushed total content past the terminal's row count on anything
+                  but a very tall window: Ink's diff-render then desyncs from the real
+                  terminal's cursor and corrupts already-painted lines (the exact "SETTINGS" ->
+                  "--ttings" family of bug from the Settings-tab fix, reproduced here against
+                  live services with a 100x30 terminal and zero panes open — Design Notes). Since
+                  these keybindings are genuinely inert while the editor is open, hiding this
+                  block then costs nothing functionally and reliably recovers the ~15 rows the
+                  editor needs. */}
+              {filterEditor === null ? (
+                <Box flexDirection="column" marginTop={spacing['section-gap']}>
+                  <DimAnnotation text="[Space] toggle" />
+                  <DimAnnotation text="[Enter] preview" />
+                  <DimAnnotation text="[Ctrl+A] toggle all" />
+                  <DimAnnotation text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`} />
+                  <DimAnnotation text={`[o] stdout ${visibility.showStdout ? 'on' : 'off'}`} />
+                  <DimAnnotation text={`[p] stderr ${visibility.showStderr ? 'on' : 'off'}`} />
+                  <DimAnnotation text="[Ctrl+↑/↓] scroll pane" />
+                  <DimAnnotation text="[c] clear focused pane" />
+                  <DimAnnotation text="[Ctrl+C] clear all panes" />
+                  <DimAnnotation text="[w] wrap/truncate this pane" />
+                  <DimAnnotation text="[Ctrl+W] wrap/truncate all" />
+                  <DimAnnotation text="[/] edit global filter" />
+                  <DimAnnotation text="[f] edit this pane's filter" />
+                  <DimAnnotation text="[g] toggle global (pane)" />
+                  <DimAnnotation text="[Esc] clear filter (cascade)" />
+                </Box>
+              ) : null}
             </Box>
 
             <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">

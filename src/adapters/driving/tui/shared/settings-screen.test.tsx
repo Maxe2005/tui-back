@@ -12,7 +12,7 @@ import {
   HIDEABLE_ACTION_HINTS,
   HIDEABLE_ACTION_TYPES,
   LOG_BUFFER_SIZE_STEP,
-  LOGS_SETTINGS_ROWS,
+  LOGS_SETTINGS_GROUPS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
   MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
@@ -194,15 +194,21 @@ describe('parseFilterHistoryGridMaxRowsDigit (story 5.4)', () => {
   });
 });
 
-describe('LOGS_SETTINGS_ROWS (story 5.4)', () => {
-  it('lists exactly the six Logs-tab fields, in this order', () => {
-    expect(LOGS_SETTINGS_ROWS).toEqual([
-      'bufferSize',
-      'startWithHistory',
-      'filterHistorySize',
-      'filterHistoryGridMaxRows',
-      'clear-global',
-      'clear-service',
+describe('LOGS_SETTINGS_GROUPS (amended 2026-09-20)', () => {
+  it('lists exactly the five Logs-tab groups, in this order', () => {
+    expect(LOGS_SETTINGS_GROUPS.map((group) => group.id)).toEqual([
+      'buffer-size',
+      'start-with-history',
+      'filter-history-size',
+      'filter-history-grid',
+      'clear-history',
+    ]);
+    expect(LOGS_SETTINGS_GROUPS.map((group) => group.label)).toEqual([
+      'Buffer size',
+      'Start with history',
+      'Filter history size',
+      'Filter history grid',
+      'Clear history',
     ]);
   });
 });
@@ -315,26 +321,26 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Up/Down to adjust, or type a digit (1-9).');
   });
 
-  it('renders the live bufferSize value and hints on the Logs tab (story 5.1, row-cursor hints amended story 5.4)', async () => {
+  it('renders the live bufferSize value and hints when drilled into the "Buffer size" group (story 5.1, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
-    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="buffer-size" />);
     expect(output).toContain('Log buffer size');
     expect(output).toContain('750');
     expect(output).toContain(`±${LOG_BUFFER_SIZE_STEP} per press`);
     expect(output).toContain('Applies to new streams only');
   });
 
-  it('renders the startWithHistory checkbox on the Logs tab, checked/unchecked to match the live setting (review fix, row-cursor amended story 5.4)', async () => {
+  it('renders the startWithHistory checkbox when drilled into the "Start with history" group, checked/unchecked to match the live setting (review fix, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
-    const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
     const uncheckedLine = unchecked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(uncheckedLine).toContain('[ ]');
-    expect(unchecked).toContain('Space toggles a checkbox');
+    expect(unchecked).toContain('Space to toggle');
 
     store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true, filterHistorySize: 20, filterHistoryGridMaxRows: 8 } } });
-    const checked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const checked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
     const checkedLine = checked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(checkedLine).toContain('[x]');
   });
@@ -385,32 +391,52 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(visibleLine).toContain('[ ]');
   });
 
-  // Story 5.4: the Logs tab's row-cursor rework.
-  it('renders every Logs-tab field as one row-cursor list, cursor on bufferSize by default', async () => {
+  // Amended 2026-09-20: the Logs tab's regroup, fixing the settings modal overflowing its
+  // viewport (border/title corruption, overlapping rows) when all six fields rendered as one
+  // flat list — mirrors the EDTs tab's group-list precedent (Design Notes there).
+  it('opens the Logs tab on its group list, not a field list', async () => {
     const store = createAppStore();
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
-    expect(output).toContain('Log buffer size');
-    expect(output).toContain('Start streaming with the most recent history');
+    expect(output).toContain('Buffer size');
+    expect(output).toContain('Start with history');
     expect(output).toContain('Filter history size');
-    expect(output).toContain('Filter history grid max rows');
-    expect(output).toContain('Clear global filter history');
-    expect(output).toContain("Clear a service's filter history");
+    expect(output).toContain('Filter history grid');
+    expect(output).toContain('Clear history');
+    expect(output).not.toContain('Log buffer size (lines per pane)');
+    expect(output).not.toContain('Clear global filter history');
     const lines = output.split('\n');
-    const bufferSizeLine = lines.find((line) => line.includes('Log buffer size'));
-    expect(bufferSizeLine).toContain('›');
+    const firstGroupLine = lines.find((line) => line.includes('Buffer size'));
+    expect(firstGroupLine).toContain('›');
   });
 
-  it('renders the live filterHistorySize/filterHistoryGridMaxRows values on the Logs tab (story 5.4)', async () => {
+  it('renders the live filterHistorySize value when drilled into the "Filter history size" group (story 5.4, regrouped 2026-09-20)', async () => {
     const store = createAppStore();
     store.setState({
       settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12 } },
     });
-    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="filter-history-size" />);
+    expect(output).toContain('Filter history size');
+    expect(output).toContain('30');
+  });
+
+  it('renders the live filterHistoryGridMaxRows value when drilled into the "Filter history grid" group (story 5.4, regrouped 2026-09-20)', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12 } },
+    });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="filter-history-grid" />);
+    expect(output).toContain('Filter history grid max rows');
+    expect(output).toContain('12');
+  });
+
+  it('drilled into the "Clear history" group, lists both clear actions as a row-cursor list, cursor on clear-global by default', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="clear-history" />);
+    expect(output).toContain('Clear global filter history');
+    expect(output).toContain("Clear a service's filter history");
     const lines = output.split('\n');
-    const historySizeLine = lines.find((line) => line.includes('Filter history size'));
-    const gridMaxRowsLine = lines.find((line) => line.includes('Filter history grid max rows'));
-    expect(historySizeLine).toContain('30');
-    expect(gridMaxRowsLine).toContain('12');
+    const clearGlobalLine = lines.find((line) => line.includes('Clear global filter history'));
+    expect(clearGlobalLine).toContain('›');
   });
 
   it('drilled into "clear a service\'s history", lists every manifest service from edtsBranches (Boundaries: drilled into a list of manifest services)', async () => {

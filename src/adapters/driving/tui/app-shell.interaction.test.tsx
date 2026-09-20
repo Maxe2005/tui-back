@@ -1580,10 +1580,12 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  // Story 5.4: the Logs tab moved from per-field dedicated keys to a row cursor — Up/Down now
-  // navigates between fields (bufferSize is the default, first row), and Left/Right adjusts
-  // whichever numeric row is currently highlighted.
-  it('Left/Right on the Logs tab\'s default bufferSize row adjusts settings.logs.bufferSize live and persists via updateSettings (story 5.1 AC: "new stream afterward uses the new buffer size"; row-cursor amended story 5.4)', async () => {
+  // Amended 2026-09-20: the Logs tab moved from a flat row cursor to a group list (mirrors the
+  // EDTs tab's own group-list precedent) — fixes the settings modal overflowing its viewport
+  // (border/title corruption, overlapping rows) when all six fields rendered as one flat list.
+  // Up/Down now navigates between groups; Enter drills into a group; Left/Right adjusts the
+  // one numeric field a drilled-in group holds.
+  it('Left/Right on the Logs tab\'s default "Buffer size" group adjusts settings.logs.bufferSize live and persists via updateSettings (story 5.1 AC: "new stream afterward uses the new buffer size"; regrouped 2026-09-20)', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1595,7 +1597,8 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab); // General -> EDTs
       await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
-      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.enter); // drill into "Buffer size" (first, default group)
 
       await press(instance, stdin, KEYS.right);
 
@@ -1616,7 +1619,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Space on the Logs tab\'s startWithHistory row (reached via one Down from bufferSize) toggles settings.logs.startWithHistory live and persists via updateSettings, independently of bufferSize (review fix; row-cursor amended story 5.4)', async () => {
+  it('Space on the Logs tab\'s "Start with history" group (reached via one Down from "Buffer size") toggles settings.logs.startWithHistory live and persists via updateSettings, independently of bufferSize (review fix; regrouped 2026-09-20)', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1628,8 +1631,9 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab); // General -> EDTs
       await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
-      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs
-      await press(instance, stdin, KEYS.down); // bufferSize -> startWithHistory row
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.down); // "Buffer size" -> "Start with history" group
+      await press(instance, stdin, KEYS.enter); // drill into "Start with history"
 
       await press(instance, stdin, KEYS.space);
 
@@ -1657,7 +1661,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
   // Story 5.4: end-to-end coverage of the two new fields and the clear actions, real-keypress
   // driven (mirrors the two tests just above).
-  it('Left/Right on the filterHistorySize/filterHistoryGridMaxRows rows adjusts them live and persists', async () => {
+  it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists (regrouped 2026-09-20)', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1669,14 +1673,17 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab); // General -> EDTs
       await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
-      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs
-      await press(instance, stdin, KEYS.down); // -> startWithHistory
-      await press(instance, stdin, KEYS.down); // -> filterHistorySize
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.down); // -> "Start with history"
+      await press(instance, stdin, KEYS.down); // -> "Filter history size"
+      await press(instance, stdin, KEYS.enter); // drill in
 
       await press(instance, stdin, KEYS.right);
       expect(store.getState().settings.logs.filterHistorySize).toBe(25);
 
-      await press(instance, stdin, KEYS.down); // -> filterHistoryGridMaxRows
+      await pressEscape(instance, stdin); // back to the group list
+      await press(instance, stdin, KEYS.down); // -> "Filter history grid"
+      await press(instance, stdin, KEYS.enter); // drill in
       await press(instance, stdin, KEYS.right);
       expect(store.getState().settings.logs.filterHistoryGridMaxRows).toBe(9);
     } finally {
@@ -1685,7 +1692,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists', async () => {
+  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists (regrouped 2026-09-20)', async () => {
     const store = createAppStore(fakeDeps());
     store.getState().commitFilterHistoryEntry({ scope: 'global', repoPath: null, mode: 'text' }, 'g-text');
     store.getState().commitFilterHistoryEntry({ scope: 'pane', repoPath: '/repo/a', mode: 'text' }, 'a-text');
@@ -1700,11 +1707,12 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab); // General -> EDTs
       await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
-      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs
-      await press(instance, stdin, KEYS.down); // -> startWithHistory
-      await press(instance, stdin, KEYS.down); // -> filterHistorySize
-      await press(instance, stdin, KEYS.down); // -> filterHistoryGridMaxRows
-      await press(instance, stdin, KEYS.down); // -> clear-global
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.down); // -> "Start with history"
+      await press(instance, stdin, KEYS.down); // -> "Filter history size"
+      await press(instance, stdin, KEYS.down); // -> "Filter history grid"
+      await press(instance, stdin, KEYS.down); // -> "Clear history"
+      await press(instance, stdin, KEYS.enter); // drill in (row cursor on clear-global)
 
       await press(instance, stdin, KEYS.enter);
       expect(store.getState().filterHistory['global:text']).toBeUndefined();
