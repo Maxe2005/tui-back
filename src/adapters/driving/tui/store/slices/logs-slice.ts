@@ -12,8 +12,8 @@
 // single DockerPort wired into AppStoreDeps.
 import type { StateCreator } from 'zustand';
 import { createLogsManager, type LogsManager } from '../../../../../core/logs/index.js';
-import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
+import { clearLogs, getServiceHealth, loadOlderLogs, restartService, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
+import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 import {
   filterHistoryKeyString,
@@ -30,6 +30,12 @@ export type LogsPaneData = {
   lines: LogLine[];
   streamError: LogsPaneErrorState;
   noMoreHistory: boolean;
+  // Story 5.3: live Docker health for this pane's container (never persisted — read on poll
+  // only) plus whether a developer-triggered `docker restart` is currently in flight for this
+  // pane (gates the R control + the no-op guard). Defaults: `down` (not yet proven up) and
+  // `false`.
+  health: HealthState;
+  restarting: boolean;
   // How many lines back from the tail this pane is currently scrolled — 0 means "pinned to
   // the live tail". Purely local UI state (never mirrored from LogsManager); bumped by
   // loadOlderLogsPane's own successful prepend so the viewport doesn't visually jump (I/O
@@ -38,8 +44,12 @@ export type LogsPaneData = {
 };
 
 function emptyPane(repoPath: string, service: string): LogsPaneData {
-  return { repoPath, service, lines: [], streamError: null, noMoreHistory: false, scrollOffset: 0 };
+  return { repoPath, service, lines: [], streamError: null, noMoreHistory: false, scrollOffset: 0, health: 'down', restarting: false };
 }
+
+// Story 5.3: per-pane health poll cadence — on subscribe plus an interval, cleared on
+// unsubscribe. Never resubscribes the log stream itself.
+export const LOGS_HEALTH_POLL_INTERVAL_MS = 5000;
 
 export type LogsSlice = {
   // repoPaths currently checked in the EDT-members list / the other-services list — both
@@ -71,6 +81,11 @@ export type LogsSlice = {
   // transition calls (never core/logs directly from a component).
   subscribeLogsPane: (repoPath: string, service: string) => Promise<void>;
   unsubscribeLogsPane: (repoPath: string) => void;
+  // Story 5.3: developer-triggered restart for one pane's service (R on a sub-focused grid
+  // pane or a fullscreen pane). A call while that pane is already restarting is a no-op —
+  // never a second concurrent `docker restart`. After the call resolves, health is re-polled
+  // immediately; a failure surfaces inline on the pane while the badge keeps last-known.
+  restartLogsPane: (repoPath: string) => Promise<void>;
   loadOlderLogsPane: (repoPath: string) => Promise<void>;
   // Wipes a pane's buffered/displayed lines (a display "clear", like a shell's `clear`) —
   // the stream itself keeps running, so a new line still appears immediately afterward.
@@ -131,6 +146,10 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // synchronous/optimistic, same as before this fix) before ever reading `get().filterHistory`.
   let filterHistoryLoadPromise: Promise<void> | null = null;
 
+  // Story 5.3: one poll timer per subscribed pane (keyed by repoPath) — started on subscribe,
+  // cleared on unsubscribe/stopAll. Never resubscribes the log stream itself.
+  const healthPollTimers = new Map<string, ReturnType<typeof setInterval>>();
+
   function persistFilterHistory(next: Record<string, string[]>): void {
     if (!deps) {
       return;
@@ -179,6 +198,64 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       });
     }
 
+    // Story 5.3: one poll cycle for a single pane — resolves the manifest-declared container,
+    // inspects it, and updates the badge only on success. Any failure (manifest load fails,
+    // inspect errors, docker unreachable) keeps last-known health and never crashes the view.
+    async function pollPaneHealth(repoPath: string): Promise<void> {
+      if (!deps) {
+        return;
+      }
+      if (!get().logsPanes[repoPath]) {
+        return;
+      }
+      const manifestResult = await deps.manifest.load(repoPath);
+      if (!manifestResult.ok) {
+        return;
+      }
+      const healthResult = await getServiceHealth({ docker: deps.docker, container: manifestResult.data.container });
+      if (!healthResult.ok) {
+        return;
+      }
+      const health = healthResult.data;
+      set((state) => {
+        const current = state.logsPanes[repoPath];
+        if (!current) {
+          return {};
+        }
+        if (current.health === health) {
+          return {};
+        }
+        return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, health } } };
+      });
+    }
+
+    function startHealthPolling(repoPath: string): void {
+      if (!deps) {
+        return;
+      }
+      if (healthPollTimers.has(repoPath)) {
+        return;
+      }
+      void pollPaneHealth(repoPath);
+      const timer = setInterval(() => {
+        void pollPaneHealth(repoPath);
+      }, LOGS_HEALTH_POLL_INTERVAL_MS);
+      // Never keep the process alive for a poll timer alone (tests, abnormal exits).
+      const unrefable = timer as unknown as { unref?: () => void };
+      if (typeof unrefable.unref === 'function') {
+        unrefable.unref();
+      }
+      healthPollTimers.set(repoPath, timer);
+    }
+
+    function stopHealthPolling(repoPath: string): void {
+      const timer = healthPollTimers.get(repoPath);
+      if (timer !== undefined) {
+        clearInterval(timer);
+        healthPollTimers.delete(repoPath);
+      }
+    }
+
     return {
       logsEdtSelected: [],
       logsOtherSelected: [],
@@ -210,6 +287,10 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         set((state) => ({
           logsPanes: { ...state.logsPanes, [repoPath]: state.logsPanes[repoPath] ?? emptyPane(repoPath, service) },
         }));
+        // Story 5.3: health polling starts with the subscription (per pane, on subscribe plus
+        // a ~5s interval). Idempotent — a second subscribe for an already-polling pane (e.g.
+        // fullscreen opened on an already-selected row) never starts a second timer.
+        startHealthPolling(repoPath);
         if (logsManager.isSubscribed(repoPath)) {
           // Already streaming (e.g. a fullscreen preview opened on an already-selected row) —
           // nothing new to start.
@@ -273,7 +354,78 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         }
       },
 
+      restartLogsPane: async (repoPath) => {
+        if (!deps || !logsManager) {
+          return;
+        }
+        const pane = get().logsPanes[repoPath];
+        if (!pane) {
+          return;
+        }
+        // Story 5.3: a call while that pane is already restarting is a no-op — never a second
+        // concurrent `docker restart`.
+        if (pane.restarting) {
+          return;
+        }
+        set((state) => {
+          const current = state.logsPanes[repoPath];
+          if (!current || current.restarting) {
+            return {};
+          }
+          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, restarting: true } } };
+        });
+        const manifestResult = await deps.manifest.load(repoPath);
+        if (!manifestResult.ok) {
+          set((state) => {
+            const current = state.logsPanes[repoPath];
+            if (!current) {
+              return {};
+            }
+            return {
+              logsPanes: {
+                ...state.logsPanes,
+                [repoPath]: {
+                  ...current,
+                  restarting: false,
+                  streamError: { code: manifestResult.error.code, message: manifestResult.error.message },
+                },
+              },
+            };
+          });
+          return;
+        }
+        const restartResult = await restartService({ docker: deps.docker, container: manifestResult.data.container });
+        if (!restartResult.ok) {
+          // Failure surfaces inline on the pane; the badge keeps last-known health.
+          set((state) => {
+            const current = state.logsPanes[repoPath];
+            if (!current) {
+              return {};
+            }
+            return {
+              logsPanes: {
+                ...state.logsPanes,
+                [repoPath]: { ...current, restarting: false, streamError: restartResult.error },
+              },
+            };
+          });
+          return;
+        }
+        set((state) => {
+          const current = state.logsPanes[repoPath];
+          if (!current) {
+            return {};
+          }
+          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, restarting: false } } };
+        });
+        // After the restart call resolves, health is re-polled immediately so the badge
+        // reflects the new state.
+        await pollPaneHealth(repoPath);
+      },
+
       unsubscribeLogsPane: (repoPath) => {
+        // Story 5.3: the poll timer is cleared on unsubscribe — polling never outlives the pane.
+        stopHealthPolling(repoPath);
         if (!logsManager) {
           return;
         }
@@ -343,6 +495,9 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         }),
 
       stopAllLogsPanes: () => {
+        for (const repoPath of [...healthPollTimers.keys()]) {
+          stopHealthPolling(repoPath);
+        }
         if (!logsManager) {
           return;
         }

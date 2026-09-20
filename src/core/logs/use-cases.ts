@@ -5,6 +5,7 @@
 // manager methods directly) exactly like the EDT slice never calls EdtRegistryPort methods
 // directly for create/switch/modify.
 import { ok, type Result } from '../result.js';
+import type { DockerPort, HealthState } from '../ports/docker.js';
 import type { LogsManager } from './index.js';
 
 export interface SubscribeLogsParams {
@@ -49,4 +50,26 @@ export interface ClearLogsParams {
 export function clearLogs(params: ClearLogsParams): Result<void> {
   params.manager.clear(params.key);
   return ok(undefined);
+}
+
+export interface GetServiceHealthParams {
+  docker: DockerPort;
+  container: string;
+}
+
+// Story 5.3: thin Result<T> wrapper over DockerPort.getContainerHealth — keeps the TUI
+// slice off the raw port, same as subscribeLogs/clearLogs keep it off LogsManager methods.
+export function getServiceHealth(params: GetServiceHealthParams): Promise<Result<HealthState>> {
+  return params.docker.getContainerHealth(params.container);
+}
+
+export interface RestartServiceParams {
+  docker: DockerPort;
+  container: string;
+}
+
+// Story 5.3: thin Result<T> wrapper over DockerPort.restartContainer — developer-triggered
+// only, never called automatically (replaces check_health.sh's auto-restart).
+export function restartService(params: RestartServiceParams): Promise<Result<void>> {
+  return params.docker.restartContainer(params.container);
 }

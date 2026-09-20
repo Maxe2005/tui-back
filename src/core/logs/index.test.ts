@@ -23,14 +23,20 @@ function fakeDocker(overrides: Partial<DockerPort> = {}): DockerPort & {
     };
   });
   const fetchLogsBefore = vi.fn(async () => ok([] as LogLine[]));
-  return {
-    streamLogs,
-    fetchLogsBefore,
-    emitLine: (container, l) => listeners.get(container)?.onLine(l),
-    emitError: (container, e) => listeners.get(container)?.onError(e),
-    stopped,
-    ...overrides,
-  };
+  const getContainerHealth = vi.fn(async () => ok('up' as const));
+  const restartContainer = vi.fn(async () => ok(undefined));
+  return Object.assign(
+    {
+      streamLogs,
+      fetchLogsBefore,
+      getContainerHealth,
+      restartContainer,
+      emitLine: (container: string, l: LogLine) => listeners.get(container)?.onLine(l),
+      emitError: (container: string, e: { code: string; message: string }) => listeners.get(container)?.onError(e),
+      stopped,
+    },
+    overrides,
+  );
 }
 
 describe('createLogsManager', () => {

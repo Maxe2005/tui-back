@@ -89,6 +89,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const docker: DockerPort = {
     streamLogs: vi.fn(() => () => {}),
     fetchLogsBefore: vi.fn(async () => ok([])),
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    restartContainer: vi.fn(async () => ok(undefined)),
   };
   return {
     registry,
@@ -509,6 +511,8 @@ describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
         return stop;
       }),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = seedLogsStoreWithDocker(docker);
     const { instance, stdin } = mount(store);
@@ -543,6 +547,8 @@ describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
         return () => {};
       }),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = seedLogsStoreWithDocker(docker);
     const { instance, stdin } = mount(store);

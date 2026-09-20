@@ -414,6 +414,7 @@ it('shouldQuit returns true for q', () => {
         closeLogsFullscreen: () => {},
         subscribeLogsPane: async () => {},
         unsubscribeLogsPane: () => {},
+        restartLogsPane: async () => {},
         loadOlderLogsPane: async () => {},
         clearLogsPane: () => {},
         setLogsPaneScrollOffset: () => {},

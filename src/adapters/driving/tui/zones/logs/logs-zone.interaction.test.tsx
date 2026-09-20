@@ -477,6 +477,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
           streamError: null,
           noMoreHistory: false,
           scrollOffset: 0,
+          health: 'up',
+          restarting: false,
         },
       },
     });
@@ -834,6 +836,126 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
 
         expect(subscribeLogsPane.mock.calls.length).toBe(callsBefore);
         expect(unsubscribeLogsPane).not.toHaveBeenCalled();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+  });
+
+  // Story 5.3: `R` on a sub-focused grid pane restarts that one pane's service.
+  describe('inline service health & restart (story 5.3)', () => {
+    function paneFor(path: string, overrides: Record<string, unknown> = {}) {
+      const name = path.split('/').pop() ?? path;
+      return {
+        repoPath: path,
+        service: name,
+        lines: [],
+        streamError: null,
+        noMoreHistory: false,
+        scrollOffset: 0,
+        health: 'down',
+        restarting: false,
+        ...overrides,
+      };
+    }
+
+    it('"R" on a sub-focused grid pane triggers restartLogsPane for that pane only', async () => {
+      const restartLogsPane = vi.fn(async () => {});
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        restartLogsPane,
+        logsOtherSelected: ['/repos/api-gateway'],
+        logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway') },
+      });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        // The pane header renders the inline health badge next to the service's logs.
+        expect(stdout.output).toContain('down');
+        await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+        await press(instance, stdin, KEYS.tab); // other-list -> panes
+
+        await press(instance, stdin, 'R');
+
+        expect(restartLogsPane).toHaveBeenCalledTimes(1);
+        expect(restartLogsPane).toHaveBeenCalledWith('/repos/api-gateway');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('"R" is a no-op while that pane is already restarting (disabled control, I/O matrix RESTART_NOOP)', async () => {
+      const restartLogsPane = vi.fn(async () => {});
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        restartLogsPane,
+        logsOtherSelected: ['/repos/api-gateway'],
+        logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway', { restarting: true }) },
+      });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        // The control renders its disabled state while a restart is in flight.
+        expect(stdout.output).toContain('restarting…');
+        await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+        await press(instance, stdin, KEYS.tab); // other-list -> panes
+
+        await press(instance, stdin, 'R');
+
+        expect(restartLogsPane).not.toHaveBeenCalled();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('"R" is a no-op while docker reports the pane as restarting (HEALTH_RESTARTING disables the control)', async () => {
+      const restartLogsPane = vi.fn(async () => {});
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        restartLogsPane,
+        logsOtherSelected: ['/repos/api-gateway'],
+        logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway', { health: 'restarting' }) },
+      });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+        await press(instance, stdin, KEYS.tab); // other-list -> panes
+
+        await press(instance, stdin, 'R');
+
+        expect(restartLogsPane).not.toHaveBeenCalled();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('"R" on a fullscreen pane restarts that pane\'s service', async () => {
+      const restartLogsPane = vi.fn(async () => {});
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        restartLogsPane,
+        logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway', { health: 'up' }) },
+      });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+        await press(instance, stdin, KEYS.enter); // ad hoc fullscreen preview on api-gateway
+        expect(store.getState().logsFullscreenTarget).toBe('/repos/api-gateway');
+
+        await press(instance, stdin, 'R');
+
+        expect(restartLogsPane).toHaveBeenCalledTimes(1);
+        expect(restartLogsPane).toHaveBeenCalledWith('/repos/api-gateway');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();

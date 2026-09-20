@@ -4,7 +4,7 @@
 // executed coverage in any environment without a reachable docker daemon (e.g. sandboxed CI).
 // These tests need no docker daemon at all.
 import { describe, expect, it } from 'vitest';
-import { createLineSplitter, mergeSortAndTrimLogs, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
+import { createLineSplitter, mapInspectToHealthState, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
 import type { LogLine } from '../../../core/ports/docker.js';
 
 describe('createLineSplitter', () => {
@@ -102,5 +102,34 @@ describe('mergeSortAndTrimLogs', () => {
     const result = mergeSortAndTrimLogs(stdout, stderr, 2);
 
     expect(result.map((l) => l.text)).toEqual(['out-1', 'err-1']);
+  });
+});
+
+describe('mapInspectToHealthState (story 5.3)', () => {
+  it('maps Restarting=true to restarting, even when Running is also true', () => {
+    expect(mapInspectToHealthState(true, true)).toBe('restarting');
+    expect(mapInspectToHealthState(false, true)).toBe('restarting');
+  });
+
+  it('maps Running=true (and not restarting) to up', () => {
+    expect(mapInspectToHealthState(true, false)).toBe('up');
+  });
+
+  it('maps a stopped/exited container (neither running nor restarting) to down', () => {
+    expect(mapInspectToHealthState(false, false)).toBe('down');
+  });
+});
+
+describe('parseHealthInspectOutput (story 5.3)', () => {
+  it('parses the "{{.State.Running}} {{.State.Restarting}}" inspect string', () => {
+    expect(parseHealthInspectOutput('true false\n')).toBe('up');
+    expect(parseHealthInspectOutput('false false\n')).toBe('down');
+    expect(parseHealthInspectOutput('false true\n')).toBe('restarting');
+    expect(parseHealthInspectOutput('true true\n')).toBe('restarting');
+  });
+
+  it('falls back to down for unparseable output, never throwing', () => {
+    expect(parseHealthInspectOutput('')).toBe('down');
+    expect(parseHealthInspectOutput('garbage\n')).toBe('down');
   });
 });

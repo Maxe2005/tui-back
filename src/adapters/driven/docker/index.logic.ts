@@ -5,7 +5,7 @@
 // reachable daemon). Mirrors how logs-zone.logic.ts was split out of logs-zone.tsx in this same
 // story: index.ts itself still owns every actual `spawn`/`spawnSync` call; this module only
 // transforms text those calls already produced.
-import type { LogLine, LogStreamTag } from '../../../core/ports/docker.js';
+import type { HealthState, LogLine, LogStreamTag } from '../../../core/ports/docker.js';
 
 function stripTrailingCr(line: string): string {
   return line.endsWith('\r') ? line.slice(0, -1) : line;
@@ -60,4 +60,29 @@ export function parseTimestampedOutput(raw: string, stream: LogStreamTag): LogLi
 export function mergeSortAndTrimLogs(stdoutLines: readonly LogLine[], stderrLines: readonly LogLine[], count: number): LogLine[] {
   const merged = [...stdoutLines, ...stderrLines].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   return merged.slice(-count);
+}
+
+// Story 5.3: maps `docker inspect --format '{{.State.Running}} {{.State.Restarting}}'` output
+// to HealthState — container missing/inspect fails is handled by the caller (index.ts maps a
+// non-zero inspect to `down` without ever calling this); a spawn-level failure never reaches
+// here either. `State.Restarting` true → `restarting`; `State.Running` true → `up`;
+// otherwise → `down`. Pure so it's directly unit-testable without a live daemon.
+export function mapInspectToHealthState(running: boolean, restarting: boolean): HealthState {
+  if (restarting) {
+    return 'restarting';
+  }
+  if (running) {
+    return 'up';
+  }
+  return 'down';
+}
+
+// Parses the raw `{{.State.Running}} {{.State.Restarting}}` inspect string (e.g. "true false")
+// into HealthState via mapInspectToHealthState — any unparseable output falls back to `down`
+// (never throws into the render tree).
+export function parseHealthInspectOutput(raw: string): HealthState {
+  const parts = raw.trim().split(/\s+/);
+  const running = parts[0] === 'true';
+  const restarting = parts[1] === 'true';
+  return mapInspectToHealthState(running, restarting);
 }

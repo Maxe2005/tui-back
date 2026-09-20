@@ -127,6 +127,67 @@ describe.skipIf(!dockerAvailable)('createDockerPort (real docker integration)', 
     const result = await port.fetchLogsBefore('tui-back-docker-test-does-not-exist', new Date().toISOString(), 10);
     expect(result).toMatchObject({ ok: false, error: { code: 'docker-unavailable' } });
   });
+
+  it('getContainerHealth returns up for a running container (story 5.3)', async () => {
+    const name = startContainer('sleep 30');
+    const port = createDockerPort();
+
+    const result = await port.getContainerHealth(name);
+
+    expect(result).toEqual({ ok: true, data: 'up' });
+  });
+
+  it(
+    'getContainerHealth returns down for a stopped (exited) container (story 5.3)',
+    async () => {
+      // No `--rm` here (unlike startContainer): a removed container would exercise the
+      // missing-name path below instead of the stopped-but-present mapping.
+      const name = `tui-back-docker-test-${randomUUID()}`;
+      runDocker(['run', '-d', '--name', name, 'busybox', 'true']);
+      containers.push(name);
+      await waitFor(() => runDocker(['inspect', '--format', '{{.State.Running}}', '--', name]) === 'false', 8000);
+
+      const port = createDockerPort();
+      const result = await port.getContainerHealth(name);
+
+      expect(result).toEqual({ ok: true, data: 'down' });
+    },
+    15000,
+  );
+
+  it('getContainerHealth returns down for a container that does not exist (story 5.3)', async () => {
+    const port = createDockerPort();
+
+    const result = await port.getContainerHealth('tui-back-docker-test-does-not-exist');
+
+    expect(result).toEqual({ ok: true, data: 'down' });
+  });
+
+  it(
+    'restartContainer restarts a running container, which reads up before and after (story 5.3)',
+    async () => {
+      const name = startContainer('sleep 30');
+      const port = createDockerPort();
+      expect(await port.getContainerHealth(name)).toEqual({ ok: true, data: 'up' });
+
+      const restarted = await port.restartContainer(name);
+
+      expect(restarted).toEqual({ ok: true, data: undefined });
+      // The restart itself is asynchronous daemon-side — wait until docker reports the
+      // container running again before asserting the post-restart health.
+      await waitFor(() => runDocker(['inspect', '--format', '{{.State.Running}}', '--', name]) === 'true', 8000);
+      expect(await port.getContainerHealth(name)).toEqual({ ok: true, data: 'up' });
+    },
+    20000,
+  );
+
+  it('restartContainer returns a docker-unavailable error for a container that does not exist (story 5.3)', async () => {
+    const port = createDockerPort();
+
+    const result = await port.restartContainer('tui-back-docker-test-does-not-exist');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'docker-unavailable' } });
+  });
 });
 
 describe.skipIf(dockerAvailable)('createDockerPort (docker unavailable in this environment)', () => {
@@ -160,6 +221,38 @@ describe('spawn failure diagnostics (status === null)', () => {
     try {
       const port = createDockerPort();
       const result = await port.fetchLogsBefore('any-container', new Date().toISOString(), 10);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('docker-unavailable');
+        expect(result.error.message).toMatch(/ENOENT/);
+      }
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('getContainerHealth reports docker-unavailable (never a bare down) when docker is missing from PATH', async () => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = join(tmpdir(), 'tui-back-no-bin');
+    try {
+      const port = createDockerPort();
+      const result = await port.getContainerHealth('any-container');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('docker-unavailable');
+        expect(result.error.message).toMatch(/ENOENT/);
+      }
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('restartContainer reports the real ENOENT cause when docker is missing from PATH', async () => {
+    const originalPath = process.env.PATH;
+    process.env.PATH = join(tmpdir(), 'tui-back-no-bin');
+    try {
+      const port = createDockerPort();
+      const result = await port.restartContainer('any-container');
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('docker-unavailable');

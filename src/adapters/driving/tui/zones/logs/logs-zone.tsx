@@ -8,10 +8,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, measureElement, Text, useInput, useWindowSize, type DOMElement } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
+import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { StatusBadge, type StatusBadgeState } from '../../shared/components/status-badge.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
@@ -89,6 +90,16 @@ const HISTORY_GRID_COLUMN_GAP = 1;
 
 function historyEntryLabel(entry: string): string {
   return entry;
+}
+
+// Story 5.3: HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error,
+// `restarting` → `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never
+// color alone; accent is never a health color (StatusBadge as-is, no change).
+function healthBadgeState(health: HealthState): StatusBadgeState {
+  if (health === 'restarting') {
+    return 'in-progress';
+  }
+  return health;
 }
 
 // Reserves a fixed-width left column for the two lists — this zone has no persisted/resizable
@@ -187,6 +198,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const unsubscribeLogsPane = useStore((state) => state.unsubscribeLogsPane);
   const loadOlderLogsPane = useStore((state) => state.loadOlderLogsPane);
   const clearLogsPane = useStore((state) => state.clearLogsPane);
+  const restartLogsPane = useStore((state) => state.restartLogsPane);
   const setLogsPaneScrollOffset = useStore((state) => state.setLogsPaneScrollOffset);
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
@@ -602,6 +614,20 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           setPaneWrap((current) => togglePaneWrapFlag(current, logsFullscreenTarget));
           return;
         }
+        // Story 5.3: developer-triggered restart for this fullscreen pane's service — while
+        // restarting (in-flight `docker restart` or docker reporting `restarting`), the
+        // control is disabled (no-op here; the slice guards too). Uppercase `R` only:
+        // lowercase `r` is the global Routes-zone mnemonic (app-shell exact-matches it
+        // whenever zoneInputCaptured is false, and Ink forwards every keypress to all
+        // mounted useInput hooks), so accepting `r` here would both restart a container
+        // and switch zones on one keypress.
+        if (input === 'R') {
+          const pane = logsPanes[logsFullscreenTarget];
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting') {
+            void restartLogsPane(logsFullscreenTarget);
+          }
+          return;
+        }
         const toggle = resolveVisibilityToggleKey(input);
         if (toggle !== null) {
           setVisibility((current) => toggleVisibilityFlag(current, toggle));
@@ -772,6 +798,21 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
+      // Story 5.3: developer-triggered restart for the sub-focused grid pane's service —
+      // while restarting, the control is disabled (no-op; the slice's no-op guard is the
+      // second line of defense against a second concurrent `docker restart`). Uppercase
+      // `R` only — lowercase `r` is the global Routes-zone mnemonic (see the fullscreen
+      // branch above for why accepting it would double-dispatch).
+      if (input === 'R') {
+        const focused = activePanes[subFocus];
+        if (focused !== undefined) {
+          const pane = logsPanes[focused.path];
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting') {
+            void restartLogsPane(focused.path);
+          }
+        }
+        return;
+      }
       if (key.return) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
@@ -809,23 +850,41 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
                 <DimAnnotation text="No services in the active EDT." />
               ) : null}
-              {edtServices.map((service, index) => (
-                <Box key={service.path} flexDirection="row">
-                  <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
-                  <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
-                </Box>
-              ))}
+              {edtServices.map((service, index) => {
+                const paneHealth = logsPanes[service.path]?.health ?? null;
+                return (
+                  <Box key={service.path} flexDirection="row">
+                    <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
+                    <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
+                    {paneHealth !== null ? (
+                      <Box marginLeft={1}>
+                        <StatusBadge state={healthBadgeState(paneHealth)} />
+                        <Text color={colors['text-dim']}> {paneHealth}</Text>
+                      </Box>
+                    ) : null}
+                  </Box>
+                );
+              })}
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
                 <DimAnnotation text="No other managed services." />
               ) : null}
-              {otherServices.map((service, index) => (
-                <Box key={service.path} flexDirection="row">
-                  <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
-                  <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
-                </Box>
-              ))}
+              {otherServices.map((service, index) => {
+                const paneHealth = logsPanes[service.path]?.health ?? null;
+                return (
+                  <Box key={service.path} flexDirection="row">
+                    <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
+                    <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
+                    {paneHealth !== null ? (
+                      <Box marginLeft={1}>
+                        <StatusBadge state={healthBadgeState(paneHealth)} />
+                        <Text color={colors['text-dim']}> {paneHealth}</Text>
+                      </Box>
+                    ) : null}
+                  </Box>
+                );
+              })}
 
               {/* Amended 2026-09-20 (crash/corruption fix): every one of these hints is a
                   services-list keybinding (Space/Enter/Ctrl+A/t/o/p/Ctrl+↑↓/c/Ctrl+C/w/Ctrl+W)
@@ -855,6 +914,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   <DimAnnotation text="[Ctrl+C] clear all panes" />
                   <DimAnnotation text="[w] wrap/truncate this pane" />
                   <DimAnnotation text="[Ctrl+W] wrap/truncate all" />
+                  <DimAnnotation text="[R] restart focused pane" />
                   <DimAnnotation text="[/] edit global filter" />
                   <DimAnnotation text="[f] edit this pane's filter" />
                   <DimAnnotation text="[g] toggle global (pane)" />
@@ -1017,9 +1077,24 @@ function LogsPaneView({
     >
       {/* User-reported: always bold (not just when sub-focused) so a service name stands out
           from its own log text at a glance, in a grid where several panes are visible at once. */}
-      <Text bold color={focused ? colors.accent : colors.text} wrap="truncate-end">
-        {service.service}
-      </Text>
+      <Box flexDirection="row">
+        <Box flexGrow={1} minWidth={0}>
+          <Text bold color={focused ? colors.accent : colors.text} wrap="truncate-end">
+            {service.service}
+          </Text>
+        </Box>
+        {/* Story 5.3: inline health badge next to the service's logs (glyph+color paired) +
+            the developer-triggered restart control's disabled state while restarting. */}
+        <Box marginLeft={1}>
+          <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
+          <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>
+        </Box>
+        {pane?.restarting || (pane?.health ?? 'down') === 'restarting' ? (
+          <Text color={colors['text-dim']}> [R] restarting…</Text>
+        ) : (
+          <Text color={colors['text-dim']}> [R]</Text>
+        )}
+      </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
       {!engaged ? (
@@ -1083,9 +1158,24 @@ function FullscreenPane({
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
-      <Text color={colors.accent} bold>
-        {serviceName ?? 'Logs'}
-      </Text>
+      <Box flexDirection="row">
+        <Box flexGrow={1} minWidth={0}>
+          <Text color={colors.accent} bold>
+            {serviceName ?? 'Logs'}
+          </Text>
+        </Box>
+        {/* Story 5.3: inline health badge + restart disabled state, mirroring the grid pane
+            header above. */}
+        <Box marginLeft={1}>
+          <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
+          <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>
+        </Box>
+        {pane?.restarting || (pane?.health ?? 'down') === 'restarting' ? (
+          <Text color={colors['text-dim']}> [R] restarting…</Text>
+        ) : (
+          <Text color={colors['text-dim']}> [R] restart</Text>
+        )}
+      </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
       {!engaged ? (
@@ -1104,7 +1194,7 @@ function FullscreenPane({
           </Text>
         ))}
       </Box>
-      <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate" />
+      <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate  [R] restart" />
       <DimAnnotation text="[/] global filter  [f] pane filter  [g] toggle global engagement" />
     </Box>
   );

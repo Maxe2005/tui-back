@@ -87,6 +87,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const docker: DockerPort = {
     streamLogs: vi.fn(() => () => {}),
     fetchLogsBefore: vi.fn(async () => ok([])),
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    restartContainer: vi.fn(async () => ok(undefined)),
   };
   return {
     registry,
@@ -1268,6 +1270,8 @@ describe("logs slice (story 5.1)", () => {
         return () => {};
       }),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
 
@@ -1287,6 +1291,8 @@ describe("logs slice (story 5.1)", () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
 
@@ -1317,6 +1323,8 @@ describe("logs slice (story 5.1)", () => {
         return () => {};
       }),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
 
@@ -1333,6 +1341,8 @@ describe("logs slice (story 5.1)", () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => stop),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1348,6 +1358,8 @@ describe("logs slice (story 5.1)", () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => ok([olderLine])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1370,6 +1382,8 @@ describe("logs slice (story 5.1)", () => {
         fetchOlder = true;
         return ok([olderLine]);
       }),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1385,12 +1399,17 @@ describe("logs slice (story 5.1)", () => {
     const manifest: ManifestPort = {
       load: vi
         .fn()
+        // Story 5.3: subscribeLogsPane's immediate health poll issues its own manifest.load
+        // synchronously before subscribe's own load, so the queue needs one extra ok.
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(err("manifest-not-found", "no manifest here")),
     };
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker, manifest }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1407,6 +1426,8 @@ describe("logs slice (story 5.1)", () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => err("docker-unavailable", "daemon down")),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1421,6 +1442,8 @@ describe("logs slice (story 5.1)", () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore,
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
 
@@ -1435,6 +1458,8 @@ describe("logs slice (story 5.1)", () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => ok([olderLine])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     store.setState((state) => ({ settings: { ...state.settings, logs: { ...state.settings.logs, startWithHistory: true } } }));
@@ -1457,6 +1482,8 @@ describe("logs slice (story 5.1)", () => {
         return stop;
       }),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1486,6 +1513,8 @@ describe("logs slice (story 5.1)", () => {
         return () => {};
       }),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1506,6 +1535,8 @@ describe("logs slice (story 5.1)", () => {
         .mockImplementationOnce(() => stopA)
         .mockImplementationOnce(() => stopB),
       fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ docker }));
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
@@ -1530,6 +1561,212 @@ describe("logs slice (story 5.1)", () => {
     await expect(store.getState().subscribeLogsPane("/repo/a", "svc-a")).resolves.toBeUndefined();
     expect(() => store.getState().unsubscribeLogsPane("/repo/a")).not.toThrow();
     await expect(store.getState().loadOlderLogsPane("/repo/a")).resolves.toBeUndefined();
+    await expect(store.getState().restartLogsPane("/repo/a")).resolves.toBeUndefined();
+  });
+});
+
+describe("logs slice: inline service health & restart (story 5.3)", () => {
+  async function flushPolls(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  it("subscribeLogsPane polls container health on subscribe and reflects it on the pane badge (I/O matrix HEALTH_UP)", async () => {
+    const getContainerHealth = vi.fn(async () => ok("up" as const));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth,
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await flushPolls();
+
+    expect(getContainerHealth).toHaveBeenCalledWith("ctr-a");
+    expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
+  });
+
+  it("a failed health poll keeps last-known health instead of clearing the badge (I/O matrix POLL_ERROR)", async () => {
+    vi.useFakeTimers();
+    try {
+      const getContainerHealth = vi.fn(async () => ok("up" as const));
+      const docker: DockerPort = {
+        streamLogs: vi.fn(() => () => {}),
+        fetchLogsBefore: vi.fn(async () => ok([])),
+        getContainerHealth,
+        restartContainer: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ docker }));
+      await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+      await vi.advanceTimersByTimeAsync(0);
+      // First drive the badge to a known non-default state — asserting `"down"` below would
+      // also match `emptyPane`'s default and pass even if a failed poll reset the badge.
+      expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
+
+      getContainerHealth.mockImplementation(async () => err("docker-unavailable", "daemon down"));
+      const callsBefore = getContainerHealth.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The failing poll really ran (guards a vacuous pass where the assertion below would
+      // hold simply because no second poll happened yet) and the badge kept last-known.
+      expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a poll whose manifest.load fails leaves health untouched and never crashes", async () => {
+    vi.useFakeTimers();
+    try {
+      const manifestLoad = vi.fn(async (path: string) => ok(manifestFor(path)));
+      const manifest: ManifestPort = { load: manifestLoad };
+      const getContainerHealth = vi.fn(async () => ok("up" as const));
+      const docker: DockerPort = {
+        streamLogs: vi.fn(() => () => {}),
+        fetchLogsBefore: vi.fn(async () => ok([])),
+        getContainerHealth,
+        restartContainer: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ docker, manifest }));
+      await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
+
+      manifestLoad.mockImplementation(async () => err("manifest-not-found", "gone"));
+      const callsBefore = getContainerHealth.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The poll bailed before ever reaching the adapter — no inspect, no crash, badge kept.
+      expect(getContainerHealth.mock.calls.length).toBe(callsBefore);
+      expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("health polling repeats on a ~5s interval and stops after unsubscribe (never outlives the pane)", async () => {
+    vi.useFakeTimers();
+    try {
+      const getContainerHealth = vi.fn(async () => ok("up" as const));
+      const docker: DockerPort = {
+        streamLogs: vi.fn(() => () => {}),
+        fetchLogsBefore: vi.fn(async () => ok([])),
+        getContainerHealth,
+        restartContainer: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ docker }));
+      await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+      await vi.advanceTimersByTimeAsync(0);
+      const afterSubscribe = getContainerHealth.mock.calls.length;
+      expect(afterSubscribe).toBeGreaterThanOrEqual(1);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(getContainerHealth.mock.calls.length).toBeGreaterThan(afterSubscribe);
+
+      const afterInterval = getContainerHealth.mock.calls.length;
+      store.getState().unsubscribeLogsPane("/repo/a");
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(getContainerHealth.mock.calls.length).toBe(afterInterval);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restartLogsPane issues exactly one docker restart for that pane's container and re-polls health immediately (I/O matrix RESTART_COMPLETES)", async () => {
+    const getContainerHealth = vi.fn(async () => ok("up" as const));
+    const restartContainer = vi.fn(async () => ok(undefined));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth,
+      restartContainer,
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    const callsAfterSubscribe = getContainerHealth.mock.calls.length;
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(restartContainer).toHaveBeenCalledTimes(1);
+    expect(restartContainer).toHaveBeenCalledWith("ctr-a");
+    expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
+    // Health re-polled immediately after the restart resolves.
+    expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsAfterSubscribe);
+  });
+
+  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent docker restart (I/O matrix RESTART_NOOP)", async () => {
+    const restartContainer = vi.fn(async () => ok(undefined));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok("up" as const)),
+      restartContainer,
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, restarting: true } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(restartContainer).not.toHaveBeenCalled();
+  });
+
+  it("restartLogsPane surfaces a restart failure inline on the pane while the badge keeps last-known health", async () => {
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok("up" as const)),
+      restartContainer: vi.fn(async () => err("docker-unavailable", "no such container")),
+    };
+    const store = createAppStore(fakeDeps({ docker }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.streamError).toEqual({
+      code: "docker-unavailable",
+      message: "no such container",
+    });
+    expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
+  });
+
+  it("restartLogsPane surfaces a manifest.load failure inline and re-enables the control instead of wedging on restarting", async () => {
+    const manifest: ManifestPort = {
+      load: vi
+        .fn()
+        // subscribeLogsPane's immediate health poll issues its own manifest.load
+        // synchronously before subscribe's own load, so the queue needs two oks before the
+        // restart's failing load.
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
+        .mockResolvedValueOnce(err("manifest-not-found", "no manifest here")),
+    };
+    const restartContainer = vi.fn(async () => ok(undefined));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok("up" as const)),
+      restartContainer,
+    };
+    const store = createAppStore(fakeDeps({ docker, manifest }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    // The restart never reached the adapter, the pane shows the failure inline, and the
+    // control is usable again instead of stuck on `[R] restarting…`.
+    expect(restartContainer).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.streamError).toEqual({
+      code: "manifest-not-found",
+      message: "no manifest here",
+    });
+    expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
   });
 });
 

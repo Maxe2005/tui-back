@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ok } from '../result.js';
+import { err, ok } from '../result.js';
+import type { DockerPort } from '../ports/docker.js';
 import type { LogsManager } from './index.js';
-import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from './use-cases.js';
+import { clearLogs, getServiceHealth, loadOlderLogs, restartService, subscribeLogs, unsubscribeLogs } from './use-cases.js';
 
 function fakeManager(overrides: Partial<LogsManager> = {}): LogsManager {
   return {
@@ -57,5 +58,58 @@ describe('clearLogs', () => {
 
     expect(result).toEqual({ ok: true, data: undefined });
     expect(manager.clear).toHaveBeenCalledWith('svc-a');
+  });
+});
+
+function fakeDocker(overrides: Partial<DockerPort> = {}): DockerPort {
+  return Object.assign(
+    {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
+    },
+    overrides,
+  );
+}
+
+describe('getServiceHealth (story 5.3)', () => {
+  it('delegates to docker.getContainerHealth with the container, forwarding its Result as-is', async () => {
+    const docker = fakeDocker({ getContainerHealth: vi.fn(async () => ok('restarting' as const)) });
+
+    const result = await getServiceHealth({ docker, container: 'ctr-a' });
+
+    expect(result).toEqual({ ok: true, data: 'restarting' });
+    expect(docker.getContainerHealth).toHaveBeenCalledWith('ctr-a');
+  });
+
+  it('forwards a down state and a docker-unavailable error untouched', async () => {
+    const down = fakeDocker({ getContainerHealth: vi.fn(async () => ok('down' as const)) });
+    expect(await getServiceHealth({ docker: down, container: 'ctr-a' })).toEqual({ ok: true, data: 'down' });
+
+    const failing = fakeDocker({ getContainerHealth: vi.fn(async () => err('docker-unavailable', 'daemon down')) });
+    expect(await getServiceHealth({ docker: failing, container: 'ctr-a' })).toEqual({
+      ok: false,
+      error: { code: 'docker-unavailable', message: 'daemon down' },
+    });
+  });
+});
+
+describe('restartService (story 5.3)', () => {
+  it('delegates to docker.restartContainer with the container, forwarding its Result as-is', async () => {
+    const docker = fakeDocker();
+
+    const result = await restartService({ docker, container: 'ctr-a' });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(docker.restartContainer).toHaveBeenCalledWith('ctr-a');
+  });
+
+  it('forwards a restart failure untouched', async () => {
+    const docker = fakeDocker({ restartContainer: vi.fn(async () => err('docker-unavailable', 'no such container')) });
+
+    const result = await restartService({ docker, container: 'ctr-a' });
+
+    expect(result).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no such container' } });
   });
 });

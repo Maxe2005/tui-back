@@ -30,6 +30,8 @@ export interface DockerErrorLike {
   message: string;
 }
 
+export type HealthState = 'up' | 'down' | 'restarting';
+
 export interface DockerPort {
   // Starts a long-lived subscription to `container`'s logs (docker adapter: `docker logs -f
   // --timestamps --since <now> <container>`, one child process per call). `onLine` fires once
@@ -46,4 +48,14 @@ export interface DockerPort {
   // called from the Ink render loop, only from an async store action reacting to a keypress,
   // mirroring every other spawnSync call in this codebase).
   fetchLogsBefore(container: string, beforeCursor: string, count: number): Promise<Result<LogLine[]>>;
+  // Live container health (story 5.3) — `docker inspect` mapped to HealthState: container
+  // missing/inspect fails → `down`; `State.Restarting` true → `restarting`; `State.Running`
+  // true → `up`; otherwise → `down`. A spawn-level failure (binary missing, timeout) is an
+  // `err('docker-unavailable', ...)` so a scheduled poll can keep last-known health; a
+  // definitive non-zero inspect (e.g. no such container) is `ok('down')`.
+  getContainerHealth(container: string): Promise<Result<HealthState>>;
+  // Developer-triggered restart only (story 5.3, replaces check_health.sh's auto-restart —
+  // never called automatically). `docker restart` one-shot via spawnSync, same idiom as
+  // fetchLogsBefore.
+  restartContainer(container: string): Promise<Result<void>>;
 }

@@ -134,6 +134,8 @@ describe('LogsZone (story 5.1)', () => {
           streamError: null,
           noMoreHistory: false,
           scrollOffset: 0,
+          health: 'up',
+          restarting: false,
         },
       },
     });
@@ -163,6 +165,8 @@ describe('LogsZone (story 5.1)', () => {
           streamError: { code: 'docker-unavailable', message: 'Docker is unavailable for container "ctr-route-explorer"' },
           noMoreHistory: false,
           scrollOffset: 0,
+          health: 'down',
+          restarting: false,
         },
       },
     });
@@ -191,6 +195,8 @@ describe('LogsZone (story 5.1)', () => {
           streamError: null,
           noMoreHistory: false,
           scrollOffset: 0,
+          health: 'up',
+          restarting: false,
         },
       },
     });
@@ -201,5 +207,48 @@ describe('LogsZone (story 5.1)', () => {
     expect(output).toContain('[Esc] back');
     // The grid/list chrome is not shown while fullscreen owns the view.
     expect(output).not.toContain('ACTIVE EDT MEMBERS');
+  });
+
+  it('renders one inline health badge glyph per pane state: up → ●, down → ○, restarting → ⣾ (story 5.3)', async () => {
+    function pane(path: string, name: string, health: 'up' | 'down' | 'restarting') {
+      return {
+        repoPath: path,
+        service: name,
+        lines: [],
+        streamError: null,
+        noMoreHistory: false,
+        scrollOffset: 0,
+        health,
+        restarting: false,
+      };
+    }
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        service({ service: 'svc-up', path: '/repos/svc-up' }),
+        service({ service: 'svc-down', path: '/repos/svc-down' }),
+        service({ service: 'svc-restarting', path: '/repos/svc-restarting' }),
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsOtherSelected: ['/repos/svc-up', '/repos/svc-down', '/repos/svc-restarting'],
+      logsPanes: {
+        '/repos/svc-up': pane('/repos/svc-up', 'svc-up', 'up'),
+        '/repos/svc-down': pane('/repos/svc-down', 'svc-down', 'down'),
+        '/repos/svc-restarting': pane('/repos/svc-restarting', 'svc-restarting', 'restarting'),
+      },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    // Glyphs come from StatusBadge via healthBadgeState — the text labels and the
+    // `[R] restarting…` hint are driven independently, so only these assert the mapping.
+    expect(output).toContain('●');
+    expect(output).toContain('○');
+    expect(output).toContain('⣾');
   });
 });

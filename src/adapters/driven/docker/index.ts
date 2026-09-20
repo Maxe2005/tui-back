@@ -22,8 +22,8 @@
 // without a live docker daemon (review fix — see that file's own header).
 import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { DockerErrorLike, DockerPort, LogLine } from '../../../core/ports/docker.js';
-import { createLineSplitter, mergeSortAndTrimLogs, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
+import type { DockerErrorLike, DockerPort, HealthState, LogLine } from '../../../core/ports/docker.js';
+import { createLineSplitter, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
 
 // A hung/unresponsive docker daemon must never freeze the whole TUI process — `spawnSync`
 // fully blocks Node's single event loop for as long as the child runs, so both one-shot
@@ -33,10 +33,20 @@ import { createLineSplitter, mergeSortAndTrimLogs, parseTimestampedOutput, split
 // `status === null` branch already surfaces it (as `docker-unavailable`) without special-casing.
 const DOCKER_SPAWN_TIMEOUT_MS = 5000;
 
+// Story 5.3: `docker restart` is inherently slower than a probe or a log fetch — the daemon
+// first stops the container (up to its `--time` grace period, 10s by default; a PID 1 that
+// ignores SIGTERM, e.g. `sh -c 'sleep …'`, burns the whole grace) and only then starts it
+// again. Sharing the 5s probe timeout would misreport a healthy-but-slow restart as a
+// failure, so the restart call gets its own bound — still finite, so a hung daemon can never
+// freeze the TUI's event loop forever (same rationale as DOCKER_SPAWN_TIMEOUT_MS above).
+const DOCKER_RESTART_TIMEOUT_MS = 30000;
+
 export function createDockerPort(): DockerPort {
   return {
     streamLogs: (container, onLine, onError) => streamLogs(container, onLine, onError),
     fetchLogsBefore: (container, beforeCursor, count) => fetchLogsBefore(container, beforeCursor, count),
+    getContainerHealth: (container) => getContainerHealth(container),
+    restartContainer: (container) => restartContainer(container),
   };
 }
 
@@ -130,6 +140,40 @@ function streamLogs(
     stopped = true;
     child.kill();
   };
+}
+
+// Story 5.3: live health via `docker inspect --format '{{.State.Running}}
+// {{.State.Restarting}}'` (spawnSync, same bounded-timeout idiom as fetchLogsBefore — never
+// from the Ink render loop, only from an async store poll action). A spawn-level failure
+// (status === null: binary missing, timeout) is `err('docker-unavailable', ...)` so the
+// slice's poll keeps last-known health; a definitive non-zero inspect (container missing,
+// daemon reporting an error for this name) is `ok('down')`, never thrown.
+async function getContainerHealth(container: string): Promise<Result<HealthState>> {
+  const result = spawnSync('docker', ['inspect', '--format', '{{.State.Running}} {{.State.Restarting}}', '--', container], {
+    encoding: 'utf8',
+    timeout: DOCKER_SPAWN_TIMEOUT_MS,
+  });
+  if (result.status === null) {
+    return err('docker-unavailable', `"docker inspect" failed for "${container}": ${spawnFailureDetail(result)}`);
+  }
+  if (result.status !== 0) {
+    return ok('down');
+  }
+  return ok(parseHealthInspectOutput(String(result.stdout)));
+}
+
+// Story 5.3: developer-triggered restart only (replaces check_health.sh's auto-restart —
+// never called automatically). One-shot `docker restart` via spawnSync; any failure is
+// `err('docker-unavailable', ...)` so the slice surfaces it inline on the pane.
+async function restartContainer(container: string): Promise<Result<void>> {
+  const result = spawnSync('docker', ['restart', '--', container], {
+    encoding: 'utf8',
+    timeout: DOCKER_RESTART_TIMEOUT_MS,
+  });
+  if (result.status !== 0) {
+    return err('docker-unavailable', `"docker restart" failed for "${container}": ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
 }
 
 async function fetchLogsBefore(container: string, beforeCursor: string, count: number): Promise<Result<LogLine[]>> {
