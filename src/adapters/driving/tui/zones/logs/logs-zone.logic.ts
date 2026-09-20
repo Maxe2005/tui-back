@@ -511,3 +511,105 @@ export function computeLineRowCount(text: string, width: number, wrap: boolean):
 // row identity, kept minimal (only what a pane/subscription needs) rather than reusing the
 // full ServiceBranchDivergence shape everywhere.
 export type LogsServiceRow = Pick<ServiceBranchDivergence, 'service' | 'path'>;
+
+// Story 5.4: filter history recall. Each exact (scope, mode) combination — global-text,
+// global-regex, and per-service-text/per-service-regex for every manifest service path — owns
+// its own independent, persisted list of committed query strings (Boundaries: "one independent
+// list per exact (scope, mode) key"). `repoPath` is only meaningful for `scope: 'pane'`.
+export type FilterHistoryKey = { scope: 'global' | 'pane'; repoPath: string | null; mode: LogFilterMode };
+
+// The flat string key StatePort.readFilterHistory/writeFilterHistory persists each list under
+// (mirrors splitterRatios' own "keyed by a plain string, the driving layer resolves the
+// encoding" convention — core/ports/state.ts has no notion of "scope"/"mode"/repoPath). Global
+// scope ignores repoPath entirely; pane scope always carries one (openPaneFilterEditor in
+// logs-zone.tsx never opens a pane editor without one).
+export function filterHistoryKeyString(key: FilterHistoryKey): string {
+  return key.scope === 'global' ? `global:${key.mode}` : `service:${key.repoPath}:${key.mode}`;
+}
+
+// I/O matrix HISTORY_PUSH/DEDUP_TOP: front-pushes `query` onto `history`, moving it to the
+// front instead of duplicating it when it's already the current top entry, then trims to
+// `maxSize`. Pure — the caller (the logs store slice) is responsible for only calling this on
+// an actual commit (Enter, compiles, non-empty) and for persisting the result.
+//
+// User-reported: when `dedupEverywhere` is true (settings.logs.filterHistoryDedup), any
+// previous occurrence of `query` — not just the top entry — is removed first and the query
+// moves to the front, so each filter exists at most once per list. When false/omitted, the
+// legacy DEDUP_TOP-only behavior applies (a non-top duplicate is front-pushed as a second
+// instance).
+export function pushFilterHistoryEntry(
+  history: readonly string[],
+  query: string,
+  maxSize: number,
+  dedupEverywhere = false,
+): string[] {
+  const rest = dedupEverywhere ? history.filter((entry) => entry !== query) : history.length > 0 && history[0] === query ? history.slice(1) : history;
+  return [query, ...rest].slice(0, Math.max(maxSize, 0));
+}
+
+// The filter editor's arrow-recall browsing state: `index` is the position in `history`
+// currently shown (0 == most recent), `savedDraft` is the draft exactly as it stood before
+// browsing began, restored verbatim once `↓` walks back past the most-recent entry.
+export type FilterHistoryBrowseState = { index: number; savedDraft: string };
+
+export type FilterHistoryBrowseResult = { query: string; browsing: FilterHistoryBrowseState | null };
+
+// I/O matrix ARROW_UP_OLDEST: `↑` on an untouched draft recalls the most-recent entry
+// (preserving the draft as `savedDraft`); further `↑` walks older entries; `↑` already at the
+// oldest entry is a no-op (Boundaries). An empty history is a no-op too — nothing to recall.
+//
+// User-reported: the editor opens pre-filled with the currently-active filter, which is
+// usually also the history's most-recent entry — recalling it first forces two `↑` presses
+// before any different value appears. Any history entry equal to the draft being browsed
+// from is therefore skipped: on a fresh `↑` the most-recent entry is skipped when it equals
+// the current query, and while already browsing, entries equal to `savedDraft` are skipped
+// when walking older. Skipping past the end is a no-op.
+export function resolveHistoryBrowseUp(
+  currentQuery: string,
+  browsing: FilterHistoryBrowseState | null,
+  history: readonly string[],
+): FilterHistoryBrowseResult {
+  if (history.length === 0) {
+    return { query: currentQuery, browsing };
+  }
+  if (browsing === null) {
+    let index = 0;
+    while (index < history.length && history[index] === currentQuery) {
+      index += 1;
+    }
+    if (index >= history.length) {
+      return { query: currentQuery, browsing };
+    }
+    return { query: history[index]!, browsing: { index, savedDraft: currentQuery } };
+  }
+  let nextIndex = browsing.index + 1;
+  while (nextIndex < history.length && history[nextIndex] === browsing.savedDraft) {
+    nextIndex += 1;
+  }
+  if (nextIndex >= history.length) {
+    return { query: currentQuery, browsing };
+  }
+  return { query: history[nextIndex]!, browsing: { index: nextIndex, savedDraft: browsing.savedDraft } };
+}
+
+// I/O matrix ARROW_DOWN_PAST_RECENT: `↓` while browsing walks back toward the draft; one more
+// `↓` past the most-recent entry (index 0) restores the original draft exactly and ends
+// browsing. Only ever called while already browsing (Boundaries: "↓ on an untouched draft ...
+// opens a ... grid browser" instead — see logs-zone.tsx's own dispatch).
+//
+// Mirrors the `↑` skip above: entries equal to `savedDraft` are never shown on the way back
+// down either — walking onto one restores the draft directly (ending browsing) instead of
+// displaying the same text twice.
+export function resolveHistoryBrowseDown(
+  browsing: FilterHistoryBrowseState,
+  history: readonly string[],
+): FilterHistoryBrowseResult {
+  let prevIndex = browsing.index - 1;
+  while (prevIndex >= 0 && history[prevIndex] === browsing.savedDraft) {
+    prevIndex -= 1;
+  }
+  if (prevIndex < 0) {
+    return { query: browsing.savedDraft, browsing: null };
+  }
+  return { query: history[prevIndex]!, browsing: { index: prevIndex, savedDraft: browsing.savedDraft } };
+}

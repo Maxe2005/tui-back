@@ -9,6 +9,13 @@
 // driving-TUI's zone types (AD-1); the driving layer is responsible for narrowing/defaulting
 // per zone. `null` means no ratios have ever been persisted (ENOENT / pre-2.21 file), mirroring
 // `readActiveEdt`'s own ENOENT -> null convention.
+//
+// Story 5.4: adds the Logs zone's filter-history lists, same shape/convention as
+// `splitterRatios` above — keyed by a plain `string` (the driving layer's
+// `filterHistoryKeyString`, logs-zone.logic.ts, encodes/decodes the (scope, mode, repoPath)
+// triple into one of these keys; core has no notion of "scope"/"mode"/repoPath, only that each
+// key maps to an ordered list of plain query strings, most-recent first). `null` means nothing
+// has ever been persisted (ENOENT / pre-5.4 file).
 import type { Result } from '../result.js';
 
 export interface StatePort {
@@ -17,4 +24,6 @@ export interface StatePort {
   writeActiveEdt(ulid: string): Promise<Result<void>>;
   readSplitterRatios(): Promise<Result<Record<string, number[]> | null>>;
   writeSplitterRatios(ratios: Record<string, number[]>): Promise<Result<void>>;
+  readFilterHistory(): Promise<Result<Record<string, string[]> | null>>;
+  writeFilterHistory(history: Record<string, string[]>): Promise<Result<void>>;
 }

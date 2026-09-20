@@ -355,7 +355,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false } },
+        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -418,6 +418,12 @@ it('shouldQuit returns true for q', () => {
         clearLogsPane: () => {},
         setLogsPaneScrollOffset: () => {},
         stopAllLogsPanes: () => {},
+        // Story 5.4: filter-history state
+        filterHistory: {},
+        loadFilterHistory: async () => {},
+        commitFilterHistoryEntry: () => {},
+        clearGlobalFilterHistory: () => {},
+        clearServiceFilterHistory: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
