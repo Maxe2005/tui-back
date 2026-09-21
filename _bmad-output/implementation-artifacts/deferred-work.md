@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
+  summary: Cursor indexing throughout `TextInputLine`'s slicing, `nextTextInputValue`, and `branch-picker.tsx`'s local `applyTextInput` operates on raw UTF-16 code units with no surrogate-pair/combining-mark awareness, so mid-string cursor positioning (new in this story) can land between the two halves of a surrogate pair or split a combining sequence for any free-text field containing non-ASCII characters (the topic field especially).
+  evidence: `src/adapters/driving/tui/shared/components/text-input-line.tsx`'s `value.slice(position, position + 1)` and both `nextTextInputValue` (`edts-zone.logic.ts`) and `applyTextInput` (`branch-picker.tsx`)'s Left/Right/Backspace/Delete all index by raw string length/slice, never by code point. Surfaced incidentally by review (blind-hunter + edge-case-hunter); pre-story `TextInputLine` had no mid-string positioning at all (trailing-only), so this specific failure mode is new, but a full fix (code-point-aware stepping via `Array.from`/`Intl.Segmenter`) is non-trivial and out of this story's frozen scope. **Track:** revisit if a real topic/branch name with emoji or combining characters is ever observed hitting this.
+
+## Deferred from: planning of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
+  summary: Migrate `command-bar.tsx`'s query input and `repo-registry-screen.tsx`'s root-path field onto the now-cursor-aware `TextInputLine`/`nextTextInputValue` (replacing their own hand-rolled `typeCommandQueryChar`/`backspaceCommandQuery` and `typeRootInputChar`/`backspaceRootInput` pairs), plus making `TextInputLine`'s `label` prop optional for the command bar's label-less rendering.
+  evidence: the full story 2.32 spec (core cursor primitive + EDT-zone/branch-picker adoption + these two migrations + optional label) measured ~2503 tokens, well past the 1600-token scope-standard threshold. The story's own implementation notes already sequence these two migrations after the EDT-zone/branch-picker work ("Sequence command-bar/registry-screen migrations after the EDT-zone fields are done, so the extended `nextTextInputValue` contract is proven first where it has the most callers"), making this a natural, low-risk split point rather than an artificial one.
+
 ## Deferred from: review of 2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current (2026-09-16)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
@@ -356,6 +368,51 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default.md`
   summary: The spec's own `## Spec Change Log` section is empty even though its Design Notes "Implementation addendum" documents a materially new core API surface (`CreateBranchOptions.bases`, a change to `resolveMemberBranch`) that was not in the original frozen Code Map.
   evidence: `spec-2-27-...md`'s `## Spec Change Log` section has no entries; the addendum under `## Design Notes` reads like exactly the content that section exists for. **Track:** process note for spec hygiene — no code impact.
+
+## Deferred from: code review of 2-29-delete-an-edt (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `delete-dialog.tsx` never calls `logEdtAction` for the active-EDT-rejection path, unlike every sibling EDT dialog (create/switch/modify/add-to-edt/service-actions), which all log an equivalent rejection.
+  evidence: the dialog's own in-code comment justifies skipping the log for the *successful*/partial-failure paths (the EDT's SQLite file, which hosts the action log, is already gone by then per AD-7) but that reasoning does not extend to the `rejected` (active-EDT) state, where the file is still present and untouched. Intent is genuinely ambiguous — the frozen spec never mentions action-log behavior for delete — so this wasn't treated as a blocking bad_spec finding. **Track:** get an explicit human call on whether a delete rejection should be logged, next time this dialog or the action-log convention is touched.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `edt-delete <topic>` gives zero feedback when `<topic>` matches no registered EDT — the dialog-opening effect just closes silently (`setDialog({ kind: 'none' })`).
+  evidence: `edts-zone.tsx`'s `currentEdtAction` effect already behaves identically for `edt-switch <topic>`/`edt-modify <topic>` with an unmatched topic — a pre-existing, story-independent convention this story's `delete` branch simply mirrors rather than introduces. **Track:** revisit for all three commands together next time this effect is touched; arguably riskier for a destructive action than for switch/modify.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `delete-dialog.tsx`'s `submitDelete` (and every sibling confirm dialog's own submit handler) reads `current.submitting` from the closure captured at call time rather than freshly from state, so two `Enter` keypresses arriving before the first `setDialog({submitting: true})` update is observed could invoke the delete action twice concurrently.
+  evidence: `switch-dialog.tsx`'s `handleSwitchConfirm` guards re-entrancy the exact same way (`current.submitting`, not a synchronous ref) — a pre-existing pattern across every confirm-style EDT dialog, not specific to this story, and each real keypress is processed by Ink's `useInput` one at a time in practice. **Track:** if this is ever observed in practice (e.g. key-repeat, programmatic double-dispatch), switch every confirm dialog to a synchronous `useRef` in-flight guard together.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `tui-back edt delete <topic>` cannot delete an EDT whose topic literally begins with `--` — the positional-argument parser treats any leading-`--` token as an unknown option, with no `--` end-of-options escape hatch.
+  evidence: `runEdtDelete` (`src/adapters/driving/cli/subcommands.ts`) parses `<topic>` as the first non-flag token, per this story's own approved spec/Code Map (`tui-back edt delete <topic> [--branches ...]`, deliberately positional unlike `create`/`switch`/`modify`'s `--topic`/`--to` flags) — changing the argument shape now would be a disruptive, low-value change for an unlikely topic name. **Track:** add a `--` end-of-options convention if this is ever hit in practice.
+
+## Deferred from: code review of 3-1-group-update-pull-restart-edt-scoped (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-1-group-update-pull-restart-edt-scoped.md`
+  summary: The dirty-worktree pre-check in `groupUpdate`'s per-member flow is a non-atomic time-of-check — uncommitted changes or a branch switch landing between the check, fetch, merge, and restart are not serialized by any per-repo primitive.
+  evidence: `src/core/scripts/group-update.ts`'s `hasUncommittedChanges` gate runs before the pull/merge/restart sequence with no lock held on the repo itself (same check-then-act shape as the pre-existing `GitPort` operations). Tolerable in practice — `git merge` refuses when it would overwrite dirty files — and fixing it needs a per-repo mutual-exclusion primitive that does not exist yet. **Track:** revisit if a concurrent-edit-during-update incident is ever observed, together with the analogous `GitPort` check-then-act gaps.
+
+## Deferred from: code review of 3-2-run-migrations-as-part-of-the-group-update (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-2-run-migrations-as-part-of-the-group-update.md`
+  summary: `runMigration` spawns the migration command with no timeout or kill guard, so a hanging migration (e.g. waiting on a DB lock or stdin) blocks its service's update — and the TUI event loop — indefinitely.
+  evidence: `src/adapters/driven/migration/index.ts` calls `spawnSync` with no `timeout` option, the same no-timeout shape as the pre-existing git/container adapters; choosing a timeout value and kill semantics is a human intent decision, not a trivial fix. **Track:** decide a timeout/kill policy (ideally once, across git/container/migration spawns) before or during story 3.5, which owns migration failure UX.
+
+## Deferred from: code review of 3-4-assisted-resolution-of-merge-conflicts-dirty-state (2026-09-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: `listDirtyPaths` parses `git status --porcelain` without `-z`, so quoted/escaped paths and `old -> new` rename splits can mis-resolve exotic filenames and miss (never wrongly grant) the lockfile auto-fix.
+  evidence: `src/adapters/driven/git/index.ts`'s `listDirtyPaths` strips surrounding quotes but never unescapes porcelain C-style escapes and splits renames on every ` -> ` occurrence. Surfaced by review (blind-hunter + edge-case-hunter); degrades safe (falls through to the guided menu, never a wrong silent discard) and only affects exotic filenames. **Track:** a `-z`/NUL-delimited porcelain parse (rename format changes under `-z`) the next time this adapter is touched.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: Quitting (`markUpdateInterrupted`) or clearing (`clearUpdate`) the Update zone while a resolution blocker is raised orphans the core seam promise — it hangs forever instead of settling the run.
+  evidence: `src/adapters/driving/tui/store/slices/update-slice.ts` nulls `pendingBlockerResolve` without resolving it on those paths; user-visible state stays consistent (flags are cleared, a new run works), but the abandoned run's `await onUpdateBlocker` never settles. Surfaced by review (blind-hunter); settling it needs an abandon-vs-cancel-run design decision, not a trivial fix. **Track:** decide (abandon silently vs. resolve `cancel-run` with a run-generation guard) next time the update slice is touched.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: Eight test files hand-maintain their own full `GitPort` fake listing all five story-3.4 methods with no shared factory, so the next port addition touches every file and risks fake drift.
+  evidence: `src/core/scripts/group-update.test.ts`, `src/core/edt/*.test.ts`, `src/adapters/driven/edt-registry/index.test.ts` and others each inline the five new methods. Surfaced by review (blind-hunter); mechanical and green today. **Track:** extract one shared `fakeGit` factory when the port next grows.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: The resolution modal names the blocked service/repo/kind but never lists which paths are dirty or conflicted, so the developer chooses stash/editor/cancel without seeing the file list.
+  evidence: `UpdateBlocker` in `src/core/scripts/group-update.ts` carries no path list and `formatBlockerBody` in `src/adapters/driving/tui/zones/update/update-zone.tsx` renders kind text only. Surfaced by review (blind-hunter); widening the seam shape is extra scope beyond the frozen spec. **Track:** carry the dirty/unmerged path list through the blocker the next time the seam shape is touched.
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-1-aggregated-live-log-stream.md`
   summary: No automatic reconnect/retry when a live log stream dies mid-flight (`streamError` surfaced via `onUpdate`) — the only recovery path is manually deselecting and reselecting the same service, with no UI hint that this is expected.

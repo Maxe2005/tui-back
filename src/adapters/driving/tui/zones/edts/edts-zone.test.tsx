@@ -15,12 +15,14 @@ import {
   advanceCreateFormFocus,
   appendHint,
   buildCreateBranchOptions,
+  buildDeleteMemberRows,
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
   formatAvailableActionsHint,
   formatEdtActionHistory,
   formatEdtDetail,
+  formatDeleteMemberMeta,
   formatEdtRowMeta,
   formatIssuesSummary,
   formatServiceDetail,
@@ -454,40 +456,63 @@ describe('cycleFormFocus', () => {
   });
 });
 
-describe('nextTextInputValue', () => {
-  it('appends a typed character', () => {
-    expect(nextTextInputValue('ab', 'c', {})).toBe('abc');
+describe('nextTextInputValue (story 2.32: {value, cursor} shape, real cursor navigation)', () => {
+  it('appends a typed character at the end when cursor trails the value', () => {
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, 'c', {})).toEqual({ value: 'abc', cursor: 3 });
   });
 
-  it('backspaces the last character', () => {
-    expect(nextTextInputValue('abc', '', { backspace: true })).toBe('ab');
-    expect(nextTextInputValue('abc', '', { delete: true })).toBe('ab');
+  it('inserts a typed character mid-string at cursor (I/O matrix: "Mid-string insert")', () => {
+    expect(nextTextInputValue({ value: 'abd', cursor: 2 }, 'c', {})).toEqual({ value: 'abcd', cursor: 3 });
+  });
+
+  it('backspaces the character before cursor (I/O matrix: "Backspace")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { backspace: true })).toEqual({ value: 'acd', cursor: 1 });
+  });
+
+  it('backspace at cursor 0 is a no-op (I/O matrix: "cursor:0 -> no-op")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 0 }, '', { backspace: true })).toEqual({ value: 'abcd', cursor: 0 });
   });
 
   it('leaves an empty value unchanged on backspace', () => {
-    expect(nextTextInputValue('', '', { backspace: true })).toBe('');
+    expect(nextTextInputValue({ value: '', cursor: 0 }, '', { backspace: true })).toEqual({ value: '', cursor: 0 });
   });
 
-  it('ignores return/escape/tab/arrows/ctrl/meta — never appended as text', () => {
-    expect(nextTextInputValue('ab', '\r', { return: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '\x1b', { escape: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { tab: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { upArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { downArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { leftArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { rightArrow: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { home: true })).toBe('ab');
-    expect(nextTextInputValue('ab', '', { end: true })).toBe('ab');
-    expect(nextTextInputValue('ab', 'c', { ctrl: true })).toBe('ab');
-    expect(nextTextInputValue('ab', 'c', { meta: true })).toBe('ab');
+  it('deletes the character after cursor, cursor unchanged (I/O matrix: "Delete")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { delete: true })).toEqual({ value: 'abd', cursor: 2 });
+  });
+
+  it('delete at cursor:len is a no-op (I/O matrix: "cursor:len -> no-op")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 4 }, '', { delete: true })).toEqual({ value: 'abcd', cursor: 4 });
+  });
+
+  it('Left/Right move cursor, clamped to [0, value.length] (I/O matrix: "Left/Right clamp")', () => {
+    expect(nextTextInputValue({ value: 'ab', cursor: 0 }, '', { leftArrow: true })).toEqual({ value: 'ab', cursor: 0 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, '', { rightArrow: true })).toEqual({ value: 'ab', cursor: 2 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { leftArrow: true })).toEqual({ value: 'ab', cursor: 0 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { rightArrow: true })).toEqual({ value: 'ab', cursor: 2 });
+  });
+
+  it('Home/End jump to the start/end (I/O matrix: "Home/End")', () => {
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { home: true })).toEqual({ value: 'abcd', cursor: 0 });
+    expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { end: true })).toEqual({ value: 'abcd', cursor: 4 });
+  });
+
+  it('ignores return/escape/tab/up/down/ctrl/meta — never appended as text, cursor unchanged', () => {
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '\r', { return: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '\x1b', { escape: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { tab: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { upArrow: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { downArrow: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, 'c', { ctrl: true })).toEqual({ value: 'ab', cursor: 1 });
+    expect(nextTextInputValue({ value: 'ab', cursor: 1 }, 'c', { meta: true })).toEqual({ value: 'ab', cursor: 1 });
   });
 
   it('ignores an empty input with no matching key flag (defensive no-op)', () => {
-    expect(nextTextInputValue('ab', '', {})).toBe('ab');
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, '', {})).toEqual({ value: 'ab', cursor: 2 });
   });
 
   it('appends a space character (Space is a valid topic character, not a checkbox toggle here)', () => {
-    expect(nextTextInputValue('ab', ' ', {})).toBe('ab ');
+    expect(nextTextInputValue({ value: 'ab', cursor: 2 }, ' ', {})).toEqual({ value: 'ab ', cursor: 3 });
   });
 });
 
@@ -816,6 +841,44 @@ describe('summarizeFailedResults', () => {
       },
     ]);
     expect(rows[0]?.code).toBe('branch-owned-by-other-edt');
+  });
+});
+
+// Review fix (story 2.29): statusError must thread through buildDeleteMemberRows into the
+// rendered row, and formatDeleteMemberMeta must annotate it rather than rendering a
+// plausible-looking-but-untrustworthy merged/clean label.
+describe('buildDeleteMemberRows / formatDeleteMemberMeta (story 2.29 review fix — statusError)', () => {
+  it('threads statusError through from MemberDeleteStatus to DeleteMemberRow', () => {
+    const rows = buildDeleteMemberRows([
+      { repoPath: '/repo/a', service: 'svc-a', branch: 'feat/a', merged: true, clean: true, statusError: 'no manifest' },
+      { repoPath: '/repo/b', service: 'svc-b', branch: 'feat/b', merged: true, clean: true },
+    ]);
+
+    expect(rows[0]?.statusError).toBe('no manifest');
+    expect(rows[1]?.statusError).toBeUndefined();
+  });
+
+  it('formatDeleteMemberMeta appends the "status unknown" annotation only when statusError is set', () => {
+    const clean = formatDeleteMemberMeta({
+      repoPath: '/repo/a',
+      service: 'svc-a',
+      branch: 'feat/a',
+      merged: true,
+      clean: true,
+      disposition: 'leave',
+    });
+    const withStatusError = formatDeleteMemberMeta({
+      repoPath: '/repo/a',
+      service: 'svc-a',
+      branch: 'feat/a',
+      merged: true,
+      clean: true,
+      disposition: 'leave',
+      statusError: 'no manifest',
+    });
+
+    expect(clean).toBe('feat/a — merged, clean');
+    expect(withStatusError).toBe('feat/a — merged, clean (status unknown — defaulted to leave)');
   });
 });
 
@@ -1293,6 +1356,77 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('SWITCH EDT');
     expect(output).toContain('force switch');
     expect(output).toContain('cancel');
+  });
+
+  // Story 2.29: the delete-confirm dialog lists every member with branch, merge status, and
+  // uncommitted-work status (acceptance criteria).
+  it('AC (2.29): the delete-confirm dialog lists every member with branch, merge, and uncommitted-work status', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [
+        edtEntry({
+          topic: 'other-work',
+          members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'feat/x' }],
+        }),
+      ],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="delete-confirm" />);
+    expect(output).toContain('DELETE EDT');
+    expect(output).toContain('other-work');
+    expect(output).toContain('api-gateway');
+    expect(output).toContain('feat/x');
+  });
+
+  // Review fix (story 2.29): a member row whose merged/clean status couldn't be established
+  // (a manifest/git read failed) must say so explicitly rather than rendering a
+  // plausible-looking-but-untrustworthy "merged/unmerged, clean/uncommitted work" label.
+  it('AC (2.29 review fix): a member row with a statusError renders the "status unknown" annotation', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [
+        edtEntry({
+          topic: 'other-work',
+          members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'feat/x' }],
+        }),
+      ],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="delete-confirm-status-error" />);
+    expect(output).toContain('DELETE EDT');
+    expect(output).toContain('api-gateway');
+    expect(output).toContain('status unknown — defaulted to leave');
+  });
+
+  // I/O matrix: "Delete the active EDT" -> rejected before any write, clear message, never
+  // auto-switched — only [Esc] cancel is ever offered.
+  it('AC (2.29): deleting the active EDT is rejected with a clear message, no confirm affordance', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-work' })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="delete-confirm-rejected" />);
+    expect(output).toContain('DELETE EDT');
+    expect(output).toContain('active-work');
+    expect(output).toContain('active EDT');
+    expect(output).toContain('cancel');
+    expect(output).not.toContain('confirm');
   });
 
   it('AC3: the modify form shows the topic, and every candidate service checked/unchecked per current membership', async () => {

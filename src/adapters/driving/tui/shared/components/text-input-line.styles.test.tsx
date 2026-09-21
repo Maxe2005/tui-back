@@ -31,3 +31,31 @@ describe('TextInputLine focused styling (story 2.23, AC: inverse cursor when foc
     expect(output).not.toContain('\u001b[7m');
   });
 });
+
+describe('TextInputLine cursor placement styling (story 2.32, AC: inverse glyph tracks cursor)', () => {
+  it('wraps the character at `cursor` in the inverse code, not the trailing character', async () => {
+    const { renderToString } = await import('./render-to-string.js');
+    const { TextInputLine } = await import('./text-input-line.js');
+
+    // cursor: 1 sits on 'b' — the inverse escape must immediately precede 'b', not 'd' (the
+    // last character), proving the caret tracks `cursor` rather than always trailing.
+    const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={1} focused />);
+    expect(output).toContain('\u001b[7mb');
+  });
+
+  it("wraps the trailing inverse space when cursor equals value.length (today's look, unchanged)", async () => {
+    const { renderToString } = await import('./render-to-string.js');
+    const { TextInputLine } = await import('./text-input-line.js');
+
+    const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={4} focused />);
+    expect(output).toContain('\u001b[7m \u001b[27m');
+  });
+
+  it("wraps the character at cursor:2 in the inverse code (code review: matches the plain-text test's mid-string scenario)", async () => {
+    const { renderToString } = await import('./render-to-string.js');
+    const { TextInputLine } = await import('./text-input-line.js');
+
+    const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={2} focused />);
+    expect(output).toContain('\u001b[7mc');
+  });
+});

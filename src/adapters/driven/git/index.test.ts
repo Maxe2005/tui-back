@@ -6,7 +6,7 @@
 // manifest-only directory that is NOT a git repository still gets the gate error rather than
 // a git failure (any git invocation there would have failed as "not a git repository").
 import { describe, expect, it, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -16,6 +16,7 @@ import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { loadManifest } from '../manifest/index.js';
 import {
   aheadBehind,
+  abortMerge,
   assertAllowedBranch,
   branchExistsLocally,
   checkoutBranch,
@@ -23,9 +24,19 @@ import {
   createGitPort,
   currentBranch,
   deleteBranch,
+  discardPaths,
   fetchBranch,
+  finalizeMerge,
+  hasStash,
   hasUncommittedChanges,
+  hasUnmergedPaths,
+  isBranchMerged,
+  isMergeInProgress,
+  isRebaseInProgress,
   listBranches,
+  listDirtyPaths,
+  mergeBranch,
+  pullBranch,
   renameBranch,
   restoreStash,
   stashSave,
@@ -149,6 +160,7 @@ function fakeEdtRegistry(entries: EdtRegistryEntry[]): EdtRegistryPort {
     list: async () => ok(entries),
     setStatus: async () => ok(undefined),
     update: async () => ok(undefined),
+    remove: async () => ok(undefined),
   };
 }
 
@@ -235,6 +247,7 @@ describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
       list: async () => ({ ok: false, error: { code: 'edt-registry-invalid-format', message: 'bad shape' } }),
       setStatus: async () => ok(undefined),
       update: async () => ok(undefined),
+      remove: async () => ok(undefined),
     };
 
     const result = await assertAllowedBranch(manifest, repo, 'feat/x', 'edt-mine', edtRegistry);
@@ -517,20 +530,47 @@ describe('spawn failure diagnostics (status === null)', () => {
 });
 
 describe('deleteBranch', () => {
-  it('deletes an existing non-shared branch ref', async () => {
+  it('deletes an existing non-shared branch ref (force: true -> git branch -D)', async () => {
     const repo = await makeGitRepo();
     expect(runGit(repo, ['branch', 'feat/x']).status).toBe(0);
 
-    const result = await deleteBranch(manifest, repo, 'feat/x');
+    const result = await deleteBranch(manifest, repo, 'feat/x', true);
 
     expect(result).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/x')).toBe(false);
   });
 
+  // Story 2.29: force: false selects `git branch -d`, which refuses to delete a branch not
+  // yet merged into the current HEAD — surfaced as a controlled git-delete-branch-error,
+  // never a throw, and the ref survives untouched.
+  it('force: false (-d) refuses to delete an unmerged branch, leaving the ref intact', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/unmerged']).status).toBe(0);
+    await writeFile(join(repo, 'unmerged.txt'), 'x');
+    runGit(repo, ['add', 'unmerged.txt']);
+    expect(runGit(repo, ['commit', '-m', 'unmerged work']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+
+    const result = await deleteBranch(manifest, repo, 'feat/unmerged', false);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-delete-branch-error' } });
+    expect(branchExists(repo, 'feat/unmerged')).toBe(true);
+  });
+
+  it('force: false (-d) deletes a branch already merged into HEAD', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
+
+    const result = await deleteBranch(manifest, repo, 'feat/merged', false);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(repo, 'feat/merged')).toBe(false);
+  });
+
   it('treats a missing branch as a no-op success (idempotent rollback)', async () => {
     const repo = await makeGitRepo();
 
-    const result = await deleteBranch(manifest, repo, 'feat/never-created');
+    const result = await deleteBranch(manifest, repo, 'feat/never-created', true);
 
     expect(result).toEqual({ ok: true, data: undefined });
   });
@@ -538,7 +578,7 @@ describe('deleteBranch', () => {
   it('rejects a built-in shared branch before any git invocation', async () => {
     const repo = await makeGitRepo();
 
-    const result = await deleteBranch(manifest, repo, 'development');
+    const result = await deleteBranch(manifest, repo, 'development', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     expect(branchExists(repo, 'development')).toBe(true);
@@ -547,7 +587,7 @@ describe('deleteBranch', () => {
   it('rejects a branch name equal to the repo manifest sharedBranch', async () => {
     const repo = await makeGitRepo('staging');
 
-    const result = await deleteBranch(manifest, repo, 'staging');
+    const result = await deleteBranch(manifest, repo, 'staging', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
   });
@@ -555,7 +595,7 @@ describe('deleteBranch', () => {
   it('rejects a shared branch without touching git at all (manifest-only dir, not a git repo)', async () => {
     const dir = await makeDirWithManifestOnly();
 
-    const result = await deleteBranch(manifest, dir, 'prod');
+    const result = await deleteBranch(manifest, dir, 'prod', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
   });
@@ -564,9 +604,41 @@ describe('deleteBranch', () => {
     const repo = await makeGitRepo();
     await rm(join(repo, '.tui-back.yaml'), { force: true });
 
-    const result = await deleteBranch(manifest, repo, 'feat/x');
+    const result = await deleteBranch(manifest, repo, 'feat/x', true);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+});
+
+// Story 2.29 — local-only ancestor check backing the EDT-delete use-case's -d/-D decision.
+describe('isBranchMerged', () => {
+  it('reports true when branchName is an ancestor of into (merged, no divergent commits)', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
+
+    const result = await isBranchMerged(repo, 'feat/merged', 'development');
+
+    expect(result).toEqual({ ok: true, data: true });
+  });
+
+  it('reports false when branchName has commits development does not have (unmerged)', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/unmerged']).status).toBe(0);
+    await writeFile(join(repo, 'unmerged.txt'), 'x');
+    runGit(repo, ['add', 'unmerged.txt']);
+    expect(runGit(repo, ['commit', '-m', 'unmerged work']).status).toBe(0);
+
+    const result = await isBranchMerged(repo, 'feat/unmerged', 'development');
+
+    expect(result).toEqual({ ok: true, data: false });
+  });
+
+  it('reports a controlled git error for a non-existent ref, never a throw', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await isBranchMerged(repo, 'feat/does-not-exist', 'development');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-base-error' } });
   });
 });
 
@@ -683,6 +755,44 @@ describe('stashSave / restoreStash', () => {
     const result = await stashSave(dir, 'tui-back:x');
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-stash-error' } });
+  });
+});
+
+// Story 2.29 — hasStash: the non-destructive existence check backing the EDT-delete
+// use-case's corrected clean-detection (Design Notes: a member's own `tui-back:<edtUlid>`
+// stash signals real uncommitted work belonging to that member, independent of whatever the
+// repo's working tree currently has checked out). Built on the same findStashRef
+// list-and-match logic restoreStash already used — never pops anything.
+describe('hasStash', () => {
+  it('reports true when a stash tagged with the given tag exists, without popping it', async () => {
+    const repo = await makeGitRepo();
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked']).status).toBe(0);
+    await writeFile(join(repo, 'tracked.txt'), 'dirty');
+    expect((await stashSave(repo, 'tui-back:01ULIDEXAMPLE')).ok).toBe(true);
+
+    const result = await hasStash(repo, 'tui-back:01ULIDEXAMPLE');
+
+    expect(result).toEqual({ ok: true, data: true });
+    // Never destructive: the stash is still present afterwards.
+    expect(runGit(repo, ['stash', 'list']).stdout).toContain('01ULIDEXAMPLE');
+  });
+
+  it('reports false when no stash matches the tag (absent-tag case)', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await hasStash(repo, 'tui-back:no-such-tag');
+
+    expect(result).toEqual({ ok: true, data: false });
+  });
+
+  it('reports a controlled error when git stash list fails (not a git repo)', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    const result = await hasStash(dir, 'tui-back:x');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-stash-list-error' } });
   });
 });
 
@@ -843,6 +953,205 @@ describe('fetchBranch', () => {
   });
 });
 
+// Story 3.1 — plain `git pull` on the current branch, only for a member already sitting on
+// its shared branch.
+describe('pullBranch', () => {
+  it('pulls new upstream commits into the current branch', async () => {
+    const { origin, clone } = await makeOriginAndClone();
+    commit(origin, 'upstream-only commit');
+
+    const result = await pullBranch(clone);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 0, behind: 0 } });
+  });
+
+  it('is a no-op success when already up to date', async () => {
+    const { clone } = await makeOriginAndClone();
+
+    expect(await pullBranch(clone)).toEqual({ ok: true, data: undefined });
+  });
+
+  it('reports a controlled error when there is no origin remote', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await pullBranch(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
+  });
+
+  it('rejects a diverged shared branch with git-pull-error (never merges, never rebases)', async () => {
+    const { origin, clone } = await makeOriginAndClone();
+    commit(origin, 'upstream-only commit');
+    // A local-only commit on the same branch diverges it — --ff-only refuses.
+    commit(clone, 'local-only commit');
+
+    const result = await pullBranch(clone);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
+    // Neither side moved: no merge commit was created to paper over the divergence.
+    expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 1 } });
+  });
+});
+
+// Story 3.1 — `git merge` of the fetched shared branch into the member's own branch, never
+// a rebase; conflicts surface as `merge-conflict` so the caller can abort.
+describe('mergeBranch', () => {
+  // A feature branch behind development with no overlapping change — merges cleanly.
+  async function makeBehindRepo(): Promise<string> {
+    const repo = await makeCleanGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'shared.txt'), 'shared change');
+    runGit(repo, ['add', 'shared.txt']);
+    expect(runGit(repo, ['commit', '-m', 'advance shared']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    return repo;
+  }
+
+  it('merges the shared branch into the member branch', async () => {
+    const repo = await makeBehindRepo();
+
+    const result = await mergeBranch(repo, 'development');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(runGit(repo, ['merge-base', '--is-ancestor', 'development', 'feat/member']).status).toBe(0);
+  });
+
+  it('is a no-op success when the member already contains the shared branch', async () => {
+    const repo = await makeCleanGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+
+    const result = await mergeBranch(repo, 'development');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+  });
+
+  it('surfaces a conflicting merge as merge-conflict, leaving the merge in progress for the caller to abort', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+
+    const result = await mergeBranch(repo, 'development');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'merge-conflict' } });
+    // The merge is still in progress — MERGE_HEAD exists — so abortMerge has work to do.
+    expect(runGit(repo, ['rev-parse', '--verify', 'MERGE_HEAD']).status).toBe(0);
+  });
+
+  it('reports a non-conflict failure as git-merge-error (never merge-conflict)', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await mergeBranch(repo, 'feat/does-not-exist');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-error' } });
+  });
+});
+
+// Story 3.1 — `git merge --abort` restores the pre-run HEAD after a conflicting merge.
+describe('abortMerge', () => {
+  it('cancels an in-progress conflicting merge, restoring the pre-run HEAD', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    const headBefore = runGit(repo, ['rev-parse', 'HEAD']).stdout.trim();
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+
+    const result = await abortMerge(repo);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(runGit(repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);
+    expect(runGit(repo, ['rev-parse', '--verify', 'MERGE_HEAD']).status).not.toBe(0);
+  });
+
+  it('reports a controlled error when no merge is in progress', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await abortMerge(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
+  });
+
+  it('falls back to the exit status when git fails with blank stderr (review)', async () => {
+    const repo = await makeCleanGitRepo();
+    const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+    const shimDir = await mkdtemp(join(tmpdir(), 'tui-back-git-shim-blank-'));
+    tmpDirs.push(shimDir);
+    const shimPath = join(shimDir, 'git');
+    // A shim `git` that fails only the `merge --abort` subcommand with zero output
+    // (forwarding every other subcommand to the real binary), exercising the exact
+    // "non-zero exit, blank stderr" branch for real.
+    await writeFile(
+      shimPath,
+      `#!/bin/sh\nif [ "$1" = "merge" ] && [ "$2" = "--abort" ]; then\n  exit 1\nfi\nexec "${realGit}" "$@"\n`,
+      { mode: 0o755 },
+    );
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${shimDir}${delimiter}${originalPath}`;
+    try {
+      const result = await abortMerge(repo);
+      expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
+      if (!result.ok) {
+        expect(result.error.message).toContain('exit 1');
+      }
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+});
+
+// Story 3.1 (review) — the MERGE_HEAD classifier the group-update pull path uses to tell
+// a conflicting pull (abort + merge-conflict) from any other pull failure.
+describe('isMergeInProgress', () => {
+  it('reports true while a conflicting merge is in progress', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: true });
+
+    expect((await abortMerge(repo)).ok).toBe(true);
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('reports false when no merge is in progress', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+  });
+});
+
 describe('createGitPort', () => {
   it('wires all four pre-2.4 methods behind the factory pattern', async () => {
     const repo = await makeGitRepo();
@@ -856,8 +1165,23 @@ describe('createGitPort', () => {
     expect(await port.currentBranch(repo)).toEqual({ ok: true, data: 'development' });
     expect(await port.createBranch(repo, 'feat/port', 'development')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/port')).toBe(true);
-    expect(await port.deleteBranch(repo, 'feat/port')).toEqual({ ok: true, data: undefined });
+    expect(await port.deleteBranch(repo, 'feat/port', true)).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/port')).toBe(false);
+  });
+
+  it('wires isBranchMerged (story 2.29) behind the factory pattern', async () => {
+    const repo = await makeGitRepo();
+    const port = createGitPort(manifest);
+    expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
+
+    expect(await port.isBranchMerged(repo, 'feat/merged', 'development')).toEqual({ ok: true, data: true });
+  });
+
+  it('wires hasStash (story 2.29) behind the factory pattern', async () => {
+    const repo = await makeGitRepo();
+    const port = createGitPort(manifest);
+
+    expect(await port.hasStash(repo, 'tui-back:no-such-tag')).toEqual({ ok: true, data: false });
   });
 
   it('wires aheadBehind (story 2.6) behind the factory pattern', async () => {
@@ -900,6 +1224,20 @@ describe('createGitPort', () => {
     expect(await port.assertAllowedBranch(repo, 'feat/taken', 'edt-other')).toEqual({ ok: true, data: undefined });
   });
 
+  it('wires the story 3.1 methods (pull, mergeBranch, abortMerge) behind the factory pattern', async () => {
+    const repo = await makeCleanGitRepo();
+    const port = createGitPort(manifest);
+    expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
+
+    // feat/x already contains development — a merge no-op success.
+    expect(await port.mergeBranch(repo, 'development')).toEqual({ ok: true, data: undefined });
+    // No merge in progress — abort reports a controlled error.
+    expect(await port.abortMerge(repo)).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
+    expect(await port.isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+    // No origin remote — pull reports a controlled error, never a throw.
+    expect(await port.pull(repo)).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
+  });
+
   it('wires listBranches/renameBranch (story 2.26) behind the factory pattern', async () => {
     const repo = await makeGitRepo();
     const port = createGitPort(manifest);
@@ -914,5 +1252,199 @@ describe('createGitPort', () => {
     expect(await port.renameBranch(repo, 'feat/x', 'feat/y')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/x')).toBe(false);
     expect(branchExists(repo, 'feat/y')).toBe(true);
+  });
+
+  it('wires the story 3.4 methods behind the factory pattern', async () => {
+    const repo = await makeCleanGitRepo();
+    const port = createGitPort(manifest);
+    await writeFile(join(repo, 'wip.txt'), 'uncommitted work');
+
+    const dirty = await port.listDirtyPaths(repo);
+    expect(dirty.ok).toBe(true);
+    if (dirty.ok) {
+      expect(dirty.data).toContain('wip.txt');
+    }
+    expect(await port.isRebaseInProgress(repo)).toEqual({ ok: true, data: false });
+    expect(await port.hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+  });
+});
+
+// Story 3.4 — porcelain file list backing the lockfile-only classifier.
+describe('listDirtyPaths', () => {
+  it('reports an empty list for a clean working tree', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('lists modified tracked files and untracked files by path', async () => {
+    const repo = await makeGitRepo();
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked']).status).toBe(0);
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await writeFile(join(repo, 'untracked.txt'), 'new');
+
+    const result = await listDirtyPaths(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toContain('tracked.txt');
+      expect(result.data).toContain('untracked.txt');
+    }
+  });
+
+  it('reports a controlled error on a non-git directory', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    const result = await listDirtyPaths(dir);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-status-error' } });
+  });
+});
+
+// Story 3.4 — path-scoped discard for the lockfile-only auto-fix.
+describe('discardPaths', () => {
+  it('restores a modified tracked file to its committed content', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'package.json'), '{"name":"x"}\n');
+    runGit(repo, ['add', 'package.json']);
+    expect(runGit(repo, ['commit', '-m', 'add package.json']).status).toBe(0);
+    await writeFile(join(repo, 'package.json'), '{"name":"dirty"}\n');
+
+    const result = await discardPaths(repo, ['package.json']);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'package.json'), 'utf8')).toBe('{"name":"x"}\n');
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('leaves paths outside the given list untouched', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'package.json'), '{"name":"x"}\n');
+    await writeFile(join(repo, 'wip.txt'), 'work');
+    runGit(repo, ['add', 'package.json', 'wip.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add files']).status).toBe(0);
+    await writeFile(join(repo, 'package.json'), '{"name":"dirty"}\n');
+    await writeFile(join(repo, 'wip.txt'), 'changed');
+
+    expect(await discardPaths(repo, ['package.json'])).toEqual({ ok: true, data: undefined });
+
+    expect(await readFile(join(repo, 'package.json'), 'utf8')).toBe('{"name":"x"}\n');
+    expect(await readFile(join(repo, 'wip.txt'), 'utf8')).toBe('changed');
+  });
+
+  it('is a no-op success for an empty path list', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await discardPaths(repo, [])).toEqual({ ok: true, data: undefined });
+  });
+
+  it('reports a controlled error for an unknown path', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await discardPaths(repo, ['no-such-file.txt']);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
+  });
+});
+
+// Story 3.4 — mid-rebase detector (detection only: the tool never touches a rebase).
+describe('isRebaseInProgress', () => {
+  it('reports false for an ordinary repo with no rebase in progress', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await isRebaseInProgress(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('reports true while a rebase-merge state dir exists', async () => {
+    const repo = await makeCleanGitRepo();
+    const gitDir = runGit(repo, ['rev-parse', '--git-dir']).stdout.trim();
+    await mkdir(join(repo, gitDir, 'rebase-merge'), { recursive: true });
+
+    expect(await isRebaseInProgress(repo)).toEqual({ ok: true, data: true });
+  });
+
+  it('reports true while a rebase-apply state dir exists', async () => {
+    const repo = await makeCleanGitRepo();
+    const gitDir = runGit(repo, ['rev-parse', '--git-dir']).stdout.trim();
+    await mkdir(join(repo, gitDir, 'rebase-apply'), { recursive: true });
+
+    expect(await isRebaseInProgress(repo)).toEqual({ ok: true, data: true });
+  });
+
+  it('reads a missing git dir as no rebase in progress, never a throw', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    expect(await isRebaseInProgress(dir)).toEqual({ ok: true, data: false });
+  });
+});
+
+// Story 3.4 — unmerged-path verification gate before merge finalization.
+describe('hasUnmergedPaths', () => {
+  it('reports false for a clean repo', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('reports true while a conflicting merge leaves unmerged paths', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: true });
+
+    expect((await abortMerge(repo)).ok).toBe(true);
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+  });
+});
+
+// Story 3.4 — finalizeMerge commits a human-resolved merge without opening an editor.
+describe('finalizeMerge', () => {
+  it('commits a hand-resolved merge (zero unmerged paths) with --no-edit', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+    // Resolve by hand exactly as a developer would: write the merged content, stage it.
+    await writeFile(join(repo, 'conflict.txt'), 'resolved');
+    expect(runGit(repo, ['add', 'conflict.txt']).status).toBe(0);
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+
+    const result = await finalizeMerge(repo);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+    expect(runGit(repo, ['merge-base', '--is-ancestor', 'development', 'feat/member']).status).toBe(0);
+  });
+
+  it('reports a controlled error when no merge is waiting to be committed', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await finalizeMerge(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-commit-error' } });
   });
 });

@@ -71,6 +71,7 @@ function fakeEdtRegistry(overrides: Partial<EdtRegistryPort> = {}): EdtRegistryP
     add: vi.fn(async () => ok(undefined)),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -101,8 +102,19 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     restoreStash: vi.fn(async () => ok(undefined)),
     branchExistsLocally: vi.fn(async () => ok(true)),
     fetch: vi.fn(async () => ok(undefined)),
+    pull: vi.fn(async () => ok(undefined)),
+    mergeBranch: vi.fn(async () => ok(undefined)),
+    abortMerge: vi.fn(async () => ok(undefined)),
+    isMergeInProgress: vi.fn(async () => ok(false)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
     ...overrides,
   };
 }
@@ -543,8 +555,8 @@ describe('createEdt — registry write under lock (AD-9)', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
     // Every branch that was created in this run is deleted again, in the same order.
     expect(calls(git.deleteBranch)).toEqual([
-      ['/repo/a', 'feat/x'],
-      ['/repo/b', 'feat/x'],
+      ['/repo/a', 'feat/x', true],
+      ['/repo/b', 'feat/x', true],
     ]);
     // Only created branches are rolled back — failed/existing members are left alone.
     expect(calls(git.createBranch)).toHaveLength(2);
@@ -578,8 +590,8 @@ describe('createEdt — registry write under lock (AD-9)', () => {
     expect(calls(edtRegistry.add)).toHaveLength(0);
     // The branches this run created are rolled back even though the lock was held.
     expect(calls(git.deleteBranch)).toEqual([
-      ['/repo/a', 'feat/x'],
-      ['/repo/b', 'feat/x'],
+      ['/repo/a', 'feat/x', true],
+      ['/repo/b', 'feat/x', true],
     ]);
     expect(await readdir(params.edtsBaseDir)).toEqual([]);
   });

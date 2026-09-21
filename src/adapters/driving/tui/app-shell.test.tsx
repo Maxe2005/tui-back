@@ -87,10 +87,11 @@ describe('AppShell', () => {
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
       // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
-      // (see edts-zone.test.tsx for its own coverage). Story 5.1: Logs is likewise real
-      // content now (see logs-zone.test.tsx) — every other zone is still the placeholder
-      // these two literal strings come from.
-      if (zone.id !== 'edts' && zone.id !== 'logs') {
+      // (see edts-zone.test.tsx for its own coverage). Story 3.1: same for Update
+      // (see update-zone.test.tsx). Story 5.1: Logs is likewise real content now (see
+      // logs-zone.test.tsx) — every other zone is still the placeholder these two
+      // literal strings come from.
+      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
@@ -381,6 +382,8 @@ it('shouldQuit returns true for q', () => {
         createEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         switchEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         modifyEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        deleteEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        resolveMemberDeleteStatuses: async () => [],
         listBranches: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         createMemberBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         renameBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
@@ -399,7 +402,22 @@ it('shouldQuit returns true for q', () => {
         openEdtCreateDialog: () => {},
         openEdtSwitchDialog: () => {},
         openEdtModifyDialog: () => {},
+        openEdtDeleteDialog: () => {},
         logEdtAction: async () => {},
+        // Story 3.1: Update zone run state
+        updateStatus: 'idle',
+        updateResults: [],
+        updateNote: null,
+        updateTopic: null,
+        updateError: null,
+        updateErrorCode: null,
+        updateUlid: null,
+        updateScope: null,
+        updateBlocker: null,
+        resolveUpdateBlocker: () => {},
+        runGroupUpdate: async () => {},
+        markUpdateInterrupted: async () => {},
+        clearUpdate: () => {},
         // Story 5.1: Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],
