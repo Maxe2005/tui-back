@@ -5,18 +5,20 @@
 // fullscreen) checked first, every keystroke decision delegated to a pure function from
 // logs-zone.logic.ts (or reused as-is from edts-zone.logic.ts where the logic is generic list
 // navigation, not EDT-specific — see that file's own header).
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Box, measureElement, Text, useInput, useWindowSize, type DOMElement } from 'ink';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import type { LogLine } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
-import { StatusBadge, type StatusBadgeState } from '../../shared/components/status-badge.js';
-import { TextInputLine } from '../../shared/components/text-input-line.js';
+import { StatusBadge } from '../../shared/components/status-badge.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
+import { FullscreenPane } from './fullscreen-pane.js';
+import { LogFilterEditor } from './log-filter-editor.js';
+import { LogsGrid } from './logs-grid.js';
+import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
   jumpSelection,
   moveSelection,
@@ -26,7 +28,6 @@ import {
   resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
 import {
-  columnDisplayWidth,
   commandAtGridCursor,
   groupCommandsByColumn,
   layoutCommandGrid,
@@ -39,26 +40,27 @@ import {
 import {
   adjustScrollOffset,
   applyLogFilters,
-  compileLogFilter,
-  computeGridLayout,
-  computeLineRowCount,
+  computeLogsLayout,
   cycleFilterLevel,
   cycleLogsPaneFocus,
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
   filterVisibleLines,
-  formatLogFilterSpec,
-  formatLogLine,
+  healthBadgeState,
+  historyEntryLabel,
   isAtOldestLine,
   isClearAllLogsKey,
+  isDefaultLogFilterSpec,
   isPaneEngagedInGlobalFilter,
   isPaneWrapped,
   isSelectAllKey,
   isWrapAllLogsKey,
+  LIST_COLUMN_WIDTH,
   movePaneSubFocus,
   reindexPaneSubFocus,
   resolveFilterClearTarget,
+  resolveFilterEditorDraft,
   resolveFullscreenScrollDirection,
   resolveHistoryBrowseDown,
   resolveHistoryBrowseUp,
@@ -67,15 +69,14 @@ import {
   resolveVisibilityToggleKey,
   setPaneGlobalFilterEngagement,
   setPaneLogFilter,
-  sliceVisibleWindow,
   toggleAllPanesWrapFlag,
   toggleFilterMode,
   toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
+  type FilterEditorState,
   type FilterHistoryBrowseState,
   type FilterHistoryKey,
-  type GridLayout,
   type LogFilterMode,
   type LogFilterSpec,
   type LogLevel,
@@ -83,118 +84,6 @@ import {
   type VisibilityFlags,
 } from './logs-zone.logic.js';
 
-// Story 5.4: the filter-history grid browser's own layout budget — mirrors command-bar.tsx's
-// MODAL_CHROME_WIDTH/MIN_GRID_WIDTH (a `ModalDialog`'s own chrome plus a safety margin) since
-// this grid renders inside the same LogFilterEditor `ModalDialog`.
-const HISTORY_GRID_CHROME_WIDTH = 6;
-const HISTORY_GRID_MIN_WIDTH = 10;
-const HISTORY_GRID_COLUMN_GAP = 1;
-// Story 5.5: the history grid browser's own available-*height* budget — ModalDialog's chrome
-// (double border top/bottom + padding top/bottom + title row + "──" separator = 6 rows) plus
-// this editor's own fixed rows above the grid (TextInputLine + Level line + the hint line
-// below the grid = 3 rows); a rough estimate mirrors CHROME_ROWS/PANE_CHROME_ROWS below ("an
-// approximation is fine here" — same precedent). The optional inline-error line is
-// deliberately not subtracted, so this budget stays slightly generous rather than short
-// whenever a regex draft is currently invalid.
-const HISTORY_GRID_CHROME_ROWS = 9;
-const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
-// Story 5.5: rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar,
-// footer, and the "LOGS" title row above it) — the list column and the pane grid are row
-// siblings sharing the exact same vertical extent, so this reuses the same estimate as
-// PANE_CHROME_ROWS' own sibling, CHROME_ROWS, below.
-const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
-
-function historyEntryLabel(entry: string): string {
-  return entry;
-}
-
-// Story 5.3: HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error,
-// `restarting` → `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never
-// color alone; accent is never a health color (StatusBadge as-is, no change).
-function healthBadgeState(health: HealthState): StatusBadgeState {
-  if (health === 'restarting') {
-    return 'in-progress';
-  }
-  return health;
-}
-
-// Reserves a fixed-width left column for the two lists — this zone has no persisted/resizable
-// splitter ratio (unlike every ListDetailSplit-based zone): the spec's Code Map/Design Notes
-// never mention one, and the grid's own auto-resize (computeGridLayout) already absorbs
-// whatever width remains.
-const LIST_COLUMN_WIDTH = 32;
-// Rough terminal-chrome budget (top bar, zone-tab bar, footer, this zone's own list headers/
-// hints) subtracted from the raw window size before computeGridLayout ever sees it — an
-// approximation is fine here since the real per-pane sizing still flows through Ink's own
-// flexGrow layout; this only decides how many rows/cols to try to fit and how many lines
-// worth of content each pane's own scroll window keeps in view.
-const CHROME_ROWS = 8;
-const PANE_CHROME_ROWS = 3;
-// A grid pane's content width is its cell width minus its own border (1 col each side) and
-// paddingX={1} (1 col each side) — needed to know how many terminal rows a wrapped line will
-// actually take (see computeLineRowCount).
-const GRID_PANE_CHROME_COLS = 4;
-
-// User-reported review fix: CHROME_ROWS/PANE_CHROME_ROWS/GRID_PANE_CHROME_COLS above are only
-// ever rough guesses (their own comments say so) — real chrome varies per pane (an optional
-// streamError or "no more history" line adds a row; Yoga's flex-grow rounding hands some grid
-// rows one more terminal row than a plain `floor(height / rows)` division would). Guessing wrong
-// used to leave a permanent gap at the bottom of every pane, worst in wrap mode (its per-line
-// row-cost estimate in computeLineRowCount compounds the same guesswork). `useElementSize`
-// measures the pane's own content box for real, post-render, via Ink's `measureElement` — the
-// estimate above now only seeds the very first paint (before Yoga has computed a layout to
-// measure), and every commit after that self-corrects to the pane's true row/column budget.
-
-// Story 5.2: the filter editor's in-progress draft — `/` opens one with scope 'global',
-// `f` with scope 'pane' (repoPath set to whichever pane owns it). `error` mirrors whatever
-// compileLogFilter last returned for this exact draft (Design Notes: recomputed live on every
-// keystroke, never just on submit) — it never blocks the draft from being edited further, it
-// only blocks that particular (mode, query, level) combination from being committed into
-// `globalFilter`/`paneFilters` (see applyFilterEditorDraft below).
-type FilterEditorState = {
-  scope: 'global' | 'pane';
-  repoPath: string | null;
-  mode: LogFilterMode;
-  query: string;
-  // Story 2.32-style cursor adoption: the caret position within `query`, threaded through to
-  // TextInputLine exactly like edts-zone.logic.ts's `nextTextInputValue`/`TextInputState`
-  // convention (reused directly below). Every programmatic overwrite of `query` (open, history
-  // recall, arrow-browse) resets this to `query.length`, matching that convention's Boundary.
-  cursor: number;
-  level: LogLevel | null;
-  error: string | null;
-  // Review fix: the spec that was in effect for this scope at the moment the editor opened —
-  // restored verbatim on Escape (a true cancel) so a reused widget whose own hint text reads
-  // "[Enter] confirm  [Esc] cancel" actually behaves that way, instead of Escape and Enter both
-  // just closing the editor and leaving whatever last compiled cleanly while typing applied.
-  preOpen: LogFilterSpec;
-  // Story 5.4: non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh
-  // open and whenever the draft is untouched/browsing has ended (snapped back to the draft, or
-  // walked past the most-recent entry). See resolveHistoryBrowseUp/Down (logs-zone.logic.ts).
-  browsing: FilterHistoryBrowseState | null;
-};
-
-// Review fix: shared by applyFilterEditorDraft's commit path and the Escape-cancel path below
-// — a spec deep-equal to DEFAULT_LOG_FILTER (empty query, no level restriction, either mode)
-// is a no-op filter and must never be stored as an explicit paneFilters[repoPath] entry (that
-// would leave the "pane filter: on" annotation/hasOwnFilter check seeing a filter that isn't
-// actually filtering anything).
-function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
-  return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
-}
-
-function useElementSize(): readonly [{ current: DOMElement | null }, { width: number; height: number } | null] {
-  const ref = useRef<DOMElement | null>(null);
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  useLayoutEffect(() => {
-    if (!ref.current) {
-      return;
-    }
-    const { width, height } = measureElement(ref.current);
-    setSize((current) => (current !== null && current.width === width && current.height === height ? current : { width, height }));
-  });
-  return [ref, size] as const;
-}
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const services = useStore((state) => state.edtsBranches);
@@ -282,44 +171,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     [activeRepoPaths, rows],
   );
 
-  // Reconciles docker subscriptions with whichever repoPaths are currently "active" (selected
-  // in either list, or the ad hoc fullscreen preview target) — I/O matrix SELECTION_CHANGE:
-  // "that stream stops"; FULLSCREEN_PREVIEW: "stream started ad hoc" / "Escape stops that ad
-  // hoc stream". A key both selected and previewed (Enter on an already-selected row) is only
-  // ever subscribed once (subscribeLogsPane/LogsManager.subscribe are both idempotent).
-  const previousActiveKeysRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const nextKeys = new Set(activeRepoPaths);
-    if (logsFullscreenTarget !== null) {
-      nextKeys.add(logsFullscreenTarget);
-    }
-    const previousKeys = previousActiveKeysRef.current;
-    for (const path of nextKeys) {
-      if (!previousKeys.has(path)) {
-        const service = rows.find((row) => row.path === path)?.service ?? path;
-        void subscribeLogsPane(path, service);
-      }
-    }
-    for (const path of previousKeys) {
-      if (!nextKeys.has(path)) {
-        unsubscribeLogsPane(path);
-      }
-    }
-    previousActiveKeysRef.current = nextKeys;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRepoPaths, logsFullscreenTarget, rows]);
-
-  // Leaving the Logs zone (unmount) must never leave a docker child process running
-  // unattended — tears down every still-active subscription.
-  useEffect(
-    () => () => {
-      for (const path of previousActiveKeysRef.current) {
-        unsubscribeLogsPane(path);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  useLogsSubscriptions({ activeRepoPaths, logsFullscreenTarget, rows, subscribeLogsPane, unsubscribeLogsPane });
 
   // Boundaries: "grid reflows and sub-focus moves to the nearest remaining pane".
   useEffect(() => {
@@ -347,48 +199,31 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   useEffect(() => () => setLogsPaneGridArrowsActive(false), [setLogsPaneGridArrowsActive]);
 
   const windowSize = useWindowSize();
-  const gridAvailableWidth = Math.max(windowSize.columns - LIST_COLUMN_WIDTH - spacing['pane-padding-x'], 20);
-  const gridAvailableHeight = Math.max(windowSize.rows - CHROME_ROWS, 5);
-  const layout = computeGridLayout(activePanes.length, gridAvailableWidth, gridAvailableHeight);
-  const paneVisibleLines = Math.max(layout.cellHeight - PANE_CHROME_ROWS, 1);
-  const paneContentWidth = Math.max(layout.cellWidth - GRID_PANE_CHROME_COLS, 1);
-  const fullscreenVisibleLines = Math.max(windowSize.rows - CHROME_ROWS, 3);
-  const fullscreenContentWidth = Math.max(windowSize.columns - spacing['pane-padding-x'] * 2, 1);
-  // Story 5.4: the history grid browser's own available width, mirroring command-bar.tsx's
-  // own `availableWidth` computation (this grid renders inside the same ModalDialog chrome).
-  const historyGridAvailableWidth = Math.max(windowSize.columns - HISTORY_GRID_CHROME_WIDTH, HISTORY_GRID_MIN_WIDTH);
-  // Story 5.5: same idea, vertically — the grid's own visible-rows budget (I/O matrix
-  // OVERFLOW_HISTORY_GRID), recalculated live off useWindowSize() on every resize.
-  const historyGridAvailableHeight = Math.max(windowSize.rows - HISTORY_GRID_CHROME_ROWS, HISTORY_GRID_MIN_VISIBLE_ROWS);
-
-  // Story 5.5 (EDITOR_OPEN_BEHIND_CONTENT): LogFilterEditor renders as a sibling *below* the
-  // "LOGS" + list/grid block, not a true overlay (Ink has no absolute positioning) — while it's
-  // open, its own rendered rows compete for the same terminal-row budget the list column's
-  // BoundedLists were computed against. The hints panel already goes away entirely while the
-  // editor is open (the pre-existing 5.4 focus-hidden fix below), but the two *service* lists
-  // don't — so this estimates the editor's own footprint (its fixed chrome/rows, plus the
-  // history-grid browser's own rows when that's open too, mirroring
-  // `historyGridAvailableHeight`'s own budget) and reserves that much off the list column's
-  // budget in addition to the header rows, so the two together still never exceed the terminal.
-  const filterEditorReservedRows =
-    filterEditor === null
-      ? 0
-      : HISTORY_GRID_CHROME_ROWS + (historyGridCursor === null ? 0 : Math.min(filterHistoryGridMaxRows, historyGridAvailableHeight));
-  // Story 5.5 (OVERFLOW_LOGS_LISTS): the list column's own total row budget — a row sibling of
-  // the pane grid, so it reuses gridAvailableHeight. Handed out top-down (EDT list, then OTHER
-  // list, then the hints panel) so a section shorter than its share leaves more room for the
-  // ones rendered after it; each BoundedList below only ever consumes what its own content
-  // actually needs (NO_OVERFLOW: nothing changes when everything already fits).
-  const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - filterEditorReservedRows, 3);
-  const edtListMaxVisibleRows = listsContentBudget;
-  // Review fix: an empty list still renders a 1-row placeholder ("No active EDT."/"No services
-  // in the active EDT."/"No other managed services.") instead of the BoundedList's own 0 rows —
-  // `Math.min(list.length, …)` was 0 for an empty list, under-counting what that section
-  // actually consumes and leaving whatever renders after it 1 row over budget.
-  const edtListConsumedRows = edtServices.length === 0 ? 1 : Math.min(edtServices.length, edtListMaxVisibleRows);
-  const otherListMaxVisibleRows = Math.max(1, listsContentBudget - edtListConsumedRows);
-  const otherListConsumedRows = otherServices.length === 0 ? 1 : Math.min(otherServices.length, otherListMaxVisibleRows);
-  const hintsMaxVisibleRows = Math.max(1, otherListMaxVisibleRows - otherListConsumedRows);
+  // Story 5.5: every terminal-row/column budget the render below derives from the live window
+  // size (pane grid, fullscreen preview, filter-history grid browser, the two service lists'
+  // own BoundedList windows) — computed by one pure function (logs-zone.logic.ts) so it stays
+  // unit-testable against a given terminal size without mounting Ink.
+  const {
+    layout,
+    paneVisibleLines,
+    paneContentWidth,
+    fullscreenVisibleLines,
+    fullscreenContentWidth,
+    historyGridAvailableWidth,
+    historyGridAvailableHeight,
+    edtListMaxVisibleRows,
+    otherListMaxVisibleRows,
+    hintsMaxVisibleRows,
+  } = computeLogsLayout({
+    windowColumns: windowSize.columns,
+    windowRows: windowSize.rows,
+    activePaneCount: activePanes.length,
+    edtServiceCount: edtServices.length,
+    otherServiceCount: otherServices.length,
+    filterEditorOpen: filterEditor !== null,
+    historyGridOpen: historyGridCursor !== null,
+    filterHistoryGridMaxRows,
+  });
 
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
     const pane = logsPanes[repoPath];
@@ -450,40 +285,19 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     return filterHistory[filterHistoryKeyString(key)] ?? [];
   }
 
-  // Story 5.2 (Design Notes): "compileLogFilter recomputes on every editor keystroke (not
-  // just submit) so the inline regex error appears/clears live". The draft itself always
-  // updates (so typed characters/level cycles are never lost); the actual applied
-  // globalFilter/paneFilters state only ever advances to a draft that compiles cleanly
-  // (Boundaries: "the previously-active filter ... stays in effect" on an invalid regex).
+  // The actual commit decision (compile the draft, decide which of globalFilter/paneFilters —
+  // if either — advances) is a pure function (resolveFilterEditorDraft, logs-zone.logic.ts);
+  // this wrapper just applies whichever state updates it reports.
   function applyFilterEditorDraft(next: FilterEditorState): void {
-    const spec: LogFilterSpec = { mode: next.mode, query: next.query, level: next.level };
-    const compiled = compileLogFilter(spec);
-    if (!compiled.ok) {
-      setFilterEditor({ ...next, error: compiled.error });
-      return;
+    const result = resolveFilterEditorDraft(next);
+    setFilterEditor(result.editor);
+    if (result.globalFilter !== null) {
+      setGlobalFilter(result.globalFilter);
     }
-    if (next.scope === 'global') {
-      setGlobalFilter(spec);
-      setFilterEditor({ ...next, error: null });
-      return;
+    if (result.paneFilterUpdate !== null) {
+      const { repoPath, spec } = result.paneFilterUpdate;
+      setPaneFilters((current) => setPaneLogFilter(current, repoPath, spec));
     }
-    const repoPath = next.repoPath;
-    if (repoPath === null) {
-      // Review fix: `scope === 'pane' && repoPath === null` is currently unreachable
-      // (openPaneFilterEditor always sets repoPath) but the type still permits it — rather than
-      // silently discarding a compiled spec with no feedback, surface it as an editor error.
-      setFilterEditor({ ...next, error: 'no pane targeted' });
-      return;
-    }
-    // Review fix: committing a vacuous spec (deep-equal to DEFAULT_LOG_FILTER, e.g. after
-    // backspacing the query back to empty) as an explicit paneFilters[repoPath] entry left a
-    // no-op-but-present key — both the "pane filter: on" annotation and
-    // resolveFilterClearTarget's `hasOwnFilter` check key off entry *presence*, not content, so
-    // the pane kept reading as filtered even though its effective filter was a no-op. Passing
-    // `null` instead removes the key exactly like the explicit-clear path (Escape /
-    // resolveFilterClearTarget) already does.
-    setPaneFilters((current) => setPaneLogFilter(current, repoPath, isDefaultLogFilterSpec(spec) ? null : spec));
-    setFilterEditor({ ...next, error: null });
   }
 
   useInput(
@@ -1075,339 +889,3 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   );
 }
 
-function LogsGrid({
-  panes,
-  logsPanes,
-  layout,
-  visibleLines,
-  contentWidth,
-  visibility,
-  paneWrap,
-  subFocused,
-  globalFilter,
-  paneFilterEngaged,
-  paneFilters,
-}: {
-  panes: ServiceBranchDivergence[];
-  logsPanes: Record<string, LogsPaneData>;
-  layout: GridLayout;
-  visibleLines: number;
-  contentWidth: number;
-  visibility: VisibilityFlags;
-  paneWrap: Record<string, boolean>;
-  subFocused: number;
-  globalFilter: LogFilterSpec;
-  paneFilterEngaged: Record<string, boolean>;
-  paneFilters: Record<string, LogFilterSpec>;
-}) {
-  const cols = Math.max(layout.cols, 1);
-  const rowsOfPanes: ServiceBranchDivergence[][] = [];
-  for (let i = 0; i < panes.length; i += cols) {
-    rowsOfPanes.push(panes.slice(i, i + cols));
-  }
-  return (
-    <Box flexDirection="column" flexGrow={1} minHeight={0}>
-      {rowsOfPanes.map((rowPanes, rowIndex) => (
-        <Box key={rowIndex} flexDirection="row" flexGrow={1} flexBasis={0} minHeight={0}>
-          {rowPanes.map((service, colIndex) => {
-            const index = rowIndex * cols + colIndex;
-            return (
-              <LogsPaneView
-                key={service.path}
-                service={service}
-                pane={logsPanes[service.path]}
-                visibility={visibility}
-                wrapLines={isPaneWrapped(paneWrap, service.path)}
-                visibleLines={visibleLines}
-                contentWidth={contentWidth}
-                focused={index === subFocused}
-                globalFilter={globalFilter}
-                engaged={isPaneEngagedInGlobalFilter(paneFilterEngaged, service.path)}
-                ownFilter={paneFilters[service.path] ?? null}
-              />
-            );
-          })}
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-// Boundaries: "A pane's effective filter is (engaged ? global : pass) AND (own ?? pass)" —
-// shared by LogsPaneView and FullscreenPane (both call applyLogFilters the same way, right
-// after filterVisibleLines, same layer 5.1's stdout/stderr toggle already lives on).
-function resolveEffectiveLines(pane: LogsPaneData | undefined, visibility: VisibilityFlags, globalFilter: LogFilterSpec, engaged: boolean, ownFilter: LogFilterSpec | null): LogLine[] {
-  if (!pane) {
-    return [];
-  }
-  return applyLogFilters(filterVisibleLines(pane.lines, visibility), engaged ? globalFilter : null, ownFilter);
-}
-
-function LogsPaneView({
-  service,
-  pane,
-  visibility,
-  wrapLines,
-  visibleLines,
-  contentWidth,
-  focused,
-  globalFilter,
-  engaged,
-  ownFilter,
-}: {
-  service: ServiceBranchDivergence;
-  pane: LogsPaneData | undefined;
-  visibility: VisibilityFlags;
-  wrapLines: boolean;
-  visibleLines: number;
-  contentWidth: number;
-  focused: boolean;
-  globalFilter: LogFilterSpec;
-  engaged: boolean;
-  ownFilter: LogFilterSpec | null;
-}) {
-  const [contentRef, measuredSize] = useElementSize();
-  const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
-  const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
-  const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
-  );
-  // A pane with buffered lines that the current stdout/stderr/story-5.2 filters happen to
-  // hide entirely must read differently from "no lines have arrived yet" — otherwise a user
-  // who toggled off both stdout and stderr, or set an aggressive filter, is misleadingly told
-  // the stream itself is empty (review fix, story 5.1; extended to the new filter layer).
-  const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
-  return (
-    <Box
-      flexDirection="column"
-      flexGrow={1}
-      flexBasis={0}
-      minHeight={0}
-      minWidth={0}
-      overflow="hidden"
-      borderStyle="single"
-      borderColor={focused ? colors.accent : colors.border}
-      paddingX={1}
-    >
-      {/* User-reported: always bold (not just when sub-focused) so a service name stands out
-          from its own log text at a glance, in a grid where several panes are visible at once. */}
-      <Box flexDirection="row">
-        <Box flexGrow={1} minWidth={0}>
-          <Text bold color={focused ? colors.accent : colors.text} wrap="truncate-end">
-            {service.service}
-          </Text>
-        </Box>
-        {/* Story 5.3: inline health badge next to the service's logs (glyph+color paired) +
-            the developer-triggered restart control's disabled state while restarting. */}
-        <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
-          <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>
-        </Box>
-        {pane?.restarting || (pane?.health ?? 'down') === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restarting…</Text>
-        ) : (
-          <Text color={colors['text-dim']}> [R]</Text>
-        )}
-      </Box>
-      {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
-      {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
-      {!engaged ? (
-        <DimAnnotation text="global filter: off" />
-      ) : !isDefaultLogFilterSpec(globalFilter) ? (
-        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
-      ) : null}
-      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
-      <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
-        {windowLines.length === 0 && !pane?.streamError ? (
-          <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
-        ) : null}
-        {windowLines.map((line, index) => (
-          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
-            {formatLogLine(line, visibility.showTimestamps)}
-          </Text>
-        ))}
-      </Box>
-    </Box>
-  );
-}
-
-function FullscreenPane({
-  repoPath,
-  serviceName,
-  pane,
-  visibility,
-  wrapLines,
-  visibleLines,
-  contentWidth,
-  globalFilter,
-  engaged,
-  ownFilter,
-}: {
-  repoPath: string;
-  // Captured directly at the point fullscreen was opened (store's logsFullscreenServiceName)
-  // rather than re-derived via a live `rows.find(...)` lookup, which can miss (e.g. a
-  // transient services-list load error while the preview is open) and silently fall back to a
-  // bare "Logs" label right when the user needs the service name most (review fix).
-  serviceName: string | null;
-  pane: LogsPaneData | undefined;
-  visibility: VisibilityFlags;
-  wrapLines: boolean;
-  visibleLines: number;
-  contentWidth: number;
-  globalFilter: LogFilterSpec;
-  engaged: boolean;
-  ownFilter: LogFilterSpec | null;
-}) {
-  const [contentRef, measuredSize] = useElementSize();
-  const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
-  const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
-  const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
-  );
-  // A pane with buffered lines that the current stdout/stderr/story-5.2 filters happen to
-  // hide entirely must read differently from "no lines have arrived yet" — otherwise a user
-  // who toggled off both stdout and stderr, or set an aggressive filter, is misleadingly told
-  // the stream itself is empty (review fix, story 5.1; extended to the new filter layer).
-  const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
-  return (
-    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
-      <Box flexDirection="row">
-        <Box flexGrow={1} minWidth={0}>
-          <Text color={colors.accent} bold>
-            {serviceName ?? 'Logs'}
-          </Text>
-        </Box>
-        {/* Story 5.3: inline health badge + restart disabled state, mirroring the grid pane
-            header above. */}
-        <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
-          <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>
-        </Box>
-        {pane?.restarting || (pane?.health ?? 'down') === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restarting…</Text>
-        ) : (
-          <Text color={colors['text-dim']}> [R] restart</Text>
-        )}
-      </Box>
-      {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
-      {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
-      {!engaged ? (
-        <DimAnnotation text="global filter: off" />
-      ) : !isDefaultLogFilterSpec(globalFilter) ? (
-        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
-      ) : null}
-      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
-      <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
-        {windowLines.length === 0 && !pane?.streamError ? (
-          <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
-        ) : null}
-        {windowLines.map((line, index) => (
-          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
-            {formatLogLine(line, visibility.showTimestamps)}
-          </Text>
-        ))}
-      </Box>
-      <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate  [R] restart" />
-      <DimAnnotation text="[/] global filter  [f] pane filter  [g] toggle global engagement" />
-    </Box>
-  );
-}
-
-// Story 5.2: renders whichever scope's editor is open — one shared component/validation for
-// both `/` (global) and `f` (pane), per Boundaries ("Both editors share one component and
-// validation"). Purely presentational, mirroring ModalDialog's other call sites — all the
-// actual keystroke handling lives in LogsZone's own useInput (Code Map: never a
-// component-owned useInput here, same convention as BranchPicker/TextInputLine).
-function LogFilterEditor({
-  editor,
-  serviceName,
-  history,
-  gridMaxRows,
-  gridCursor,
-  gridScrollOffset,
-  gridAvailableWidth,
-  gridAvailableHeight,
-}: {
-  editor: FilterEditorState;
-  serviceName: string | null;
-  history: string[];
-  gridMaxRows: number;
-  gridCursor: GridCursor | null;
-  gridScrollOffset: number;
-  gridAvailableWidth: number;
-  gridAvailableHeight: number;
-}) {
-  const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
-  // Story 5.4: the history grid browser — reuses command-bar.tsx's generalized grid primitives
-  // over plain query strings (`getLabel = historyEntryLabel`, i.e. the identity function)
-  // rather than a shared visual component (Code Map: "with its own small JSX loop").
-  // Story 5.5 (OVERFLOW_HISTORY_GRID): a `verticalWindow` is now also passed — the grid gains
-  // vertical pagination the same way it already had horizontal truncation/scroll, centered on
-  // the highlighted cell's own row so it never scrolls out of view.
-  const gridLayout =
-    gridCursor !== null
-      ? layoutCommandGrid(history, gridMaxRows, gridAvailableWidth, historyEntryLabel, gridScrollOffset, {
-          maxVisibleRows: gridAvailableHeight,
-          cursorRow: gridCursor.row,
-        })
-      : null;
-  // Review fix: each column's width used to be computed from `gridLayout.columns` — already
-  // vertically sliced — so the widest entry could scroll out of the visible window and shrink
-  // the column, misaligning padding against the pre-5.5 stable width as the user scrolls
-  // vertically. Widths are the full, unsliced column's own (mirrors `groupCommandsByColumn`'s
-  // own column-major grouping, same source `useInput`'s row/cursor math already reads).
-  const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
-  return (
-    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
-      <TextInputLine
-        label={editor.mode === 'regex' ? 'Regex' : 'Text'}
-        value={editor.query}
-        cursor={editor.cursor}
-        focused={gridCursor === null}
-      />
-      <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
-      {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
-      {gridCursor !== null && gridLayout !== null ? (
-        history.length === 0 ? (
-          <DimAnnotation text="No history for this filter yet." />
-        ) : (
-          <>
-            {gridLayout.truncated.top ? <Text color={colors['text-dim']}>▲ more above</Text> : null}
-            <Box flexDirection="row">
-              {gridLayout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-              {gridLayout.columns.map((column, columnIndex) => {
-                const absoluteColumn = gridLayout.scrollOffset + columnIndex;
-                const width = columnDisplayWidth(fullHistoryColumns[absoluteColumn] ?? column, historyEntryLabel);
-                return (
-                  <Box key={absoluteColumn} flexDirection="column" marginRight={HISTORY_GRID_COLUMN_GAP}>
-                    {column.map((entry, rowIndex) => {
-                      const absoluteRow = gridLayout.rowScrollOffset + rowIndex;
-                      const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === absoluteRow;
-                      return (
-                        <Text key={`${absoluteColumn}-${absoluteRow}`} color={isCursor ? colors.accent : colors['text-dim']}>
-                          {isCursor ? '› ' : '  '}
-                          {entry.padEnd(width)}
-                        </Text>
-                      );
-                    })}
-                  </Box>
-                );
-              })}
-              {gridLayout.truncated.right ? <Text color={colors['text-dim']}> …</Text> : null}
-            </Box>
-            {gridLayout.truncated.bottom ? <Text color={colors['text-dim']}>▼ more below</Text> : null}
-          </>
-        )
-      ) : null}
-      <DimAnnotation
-        text={
-          gridCursor !== null
-            ? '[↑/↓/←/→] browse history  [Enter] recall  [Esc] close'
-            : '[Tab] text/regex  [Ctrl+←/→] level  [↑/↓] history  [Enter/Esc] done'
-        }
-      />
-    </ModalDialog>
-  );
-}
