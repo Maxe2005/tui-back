@@ -17,6 +17,7 @@ import type { Manifest, ManifestPort } from '../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
+import type { DockerPort } from '../../../core/ports/docker.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
@@ -86,6 +87,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeActiveEdt: vi.fn(async () => ok(undefined)),
     readSplitterRatios: vi.fn(async () => ok(null)),
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
@@ -94,6 +97,12 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const settings: SettingsPort = {
     load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
     save: vi.fn(async () => ok(undefined)),
+  };
+  const docker: DockerPort = {
+    streamLogs: vi.fn(() => () => {}),
+    fetchLogsBefore: vi.fn(async () => ok([])),
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    restartContainer: vi.fn(async () => ok(undefined)),
   };
   return {
     registry,
@@ -106,6 +115,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     edtRegistryResourceKey: '/tmp/edts.yaml',
     edtsBaseDir: '/tmp/edts',
     settings,
+    docker,
     ...overrides,
   };
 }
@@ -372,6 +382,198 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
 
       // Tab has no shell-level zone-switching effect either before or after this story.
       expect(store.getState().activeZone).toBe('dashboard');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell Logs zone pane-grid arrow ownership (story 5.1 review fix)', () => {
+  // Ink dispatches every keypress to every mounted `useInput` hook regardless of z-order —
+  // with the Logs zone active and its own pane-focus on the grid (Left/Right/Up/Down move
+  // sub-focus between panes there), the very same Left/Right keypress used to also reach
+  // this global Left/Right zone-switch (story 2.12) and switch the active zone out from
+  // under the grid before the user ever saw their sub-focus move. Neither
+  // logs-zone.interaction.test.tsx (mounts LogsZone alone, never AppShell) nor
+  // app-shell.test.tsx (renderToString's fake stdin never emits real keypresses) could catch
+  // this — only a real-keypress round-trip through both components together can.
+  function seedLogsStore(overrides: Record<string, unknown> = {}) {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'logs',
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        {
+          service: 'api-gateway',
+          path: '/repos/api-gateway',
+          isMember: false,
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          status: 'current',
+          sharedBranch: 'development',
+        },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      ...overrides,
+    });
+    return store;
+  }
+
+  it('Right no longer switches the active zone while Logs pane sub-focus owns the arrows', async () => {
+    const store = seedLogsStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.space); // select the one service, so an active pane exists
+      await press(instance, stdin, KEYS.tab); // other-list -> panes
+      expect(store.getState().logsPaneGridArrowsActive).toBe(true);
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().activeZone).toBe('logs');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Right still switches the active zone normally once pane focus cycles back off the grid', async () => {
+    const store = seedLogsStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.tab); // other-list -> panes
+      await press(instance, stdin, KEYS.tab); // panes -> edt-list (cycle wraps)
+      expect(store.getState().logsPaneGridArrowsActive).toBe(false);
+
+      await press(instance, stdin, KEYS.right);
+
+      // 'routes' is the next zone after 'logs' in ZONES order.
+      expect(store.getState().activeZone).toBe('routes');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('clears logsPaneGridArrowsActive on unmount — leaving the Logs zone never leaves global arrow-switch inert', async () => {
+    const store = seedLogsStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.tab); // -> panes
+      expect(store.getState().logsPaneGridArrowsActive).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+    expect(store.getState().logsPaneGridArrowsActive).toBe(false);
+  });
+});
+
+describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
+  // Real docker wiring (unlike seedLogsStore above, which uses a bare createAppStore() —
+  // subscribeLogsPane no-ops without deps, so it never populates logsPanes with real lines)
+  // is needed here to prove `c` actually wipes buffered lines without touching the stream.
+  function seedLogsStoreWithDocker(docker: DockerPort) {
+    const store = createAppStore(fakeDeps({ docker }));
+    store.setState({
+      activeZone: 'logs',
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        {
+          service: 'api-gateway',
+          path: '/repos/api-gateway',
+          isMember: false,
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          status: 'current',
+          sharedBranch: 'development',
+        },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    return store;
+  }
+
+  it('c clears the sub-focused pane\'s buffered lines in the grid without stopping its stream', async () => {
+    const streamed: { onLine: (line: { timestamp: string; stream: 'stdout' | 'stderr'; text: string }) => void } = {
+      onLine: () => {},
+    };
+    const stop = vi.fn();
+    const docker: DockerPort = {
+      streamLogs: vi.fn((_container, onLine) => {
+        streamed.onLine = onLine;
+        return stop;
+      }),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+    const store = seedLogsStoreWithDocker(docker);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.space); // select api-gateway, starts its stream
+      await press(instance, stdin, KEYS.tab); // other-list -> panes
+      streamed.onLine({ timestamp: '2026-01-01T00:00:00.000Z', stream: 'stdout', text: 'hello' });
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toHaveLength(1);
+
+      await press(instance, stdin, 'c');
+
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toEqual([]);
+      // The subscription itself is untouched — clearing is a display wipe, not a teardown.
+      expect(stop).not.toHaveBeenCalled();
+      streamed.onLine({ timestamp: '2026-01-01T00:00:01.000Z', stream: 'stdout', text: 'world' });
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines.map((l) => l.text)).toEqual(['world']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('c clears the fullscreen preview\'s pane too', async () => {
+    const streamed: { onLine: (line: { timestamp: string; stream: 'stdout' | 'stderr'; text: string }) => void } = {
+      onLine: () => {},
+    };
+    const docker: DockerPort = {
+      streamLogs: vi.fn((_container, onLine) => {
+        streamed.onLine = onLine;
+        return () => {};
+      }),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth: vi.fn(async () => ok('up' as const)),
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+    const store = seedLogsStoreWithDocker(docker);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, KEYS.enter); // ad hoc fullscreen preview on api-gateway
+      streamed.onLine({ timestamp: '2026-01-01T00:00:00.000Z', stream: 'stdout', text: 'hello' });
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toHaveLength(1);
+
+      await press(instance, stdin, 'c');
+
+      expect(store.getState().logsPanes['/repos/api-gateway']?.lines).toEqual([]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -703,6 +905,41 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       // "reg" alone would show "unknown command" on Enter (not an exact match) — this only
       // succeeds if Tab actually completed the input to the full "registry" name first.
       expect(store.getState().registryScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the :quit command requests a quit through the store — reachable regardless of the "q" shortcut setting', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...store.getState().settings, general: { quitShortcutEnabled: false } } });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'quit');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().quitRequested).toBe(true);
+      expect(store.getState().commandBarOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the :quit command is a no-op while a run is in progress', async () => {
+    const store = createAppStore();
+    store.setState({ runInProgress: true });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'quit');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().quitRequested).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1142,12 +1379,12 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
   });
 
   it('gridMaxRows from the settings screen is live in the command bar\'s grid layout', async () => {
-    // 5 registered commands (registry, edt-create, edt-switch, edt-modify, settings), grouped
-    // column-major with maxRows=2 -> 3 columns of [2, 2, 1] — directly observable in the
-    // rendered COMMAND grid without needing to stub extra commands.
+    // 6 registered commands (registry, edt-create, edt-switch, edt-modify, settings, quit),
+    // grouped column-major with maxRows=2 -> 3 columns of [2, 2, 2] — directly observable in
+    // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] } },
+      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1157,9 +1394,9 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
       const lines = stdout.output.split('\n');
       // Column 0 = [registry, edt-create], column 1 = [edt-switch, edt-modify], column 2 =
-      // [settings] (maxRows=2). Row 0 of the grid renders column-0-row-0 and column-1-row-0
+      // [settings, quit] (maxRows=2). Row 0 of the grid renders column-0-row-0 and column-1-row-0
       // on the SAME terminal line ("registry" + "edt-switch"); "edt-create" (column 0's row
-      // 1) lands on the NEXT line instead. A single-column-of-5 layout (the pre-2.19 default,
+      // 1) lands on the NEXT line instead. A single-column-of-6 layout (the pre-2.19 default,
       // maxRows=8) would instead put every command on its own line, with "edt-create"
       // sharing no line with "registry" either way — the positive signal here is
       // "edt-switch" sharing registry's line, which only maxRows=2 grouping produces.
@@ -1191,7 +1428,36 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settingsScreenOpen).toBe(true);
       expect(stdout.output).toContain('SETTINGS');
-      expect(stdout.output).toContain('No general settings yet.');
+      expect(stdout.output).toContain("Enable 'q' to quit");
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the General tab toggles settings.general.quitShortcutEnabled and persists via updateSettings', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ' ');
+
+      expect(store.getState().settings.general.quitShortcutEnabled).toBe(false);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: false },
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      });
+
+      await press(instance, stdin, ' ');
+      expect(store.getState().settings.general.quitShortcutEnabled).toBe(true);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1221,7 +1487,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      expect(stdout.output).toContain('No general settings yet.');
+      expect(stdout.output).toContain("Enable 'q' to quit");
 
       await press(instance, stdin, KEYS.tab);
       // Amended 2026-08-28: the EDTs tab now opens on its group list, not the flat checkbox
@@ -1233,7 +1499,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(stdout.output).toContain('Command grid max rows:');
 
       await press(instance, stdin, KEYS.tab);
-      expect(stdout.output).toContain('No general settings yet.');
+      expect(stdout.output).toContain("Enable 'q' to quit");
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1321,9 +1587,162 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.commandPalette.gridMaxRows).toBe(9);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 9 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Amended 2026-09-20: the Logs tab moved from a flat row cursor to a group list (mirrors the
+  // EDTs tab's own group-list precedent) — fixes the settings modal overflowing its viewport
+  // (border/title corruption, overlapping rows) when all six fields rendered as one flat list.
+  // Up/Down now navigates between groups; Enter drills into a group; Left/Right adjusts the
+  // one numeric field a drilled-in group holds.
+  it('Left/Right on the Logs tab\'s default "Buffer size" group adjusts settings.logs.bufferSize live and persists via updateSettings (story 5.1 AC: "new stream afterward uses the new buffer size"; regrouped 2026-09-20)', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.enter); // drill into "Buffer size" (first, default group)
+
+      await press(instance, stdin, KEYS.right);
+
+      expect(store.getState().settings.logs.bufferSize).toBe(550);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      });
+
+      // A typed digit is a quick preset (digit x 100), still while on the bufferSize row.
+      await press(instance, stdin, '3');
+      expect(store.getState().settings.logs.bufferSize).toBe(300);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the Logs tab\'s "Start with history" group (reached via one Down from "Buffer size") toggles settings.logs.startWithHistory live and persists via updateSettings, independently of bufferSize (review fix; regrouped 2026-09-20)', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.down); // "Buffer size" -> "Start with history" group
+      await press(instance, stdin, KEYS.enter); // drill into "Start with history"
+
+      await press(instance, stdin, KEYS.space);
+
+      expect(store.getState().settings.logs.startWithHistory).toBe(true);
+      expect(store.getState().settings.logs.bufferSize).toBe(DEFAULT_SETTINGS.logs.bufferSize);
+      expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
+        commandPalette: { gridMaxRows: 8 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        logs: {
+          bufferSize: DEFAULT_SETTINGS.logs.bufferSize,
+          startWithHistory: true,
+          filterHistorySize: 20,
+          filterHistoryGridMaxRows: 8,
+          filterHistoryDedup: true,
+        },
+      });
+
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.logs.startWithHistory).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 5.4: end-to-end coverage of the two new fields and the clear actions, real-keypress
+  // driven (mirrors the two tests just above).
+  it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists (regrouped 2026-09-20)', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.down); // -> "Start with history"
+      await press(instance, stdin, KEYS.down); // -> "Filter history size"
+      await press(instance, stdin, KEYS.enter); // drill in
+
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.logs.filterHistorySize).toBe(25);
+
+      await pressEscape(instance, stdin); // back to the group list
+      await press(instance, stdin, KEYS.down); // -> "Filter history grid"
+      await press(instance, stdin, KEYS.enter); // drill in
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.logs.filterHistoryGridMaxRows).toBe(9);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists (regrouped 2026-09-20)', async () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().commitFilterHistoryEntry({ scope: 'global', repoPath: null, mode: 'text' }, 'g-text');
+    store.getState().commitFilterHistoryEntry({ scope: 'pane', repoPath: '/repo/a', mode: 'text' }, 'a-text');
+    store.setState({
+      edtsBranches: [
+        { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+      ],
+    });
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // Command Palette -> Logs (group list)
+      await press(instance, stdin, KEYS.down); // -> "Start with history"
+      await press(instance, stdin, KEYS.down); // -> "Filter history size"
+      await press(instance, stdin, KEYS.down); // -> "Filter history grid"
+      await press(instance, stdin, KEYS.down); // -> "Filter history dedup"
+      await press(instance, stdin, KEYS.down); // -> "Clear history"
+      await press(instance, stdin, KEYS.enter); // drill in (row cursor on clear-global)
+
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().filterHistory['global:text']).toBeUndefined();
+      expect(store.getState().filterHistory['service:/repo/a:text']).toEqual(['a-text']);
+
+      await press(instance, stdin, KEYS.down); // -> clear-service
+      await press(instance, stdin, KEYS.enter); // drill into the service list
+      await press(instance, stdin, KEYS.enter); // clear svc-a's history
+
+      expect(store.getState().filterHistory['service:/repo/a:text']).toBeUndefined();
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1347,8 +1766,10 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edts']);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
       instance.unmount();
@@ -1378,9 +1799,47 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['create']);
       expect(settingsPort.save).toHaveBeenCalledWith({
+        general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Story 5.2 (Code Map): "app-shell.tsx:352 -- guard shouldOpenFilter dispatch with
+  // activeZone !== 'logs', same precedent as logsPaneGridArrowsActive" — the Logs zone now
+  // owns `/` itself (its own global-filter editor), so this app-wide stub must go inert while
+  // it's the active zone, the same double-dispatch hazard already solved for arrow keys.
+  it('the global "/" filter stub opens normally outside the Logs zone', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().activeZone).not.toBe('logs');
+
+      await press(instance, stdin, '/');
+
+      expect(stdout.output).toContain('Filter input — wired in Epic 2+');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the global "/" filter stub stays inert while the Logs zone is active — it owns "/" itself', async () => {
+    const store = createAppStore();
+    store.setState({ activeZone: 'logs' });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+
+      expect(stdout.output).not.toContain('Filter input — wired in Epic 2+');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1484,6 +1943,8 @@ describe('AppShell edts load activation (story 2.20)', () => {
       writeActiveEdt: vi.fn(async () => ok(undefined)),
       readSplitterRatios: vi.fn(async () => ok(null)),
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -1524,6 +1985,8 @@ describe('AppShell splitterRatios load activation (story 2.21)', () => {
       writeActiveEdt: vi.fn(async () => ok(undefined)),
       readSplitterRatios: vi.fn(async () => ok({ edts: [0.3, 0.4, 0.5], dashboard: [0.6] })),
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -1790,6 +2253,8 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
       writeActiveEdt: vi.fn(async () => ok(undefined)),
       readSplitterRatios: vi.fn(async () => ok(null)),
       writeSplitterRatios,
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
     };
     // A non-empty EDT registry: an empty one auto-opens the EDTs zone's create dialog (AC1),
     // which sets zoneInputCaptured — that would swallow the Ctrl+W-driven resize keypress

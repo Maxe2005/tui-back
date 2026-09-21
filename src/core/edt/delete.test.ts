@@ -81,6 +81,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeActiveEdt: vi.fn(async () => ok(undefined)),
     readSplitterRatios: vi.fn(async () => ok(null)),
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }

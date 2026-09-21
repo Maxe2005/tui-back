@@ -44,6 +44,19 @@ export const COMMANDS: readonly Command[] = [
     name: 'settings',
     run: (useStore) => useStore.getState().openSettingsScreen(),
   },
+  // Mirrors shouldQuit's own runInProgress guard (app-shell.tsx) so `:quit` can't bypass it —
+  // unlike the raw `q` keypress, this command stays reachable regardless of
+  // settings.general.quitShortcutEnabled (that flag only gates the keypress). Goes through
+  // requestQuit(), the same store flag AppShell's quitRequested effect already watches to call
+  // the composition root's onQuit — never a direct process.exit here.
+  {
+    name: 'quit',
+    run: (useStore) => {
+      if (!useStore.getState().runInProgress) {
+        useStore.getState().requestQuit();
+      }
+    },
+  },
 ];
 
 // Pure prefix filter, case-insensitive — mirrors zones.ts's pure-function convention

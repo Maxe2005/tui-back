@@ -10,11 +10,16 @@
 // zone's 3-boundary array coming back with only 1 entry) are a semantic, not a shape,
 // validation — the driving layer's loadSplitterRatios() falls back to that zone's own default
 // silently rather than this schema rejecting the whole file over it.
+//
+// Story 5.4: adds `filterHistory`, optional the same way — a pre-5.4 file has neither key at
+// all. Keyed by a plain string (the driving layer's filterHistoryKeyString), each value an
+// ordered array of plain query strings.
 import { z } from 'zod';
 
 export const stateSchema = z
   .object({
     activeEdt: z.string().min(1).nullable(),
     splitterRatios: z.record(z.string(), z.array(z.number())).optional(),
+    filterHistory: z.record(z.string(), z.array(z.string())).optional(),
   })
   .strict();

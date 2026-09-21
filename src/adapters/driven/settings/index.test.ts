@@ -70,8 +70,10 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -117,6 +119,119 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('commandPalette.gridMaxRows');
   });
 
+  it('falls back to defaults with a field-naming warning when logs.bufferSize exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 5001\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.bufferSize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.bufferSize is below the lower bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 49\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.bufferSize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.bufferSize is not an integer', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 1.5\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.bufferSize');
+  });
+
+  // Story 5.4: mirrors the logs.bufferSize bound tests above for the two new fields.
+  it('falls back to defaults with a field-naming warning when logs.filterHistorySize exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  filterHistorySize: 201\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.filterHistorySize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.filterHistorySize is below the lower bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  filterHistorySize: 0\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.filterHistorySize');
+  });
+
+  it('falls back to defaults with a field-naming warning when logs.filterHistoryGridMaxRows exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  filterHistoryGridMaxRows: 100\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('logs.filterHistoryGridMaxRows');
+  });
+
+  it('loads a pre-existing file whose logs block predates filterHistorySize/filterHistoryGridMaxRows — defaults just those fields, keeps bufferSize', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 750\n');
+
+    const result = await loadSettings(file);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          general: { quitShortcutEnabled: true },
+          commandPalette: { gridMaxRows: 8 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        },
+        warning: null,
+      },
+    });
+  });
+
+  it('falls back to defaults with a field-naming warning when general.quitShortcutEnabled is not a boolean', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'general:\n  quitShortcutEnabled: "nope"\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('general.quitShortcutEnabled');
+  });
+
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -147,8 +262,58 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
+          general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        },
+        warning: null,
+      },
+    });
+  });
+
+  it('loads a pre-existing file whose logs block predates startWithHistory — defaults just that field, keeps bufferSize (review fix)', async () => {
+    // A settings.yaml written before this field existed has a `logs:` block with `bufferSize`
+    // only. Mirrors the hiddenActionTypes precedent just above: must default startWithHistory
+    // to false rather than falling back to every default (which would also silently discard
+    // the developer's existing bufferSize customization).
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 750\n');
+
+    const result = await loadSettings(file);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          general: { quitShortcutEnabled: true },
+          commandPalette: { gridMaxRows: 8 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        },
+        warning: null,
+      },
+    });
+  });
+
+  it('loads a pre-existing file with no general block — defaults quitShortcutEnabled to true, keeps other fields', async () => {
+    // Mirrors the hiddenActionTypes/startWithHistory precedents above: a settings.yaml written
+    // before this field existed has no `general:` block at all.
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'commandPalette:\n  gridMaxRows: 12\n');
+
+    const result = await loadSettings(file);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          general: { quitShortcutEnabled: true },
+          commandPalette: { gridMaxRows: 12 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -171,8 +336,10 @@ describe('saveSettings', () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'settings.yaml');
     const settings = {
+      general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 10 },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     const result = await saveSettings(file, settings);
@@ -187,13 +354,17 @@ describe('saveSettings', () => {
     await saveSettings(file, DEFAULT_SETTINGS);
 
     await saveSettings(file, {
+      general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
+      general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
   });
 });
@@ -204,8 +375,10 @@ describe('createSettingsPort', () => {
     const file = join(root, 'settings.yaml');
     const port = createSettingsPort(file);
     const settings = {
+      general: { quitShortcutEnabled: false },
       commandPalette: { gridMaxRows: 5 },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
+      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     await port.save(settings);

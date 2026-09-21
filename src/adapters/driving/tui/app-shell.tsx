@@ -151,7 +151,7 @@ export function shouldOpenCommand(input: string): boolean {
 }
 
 export function shouldQuit(input: string, _key: { escape?: boolean }, state: AppState): boolean {
-  return input === 'q' && !state.runInProgress;
+  return input === 'q' && !state.runInProgress && state.settings.general.quitShortcutEnabled;
 }
 
 export function AppShell({
@@ -200,6 +200,11 @@ export function AppShell({
   // EDTs zone's persisted boundary ratios are live before it ever renders, independent of
   // whether the EDTs zone is the first one visited.
   const loadSplitterRatios = useStore((state) => state.loadSplitterRatios);
+  // Story 5.4: same mount-once idiom — the Logs zone's filter editor and the Settings screen's
+  // Logs tab both read `store.filterHistory` unconditionally (arrow-recall/grid-browse and the
+  // clear actions), so the persisted lists must be live before either is ever opened
+  // (RESTART_PERSIST: "loaded from state.json on the next filter-editor open").
+  const loadFilterHistory = useStore((state) => state.loadFilterHistory);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
@@ -239,6 +244,13 @@ export function AppShell({
   // it ever renders.
   useEffect(() => {
     void loadSplitterRatios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Story 5.4 (I/O matrix RESTART_PERSIST): loaded once at app mount, same mount-once idiom as
+  // loadSplitterRatios above.
+  useEffect(() => {
+    void loadFilterHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -338,13 +350,22 @@ export function AppShell({
         return;
       }
 
-      const arrowZoneId = resolveZoneArrowSwitch(key, activeZone, reachable);
+      // Story 5.1 fix: while the Logs zone's pane grid owns Left/Right/Up/Down for sub-focus
+      // movement, this global Left/Right zone-switch must stay inert — otherwise every
+      // mounted `useInput` hook (Ink dispatches to all of them, not just the topmost) fires
+      // on the same keypress and the zone switches out from under the pane grid before its
+      // own handler's `setSubFocus` even matters.
+      const arrowZoneId = state.logsPaneGridArrowsActive ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;
       }
 
-      if (shouldOpenFilter(input)) {
+      // Story 5.2: the Logs zone owns `/` itself (its own global-filter editor) while it's
+      // the active zone — without this guard, this app-wide filter stub would also fire on
+      // the same keystroke (Ink dispatches to every mounted `useInput` hook), the same
+      // double-dispatch hazard already solved for arrow keys via `logsPaneGridArrowsActive`.
+      if (activeZone !== 'logs' && shouldOpenFilter(input)) {
         setFilterOpen(true);
         return;
       }

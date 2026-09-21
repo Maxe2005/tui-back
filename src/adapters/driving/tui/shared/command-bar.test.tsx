@@ -188,7 +188,7 @@ describe('groupCommandsByColumn', () => {
 describe('layoutCommandGrid', () => {
   it('renders every column untruncated when it all fits', () => {
     const matches = [registry, reload, edtCreate];
-    const layout = layoutCommandGrid(matches, 8, 200, 0);
+    const layout = layoutCommandGrid(matches, 8, 200, (c) => c.name, 0);
     expect(layout.truncated).toEqual({ left: false, right: false });
     expect(layout.columns).toEqual(groupCommandsByColumn(matches, 8));
     expect(layout.scrollOffset).toBe(0);
@@ -198,7 +198,7 @@ describe('layoutCommandGrid', () => {
     // Two 1-row columns of "aa"/"bb" (width 2 each) + 1 gap = exactly 5 wide.
     const a: Command = { name: 'aa', run: () => {} };
     const b: Command = { name: 'bb', run: () => {} };
-    const layout = layoutCommandGrid([a, b], 1, 5, 0);
+    const layout = layoutCommandGrid([a, b], 1, 5, (c) => c.name, 0);
     expect(layout.truncated).toEqual({ left: false, right: false });
     expect(layout.columns).toEqual([[a], [b]]);
   });
@@ -206,7 +206,7 @@ describe('layoutCommandGrid', () => {
   it('truncates the right edge when the grid is wider than the terminal', () => {
     const columns: Command[] = Array.from({ length: 6 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
     // One column per match (maxRows=1), each column 5 wide ("cmd-0".length === 5).
-    const layout = layoutCommandGrid(columns, 1, 15, 0);
+    const layout = layoutCommandGrid(columns, 1, 15, (c) => c.name, 0);
     expect(layout.truncated.left).toBe(false);
     expect(layout.truncated.right).toBe(true);
     expect(layout.columns.length).toBeGreaterThan(0);
@@ -216,20 +216,20 @@ describe('layoutCommandGrid', () => {
 
   it('truncates the left edge once scrolled away from the start', () => {
     const columns: Command[] = Array.from({ length: 6 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
-    const layout = layoutCommandGrid(columns, 1, 15, 3);
+    const layout = layoutCommandGrid(columns, 1, 15, (c) => c.name, 3);
     expect(layout.truncated.left).toBe(true);
     expect(layout.scrollOffset).toBe(3);
   });
 
   it('always renders at least one column even when it alone exceeds the budget', () => {
     const columns: Command[] = Array.from({ length: 3 }, (_, i) => ({ name: `command-name-${i}`, run: () => {} }));
-    const layout = layoutCommandGrid(columns, 1, 3, 0);
+    const layout = layoutCommandGrid(columns, 1, 3, (c) => c.name, 0);
     expect(layout.columns.length).toBe(1);
   });
 
   it('clamps an out-of-range scrollOffset to the last column', () => {
     const columns: Command[] = Array.from({ length: 6 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
-    const layout = layoutCommandGrid(columns, 1, 15, 999);
+    const layout = layoutCommandGrid(columns, 1, 15, (c) => c.name, 999);
     expect(layout.scrollOffset).toBe(5);
     expect(layout.truncated.right).toBe(false);
   });
