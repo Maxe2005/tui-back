@@ -279,7 +279,9 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   if (!registeredEntry.ok) {
     rollback();
     for (const { repoPath, branchName } of createdBranches) {
-      const deleted = await git.deleteBranch(repoPath, branchName);
+      // Story 2.29: deleteBranch now requires an explicit force flag — `true` preserves this
+      // rollback path's pre-existing `-D` (unconditional) behavior exactly.
+      const deleted = await git.deleteBranch(repoPath, branchName, true);
       if (!deleted.ok) {
         console.error(
           `Failed to delete branch ${branchName} in ${repoPath} after a failed EDT creation:`,

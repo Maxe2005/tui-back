@@ -14,6 +14,14 @@
 // cross-EDT half: when passed (with an EdtRegistryPort wired into the adapter), it also
 // rejects a branch already registered as a *different* EDT's own branch for that repo —
 // existing (no-`edtId`) call sites (createBranch/deleteBranch, create.ts) are unaffected.
+//
+// Story 2.29 (delete an EDT): `deleteBranch` widens with a required `force` flag — the
+// delete use-case always decides `-d` (merged+clean) vs. `-D` (force) itself from real,
+// freshly-read git state, never trusting a caller's stale/optimistic guess. Every existing
+// call site (create.ts's rollback path) now passes `force: true` explicitly, preserving its
+// pre-2.29 `-D` rollback behavior exactly. `isBranchMerged` is new: an ordinary (non-gated)
+// local read used only to decide *how* to delete a branch that was already independently
+// authorized for deletion — never itself a safety gate, so it takes no edtId/manifest args.
 import type { Result } from '../result.js';
 
 export interface GitPort {
@@ -25,8 +33,18 @@ export interface GitPort {
   assertAllowedBranch(repoPath: string, branchName: string, edtId?: string): Promise<Result<void>>;
   createBranch(repoPath: string, branchName: string, baseBranch: string): Promise<Result<void>>;
   // Deletes a branch ref that this tool created (rollback path: a failed EDT creation must
-  // not leave orphaned branch refs behind). Shares createBranch's shared-branch gate.
-  deleteBranch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // not leave orphaned branch refs behind) or that a developer explicitly chose to delete
+  // (story 2.29's EDT-delete flow). Shares createBranch's shared-branch gate. `force` selects
+  // `git branch -d` (false — refuses an unmerged branch) vs. `-D` (true — unconditional) at
+  // the git-invocation level; the caller (not this method) is responsible for having already
+  // decided which is appropriate (e.g. via isBranchMerged + hasUncommittedChanges).
+  deleteBranch(repoPath: string, branchName: string, force: boolean): Promise<Result<void>>;
+  // Story 2.29: true when branchName is already merged into `into` (`git merge-base
+  // --is-ancestor branchName into`) — local-only, no fetch. Used by the EDT-delete use-case
+  // to decide `-d` vs `-D`, and by its caller (the TUI) to compute a member row's
+  // delete-by-default disposition. Never a safety gate itself — it never rejects anything and
+  // takes no edtId, unlike assertAllowedBranch.
+  isBranchMerged(repoPath: string, branchName: string, into: string): Promise<Result<boolean>>;
   currentBranch(repoPath: string): Promise<Result<string>>;
   // Story 2.6 (FR-9): { ahead, behind } counts of the current branch relative to its
   // configured upstream (git's own branch.<name>.remote/merge tracking config — never a
@@ -62,12 +80,56 @@ export interface GitPort {
   // safe even if the developer's own unrelated stashes exist). A no-op success when no
   // matching stash exists: not every switch pops one, only a return into an EDT that owns one.
   restoreStash(repoPath: string, message: string): Promise<Result<void>>;
+  // Story 2.29: true iff a stash whose message contains `tag` exists in repoPath — the same
+  // message-substring match restoreStash uses, but non-destructive (existence only, never
+  // pops). Backs the EDT-delete use-case's corrected clean-detection: a member's own
+  // `tui-back:<edtUlid>` stash (the tag switch.ts writes when switching *away* from that EDT)
+  // signals real, still-uncommitted work belonging to that member's own branch, independent
+  // of whatever repoPath's working tree currently happens to have checked out.
+  hasStash(repoPath: string, tag: string): Promise<Result<boolean>>;
   branchExistsLocally(repoPath: string, branchName: string): Promise<Result<boolean>>;
   // Fetches branchName from origin into a same-named local branch (`git fetch origin
   // branch:branch`) — used only when branchExistsLocally reported false for a non-member
   // repo's manifest sharedBranch. Never used for a member's own branch (spec: a missing
   // member branch is reported failed, never auto-fetched).
   fetch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // Story 3.1: plain `git pull` on the current branch — used only when a member already sits
+  // on its manifest sharedBranch (the merge path below would be a self-merge). Follows the
+  // switch.ts precedent: pulls of the shared branch carry no write-gate.
+  pull(repoPath: string): Promise<Result<void>>;
+  // Story 3.1 (review): true while a conflicting merge *or* pull is still in progress
+  // (MERGE_HEAD exists) — lets the group-update use-case abort a conflicting `git pull`
+  // back to the pre-run HEAD the same way it aborts a conflicting merge. An unresolvable
+  // check (git itself unspawnable) is the only failure mode; anything else reads as
+  // "no merge in progress", never a throw.
+  isMergeInProgress(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.1: `git merge <branch>` of the (already fetched) shared branch into the member's
+  // own current branch — never a rebase. A conflicting merge surfaces as `merge-conflict`
+  // (distinct from any other `git-merge-error`); the caller aborts via abortMerge below so
+  // the repo lands back at its pre-run HEAD.
+  mergeBranch(repoPath: string, branch: string): Promise<Result<void>>;
+  // Story 3.1: `git merge --abort` — cancels an in-progress conflicting merge, restoring the
+  // pre-run HEAD. Never discards developer work: abort only cancels the attempted merge.
+  abortMerge(repoPath: string): Promise<Result<void>>;
+  // Story 3.4: porcelain file list backing the lockfile-only classifier — the raw
+  // `git status --porcelain` paths (one entry per dirty path; renames surface both sides so
+  // the classifier stays conservative). Empty when the tree is clean.
+  listDirtyPaths(repoPath: string): Promise<Result<string[]>>;
+  // Story 3.4: path-scoped discard (`git checkout -- <paths>` equivalent) for the
+  // lockfile-only auto-fix. Never touches paths outside the given list.
+  discardPaths(repoPath: string, paths: string[]): Promise<Result<void>>;
+  // Story 3.4: true while a `git rebase` is still in progress (rebase-merge/rebase-apply
+  // state dirs exist under the repo's git dir). The tool never touches a rebase — this is
+  // only a detector so a pre-existing mid-rebase surfaces as its own distinct state.
+  // Mirror of isMergeInProgress's contract: only an unresolvable check fails.
+  isRebaseInProgress(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.4: true while unmerged (conflicted) paths remain (`git diff --name-only
+  // --diff-filter=U` is non-empty) — the re-verification gate before finalizing a
+  // human-resolved merge.
+  hasUnmergedPaths(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.4: `git commit --no-edit` — finalizes a human-resolved merge after
+  // hasUnmergedPaths reported clean. Never resolves conflict content itself.
+  finalizeMerge(repoPath: string): Promise<Result<void>>;
   // Story 2.26: the branch-picker's candidate source for both its filterable-list widget's
   // uses (base-branch candidates for Create new, target-branch candidates for Pick existing).
   // Local-only, mirroring branchExistsLocally's scope (Boundaries: "Remote-branch listing —

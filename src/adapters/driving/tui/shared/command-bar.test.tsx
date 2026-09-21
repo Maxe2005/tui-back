@@ -233,6 +233,76 @@ describe('layoutCommandGrid', () => {
     expect(layout.scrollOffset).toBe(5);
     expect(layout.truncated.right).toBe(false);
   });
+
+  // Story 5.5: vertical pagination on top of the existing horizontal truncation/scroll
+  // (UX-DR30) — used by logs-zone.tsx's filter-history grid browser (I/O matrix
+  // OVERFLOW_HISTORY_GRID). Every pre-5.5 call above omits `verticalWindow`, so `rowScrollOffset`
+  // stays 0 and `truncated.top`/`.bottom` stay undefined there — asserted once more explicitly
+  // here as the story's own no-behavior-change guard for every existing caller.
+  describe('vertical pagination (story 5.5)', () => {
+    it('is a no-op (rowScrollOffset: 0, no top/bottom truncation) when no verticalWindow is given', () => {
+      const matches = [registry, reload, edtCreate];
+      const layout = layoutCommandGrid(matches, 8, 200, (c) => c.name, 0);
+      expect(layout.rowScrollOffset).toBe(0);
+      expect(layout.truncated.top).toBeUndefined();
+      expect(layout.truncated.bottom).toBeUndefined();
+    });
+
+    it('is a no-op when every column already fits maxVisibleRows', () => {
+      const columns: Command[] = Array.from({ length: 3 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
+      const layout = layoutCommandGrid(columns, 3, 200, (c) => c.name, 0, { maxVisibleRows: 10, cursorRow: 0 });
+      expect(layout.rowScrollOffset).toBe(0);
+      expect(layout.truncated.top).toBe(false);
+      expect(layout.truncated.bottom).toBe(false);
+      expect(layout.columns[0]).toHaveLength(3);
+    });
+
+    it('paginates a single tall column, showing a bottom truncation when the cursor is at the top', () => {
+      const single: Command[] = Array.from({ length: 20 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
+      const layout = layoutCommandGrid(single, 20, 200, (c) => c.name, 0, { maxVisibleRows: 5, cursorRow: 0 });
+      expect(layout.rowScrollOffset).toBe(0);
+      expect(layout.truncated.top).toBe(false);
+      expect(layout.truncated.bottom).toBe(true);
+      // Review fix: 4 items + the "more below" indicator line LogFilterEditor renders around
+      // the grid = exactly 5 — a full 5 rows of *content* here would overshoot the budget once
+      // that indicator line is counted (it used to, before this fix).
+      expect(layout.columns[0]).toHaveLength(4);
+      expect(layout.columns[0]?.[0]?.name).toBe('cmd-0');
+    });
+
+    it('centers the window on cursorRow once scrolled, keeping the cursor visible with a top truncation', () => {
+      const single: Command[] = Array.from({ length: 20 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
+      const layout = layoutCommandGrid(single, 20, 200, (c) => c.name, 0, { maxVisibleRows: 5, cursorRow: 19 });
+      expect(layout.truncated.top).toBe(true);
+      expect(layout.rowScrollOffset).toBeGreaterThan(0);
+      expect(layout.columns[0]?.some((c) => c.name === 'cmd-19')).toBe(true);
+    });
+
+    // Review fix: `applyVerticalWindow` used to slice every column to the full `maxVisibleRows`
+    // and let the caller (LogFilterEditor) render the `▲`/`▼` indicator lines as *additional*
+    // siblings around that — so the grid's real footprint was `maxVisibleRows + up to 2`, over
+    // budget by design. Asserts the invariant across a spread of budgets/cursor positions,
+    // mirroring bounded-list.test.tsx's own "never renders more total rows" guard.
+    it('never renders more total rows (column content + top/bottom indicators) than maxVisibleRows', () => {
+      const single: Command[] = Array.from({ length: 30 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
+      for (const maxVisibleRows of [1, 2, 3, 6]) {
+        for (const cursorRow of [0, 5, 15, 29]) {
+          const layout = layoutCommandGrid(single, 30, 200, (c) => c.name, 0, { maxVisibleRows, cursorRow });
+          const totalRows = (layout.columns[0]?.length ?? 0) + (layout.truncated.top ? 1 : 0) + (layout.truncated.bottom ? 1 : 0);
+          expect(totalRows).toBeLessThanOrEqual(maxVisibleRows);
+        }
+      }
+    });
+
+    it('never changes the column-major layout or column widths for the columns that remain visible', () => {
+      const columns: Command[] = Array.from({ length: 10 }, (_, i) => ({ name: `command-${i}`, run: () => {} }));
+      const unwindowed = layoutCommandGrid(columns, 10, 200, (c) => c.name, 0);
+      const windowed = layoutCommandGrid(columns, 10, 200, (c) => c.name, 0, { maxVisibleRows: 4, cursorRow: 0 });
+      expect(windowed.columns).toHaveLength(unwindowed.columns.length);
+      expect(windowed.truncated.left).toBe(unwindowed.truncated.left);
+      expect(windowed.truncated.right).toBe(unwindowed.truncated.right);
+    });
+  });
 });
 
 describe('moveGridCursorVertical', () => {

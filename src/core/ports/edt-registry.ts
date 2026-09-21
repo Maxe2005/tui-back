@@ -49,6 +49,9 @@
    // past a held lock) and the target EDT to 'active'. Fails with edt-not-found if ulid isn't
    // registered.
    setStatus(ulid: string, status: EdtStatus): Promise<Result<void>>;
+   // Story 2.29: read/find/filter/write, mirroring update()'s shape — removes ulid's entry
+   // entirely (no soft-delete/undo). Fails with edt-not-found if ulid isn't registered.
+   remove(ulid: string): Promise<Result<void>>;
    // Story 2.15 (optional): logs an action to the per-EDT SQLite action_log table.
    // Implementations that don't support action history should not implement this.
    logAction?(ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string): Promise<Result<void>>;

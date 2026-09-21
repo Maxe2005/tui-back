@@ -23,7 +23,8 @@
 // flag. `git checkout <branch> --` uses the (different) trailing-`--` form git-checkout(1)
 // documents to force <branch> to be read as a revision, never a pathspec.
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -36,15 +37,26 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     assertAllowedBranch: (repoPath, branchName, edtId) =>
       assertAllowedBranch(manifest, repoPath, branchName, edtId, edtRegistry),
     createBranch: (repoPath, branchName, baseBranch) => createBranch(manifest, repoPath, branchName, baseBranch),
-    deleteBranch: (repoPath, branchName) => deleteBranch(manifest, repoPath, branchName),
+    deleteBranch: (repoPath, branchName, force) => deleteBranch(manifest, repoPath, branchName, force),
+    isBranchMerged: (repoPath, branchName, into) => isBranchMerged(repoPath, branchName, into),
     currentBranch: (repoPath) => currentBranch(repoPath),
     aheadBehind: (repoPath) => aheadBehind(repoPath),
     checkout: (repoPath, branchName) => checkoutBranch(repoPath, branchName),
     hasUncommittedChanges: (repoPath) => hasUncommittedChanges(repoPath),
     stashSave: (repoPath, message) => stashSave(repoPath, message),
     restoreStash: (repoPath, message) => restoreStash(repoPath, message),
+    hasStash: (repoPath, tag) => hasStash(repoPath, tag),
     branchExistsLocally: (repoPath, branchName) => branchExistsLocally(repoPath, branchName),
     fetch: (repoPath, branchName) => fetchBranch(repoPath, branchName),
+    pull: (repoPath) => pullBranch(repoPath),
+    isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
+    mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
+    abortMerge: (repoPath) => abortMerge(repoPath),
+    listDirtyPaths: (repoPath) => listDirtyPaths(repoPath),
+    discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
+    isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
+    hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
+    finalizeMerge: (repoPath) => finalizeMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
     renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
   };
@@ -138,14 +150,17 @@ export async function createBranch(
 }
 
 // Deletes a branch ref (rollback path — story 2.2 review: a failed EDT creation must not
-// leave orphaned branch refs in member repos). Delegates to assertAllowedBranch first, same
+// leave orphaned branch refs in member repos — and story 2.29's EDT-delete flow, for a member
+// branch a developer explicitly chose to delete). Delegates to assertAllowedBranch first, same
 // as createBranch: a shared/protected target is rejected before any `git` invocation, and a
 // repo whose manifest cannot load gets no git write at all. A missing branch is a no-op
-// success (idempotent rollback).
+// success (idempotent rollback). Story 2.29: `force` selects `-d` (refuses an unmerged branch)
+// vs. `-D` (unconditional) — the caller decides which, this method never second-guesses it.
 export async function deleteBranch(
   manifest: ManifestPort,
   repoPath: string,
   branchName: string,
+  force: boolean,
 ): Promise<Result<void>> {
   const allowed = await assertAllowedBranch(manifest, repoPath, branchName);
   if (!allowed.ok) {
@@ -160,11 +175,29 @@ export async function deleteBranch(
     return err('git-delete-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
   }
 
-  const deleted = spawnSync('git', ['branch', '-D', '--', branchName], { cwd: repoPath, encoding: 'utf8' });
+  const flag = force ? '-D' : '-d';
+  const deleted = spawnSync('git', ['branch', flag, '--', branchName], { cwd: repoPath, encoding: 'utf8' });
   if (deleted.status !== 0) {
-    return err('git-delete-branch-error', `git branch -D failed in ${repoPath}: ${spawnFailureDetail(deleted)}`);
+    return err('git-delete-branch-error', `git branch ${flag} failed in ${repoPath}: ${spawnFailureDetail(deleted)}`);
   }
   return ok(undefined);
+}
+
+// Story 2.29 — true when branchName is already merged into `into`
+// (`git merge-base --is-ancestor branchName into`), local-only, no fetch. Exit-code taxonomy
+// (git-merge-base(1)): 0 = branchName is an ancestor of into (merged), 1 = it is not
+// (unmerged) — both are real, successful answers, never a Result error; anything else
+// (missing ref, not a git repo, ...) is a genuine git error. Never a safety gate itself: it
+// takes no edtId/manifest and never rejects anything, unlike assertAllowedBranch.
+export async function isBranchMerged(repoPath: string, branchName: string, into: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['merge-base', '--is-ancestor', branchName, into], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status === 0) {
+    return ok(true);
+  }
+  if (result.status === 1) {
+    return ok(false);
+  }
+  return err('git-merge-base-error', `git merge-base --is-ancestor failed in ${repoPath}: ${spawnFailureDetail(result)}`);
 }
 
 export async function currentBranch(repoPath: string): Promise<Result<string>> {
@@ -327,29 +360,55 @@ export async function stashSave(repoPath: string, message: string): Promise<Resu
   return ok(undefined);
 }
 
-// Story 2.4 — Finds the stash entry whose subject contains `message` (git renders a
-// `-m`-tagged push as "On <branch>: <message>", so a substring match is exactly right — not
-// stack position, so this is safe even if the developer's own unrelated stashes exist) and
-// pops it. No matching stash is a no-op success: not every switch pops one, only a return
-// into an EDT that owns one.
+// Story 2.4 (extracted for story 2.29 — see findStashRef below) — Finds the stash entry
+// whose subject contains `message` (git renders a `-m`-tagged push as "On <branch>:
+// <message>", so a substring match is exactly right — not stack position, so this is safe
+// even if the developer's own unrelated stashes exist) and pops it. No matching stash is a
+// no-op success: not every switch pops one, only a return into an EDT that owns one.
 export async function restoreStash(repoPath: string, message: string): Promise<Result<void>> {
+  const found = await findStashRef(repoPath, message);
+  if (!found.ok) {
+    return found;
+  }
+  if (found.data === null) {
+    return ok(undefined);
+  }
+
+  const popped = spawnSync('git', ['stash', 'pop', found.data], { cwd: repoPath, encoding: 'utf8' });
+  if (popped.status !== 0) {
+    return err('git-stash-pop-error', `git stash pop ${found.data} failed in ${repoPath}: ${spawnFailureDetail(popped)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.29 — the list-and-match-by-message-substring logic restoreStash has always used
+// (above), extracted so `hasStash` can reuse it non-destructively: existence only, never
+// pops. Returns the stash ref (e.g. `stash@{0}`) of the first match, or null when none of
+// repoPath's stashes carry `tag` in their subject.
+export async function findStashRef(repoPath: string, tag: string): Promise<Result<string | null>> {
   const list = spawnSync('git', ['stash', 'list', '--format=%gd %s'], { cwd: repoPath, encoding: 'utf8' });
   if (list.status !== 0) {
     return err('git-stash-list-error', `git stash list failed in ${repoPath}: ${spawnFailureDetail(list)}`);
   }
 
   const lines = String(list.stdout).split('\n').filter((line) => line.trim() !== '');
-  const match = lines.find((line) => line.includes(message));
+  const match = lines.find((line) => line.includes(tag));
   if (match === undefined) {
-    return ok(undefined);
+    return ok(null);
   }
+  return ok(match.slice(0, match.indexOf(' ')));
+}
 
-  const ref = match.slice(0, match.indexOf(' '));
-  const popped = spawnSync('git', ['stash', 'pop', ref], { cwd: repoPath, encoding: 'utf8' });
-  if (popped.status !== 0) {
-    return err('git-stash-pop-error', `git stash pop ${ref} failed in ${repoPath}: ${spawnFailureDetail(popped)}`);
+// Story 2.29 — non-destructive existence check backing the EDT-delete use-case's corrected
+// clean-detection (Design Notes): true iff a stash tagged `tag` exists in repoPath. Never
+// pops anything, unlike restoreStash — this is a read used to decide a member's own
+// delete-disposition default/force-vs-not, not to act on the stash itself.
+export async function hasStash(repoPath: string, tag: string): Promise<Result<boolean>> {
+  const found = await findStashRef(repoPath, tag);
+  if (!found.ok) {
+    return found;
   }
-  return ok(undefined);
+  return ok(found.data !== null);
 }
 
 // Story 2.4 — reuses showRef's exit-code taxonomy (0 exists / 1 missing / other real error).
@@ -372,6 +431,157 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
   });
   if (result.status !== 0) {
     return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.1 — `git pull --ff-only` on the current branch. Only ever called for a member
+// that already sits on its manifest sharedBranch (the merge path below would be a
+// self-merge), mirroring the switch.ts precedent that pulls of the shared branch carry no
+// write-gate. `--ff-only` never merges and never rebases (a diverged branch is a clean
+// `git-pull-error`, never a surprise merge commit), and `GIT_TERMINAL_PROMPT=0` keeps a
+// credential-requiring remote from hanging on an interactive prompt. Together with
+// `--no-edit` on the merge path, no git invocation here can open an editor or prompt.
+export async function pullBranch(repoPath: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['pull', '--ff-only'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  if (result.status !== 0) {
+    return err('git-pull-error', `git pull --ff-only failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.1 — `git merge` of the already-fetched shared branch into the member's own
+// current branch, never a rebase. `--no-edit` keeps the merge non-interactive (no editor).
+// A conflicting merge is distinguished by MERGE_HEAD existing afterwards (the merge is
+// still in progress) — locale-independent, unlike matching git's own CONFLICT marker in
+// its human-readable output — so the caller can abort and report `merge-conflict` instead
+// of a generic merge failure.
+export async function mergeBranch(repoPath: string, branch: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['merge', '--no-edit', branch], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    const merging = await isMergeInProgress(repoPath);
+    if (merging.ok && merging.data) {
+      return err('merge-conflict', `git merge ${branch} conflicts in ${repoPath}: ${spawnFailureDetail(result)}`);
+    }
+    return err('git-merge-error', `git merge ${branch} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.1 — `git merge --abort` cancels the in-progress merge, restoring the pre-run
+// HEAD. Abort cancels only the attempted merge, never developer work.
+export async function abortMerge(repoPath: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['merge', '--abort'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-merge-abort-error', `git merge --abort failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// A failed `git merge` (or `git pull`) that leaves MERGE_HEAD behind is a conflicting
+// merge still in progress (the caller's abortMerge target); any other failure (unknown
+// branch, not a git repo, ...) leaves no MERGE_HEAD. `git rev-parse --verify --quiet`
+// exit-code taxonomy: 0 exists, 1 missing, anything else (except an unspawnable git,
+// status === null, which is a real environment failure) reads as missing — the merge
+// already failed, so this is only a classifier, never the reported error.
+export async function isMergeInProgress(repoPath: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (result.status === null) {
+    return err('git-merge-check-error', `Cannot check merge state in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(result.status === 0);
+}
+
+// Story 3.4 — porcelain file list backing the lockfile-only classifier: one entry per
+// dirty path parsed from `git status --porcelain` (each line is `XY<space>path`; renames
+// surface as `old -> new` and contribute both sides so the classifier stays conservative).
+// Empty output means a clean tree. A non-zero exit is a controlled git-status-error.
+export async function listDirtyPaths(repoPath: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['status', '--porcelain'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  const paths: string[] = [];
+  for (const line of String(result.stdout).split('\n')) {
+    if (line.trim() === '') {
+      continue;
+    }
+    const entry = line.length > 3 ? line.slice(3).trim() : '';
+    if (entry === '') {
+      continue;
+    }
+    // Rename/copy entries surface as `old -> new` — keep both sides (conservative: a
+    // non-lockfile on either side blocks the lockfile-only auto-fix).
+    if (entry.includes(' -> ')) {
+      for (const side of entry.split(' -> ')) {
+        const trimmed = side.trim().replace(/^"|"$/g, '');
+        if (trimmed !== '') {
+          paths.push(trimmed);
+        }
+      }
+    } else {
+      paths.push(entry.replace(/^"|"$/g, ''));
+    }
+  }
+  return ok(paths);
+}
+
+// Story 3.4 — path-scoped discard (`git checkout -- <paths>` equivalent) for the
+// lockfile-only auto-fix. The `--` terminates option parsing so a path starting with `-`
+// is never treated as a flag (the createBranch/deleteBranch precedent). An empty list is
+// a no-op success.
+export async function discardPaths(repoPath: string, paths: string[]): Promise<Result<void>> {
+  if (paths.length === 0) {
+    return ok(undefined);
+  }
+  const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.4 — mid-rebase detector: resolves the repo's git dir (`git rev-parse --git-dir`,
+// relative for ordinary repos — resolved against repoPath) and reports true while either
+// rebase state dir exists. Mirrors isMergeInProgress's taxonomy: only an unspawnable git
+// (status === null) is a real failure; an unresolvable git dir (not a repo, ...) reads as
+// "no rebase in progress", never a throw. The tool never touches a rebase — detection only.
+export async function isRebaseInProgress(repoPath: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['rev-parse', '--git-dir'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status === null) {
+    return err('git-rebase-check-error', `Cannot check rebase state in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  if (result.status !== 0) {
+    return ok(false);
+  }
+  const gitDir = resolve(repoPath, String(result.stdout).trim());
+  return ok(existsSync(join(gitDir, 'rebase-merge')) || existsSync(join(gitDir, 'rebase-apply')));
+}
+
+// Story 3.4 — unmerged-path check (`git diff --name-only --diff-filter=U` non-empty):
+// the re-verification gate before finalizeMerge. Any git failure is a controlled error.
+export async function hasUnmergedPaths(repoPath: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['diff', '--name-only', '--diff-filter=U'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-unmerged-check-error', `Cannot check unmerged paths in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).trim().length > 0);
+}
+
+// Story 3.4 — `git commit --no-edit` finalizes a human-resolved merge after
+// hasUnmergedPaths reported clean. `--no-edit` keeps it non-interactive (no editor — the
+// pull/merge `--no-edit` precedent). Never resolves conflict content itself.
+export async function finalizeMerge(repoPath: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['commit', '--no-edit'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-commit-error', `git commit --no-edit failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(undefined);
 }
@@ -460,7 +670,10 @@ function spawnFailureDetail(result: { status: number | null; stderr: string; err
     const code = spawnError?.code;
     return typeof message === 'string' && message !== '' ? message : (typeof code === 'string' ? code : 'unknown error');
   }
-  return String(result.stderr).trim();
+  // Some git failures exit non-zero with blank stderr — fall back to the exit status so
+  // the message never ends with a blank cause.
+  const stderr = String(result.stderr).trim();
+  return stderr !== '' ? stderr : `exit ${String(result.status)}`;
 }
 
 function showRef(repoPath: string, branchName: string): ShowRefOutcome {

@@ -48,6 +48,7 @@ function fakeEdtRegistry(entries: EdtRegistryEntry[] = [], overrides: Partial<Ed
     list: vi.fn(async () => ok(entries)),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }

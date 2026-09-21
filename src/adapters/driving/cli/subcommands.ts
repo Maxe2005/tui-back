@@ -10,9 +10,13 @@ import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
 import { switchActiveEdt } from '../../../core/edt/switch.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
+import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
+import { groupUpdate } from '../../../core/scripts/group-update.js';
+import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
@@ -30,7 +34,11 @@ const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force]';
 const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
-const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}`;
+const EDT_DELETE_USAGE =
+  'tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]... ' +
+  '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
+const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
+const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -41,6 +49,8 @@ export function buildSubcommands(deps: {
   edtRegistry: EdtRegistryPort;
   edtRegistryResourceKey: string;
   git: GitPort;
+  container: ContainerPort;
+  migration: MigrationPort;
   state: StatePort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
@@ -120,8 +130,61 @@ export function buildSubcommands(deps: {
         if (args[0] === 'modify') {
           return runEdtModify(deps, args.slice(1));
         }
+        if (args[0] === 'delete') {
+          return runEdtDelete(deps, args.slice(1));
+        }
         const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
         return err('invalid-argument', `Unknown edt action: ${label}. Usage:\n${EDT_USAGE}`);
+      },
+    },
+    {
+      name: 'update',
+      usage: UPDATE_USAGE,
+      // Story 3.3: the bare invocation stays EDT-scoped (3.1/3.2, `--all` never implied);
+      // `--all --yes` (order-insensitive) runs the same per-service flow against every
+      // managed repo; `--all` alone is a `confirmation-required` rejection naming `--yes`
+      // (confirmation stays out of core — a driving concern). Any other flag is an explicit
+      // invalid-argument rejection, never silently ignored.
+      run: async (args) => {
+        // Story 3.4: the CLI explicitly passes no resolution seam — dirty worktrees keep
+        // today's `skipped`/`dirty-worktree` rows and conflicts keep the abort-and-report
+        // `failed`/`merge-conflict` rows, with no prompt and single-line JSON output.
+        if (args.length === 0) {
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'edt',
+            onUpdateBlocker: undefined,
+          });
+        }
+        const sorted = [...args].sort();
+        if (sorted.length === 2 && sorted[0] === '--all' && sorted[1] === '--yes') {
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'all',
+            onUpdateBlocker: undefined,
+          });
+        }
+        if (args.length === 1 && args[0] === '--all') {
+          return err(
+            'confirmation-required',
+            `All-repos update touches every managed repo — rerun with --all --yes to confirm. Usage: ${UPDATE_USAGE}`,
+          );
+        }
+        return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
       },
     },
   ];
@@ -443,6 +506,106 @@ async function runEdtModify(
     removeMembers: rawRemoveMembers,
     setBranches: rawSetBranches,
     renameTo,
+  });
+}
+
+// Hand-rolled flag parsing for `edt delete`: a positional <topic> (mirroring the `<topic>`
+// precedent, unlike modify/switch's --topic flag — Code Map) plus repeated
+// `--branches <repoPath>=<leave|delete>` (mirrors --set-branch's `<path>=<value>` parsing).
+// A member with no matching --branches entry defaults to 'leave' — deleteEdt itself already
+// treats an absent disposition that way, so this wrapper never has to fill one in.
+async function runEdtDelete(
+  deps: {
+    edtRegistry: EdtRegistryPort;
+    edtRegistryResourceKey: string;
+    manifest: ManifestPort;
+    git: GitPort;
+    lock: LockPort;
+    state: StatePort;
+    edtsBaseDir: string;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let topic: string | undefined;
+  const dispositions: Record<string, MemberDisposition> = {};
+
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    if (flag === '--branches') {
+      const value = args[i + 1];
+      if (value === undefined) {
+        return err('invalid-argument', `Missing value for --branches. Usage: ${EDT_DELETE_USAGE}`);
+      }
+      const eq = value.indexOf('=');
+      if (eq === -1) {
+        return err('invalid-argument', `--branches must be <repoPath>=<leave|delete>, got "${value}"`);
+      }
+      const rawPath = value.slice(0, eq);
+      // Review fix (story 2.29): an empty repoPath before "=" (e.g. "--branches =delete")
+      // used to resolve silently to process.cwd() — reject it instead of guessing.
+      if (rawPath.trim() === '') {
+        return err('invalid-argument', `--branches "${value}" is missing a repoPath before "="`);
+      }
+      const path = resolve(rawPath);
+      const disposition = value.slice(eq + 1);
+      if (disposition !== 'leave' && disposition !== 'delete') {
+        return err('invalid-argument', `--branches disposition must be "leave" or "delete", got "${disposition}"`);
+      }
+      // Review fix (story 2.29): a --branches repeated for the same resolved repoPath used to
+      // let the later value silently win — reject it instead, same spirit as the unmatched-path
+      // check below.
+      if (Object.prototype.hasOwnProperty.call(dispositions, path)) {
+        return err('invalid-argument', `--branches "${rawPath}" was specified more than once`);
+      }
+      dispositions[path] = disposition;
+      i += 1;
+      continue;
+    }
+    if (flag !== undefined && !flag.startsWith('--') && topic === undefined) {
+      topic = flag;
+      continue;
+    }
+    return err('invalid-argument', `Unknown edt delete option: "${flag}". Usage: ${EDT_DELETE_USAGE}`);
+  }
+
+  if (topic === undefined) {
+    return err('invalid-argument', `Missing <topic>. Usage: ${EDT_DELETE_USAGE}`);
+  }
+
+  // Review fix (story 2.29): a --branches repoPath that isn't one of the target EDT's own
+  // members used to be silently ignored (that "member" just never had its disposition
+  // filled in, defaulting to 'leave') — reject it instead, naming the unmatched path(s), the
+  // same way a developer typo deserves a loud failure rather than a silent no-op. Skipped
+  // when the topic itself isn't found: deleteEdt's own edt-not-found already covers that,
+  // and there is no real membership to validate --branches against.
+  if (Object.keys(dispositions).length > 0) {
+    const listed = await deps.edtRegistry.list();
+    if (!listed.ok) {
+      return listed;
+    }
+    const target = listed.data.find((candidate) => candidate.topic === topic);
+    if (target !== undefined) {
+      const memberPaths = new Set(target.members.map((member) => resolve(member.repoPath)));
+      const unmatched = Object.keys(dispositions).filter((path) => !memberPaths.has(path));
+      if (unmatched.length > 0) {
+        return err(
+          'invalid-argument',
+          `--branches repoPath(s) not found among EDT "${topic}"'s members: ${unmatched.join(', ')}`,
+        );
+      }
+    }
+  }
+
+  return deleteEdt({
+    edtRegistry: deps.edtRegistry,
+    edtRegistryResourceKey: deps.edtRegistryResourceKey,
+    manifest: deps.manifest,
+    git: deps.git,
+    lock: deps.lock,
+    state: deps.state,
+    edtsBaseDir: deps.edtsBaseDir,
+    topic,
+    dispositions,
   });
 }
 

@@ -20,10 +20,11 @@
 // and the 5 dialogs' state shapes/initializers live in edts-zone.logic.ts (kept in one place
 // so the component here stays scannable; see that file's own header for why).
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput, type Key } from 'ink';
+import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
+import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
@@ -41,6 +42,7 @@ import {
   formatServiceMeta,
   initialAddToEdtDialog,
   initialCreateDialog,
+  initialDeleteDialog,
   initialModifyDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
@@ -52,13 +54,21 @@ import {
   resolveCandidateListState,
   resolveSelectionDirection,
   resolveSelectionJump,
+  type DeleteDialogState,
   type EdtDialogState,
 } from './edts-zone.logic.js';
 import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
 import { createCreateDialogHandlers, CreateDialogView } from './dialogs/create-dialog.js';
+import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
+
+// Story 5.5: rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above
+// the splitter, both section headers, and the loading/error/issues lines) subtracted from the
+// raw window size before either service list's own BoundedList ever sees it — mirrors
+// logs-zone.tsx's own CHROME_ROWS ("an approximation is fine here").
+const EDTS_SERVICE_LISTS_CHROME_ROWS = 12;
 
 export function EdtsZone({
   useStore = useAppStore,
@@ -78,7 +88,16 @@ export function EdtsZone({
 }: {
   useStore?: AppStore;
   initialPaneFocus?: PaneFocus;
-  initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' | 'service-actions' | 'add-to-edt';
+  initialDialogKind?:
+    | 'create'
+    | 'switch-confirm'
+    | 'switch-blocked'
+    | 'modify'
+    | 'service-actions'
+    | 'add-to-edt'
+    | 'delete-confirm'
+    | 'delete-confirm-rejected'
+    | 'delete-confirm-status-error';
 }) {
   // Story 2.21: splitterRatios.edts is now a 3-entry array — boundary 0 (index 0) drives the
   // existing list<->detail split below; boundaries 1/2 drive the list column's own two
@@ -99,6 +118,8 @@ export function EdtsZone({
   const createEdtAction = useStore((state) => state.createEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
   const modifyEdtAction = useStore((state) => state.modifyEdt);
+  const deleteEdtAction = useStore((state) => state.deleteEdt);
+  const resolveMemberDeleteStatusesAction = useStore((state) => state.resolveMemberDeleteStatuses);
   // Story 2.26: the shared branch-picker's own store actions (Design Notes: `deps.git` is
   // still never touched directly from this zone — these wrap core/edt/modify.ts's
   // listMemberBranches/createMemberBranch/renameMemberBranch exports).
@@ -192,6 +213,46 @@ export function EdtsZone({
       }
       return initialAddToEdtDialog(target, svc.path, svc.service, svc.branch, svc.sharedBranch);
     }
+    if (initialDialogKind === 'delete-confirm-rejected') {
+      return initialDeleteDialog(target, true);
+    }
+    if (initialDialogKind === 'delete-confirm') {
+      // Test-only seed (mirrors service-actions/add-to-edt's own static seeding above):
+      // renderToString never observes the real effect-driven listBranches/status fetch, so
+      // memberRows is pre-populated here directly rather than left `null` (which would render
+      // as "Loading member status…" forever in a one-shot smoke test).
+      const dialog = initialDeleteDialog(target, false);
+      return {
+        ...dialog,
+        memberRows: target.members.map((member) => ({
+          repoPath: member.repoPath,
+          service: member.service,
+          branch: member.branch,
+          merged: false,
+          clean: true,
+          disposition: 'leave' as const,
+        })),
+      };
+    }
+    if (initialDialogKind === 'delete-confirm-status-error') {
+      // Review fix (story 2.29) test-only seed: one row carries a statusError (mirrors the
+      // shape resolveMemberDeleteStatuses returns when a manifest/git read fails) so
+      // formatDeleteMemberMeta's "(status unknown — defaulted to leave)" annotation has real
+      // rendering coverage, not just a pure-function unit test.
+      const dialog = initialDeleteDialog(target, false);
+      return {
+        ...dialog,
+        memberRows: target.members.map((member) => ({
+          repoPath: member.repoPath,
+          service: member.service,
+          branch: member.branch,
+          merged: false,
+          clean: true,
+          disposition: 'leave' as const,
+          statusError: 'no manifest',
+        })),
+      };
+    }
     return initialModifyDialog(target);
   });
 
@@ -209,6 +270,25 @@ export function EdtsZone({
   const clampedOtherServicesSelected = otherServices.length === 0 ? 0 : Math.min(otherServicesSelected, otherServices.length - 1);
   const focusedEdtService: ServiceBranchDivergence | undefined = edtServices[clampedEdtServicesSelected];
   const focusedOtherService: ServiceBranchDivergence | undefined = otherServices[clampedOtherServicesSelected];
+
+  // Story 5.5 (OVERFLOW_EDTS_LISTS): same unbounded-list corruption pattern as the Logs zone,
+  // confirmed by inspection — EDT SERVICES/OTHER SERVICES render every row with no cap. A rough
+  // total-rows budget for this zone's whole list column (top bar, zone-tab bar, footer, the
+  // EDTS pane above the splitter, both section headers, and the loading/error/issues lines)
+  // mirrors logs-zone.tsx's own CHROME_ROWS precedent ("an approximation is fine here") rather
+  // than a precise splitter-ratio measurement — this only adds a rendering-level bound around
+  // existing rows (Never: EDT SERVICES/OTHER SERVICES' own content/selection/action semantics
+  // stay untouched). Handed out top-down (EDT SERVICES first, OTHER SERVICES the remainder) so
+  // a short EDT SERVICES list leaves more room for OTHER SERVICES.
+  const windowSize = useWindowSize();
+  const servicesListsAvailableHeight = Math.max(windowSize.rows - EDTS_SERVICE_LISTS_CHROME_ROWS, 4);
+  const edtServicesMaxVisibleRows = servicesListsAvailableHeight;
+  // Review fix: an empty EDT SERVICES list still renders a 1-row placeholder ("No services in
+  // this EDT.") instead of the BoundedList's own 0 rows — `Math.min(edtServices.length, …)` was
+  // 0 for an empty list, under-counting what that section actually consumes and leaving OTHER
+  // SERVICES 1 row over budget.
+  const edtServicesConsumedRows = edtServices.length === 0 ? 1 : Math.min(edtServices.length, edtServicesMaxVisibleRows);
+  const otherServicesMaxVisibleRows = Math.max(1, servicesListsAvailableHeight - edtServicesConsumedRows);
 
   // Review fix (story 2.18): arrowing within the `edts` pane changes `focusedEdt` — and
   // therefore the contents of both partitioned service panes — without touching either pane's
@@ -341,6 +421,32 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         }
+      } else if (currentEdtAction.type === 'delete') {
+        // Boundary: "The active EDT can never be deleted ... reject before any git/file
+        // write." initialDeleteDialog itself enforces this at open time (isActive param) —
+        // the dialog still opens for an active target, just showing the rejection message
+        // (never auto-switched, per the same Boundary).
+        if (currentEdtAction.target !== 'select EDT') {
+          const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
+          if (targetEdt) {
+            setDialog(initialDeleteDialog(targetEdt, targetEdt.ulid === activeEdtUlid));
+            setCurrentEdtAction(null);
+          } else {
+            setDialog({ kind: 'none' });
+            setCurrentEdtAction(null);
+          }
+        } else {
+          // No topic specified - open delete for the focused EDT (mirrors modify's own
+          // no-topic fallback, unlike switch's "first non-active" — a delete on the focused
+          // active EDT is exactly the case that should surface the rejection message).
+          if (focusedEdt) {
+            setDialog(initialDeleteDialog(focusedEdt, focusedEdt.ulid === activeEdtUlid));
+            setCurrentEdtAction(null);
+          } else {
+            setDialog({ kind: 'none' });
+            setCurrentEdtAction(null);
+          }
+        }
       }
     }
   }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, focusedEdt, setDialog, setCurrentEdtAction]);
@@ -424,6 +530,31 @@ export function EdtsZone({
     createMemberBranchAction,
     renameBranchAction,
   });
+  const { handleDeleteDialogInput, loadMemberStatuses } = createDeleteDialogHandlers({
+    setDialog,
+    deleteEdtAction,
+    resolveMemberDeleteStatusesAction,
+    loadEdts,
+    loadEdtsBranches,
+    setCurrentEdtAction,
+  });
+
+  // Story 2.29: fetches the delete-confirm dialog's own per-member merge/clean statuses once,
+  // when it opens with memberRows === null (mirrors the branch-picker fetch effect above) —
+  // never fired for a `rejected` dialog (nothing to disposition there). Keyed on primitives
+  // (ulid + a loading/loaded flag), not the dialog object itself, for the same reason the
+  // branch-picker effect above is: a fresh `dialog` object on every keystroke must never
+  // re-trigger this fetch.
+  const deleteDialogTargetUlid = dialog.kind === 'delete-confirm' && !dialog.rejected ? dialog.target.ulid : null;
+  const deleteDialogNeedsStatuses = dialog.kind === 'delete-confirm' && !dialog.rejected && dialog.memberRows === null;
+  useEffect(() => {
+    if (deleteDialogTargetUlid === null || !deleteDialogNeedsStatuses) {
+      return;
+    }
+    const current = dialog as DeleteDialogState;
+    void loadMemberStatuses(current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteDialogTargetUlid, deleteDialogNeedsStatuses]);
 
   useInput((input, key) => {
     if (dialog.kind === 'create') {
@@ -444,6 +575,10 @@ export function EdtsZone({
     }
     if (dialog.kind === 'add-to-edt') {
       handleAddToEdtInput(dialog, input, key);
+      return;
+    }
+    if (dialog.kind === 'delete-confirm') {
+      handleDeleteDialogInput(dialog, input, key);
       return;
     }
 
@@ -595,14 +730,21 @@ export function EdtsZone({
                     {!loading && status !== 'error' && edtServices.length === 0 ? (
                       <Text color={colors['text-dim']}>No services in this EDT.</Text>
                     ) : null}
-                    {edtServices.map((service, index) => (
-                      <ListRow
-                        key={service.path}
-                        label={service.service}
-                        meta={formatServiceMeta(service)}
-                        selected={paneFocus === 'edt-services' && index === clampedEdtServicesSelected}
-                      />
-                    ))}
+                    {/* Story 5.5 (OVERFLOW_EDTS_LISTS): bounded to edtServicesMaxVisibleRows —
+                        content/selection/action semantics unchanged, only the rendered window. */}
+                    <BoundedList
+                      items={edtServices}
+                      maxVisibleRows={edtServicesMaxVisibleRows}
+                      cursorIndex={paneFocus === 'edt-services' ? clampedEdtServicesSelected : undefined}
+                      renderItem={(service, index) => (
+                        <ListRow
+                          key={service.path}
+                          label={service.service}
+                          meta={formatServiceMeta(service)}
+                          selected={paneFocus === 'edt-services' && index === clampedEdtServicesSelected}
+                        />
+                      )}
+                    />
                   </>
                 ) : (
                   <DimAnnotation text="No EDT selected" />
@@ -620,14 +762,20 @@ export function EdtsZone({
                 {!loading && status !== 'error' && otherServices.length === 0 ? (
                   <Text color={colors['text-dim']}>No managed services found.</Text>
                 ) : null}
-                {otherServices.map((service, index) => (
-                  <ListRow
-                    key={service.path}
-                    label={service.service}
-                    meta={formatServiceMeta(service)}
-                    selected={paneFocus === 'other-services' && index === clampedOtherServicesSelected}
-                  />
-                ))}
+                {/* Story 5.5 (OVERFLOW_EDTS_LISTS): bounded to otherServicesMaxVisibleRows. */}
+                <BoundedList
+                  items={otherServices}
+                  maxVisibleRows={otherServicesMaxVisibleRows}
+                  cursorIndex={paneFocus === 'other-services' ? clampedOtherServicesSelected : undefined}
+                  renderItem={(service, index) => (
+                    <ListRow
+                      key={service.path}
+                      label={service.service}
+                      meta={formatServiceMeta(service)}
+                      selected={paneFocus === 'other-services' && index === clampedOtherServicesSelected}
+                    />
+                  )}
+                />
               </Box>
             </Box>
           </Box>
@@ -680,6 +828,8 @@ export function EdtsZone({
       {dialog.kind === 'service-actions' ? <ServiceActionsDialogView dialog={dialog} /> : null}
 
       {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} /> : null}
+
+      {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
     </Box>
   );
 }
