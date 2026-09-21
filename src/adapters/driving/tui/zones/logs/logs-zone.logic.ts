@@ -491,6 +491,52 @@ export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
   };
 }
 
+// Extracted from logs-zone.tsx (refactor): the filter editor's own commit decision, shared by
+// every draft-mutating keystroke (Tab, Ctrl+←/→, ↑/↓ history browse, Backspace/Delete, typed
+// characters, and the grid recall). Story 5.2 (Design Notes): "compileLogFilter recomputes on
+// every editor keystroke (not just submit) so the inline regex error appears/clears live". The
+// draft itself always advances (so typed characters/level cycles are never lost); which of
+// `globalFilter`/`paneFilterUpdate` is non-null tells the caller (logs-zone.tsx) which piece of
+// committed state to update — at most one of them ever is, and neither is when the draft fails
+// to compile (Boundaries: "the previously-active filter ... stays in effect" on an invalid
+// regex) — the caller only ever needs to setFilterEditor(result.editor) plus, conditionally,
+// one of those two updates.
+export type FilterEditorDraftResult = {
+  editor: FilterEditorState;
+  globalFilter: LogFilterSpec | null;
+  paneFilterUpdate: { repoPath: string; spec: LogFilterSpec | null } | null;
+};
+
+export function resolveFilterEditorDraft(next: FilterEditorState): FilterEditorDraftResult {
+  const spec: LogFilterSpec = { mode: next.mode, query: next.query, level: next.level };
+  const compiled = compileLogFilter(spec);
+  if (!compiled.ok) {
+    return { editor: { ...next, error: compiled.error }, globalFilter: null, paneFilterUpdate: null };
+  }
+  if (next.scope === 'global') {
+    return { editor: { ...next, error: null }, globalFilter: spec, paneFilterUpdate: null };
+  }
+  const repoPath = next.repoPath;
+  if (repoPath === null) {
+    // Review fix: `scope === 'pane' && repoPath === null` is currently unreachable
+    // (openPaneFilterEditor always sets repoPath) but the type still permits it — rather than
+    // silently discarding a compiled spec with no feedback, surface it as an editor error.
+    return { editor: { ...next, error: 'no pane targeted' }, globalFilter: null, paneFilterUpdate: null };
+  }
+  // Review fix: committing a vacuous spec (deep-equal to DEFAULT_LOG_FILTER, e.g. after
+  // backspacing the query back to empty) as an explicit paneFilters[repoPath] entry left a
+  // no-op-but-present key — both the "pane filter: on" annotation and
+  // resolveFilterClearTarget's `hasOwnFilter` check key off entry *presence*, not content, so
+  // the pane kept reading as filtered even though its effective filter was a no-op. `null`
+  // instead removes the key exactly like the explicit-clear path (Escape / resolveFilterClearTarget)
+  // already does.
+  return {
+    editor: { ...next, error: null },
+    globalFilter: null,
+    paneFilterUpdate: { repoPath, spec: isDefaultLogFilterSpec(spec) ? null : spec },
+  };
+}
+
 // Boundaries: "A pane's effective filter is (engaged ? global : pass) AND (own ?? pass)" —
 // `global`/`own` are already resolved by the caller to `null` for whichever half of that
 // formula should pass everything (a disengaged pane passes `null` for `global`; a pane with
