@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, measureElement, Text, useInput, useWindowSize, type DOMElement } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
@@ -87,6 +88,20 @@ import {
 const HISTORY_GRID_CHROME_WIDTH = 6;
 const HISTORY_GRID_MIN_WIDTH = 10;
 const HISTORY_GRID_COLUMN_GAP = 1;
+// Story 5.5: the history grid browser's own available-*height* budget — ModalDialog's chrome
+// (double border top/bottom + padding top/bottom + title row + "──" separator = 6 rows) plus
+// this editor's own fixed rows above the grid (TextInputLine + Level line + the hint line
+// below the grid = 3 rows); a rough estimate mirrors CHROME_ROWS/PANE_CHROME_ROWS below ("an
+// approximation is fine here" — same precedent). The optional inline-error line is
+// deliberately not subtracted, so this budget stays slightly generous rather than short
+// whenever a regex draft is currently invalid.
+const HISTORY_GRID_CHROME_ROWS = 9;
+const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
+// Story 5.5: rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar,
+// footer, and the "LOGS" title row above it) — the list column and the pane grid are row
+// siblings sharing the exact same vertical extent, so this reuses the same estimate as
+// PANE_CHROME_ROWS' own sibling, CHROME_ROWS, below.
+const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
 
 function historyEntryLabel(entry: string): string {
   return entry;
@@ -336,6 +351,38 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Story 5.4: the history grid browser's own available width, mirroring command-bar.tsx's
   // own `availableWidth` computation (this grid renders inside the same ModalDialog chrome).
   const historyGridAvailableWidth = Math.max(windowSize.columns - HISTORY_GRID_CHROME_WIDTH, HISTORY_GRID_MIN_WIDTH);
+  // Story 5.5: same idea, vertically — the grid's own visible-rows budget (I/O matrix
+  // OVERFLOW_HISTORY_GRID), recalculated live off useWindowSize() on every resize.
+  const historyGridAvailableHeight = Math.max(windowSize.rows - HISTORY_GRID_CHROME_ROWS, HISTORY_GRID_MIN_VISIBLE_ROWS);
+
+  // Story 5.5 (EDITOR_OPEN_BEHIND_CONTENT): LogFilterEditor renders as a sibling *below* the
+  // "LOGS" + list/grid block, not a true overlay (Ink has no absolute positioning) — while it's
+  // open, its own rendered rows compete for the same terminal-row budget the list column's
+  // BoundedLists were computed against. The hints panel already goes away entirely while the
+  // editor is open (the pre-existing 5.4 focus-hidden fix below), but the two *service* lists
+  // don't — so this estimates the editor's own footprint (its fixed chrome/rows, plus the
+  // history-grid browser's own rows when that's open too, mirroring
+  // `historyGridAvailableHeight`'s own budget) and reserves that much off the list column's
+  // budget in addition to the header rows, so the two together still never exceed the terminal.
+  const filterEditorReservedRows =
+    filterEditor === null
+      ? 0
+      : HISTORY_GRID_CHROME_ROWS + (historyGridCursor === null ? 0 : Math.min(filterHistoryGridMaxRows, historyGridAvailableHeight));
+  // Story 5.5 (OVERFLOW_LOGS_LISTS): the list column's own total row budget — a row sibling of
+  // the pane grid, so it reuses gridAvailableHeight. Handed out top-down (EDT list, then OTHER
+  // list, then the hints panel) so a section shorter than its share leaves more room for the
+  // ones rendered after it; each BoundedList below only ever consumes what its own content
+  // actually needs (NO_OVERFLOW: nothing changes when everything already fits).
+  const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - filterEditorReservedRows, 3);
+  const edtListMaxVisibleRows = listsContentBudget;
+  // Review fix: an empty list still renders a 1-row placeholder ("No active EDT."/"No services
+  // in the active EDT."/"No other managed services.") instead of the BoundedList's own 0 rows —
+  // `Math.min(list.length, …)` was 0 for an empty list, under-counting what that section
+  // actually consumes and leaving whatever renders after it 1 row over budget.
+  const edtListConsumedRows = edtServices.length === 0 ? 1 : Math.min(edtServices.length, edtListMaxVisibleRows);
+  const otherListMaxVisibleRows = Math.max(1, listsContentBudget - edtListConsumedRows);
+  const otherListConsumedRows = otherServices.length === 0 ? 1 : Math.min(otherServices.length, otherListMaxVisibleRows);
+  const hintsMaxVisibleRows = Math.max(1, otherListMaxVisibleRows - otherListConsumedRows);
 
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
     const pane = logsPanes[repoPath];
@@ -850,41 +897,54 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
                 <DimAnnotation text="No services in the active EDT." />
               ) : null}
-              {edtServices.map((service, index) => {
-                const paneHealth = logsPanes[service.path]?.health ?? null;
-                return (
-                  <Box key={service.path} flexDirection="row">
-                    <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
-                    <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
-                    {paneHealth !== null ? (
-                      <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState(paneHealth)} />
-                        <Text color={colors['text-dim']}> {paneHealth}</Text>
-                      </Box>
-                    ) : null}
-                  </Box>
-                );
-              })}
+              {/* Story 5.5 (OVERFLOW_LOGS_LISTS): bounded to edtListMaxVisibleRows, following
+                  the cursor only while this list actually owns focus — otherwise the window
+                  anchors to the top, same as before this story. */}
+              <BoundedList
+                items={edtServices}
+                maxVisibleRows={edtListMaxVisibleRows}
+                cursorIndex={paneFocus === 'edt-list' ? clampedEdtCursor : undefined}
+                renderItem={(service, index) => {
+                  const paneHealth = logsPanes[service.path]?.health ?? null;
+                  return (
+                    <Box key={service.path} flexDirection="row">
+                      <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
+                      <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
+                      {paneHealth !== null ? (
+                        <Box marginLeft={1}>
+                          <StatusBadge state={healthBadgeState(paneHealth)} />
+                          <Text color={colors['text-dim']}> {paneHealth}</Text>
+                        </Box>
+                      ) : null}
+                    </Box>
+                  );
+                }}
+              />
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
                 <DimAnnotation text="No other managed services." />
               ) : null}
-              {otherServices.map((service, index) => {
-                const paneHealth = logsPanes[service.path]?.health ?? null;
-                return (
-                  <Box key={service.path} flexDirection="row">
-                    <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
-                    <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
-                    {paneHealth !== null ? (
-                      <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState(paneHealth)} />
-                        <Text color={colors['text-dim']}> {paneHealth}</Text>
-                      </Box>
-                    ) : null}
-                  </Box>
-                );
-              })}
+              <BoundedList
+                items={otherServices}
+                maxVisibleRows={otherListMaxVisibleRows}
+                cursorIndex={paneFocus === 'other-list' ? clampedOtherCursor : undefined}
+                renderItem={(service, index) => {
+                  const paneHealth = logsPanes[service.path]?.health ?? null;
+                  return (
+                    <Box key={service.path} flexDirection="row">
+                      <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
+                      <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
+                      {paneHealth !== null ? (
+                        <Box marginLeft={1}>
+                          <StatusBadge state={healthBadgeState(paneHealth)} />
+                          <Text color={colors['text-dim']}> {paneHealth}</Text>
+                        </Box>
+                      ) : null}
+                    </Box>
+                  );
+                }}
+              />
 
               {/* Amended 2026-09-20 (crash/corruption fix): every one of these hints is a
                   services-list keybinding (Space/Enter/Ctrl+A/t/o/p/Ctrl+↑↓/c/Ctrl+C/w/Ctrl+W)
@@ -900,25 +960,35 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   live services with a 100x30 terminal and zero panes open — Design Notes). Since
                   these keybindings are genuinely inert while the editor is open, hiding this
                   block then costs nothing functionally and reliably recovers the ~15 rows the
-                  editor needs. */}
+                  editor needs.
+                  Story 5.5: now additionally bounded (hintsMaxVisibleRows) rather than relying
+                  on this being "the last thing rendered" — the two lists above it can push it
+                  past the terminal's own row count on a small enough window even with the
+                  filter editor closed. */}
               {filterEditor === null ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
-                  <DimAnnotation text="[Space] toggle" />
-                  <DimAnnotation text="[Enter] preview" />
-                  <DimAnnotation text="[Ctrl+A] toggle all" />
-                  <DimAnnotation text={`[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`} />
-                  <DimAnnotation text={`[o] stdout ${visibility.showStdout ? 'on' : 'off'}`} />
-                  <DimAnnotation text={`[p] stderr ${visibility.showStderr ? 'on' : 'off'}`} />
-                  <DimAnnotation text="[Ctrl+↑/↓] scroll pane" />
-                  <DimAnnotation text="[c] clear focused pane" />
-                  <DimAnnotation text="[Ctrl+C] clear all panes" />
-                  <DimAnnotation text="[w] wrap/truncate this pane" />
-                  <DimAnnotation text="[Ctrl+W] wrap/truncate all" />
-                  <DimAnnotation text="[R] restart focused pane" />
-                  <DimAnnotation text="[/] edit global filter" />
-                  <DimAnnotation text="[f] edit this pane's filter" />
-                  <DimAnnotation text="[g] toggle global (pane)" />
-                  <DimAnnotation text="[Esc] clear filter (cascade)" />
+                  <BoundedList
+                    items={[
+                      '[Space] toggle',
+                      '[Enter] preview',
+                      '[Ctrl+A] toggle all',
+                      `[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`,
+                      `[o] stdout ${visibility.showStdout ? 'on' : 'off'}`,
+                      `[p] stderr ${visibility.showStderr ? 'on' : 'off'}`,
+                      '[Ctrl+↑/↓] scroll pane',
+                      '[c] clear focused pane',
+                      '[Ctrl+C] clear all panes',
+                      '[w] wrap/truncate this pane',
+                      '[Ctrl+W] wrap/truncate all',
+                      '[R] restart focused pane',
+                      '[/] edit global filter',
+                      "[f] edit this pane's filter",
+                      '[g] toggle global (pane)',
+                      '[Esc] clear filter (cascade)',
+                    ]}
+                    maxVisibleRows={hintsMaxVisibleRows}
+                    renderItem={(text, index) => <DimAnnotation key={index} text={text} />}
+                  />
                 </Box>
               ) : null}
             </Box>
@@ -954,6 +1024,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           gridCursor={historyGridCursor}
           gridScrollOffset={historyGridScroll}
           gridAvailableWidth={historyGridAvailableWidth}
+          gridAvailableHeight={historyGridAvailableHeight}
         />
       ) : null}
     </Box>
@@ -1213,6 +1284,7 @@ function LogFilterEditor({
   gridCursor,
   gridScrollOffset,
   gridAvailableWidth,
+  gridAvailableHeight,
 }: {
   editor: FilterEditorState;
   serviceName: string | null;
@@ -1221,12 +1293,28 @@ function LogFilterEditor({
   gridCursor: GridCursor | null;
   gridScrollOffset: number;
   gridAvailableWidth: number;
+  gridAvailableHeight: number;
 }) {
   const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
   // Story 5.4: the history grid browser — reuses command-bar.tsx's generalized grid primitives
   // over plain query strings (`getLabel = historyEntryLabel`, i.e. the identity function)
   // rather than a shared visual component (Code Map: "with its own small JSX loop").
-  const gridLayout = gridCursor !== null ? layoutCommandGrid(history, gridMaxRows, gridAvailableWidth, historyEntryLabel, gridScrollOffset) : null;
+  // Story 5.5 (OVERFLOW_HISTORY_GRID): a `verticalWindow` is now also passed — the grid gains
+  // vertical pagination the same way it already had horizontal truncation/scroll, centered on
+  // the highlighted cell's own row so it never scrolls out of view.
+  const gridLayout =
+    gridCursor !== null
+      ? layoutCommandGrid(history, gridMaxRows, gridAvailableWidth, historyEntryLabel, gridScrollOffset, {
+          maxVisibleRows: gridAvailableHeight,
+          cursorRow: gridCursor.row,
+        })
+      : null;
+  // Review fix: each column's width used to be computed from `gridLayout.columns` — already
+  // vertically sliced — so the widest entry could scroll out of the visible window and shrink
+  // the column, misaligning padding against the pre-5.5 stable width as the user scrolls
+  // vertically. Widths are the full, unsliced column's own (mirrors `groupCommandsByColumn`'s
+  // own column-major grouping, same source `useInput`'s row/cursor math already reads).
+  const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
   return (
     <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
       <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused={gridCursor === null} />
@@ -1236,27 +1324,32 @@ function LogFilterEditor({
         history.length === 0 ? (
           <DimAnnotation text="No history for this filter yet." />
         ) : (
-          <Box flexDirection="row">
-            {gridLayout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-            {gridLayout.columns.map((column, columnIndex) => {
-              const absoluteColumn = gridLayout.scrollOffset + columnIndex;
-              const width = columnDisplayWidth(column, historyEntryLabel);
-              return (
-                <Box key={absoluteColumn} flexDirection="column" marginRight={HISTORY_GRID_COLUMN_GAP}>
-                  {column.map((entry, rowIndex) => {
-                    const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === rowIndex;
-                    return (
-                      <Text key={`${absoluteColumn}-${rowIndex}`} color={isCursor ? colors.accent : colors['text-dim']}>
-                        {isCursor ? '› ' : '  '}
-                        {entry.padEnd(width)}
-                      </Text>
-                    );
-                  })}
-                </Box>
-              );
-            })}
-            {gridLayout.truncated.right ? <Text color={colors['text-dim']}> …</Text> : null}
-          </Box>
+          <>
+            {gridLayout.truncated.top ? <Text color={colors['text-dim']}>▲ more above</Text> : null}
+            <Box flexDirection="row">
+              {gridLayout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
+              {gridLayout.columns.map((column, columnIndex) => {
+                const absoluteColumn = gridLayout.scrollOffset + columnIndex;
+                const width = columnDisplayWidth(fullHistoryColumns[absoluteColumn] ?? column, historyEntryLabel);
+                return (
+                  <Box key={absoluteColumn} flexDirection="column" marginRight={HISTORY_GRID_COLUMN_GAP}>
+                    {column.map((entry, rowIndex) => {
+                      const absoluteRow = gridLayout.rowScrollOffset + rowIndex;
+                      const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === absoluteRow;
+                      return (
+                        <Text key={`${absoluteColumn}-${absoluteRow}`} color={isCursor ? colors.accent : colors['text-dim']}>
+                          {isCursor ? '› ' : '  '}
+                          {entry.padEnd(width)}
+                        </Text>
+                      );
+                    })}
+                  </Box>
+                );
+              })}
+              {gridLayout.truncated.right ? <Text color={colors['text-dim']}> …</Text> : null}
+            </Box>
+            {gridLayout.truncated.bottom ? <Text color={colors['text-dim']}>▼ more below</Text> : null}
+          </>
         )
       ) : null}
       <DimAnnotation
