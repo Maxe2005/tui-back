@@ -16,6 +16,13 @@ export {
   resolveHelpWindow,
   DEFAULT_HELP_VISIBLE_LINES,
 } from './keybinding-help.js';
+export {
+  BoundedList,
+  clampBoundedOffset,
+  resolveBoundedWindow,
+  resolveBoundedVisibility,
+} from './bounded-list.js';
+export type { BoundedListProps, BoundedListVisibility } from './bounded-list.js';
 export { CheckboxListItem } from './checkbox-list-item.js';
 export type { CheckboxListItemProps, ResolvedCheckboxItem } from './checkbox-list-item.js';
 export { resolveCheckboxItemLayout } from './checkbox-list-item.js';

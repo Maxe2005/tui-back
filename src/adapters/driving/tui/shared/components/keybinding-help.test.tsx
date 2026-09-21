@@ -7,7 +7,19 @@ import {
   resolveHelpScroll,
   resolveHelpWindow,
 } from './index.js';
+import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 import { renderToString } from './render-to-string.js';
+
+// Story 5.5: clampHelpOffset/resolveHelpWindow are now thin aliases for bounded-list.tsx's own
+// clampBoundedOffset/resolveBoundedWindow (the shared primitive every bounded surface in the
+// app reuses) — proves the extraction genuinely removed the duplicated window logic rather
+// than just renaming a second copy of it.
+describe('keybinding-help delegates to the shared bounded-list primitive (story 5.5)', () => {
+  it('clampHelpOffset/resolveHelpWindow are literally bounded-list.tsx\'s own exports', () => {
+    expect(clampHelpOffset).toBe(clampBoundedOffset);
+    expect(resolveHelpWindow).toBe(resolveBoundedWindow);
+  });
+});
 
 describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
   it('clamps negative and non-finite offsets to 0', () => {

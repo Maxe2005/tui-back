@@ -1,0 +1,170 @@
+// tui/shared/components/bounded-list: unit coverage for story 5.5's shared scrollable-window
+// primitive — the pure clamp/window helpers (extracted verbatim from keybinding-help.tsx's own
+// resolveHelpWindow/clampHelpOffset), the component's own indicator-aware windowing on top of
+// them, and the <BoundedList> component's rendered output (renderToString, mirroring
+// keybinding-help.test.tsx's own convention).
+import { describe, it, expect } from 'vitest';
+import { Text } from 'ink';
+import {
+  BoundedList,
+  clampBoundedOffset,
+  resolveBoundedVisibility,
+  resolveBoundedWindow,
+} from './bounded-list.js';
+import { renderToString } from './render-to-string.js';
+
+describe('clampBoundedOffset', () => {
+  it('clamps negative and non-finite offsets to 0', () => {
+    expect(clampBoundedOffset(-3, 10)).toBe(0);
+    expect(clampBoundedOffset(Number.NaN, 10)).toBe(0);
+    expect(clampBoundedOffset(Number.POSITIVE_INFINITY, 10)).toBe(0);
+  });
+
+  it('clamps offsets above the max to the max', () => {
+    expect(clampBoundedOffset(12, 10)).toBe(10);
+    expect(clampBoundedOffset(10, 10)).toBe(10);
+  });
+
+  it('clamps the max offset itself when non-finite or negative', () => {
+    expect(clampBoundedOffset(5, Number.NaN)).toBe(0);
+    expect(clampBoundedOffset(5, -1)).toBe(0);
+  });
+});
+
+describe('resolveBoundedWindow', () => {
+  const items = Array.from({ length: 20 }, (_, i) => `item-${i}`);
+
+  it('resolves the visible slice for the given offset and line count', () => {
+    const window = resolveBoundedWindow(items, 0, 5);
+    expect(window.visible).toEqual(['item-0', 'item-1', 'item-2', 'item-3', 'item-4']);
+    expect(window.scrollOffset).toBe(0);
+  });
+
+  it('clamps an out-of-range offset to the last full window', () => {
+    const window = resolveBoundedWindow(items, 100, 5);
+    expect(window.scrollOffset).toBe(15);
+    expect(window.visible).toEqual(['item-15', 'item-16', 'item-17', 'item-18', 'item-19']);
+  });
+});
+
+describe('resolveBoundedVisibility (NO_OVERFLOW / OVERFLOW)', () => {
+  it('NO_OVERFLOW: renders every item with no indicator when everything already fits', () => {
+    const items = ['a', 'b', 'c'];
+    const result = resolveBoundedVisibility(items, 5, undefined);
+    expect(result).toEqual({ visible: items, scrollOffset: 0, hasMoreAbove: false, hasMoreBelow: false });
+  });
+
+  it('OVERFLOW: anchors to the top with a "more below" indicator when there is no cursor to follow', () => {
+    const items = Array.from({ length: 10 }, (_, i) => `item-${i}`);
+    const result = resolveBoundedVisibility(items, 5, undefined);
+    expect(result.hasMoreAbove).toBe(false);
+    expect(result.hasMoreBelow).toBe(true);
+    expect(result.visible).toEqual(['item-0', 'item-1', 'item-2', 'item-3']);
+  });
+
+  it('never renders more total rows (items + indicators) than the given budget', () => {
+    const items = Array.from({ length: 50 }, (_, i) => `item-${i}`);
+    for (const cursorIndex of [0, 5, 24, 49, undefined]) {
+      const result = resolveBoundedVisibility(items, 6, cursorIndex);
+      const totalRows = result.visible.length + (result.hasMoreAbove ? 1 : 0) + (result.hasMoreBelow ? 1 : 0);
+      expect(totalRows).toBeLessThanOrEqual(6);
+    }
+  });
+
+  // Review fix: at the extreme end of the budget (1 or 2 total rows), the original two-pass
+  // reservation could floor `itemRows` at 1 on *both* passes and end up showing 1 item plus
+  // *both* indicators — 3 rows for a budget of 1. Concretely reachable via
+  // logs-zone.test.tsx's OVERFLOW_LOGS_LISTS test, where the hints panel's own budget computes
+  // to exactly 1. These assert the invariant holds at the tightest budgets, with and without a
+  // cursorIndex to follow (the no-cursorIndex case anchors to the top, so it can only ever need
+  // a "more below" indicator; the cursorIndex cases can land anywhere, including squarely in
+  // the middle where both directions are truncated).
+  it('never exceeds a maxVisibleRows: 1 budget, with or without a cursorIndex', () => {
+    const items = Array.from({ length: 20 }, (_, i) => `item-${i}`);
+    for (const cursorIndex of [undefined, 0, 10, 19]) {
+      const result = resolveBoundedVisibility(items, 1, cursorIndex);
+      const totalRows = result.visible.length + (result.hasMoreAbove ? 1 : 0) + (result.hasMoreBelow ? 1 : 0);
+      expect(totalRows).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('never exceeds a maxVisibleRows: 2 budget, with or without a cursorIndex', () => {
+    const items = Array.from({ length: 20 }, (_, i) => `item-${i}`);
+    for (const cursorIndex of [undefined, 0, 10, 19]) {
+      const result = resolveBoundedVisibility(items, 2, cursorIndex);
+      const totalRows = result.visible.length + (result.hasMoreAbove ? 1 : 0) + (result.hasMoreBelow ? 1 : 0);
+      expect(totalRows).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('at maxVisibleRows: 1 with no cursorIndex, shows the first item with no indicator (content wins over chrome)', () => {
+    const items = Array.from({ length: 20 }, (_, i) => `item-${i}`);
+    const result = resolveBoundedVisibility(items, 1, undefined);
+    expect(result.visible).toEqual(['item-0']);
+    expect(result.hasMoreAbove).toBe(false);
+    expect(result.hasMoreBelow).toBe(false);
+  });
+
+  it('keeps cursorIndex inside the visible window even after the second-pass budget shrink', () => {
+    // Regression guard: the original bug recomputed itemRows on the second pass but reused the
+    // *first* pass's rawOffset, which could leave the window not containing cursorIndex at all
+    // (e.g. cursorIndex: 5 against an 8-item list, budget 3, used to render only item-4).
+    const items = Array.from({ length: 8 }, (_, i) => `item-${i}`);
+    const result = resolveBoundedVisibility(items, 3, 5);
+    expect(result.visible).toContain('item-5');
+  });
+
+  it('centers the window on cursorIndex once scrolled, keeping the cursor row visible', () => {
+    const items = Array.from({ length: 30 }, (_, i) => `item-${i}`);
+    const result = resolveBoundedVisibility(items, 10, 15);
+    const cursorPosition = result.scrollOffset;
+    expect(15).toBeGreaterThanOrEqual(cursorPosition);
+    expect(15).toBeLessThan(cursorPosition + result.visible.length);
+    expect(result.hasMoreAbove).toBe(true);
+  });
+
+  it('shows a "more above" indicator only once scrolled past the first item', () => {
+    const items = Array.from({ length: 10 }, (_, i) => `item-${i}`);
+    expect(resolveBoundedVisibility(items, 5, 0).hasMoreAbove).toBe(false);
+    expect(resolveBoundedVisibility(items, 5, 9).hasMoreAbove).toBe(true);
+  });
+
+  it('shows a "more below" indicator only while the last item is out of view', () => {
+    const items = Array.from({ length: 10 }, (_, i) => `item-${i}`);
+    expect(resolveBoundedVisibility(items, 10, 0).hasMoreBelow).toBe(false);
+    expect(resolveBoundedVisibility(items, 5, 0).hasMoreBelow).toBe(true);
+  });
+});
+
+describe('<BoundedList> rendering', () => {
+  it('NO_OVERFLOW: renders every row and no indicator line when nothing overflows', async () => {
+    const output = await renderToString(
+      <BoundedList items={['alpha', 'beta', 'gamma']} maxVisibleRows={10} renderItem={(item) => <Text key={item}>{item}</Text>} />,
+    );
+    expect(output).toContain('alpha');
+    expect(output).toContain('beta');
+    expect(output).toContain('gamma');
+    expect(output).not.toContain('more above');
+    expect(output).not.toContain('more below');
+  });
+
+  it('OVERFLOW: hides rows past the budget and shows a "more below" indicator', async () => {
+    const items = Array.from({ length: 10 }, (_, i) => `item-${i}`);
+    const output = await renderToString(
+      <BoundedList items={items} maxVisibleRows={4} renderItem={(item) => <Text key={item}>{item}</Text>} />,
+    );
+    expect(output).toContain('item-0');
+    expect(output).not.toContain('item-9');
+    expect(output).toContain('more below');
+    expect(output).not.toContain('more above');
+  });
+
+  it('shows a "more above" indicator once the window is scrolled by following cursorIndex', async () => {
+    const items = Array.from({ length: 10 }, (_, i) => `item-${i}`);
+    const output = await renderToString(
+      <BoundedList items={items} maxVisibleRows={4} cursorIndex={9} renderItem={(item) => <Text key={item}>{item}</Text>} />,
+    );
+    expect(output).toContain('item-9');
+    expect(output).toContain('more above');
+  });
+});

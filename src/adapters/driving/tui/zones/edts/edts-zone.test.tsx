@@ -1405,6 +1405,65 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('api-gateway');
   });
 
+  // Story 5.5: bounds OTHER SERVICES (and EDT SERVICES) to the terminal's actual row count
+  // instead of rendering every row unconditionally (I/O matrix OVERFLOW_EDTS_LISTS) — the same
+  // unbounded-list corruption pattern as the Logs zone, confirmed by inspection here.
+  it('OVERFLOW_EDTS_LISTS: a very long OTHER SERVICES list is bounded with a "more below" indicator, never rendering past the terminal', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: Array.from({ length: 60 }, (_, i) => service({ service: `svc-${i}`, path: `/repos/svc-${i}` })),
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('svc-0');
+    expect(output).not.toContain('svc-59');
+    expect(output).toContain('more below');
+  });
+
+  // NO_OVERFLOW regression guard: a handful of services never triggers the indicator.
+  it('NO_OVERFLOW: a short services list renders with no scroll indicator', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'api-gateway', path: '/repos/api-gateway' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).not.toContain('more above');
+    expect(output).not.toContain('more below');
+  });
+
+  // Review fix: an empty EDT SERVICES list still renders a 1-row "No services in this EDT."
+  // placeholder instead of the BoundedList's own 0 rows — the budget handed to OTHER SERVICES
+  // used to not subtract that row, leaving it 1 row over its true remaining budget. 28 services
+  // is the exact boundary at the default 120x40 test terminal (servicesListsAvailableHeight
+  // 28, minus the 1 placeholder row = 27): pre-fix this count still fit (no indicator);
+  // post-fix it correctly overflows by exactly one.
+  it('review fix: the empty EDT SERVICES placeholder counts toward the budget OTHER SERVICES is handed', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: Array.from({ length: 28 }, (_, i) => service({ service: `svc-${i}`, path: `/repos/svc-${i}` })),
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('No services in this EDT.');
+    expect(output).toContain('more below');
+  });
+
   it('AC4: the EDT SERVICES contextual menu shows Remove / Change branch / a disabled Restart annotated "Available with Epic 5"', async () => {
     const store = createAppStore();
     const target = edtEntry({

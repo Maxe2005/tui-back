@@ -998,4 +998,174 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       await instance.waitUntilExit();
     }
   });
+
+  // Story 5.5: bounds the filter-history grid browser's own vertical extent to the terminal's
+  // actual row count (I/O matrix OVERFLOW_HISTORY_GRID/RESIZE_LIVE) — mirrors the grid's
+  // existing horizontal truncation/scroll, recomputed live off useWindowSize() on every resize
+  // rather than a value fixed at mount.
+  describe('history grid vertical pagination (story 5.5)', () => {
+    it('OVERFLOW_HISTORY_GRID & RESIZE_LIVE: the grid gains a "more below" indicator once the terminal shrinks below its row count, and loses it again once the terminal grows back', async () => {
+      const history = Array.from({ length: 10 }, (_, i) => `entry-${i}`);
+      const store = seedStore({ filterHistory: { 'global:text': history } });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+
+        await press(instance, stdin, '/');
+        await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0
+        let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(lastFrame).toContain('entry-0');
+        expect(lastFrame).not.toContain('more below');
+        expect(lastFrame).not.toContain('more above');
+
+        // Shrinks well below what the 8-row (default) first column needs.
+        stdout.rows = 10;
+        stdout.emit('resize');
+        await instance.waitUntilRenderFlush();
+        await instance.waitUntilRenderFlush();
+        lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(lastFrame).toContain('more below');
+        expect(lastFrame).not.toContain('more above');
+
+        // Grows back to the original size — the grid un-paginates, no visible regression.
+        stdout.rows = 24;
+        stdout.emit('resize');
+        await instance.waitUntilRenderFlush();
+        await instance.waitUntilRenderFlush();
+        lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(lastFrame).not.toContain('more below');
+        expect(lastFrame).not.toContain('more above');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    // Review fix: `GridCursor.row` is an absolute index into the *full* (unsliced) column —
+    // `historyGridCursor` and `commandAtGridCursor`'s own lookup both use the full
+    // `groupCommandsByColumn` output, never the vertically-windowed `layoutCommandGrid` result
+    // (that's only ever built for rendering) — so scrolling the grid down must never change
+    // which entry Enter actually recalls. Exactly 8 entries keeps every one of them in a single
+    // column (default filterHistoryGridMaxRows), so ↓ presses move the cursor within that one
+    // column; shrinking the terminal forces rowScrollOffset > 0 partway through.
+    it('recalls the correct entry after scrolling the grid past rowScrollOffset > 0, not an off-by-rowScrollOffset one', async () => {
+      const history = Array.from({ length: 8 }, (_, i) => `entry-${i}`);
+      const store = seedStore({ filterHistory: { 'global:text': history } });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+
+        await press(instance, stdin, '/');
+        await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0
+
+        // Shrinks enough that the 8-row column can't fit without vertical pagination.
+        stdout.rows = 11;
+        stdout.emit('resize');
+        await instance.waitUntilRenderFlush();
+        await instance.waitUntilRenderFlush();
+
+        // Walks the cursor down to row 5 — past where the window must have scrolled
+        // (rowScrollOffset > 0) to keep it visible under the shrunk budget.
+        for (let i = 0; i < 5; i += 1) {
+          await press(instance, stdin, KEYS.down);
+        }
+        let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(lastFrame).toContain('more above'); // proves rowScrollOffset > 0 at this point
+
+        await press(instance, stdin, KEYS.enter);
+        lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(lastFrame).toContain('Text: entry-5');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    // Review fix: a column's display width used to be computed from `gridLayout.columns` —
+    // already vertically sliced — so its widest entry scrolling out of view (via the second
+    // column's own row navigation) shrank the column and misaligned every column after it. Two
+    // columns of 5 rows each (filterHistoryGridMaxRows: 5), the widest entry pinned to column
+    // 0's own top row: scrolling column 0 down until that entry is no longer visible must not
+    // move where column 1's entries start.
+    it('keeps a column\'s display width stable as its own vertical scroll changes (column 1 never shifts)', async () => {
+      const history = ['LONGLONGLONGLONGLONGLONG', 'e1', 'e2', 'e3', 'e4', 'f5', 'f6', 'f7', 'f8', 'f9'];
+      const store = seedStore({ filterHistory: { 'global:text': history } });
+      store.setState({
+        settings: { ...store.getState().settings, logs: { ...store.getState().settings.logs, filterHistoryGridMaxRows: 5 } },
+      });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+
+        await press(instance, stdin, '/');
+        await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0 — the wide entry is visible here
+
+        stdout.rows = 10; // forces vertical pagination on the 5-row-tall column 0
+        stdout.emit('resize');
+        await instance.waitUntilRenderFlush();
+        await instance.waitUntilRenderFlush();
+
+        let frame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        const wideEntryLine = frame.split('\n').find((line) => line.includes('LONGLONGLONGLONGLONGLONG'));
+        const column1StartWithWideEntryVisible = wideEntryLine?.indexOf('f5');
+        expect(column1StartWithWideEntryVisible).toBeGreaterThan(0);
+
+        // Scrolls column 0 down past the wide entry (row 0) to row 4 — it's no longer rendered.
+        for (let i = 0; i < 4; i += 1) {
+          await press(instance, stdin, KEYS.down);
+        }
+        frame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(frame).not.toContain('LONGLONGLONGLONGLONGLONG');
+        const shortEntryLine = frame.split('\n').find((line) => line.includes('e3'));
+        const column1StartWithWideEntryHidden = shortEntryLine?.indexOf('f8');
+
+        expect(column1StartWithWideEntryHidden).toBe(column1StartWithWideEntryVisible);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    // I/O matrix EDITOR_OPEN_BEHIND_CONTENT: the editor renders as a sibling *below* the
+    // "LOGS" + list/grid block (Ink has no absolute positioning), so its own rows compete with
+    // the still-mounted service lists/hints panel/pane grid for the same terminal-row budget.
+    // Seeds enough services that the lists would overflow on their own, then opens the global
+    // filter editor and asserts the combined frame still respects both halves of story 5.4's
+    // and this story's own contracts: the hints panel stays hidden (5.4's focus-fix, not
+    // undone) and the service list behind the editor is still bounded rather than dumping
+    // every row now that the editor's own body is also competing for rows.
+    it('EDITOR_OPEN_BEHIND_CONTENT: opening the filter editor over an overflowing services list keeps the hints panel hidden and the list itself bounded', async () => {
+      const store = seedStore({
+        edtsBranches: Array.from({ length: 60 }, (_, i) => service({ service: `svc-${i}`, path: `/repos/svc-${i}` })),
+      });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+
+        // Before the editor opens: an overflowing OTHER SERVICES list already shows the
+        // story's own bounded-window indicator (regression guard for the scenario the editor
+        // is about to be opened on top of).
+        let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
+        expect(lastFrame).toContain('more below');
+
+        await press(instance, stdin, '/');
+        lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
+        expect(lastFrame).toContain('GLOBAL LOG FILTER');
+
+        // 5.4's existing focus-hidden-while-editing fix survives this story's changes: none of
+        // the services-list keybinding hints render while the editor owns input.
+        expect(lastFrame).not.toContain('[Space] toggle');
+        expect(lastFrame).not.toContain('[Ctrl+A] toggle all');
+
+        // The service list mounted behind the editor is still present but bounded, not an
+        // unconditional dump of all 60 rows now that the editor's own body also needs rows.
+        expect(lastFrame).toContain('svc-0');
+        expect(lastFrame).not.toContain('svc-59');
+        expect(lastFrame).toContain('more below');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+  });
 });

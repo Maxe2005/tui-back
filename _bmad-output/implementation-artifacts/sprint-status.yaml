@@ -42,6 +42,7 @@
 
 generated: 2026-08-11
 last_updated: 2026-09-21
+# 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to review after code-review + patch loop (bmad-build).
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) started (bmad-build).
 # 2026-09-20: Sprint Change Proposal (sprint-change-proposal-2026-09-20.md) appended story 5-5
 # (bound list & filter-editor height to the terminal window) to epic-5 — new backlog entry
@@ -134,7 +135,7 @@ development_status:
   5-2-filter-the-aggregated-stream: done
   5-3-inline-service-health-restart-control: review
   5-4-filter-history-recall: done
-  5-5-bound-list-filter-editor-height-to-the-terminal-window: in-progress
+  5-5-bound-list-filter-editor-height-to-the-terminal-window: review
   epic-5-retrospective: optional
 
   epic-6: backlog
