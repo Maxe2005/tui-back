@@ -55,7 +55,7 @@ async function type(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStrea
 function mount(
   store: ReturnType<typeof createAppStore>,
   extraProps: {
-    initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' | 'service-actions' | 'add-to-edt';
+    initialDialogKind?: 'create' | 'switch-confirm' | 'switch-blocked' | 'modify' | 'service-actions' | 'add-to-edt' | 'delete-confirm' | 'delete-confirm-rejected';
   } = {},
 ) {
   const stdout = new FakeTtyStdout();
@@ -708,6 +708,43 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  it('story 2.32: Left/Backspace edit the topic field at the caret through a real keypress round-trip, not always at the end', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // AC1: zero EDTs -> the create prompt auto-opens, topic-focused by default.
+      await type(instance, stdin, 'abd'); // cursor trails at 3
+      await press(instance, stdin, KEYS.left); // cursor -> 2
+      // Mid-string insert (I/O matrix): typing 'c' at cursor 2 in "abd" must produce "abcd" —
+      // if Left had stayed a no-op (pre-story behavior), this would append at the end instead,
+      // producing "abdc".
+      await type(instance, stdin, 'c');
+      expect(stdout.output).toContain('Topic: abcd');
+      expect(stdout.output).not.toContain('Topic: abdc');
+
+      await press(instance, stdin, KEYS.home); // cursor -> 0
+      await press(instance, stdin, KEYS.backspace); // cursor:0 -> no-op (I/O matrix)
+      expect(stdout.output).toContain('Topic: abcd');
+
+      await press(instance, stdin, KEYS.end); // cursor -> 4 (value.length)
+      await press(instance, stdin, KEYS.backspace); // removes 'd' before cursor
+      expect(stdout.output).toContain('Topic: abc');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('a zone dialog sets zoneInputCaptured so a typed "?" never opens global help while it is open', async () => {
     const store = createAppStore();
     store.setState({
@@ -902,6 +939,60 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       // suggestBranchNameFromTopic('Fix Auth Bug') -> 'fix-auth-bug', pre-filled without ever
       // typing into the field.
       expect(stdout.output).toContain('Branch name: fix-auth-bug');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.32 (code review): a pure cursor move on the branch-name field never freezes it out of topic-slug auto-fill', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'Fix Auth Bug');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.space); // select svc-a -> branchName auto-fills 'fix-auth-bug' (untouched)
+      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // confirm base-branch picker -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name, focused: 'fix-auth-bug'
+      expect(stdout.output).toContain('Branch name: fix-auth-bug');
+
+      // A pure caret move — no typing — must never mark the field touched (only an actual
+      // value change may opt it out of future auto-fill, per prefillBranchNames' own
+      // doc comment and this story's Boundaries).
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.home);
+
+      await press(instance, stdin, KEYS.tab); // branch-name (grouped) -> wraps back to topic
+
+      // Clear and retype the topic — a genuinely new topic slug only shows up in the
+      // branch-name field if it's still untouched. Captured *after* the assertion above (which
+      // legitimately saw "fix-auth-bug" earlier) so the "never resurrected" check below only
+      // looks at frames rendered from here on.
+      const beforeRetype = stdout.output.length;
+      for (let i = 0; i < 'Fix Auth Bug'.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await type(instance, stdin, 'New Auth');
+      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.tab); // members -> branch-base: re-triggers prefillBranchNames
+
+      // If the earlier cursor-only move had wrongly set branchNameTouched, every frame from
+      // here on would still read 'fix-auth-bug' (frozen) instead of picking up the new topic's
+      // slug.
+      expect(stdout.output).toContain('Branch name: new-auth');
+      expect(stdout.output.slice(beforeRetype)).not.toContain('Branch name: fix-auth-bug');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1529,6 +1620,200 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await pressEscape(instance, stdin);
 
       expect(store.getState().quitRequested).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+// ==========================================================================================
+// Story 2.29 — delete an EDT (real-keypress coverage: toggling a member's disposition and
+// confirming/cancelling are only exercisable through a real Ink useInput round-trip).
+// ==========================================================================================
+
+describe('EdtsZone real-keypress interactions (story 2.29, delete an EDT)', () => {
+  it('confirms deletion with the default (all "leave") dispositions when nothing is toggled', async () => {
+    const store = createAppStore();
+    const target = edt({
+      ulid: 'target-ulid',
+      topic: 'demo',
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    });
+    const deleteCalls: Array<{ topic: string; dispositions: Record<string, 'leave' | 'delete'> }> = [];
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      resolveMemberDeleteStatuses: async () => [{ repoPath: '/repo/a', service: 'svc-a', branch: 'feat/a', merged: false, clean: true }],
+      deleteEdt: async (params) => {
+        deleteCalls.push(params);
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [{ service: 'svc-a', outcome: 'left' }] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store, { initialDialogKind: 'delete-confirm' });
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('DELETE EDT');
+      expect(stdout.output).toContain('svc-a');
+
+      await press(instance, stdin, KEYS.enter); // confirm
+      await instance.waitUntilRenderFlush();
+
+      expect(deleteCalls).toEqual([{ topic: 'demo', dispositions: { '/repo/a': 'leave' } }]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space toggles a member row to "delete" before confirming', async () => {
+    const store = createAppStore();
+    const target = edt({
+      ulid: 'target-ulid',
+      topic: 'demo',
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    });
+    const deleteCalls: Array<{ topic: string; dispositions: Record<string, 'leave' | 'delete'> }> = [];
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      resolveMemberDeleteStatuses: async () => [{ repoPath: '/repo/a', service: 'svc-a', branch: 'feat/a', merged: false, clean: true }],
+      deleteEdt: async (params) => {
+        deleteCalls.push(params);
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [{ service: 'svc-a', outcome: 'deleted' }] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store, { initialDialogKind: 'delete-confirm' });
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.space); // toggle svc-a to "delete"
+      await press(instance, stdin, KEYS.enter); // confirm
+      await instance.waitUntilRenderFlush();
+
+      expect(deleteCalls).toEqual([{ topic: 'demo', dispositions: { '/repo/a': 'delete' } }]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a per-branch collision (branch-owned-by-other-edt) renders as a plain line, never a "try a different branch" retry action', async () => {
+    const store = createAppStore();
+    const target = edt({
+      ulid: 'target-ulid',
+      topic: 'demo',
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    });
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      resolveMemberDeleteStatuses: async () => [{ repoPath: '/repo/a', service: 'svc-a', branch: 'feat/a', merged: true, clean: true }],
+      deleteEdt: async () => ({
+        ok: true,
+        data: {
+          ulid: target.ulid,
+          topic: target.topic,
+          results: [{ service: 'svc-a', outcome: 'failed', detail: { code: 'branch-owned-by-other-edt', message: 'Branch already claimed' } }],
+        },
+      }),
+    });
+
+    const { instance, stdout, stdin } = mount(store, { initialDialogKind: 'delete-confirm' });
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.enter); // confirm (default: merged+clean -> "delete")
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('Branch already claimed');
+      expect(stdout.output).not.toContain('try a different branch');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Escape cancels the delete-confirm dialog without ever calling deleteEdt', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'target-ulid', topic: 'demo' });
+    let deleteCalls = 0;
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      resolveMemberDeleteStatuses: async () => [],
+      deleteEdt: async () => {
+        deleteCalls += 1;
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [] } };
+      },
+    });
+
+    const { instance, stdin } = mount(store, { initialDialogKind: 'delete-confirm' });
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await pressEscape(instance, stdin);
+
+      expect(deleteCalls).toBe(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // I/O matrix: "Delete the active EDT" -> rejected before any write, never auto-switched —
+  // only Escape is ever offered, Enter/Space are inert.
+  it('rejects the active EDT: Enter/Space are inert, only Escape closes the dialog', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'active-ulid', topic: 'demo' });
+    let deleteCalls = 0;
+    let statusCalls = 0;
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      resolveMemberDeleteStatuses: async () => {
+        statusCalls += 1;
+        return [];
+      },
+      deleteEdt: async () => {
+        deleteCalls += 1;
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store, { initialDialogKind: 'delete-confirm-rejected' });
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('active EDT');
+
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter);
+      await instance.waitUntilRenderFlush();
+
+      expect(deleteCalls).toBe(0);
+      // Never even fetches member statuses — there is nothing to disposition (Boundaries:
+      // "reject before any git/file write").
+      expect(statusCalls).toBe(0);
+
+      await pressEscape(instance, stdin);
+      expect(store.getState().currentEdtAction).toBeNull();
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

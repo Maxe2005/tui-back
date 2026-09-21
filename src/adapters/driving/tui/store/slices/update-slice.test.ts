@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../core/result.js';
 import type { ContainerPort } from '../../../../../core/ports/container.js';
+import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../../core/ports/git.js';
 import type { LockPort } from '../../../../../core/ports/lock.js';
@@ -63,6 +64,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
@@ -79,12 +82,15 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     ),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
   };
   const state: StatePort = {
     readActiveEdt: vi.fn(async () => ok('edt-1')),
     writeActiveEdt: vi.fn(async () => ok(undefined)),
     readSplitterRatios: vi.fn(async () => ok(null)),
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
@@ -100,12 +106,19 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
     save: vi.fn(async () => ok(undefined)),
   };
+  const docker: DockerPort = {
+    streamLogs: vi.fn(() => () => {}),
+    fetchLogsBefore: vi.fn(async () => ok([])),
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    restartContainer: vi.fn(async () => ok(undefined)),
+  };
   return {
     registry,
     manifest,
     git,
     container,
     migration,
+    docker,
     edtRegistry,
     state,
     lock,
@@ -166,6 +179,8 @@ describe('update slice', () => {
       writeActiveEdt: vi.fn(async () => ok(undefined)),
       readSplitterRatios: vi.fn(async () => ok(null)),
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -324,6 +339,7 @@ describe('update slice', () => {
       list: vi.fn(async () => ok([])),
       setStatus: vi.fn(async () => err('edt-not-found', 'gone')),
       update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry }));
     store.setState({ activeEdt: 'edt-gone', updateStatus: 'running' });
@@ -344,6 +360,7 @@ describe('update slice', () => {
         throw new Error('disk on fire');
       }),
       update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry }));
     store.setState({ activeEdt: 'edt-1', updateStatus: 'running' });

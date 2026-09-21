@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
+  summary: Cursor indexing throughout `TextInputLine`'s slicing, `nextTextInputValue`, and `branch-picker.tsx`'s local `applyTextInput` operates on raw UTF-16 code units with no surrogate-pair/combining-mark awareness, so mid-string cursor positioning (new in this story) can land between the two halves of a surrogate pair or split a combining sequence for any free-text field containing non-ASCII characters (the topic field especially).
+  evidence: `src/adapters/driving/tui/shared/components/text-input-line.tsx`'s `value.slice(position, position + 1)` and both `nextTextInputValue` (`edts-zone.logic.ts`) and `applyTextInput` (`branch-picker.tsx`)'s Left/Right/Backspace/Delete all index by raw string length/slice, never by code point. Surfaced incidentally by review (blind-hunter + edge-case-hunter); pre-story `TextInputLine` had no mid-string positioning at all (trailing-only), so this specific failure mode is new, but a full fix (code-point-aware stepping via `Array.from`/`Intl.Segmenter`) is non-trivial and out of this story's frozen scope. **Track:** revisit if a real topic/branch name with emoji or combining characters is ever observed hitting this.
+
+## Deferred from: planning of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
+  summary: Migrate `command-bar.tsx`'s query input and `repo-registry-screen.tsx`'s root-path field onto the now-cursor-aware `TextInputLine`/`nextTextInputValue` (replacing their own hand-rolled `typeCommandQueryChar`/`backspaceCommandQuery` and `typeRootInputChar`/`backspaceRootInput` pairs), plus making `TextInputLine`'s `label` prop optional for the command bar's label-less rendering.
+  evidence: the full story 2.32 spec (core cursor primitive + EDT-zone/branch-picker adoption + these two migrations + optional label) measured ~2503 tokens, well past the 1600-token scope-standard threshold. The story's own implementation notes already sequence these two migrations after the EDT-zone/branch-picker work ("Sequence command-bar/registry-screen migrations after the EDT-zone fields are done, so the extended `nextTextInputValue` contract is proven first where it has the most callers"), making this a natural, low-risk split point rather than an artificial one.
+
 ## Deferred from: review of 2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current (2026-09-16)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
@@ -357,6 +369,24 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: The spec's own `## Spec Change Log` section is empty even though its Design Notes "Implementation addendum" documents a materially new core API surface (`CreateBranchOptions.bases`, a change to `resolveMemberBranch`) that was not in the original frozen Code Map.
   evidence: `spec-2-27-...md`'s `## Spec Change Log` section has no entries; the addendum under `## Design Notes` reads like exactly the content that section exists for. **Track:** process note for spec hygiene — no code impact.
 
+## Deferred from: code review of 2-29-delete-an-edt (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `delete-dialog.tsx` never calls `logEdtAction` for the active-EDT-rejection path, unlike every sibling EDT dialog (create/switch/modify/add-to-edt/service-actions), which all log an equivalent rejection.
+  evidence: the dialog's own in-code comment justifies skipping the log for the *successful*/partial-failure paths (the EDT's SQLite file, which hosts the action log, is already gone by then per AD-7) but that reasoning does not extend to the `rejected` (active-EDT) state, where the file is still present and untouched. Intent is genuinely ambiguous — the frozen spec never mentions action-log behavior for delete — so this wasn't treated as a blocking bad_spec finding. **Track:** get an explicit human call on whether a delete rejection should be logged, next time this dialog or the action-log convention is touched.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `edt-delete <topic>` gives zero feedback when `<topic>` matches no registered EDT — the dialog-opening effect just closes silently (`setDialog({ kind: 'none' })`).
+  evidence: `edts-zone.tsx`'s `currentEdtAction` effect already behaves identically for `edt-switch <topic>`/`edt-modify <topic>` with an unmatched topic — a pre-existing, story-independent convention this story's `delete` branch simply mirrors rather than introduces. **Track:** revisit for all three commands together next time this effect is touched; arguably riskier for a destructive action than for switch/modify.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `delete-dialog.tsx`'s `submitDelete` (and every sibling confirm dialog's own submit handler) reads `current.submitting` from the closure captured at call time rather than freshly from state, so two `Enter` keypresses arriving before the first `setDialog({submitting: true})` update is observed could invoke the delete action twice concurrently.
+  evidence: `switch-dialog.tsx`'s `handleSwitchConfirm` guards re-entrancy the exact same way (`current.submitting`, not a synchronous ref) — a pre-existing pattern across every confirm-style EDT dialog, not specific to this story, and each real keypress is processed by Ink's `useInput` one at a time in practice. **Track:** if this is ever observed in practice (e.g. key-repeat, programmatic double-dispatch), switch every confirm dialog to a synchronous `useRef` in-flight guard together.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
+  summary: `tui-back edt delete <topic>` cannot delete an EDT whose topic literally begins with `--` — the positional-argument parser treats any leading-`--` token as an unknown option, with no `--` end-of-options escape hatch.
+  evidence: `runEdtDelete` (`src/adapters/driving/cli/subcommands.ts`) parses `<topic>` as the first non-flag token, per this story's own approved spec/Code Map (`tui-back edt delete <topic> [--branches ...]`, deliberately positional unlike `create`/`switch`/`modify`'s `--topic`/`--to` flags) — changing the argument shape now would be a disruptive, low-value change for an unlikely topic name. **Track:** add a `--` end-of-options convention if this is ever hit in practice.
+
 ## Deferred from: code review of 3-1-group-update-pull-restart-edt-scoped (2026-09-17)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-1-group-update-pull-restart-edt-scoped.md`
@@ -383,3 +413,35 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
   summary: The resolution modal names the blocked service/repo/kind but never lists which paths are dirty or conflicted, so the developer chooses stash/editor/cancel without seeing the file list.
   evidence: `UpdateBlocker` in `src/core/scripts/group-update.ts` carries no path list and `formatBlockerBody` in `src/adapters/driving/tui/zones/update/update-zone.tsx` renders kind text only. Surfaced by review (blind-hunter); widening the seam shape is extra scope beyond the frozen spec. **Track:** carry the dirty/unmerged path list through the blocker the next time the seam shape is touched.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-1-aggregated-live-log-stream.md`
+  summary: No automatic reconnect/retry when a live log stream dies mid-flight (`streamError` surfaced via `onUpdate`) — the only recovery path is manually deselecting and reselecting the same service, with no UI hint that this is expected.
+  evidence: `LogsManager.subscribe` never retries after the adapter reports a mid-stream failure; the only way to re-run `docker.streamLogs` for that key is a fresh `subscribeLogsPane` call, triggered today only by a selection toggle. **Track:** design a reconnect/backoff strategy alongside story 5.3's health-status work, since automatic recovery is conceptually adjacent to health monitoring and out of story 5.1's frozen scope.
+
+## Deferred from: code review of 5-2-filter-the-aggregated-stream (2026-09-18)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-2-filter-the-aggregated-stream.md`
+  summary: `compileLogFilter`'s regex mode passes the user-typed query straight into `new RegExp(spec.query, 'i')` with no complexity/length guard, so a pathological pattern (e.g. `(a+)+$`) tested against buffered log lines on every render could hang the render loop.
+  evidence: `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`'s `compileLogFilter` only catches a `RegExp` *construction* syntax error, never a slow-to-evaluate pattern; surfaced incidentally by review (blind-hunter), not required by the story's frozen scope (which only mandates rejecting a pattern that fails to compile). **Track:** revisit if a real hang is ever observed — options include a regex-complexity heuristic, a `RegExp` evaluation timeout (needs a worker/async boundary Ink's synchronous render doesn't have today), or documenting it as an accepted self-inflicted risk (the user only filters their own local session's logs, not shared/untrusted input).
+
+## Deferred from: code review of 5-4-filter-history-recall (2026-09-20)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
+  summary: A persisted filter-history list's length isn't capped anywhere except at commit time (`pushFilterHistoryEntry`'s trim), and `stateSchema.filterHistory` has no `.max()` on array length or key count.
+  evidence: If `settings.logs.filterHistorySize` is lowered after a list already grew larger, or `state.json` is hand-edited with an oversized array, `loadFilterHistory` loads it verbatim and the grid browser shows more entries than the configured max until the next commit for that exact scope+mode key happens to trim it; the zod schema (`src/adapters/driven/state/schema.ts`) accepts an unbounded map/array. The frozen spec only asked for trimming "on commit," so this matches the letter of the spec — surfaced by review (blind-hunter) as a hardening gap, not a story-scope violation. **Track:** enforce the cap on load too (and/or add a schema `.max()`) next time this area is touched.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
+  summary: No garbage collection (or manual clear path) exists for a service's filter history once that service is removed/renamed in the manifest, and the "Clear a service's filter history" drill-down list gives no indication of which services actually have history or a way to clear several at once.
+  evidence: History is keyed by absolute `repoPath` in `state.json` forever; the Settings screen's per-service clear list (`settings-screen.tsx`) is built from `edtsBranches` (currently-known services only), so an orphaned entry for a removed/renamed service is permanently untargetable from the UI. Surfaced by review (blind-hunter); not required by the frozen spec, which doesn't mention manifest-removal handling. **Track:** revisit alongside any future manifest-service-removal story, or if `state.json` growth is ever observed.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
+  summary: "Clear global filter history" and "Clear a service's filter history" are both immediately destructive with no confirmation prompt or undo, and the Logs settings tab's row-cursor hint text doesn't distinguish which of the two rows fires immediately vs. which merely opens a submenu.
+  evidence: In `settings-screen.tsx`, `Enter`/`Space` on "Clear global filter history" wipes both global lists (text+regex) on the spot; "Clear a service's filter history" only drills into a sub-list requiring one more `Enter`. The frozen spec asked only for "actions to clear history globally or per service," not for confirmation UX, so this isn't a spec violation — surfaced by review (blind-hunter) as a usability-safety gap. **Track:** revisit if an accidental-wipe complaint is ever reported, or when the settings screen next gets a confirmation-dialog primitive for any other destructive action.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
+  summary: The `filterHistorySize` settings row has no digit-preset quick-jump, unlike its siblings `bufferSize` (x100 presets) and `filterHistoryGridMaxRows` (1-9 presets) — reaching either end of its 1-200 range takes many repeated Left/Right presses.
+  evidence: `settings-screen.tsx`'s `filterHistorySize` row only wires Left/Right step-adjust, no `parse*Digit` handler; every other numeric field on this tab (and the Command Palette tab) has one. Surfaced by review (blind-hunter) as a UX-consistency gap; the frozen spec's Boundaries named only the MIN/MAX-constant mirroring convention, not the full digit-preset idiom, so this wasn't a clear-cut spec requirement. **Track:** add a digit-preset (e.g. digit × 10) next time this tab is touched.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
+  summary: `filterHistoryKeyString`'s flat `service:${repoPath}:${mode}` encoding is ambiguous if a `repoPath` ever contains a literal colon (e.g. a Windows-style path) — safe today since the key is used only opaquely, but fragile for any future code that needs to decode it.
+  evidence: `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`'s `filterHistoryKeyString` joins scope/repoPath/mode with `:` and is never parsed back today. Surfaced by review (blind-hunter). **Track:** switch to a safer separator or a structured (non-string) key before any decode-needing code (e.g. the manifest-removal GC above) is written against it.

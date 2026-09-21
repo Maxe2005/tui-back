@@ -5,6 +5,11 @@ export type TextInputLineProps = {
   label: string;
   value: string;
   focused?: boolean;
+  // Story 2.32: the caret's position within `value`, in [0, value.length]. Defaults to
+  // `value.length` (today's always-trailing look) so every caller that omits it — still most of
+  // them, per the story's deferred command-bar/repo-registry-screen adoption — renders
+  // identically to before this story.
+  cursor?: number;
 };
 
 export type ResolvedTextInputLine = {
@@ -21,17 +26,38 @@ export function resolveTextInputLineLayout(props: TextInputLineProps): ResolvedT
 }
 
 export function TextInputLine(props: TextInputLineProps) {
-  const { label, value, focused = false } = props;
+  const { label, value, focused = false, cursor } = props;
   const layout = resolveTextInputLineLayout(props);
+  if (!layout.showCursor) {
+    // Unfocused: no caret to place — render exactly as before this story.
+    return (
+      <Box flexDirection="column">
+        <Box>
+          <Text color={layout.labelColor}>
+            {label}: {value}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+  // Clamp defensively — a caller-supplied cursor out of [0, value.length] must never crash the
+  // render or slice into nonsense.
+  const position = Math.min(Math.max(cursor ?? value.length, 0), value.length);
+  const before = value.slice(0, position);
+  // At the end of the value there's no character to sit the caret on, so it renders as an
+  // inverse space — the pre-story "always-trailing" look, now reachable at any position.
+  const atCursor = value.slice(position, position + 1) || ' ';
+  const after = value.slice(position + 1);
   return (
     <Box flexDirection="column">
       <Box>
         <Text color={layout.labelColor}>
-          {label}: {value}
+          {label}: {before}
         </Text>
-        {layout.showCursor ? <Text inverse> </Text> : null}
+        <Text inverse>{atCursor}</Text>
+        <Text color={layout.labelColor}>{after}</Text>
       </Box>
-      {layout.showCursor ? <Text color={colors.text}>[Enter] confirm  [Esc] cancel</Text> : null}
+      <Text color={colors.text}>[Enter] confirm  [Esc] cancel</Text>
     </Box>
   );
 }

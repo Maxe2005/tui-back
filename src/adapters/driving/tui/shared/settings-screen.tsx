@@ -33,18 +33,25 @@ import { ModalDialog } from './components/modal-dialog.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
+  MAX_FILTER_HISTORY_GRID_MAX_ROWS,
+  MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
+  MAX_LOG_BUFFER_SIZE,
+  MIN_FILTER_HISTORY_GRID_MAX_ROWS,
+  MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
+  MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette'];
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
   edts: 'EDTs',
   'command-palette': 'Command Palette',
+  logs: 'Logs',
 };
 
 // AC1: Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General
@@ -100,6 +107,66 @@ export function parseGridMaxRowsDigit(input: string): number | null {
     return null;
   }
   return clampGridMaxRows(Number(input));
+}
+
+// Logs tab (story 5.1): settings.logs.bufferSize, reusing the exact clamp/adjust/parse-digit/
+// render idiom the Command Palette tab established above for gridMaxRows. Scaled for a much
+// wider range (50-5000 vs. 1-99): Up/Down steps by LOG_BUFFER_SIZE_STEP rather than 1 (a
+// single-line step would take dozens of keypresses to cross the range), and a typed digit
+// 1-9 is a quick preset (digit x 100, e.g. '5' -> 500) rather than the literal digit — the
+// same "single keystroke sets a sane value directly" spirit as parseGridMaxRowsDigit, just
+// rescaled to a range where the literal digit itself is never a meaningful buffer size.
+export const LOG_BUFFER_SIZE_STEP = 50;
+export { MIN_LOG_BUFFER_SIZE, MAX_LOG_BUFFER_SIZE };
+
+export function clampLogBufferSize(value: number): number {
+  return Math.min(Math.max(value, MIN_LOG_BUFFER_SIZE), MAX_LOG_BUFFER_SIZE);
+}
+
+export function adjustLogBufferSize(current: number, direction: 'up' | 'down'): number {
+  return clampLogBufferSize(current + (direction === 'up' ? LOG_BUFFER_SIZE_STEP : -LOG_BUFFER_SIZE_STEP));
+}
+
+export function parseLogBufferSizeDigit(input: string): number | null {
+  if (!/^[1-9]$/.test(input)) {
+    return null;
+  }
+  return clampLogBufferSize(Number(input) * 100);
+}
+
+// Logs tab (story 5.4): settings.logs.filterHistorySize/filterHistoryGridMaxRows, same clamp/
+// adjust idiom as bufferSize/gridMaxRows above. filterHistorySize has no digit preset (its
+// range doesn't lend itself to one the way bufferSize's x100 or gridMaxRows' literal digit
+// do) — Left/Right (see the group model below) is its only adjustment.
+export const FILTER_HISTORY_SIZE_STEP = 5;
+export { MIN_FILTER_HISTORY_SIZE, MAX_FILTER_HISTORY_SIZE };
+
+export function clampFilterHistorySize(value: number): number {
+  return Math.min(Math.max(value, MIN_FILTER_HISTORY_SIZE), MAX_FILTER_HISTORY_SIZE);
+}
+
+export function adjustFilterHistorySize(current: number, direction: 'up' | 'down'): number {
+  return clampFilterHistorySize(current + (direction === 'up' ? FILTER_HISTORY_SIZE_STEP : -FILTER_HISTORY_SIZE_STEP));
+}
+
+// filterHistoryGridMaxRows mirrors gridMaxRows' own [1, 99] range and digit-preset convention
+// exactly, but through its own independent constants (Boundaries: "independent of
+// commandPalette.gridMaxRows").
+export { MIN_FILTER_HISTORY_GRID_MAX_ROWS, MAX_FILTER_HISTORY_GRID_MAX_ROWS };
+
+export function clampFilterHistoryGridMaxRows(value: number): number {
+  return Math.min(Math.max(value, MIN_FILTER_HISTORY_GRID_MAX_ROWS), MAX_FILTER_HISTORY_GRID_MAX_ROWS);
+}
+
+export function adjustFilterHistoryGridMaxRows(current: number, direction: 'up' | 'down'): number {
+  return clampFilterHistoryGridMaxRows(current + (direction === 'up' ? 1 : -1));
+}
+
+export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null {
+  if (!/^[1-9]$/.test(input)) {
+    return null;
+  }
+  return clampFilterHistoryGridMaxRows(Number(input));
 }
 
 // EDTs tab: the hideable per-context action hints (story 2.18's formatAvailableActionsHint).
@@ -158,6 +225,47 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'action-types', label: 'Recent action types' },
 ];
 
+// Amended 2026-09-20 (visual-corruption fix): the Logs tab used to render all six fields as
+// one flat row-cursor list (plus three DimAnnotation lines) inside ModalDialog, which has no
+// width/height cap — in anything but a tall terminal, that content overflowed the visible
+// viewport and Ink's diff-render corrupted the border/title above it ("SETTINGS" rendering as
+// "--ttings") and overlapped the last two rows. Fixed the same way the EDTs tab already
+// solves this (Design Notes there): a group-list level first, one field (or a small related
+// cluster) per group, so no single screen renders more than a handful of lines. Five groups —
+// four single-field ones plus "Clear history" holding both clear actions — chosen over fewer,
+// denser groups so each screen stays minimal; the extra keystrokes to reach a field are an
+// accepted trade-off (user decision, 2026-09-20).
+export type LogsSettingsGroupId =
+  | 'buffer-size'
+  | 'start-with-history'
+  | 'filter-history-size'
+  | 'filter-history-grid'
+  | 'filter-history-dedup'
+  | 'clear-history';
+
+export type LogsSettingsGroup = { id: LogsSettingsGroupId; label: string };
+
+export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
+  { id: 'buffer-size', label: 'Buffer size' },
+  { id: 'start-with-history', label: 'Start with history' },
+  { id: 'filter-history-size', label: 'Filter history size' },
+  { id: 'filter-history-grid', label: 'Filter history grid' },
+  { id: 'filter-history-dedup', label: 'Filter history dedup' },
+  { id: 'clear-history', label: 'Clear history' },
+];
+
+// "Clear history" is the one Logs group holding more than a single field — its own small
+// Up/Down row list, one level below the group list, mirroring the EDTs tab's own two-level
+// depth (group list -> checkbox list) rather than growing a third top-level list.
+export type LogsClearRowId = 'clear-global' | 'clear-service';
+
+export const LOGS_CLEAR_ROWS: readonly LogsClearRowId[] = ['clear-global', 'clear-service'];
+
+export const LOGS_CLEAR_ROW_LABELS: Record<LogsClearRowId, string> = {
+  'clear-global': 'Clear global filter history',
+  'clear-service': "Clear a service's filter history",
+};
+
 // Amended 2026-08-28 (Sprint Change Proposal): self-contained Esc handling, mirroring
 // command-bar.tsx's own `onClose` pattern rather than repo-registry-screen.tsx's
 // AppShell-centralized one — the EDTs tab's drill-down state (is a group open?) is local to
@@ -174,6 +282,13 @@ export type SettingsScreenProps = {
   // (AC1, AC6).
   initialTab?: SettingsTab;
   initialEdtsGroup?: SettingsGroupId | null;
+  // Amended 2026-09-20: same test-only injection idiom, one level up, for the Logs tab's own
+  // group list (mirrors initialEdtsGroup). Production always starts on the group list (null).
+  initialLogsGroup?: LogsSettingsGroupId | null;
+  // Story 5.4: same test-only injection idiom, for the Logs tab's "clear a service's history"
+  // drill-down. Implies initialLogsGroup = 'clear-history' when that prop is left unset, since
+  // the service list is only reachable from within that group.
+  initialLogsClearServiceOpen?: boolean;
 };
 
 export function SettingsScreen({
@@ -181,42 +296,93 @@ export function SettingsScreen({
   onClose = () => {},
   initialTab = 'general',
   initialEdtsGroup = null,
+  initialLogsGroup = null,
+  initialLogsClearServiceOpen = false,
 }: SettingsScreenProps) {
   const settings = useStore((state) => state.settings);
   const settingsWarning = useStore((state) => state.settingsWarning);
   const updateSettings = useStore((state) => state.updateSettings);
+  // Story 5.4: the Logs tab's clear actions and the service list its "clear this service" row
+  // drills into.
+  const clearGlobalFilterHistory = useStore((state) => state.clearGlobalFilterHistory);
+  const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
+  const edtsBranches = useStore((state) => state.edtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [edtsGroup, setEdtsGroup] = useState<SettingsGroupId | null>(initialEdtsGroup);
   const [groupCursor, setGroupCursor] = useState(0);
   const [hintCursor, setHintCursor] = useState(0);
   const [actionTypeCursor, setActionTypeCursor] = useState(0);
+  // Amended 2026-09-20: the Logs tab's own group list (mirrors edtsGroup/groupCursor exactly),
+  // the "Clear history" group's own two-row list one level below that, and the "clear a
+  // service's history" row's drill-down state one level below that again.
+  const [logsGroup, setLogsGroup] = useState<LogsSettingsGroupId | null>(
+    initialLogsGroup ?? (initialLogsClearServiceOpen ? 'clear-history' : null),
+  );
+  const [logsGroupCursor, setLogsGroupCursor] = useState(0);
+  const [logsClearRowCursor, setLogsClearRowCursor] = useState(0);
+  const [logsClearServiceOpen, setLogsClearServiceOpen] = useState(initialLogsClearServiceOpen);
+  const [logsClearServiceCursor, setLogsClearServiceCursor] = useState(0);
+  const logsServices = edtsBranches ?? [];
 
-  // AC6: only true on the EDTs tab with a group drilled in — every other combination (General,
-  // Command Palette, or the EDTs tab's own group list) is "not drilled in" for Esc purposes.
-  const drilledIn = tab === 'edts' && edtsGroup !== null;
+  // AC6 (amended 2026-09-20): drilled in on the EDTs tab's own group, or on any Logs tab group
+  // (single-field group, "Clear history"'s own row list, or its "clear a service's history"
+  // sub-list) — every other combination is "not drilled in" for Esc purposes.
+  const drilledIn = (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
 
   useInput((input, key) => {
     if (key.escape) {
-      if (drilledIn) {
+      if (tab === 'edts' && edtsGroup !== null) {
         // Steps back up to the group list — the whole settings screen stays open.
         setEdtsGroup(null);
+        return;
+      }
+      if (tab === 'logs' && logsClearServiceOpen) {
+        setLogsClearServiceOpen(false);
+        return;
+      }
+      if (tab === 'logs' && logsGroup !== null) {
+        // Steps back up to the group list — the whole settings screen stays open.
+        setLogsGroup(null);
         return;
       }
       onClose();
       return;
     }
 
-    // AC1 (amended): Left/Right/Tab cycle the top-level tabs, but never while a group is
-    // drilled into on the EDTs tab — those keys have no meaning at that level (Up/Down/Space/
-    // Esc do instead), so cycling out from under a drilled-in group would be surprising.
-    if (!drilledIn && (key.tab || key.leftArrow || key.rightArrow)) {
-      const direction = key.leftArrow ? -1 : 1;
-      // Landing on (or leaving) the EDTs tab always resets to its group-list level (AC6:
-      // "on first opening the EDTs tab" — every arrival, not just the very first).
+    // AC1 (amended 2026-09-20): Tab always cycles the top-level tabs (never while drilled in).
+    // Left/Right also cycle tabs at every tab's own top level — the Logs tab no longer needs an
+    // exception here now that it has its own group list (see the group model below) rather than
+    // a flat row list claiming Left/Right at the top level; Tab remains that tab's own way back
+    // out to General/EDTs/Command Palette.
+    if (!drilledIn && key.tab) {
+      // Landing on (or leaving) the EDTs/Logs tab always resets to its own top level (AC6: "on
+      // first opening the EDTs tab" — every arrival, not just the very first — extended to the
+      // Logs tab's group list).
       setEdtsGroup(null);
       setGroupCursor(0);
+      setLogsGroup(null);
+      setLogsGroupCursor(0);
+      setLogsClearServiceOpen(false);
+      setTab((current) => nextSettingsTab(current, 1));
+      return;
+    }
+    if (!drilledIn && (key.leftArrow || key.rightArrow)) {
+      const direction = key.leftArrow ? -1 : 1;
+      setEdtsGroup(null);
+      setGroupCursor(0);
+      setLogsGroup(null);
+      setLogsGroupCursor(0);
       setTab((current) => nextSettingsTab(current, direction));
+      return;
+    }
+
+    if (tab === 'general') {
+      // Space toggles quitShortcutEnabled — General has no row cursor yet, mirroring the Logs
+      // tab's single dedicated-key convention for a lone checkbox field.
+      if (input === ' ') {
+        void updateSettings({ general: { quitShortcutEnabled: !settings.general.quitShortcutEnabled } });
+      }
       return;
     }
 
@@ -237,6 +403,130 @@ export function SettingsScreen({
       if (digit !== null) {
         void updateSettings({ commandPalette: { gridMaxRows: digit } });
         return;
+      }
+      return;
+    }
+
+    if (tab === 'logs') {
+      // Story 5.4: the "clear a service's history" drill-down — its own small Up/Down list,
+      // Enter/Space clears that one service's two lists (text + regex), Esc (handled above)
+      // steps back to the "Clear history" group's row list.
+      if (logsClearServiceOpen) {
+        if (key.upArrow) {
+          setLogsClearServiceCursor((current) => moveHintCursor(current, 'up', logsServices.length));
+          return;
+        }
+        if (key.downArrow) {
+          setLogsClearServiceCursor((current) => moveHintCursor(current, 'down', logsServices.length));
+          return;
+        }
+        if (key.return || input === ' ') {
+          const service = logsServices[logsClearServiceCursor];
+          if (service) {
+            clearServiceFilterHistory(service.path);
+          }
+        }
+        return;
+      }
+
+      // Amended 2026-09-20: "Clear history" is the one Logs group with more than one field —
+      // its own small Up/Down row list, Enter triggers whichever action is highlighted.
+      if (logsGroup === 'clear-history') {
+        if (key.upArrow) {
+          setLogsClearRowCursor((current) => moveHintCursor(current, 'up', LOGS_CLEAR_ROWS.length));
+          return;
+        }
+        if (key.downArrow) {
+          setLogsClearRowCursor((current) => moveHintCursor(current, 'down', LOGS_CLEAR_ROWS.length));
+          return;
+        }
+        const row = LOGS_CLEAR_ROWS[logsClearRowCursor];
+        if (row === 'clear-global' && (key.return || input === ' ')) {
+          clearGlobalFilterHistory();
+          return;
+        }
+        if (row === 'clear-service' && key.return) {
+          setLogsClearServiceOpen(true);
+          setLogsClearServiceCursor(0);
+        }
+        return;
+      }
+
+      if (logsGroup === 'buffer-size') {
+        if (key.leftArrow) {
+          void updateSettings({ logs: { bufferSize: adjustLogBufferSize(settings.logs.bufferSize, 'down') } });
+          return;
+        }
+        if (key.rightArrow) {
+          void updateSettings({ logs: { bufferSize: adjustLogBufferSize(settings.logs.bufferSize, 'up') } });
+          return;
+        }
+        const digit = parseLogBufferSizeDigit(input);
+        if (digit !== null) {
+          void updateSettings({ logs: { bufferSize: digit } });
+        }
+        return;
+      }
+
+      if (logsGroup === 'start-with-history') {
+        if (input === ' ') {
+          void updateSettings({ logs: { startWithHistory: !settings.logs.startWithHistory } });
+        }
+        return;
+      }
+
+      if (logsGroup === 'filter-history-size') {
+        if (key.leftArrow) {
+          void updateSettings({ logs: { filterHistorySize: adjustFilterHistorySize(settings.logs.filterHistorySize, 'down') } });
+          return;
+        }
+        if (key.rightArrow) {
+          void updateSettings({ logs: { filterHistorySize: adjustFilterHistorySize(settings.logs.filterHistorySize, 'up') } });
+        }
+        return;
+      }
+
+      if (logsGroup === 'filter-history-grid') {
+        if (key.leftArrow) {
+          void updateSettings({
+            logs: { filterHistoryGridMaxRows: adjustFilterHistoryGridMaxRows(settings.logs.filterHistoryGridMaxRows, 'down') },
+          });
+          return;
+        }
+        if (key.rightArrow) {
+          void updateSettings({
+            logs: { filterHistoryGridMaxRows: adjustFilterHistoryGridMaxRows(settings.logs.filterHistoryGridMaxRows, 'up') },
+          });
+          return;
+        }
+        const digit = parseFilterHistoryGridMaxRowsDigit(input);
+        if (digit !== null) {
+          void updateSettings({ logs: { filterHistoryGridMaxRows: digit } });
+        }
+        return;
+      }
+
+      if (logsGroup === 'filter-history-dedup') {
+        if (input === ' ') {
+          void updateSettings({ logs: { filterHistoryDedup: !settings.logs.filterHistoryDedup } });
+        }
+        return;
+      }
+
+      // logsGroup === null: the group-list level — Up/Down navigates, Enter drills in.
+      if (key.upArrow) {
+        setLogsGroupCursor((current) => moveHintCursor(current, 'up', LOGS_SETTINGS_GROUPS.length));
+        return;
+      }
+      if (key.downArrow) {
+        setLogsGroupCursor((current) => moveHintCursor(current, 'down', LOGS_SETTINGS_GROUPS.length));
+        return;
+      }
+      if (key.return) {
+        const group = LOGS_SETTINGS_GROUPS[logsGroupCursor];
+        if (group) {
+          setLogsGroup(group.id);
+        }
       }
       return;
     }
@@ -321,9 +611,14 @@ export function SettingsScreen({
 
         {settingsWarning ? <DimAnnotation text={settingsWarning} /> : null}
 
-        {/* AC2: General renders validly with zero settings defined — never an error. */}
         {tab === 'general' ? (
-          <Text color={colors['text-dim']}>No general settings yet.</Text>
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Enable 'q' to quit"
+              state={settings.general.quitShortcutEnabled ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="Space to toggle. Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
+          </Box>
         ) : null}
 
         {tab === 'command-palette' ? (
@@ -332,6 +627,109 @@ export function SettingsScreen({
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Up/Down to adjust, or type a digit (1-9)." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === null ? (
+          // Amended 2026-09-20: the Logs tab's own group-list level, mirroring the EDTs tab's
+          // group list exactly — every field lives behind its own (or a shared) group now,
+          // rather than one flat six-row list, so no single screen overflows the modal.
+          <Box flexDirection="column">
+            {LOGS_SETTINGS_GROUPS.map((group, index) => {
+              const highlighted = index === logsGroupCursor;
+              return (
+                <Box key={group.id} flexDirection="row">
+                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text}>{group.label}</Text>
+                </Box>
+              );
+            })}
+            <DimAnnotation text="Enter to open a group. Esc to close." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'buffer-size' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>
+              Log buffer size (lines per pane): <Text color={colors.accent}>{settings.logs.bufferSize}</Text>
+            </Text>
+            <DimAnnotation
+              text={`Left/Right: ±${LOG_BUFFER_SIZE_STEP} per press, or a typed digit (1-9) for a x100 preset. Applies to new streams only — already-running panes keep their current buffer size. Esc for the group list.`}
+            />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'start-with-history' ? (
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Start streaming with the most recent history"
+              state={settings.logs.startWithHistory ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="Space to toggle. Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-history-size' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>
+              Filter history size (entries per list): <Text color={colors.accent}>{settings.logs.filterHistorySize}</Text>
+            </Text>
+            <DimAnnotation text={`Left/Right: ±${FILTER_HISTORY_SIZE_STEP} per press. Esc for the group list.`} />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-history-grid' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>
+              Filter history grid max rows: <Text color={colors.accent}>{settings.logs.filterHistoryGridMaxRows}</Text>
+            </Text>
+            <DimAnnotation text="Left/Right: ±1 per press, or a typed digit (1-9). Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-history-dedup' ? (
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Dedup filter history (one instance per filter)"
+              state={settings.logs.filterHistoryDedup ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="Space to toggle. Checked: reusing a filter moves it to the most recent place instead of storing it twice. Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'clear-history' && !logsClearServiceOpen ? (
+          // Amended 2026-09-20: "Clear history" is the one Logs group holding both clear
+          // actions — its own small Up/Down row list, one level below the group list.
+          <Box flexDirection="column">
+            {LOGS_CLEAR_ROWS.map((row, index) => {
+              const highlighted = index === logsClearRowCursor;
+              return (
+                <Box key={row} flexDirection="row">
+                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text}>{LOGS_CLEAR_ROW_LABELS[row]}</Text>
+                </Box>
+              );
+            })}
+            <DimAnnotation text="Enter runs the highlighted action. Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'clear-history' && logsClearServiceOpen ? (
+          // Story 5.4: the "clear a service's history" row's drill-down — a plain Up/Down list
+          // over every manifest service (Boundaries: "drilled into a list of manifest
+          // services"), never limited to the active EDT's own members.
+          <Box flexDirection="column">
+            {logsServices.length === 0 ? <DimAnnotation text="No manifest services loaded yet." /> : null}
+            {logsServices.map((service, index) => {
+              const highlighted = index === logsClearServiceCursor;
+              return (
+                <Box key={service.path} flexDirection="row">
+                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text}>{service.service}</Text>
+                </Box>
+              );
+            })}
+            <DimAnnotation text="Enter to clear that service's filter history (text + regex). Esc for the row list." />
           </Box>
         ) : null}
 

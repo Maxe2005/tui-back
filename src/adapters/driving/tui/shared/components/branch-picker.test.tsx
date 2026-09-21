@@ -61,6 +61,76 @@ describe('createBranchPickerState', () => {
     expect(state.nameValue).toBe('feature-suggested');
     expect(state.baseBranch).toBe('development');
     expect(state.baseFocused).toBe(true);
+    // Story 2.32: every field's caret starts at its own seeded value's end.
+    expect(state.nameValueCursor).toBe('feature-suggested'.length);
+    expect(state.baseBranchCursor).toBe('development'.length);
+    expect(state.pickQueryCursor).toBe(0);
+  });
+});
+
+describe('handleBranchPickerKey — cursor navigation (story 2.32)', () => {
+  it('Left/Right/Home/End move the name field caret; typing inserts at the caret', () => {
+    const state = baseState({ baseFocused: false, nameValue: 'abd', nameValueCursor: 2 });
+    const typed = handleBranchPickerKey(state, [], [], 'c', {});
+    expect(typed.type).toBe('update');
+    if (typed.type === 'update') {
+      expect(typed.state.nameValue).toBe('abcd');
+      expect(typed.state.nameValueCursor).toBe(3);
+    }
+
+    const home = handleBranchPickerKey(state, [], [], '', { home: true });
+    expect(home.type).toBe('update');
+    if (home.type === 'update') {
+      expect(home.state.nameValueCursor).toBe(0);
+      expect(home.state.nameValue).toBe('abd');
+    }
+
+    const end = handleBranchPickerKey(state, [], [], '', { end: true });
+    expect(end.type).toBe('update');
+    if (end.type === 'update') {
+      expect(end.state.nameValueCursor).toBe(3);
+    }
+
+    // Left/Right-at-boundary clamp (unchanged from before).
+    const left = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'ab', nameValueCursor: 0 }), [], [], '', { leftArrow: true });
+    expect(left.type).toBe('update');
+    if (left.type === 'update') {
+      expect(left.state.nameValueCursor).toBe(0);
+    }
+
+    // Code review fix: the title promises Left/Right both move the caret — a real decrement
+    // from a non-zero position (Left) and a real mid-string advance (Right), not just the
+    // already-at-0 clamp above.
+    const leftFromMid = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'abcd', nameValueCursor: 3 }), [], [], '', { leftArrow: true });
+    expect(leftFromMid.type).toBe('update');
+    if (leftFromMid.type === 'update') {
+      expect(leftFromMid.state.nameValueCursor).toBe(2);
+      expect(leftFromMid.state.nameValue).toBe('abcd');
+    }
+
+    const rightFromMid = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'abcd', nameValueCursor: 1 }), [], [], '', { rightArrow: true });
+    expect(rightFromMid.type).toBe('update');
+    if (rightFromMid.type === 'update') {
+      expect(rightFromMid.state.nameValueCursor).toBe(2);
+      expect(rightFromMid.state.nameValue).toBe('abcd');
+    }
+  });
+
+  it('Backspace/Delete edit at the caret, not always the end', () => {
+    const state = baseState({ baseFocused: false, nameValue: 'abcd', nameValueCursor: 2 });
+    const backspaced = handleBranchPickerKey(state, [], [], '', { backspace: true });
+    expect(backspaced.type).toBe('update');
+    if (backspaced.type === 'update') {
+      expect(backspaced.state.nameValue).toBe('acd');
+      expect(backspaced.state.nameValueCursor).toBe(1);
+    }
+
+    const deleted = handleBranchPickerKey(state, [], [], '', { delete: true });
+    expect(deleted.type).toBe('update');
+    if (deleted.type === 'update') {
+      expect(deleted.state.nameValue).toBe('abd');
+      expect(deleted.state.nameValueCursor).toBe(2);
+    }
   });
 });
 
@@ -72,12 +142,12 @@ describe('handleBranchPickerKey — mode cycling (Tab)', () => {
     if (result.type === 'update') {
       expect(result.state.mode).toBe('rename-current');
       // Pre-selected onto the current branch, skipping the picking step (Boundaries).
-      expect(result.state.renameSub).toEqual({ oldName: 'main', value: 'main', error: null });
+      expect(result.state.renameSub).toEqual({ oldName: 'main', value: 'main', cursor: 4, error: null });
     }
   });
 
   it('Tab from Rename current wraps back to Pick existing', () => {
-    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'main', error: null } });
+    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'main', cursor: 4, error: null } });
     const result = handleBranchPickerKey(state, [], [], '', { tab: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
@@ -183,18 +253,18 @@ describe('handleBranchPickerKey — Pick existing', () => {
     const result = handleBranchPickerKey(state, ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
-      expect(result.state.renameSub).toEqual({ oldName: 'shared-feature', value: 'shared-feature', error: null });
+      expect(result.state.renameSub).toEqual({ oldName: 'shared-feature', value: 'shared-feature', cursor: 'shared-feature'.length, error: null });
     }
   });
 
   it('confirming the rename field submits a rename outcome in one step', () => {
-    const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'shared-feature-v2', error: null } });
+    const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'shared-feature-v2', cursor: 'shared-feature-v2'.length, error: null } });
     const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { return: true });
     expect(result).toEqual({ type: 'submit', outcome: { kind: 'rename', oldName: 'shared-feature', newName: 'shared-feature-v2' } });
   });
 
   it('rejects an empty rename value inline', () => {
-    const state = pickState({ renameSub: { oldName: 'shared-feature', value: '', error: null } });
+    const state = pickState({ renameSub: { oldName: 'shared-feature', value: '', cursor: 0, error: null } });
     const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { return: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
@@ -203,7 +273,7 @@ describe('handleBranchPickerKey — Pick existing', () => {
   });
 
   it('Escape from the rename sub-view returns to the list, not a full cancel', () => {
-    const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'x', error: null } });
+    const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'x', cursor: 1, error: null } });
     const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { escape: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
@@ -214,13 +284,13 @@ describe('handleBranchPickerKey — Pick existing', () => {
 
 describe('handleBranchPickerKey — Rename current', () => {
   it('pre-selected onto the current branch, confirming submits a rename outcome', () => {
-    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'feature-renamed', error: null } });
+    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'feature-renamed', cursor: 'feature-renamed'.length, error: null } });
     const result = handleBranchPickerKey(state, [], [], '', { return: true });
     expect(result).toEqual({ type: 'submit', outcome: { kind: 'rename', oldName: 'main', newName: 'feature-renamed' } });
   });
 
   it('rejects an emptied value inline, never submits', () => {
-    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: '', error: null } });
+    const state = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: '', cursor: 0, error: null } });
     const result = handleBranchPickerKey(state, [], [], '', { return: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
@@ -243,13 +313,15 @@ describe('applyBranchPickerRetry', () => {
     expect(retried.mode).toBe('create-new');
     expect(retried.baseFocused).toBe(false);
     expect(retried.nameValue).toBe('feature-collided');
+    // Story 2.32: a programmatic overwrite resets the caret to the reopened value's end.
+    expect(retried.nameValueCursor).toBe('feature-collided'.length);
   });
 
   it('a "try a different branch" retry reopens the rename field pre-filled with the collided value', () => {
     const state = baseState({ mode: 'pick-existing' });
     const retried = applyBranchPickerRetry(state, { field: 'rename', value: 'feature-collided', oldName: 'main' });
     expect(retried.mode).toBe('rename-current');
-    expect(retried.renameSub).toEqual({ oldName: 'main', value: 'feature-collided', error: null });
+    expect(retried.renameSub).toEqual({ oldName: 'main', value: 'feature-collided', cursor: 'feature-collided'.length, error: null });
   });
 });
 

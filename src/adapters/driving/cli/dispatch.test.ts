@@ -24,6 +24,8 @@ function fakeState(): StatePort {
     writeActiveEdt: async () => ok(undefined),
     readSplitterRatios: async () => ok(null),
     writeSplitterRatios: async () => ok(undefined),
+    readFilterHistory: async () => ok(null),
+    writeFilterHistory: async () => ok(undefined),
   };
 }
 
@@ -155,7 +157,13 @@ describe('subcommand registry guards', () => {
   });
 
   function fakeEdtRegistry(): EdtRegistryPort {
-    return { add: async () => ok(undefined), list: async () => ok([]), setStatus: async () => ok(undefined), update: async () => ok(undefined) };
+    return {
+      add: async () => ok(undefined),
+      list: async () => ok([]),
+      setStatus: async () => ok(undefined),
+      update: async () => ok(undefined),
+      remove: async () => ok(undefined),
+    };
   }
 
   function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
@@ -192,6 +200,8 @@ describe('subcommand registry guards', () => {
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
+      isBranchMerged: async () => ok(true),
+      hasStash: async () => ok(false),
     };
 
     return buildSubcommands({
@@ -250,6 +260,101 @@ describe('subcommand registry guards', () => {
 
     const excess = await edt.run(['create', 'extra']);
     expect(excess).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('edt delete dispatches to the delete use-case, parsing the positional topic and --branches flags', async () => {
+    const subcommands = buildTestSubcommands();
+    const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+    if (!edt) throw new Error('expected edt subcommand');
+
+    const missingTopic = await edt.run(['delete']);
+    expect(missingTopic).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const malformedBranches = await edt.run(['delete', 'demo', '--branches', 'no-equals-sign']);
+    expect(malformedBranches).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const badDisposition = await edt.run(['delete', 'demo', '--branches', '/repo/a=maybe']);
+    expect(badDisposition).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const unknownFlag = await edt.run(['delete', 'demo', '--bogus']);
+    expect(unknownFlag).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    // A well-formed call reaches the use-case itself, which reports edt-not-found for a
+    // topic the fake registry doesn't know about — proving dispatch/parsing succeeded.
+    const notFound = await edt.run(['delete', 'no-such-topic', '--branches', '/repo/a=delete']);
+    expect(notFound).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+  });
+
+  // Review fix (story 2.29): three previously-silent --branches mistakes now reject with
+  // invalid-argument instead of resolving to a surprising default.
+  describe('edt delete --branches validation (story 2.29 review fixes)', () => {
+    function fakeEdtRegistryWithTarget(): EdtRegistryPort {
+      const target = {
+        ulid: 'ulid-1',
+        topic: 'demo',
+        createdAt: '2026-08-18T00:00:00.000Z',
+        status: 'inactive' as const,
+        members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+      };
+      return {
+        add: async () => ok(undefined),
+        list: async () => ok([target]),
+        setStatus: async () => ok(undefined),
+        update: async () => ok(undefined),
+        remove: async () => ok(undefined),
+      };
+    }
+
+    it('rejects an empty repoPath before "=" instead of resolving it to process.cwd()', async () => {
+      const subcommands = buildTestSubcommands();
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['delete', 'demo', '--branches', '=delete']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('rejects a --branches repoPath that is not one of the target EDT\'s own members', async () => {
+      const subcommands = buildTestSubcommands({ edtRegistry: fakeEdtRegistryWithTarget() });
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['delete', 'demo', '--branches', '/repo/not-a-member=delete']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('accepts a --branches repoPath that does match a target member', async () => {
+      const subcommands = buildTestSubcommands({ edtRegistry: fakeEdtRegistryWithTarget() });
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['delete', 'demo', '--branches', '/repo/a=delete']);
+
+      // Reaches the use-case (never rejected at the CLI-validation layer above).
+      expect(result).toMatchObject({ ok: true });
+    });
+
+    it('rejects a --branches repeated for the same resolved repoPath instead of letting the later value win', async () => {
+      const subcommands = buildTestSubcommands({ edtRegistry: fakeEdtRegistryWithTarget() });
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['delete', 'demo', '--branches', '/repo/a=leave', '--branches', '/repo/a=delete']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('rejects a --branches repeated for the same repoPath even under a differently-shaped (trailing-slash) spelling', async () => {
+      const subcommands = buildTestSubcommands({ edtRegistry: fakeEdtRegistryWithTarget() });
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['delete', 'demo', '--branches', '/repo/a=leave', '--branches', '/repo/a/=delete']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
   });
 
   it('register --reset routes to the reset use-case, rejecting extra arguments', async () => {

@@ -5,13 +5,26 @@
 import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
+  MAX_FILTER_HISTORY_GRID_MAX_ROWS,
+  MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
+  MAX_LOG_BUFFER_SIZE,
+  MIN_FILTER_HISTORY_GRID_MAX_ROWS,
+  MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
+  MIN_LOG_BUFFER_SIZE,
   type Settings,
 } from '../../../core/ports/settings.js';
 
 export const settingsSchema: z.ZodType<Settings> = z
   .object({
+    general: z
+      .object({
+        quitShortcutEnabled: z.boolean().optional().default(DEFAULT_SETTINGS.general.quitShortcutEnabled),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.general),
     commandPalette: z
       .object({
         gridMaxRows: z.number().int().min(MIN_GRID_MAX_ROWS).max(MAX_GRID_MAX_ROWS),
@@ -36,5 +49,38 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.edts),
+    // Story 5.1: keeps a corrupt/out-of-range settings.yaml non-blocking (existing guarantee).
+    // Per this file's own `.strict()` + `.default()`-per-top-level-key convention, an invalid
+    // `logs.bufferSize` does not just reset this `logs` block — the whole top-level `.strict()`
+    // object fails validation as one unit, so *every* top-level key (commandPalette, edts, logs)
+    // falls back to DEFAULT_SETTINGS, exactly like an invalid commandPalette.gridMaxRows or an
+    // unknown top-level field does elsewhere in this schema (see index.test.ts's "falls back to
+    // defaults with a field-naming warning..." tests, all of which assert the *entire*
+    // DEFAULT_SETTINGS, not just one block).
+    logs: z
+      .object({
+        bufferSize: z.number().int().min(MIN_LOG_BUFFER_SIZE).max(MAX_LOG_BUFFER_SIZE),
+        startWithHistory: z.boolean().optional().default(DEFAULT_SETTINGS.logs.startWithHistory),
+        // Story 5.4: same optional-with-default convention as startWithHistory above — a
+        // pre-5.4 settings.yaml's `logs:` block predates both fields entirely.
+        filterHistorySize: z
+          .number()
+          .int()
+          .min(MIN_FILTER_HISTORY_SIZE)
+          .max(MAX_FILTER_HISTORY_SIZE)
+          .optional()
+          .default(DEFAULT_SETTINGS.logs.filterHistorySize),
+        filterHistoryGridMaxRows: z
+          .number()
+          .int()
+          .min(MIN_FILTER_HISTORY_GRID_MAX_ROWS)
+          .max(MAX_FILTER_HISTORY_GRID_MAX_ROWS)
+          .optional()
+          .default(DEFAULT_SETTINGS.logs.filterHistoryGridMaxRows),
+        filterHistoryDedup: z.boolean().optional().default(DEFAULT_SETTINGS.logs.filterHistoryDedup),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.logs),
   })
   .strict();

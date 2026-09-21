@@ -81,6 +81,14 @@ export type NavigationSlice = {
   // to a global dispatch while a text field or checklist owns the keystroke.
   zoneInputCaptured: boolean;
   setZoneInputCaptured: (value: boolean) => void;
+  // Story 5.1 fix: unlike zoneInputCaptured (a full dialog capture that also blocks `?`/`/`/
+  // `:`/`q`), the Logs zone's pane grid only needs Left/Right/Up/Down themselves to stop
+  // meaning "switch zone" while sub-focus is moving between panes — every other global
+  // shortcut (including other zones' mnemonics) must keep working. Set by LogsZone whenever
+  // its own pane-focus state is 'panes' (see logs-zone.tsx); gates only
+  // `resolveZoneArrowSwitch`'s dispatch in AppShell, nothing else.
+  logsPaneGridArrowsActive: boolean;
+  setLogsPaneGridArrowsActive: (value: boolean) => void;
   // Review patch (story 2.9): `q` is unreachable while `zoneInputCaptured` is set (it must
   // be typable into a text field), so a zone whose captured dialog has no cancel target of
   // its own — the EDTs zone's AC1 create prompt when the registry is still genuinely empty,
@@ -243,6 +251,8 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
     },
     zoneInputCaptured: false,
     setZoneInputCaptured: (value) => set({ zoneInputCaptured: value }),
+    logsPaneGridArrowsActive: false,
+    setLogsPaneGridArrowsActive: (value) => set({ logsPaneGridArrowsActive: value }),
     quitRequested: false,
     requestQuit: () => set({ quitRequested: true }),
     commandBarOpen: false,

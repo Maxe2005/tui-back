@@ -53,6 +53,7 @@ function fakeEdtRegistry(overrides: Partial<EdtRegistryPort> = {}): EdtRegistryP
     list: vi.fn(async () => ok([])),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -71,6 +72,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeActiveEdt: vi.fn(async () => ok(undefined)),
     readSplitterRatios: vi.fn(async () => ok(null)),
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -99,6 +102,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
     ...overrides,
   };
 }

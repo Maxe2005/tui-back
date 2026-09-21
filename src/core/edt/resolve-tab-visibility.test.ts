@@ -48,6 +48,7 @@ function fakeEdtRegistry(entries: EdtRegistryEntry[] = [], overrides: Partial<Ed
     list: vi.fn(async () => ok(entries)),
     setStatus: vi.fn(async () => ok(undefined)),
     update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -58,6 +59,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeActiveEdt: vi.fn(async () => ok(undefined)),
     readSplitterRatios: vi.fn(async () => ok(null)),
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }

@@ -346,6 +346,157 @@ describe('state write propagates a genuine read I/O error rather than writing bl
   });
 });
 
+// Story 5.4: filterHistory read/write, mirroring splitterRatios' own coverage shape exactly
+// (serialization, per-field isolation on sibling corruption) — see that describe block above.
+describe('state readFilterHistory()', () => {
+  it('reads null (nothing persisted yet) when the file does not exist (ENOENT)', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+
+    expect(await port.readFilterHistory()).toEqual({ ok: true, data: null });
+  });
+
+  it('reads null for a pre-5.4 state.json ({ activeEdt, splitterRatios } only)', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: null, splitterRatios: { edts: [0.4, 0.5, 0.6] } }));
+    const port = createStatePort(file);
+
+    expect(await port.readFilterHistory()).toEqual({ ok: true, data: null });
+  });
+
+  it('round-trips a written filterHistory map', async () => {
+    const file = await makeStateFile();
+    await writeFile(
+      file,
+      JSON.stringify({
+        activeEdt: null,
+        filterHistory: { 'global:text': ['boom', 'error'], 'service:/repos/api:regex': ['^ERROR'] },
+      }),
+    );
+    const port = createStatePort(file);
+
+    expect(await port.readFilterHistory()).toEqual({
+      ok: true,
+      data: { 'global:text': ['boom', 'error'], 'service:/repos/api:regex': ['^ERROR'] },
+    });
+  });
+
+  it('rejects invalid JSON with state-invalid-json', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, '{not json');
+    const port = createStatePort(file);
+
+    const result = await port.readFilterHistory();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('state-invalid-json');
+    }
+  });
+
+  it('rejects a schema-invalid shape with state-invalid-format', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: null, filterHistory: { 'global:text': [1, 2] } }));
+    const port = createStatePort(file);
+
+    const result = await port.readFilterHistory();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('state-invalid-format');
+    }
+  });
+});
+
+describe('state writeFilterHistory()', () => {
+  it('creates the state directory and file on first write, alongside activeEdt: null', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+
+    const result = await port.writeFilterHistory({ 'global:text': ['boom'] });
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    const content = JSON.parse(await readFile(file, 'utf8'));
+    expect(content).toEqual({ activeEdt: null, filterHistory: { 'global:text': ['boom'] } });
+  });
+
+  it('overwrites a previously written filterHistory map', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    await port.writeFilterHistory({ 'global:text': ['boom'] });
+
+    await port.writeFilterHistory({ 'global:text': ['other'] });
+
+    expect(await port.readFilterHistory()).toEqual({ ok: true, data: { 'global:text': ['other'] } });
+  });
+
+  it('preserves a previously written activeEdt and splitterRatios when writing filterHistory', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    await port.writeActiveEdt('01JXXXXX1AAAAAAAAAAAAAAAAA');
+    await port.writeSplitterRatios({ edts: [0.4, 0.5, 0.6] });
+
+    await port.writeFilterHistory({ 'global:text': ['boom'] });
+
+    const content = JSON.parse(await readFile(file, 'utf8'));
+    expect(content).toEqual({
+      activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      splitterRatios: { edts: [0.4, 0.5, 0.6] },
+      filterHistory: { 'global:text': ['boom'] },
+    });
+  });
+
+  it('preserves a previously written filterHistory when writing activeEdt/splitterRatios', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    await port.writeFilterHistory({ 'global:text': ['boom'] });
+
+    await port.writeActiveEdt('01JXXXXX1AAAAAAAAAAAAAAAAA');
+    await port.writeSplitterRatios({ edts: [0.4, 0.5, 0.6] });
+
+    const content = JSON.parse(await readFile(file, 'utf8'));
+    expect(content).toEqual({
+      activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      splitterRatios: { edts: [0.4, 0.5, 0.6] },
+      filterHistory: { 'global:text': ['boom'] },
+    });
+  });
+});
+
+describe('state per-field read isolation on a sibling-field validation failure (story 5.4)', () => {
+  it('readActiveEdt still succeeds when filterHistory alone is shape-invalid', async () => {
+    const file = await makeStateFile();
+    await writeFile(
+      file,
+      JSON.stringify({ activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA', filterHistory: { 'global:text': [1, 2] } }),
+    );
+    const port = createStatePort(file);
+
+    expect(await port.readActiveEdt()).toEqual({ ok: true, data: '01JXXXXX1AAAAAAAAAAAAAAAAA' });
+  });
+
+  it('readFilterHistory still succeeds when activeEdt alone is shape-invalid', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: 42, filterHistory: { 'global:text': ['boom'] } }));
+    const port = createStatePort(file);
+
+    expect(await port.readFilterHistory()).toEqual({ ok: true, data: { 'global:text': ['boom'] } });
+  });
+
+  it('readFilterHistory still fails with state-invalid-format when filterHistory itself is the invalid field', async () => {
+    const file = await makeStateFile();
+    await writeFile(
+      file,
+      JSON.stringify({ activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA', filterHistory: { 'global:text': [1, 2] } }),
+    );
+    const port = createStatePort(file);
+
+    const result = await port.readFilterHistory();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('state-invalid-format');
+    }
+  });
+});
+
 // Review fix (story 2.21, finding 3): a shape-invalid `splitterRatios` (a UI-only preference)
 // must never break reading `activeEdt`, and vice versa — core use-cases (switch.ts, list.ts,
 // resolve-tab-visibility.ts) only ever call readActiveEdt and have nothing to do with layout

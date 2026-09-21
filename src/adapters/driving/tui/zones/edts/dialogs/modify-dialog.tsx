@@ -338,7 +338,13 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
       void submitModify(current);
       return;
     }
-    deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, topic: nextTextInputValue(prev.topic, input, key) } : prev));
+    deps.setDialog((prev) => {
+      if (prev.kind !== 'modify') {
+        return prev;
+      }
+      const next = nextTextInputValue({ value: prev.topic, cursor: prev.topicCursor }, input, key);
+      return { ...prev, topic: next.value, topicCursor: next.cursor };
+    });
   }
 
   return { handleModifyDialogInput };
@@ -383,7 +389,7 @@ export function ModifyDialogView({
           />
         ) : (
           <>
-            <TextInputLine label="Topic" value={dialog.topic} focused={dialog.formFocus === 'topic'} />
+            <TextInputLine label="Topic" value={dialog.topic} cursor={dialog.topicCursor} focused={dialog.formFocus === 'topic'} />
             {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
             {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
             {candidateState === 'ready'
