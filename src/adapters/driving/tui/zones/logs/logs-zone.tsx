@@ -5,8 +5,8 @@
 // fullscreen) checked first, every keystroke decision delegated to a pure function from
 // logs-zone.logic.ts (or reused as-is from edts-zone.logic.ts where the logic is generic list
 // navigation, not EDT-specific — see that file's own header).
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Box, measureElement, Text, useInput, useWindowSize, type DOMElement } from 'ink';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
@@ -15,6 +15,7 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { StatusBadge, type StatusBadgeState } from '../../shared/components/status-badge.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
+import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
 import {
@@ -181,19 +182,6 @@ type FilterEditorState = {
 // actually filtering anything).
 function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
   return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
-}
-
-function useElementSize(): readonly [{ current: DOMElement | null }, { width: number; height: number } | null] {
-  const ref = useRef<DOMElement | null>(null);
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  useLayoutEffect(() => {
-    if (!ref.current) {
-      return;
-    }
-    const { width, height } = measureElement(ref.current);
-    setSize((current) => (current !== null && current.width === width && current.height === height ? current : { width, height }));
-  });
-  return [ref, size] as const;
 }
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
