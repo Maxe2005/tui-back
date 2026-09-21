@@ -592,6 +592,35 @@ export type FilterHistoryBrowseState = { index: number; savedDraft: string };
 
 export type FilterHistoryBrowseResult = { query: string; browsing: FilterHistoryBrowseState | null };
 
+// Extracted from logs-zone.tsx (refactor): the filter editor's in-progress draft — `/` opens
+// one with scope 'global', `f` with scope 'pane' (repoPath set to whichever pane owns it).
+// `error` mirrors whatever compileLogFilter last returned for this exact draft (Design Notes:
+// recomputed live on every keystroke, never just on submit) — it never blocks the draft from
+// being edited further, it only blocks that particular (mode, query, level) combination from
+// being committed into `globalFilter`/`paneFilters` (see logs-zone.tsx's applyFilterEditorDraft).
+export type FilterEditorState = {
+  scope: 'global' | 'pane';
+  repoPath: string | null;
+  mode: LogFilterMode;
+  query: string;
+  // Story 2.32-style cursor adoption: the caret position within `query`, threaded through to
+  // TextInputLine exactly like edts-zone.logic.ts's `nextTextInputValue`/`TextInputState`
+  // convention (reused directly below). Every programmatic overwrite of `query` (open, history
+  // recall, arrow-browse) resets this to `query.length`, matching that convention's Boundary.
+  cursor: number;
+  level: LogLevel | null;
+  error: string | null;
+  // Review fix: the spec that was in effect for this scope at the moment the editor opened —
+  // restored verbatim on Escape (a true cancel) so a reused widget whose own hint text reads
+  // "[Enter] confirm  [Esc] cancel" actually behaves that way, instead of Escape and Enter both
+  // just closing the editor and leaving whatever last compiled cleanly while typing applied.
+  preOpen: LogFilterSpec;
+  // Story 5.4: non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh
+  // open and whenever the draft is untouched/browsing has ended (snapped back to the draft, or
+  // walked past the most-recent entry). See resolveHistoryBrowseUp/Down just above.
+  browsing: FilterHistoryBrowseState | null;
+};
+
 // I/O matrix ARROW_UP_OLDEST: `↑` on an untouched draft recalls the most-recent entry
 // (preserving the draft as `savedDraft`); further `↑` walks older entries; `↑` already at the
 // oldest entry is a no-op (Boundaries). An empty history is a no-op too — nothing to recall.
@@ -650,4 +679,12 @@ export function resolveHistoryBrowseDown(
     return { query: browsing.savedDraft, browsing: null };
   }
   return { query: history[prevIndex]!, browsing: { index: prevIndex, savedDraft: browsing.savedDraft } };
+}
+
+// Extracted from logs-zone.tsx (refactor): the filter-history grid browser's own `getLabel`
+// callback for command-bar.ts's generalized grid primitives (which operate over arbitrary
+// entries, not just plain strings) — history entries are plain strings already, so this is the
+// identity function. Shared by LogsZone's own useInput dispatch and LogFilterEditor's render.
+export function historyEntryLabel(entry: string): string {
+  return entry;
 }

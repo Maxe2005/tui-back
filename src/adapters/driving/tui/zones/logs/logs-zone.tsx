@@ -12,12 +12,11 @@ import type { LogLine } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
-import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
 import { FullscreenPane } from './fullscreen-pane.js';
+import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
 import {
   jumpSelection,
@@ -28,7 +27,6 @@ import {
   resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
 import {
-  columnDisplayWidth,
   commandAtGridCursor,
   groupCommandsByColumn,
   layoutCommandGrid,
@@ -50,6 +48,7 @@ import {
   filterHistoryKeyString,
   filterVisibleLines,
   healthBadgeState,
+  historyEntryLabel,
   isAtOldestLine,
   isClearAllLogsKey,
   isDefaultLogFilterSpec,
@@ -73,6 +72,7 @@ import {
   toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
+  type FilterEditorState,
   type FilterHistoryBrowseState,
   type FilterHistoryKey,
   type LogFilterMode,
@@ -87,7 +87,6 @@ import {
 // this grid renders inside the same LogFilterEditor `ModalDialog`.
 const HISTORY_GRID_CHROME_WIDTH = 6;
 const HISTORY_GRID_MIN_WIDTH = 10;
-const HISTORY_GRID_COLUMN_GAP = 1;
 // Story 5.5: the history grid browser's own available-*height* budget — ModalDialog's chrome
 // (double border top/bottom + padding top/bottom + title row + "──" separator = 6 rows) plus
 // this editor's own fixed rows above the grid (TextInputLine + Level line + the hint line
@@ -102,10 +101,6 @@ const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
 // siblings sharing the exact same vertical extent, so this reuses the same estimate as
 // PANE_CHROME_ROWS' own sibling, CHROME_ROWS, below.
 const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
-
-function historyEntryLabel(entry: string): string {
-  return entry;
-}
 
 // Reserves a fixed-width left column for the two lists — this zone has no persisted/resizable
 // splitter ratio (unlike every ListDetailSplit-based zone): the spec's Code Map/Design Notes
@@ -133,35 +128,6 @@ const GRID_PANE_CHROME_COLS = 4;
 // measures the pane's own content box for real, post-render, via Ink's `measureElement` — the
 // estimate above now only seeds the very first paint (before Yoga has computed a layout to
 // measure), and every commit after that self-corrects to the pane's true row/column budget.
-
-// Story 5.2: the filter editor's in-progress draft — `/` opens one with scope 'global',
-// `f` with scope 'pane' (repoPath set to whichever pane owns it). `error` mirrors whatever
-// compileLogFilter last returned for this exact draft (Design Notes: recomputed live on every
-// keystroke, never just on submit) — it never blocks the draft from being edited further, it
-// only blocks that particular (mode, query, level) combination from being committed into
-// `globalFilter`/`paneFilters` (see applyFilterEditorDraft below).
-type FilterEditorState = {
-  scope: 'global' | 'pane';
-  repoPath: string | null;
-  mode: LogFilterMode;
-  query: string;
-  // Story 2.32-style cursor adoption: the caret position within `query`, threaded through to
-  // TextInputLine exactly like edts-zone.logic.ts's `nextTextInputValue`/`TextInputState`
-  // convention (reused directly below). Every programmatic overwrite of `query` (open, history
-  // recall, arrow-browse) resets this to `query.length`, matching that convention's Boundary.
-  cursor: number;
-  level: LogLevel | null;
-  error: string | null;
-  // Review fix: the spec that was in effect for this scope at the moment the editor opened —
-  // restored verbatim on Escape (a true cancel) so a reused widget whose own hint text reads
-  // "[Enter] confirm  [Esc] cancel" actually behaves that way, instead of Escape and Enter both
-  // just closing the editor and leaving whatever last compiled cleanly while typing applied.
-  preOpen: LogFilterSpec;
-  // Story 5.4: non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh
-  // open and whenever the draft is untouched/browsing has ended (snapped back to the draft, or
-  // walked past the most-recent entry). See resolveHistoryBrowseUp/Down (logs-zone.logic.ts).
-  browsing: FilterHistoryBrowseState | null;
-};
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const services = useStore((state) => state.edtsBranches);
@@ -1042,99 +1008,3 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   );
 }
 
-// Story 5.2: renders whichever scope's editor is open — one shared component/validation for
-// both `/` (global) and `f` (pane), per Boundaries ("Both editors share one component and
-// validation"). Purely presentational, mirroring ModalDialog's other call sites — all the
-// actual keystroke handling lives in LogsZone's own useInput (Code Map: never a
-// component-owned useInput here, same convention as BranchPicker/TextInputLine).
-function LogFilterEditor({
-  editor,
-  serviceName,
-  history,
-  gridMaxRows,
-  gridCursor,
-  gridScrollOffset,
-  gridAvailableWidth,
-  gridAvailableHeight,
-}: {
-  editor: FilterEditorState;
-  serviceName: string | null;
-  history: string[];
-  gridMaxRows: number;
-  gridCursor: GridCursor | null;
-  gridScrollOffset: number;
-  gridAvailableWidth: number;
-  gridAvailableHeight: number;
-}) {
-  const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
-  // Story 5.4: the history grid browser — reuses command-bar.tsx's generalized grid primitives
-  // over plain query strings (`getLabel = historyEntryLabel`, i.e. the identity function)
-  // rather than a shared visual component (Code Map: "with its own small JSX loop").
-  // Story 5.5 (OVERFLOW_HISTORY_GRID): a `verticalWindow` is now also passed — the grid gains
-  // vertical pagination the same way it already had horizontal truncation/scroll, centered on
-  // the highlighted cell's own row so it never scrolls out of view.
-  const gridLayout =
-    gridCursor !== null
-      ? layoutCommandGrid(history, gridMaxRows, gridAvailableWidth, historyEntryLabel, gridScrollOffset, {
-          maxVisibleRows: gridAvailableHeight,
-          cursorRow: gridCursor.row,
-        })
-      : null;
-  // Review fix: each column's width used to be computed from `gridLayout.columns` — already
-  // vertically sliced — so the widest entry could scroll out of the visible window and shrink
-  // the column, misaligning padding against the pre-5.5 stable width as the user scrolls
-  // vertically. Widths are the full, unsliced column's own (mirrors `groupCommandsByColumn`'s
-  // own column-major grouping, same source `useInput`'s row/cursor math already reads).
-  const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
-  return (
-    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
-      <TextInputLine
-        label={editor.mode === 'regex' ? 'Regex' : 'Text'}
-        value={editor.query}
-        cursor={editor.cursor}
-        focused={gridCursor === null}
-      />
-      <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
-      {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
-      {gridCursor !== null && gridLayout !== null ? (
-        history.length === 0 ? (
-          <DimAnnotation text="No history for this filter yet." />
-        ) : (
-          <>
-            {gridLayout.truncated.top ? <Text color={colors['text-dim']}>▲ more above</Text> : null}
-            <Box flexDirection="row">
-              {gridLayout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-              {gridLayout.columns.map((column, columnIndex) => {
-                const absoluteColumn = gridLayout.scrollOffset + columnIndex;
-                const width = columnDisplayWidth(fullHistoryColumns[absoluteColumn] ?? column, historyEntryLabel);
-                return (
-                  <Box key={absoluteColumn} flexDirection="column" marginRight={HISTORY_GRID_COLUMN_GAP}>
-                    {column.map((entry, rowIndex) => {
-                      const absoluteRow = gridLayout.rowScrollOffset + rowIndex;
-                      const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === absoluteRow;
-                      return (
-                        <Text key={`${absoluteColumn}-${absoluteRow}`} color={isCursor ? colors.accent : colors['text-dim']}>
-                          {isCursor ? '› ' : '  '}
-                          {entry.padEnd(width)}
-                        </Text>
-                      );
-                    })}
-                  </Box>
-                );
-              })}
-              {gridLayout.truncated.right ? <Text color={colors['text-dim']}> …</Text> : null}
-            </Box>
-            {gridLayout.truncated.bottom ? <Text color={colors['text-dim']}>▼ more below</Text> : null}
-          </>
-        )
-      ) : null}
-      <DimAnnotation
-        text={
-          gridCursor !== null
-            ? '[↑/↓/←/→] browse history  [Enter] recall  [Esc] close'
-            : '[Tab] text/regex  [Ctrl+←/→] level  [↑/↓] history  [Enter/Esc] done'
-        }
-      />
-    </ModalDialog>
-  );
-}
