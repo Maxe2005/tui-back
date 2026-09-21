@@ -296,9 +296,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
   });
 
   // User-reported: bare Left/Right used to cycle the level restriction, colliding with where a
-  // text cursor would naturally live — now they're inert (Ctrl+Left/Right above is the only
-  // binding), and since arrow-key input carries no printable character, they don't leak into
-  // the query text either.
+  // text cursor would naturally live — now they're the TextInputLine caret (Ctrl+Left/Right
+  // above is the only remaining binding for the level restriction) and never touch it.
   it('bare Left/Right no longer cycle the level restriction or alter the query', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -313,6 +312,117 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
       expect(lastFrame).toContain('Level: ALL');
       expect(lastFrame).toContain('Text: boom');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // App-wide cursor adoption (mirrors story 2.32's TextInputLine/nextTextInputValue contract):
+  // the filter editor's query field now supports real caret navigation and mid-string
+  // insert/delete instead of always appending/removing at the end.
+  it('Left/Home move the caret so a typed character inserts mid-string rather than appending', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'abd');
+      await press(instance, stdin, KEYS.left); // caret after 'b', before 'd'
+      await press(instance, stdin, 'c');
+
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text: abcd');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Home then a typed character inserts at the start of the query', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'bcd');
+      await press(instance, stdin, KEYS.home);
+      await press(instance, stdin, 'a');
+
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text: abcd');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Backspace removes the character before the caret, not always the last character', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'abcd');
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.left); // caret between 'b' and 'c'
+      await press(instance, stdin, KEYS.backspace); // removes 'b'
+
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text: acd');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('End then Left/Right/Home form no-ops at either boundary, and End restores caret to the end for further typing', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'abcd');
+      await press(instance, stdin, KEYS.home);
+      await press(instance, stdin, KEYS.left); // already at 0, no-op
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, 'e');
+
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text: abcde');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // A pure caret move while browsing history must not snap the draft back — only typing/
+  // Backspace does that (mirrors the EDT-zone regression already proven for `branchNamesTouched`
+  // never flipping on a cursor-only move).
+  it('Left/Right while browsing a recalled history entry moves the caret without snapping back to the draft', async () => {
+    const store = seedStore({ filterHistory: { 'global:text': ['recalled'] } });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'draft');
+      await press(instance, stdin, KEYS.up); // now showing "recalled", saved draft "draft"
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.right);
+
+      let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text: recalled');
+
+      // Typing still snaps back to the saved draft, appended — proving the caret move above
+      // didn't silently clear `browsing`.
+      await press(instance, stdin, 'X');
+      lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text: draftX');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

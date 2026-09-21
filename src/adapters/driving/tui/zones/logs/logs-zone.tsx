@@ -20,6 +20,7 @@ import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-s
 import {
   jumpSelection,
   moveSelection,
+  nextTextInputValue,
   partitionServicesByEdtMembership,
   resolveSelectionDirection,
   resolveSelectionJump,
@@ -155,6 +156,11 @@ type FilterEditorState = {
   repoPath: string | null;
   mode: LogFilterMode;
   query: string;
+  // Story 2.32-style cursor adoption: the caret position within `query`, threaded through to
+  // TextInputLine exactly like edts-zone.logic.ts's `nextTextInputValue`/`TextInputState`
+  // convention (reused directly below). Every programmatic overwrite of `query` (open, history
+  // recall, arrow-browse) resets this to `query.length`, matching that convention's Boundary.
+  cursor: number;
   level: LogLevel | null;
   error: string | null;
   // Review fix: the spec that was in effect for this scope at the moment the editor opened —
@@ -411,6 +417,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       repoPath: null,
       mode: globalFilter.mode,
       query: globalFilter.query,
+      cursor: globalFilter.query.length,
       level: globalFilter.level,
       error: null,
       preOpen: globalFilter,
@@ -425,6 +432,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       repoPath,
       mode: existing.mode,
       query: existing.query,
+      cursor: existing.query.length,
       level: existing.level,
       error: null,
       preOpen: existing,
@@ -520,7 +528,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           if (key.return) {
             const entry = commandAtGridCursor(columns, historyGridCursor);
             if (entry !== undefined) {
-              applyFilterEditorDraft({ ...filterEditor, query: entry, browsing: null });
+              applyFilterEditorDraft({ ...filterEditor, query: entry, cursor: entry.length, browsing: null });
             }
             setHistoryGridCursor(null);
             return;
@@ -574,12 +582,30 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // already applied to a printable char/Backspace while browsing: the recalled entry
           // is discarded and the original (pre-browse) draft carries over into the new mode.
           const baseQuery = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
-          applyFilterEditorDraft({ ...filterEditor, query: baseQuery, mode: toggleFilterMode(filterEditor.mode), browsing: null });
+          // Snapping back out of a browsed entry changes `query`, so the caret resets to its end
+          // (programmatic-overwrite convention); an untouched draft's caret position carries over.
+          const baseCursor = filterEditor.browsing !== null ? baseQuery.length : filterEditor.cursor;
+          applyFilterEditorDraft({
+            ...filterEditor,
+            query: baseQuery,
+            cursor: baseCursor,
+            mode: toggleFilterMode(filterEditor.mode),
+            browsing: null,
+          });
           setHistoryGridCursor(null);
           return;
         }
         if (key.ctrl && (key.leftArrow || key.rightArrow)) {
           applyFilterEditorDraft({ ...filterEditor, level: cycleFilterLevel(filterEditor.level, key.rightArrow ? 'next' : 'previous') });
+          return;
+        }
+        // Cursor navigation (new, mirrors edts-zone.logic.ts's nextTextInputValue/TextInputLine
+        // adoption): bare Left/Right/Home/End move the caret only — Ctrl+Left/Right above already
+        // claims the level-cycle binding, and this never touches `query`/`browsing`/`error`, so a
+        // pure caret move never snaps a browsed history entry back to the saved draft.
+        if (key.leftArrow || key.rightArrow || key.home || key.end) {
+          const result = nextTextInputValue({ value: filterEditor.query, cursor: filterEditor.cursor }, input, key);
+          setFilterEditor({ ...filterEditor, cursor: result.cursor });
           return;
         }
         // Story 5.4: arrow-recall. `↑` always browses (recalling the most-recent entry on an
@@ -589,7 +615,12 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         if (key.upArrow) {
           const history = historyForEditor(filterEditor);
           const result = resolveHistoryBrowseUp(filterEditor.query, filterEditor.browsing, history);
-          applyFilterEditorDraft({ ...filterEditor, query: result.query, browsing: result.browsing });
+          applyFilterEditorDraft({
+            ...filterEditor,
+            query: result.query,
+            cursor: result.query.length,
+            browsing: result.browsing,
+          });
           return;
         }
         if (key.downArrow) {
@@ -603,23 +634,36 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           }
           const history = historyForEditor(filterEditor);
           const result = resolveHistoryBrowseDown(filterEditor.browsing, history);
-          applyFilterEditorDraft({ ...filterEditor, query: result.query, browsing: result.browsing });
+          applyFilterEditorDraft({
+            ...filterEditor,
+            query: result.query,
+            cursor: result.query.length,
+            browsing: result.browsing,
+          });
           return;
         }
         if (key.backspace || key.delete) {
           // Story 5.4 (I/O matrix SNAP_BACK_TYPE): while browsing, Backspace snaps back to the
           // saved draft with the backspace applied on top, rather than editing the recalled
-          // history entry in place.
-          const base = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
-          applyFilterEditorDraft({ ...filterEditor, query: base.slice(0, -1), browsing: null });
+          // history entry in place — same "caret at the saved draft's end" convention as the
+          // typed-char snap-back just below.
+          const browsing = filterEditor.browsing;
+          const base = browsing !== null ? browsing.savedDraft : filterEditor.query;
+          const cursor = browsing !== null ? base.length : filterEditor.cursor;
+          const result = nextTextInputValue({ value: base, cursor }, input, key);
+          applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
           return;
         }
         if (!key.ctrl && !key.meta && input.length > 0) {
           // Story 5.4 (I/O matrix SNAP_BACK_TYPE): any printable character while browsing
           // snaps back to the draft with that keystroke applied on top — same one-key-resume
-          // idiom already used elsewhere in this editor.
-          const base = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
-          applyFilterEditorDraft({ ...filterEditor, query: base + input, browsing: null });
+          // idiom already used elsewhere in this editor, and inserts at the caret rather than
+          // always appending, now that the field is cursor-aware.
+          const browsing = filterEditor.browsing;
+          const base = browsing !== null ? browsing.savedDraft : filterEditor.query;
+          const cursor = browsing !== null ? base.length : filterEditor.cursor;
+          const result = nextTextInputValue({ value: base, cursor }, input, key);
+          applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
         }
         return;
       }
@@ -1317,7 +1361,12 @@ function LogFilterEditor({
   const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
   return (
     <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
-      <TextInputLine label={editor.mode === 'regex' ? 'Regex' : 'Text'} value={editor.query} focused={gridCursor === null} />
+      <TextInputLine
+        label={editor.mode === 'regex' ? 'Regex' : 'Text'}
+        value={editor.query}
+        cursor={editor.cursor}
+        focused={gridCursor === null}
+      />
       <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
       {gridCursor !== null && gridLayout !== null ? (
