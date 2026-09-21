@@ -8,12 +8,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import type { LogLine } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
-import { StatusBadge, type StatusBadgeState } from '../../shared/components/status-badge.js';
+import { StatusBadge } from '../../shared/components/status-badge.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -51,6 +51,7 @@ import {
   filterVisibleLines,
   formatLogFilterSpec,
   formatLogLine,
+  healthBadgeState,
   isAtOldestLine,
   isClearAllLogsKey,
   isDefaultLogFilterSpec,
@@ -109,16 +110,6 @@ const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" head
 
 function historyEntryLabel(entry: string): string {
   return entry;
-}
-
-// Story 5.3: HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error,
-// `restarting` → `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never
-// color alone; accent is never a health color (StatusBadge as-is, no change).
-function healthBadgeState(health: HealthState): StatusBadgeState {
-  if (health === 'restarting') {
-    return 'in-progress';
-  }
-  return health;
 }
 
 // Reserves a fixed-width left column for the two lists — this zone has no persisted/resizable

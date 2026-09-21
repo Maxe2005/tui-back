@@ -10,7 +10,19 @@
 // partitionServicesByEdtMembership shape").
 import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
+import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import type { StatusBadgeState } from '../../shared/components/status-badge.js';
+
+// Story 5.3: HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error,
+// `restarting` → `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never
+// color alone; accent is never a health color (StatusBadge as-is, no change). Shared by every
+// place a health badge renders (list rows, grid panes, fullscreen pane).
+export function healthBadgeState(health: HealthState): StatusBadgeState {
+  if (health === 'restarting') {
+    return 'in-progress';
+  }
+  return health;
+}
 
 // Boundaries: "Tab cycles EDT list -> other list -> panes".
 export type LogsPaneFocus = 'edt-list' | 'other-list' | 'panes';
