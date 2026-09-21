@@ -7,10 +7,12 @@
 // adapter (zones, command-bar, app-shell) imports.
 import { create } from 'zustand';
 import type { UseBoundStore, StoreApi } from 'zustand';
+import type { ContainerPort } from '../../../../core/ports/container.js';
 import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
 import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../core/ports/state.js';
@@ -18,12 +20,14 @@ import { createNavigationSlice, type NavigationSlice } from './slices/navigation
 import { createEdtSlice, type EdtSlice } from './slices/edt-slice.js';
 import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice.js';
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
+import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
 export type { CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
 export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/edt-slice.js';
 export type { RegistryOutcome, RegistryRegisterResult } from './slices/registry-slice.js';
 export type { SettingsUpdate } from './slices/settings-slice.js';
+export type { UpdateRunStatus } from './slices/update-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
@@ -48,9 +52,18 @@ export type AppStoreDeps = {
   registryResourceKey: string;
   // Story 2.19: the settings screen's persistence port (zod-validated settings.yaml).
   settings: SettingsPort;
+  // Story 3.1: the container-restart port the Update zone's runGroupUpdate closes over.
+  // Optional so every pre-existing `createAppStore()` call (tests, and the module-level
+  // `useAppStore` default below) keeps working unwired; runGroupUpdate degrades to an
+  // explicit error state rather than throwing when it is missing.
+  container?: ContainerPort;
+  // Story 3.2: the migration-run port the Update zone's runGroupUpdate closes over (the
+  // manifest `migrationCommand` runs between pull/merge and restart). Same optionality
+  // contract as `container` above — runGroupUpdate requires both before starting a run.
+  migration?: MigrationPort;
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -58,6 +71,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createEdtSlice(deps)(...args),
     ...createRegistrySlice(deps)(...args),
     ...createSettingsSlice(deps)(...args),
+    ...createUpdateSlice(deps)(...args),
   }));
 }
 

@@ -93,6 +93,43 @@ export interface GitPort {
   // repo's manifest sharedBranch. Never used for a member's own branch (spec: a missing
   // member branch is reported failed, never auto-fetched).
   fetch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // Story 3.1: plain `git pull` on the current branch — used only when a member already sits
+  // on its manifest sharedBranch (the merge path below would be a self-merge). Follows the
+  // switch.ts precedent: pulls of the shared branch carry no write-gate.
+  pull(repoPath: string): Promise<Result<void>>;
+  // Story 3.1 (review): true while a conflicting merge *or* pull is still in progress
+  // (MERGE_HEAD exists) — lets the group-update use-case abort a conflicting `git pull`
+  // back to the pre-run HEAD the same way it aborts a conflicting merge. An unresolvable
+  // check (git itself unspawnable) is the only failure mode; anything else reads as
+  // "no merge in progress", never a throw.
+  isMergeInProgress(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.1: `git merge <branch>` of the (already fetched) shared branch into the member's
+  // own current branch — never a rebase. A conflicting merge surfaces as `merge-conflict`
+  // (distinct from any other `git-merge-error`); the caller aborts via abortMerge below so
+  // the repo lands back at its pre-run HEAD.
+  mergeBranch(repoPath: string, branch: string): Promise<Result<void>>;
+  // Story 3.1: `git merge --abort` — cancels an in-progress conflicting merge, restoring the
+  // pre-run HEAD. Never discards developer work: abort only cancels the attempted merge.
+  abortMerge(repoPath: string): Promise<Result<void>>;
+  // Story 3.4: porcelain file list backing the lockfile-only classifier — the raw
+  // `git status --porcelain` paths (one entry per dirty path; renames surface both sides so
+  // the classifier stays conservative). Empty when the tree is clean.
+  listDirtyPaths(repoPath: string): Promise<Result<string[]>>;
+  // Story 3.4: path-scoped discard (`git checkout -- <paths>` equivalent) for the
+  // lockfile-only auto-fix. Never touches paths outside the given list.
+  discardPaths(repoPath: string, paths: string[]): Promise<Result<void>>;
+  // Story 3.4: true while a `git rebase` is still in progress (rebase-merge/rebase-apply
+  // state dirs exist under the repo's git dir). The tool never touches a rebase — this is
+  // only a detector so a pre-existing mid-rebase surfaces as its own distinct state.
+  // Mirror of isMergeInProgress's contract: only an unresolvable check fails.
+  isRebaseInProgress(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.4: true while unmerged (conflicted) paths remain (`git diff --name-only
+  // --diff-filter=U` is non-empty) — the re-verification gate before finalizing a
+  // human-resolved merge.
+  hasUnmergedPaths(repoPath: string): Promise<Result<boolean>>;
+  // Story 3.4: `git commit --no-edit` — finalizes a human-resolved merge after
+  // hasUnmergedPaths reported clean. Never resolves conflict content itself.
+  finalizeMerge(repoPath: string): Promise<Result<void>>;
   // Story 2.26: the branch-picker's candidate source for both its filterable-list widget's
   // uses (base-branch candidates for Create new, target-branch candidates for Pick existing).
   // Local-only, mirroring branchExistsLocally's scope (Boundaries: "Remote-branch listing —

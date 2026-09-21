@@ -12,8 +12,11 @@ import { switchActiveEdt } from '../../../core/edt/switch.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
+import { groupUpdate } from '../../../core/scripts/group-update.js';
+import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
@@ -35,6 +38,7 @@ const EDT_DELETE_USAGE =
   'tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]... ' +
   '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
+const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -45,6 +49,8 @@ export function buildSubcommands(deps: {
   edtRegistry: EdtRegistryPort;
   edtRegistryResourceKey: string;
   git: GitPort;
+  container: ContainerPort;
+  migration: MigrationPort;
   state: StatePort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
@@ -129,6 +135,56 @@ export function buildSubcommands(deps: {
         }
         const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
         return err('invalid-argument', `Unknown edt action: ${label}. Usage:\n${EDT_USAGE}`);
+      },
+    },
+    {
+      name: 'update',
+      usage: UPDATE_USAGE,
+      // Story 3.3: the bare invocation stays EDT-scoped (3.1/3.2, `--all` never implied);
+      // `--all --yes` (order-insensitive) runs the same per-service flow against every
+      // managed repo; `--all` alone is a `confirmation-required` rejection naming `--yes`
+      // (confirmation stays out of core — a driving concern). Any other flag is an explicit
+      // invalid-argument rejection, never silently ignored.
+      run: async (args) => {
+        // Story 3.4: the CLI explicitly passes no resolution seam — dirty worktrees keep
+        // today's `skipped`/`dirty-worktree` rows and conflicts keep the abort-and-report
+        // `failed`/`merge-conflict` rows, with no prompt and single-line JSON output.
+        if (args.length === 0) {
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'edt',
+            onUpdateBlocker: undefined,
+          });
+        }
+        const sorted = [...args].sort();
+        if (sorted.length === 2 && sorted[0] === '--all' && sorted[1] === '--yes') {
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'all',
+            onUpdateBlocker: undefined,
+          });
+        }
+        if (args.length === 1 && args[0] === '--all') {
+          return err(
+            'confirmation-required',
+            `All-repos update touches every managed repo — rerun with --all --yes to confirm. Usage: ${UPDATE_USAGE}`,
+          );
+        }
+        return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
       },
     },
   ];

@@ -386,3 +386,30 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-29-delete-an-edt.md`
   summary: `tui-back edt delete <topic>` cannot delete an EDT whose topic literally begins with `--` — the positional-argument parser treats any leading-`--` token as an unknown option, with no `--` end-of-options escape hatch.
   evidence: `runEdtDelete` (`src/adapters/driving/cli/subcommands.ts`) parses `<topic>` as the first non-flag token, per this story's own approved spec/Code Map (`tui-back edt delete <topic> [--branches ...]`, deliberately positional unlike `create`/`switch`/`modify`'s `--topic`/`--to` flags) — changing the argument shape now would be a disruptive, low-value change for an unlikely topic name. **Track:** add a `--` end-of-options convention if this is ever hit in practice.
+
+## Deferred from: code review of 3-1-group-update-pull-restart-edt-scoped (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-1-group-update-pull-restart-edt-scoped.md`
+  summary: The dirty-worktree pre-check in `groupUpdate`'s per-member flow is a non-atomic time-of-check — uncommitted changes or a branch switch landing between the check, fetch, merge, and restart are not serialized by any per-repo primitive.
+  evidence: `src/core/scripts/group-update.ts`'s `hasUncommittedChanges` gate runs before the pull/merge/restart sequence with no lock held on the repo itself (same check-then-act shape as the pre-existing `GitPort` operations). Tolerable in practice — `git merge` refuses when it would overwrite dirty files — and fixing it needs a per-repo mutual-exclusion primitive that does not exist yet. **Track:** revisit if a concurrent-edit-during-update incident is ever observed, together with the analogous `GitPort` check-then-act gaps.
+
+## Deferred from: code review of 3-2-run-migrations-as-part-of-the-group-update (2026-09-17)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-2-run-migrations-as-part-of-the-group-update.md`
+  summary: `runMigration` spawns the migration command with no timeout or kill guard, so a hanging migration (e.g. waiting on a DB lock or stdin) blocks its service's update — and the TUI event loop — indefinitely.
+  evidence: `src/adapters/driven/migration/index.ts` calls `spawnSync` with no `timeout` option, the same no-timeout shape as the pre-existing git/container adapters; choosing a timeout value and kill semantics is a human intent decision, not a trivial fix. **Track:** decide a timeout/kill policy (ideally once, across git/container/migration spawns) before or during story 3.5, which owns migration failure UX.
+
+## Deferred from: code review of 3-4-assisted-resolution-of-merge-conflicts-dirty-state (2026-09-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: `listDirtyPaths` parses `git status --porcelain` without `-z`, so quoted/escaped paths and `old -> new` rename splits can mis-resolve exotic filenames and miss (never wrongly grant) the lockfile auto-fix.
+  evidence: `src/adapters/driven/git/index.ts`'s `listDirtyPaths` strips surrounding quotes but never unescapes porcelain C-style escapes and splits renames on every ` -> ` occurrence. Surfaced by review (blind-hunter + edge-case-hunter); degrades safe (falls through to the guided menu, never a wrong silent discard) and only affects exotic filenames. **Track:** a `-z`/NUL-delimited porcelain parse (rename format changes under `-z`) the next time this adapter is touched.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: Quitting (`markUpdateInterrupted`) or clearing (`clearUpdate`) the Update zone while a resolution blocker is raised orphans the core seam promise — it hangs forever instead of settling the run.
+  evidence: `src/adapters/driving/tui/store/slices/update-slice.ts` nulls `pendingBlockerResolve` without resolving it on those paths; user-visible state stays consistent (flags are cleared, a new run works), but the abandoned run's `await onUpdateBlocker` never settles. Surfaced by review (blind-hunter); settling it needs an abandon-vs-cancel-run design decision, not a trivial fix. **Track:** decide (abandon silently vs. resolve `cancel-run` with a run-generation guard) next time the update slice is touched.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: Eight test files hand-maintain their own full `GitPort` fake listing all five story-3.4 methods with no shared factory, so the next port addition touches every file and risks fake drift.
+  evidence: `src/core/scripts/group-update.test.ts`, `src/core/edt/*.test.ts`, `src/adapters/driven/edt-registry/index.test.ts` and others each inline the five new methods. Surfaced by review (blind-hunter); mechanical and green today. **Track:** extract one shared `fakeGit` factory when the port next grows.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-4-assisted-resolution-of-merge-conflicts-dirty-state.md`
+  summary: The resolution modal names the blocked service/repo/kind but never lists which paths are dirty or conflicted, so the developer chooses stash/editor/cancel without seeing the file list.
+  evidence: `UpdateBlocker` in `src/core/scripts/group-update.ts` carries no path list and `formatBlockerBody` in `src/adapters/driving/tui/zones/update/update-zone.tsx` renders kind text only. Surfaced by review (blind-hunter); widening the seam shape is extra scope beyond the frozen spec. **Track:** carry the dirty/unmerged path list through the blocker the next time the seam shape is touched.

@@ -102,6 +102,15 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     renameBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    pull: vi.fn(async () => ok(undefined)),
+    isMergeInProgress: vi.fn(async () => ok(false)),
+    mergeBranch: vi.fn(async () => ok(undefined)),
+    abortMerge: vi.fn(async () => ok(undefined)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
