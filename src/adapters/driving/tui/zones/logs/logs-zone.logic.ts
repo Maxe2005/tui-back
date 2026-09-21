@@ -291,6 +291,15 @@ export type LogFilterSpec = {
 
 export const DEFAULT_LOG_FILTER: LogFilterSpec = { mode: 'text', query: '', level: null };
 
+// Extracted from logs-zone.tsx (refactor): shared by the filter-editor commit/cancel paths and
+// every pane's "pane filter: on" annotation — a spec deep-equal to DEFAULT_LOG_FILTER (empty
+// query, no level restriction, either mode) is a no-op filter and must never be stored as an
+// explicit paneFilters[repoPath] entry (that would leave the annotation/hasOwnFilter check
+// seeing a filter that isn't actually filtering anything).
+export function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
+  return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
+}
+
 // Boundaries: "Level filtering has no source field (LogLine has no level) — matched via a
 // text heuristic (ERROR|WARN|INFO|DEBUG, case-insensitive) against line.text". Only the
 // *first* matching token counts — real log lines never carry more than one level tag, and
@@ -353,6 +362,23 @@ export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec
     }
     return true;
   });
+}
+
+// Extracted from logs-zone.tsx (refactor): shared by LogsPaneView and FullscreenPane (both
+// call applyLogFilters the same way, right after filterVisibleLines, same layer 5.1's
+// stdout/stderr toggle already lives on). Boundaries: "A pane's effective filter is
+// (engaged ? global : pass) AND (own ?? pass)".
+export function resolveEffectiveLines(
+  pane: { lines: readonly LogLine[] } | undefined,
+  visibility: VisibilityFlags,
+  globalFilter: LogFilterSpec,
+  engaged: boolean,
+  ownFilter: LogFilterSpec | null,
+): LogLine[] {
+  if (!pane) {
+    return [];
+  }
+  return applyLogFilters(filterVisibleLines(pane.lines, visibility), engaged ? globalFilter : null, ownFilter);
 }
 
 // Per-pane engagement with the global filter, keyed by repoPath — mirrors isPaneWrapped/

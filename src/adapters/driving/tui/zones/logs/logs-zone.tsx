@@ -53,12 +53,14 @@ import {
   formatLogLine,
   isAtOldestLine,
   isClearAllLogsKey,
+  isDefaultLogFilterSpec,
   isPaneEngagedInGlobalFilter,
   isPaneWrapped,
   isSelectAllKey,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
+  resolveEffectiveLines,
   resolveFilterClearTarget,
   resolveFullscreenScrollDirection,
   resolveHistoryBrowseDown,
@@ -174,15 +176,6 @@ type FilterEditorState = {
   // walked past the most-recent entry). See resolveHistoryBrowseUp/Down (logs-zone.logic.ts).
   browsing: FilterHistoryBrowseState | null;
 };
-
-// Review fix: shared by applyFilterEditorDraft's commit path and the Escape-cancel path below
-// — a spec deep-equal to DEFAULT_LOG_FILTER (empty query, no level restriction, either mode)
-// is a no-op filter and must never be stored as an explicit paneFilters[repoPath] entry (that
-// would leave the "pane filter: on" annotation/hasOwnFilter check seeing a filter that isn't
-// actually filtering anything).
-function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
-  return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
-}
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const services = useStore((state) => state.edtsBranches);
@@ -1119,16 +1112,6 @@ function LogsGrid({
       ))}
     </Box>
   );
-}
-
-// Boundaries: "A pane's effective filter is (engaged ? global : pass) AND (own ?? pass)" —
-// shared by LogsPaneView and FullscreenPane (both call applyLogFilters the same way, right
-// after filterVisibleLines, same layer 5.1's stdout/stderr toggle already lives on).
-function resolveEffectiveLines(pane: LogsPaneData | undefined, visibility: VisibilityFlags, globalFilter: LogFilterSpec, engaged: boolean, ownFilter: LogFilterSpec | null): LogLine[] {
-  if (!pane) {
-    return [];
-  }
-  return applyLogFilters(filterVisibleLines(pane.lines, visibility), engaged ? globalFilter : null, ownFilter);
 }
 
 function LogsPaneView({
