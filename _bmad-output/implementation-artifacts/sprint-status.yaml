@@ -41,7 +41,8 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-09-20
+last_updated: 2026-09-21
+# 2026-09-21: Story 5-5 (bound list & filter-editor height) started (bmad-build).
 # 2026-09-20: Sprint Change Proposal (sprint-change-proposal-2026-09-20.md) appended story 5-5
 # (bound list & filter-editor height to the terminal window) to epic-5 — new backlog entry
 # below; story 5-4 confirmed unchanged, its own hint-panel-hidden-while-editing fix retained.
@@ -133,7 +134,7 @@ development_status:
   5-2-filter-the-aggregated-stream: done
   5-3-inline-service-health-restart-control: review
   5-4-filter-history-recall: done
-  5-5-bound-list-filter-editor-height-to-the-terminal-window: backlog
+  5-5-bound-list-filter-editor-height-to-the-terminal-window: in-progress
   epic-5-retrospective: optional
 
   epic-6: backlog
