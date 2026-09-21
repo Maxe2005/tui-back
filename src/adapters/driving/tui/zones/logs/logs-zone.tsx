@@ -8,7 +8,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -75,11 +74,8 @@ import {
   togglePaneWrapFlag,
   toggleVisibilityFlag,
   type FilterEditorState,
-  type FilterHistoryBrowseState,
   type FilterHistoryKey,
-  type LogFilterMode,
   type LogFilterSpec,
-  type LogLevel,
   type LogsPaneFocus,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
