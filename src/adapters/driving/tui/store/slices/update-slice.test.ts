@@ -56,6 +56,11 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     mergeBranch: vi.fn(async () => ok(undefined)),
     abortMerge: vi.fn(async () => ok(undefined)),
     isMergeInProgress: vi.fn(async () => ok(false)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
   };
@@ -113,7 +118,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
 }
 
 describe('update slice', () => {
-  it('starts idle with no results, note, or error', () => {
+  it('starts idle with no results, note, error, or raised blocker', () => {
     const store = createAppStore(fakeDeps());
 
     expect(store.getState().updateStatus).toBe('idle');
@@ -121,6 +126,7 @@ describe('update slice', () => {
     expect(store.getState().updateNote).toBeNull();
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
+    expect(store.getState().updateBlocker).toBeNull();
   });
 
   it('runGroupUpdate runs the core use-case in-process and lands done with per-service rows', async () => {
@@ -354,6 +360,7 @@ describe('update slice', () => {
 
     await store.getState().runGroupUpdate();
     expect(store.getState().updateStatus).toBe('done');
+    store.setState({ updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' } });
     store.getState().clearUpdate();
 
     expect(store.getState().updateStatus).toBe('idle');
@@ -363,5 +370,68 @@ describe('update slice', () => {
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
     expect(store.getState().updateScope).toBeNull();
+    expect(store.getState().updateBlocker).toBeNull();
+  });
+
+  it('runGroupUpdate raises the blocker on a dirty repo and resumes on resolveUpdateBlocker (story 3.4)', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    };
+    const store = createAppStore(fakeDeps({ git }));
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => {
+      expect(store.getState().updateBlocker).toEqual({
+        service: 'svc-a',
+        repoPath: '/repo/a',
+        kind: 'dirty-worktree',
+      });
+    });
+    expect(store.getState().updateStatus).toBe('running');
+
+    store.getState().resolveUpdateBlocker('cancel-repo');
+    await run;
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    expect(store.getState().runInProgress).toBe(false);
+  });
+
+  it('resolveUpdateBlocker with no raised blocker is a no-op, never a throw (story 3.4)', () => {
+    const store = createAppStore(fakeDeps());
+
+    store.getState().resolveUpdateBlocker('cancel-repo');
+
+    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('a throwing git write under a raised blocker settles as internal-error with the menu cleared (story 3.4)', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+      stashSave: vi.fn(async () => {
+        throw new Error('stash exploded');
+      }),
+    };
+    const store = createAppStore(fakeDeps({ git }));
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => {
+      expect(store.getState().updateBlocker).not.toBeNull();
+    });
+    store.getState().resolveUpdateBlocker('stash');
+    await run;
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('internal-error');
+    expect(store.getState().updateError).toContain('stash exploded');
+    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().runInProgress).toBe(false);
   });
 });

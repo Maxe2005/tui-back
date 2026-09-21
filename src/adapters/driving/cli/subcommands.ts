@@ -139,6 +139,9 @@ export function buildSubcommands(deps: {
       // (confirmation stays out of core — a driving concern). Any other flag is an explicit
       // invalid-argument rejection, never silently ignored.
       run: async (args) => {
+        // Story 3.4: the CLI explicitly passes no resolution seam — dirty worktrees keep
+        // today's `skipped`/`dirty-worktree` rows and conflicts keep the abort-and-report
+        // `failed`/`merge-conflict` rows, with no prompt and single-line JSON output.
         if (args.length === 0) {
           return groupUpdate({
             edtRegistry: deps.edtRegistry,
@@ -150,6 +153,7 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
+            onUpdateBlocker: undefined,
           });
         }
         const sorted = [...args].sort();
@@ -164,6 +168,7 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',
+            onUpdateBlocker: undefined,
           });
         }
         if (args.length === 1 && args[0] === '--all') {

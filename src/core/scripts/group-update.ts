@@ -12,14 +12,18 @@
 //
 // Per-repo flow: `currentBranch` must equal the member's recorded branch (anything else
 // is an `unexpected-branch` failure with no git write, no migration, and no restart) →
-// dirty check (`skipped`) → equals `sharedBranch` ? `pull` : (`fetch` shared branch,
-// `assertAllowedBranch` on the member branch, `mergeBranch`); on a `merge-conflict`
-// (or a conflicting pull that leaves the repo mid-merge), `git merge --abort` restores
-// the pre-run HEAD (abort cancels only the attempted merge, never developer work — full
-// guided handling arrives in story 3.4). Story 3.2 inserts the migrate phase next (the
+// pre-existing mid-merge/mid-rebase surfaces as its own distinct `skipped` state (never
+// aborted) → dirty check (lockfile-only dirt silently discarded per the `update_repo.sh`
+// convention, other dirt `skipped` without a seam) → equals `sharedBranch` ? `pull` :
+// (`fetch` shared branch, `assertAllowedBranch` on the member branch, `mergeBranch`); on
+// a `merge-conflict` (or a conflicting pull that leaves the repo mid-merge) without a
+// seam, `git merge --abort` restores the pre-run HEAD (abort cancels only the attempted
+// merge, never developer work). Story 3.4: with the `onUpdateBlocker` seam, dirty and
+// conflict states pause on a driving-provided four-choice menu (stash / edited /
+// cancel-repo / cancel-run) with re-verification before resuming, abort-only-own-merge,
+// and a single-retry bound on conflicts. Story 3.2 inserts the migrate phase next (the
 // manifest's `migrationCommand`, skipped without error when undeclared; a failure is a
-// `migration-failed` row with no restart) → `container.restart`. Dirty worktrees are
-// detected and reported only, never stashed or fixed.
+// `migration-failed` row with no restart) → `container.restart`.
 import { basename, resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
@@ -67,7 +71,51 @@ export interface GroupUpdateParams {
   lock: LockPort;
   registry?: RegistryPort;
   scope?: GroupUpdateScope;
+  // Story 3.4: the assisted-resolution seam. Absent by default (the CLI path passes no
+  // seam, keeping today's skip/abort rows); the TUI backs it with a bounded modal menu.
+  // Core owns classification, auto-fix, stash, re-verification, and merge finalization —
+  // the driving side owns only menu rendering and the editor process (core only ever sees
+  // the `edited` choice, never an editor).
+  onUpdateBlocker?: OnUpdateBlocker;
 }
+
+// Story 3.4: the resolution seam shape (Design Notes). `kind` distinguishes a dirty
+// worktree from a mid-run conflict from a pre-existing mid-merge/mid-rebase (surfaced
+// before any menu); the driving side answers with one of four bounded choices.
+export type UpdateBlockerKind = 'dirty-worktree' | 'merge-conflict' | 'mid-merge' | 'mid-rebase';
+
+export interface UpdateBlocker {
+  service: string;
+  repoPath: string;
+  kind: UpdateBlockerKind;
+}
+
+export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+
+export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerChoice>;
+
+// Story 3.4: lockfile-only dirt (the `update_repo.sh` convention) is silently discarded,
+// everything else pauses on the seam. Basename-matched at any depth ("any scope").
+const LOCKFILE_BASENAMES: readonly string[] = [
+  'package.json',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'bun.lock',
+  'bun.lockb',
+  'npm-shrinkwrap.json',
+];
+
+function isLockfileOnly(paths: readonly string[]): boolean {
+  return (
+    paths.length > 0 &&
+    paths.every((candidate) => LOCKFILE_BASENAMES.includes(basename(candidate.replace(/\/+$/, ''))))
+  );
+}
+
+// Story 3.4: the message tag for seam-driven stashes (message-tagged, not stack-position —
+// the switch.ts precedent — safe alongside the developer's own unrelated stashes).
+const UPDATE_STASH_MESSAGE = 'tui-back:update';
 
 export async function groupUpdate(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
   const { scope = 'edt' } = params;
@@ -126,9 +174,23 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         results.push(failed(serviceFallback(repoPath), loaded.error));
         continue;
       }
-      results.push(
-        await updateWithLoadedManifest(loaded.data, git, container, migration, undefined, repoPath, loaded.data.service, undefined),
+      // Story 3.4: `cancel-run` stops the loop but still returns `ok` with rows so far
+      // (a cancelled repo is `skipped`, never `failed`).
+      const outcome = await updateWithLoadedManifest(
+        loaded.data,
+        git,
+        container,
+        migration,
+        undefined,
+        repoPath,
+        loaded.data.service,
+        undefined,
+        params.onUpdateBlocker,
       );
+      results.push(outcome.row);
+      if (outcome.cancelRun) {
+        break;
+      }
     }
     // Every registered path was unmanaged — an explicit no-op, never silent success.
     if (results.length === 0) {
@@ -205,7 +267,12 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
       });
       const results: GroupUpdateRepoResult[] = [];
       for (const member of members) {
-        results.push(await updateMember(manifest, git, container, migration, active.ulid, member));
+        // Story 3.4: `cancel-run` stops the loop but still returns `ok` with rows so far.
+        const outcome = await updateMember(manifest, git, container, migration, active.ulid, member, params.onUpdateBlocker);
+        results.push(outcome.row);
+        if (outcome.cancelRun) {
+          break;
+        }
       }
       // A fully successful run clears a previously set `interrupted` status so the re-run
       // offer doesn't persist forever: results exist and none failed (a `skipped` row
@@ -252,15 +319,32 @@ async function updateMember(
   migration: MigrationPort,
   edtUlid: string,
   member: { service: string; repoPath: string; branch: string },
-): Promise<GroupUpdateRepoResult> {
+  onUpdateBlocker?: OnUpdateBlocker,
+): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
   const loaded = await manifest.load(repoPath);
   if (!loaded.ok) {
-    return failed(service, loaded.error);
+    return { row: failed(service, loaded.error), cancelRun: false };
   }
 
-  return updateWithLoadedManifest(loaded.data, git, container, migration, edtUlid, repoPath, service, branch);
+  return updateWithLoadedManifest(loaded.data, git, container, migration, edtUlid, repoPath, service, branch, onUpdateBlocker);
+}
+
+// Story 3.4: the per-repo outcome plus the `cancel-run` loop-stop signal. The cancelled
+// repo itself is always a `skipped` row, never `failed` — the outer loops push the row
+// and break, still returning `ok` with rows so far.
+interface RepoOutcome {
+  row: GroupUpdateRepoResult;
+  cancelRun: boolean;
+}
+
+function skipped(service: string, code: string, message: string): RepoOutcome {
+  return { row: { service, outcome: 'skipped', detail: { code, message } }, cancelRun: false };
+}
+
+function failedOutcome(service: string, error: ResultError): RepoOutcome {
+  return { row: failed(service, error), cancelRun: false };
 }
 
 // Shared per-service flow for both scopes (story 3.3 reuses the EDT mechanic unchanged):
@@ -268,6 +352,14 @@ async function updateMember(
 // (unexpected-branch gate + gated write); the all-repos scope passes neither, operating on
 // `currentBranch` as-is (`==sharedBranch` → `pull`, else `fetch` + ungated
 // `assertAllowedBranch` + `mergeBranch`).
+//
+// Story 3.4 layers assisted resolution onto this flow: lockfile-only dirt is silently
+// discarded (the `update_repo.sh` convention, seam or not); a pre-existing
+// mid-merge/mid-rebase surfaces as its own distinct state before any menu (never aborted
+// by any choice); any other dirty worktree or mid-run conflict pauses on the
+// `onUpdateBlocker` seam when present (absent seam preserves today's skip/abort rows).
+// Every resumed repo is re-verified before continuing; one repo's resolution never touches
+// another repo.
 async function updateWithLoadedManifest(
   loaded: Manifest,
   git: GitPort,
@@ -277,12 +369,13 @@ async function updateWithLoadedManifest(
   repoPath: string,
   service: string,
   expectedBranch: string | undefined,
-): Promise<GroupUpdateRepoResult> {
+  onUpdateBlocker?: OnUpdateBlocker,
+): Promise<RepoOutcome> {
   const { container: containerName, sharedBranch, migrationCommand } = loaded;
 
   const current = await git.currentBranch(repoPath);
   if (!current.ok) {
-    return failed(service, current.error);
+    return failedOutcome(service, current.error);
   }
 
   // EDT scope only: the repo must sit on the member's own recorded branch — merging into
@@ -290,57 +383,119 @@ async function updateWithLoadedManifest(
   // No git write and no restart below this point runs for this repo.
   if (expectedBranch !== undefined && current.data !== expectedBranch) {
     return {
-      service,
-      outcome: 'failed',
-      detail: {
-        code: 'unexpected-branch',
-        message: `Repo ${repoPath} is on branch "${current.data}" but the EDT expects "${expectedBranch}" — left untouched`,
+      row: {
+        service,
+        outcome: 'failed',
+        detail: {
+          code: 'unexpected-branch',
+          message: `Repo ${repoPath} is on branch "${current.data}" but the EDT expects "${expectedBranch}" — left untouched`,
+        },
       },
+      cancelRun: false,
     };
   }
 
-  const dirty = await git.hasUncommittedChanges(repoPath);
-  if (!dirty.ok) {
-    return failed(service, dirty.error);
+  // Story 3.4 — pre-existing mid-merge/mid-rebase is detected as its own distinct case
+  // before the dirty gate and before any pull/merge of this run. Core aborts only merges
+  // the current run started — this state is never aborted, only reported (seam or not)
+  // with the menu applying after the report.
+  const settledPreexisting = await settlePreexistingMidState(service, repoPath, git, onUpdateBlocker);
+  if (!settledPreexisting.resumed) {
+    return settledPreexisting.cancelRun
+      ? { row: settledPreexisting.row, cancelRun: true }
+      : { row: settledPreexisting.row, cancelRun: false };
   }
-  if (dirty.data) {
-    return {
-      service,
-      outcome: 'skipped',
-      detail: { code: 'dirty-worktree', message: `Repo ${repoPath} has uncommitted changes — left untouched` },
-    };
+
+  // Story 3.4 — dirty gate: lockfile-only dirt is discarded silently (seam or not) and
+  // the repo proceeds; any other dirt pauses on the seam when present, else keeps today's
+  // `skipped`/`dirty-worktree` row.
+  const dirtyPaths = await git.listDirtyPaths(repoPath);
+  if (!dirtyPaths.ok) {
+    return failedOutcome(service, dirtyPaths.error);
+  }
+  if (dirtyPaths.data.length > 0) {
+    if (isLockfileOnly(dirtyPaths.data)) {
+      const discarded = await git.discardPaths(repoPath, dirtyPaths.data);
+      if (!discarded.ok) {
+        return failedOutcome(service, discarded.error);
+      }
+      const rechecked = await git.listDirtyPaths(repoPath);
+      if (!rechecked.ok) {
+        return failedOutcome(service, rechecked.error);
+      }
+      // Still dirty after the auto-fix (e.g. untracked lockfiles a path-scoped checkout
+      // cannot restore) — handled as ordinary dirt below, never looped silently.
+      if (rechecked.data.length > 0) {
+        const outcome = await resolveDirtyBlocker(service, repoPath, git, onUpdateBlocker);
+        if (!outcome.resumed) {
+          return outcome.cancelRun ? { row: outcome.row, cancelRun: true } : { row: outcome.row, cancelRun: false };
+        }
+      }
+    } else {
+      const outcome = await resolveDirtyBlocker(service, repoPath, git, onUpdateBlocker);
+      if (!outcome.resumed) {
+        return outcome.cancelRun ? { row: outcome.row, cancelRun: true } : { row: outcome.row, cancelRun: false };
+      }
+    }
   }
 
   if (current.data === sharedBranch) {
     const pulled = await git.pull(repoPath);
     if (!pulled.ok) {
       // A conflicting pull leaves the repo mid-merge exactly like a conflicting merge
-      // does — abort back to the pre-run HEAD and report it as such; any other pull
-      // failure keeps its own code.
+      // does — without a seam, abort back to the pre-run HEAD and report it as such
+      // (today's behavior); with a seam, the bounded resolution menu applies. Any other
+      // pull failure keeps its own code.
       const merging = await git.isMergeInProgress(repoPath);
       if (merging.ok && merging.data) {
-        return failConflicted(service, git, repoPath, { code: 'merge-conflict', message: pulled.error.message });
+        const settlement = await resolveMidRunConflict(
+          service,
+          git,
+          repoPath,
+          { code: 'merge-conflict', message: pulled.error.message },
+          onUpdateBlocker,
+          'pull',
+          sharedBranch,
+        );
+        // A resumed conflict rejoins the pipeline below (migrate → restart); a settled
+        // one already carries its row.
+        if (settlement.done) {
+          return settlement.outcome;
+        }
+      } else {
+        return failedOutcome(service, pulled.error);
       }
-      return failed(service, pulled.error);
     }
   } else {
     const fetched = await git.fetch(repoPath, sharedBranch);
     if (!fetched.ok) {
-      return failed(service, fetched.error);
+      return failedOutcome(service, fetched.error);
     }
     // Re-verify before any git write (AD-8) — never assume the member branch is still safe.
     // All-repos scope passes no edtId: the shared-branch gate still applies, the cross-EDT
     // half is skipped.
     const allowed = await git.assertAllowedBranch(repoPath, current.data, edtUlid);
     if (!allowed.ok) {
-      return failed(service, allowed.error);
+      return failedOutcome(service, allowed.error);
     }
     const merged = await git.mergeBranch(repoPath, sharedBranch);
     if (!merged.ok) {
       if (merged.error.code === 'merge-conflict') {
-        return failConflicted(service, git, repoPath, merged.error);
+        const settlement = await resolveMidRunConflict(
+          service,
+          git,
+          repoPath,
+          merged.error,
+          onUpdateBlocker,
+          'merge',
+          sharedBranch,
+        );
+        if (settlement.done) {
+          return settlement.outcome;
+        }
+      } else {
+        return failedOutcome(service, merged.error);
       }
-      return failed(service, merged.error);
     }
   }
 
@@ -353,7 +508,7 @@ async function updateWithLoadedManifest(
   if (migrationCommand !== undefined && migrationCommand.trim() !== '') {
     const migrated = await migration.run(repoPath, migrationCommand);
     if (!migrated.ok) {
-      return failed(service, {
+      return failedOutcome(service, {
         code: 'migration-failed',
         message: `Repo ${repoPath} migration "${migrationCommand}" failed: ${migrated.error.message}`,
       });
@@ -364,13 +519,13 @@ async function updateWithLoadedManifest(
   if (!restarted.ok) {
     // Every row's detail names its repoPath — with duplicate service names in one EDT,
     // the code alone can't tell two rows apart.
-    return failed(service, {
+    return failedOutcome(service, {
       code: restarted.error.code,
       message: `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
     });
   }
 
-  return { service, outcome: 'updated' };
+  return { row: { service, outcome: 'updated' }, cancelRun: false };
 }
 
 // Aborts a conflicting merge (or pull) back to the pre-run HEAD and reports it as
@@ -381,13 +536,326 @@ async function failConflicted(
   git: GitPort,
   repoPath: string,
   conflict: ResultError,
-): Promise<GroupUpdateRepoResult> {
+): Promise<RepoOutcome> {
   const aborted = await git.abortMerge(repoPath);
   if (!aborted.ok) {
-    return failed(service, {
+    return failedOutcome(service, {
       code: 'merge-conflict',
       message: `${conflict.message} (merge --abort also failed: ${aborted.error.message})`,
     });
   }
-  return failed(service, conflict);
+  return failedOutcome(service, conflict);
+}
+
+// Story 3.4 — asks the driving-provided seam for a blocker choice. A throwing seam (a
+// driving-side bug — dispatch maps top-level throws to `internal-error`) is folded into a
+// per-service `failed` row here instead, so one repo's menu failure never strands the
+// others' rows; an unknown choice string is the same class of driving bug.
+async function askSeam(
+  onUpdateBlocker: OnUpdateBlocker,
+  blocker: UpdateBlocker,
+): Promise<{ choice: UpdateBlockerChoice } | { error: ResultError }> {
+  try {
+    const choice = await onUpdateBlocker(blocker);
+    if (choice !== 'stash' && choice !== 'edited' && choice !== 'cancel-repo' && choice !== 'cancel-run') {
+      return {
+        error: {
+          code: 'internal-error',
+          message: `Update blocker seam returned an unknown choice for repo ${blocker.repoPath}`,
+        },
+      };
+    }
+    return { choice };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { error: { code: 'internal-error', message: `Update blocker seam failed for repo ${blocker.repoPath}: ${detail}` } };
+  }
+}
+
+// Story 3.4 — re-verifies a repo before resuming it after a `stash`/`edited` choice:
+// no mid-merge, no mid-rebase, and zero dirty paths. Real conflict content is never
+// auto-resolved here — this only reads state.
+async function reverifyClean(git: GitPort, repoPath: string): Promise<Result<boolean>> {
+  const merging = await git.isMergeInProgress(repoPath);
+  if (!merging.ok) {
+    return merging;
+  }
+  if (merging.data) {
+    return ok(false);
+  }
+  const rebasing = await git.isRebaseInProgress(repoPath);
+  if (!rebasing.ok) {
+    return rebasing;
+  }
+  if (rebasing.data) {
+    return ok(false);
+  }
+  const paths = await git.listDirtyPaths(repoPath);
+  if (!paths.ok) {
+    return paths;
+  }
+  return ok(paths.data.length === 0);
+}
+
+type BlockerSettlement =
+  | { resumed: true }
+  | { resumed: false; row: GroupUpdateRepoResult; cancelRun: boolean };
+
+// Story 3.4 — pre-existing mid-merge/mid-rebase settlement. Without a seam this is a
+// distinct `skipped` row (never today's dirty/conflict codes, never aborted); with a seam
+// the same four-choice menu applies after the report, and cancel choices never abort the
+// pre-existing state (only merges this run started are ever aborted). Resumption means
+// the mid-state cleared — ordinary dirt left behind falls through to the dirty gate,
+// which re-reads the tree fresh.
+async function settlePreexistingMidState(
+  service: string,
+  repoPath: string,
+  git: GitPort,
+  onUpdateBlocker: OnUpdateBlocker | undefined,
+): Promise<BlockerSettlement> {
+  const merging = await git.isMergeInProgress(repoPath);
+  if (!merging.ok) {
+    return { resumed: false, row: failed(service, merging.error), cancelRun: false };
+  }
+  const rebasing = await git.isRebaseInProgress(repoPath);
+  if (!rebasing.ok) {
+    return { resumed: false, row: failed(service, rebasing.error), cancelRun: false };
+  }
+  if (!merging.data && !rebasing.data) {
+    return { resumed: true };
+  }
+  const kind: UpdateBlockerKind = rebasing.data ? 'mid-rebase' : 'mid-merge';
+  const stateName = kind === 'mid-rebase' ? 'mid-rebase' : 'mid-merge';
+  if (onUpdateBlocker === undefined) {
+    return {
+      resumed: false,
+      row: {
+        service,
+        outcome: 'skipped',
+        detail: { code: kind, message: `Repo ${repoPath} is ${stateName} — left untouched` },
+      },
+      cancelRun: false,
+    };
+  }
+  for (;;) {
+    const asked = await askSeam(onUpdateBlocker, { service, repoPath, kind });
+    if ('error' in asked) {
+      return { resumed: false, row: failed(service, asked.error), cancelRun: false };
+    }
+    if (asked.choice === 'cancel-repo') {
+      return {
+        resumed: false,
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: kind, message: `Repo ${repoPath} ${stateName} update cancelled by developer — left as-is` },
+        },
+        cancelRun: false,
+      };
+    }
+    if (asked.choice === 'cancel-run') {
+      return {
+        resumed: false,
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: kind, message: `Repo ${repoPath} ${stateName} update cancelled by developer — left as-is` },
+        },
+        cancelRun: true,
+      };
+    }
+    if (asked.choice === 'stash') {
+      // A stash during a mid-merge/mid-rebase may fail (git refuses) — either way the
+      // re-verification below decides: still mid-state re-presents the menu.
+      await git.stashSave(repoPath, UPDATE_STASH_MESSAGE);
+    }
+    // `edited` is driving-side only (the editor spawn) — core only re-verifies.
+    const stillMerging = await git.isMergeInProgress(repoPath);
+    if (!stillMerging.ok) {
+      return { resumed: false, row: failed(service, stillMerging.error), cancelRun: false };
+    }
+    const stillRebasing = await git.isRebaseInProgress(repoPath);
+    if (!stillRebasing.ok) {
+      return { resumed: false, row: failed(service, stillRebasing.error), cancelRun: false };
+    }
+    if (!stillMerging.data && !stillRebasing.data) {
+      return { resumed: true };
+    }
+    // Still mid-state → re-present the menu.
+  }
+}
+
+// Story 3.4 — ordinary (non-lockfile) dirty-worktree settlement. Without a seam this is
+// today's `skipped`/`dirty-worktree` row with zero writes; with a seam the run waits on
+// the four-choice menu and resumes only after a passing re-verification (`stash` stashes
+// via the git port, `edited` re-verifies a driving-side edit; still dirty re-presents).
+async function resolveDirtyBlocker(
+  service: string,
+  repoPath: string,
+  git: GitPort,
+  onUpdateBlocker: OnUpdateBlocker | undefined,
+): Promise<BlockerSettlement> {
+  if (onUpdateBlocker === undefined) {
+    return {
+      resumed: false,
+      row: {
+        service,
+        outcome: 'skipped',
+        detail: { code: 'dirty-worktree', message: `Repo ${repoPath} has uncommitted changes — left untouched` },
+      },
+      cancelRun: false,
+    };
+  }
+  for (;;) {
+    const asked = await askSeam(onUpdateBlocker, { service, repoPath, kind: 'dirty-worktree' });
+    if ('error' in asked) {
+      return { resumed: false, row: failed(service, asked.error), cancelRun: false };
+    }
+    if (asked.choice === 'cancel-repo') {
+      return {
+        resumed: false,
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: 'dirty-worktree', message: `Repo ${repoPath} update cancelled by developer — left untouched` },
+        },
+        cancelRun: false,
+      };
+    }
+    if (asked.choice === 'cancel-run') {
+      return {
+        resumed: false,
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: 'dirty-worktree', message: `Repo ${repoPath} update cancelled by developer — left untouched` },
+        },
+        cancelRun: true,
+      };
+    }
+    if (asked.choice === 'stash') {
+      // A failed stash leaves the dirt behind — the re-verification below re-presents
+      // the menu rather than failing the repo for a transient stash error.
+      await git.stashSave(repoPath, UPDATE_STASH_MESSAGE);
+    }
+    // `edited` is driving-side only — core only re-verifies before resuming.
+    const verify = await reverifyClean(git, repoPath);
+    if (!verify.ok) {
+      return { resumed: false, row: failed(service, verify.error), cancelRun: false };
+    }
+    if (verify.data) {
+      return { resumed: true };
+    }
+    // Still dirty/conflicted → re-present the menu.
+  }
+}
+
+// Story 3.4 — mid-run conflict settlement (a merge — or pull — this run started now leaves
+// the repo mid-merge). Without a seam this is today's abort-and-report `failed`/
+// `merge-conflict` row; with a seam there is no abort yet — one prompt, then a bounded
+// single retry: a still-conflicted retry ends as one `failed`/`merge-conflict` row with no
+// second prompt. Cancel choices abort the own-started merge (never a pre-existing one —
+// this state is by construction own-started) and land a `skipped` row. A resumed conflict
+// rejoins the caller's pipeline (migrate → restart) via `{ done: false }`.
+type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false };
+
+async function resolveMidRunConflict(
+  service: string,
+  git: GitPort,
+  repoPath: string,
+  conflict: ResultError,
+  onUpdateBlocker: OnUpdateBlocker | undefined,
+  via: 'pull' | 'merge',
+  sharedBranch: string,
+): Promise<ConflictSettlement> {
+  if (onUpdateBlocker === undefined) {
+    return { done: true, outcome: await failConflicted(service, git, repoPath, conflict) };
+  }
+  const asked = await askSeam(onUpdateBlocker, { service, repoPath, kind: 'merge-conflict' });
+  if ('error' in asked) {
+    return { done: true, outcome: await failConflicted(service, git, repoPath, asked.error) };
+  }
+  if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
+    // Own-started merge aborted, repo left at pre-run HEAD; a cancelled repo is `skipped`,
+    // never `failed` — even when the abort itself fails, the code stays informative.
+    const aborted = await git.abortMerge(repoPath);
+    const row: GroupUpdateRepoResult = aborted.ok
+      ? {
+          service,
+          outcome: 'skipped',
+          detail: { code: 'merge-conflict', message: `Repo ${repoPath} update cancelled by developer — merge aborted` },
+        }
+      : {
+          service,
+          outcome: 'skipped',
+          detail: {
+            code: 'merge-conflict',
+            message: `Repo ${repoPath} update cancelled by developer (merge --abort also failed: ${aborted.error.message})`,
+          },
+        };
+    return asked.choice === 'cancel-run' ? { done: true, outcome: { row, cancelRun: true } } : { done: true, outcome: { row, cancelRun: false } };
+  }
+  if (asked.choice === 'stash') {
+    await git.stashSave(repoPath, UPDATE_STASH_MESSAGE);
+    // A stash cannot clear a mid-merge by itself — re-verify, and only a clean tree earns
+    // the single bounded resume below; anything still blocked ends the retry bound here.
+    const verify = await reverifyClean(git, repoPath);
+    if (!verify.ok) {
+      return { done: true, outcome: await failConflicted(service, git, repoPath, verify.error) };
+    }
+    if (!verify.data) {
+      return { done: true, outcome: await failConflicted(service, git, repoPath, conflict) };
+    }
+    return resumeOnceAfterConflict(service, git, repoPath, via, sharedBranch);
+  }
+  // `edited` — the developer resolved by hand driving-side. Verify zero unmerged paths,
+  // then finalize the merge commit and rejoin the pipeline (migrate → restart). A
+  // still-conflicted tree earns the single bounded re-merge, never a second prompt.
+  const unmerged = await git.hasUnmergedPaths(repoPath);
+  if (!unmerged.ok) {
+    return { done: true, outcome: await failConflicted(service, git, repoPath, unmerged.error) };
+  }
+  if (!unmerged.data) {
+    const finalized = await git.finalizeMerge(repoPath);
+    if (!finalized.ok) {
+      // Never abort here: the tree carries the developer's own in-the-moment resolution
+      // (staged, uncommitted) — discarding it via --abort without an explicit choice
+      // would violate the never-discard rule. Leave the repo as-is for hand finishing.
+      return { done: true, outcome: failedOutcome(service, finalized.error) };
+    }
+    // Finalized — the merge commit exists; rejoin the pipeline (migrate → restart).
+    return { done: false };
+  }
+  return resumeOnceAfterConflict(service, git, repoPath, via, sharedBranch);
+}
+
+// Story 3.4 — the single bounded resume after a conflict choice: one re-pull/re-merge,
+// still conflicted → abort + one `failed`/`merge-conflict` row, no second prompt. A clean
+// resume rejoins the caller's pipeline via `{ done: false }` (migrate → restart still run).
+async function resumeOnceAfterConflict(
+  service: string,
+  git: GitPort,
+  repoPath: string,
+  via: 'pull' | 'merge',
+  sharedBranch: string,
+): Promise<ConflictSettlement> {
+  if (via === 'pull') {
+    const retried = await git.pull(repoPath);
+    if (!retried.ok) {
+      const stillMerging = await git.isMergeInProgress(repoPath);
+      if (stillMerging.ok && stillMerging.data) {
+        return { done: true, outcome: await failConflicted(service, git, repoPath, { code: 'merge-conflict', message: retried.error.message }) };
+      }
+      return { done: true, outcome: failedOutcome(service, retried.error) };
+    }
+    return { done: false };
+  }
+  const retried = await git.mergeBranch(repoPath, sharedBranch);
+  if (!retried.ok) {
+    if (retried.error.code === 'merge-conflict') {
+      return { done: true, outcome: await failConflicted(service, git, repoPath, retried.error) };
+    }
+    return { done: true, outcome: failedOutcome(service, retried.error) };
+  }
+  return { done: false };
 }

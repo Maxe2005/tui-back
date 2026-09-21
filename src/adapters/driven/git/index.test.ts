@@ -6,7 +6,7 @@
 // manifest-only directory that is NOT a git repository still gets the gate error rather than
 // a git failure (any git invocation there would have failed as "not a git repository").
 import { describe, expect, it, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -24,10 +24,15 @@ import {
   createGitPort,
   currentBranch,
   deleteBranch,
+  discardPaths,
   fetchBranch,
+  finalizeMerge,
   hasUncommittedChanges,
+  hasUnmergedPaths,
   isMergeInProgress,
+  isRebaseInProgress,
   listBranches,
+  listDirtyPaths,
   mergeBranch,
   pullBranch,
   renameBranch,
@@ -1131,5 +1136,199 @@ describe('createGitPort', () => {
     expect(await port.renameBranch(repo, 'feat/x', 'feat/y')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/x')).toBe(false);
     expect(branchExists(repo, 'feat/y')).toBe(true);
+  });
+
+  it('wires the story 3.4 methods behind the factory pattern', async () => {
+    const repo = await makeCleanGitRepo();
+    const port = createGitPort(manifest);
+    await writeFile(join(repo, 'wip.txt'), 'uncommitted work');
+
+    const dirty = await port.listDirtyPaths(repo);
+    expect(dirty.ok).toBe(true);
+    if (dirty.ok) {
+      expect(dirty.data).toContain('wip.txt');
+    }
+    expect(await port.isRebaseInProgress(repo)).toEqual({ ok: true, data: false });
+    expect(await port.hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+  });
+});
+
+// Story 3.4 — porcelain file list backing the lockfile-only classifier.
+describe('listDirtyPaths', () => {
+  it('reports an empty list for a clean working tree', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('lists modified tracked files and untracked files by path', async () => {
+    const repo = await makeGitRepo();
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked']).status).toBe(0);
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await writeFile(join(repo, 'untracked.txt'), 'new');
+
+    const result = await listDirtyPaths(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toContain('tracked.txt');
+      expect(result.data).toContain('untracked.txt');
+    }
+  });
+
+  it('reports a controlled error on a non-git directory', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    const result = await listDirtyPaths(dir);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-status-error' } });
+  });
+});
+
+// Story 3.4 — path-scoped discard for the lockfile-only auto-fix.
+describe('discardPaths', () => {
+  it('restores a modified tracked file to its committed content', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'package.json'), '{"name":"x"}\n');
+    runGit(repo, ['add', 'package.json']);
+    expect(runGit(repo, ['commit', '-m', 'add package.json']).status).toBe(0);
+    await writeFile(join(repo, 'package.json'), '{"name":"dirty"}\n');
+
+    const result = await discardPaths(repo, ['package.json']);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'package.json'), 'utf8')).toBe('{"name":"x"}\n');
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('leaves paths outside the given list untouched', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'package.json'), '{"name":"x"}\n');
+    await writeFile(join(repo, 'wip.txt'), 'work');
+    runGit(repo, ['add', 'package.json', 'wip.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add files']).status).toBe(0);
+    await writeFile(join(repo, 'package.json'), '{"name":"dirty"}\n');
+    await writeFile(join(repo, 'wip.txt'), 'changed');
+
+    expect(await discardPaths(repo, ['package.json'])).toEqual({ ok: true, data: undefined });
+
+    expect(await readFile(join(repo, 'package.json'), 'utf8')).toBe('{"name":"x"}\n');
+    expect(await readFile(join(repo, 'wip.txt'), 'utf8')).toBe('changed');
+  });
+
+  it('is a no-op success for an empty path list', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await discardPaths(repo, [])).toEqual({ ok: true, data: undefined });
+  });
+
+  it('reports a controlled error for an unknown path', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await discardPaths(repo, ['no-such-file.txt']);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
+  });
+});
+
+// Story 3.4 — mid-rebase detector (detection only: the tool never touches a rebase).
+describe('isRebaseInProgress', () => {
+  it('reports false for an ordinary repo with no rebase in progress', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await isRebaseInProgress(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('reports true while a rebase-merge state dir exists', async () => {
+    const repo = await makeCleanGitRepo();
+    const gitDir = runGit(repo, ['rev-parse', '--git-dir']).stdout.trim();
+    await mkdir(join(repo, gitDir, 'rebase-merge'), { recursive: true });
+
+    expect(await isRebaseInProgress(repo)).toEqual({ ok: true, data: true });
+  });
+
+  it('reports true while a rebase-apply state dir exists', async () => {
+    const repo = await makeCleanGitRepo();
+    const gitDir = runGit(repo, ['rev-parse', '--git-dir']).stdout.trim();
+    await mkdir(join(repo, gitDir, 'rebase-apply'), { recursive: true });
+
+    expect(await isRebaseInProgress(repo)).toEqual({ ok: true, data: true });
+  });
+
+  it('reads a missing git dir as no rebase in progress, never a throw', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    expect(await isRebaseInProgress(dir)).toEqual({ ok: true, data: false });
+  });
+});
+
+// Story 3.4 — unmerged-path verification gate before merge finalization.
+describe('hasUnmergedPaths', () => {
+  it('reports false for a clean repo', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('reports true while a conflicting merge leaves unmerged paths', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: true });
+
+    expect((await abortMerge(repo)).ok).toBe(true);
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+  });
+});
+
+// Story 3.4 — finalizeMerge commits a human-resolved merge without opening an editor.
+describe('finalizeMerge', () => {
+  it('commits a hand-resolved merge (zero unmerged paths) with --no-edit', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+    // Resolve by hand exactly as a developer would: write the merged content, stage it.
+    await writeFile(join(repo, 'conflict.txt'), 'resolved');
+    expect(runGit(repo, ['add', 'conflict.txt']).status).toBe(0);
+    expect(await hasUnmergedPaths(repo)).toEqual({ ok: true, data: false });
+
+    const result = await finalizeMerge(repo);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await isMergeInProgress(repo)).toEqual({ ok: true, data: false });
+    expect(runGit(repo, ['merge-base', '--is-ancestor', 'development', 'feat/member']).status).toBe(0);
+  });
+
+  it('reports a controlled error when no merge is waiting to be committed', async () => {
+    const repo = await makeCleanGitRepo();
+
+    const result = await finalizeMerge(repo);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'git-commit-error' } });
   });
 });

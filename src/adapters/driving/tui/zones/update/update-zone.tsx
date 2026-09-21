@@ -7,16 +7,22 @@
 // `interrupted` and the app quits (AppShell's quitRequested handoff); the next idle render
 // offers a re-run.
 //
+// Story 3.4 backs core's `onUpdateBlocker` seam here: a dirty/conflicted repo pauses the
+// run on a bounded four-choice modal menu (stash / open in editor / cancel repo / cancel
+// run) rendered as `ListRow`s. The editor spawn is driving-side only (`launchEditor`);
+// every git write still goes through the core use-case (AD-1).
+//
 // Every keystroke behavior is a standalone pure function below, unit-tested directly — the
 // `useInput` callback stays a thin dispatcher over them (the edts-zone.tsx convention:
 // the shared renderToString harness's fake stdin never emits data, so a useInput callback
 // itself is never invoked by any test in the repo).
+import { spawnSync } from 'node:child_process';
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { GroupUpdateRepoResult } from '../../../../../core/scripts/group-update.js';
+import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { DetailPane, ModalDialog, Spinner, type SummaryTone } from '../../shared/components/index.js';
+import { DetailPane, ListRow, ModalDialog, Spinner, type SummaryTone } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 
 export const UPDATE_IDLE_PROMPT = 'Press [Enter] to bring every member service up to date.';
@@ -129,6 +135,90 @@ export function resolveQuitConfirm(input: string, key: { return?: boolean; escap
   return null;
 }
 
+// Story 3.4: the assisted-resolution menu — the seam's four fixed choices rendered as
+// `ListRow`s navigated like the EDT zone's `SERVICE_ACTION_MENU_ITEMS` (arrows/Home/End +
+// Enter — the story 2.7 canonical contract; filterable-list widgets are overkill for four
+// fixed rows). `Escape` answers `cancel-repo`: the least-destructive unblock (the repo is
+// skipped, the rest of the run continues) so a stray keystroke never cancels the run.
+export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
+
+export const UPDATE_BLOCKER_MENU_ITEMS = Object.freeze([
+  { value: 'stash', label: 'Stash changes and continue' },
+  { value: 'edited', label: 'Open in editor — I resolved it by hand' },
+  { value: 'cancel-repo', label: 'Cancel this repo (continue with the rest)' },
+  { value: 'cancel-run', label: 'Cancel the whole run' },
+] as const);
+
+export type UpdateBlockerMenuValue = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number]['value'];
+
+// The modal body names the blocked service, its repo path, and the blocker kind —
+// mid-merge/mid-rebase rows stress that the pre-existing state is reported, never
+// auto-touched.
+export function formatBlockerBody(blocker: UpdateBlocker): string {
+  switch (blocker.kind) {
+    case 'dirty-worktree':
+      return `"${blocker.service}" has uncommitted changes (${blocker.repoPath}).`;
+    case 'merge-conflict':
+      return `"${blocker.service}" hit a merge conflict (${blocker.repoPath}).`;
+    case 'mid-merge':
+      return `"${blocker.service}" is already mid-merge from an earlier run (${blocker.repoPath}) — left as-is.`;
+    case 'mid-rebase':
+      return `"${blocker.service}" is already mid-rebase from an earlier run (${blocker.repoPath}) — rebases are never touched.`;
+  }
+}
+
+export type BlockerMenuKey = {
+  upArrow?: boolean;
+  downArrow?: boolean;
+  home?: boolean;
+  end?: boolean;
+  return?: boolean;
+  escape?: boolean;
+};
+
+export type BlockerMenuStep = { type: 'move'; cursor: number } | { type: 'choose'; choice: UpdateBlockerMenuValue } | { type: 'ignore' };
+
+export function resolveBlockerMenuKey(input: string, key: BlockerMenuKey, cursor: number): BlockerMenuStep {
+  const length = UPDATE_BLOCKER_MENU_ITEMS.length;
+  if (key.home === true) {
+    return { type: 'move', cursor: 0 };
+  }
+  if (key.end === true) {
+    return { type: 'move', cursor: length - 1 };
+  }
+  if (key.upArrow === true) {
+    return { type: 'move', cursor: Math.max(0, cursor - 1) };
+  }
+  if (key.downArrow === true) {
+    return { type: 'move', cursor: Math.min(length - 1, cursor + 1) };
+  }
+  if (key.return === true) {
+    const item = UPDATE_BLOCKER_MENU_ITEMS[cursor];
+    if (item === undefined) {
+      return { type: 'ignore' };
+    }
+    return { type: 'choose', choice: item.value };
+  }
+  if (key.escape === true) {
+    return { type: 'choose', choice: 'cancel-repo' };
+  }
+  return { type: 'ignore' };
+}
+
+// Story 3.4: the driving-side editor launch — core only ever sees the `edited` choice,
+// never an editor (AD-1: the TUI never calls a driven adapter; spawning the editor is
+// driving-side only). Spawns `$EDITOR` (fallback `vi`) on the blocked repo with the
+// terminal attached and waits for exit; the exit status is deliberately unread — core's
+// re-verification is the gate (a no-op edit simply re-presents the menu). An `$EDITOR`
+// value carries its own flags (`code --wait`, `emacs -nw`, ...) — the first
+// whitespace-separated token is the binary, the rest are leading args with the blocked
+// repo appended last.
+export function launchEditor(repoPath: string): void {
+  const configured = process.env.EDITOR?.trim();
+  const [binary = 'vi', ...leading] = configured !== undefined && configured !== '' ? configured.split(/\s+/) : [];
+  spawnSync(binary, [...leading, repoPath], { stdio: 'inherit' });
+}
+
 export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const updateStatus = useStore((state) => state.updateStatus);
   const updateResults = useStore((state) => state.updateResults);
@@ -137,6 +227,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateError = useStore((state) => state.updateError);
   const updateErrorCode = useStore((state) => state.updateErrorCode);
   const updateScope = useStore((state) => state.updateScope);
+  const updateBlocker = useStore((state) => state.updateBlocker);
+  const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
   const runGroupUpdate = useStore((state) => state.runGroupUpdate);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
   const activeEdt = useStore((state) => state.activeEdt);
@@ -150,16 +242,42 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [allConfirm, setAllConfirm] = useState(false);
+  const [blockerCursor, setBlockerCursor] = useState(0);
 
-  // While either dialog owns the keystroke, every global shortcut (including `?`
+  // While any dialog owns the keystroke, every global shortcut (including `?`
   // help and the zone mnemonics) must not fire — the same zoneInputCaptured gate the EDTs
-  // zone's own dialogs use.
+  // zone's own dialogs use. The blocker menu captures hardest: while a repo waits, no
+  // other zone key may fire at all.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm || allConfirm);
-  }, [quitConfirm, allConfirm, setZoneInputCaptured]);
+    setZoneInputCaptured(quitConfirm || allConfirm || updateBlocker !== null);
+  }, [quitConfirm, allConfirm, updateBlocker, setZoneInputCaptured]);
+
+  // A newly raised blocker always opens the menu on its first row.
+  useEffect(() => {
+    if (updateBlocker !== null) {
+      setBlockerCursor(0);
+    }
+  }, [updateBlocker]);
 
   useInput(
     (input, key) => {
+      // Story 3.4: while a repo waits on the resolution seam, the menu owns every
+      // keystroke — `q` must not open the quit-confirm underneath it (cancel the run
+      // through the menu instead).
+      if (updateBlocker !== null) {
+        const step = resolveBlockerMenuKey(input, key, blockerCursor);
+        if (step.type === 'move') {
+          setBlockerCursor(step.cursor);
+        } else if (step.type === 'choose') {
+          if (step.choice === 'edited') {
+            // Driving-side editor: spawn `$EDITOR` and wait for exit, then report the
+            // choice — core re-verifies before resuming (a no-op edit re-presents).
+            launchEditor(updateBlocker.repoPath);
+          }
+          resolveUpdateBlocker(step.choice);
+        }
+        return;
+      }
       if (allConfirm) {
         const decision = resolveAllConfirm(input, key);
         if (decision === 'confirm') {
@@ -273,6 +391,16 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       </ModalDialog>
       <ModalDialog title={UPDATE_ALL_CONFIRM_TITLE} open={allConfirm} onConfirm={() => {}} onCancel={() => setAllConfirm(false)}>
         <Text color={colors.text}>{UPDATE_ALL_CONFIRM_BODY}</Text>
+      </ModalDialog>
+      <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
+        {updateBlocker !== null ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
+            {UPDATE_BLOCKER_MENU_ITEMS.map((item, index) => (
+              <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
+            ))}
+          </Box>
+        ) : null}
       </ModalDialog>
     </Box>
   );

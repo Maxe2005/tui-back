@@ -18,6 +18,9 @@ import {
   groupUpdate,
   markGroupUpdateInterrupted,
   type GroupUpdateParams,
+  type OnUpdateBlocker,
+  type UpdateBlocker,
+  type UpdateBlockerChoice,
 } from './group-update.js';
 
 function calls(fn: unknown): Array<unknown[]> {
@@ -60,6 +63,11 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     mergeBranch: vi.fn(async () => ok(undefined)),
     abortMerge: vi.fn(async () => ok(undefined)),
     isMergeInProgress: vi.fn(async () => ok(false)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     ...overrides,
@@ -140,6 +148,9 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     container: overrides.container ?? fakeContainer(),
     migration: overrides.migration ?? fakeMigration(),
     lock: overrides.lock ?? fakeLock(),
+    ...(overrides.registry !== undefined ? { registry: overrides.registry } : {}),
+    ...(overrides.scope !== undefined ? { scope: overrides.scope } : {}),
+    ...(overrides.onUpdateBlocker !== undefined ? { onUpdateBlocker: overrides.onUpdateBlocker } : {}),
   };
 }
 
@@ -295,7 +306,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('development')),
-      hasUncommittedChanges: vi.fn(async () => ok(true)),
+      listDirtyPaths: vi.fn(async () => ok(['wip.txt'])),
     });
     const container = fakeContainer();
 
@@ -327,7 +338,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
 
   it('skips a dirty worktree with dirty-worktree detail, touching no git write and no container', async () => {
     const git = fakeGit({
-      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
     });
     const container = fakeContainer();
 
@@ -523,10 +534,15 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
     const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
+    // No mid-merge before the pull (pre-existing check passes); the failed pull leaves one.
+    let pullCalled = false;
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('development')),
-      pull: vi.fn(async () => err('git-pull-error', 'pull conflicts')),
-      isMergeInProgress: vi.fn(async () => ok(true)),
+      pull: vi.fn(async () => {
+        pullCalled = true;
+        return err('git-pull-error', 'pull conflicts');
+      }),
+      isMergeInProgress: vi.fn(async () => ok(pullCalled)),
     });
 
     const result = await groupUpdate(makeParams({ edtRegistry, state, git }));
@@ -544,10 +560,14 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
     const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
+    let pullCalled = false;
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('development')),
-      pull: vi.fn(async () => err('git-pull-error', 'pull conflicts')),
-      isMergeInProgress: vi.fn(async () => ok(true)),
+      pull: vi.fn(async () => {
+        pullCalled = true;
+        return err('git-pull-error', 'pull conflicts');
+      }),
+      isMergeInProgress: vi.fn(async () => ok(pullCalled)),
       abortMerge: vi.fn(async () => err('git-merge-abort-error', 'no merge to abort')),
     });
 
@@ -566,10 +586,15 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
     const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
+    // The pre-existing check passes (first call clean); the post-pull classification fails.
+    let mergeChecks = 0;
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('development')),
       pull: vi.fn(async () => err('git-pull-error', 'no route to origin')),
-      isMergeInProgress: vi.fn(async () => err('git-merge-check-error', 'git missing')),
+      isMergeInProgress: vi.fn(async () => {
+        mergeChecks += 1;
+        return mergeChecks <= 1 ? ok(false) : err('git-merge-check-error', 'git missing');
+      }),
     });
 
     const result = await groupUpdate(makeParams({ edtRegistry, state, git }));
@@ -723,7 +748,7 @@ describe('groupUpdate — migrate phase (story 3.2)', () => {
 
   it('never runs the migration for a dirty member — the row keeps its dirty-worktree skip', async () => {
     const git = fakeGit({
-      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
     });
     const migration = fakeMigration();
 
@@ -1097,7 +1122,7 @@ describe('groupUpdate — all-repos scope (story 3.3)', () => {
 
   it('keeps per-repo isolation: one dirty/conflict/migrate/restart failure never blocks the other', async () => {
     const git = fakeGit({
-      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
     });
     const container = fakeContainer();
 
@@ -1179,5 +1204,520 @@ describe('groupUpdate — all-repos scope (story 3.3)', () => {
     const result = await groupUpdate(allParams({ registry }));
 
     expect(result).toMatchObject({ ok: false, error: { code: 'registry-invalid-yaml' } });
+  });
+});
+
+describe('groupUpdate — assisted resolution (story 3.4)', () => {
+  // A scripted seam: answers each blocker with the next scripted choice, recording every
+  // blocker raised (the Code Map's "scripted seam callbacks test the same way" as fakeGit
+  // overrides + call-order assertions).
+  function scriptedSeam(choices: UpdateBlockerChoice[]): { seam: OnUpdateBlocker; blockers: UpdateBlocker[] } {
+    const blockers: UpdateBlocker[] = [];
+    let index = 0;
+    const seam: OnUpdateBlocker = async (blocker) => {
+      blockers.push(blocker);
+      const choice = choices[index];
+      index += 1;
+      if (choice === undefined) {
+        throw new Error(`seam script exhausted after ${String(index - 1)} prompts`);
+      }
+      return choice;
+    };
+    return { seam, blockers };
+  }
+
+  it('auto-discards lockfile-only dirt silently and proceeds through merge → migrate → restart', async () => {
+    const git = fakeGit();
+    // Dirty at the gate, clean after the discard lands.
+    (git.listDirtyPaths as unknown as Mock).mockResolvedValueOnce(ok(['package.json'])).mockResolvedValue(ok([]));
+    const migration = fakeMigration();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(makeParams({ git, migration, container }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(git.discardPaths)).toContainEqual(['/repo/a', ['package.json']]);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(1);
+  });
+
+  it('auto-discards nested lockfile paths (any depth) without prompting', async () => {
+    const git = fakeGit();
+    (git.listDirtyPaths as unknown as Mock)
+      .mockResolvedValueOnce(ok(['services/a/package-lock.json', 'package.json']))
+      .mockResolvedValueOnce(ok([]))
+      .mockResolvedValue(ok([]));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: scriptedSeam([]).seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(calls(git.discardPaths)).toContainEqual(['/repo/a', ['services/a/package-lock.json', 'package.json']]);
+  });
+
+  it('treats mixed lockfile + real dirt as ordinary dirt (no silent discard)', async () => {
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['package.json', 'src/index.ts'] : [])),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.discardPaths)).toHaveLength(0);
+  });
+
+  it('dirty with seam: stash stashes via the git port, re-verifies clean, and resumes', async () => {
+    const { seam, blockers } = scriptedSeam(['stash']);
+    const git = fakeGit();
+    // Dirty at the gate, clean after the stash.
+    (git.listDirtyPaths as unknown as Mock).mockResolvedValueOnce(ok(['wip.txt'])).mockResolvedValue(ok([]));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }]);
+    expect(calls(git.stashSave)).toContainEqual(['/repo/a', 'tui-back:update']);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+  });
+
+  it('dirty with seam: edited re-verifies before resuming', async () => {
+    const { seam, blockers } = scriptedSeam(['edited']);
+    const git = fakeGit();
+    (git.listDirtyPaths as unknown as Mock)
+      .mockResolvedValueOnce(ok(['wip.txt']))
+      .mockResolvedValue(ok([]));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }]);
+    // `edited` never writes through git itself — no stash, the menu only re-verifies.
+    expect(calls(git.stashSave)).toHaveLength(0);
+  });
+
+  it('dirty with seam: still dirty after stash re-presents the menu', async () => {
+    const { seam, blockers } = scriptedSeam(['stash', 'cancel-repo']);
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(blockers).toHaveLength(2);
+    expect(blockers.every((blocker) => blocker.kind === 'dirty-worktree')).toBe(true);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('dirty with seam: cancel-repo skips only that repo without aborting anything', async () => {
+    const { seam } = scriptedSeam(['cancel-repo']);
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.abortMerge)).toHaveLength(0);
+  });
+
+  it('dirty with seam: cancel-run stops the loop with rows so far, all skipped-never-failed', async () => {
+    const { seam } = scriptedSeam(['cancel-run']);
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } }],
+      },
+    });
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(1);
+    }
+    // The run stopped: the second repo was never even read.
+    expect(calls(git.currentBranch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
+  });
+
+  it('mid-run conflict with seam: edited with zero unmerged paths finalizes the merge and continues', async () => {
+    const { seam, blockers } = scriptedSeam(['edited']);
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const git = fakeGit({
+      mergeBranch: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? err('merge-conflict', 'Automatic merge failed') : ok(undefined),
+      ),
+      hasUnmergedPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+    });
+
+    const result = await groupUpdate(makeParams({ git, migration, container, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
+    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
+    // Finalized, not aborted — and the pipeline continued through migrate + restart.
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(1);
+  });
+
+  it('mid-run conflict with seam: a still-conflicted retry ends failed with no second prompt', async () => {
+    const { seam, blockers } = scriptedSeam(['edited', 'edited']);
+    const migration = fakeMigration();
+    const git = fakeGit({
+      mergeBranch: vi.fn(async () => err('merge-conflict', 'Automatic merge failed')),
+      hasUnmergedPaths: vi.fn(async () => ok(true)),
+    });
+
+    const result = await groupUpdate(makeParams({ git, migration, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict' } },
+          { service: 'svc-b', outcome: 'failed', detail: { code: 'merge-conflict' } },
+        ],
+      },
+    });
+    // Exactly one prompt per conflicted repo (two repos conflict here, one prompt each —
+    // never a second prompt for the same repo).
+    expect(blockers.filter((blocker) => blocker.repoPath === '/repo/a')).toHaveLength(1);
+    // One initial merge + one bounded retry per repo, then abort.
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(2);
+    expect(calls(git.abortMerge).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('mid-run conflict with seam: cancel-repo aborts the own-started merge into a skipped row', async () => {
+    const { seam } = scriptedSeam(['cancel-repo']);
+    const git = fakeGit({
+      mergeBranch: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? err('merge-conflict', 'Automatic merge failed') : ok(undefined),
+      ),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'merge-conflict' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
+  });
+
+  it('mid-run conflict with seam: stash with a clean re-verification resumes the merge once', async () => {
+    const single = edtEntry('edt-single', 'demo', [member('svc-a', '/repo/a', 'feat/a')]);
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([single])) });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-single')) });
+    const { seam, blockers } = scriptedSeam(['stash']);
+    let merges = 0;
+    const git = fakeGit({
+      mergeBranch: vi.fn(async () => {
+        merges += 1;
+        return merges <= 1 ? err('merge-conflict', 'Automatic merge failed') : ok(undefined);
+      }),
+    });
+
+    const result = await groupUpdate(makeParams({ edtRegistry, state, git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
+    expect(calls(git.stashSave)).toEqual([['/repo/a', 'tui-back:update']]);
+    expect(calls(git.mergeBranch)).toHaveLength(2);
+    expect(calls(git.abortMerge)).toHaveLength(0);
+  });
+
+  it('pre-existing mid-merge without a seam is a distinct skipped row, never aborted', async () => {
+    const git = fakeGit({
+      isMergeInProgress: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'mid-merge' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('pre-existing mid-rebase without a seam is a distinct skipped row, rebase never touched', async () => {
+    const git = fakeGit({
+      isRebaseInProgress: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'mid-rebase' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('pre-existing mid-merge with seam: menu applies after the report, edited resumes when cleared', async () => {
+    const { seam, blockers } = scriptedSeam(['edited']);
+    const git = fakeGit();
+    // Mid-merge at arrival, cleared by the hand resolution the `edited` choice reports.
+    (git.isMergeInProgress as unknown as Mock)
+      .mockResolvedValueOnce(ok(true))
+      .mockResolvedValueOnce(ok(false))
+      .mockResolvedValue(ok(false));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'mid-merge' }]);
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+  });
+
+  it('pre-existing mid-merge with seam: cancel-repo never aborts it', async () => {
+    const { seam, blockers } = scriptedSeam(['cancel-repo']);
+    const git = fakeGit({
+      isMergeInProgress: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'mid-merge' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'mid-merge' }]);
+    expect(calls(git.abortMerge)).toHaveLength(0);
+  });
+
+  it('a throwing seam folds into a per-service failed row, others continue', async () => {
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+    const exploding: OnUpdateBlocker = async () => {
+      throw new Error('menu crashed');
+    };
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: exploding }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'internal-error' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+  });
+
+  it('lockfile auto-fix applies in the all-repos scope too', async () => {
+    const git = fakeGit();
+    (git.listDirtyPaths as unknown as Mock)
+      .mockResolvedValueOnce(ok(['package.json']))
+      .mockResolvedValueOnce(ok([]))
+      .mockResolvedValue(ok([]));
+    const params: GroupUpdateParams = {
+      ...makeParams({ git }),
+      registry: fakeRegistry(['/repo/a']),
+      scope: 'all',
+    };
+
+    const result = await groupUpdate(params);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { ulid: 'all', scope: 'all', results: [{ service: 'a', outcome: 'updated' }] },
+    });
+    expect(calls(git.discardPaths)).toContainEqual(['/repo/a', ['package.json']]);
+  });
+
+  it('a failing lockfile discard is a failed row with its code, touching no pull/merge/migration/restart', async () => {
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['package.json'] : [])),
+      discardPaths: vi.fn(async () => err('git-discard-error', 'git checkout -- failed')),
+    });
+    const migration = fakeMigration();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(makeParams({ git, migration, container }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'git-discard-error' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    expect(calls(git.pull).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(0);
+  });
+
+  it('a failing merge finalization is a failed row with its code, never aborted', async () => {
+    const { seam, blockers } = scriptedSeam(['edited']);
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const git = fakeGit({
+      mergeBranch: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? err('merge-conflict', 'Automatic merge failed') : ok(undefined),
+      ),
+      hasUnmergedPaths: vi.fn(async () => ok(false)),
+      finalizeMerge: vi.fn(async () => err('git-commit-error', 'nothing to commit')),
+    });
+
+    const result = await groupUpdate(makeParams({ git, migration, container, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'git-commit-error' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
+    // The tree carries the developer's own resolution — aborting it away is forbidden.
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(0);
+  });
+
+  it('pull-path conflict with seam: edited finalizes via pull, never mergeBranch', async () => {
+    const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
+    const { seam, blockers } = scriptedSeam(['edited']);
+    // No mid-merge before the pull (pre-existing check passes); the failed pull leaves one.
+    let pullCalled = false;
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('development')),
+      pull: vi.fn(async () => {
+        pullCalled = true;
+        return err('git-pull-error', 'pull conflicts');
+      }),
+      isMergeInProgress: vi.fn(async () => ok(pullCalled)),
+      hasUnmergedPaths: vi.fn(async () => ok(false)),
+    });
+
+    const result = await groupUpdate(makeParams({ edtRegistry, state, git, migration, container, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
+    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
+    expect(calls(git.pull)).toHaveLength(1);
+    expect(calls(git.mergeBranch)).toHaveLength(0);
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(migration.run)).toEqual([['/repo/a', 'npm run migration:run']]);
+    expect(calls(container.restart)).toEqual([['ctr-a']]);
+  });
+
+  it('pull-path conflict with seam: a still-conflicted edited earns one re-pull, then updated', async () => {
+    const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
+    const { seam, blockers } = scriptedSeam(['edited']);
+    let pulls = 0;
+    let pullCalled = false;
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('development')),
+      pull: vi.fn(async () => {
+        pulls += 1;
+        pullCalled = true;
+        return pulls <= 1 ? err('git-pull-error', 'pull conflicts') : ok(undefined);
+      }),
+      isMergeInProgress: vi.fn(async () => ok(pullCalled)),
+      hasUnmergedPaths: vi.fn(async () => ok(true)),
+    });
+
+    const result = await groupUpdate(makeParams({ edtRegistry, state, git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
+    expect(calls(git.pull)).toHaveLength(2);
+    expect(calls(git.mergeBranch)).toHaveLength(0);
   });
 });

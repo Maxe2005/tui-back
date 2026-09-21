@@ -64,6 +64,11 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     mergeBranch: vi.fn(async () => ok(undefined)),
     abortMerge: vi.fn(async () => ok(undefined)),
     isMergeInProgress: vi.fn(async () => ok(false)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
   };

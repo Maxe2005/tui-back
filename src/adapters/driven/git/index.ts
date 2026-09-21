@@ -23,7 +23,8 @@
 // flag. `git checkout <branch> --` uses the (different) trailing-`--` form git-checkout(1)
 // documents to force <branch> to be read as a revision, never a pathspec.
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -49,6 +50,11 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
     mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
     abortMerge: (repoPath) => abortMerge(repoPath),
+    listDirtyPaths: (repoPath) => listDirtyPaths(repoPath),
+    discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
+    isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
+    hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
+    finalizeMerge: (repoPath) => finalizeMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
     renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
   };
@@ -442,6 +448,93 @@ export async function isMergeInProgress(repoPath: string): Promise<Result<boolea
     return err('git-merge-check-error', `Cannot check merge state in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(result.status === 0);
+}
+
+// Story 3.4 — porcelain file list backing the lockfile-only classifier: one entry per
+// dirty path parsed from `git status --porcelain` (each line is `XY<space>path`; renames
+// surface as `old -> new` and contribute both sides so the classifier stays conservative).
+// Empty output means a clean tree. A non-zero exit is a controlled git-status-error.
+export async function listDirtyPaths(repoPath: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['status', '--porcelain'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  const paths: string[] = [];
+  for (const line of String(result.stdout).split('\n')) {
+    if (line.trim() === '') {
+      continue;
+    }
+    const entry = line.length > 3 ? line.slice(3).trim() : '';
+    if (entry === '') {
+      continue;
+    }
+    // Rename/copy entries surface as `old -> new` — keep both sides (conservative: a
+    // non-lockfile on either side blocks the lockfile-only auto-fix).
+    if (entry.includes(' -> ')) {
+      for (const side of entry.split(' -> ')) {
+        const trimmed = side.trim().replace(/^"|"$/g, '');
+        if (trimmed !== '') {
+          paths.push(trimmed);
+        }
+      }
+    } else {
+      paths.push(entry.replace(/^"|"$/g, ''));
+    }
+  }
+  return ok(paths);
+}
+
+// Story 3.4 — path-scoped discard (`git checkout -- <paths>` equivalent) for the
+// lockfile-only auto-fix. The `--` terminates option parsing so a path starting with `-`
+// is never treated as a flag (the createBranch/deleteBranch precedent). An empty list is
+// a no-op success.
+export async function discardPaths(repoPath: string, paths: string[]): Promise<Result<void>> {
+  if (paths.length === 0) {
+    return ok(undefined);
+  }
+  const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 3.4 — mid-rebase detector: resolves the repo's git dir (`git rev-parse --git-dir`,
+// relative for ordinary repos — resolved against repoPath) and reports true while either
+// rebase state dir exists. Mirrors isMergeInProgress's taxonomy: only an unspawnable git
+// (status === null) is a real failure; an unresolvable git dir (not a repo, ...) reads as
+// "no rebase in progress", never a throw. The tool never touches a rebase — detection only.
+export async function isRebaseInProgress(repoPath: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['rev-parse', '--git-dir'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status === null) {
+    return err('git-rebase-check-error', `Cannot check rebase state in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  if (result.status !== 0) {
+    return ok(false);
+  }
+  const gitDir = resolve(repoPath, String(result.stdout).trim());
+  return ok(existsSync(join(gitDir, 'rebase-merge')) || existsSync(join(gitDir, 'rebase-apply')));
+}
+
+// Story 3.4 — unmerged-path check (`git diff --name-only --diff-filter=U` non-empty):
+// the re-verification gate before finalizeMerge. Any git failure is a controlled error.
+export async function hasUnmergedPaths(repoPath: string): Promise<Result<boolean>> {
+  const result = spawnSync('git', ['diff', '--name-only', '--diff-filter=U'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-unmerged-check-error', `Cannot check unmerged paths in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).trim().length > 0);
+}
+
+// Story 3.4 — `git commit --no-edit` finalizes a human-resolved merge after
+// hasUnmergedPaths reported clean. `--no-edit` keeps it non-interactive (no editor — the
+// pull/merge `--no-edit` precedent). Never resolves conflict content itself.
+export async function finalizeMerge(repoPath: string): Promise<Result<void>> {
+  const result = spawnSync('git', ['commit', '--no-edit'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-commit-error', `git commit --no-edit failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
 }
 
 // Story 2.26 — the branch-picker's candidate source: `refs/heads/` only (local-only, never

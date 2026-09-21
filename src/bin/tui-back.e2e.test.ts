@@ -1479,6 +1479,35 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).not.toBe(0);
   });
 
+  it('a lockfile-only dirty member is auto-discarded and still updates, one JSON line (story 3.4)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    const b = await makeBehindMember();
+    // Tracked lockfile dirt only: commit a package.json on the member branch, then modify
+    // it without committing — the update must discard it silently and proceed.
+    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer"}\n');
+    runGit(a.repo, ['add', 'package.json']);
+    expect(runGit(a.repo, ['commit', '-m', 'add package.json']).status).toBe(0);
+    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
+    await registerRepos([a.repo, b.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([
+      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated' },
+    ]);
+    // The lockfile dirt was discarded (committed content restored) and the merge landed.
+    expect(await readFile(join(a.repo, 'package.json'), 'utf8')).toBe('{"name":"route-explorer"}\n');
+    const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
+    expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).toBe(0);
+  });
+
   it('runs each member migrationCommand after pull/merge: marker files prove it ran, both updated (story 3.2 AC1)', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);

@@ -8,6 +8,8 @@ import {
   markGroupUpdateInterrupted as markGroupUpdateInterruptedUseCase,
   type GroupUpdateRepoResult,
   type GroupUpdateScope,
+  type UpdateBlocker,
+  type UpdateBlockerChoice,
 } from '../../../../../core/scripts/group-update.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
@@ -29,6 +31,13 @@ export type UpdateSlice = {
   // An all-repos run targets no EDT: `updateUlid` is `'all'` and `updateScope` is `'all'`.
   updateUlid: string | null;
   updateScope: GroupUpdateScope | null;
+  // Story 3.4: the currently raised resolution blocker (null when no repo is waiting).
+  // Core's `onUpdateBlocker` seam sets this and waits; the Update zone renders the bounded
+  // four-choice modal menu over it, and this dispatch carries the developer's choice back
+  // to the waiting run. Every git write still goes through the core use-case (AD-1) — the
+  // driving side owns only menu rendering and the editor process.
+  updateBlocker: UpdateBlocker | null;
+  resolveUpdateBlocker: (choice: UpdateBlockerChoice) => void;
   // Starts the core use-case in-process. A no-op-with-signal guard, not a throw, when the
   // store is unwired; a second call while a run is already in flight reports
   // `update-already-running` so double-Enter gives feedback instead of silence.
@@ -44,6 +53,10 @@ export type UpdateSlice = {
 };
 
 export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], UpdateSlice> {
+  // Story 3.4: the pending seam promise's resolver — installed when core raises a blocker,
+  // consumed when the zone menu dispatches a choice. Held in closure, never in Zustand
+  // state (a function is non-serializable, and set() replacements must not drop it).
+  let pendingBlockerResolve: ((choice: UpdateBlockerChoice) => void) | null = null;
   return (set, get) => ({
     updateStatus: 'idle',
     updateResults: [],
@@ -53,6 +66,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     updateErrorCode: null,
     updateUlid: null,
     updateScope: null,
+    updateBlocker: null,
+    resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
+      const resolve = pendingBlockerResolve;
+      pendingBlockerResolve = null;
+      set({ updateBlocker: null });
+      resolve?.(choice);
+    },
     runGroupUpdate: async (scope: GroupUpdateScope = 'edt') => {
       if (!deps || !deps.container || !deps.migration) {
         set({
@@ -79,7 +99,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         updateErrorCode: null,
         updateUlid: null,
         updateScope: scope,
+        updateBlocker: null,
       });
+      pendingBlockerResolve = null;
       get().setRunInProgress(true);
       // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
       // unexpected failure in production) must still clear `runInProgress` — otherwise the
@@ -95,6 +117,15 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           lock: deps.lock,
           registry: deps.registry,
           scope,
+          // Story 3.4: the TUI backs the assisted-resolution seam — core pauses the run on
+          // each dirty/conflicted repo and waits here while the zone's modal menu collects
+          // the developer's choice (stash / open in editor / cancel repo / cancel run).
+          onUpdateBlocker: async (blocker) => {
+            set({ updateBlocker: blocker });
+            return new Promise<UpdateBlockerChoice>((resolve) => {
+              pendingBlockerResolve = resolve;
+            });
+          },
         });
         if (result.ok) {
           set({
@@ -116,6 +147,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         const detail = error instanceof Error ? error.message : String(error);
         set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
       } finally {
+        // A run that threw while a blocker was still raised (a rejecting fake port under a
+        // test, a truly unexpected failure in production) must not leave the menu raised
+        // forever — the choice path already cleared it via resolveUpdateBlocker.
+        pendingBlockerResolve = null;
+        if (get().updateBlocker !== null) {
+          set({ updateBlocker: null });
+        }
         get().setRunInProgress(false);
       }
     },
@@ -168,6 +206,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         updateErrorCode: null,
         updateUlid: null,
         updateScope: null,
+        updateBlocker: null,
       }),
   });
 }

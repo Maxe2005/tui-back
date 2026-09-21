@@ -3,7 +3,8 @@
 // offer, running spinner, done summary, top-level error). The useInput callback itself is
 // never invoked here — the shared harness's fake stdin never emits data (the edts-zone
 // convention) — so keystroke behavior is verified through the pure functions directly.
-import { describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { createAppStore } from '../../store/app-store.js';
@@ -12,15 +13,20 @@ import {
   UPDATE_ALL_CONFIRM_TITLE,
   UPDATE_ALL_REPOS_PROMPT,
   UPDATE_ALL_RUNNING_LABEL,
+  UPDATE_BLOCKER_MENU_ITEMS,
+  UPDATE_BLOCKER_TITLE,
   UPDATE_IDLE_PROMPT,
   UPDATE_INTERRUPTED_OFFER,
   UPDATE_LOADING_MEMBERS,
   UPDATE_QUIT_CONFIRM_BODY,
   UPDATE_QUIT_CONFIRM_BODY_ALL,
   UPDATE_RUNNING_LABEL,
+  formatBlockerBody,
   formatUpdateRow,
   formatUpdateSummary,
+  launchEditor,
   resolveAllConfirm,
+  resolveBlockerMenuKey,
   resolveQuitConfirm,
   resolveUpdateTone,
   shouldConfirmQuit,
@@ -28,6 +34,11 @@ import {
   shouldOpenAllConfirm,
   UpdateZone,
 } from './update-zone.js';
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return { ...original, spawnSync: vi.fn() };
+});
 
 const INTERRUPTED_EDTS = [
   {
@@ -158,6 +169,92 @@ describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
     expect(resolveAllConfirm('a', {})).toBeNull();
     expect(resolveAllConfirm('y', {})).toBeNull();
     expect(resolveAllConfirm('', {})).toBeNull();
+  });
+});
+
+describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey (story 3.4)', () => {
+  it('offers exactly the four bounded choices in menu order', () => {
+    expect(UPDATE_BLOCKER_MENU_ITEMS.map((item) => item.value)).toEqual(['stash', 'edited', 'cancel-repo', 'cancel-run']);
+  });
+
+  it('moves the cursor with arrows, clamped at the ends, and ignores anything else', () => {
+    expect(resolveBlockerMenuKey('', {}, 1)).toEqual({ type: 'ignore' });
+    expect(resolveBlockerMenuKey('', { downArrow: true }, 0)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveBlockerMenuKey('', { downArrow: true }, 3)).toEqual({ type: 'move', cursor: 3 });
+    expect(resolveBlockerMenuKey('', { upArrow: true }, 2)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveBlockerMenuKey('', { upArrow: true }, 0)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveBlockerMenuKey('q', {}, 0)).toEqual({ type: 'ignore' });
+  });
+
+  it('jumps with Home/End', () => {
+    expect(resolveBlockerMenuKey('', { home: true }, 2)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveBlockerMenuKey('', { end: true }, 0)).toEqual({ type: 'move', cursor: 3 });
+  });
+
+  it('chooses the cursor row on Enter and answers cancel-repo on Escape', () => {
+    expect(resolveBlockerMenuKey('', { return: true }, 0)).toEqual({ type: 'choose', choice: 'stash' });
+    expect(resolveBlockerMenuKey('', { return: true }, 1)).toEqual({ type: 'choose', choice: 'edited' });
+    expect(resolveBlockerMenuKey('', { return: true }, 2)).toEqual({ type: 'choose', choice: 'cancel-repo' });
+    expect(resolveBlockerMenuKey('', { return: true }, 3)).toEqual({ type: 'choose', choice: 'cancel-run' });
+    expect(resolveBlockerMenuKey('', { escape: true }, 0)).toEqual({ type: 'choose', choice: 'cancel-repo' });
+  });
+
+  it('ignores Enter on an out-of-range cursor', () => {
+    expect(resolveBlockerMenuKey('', { return: true }, 9)).toEqual({ type: 'ignore' });
+  });
+});
+
+describe('launchEditor (story 3.4)', () => {
+  const originalEditor = process.env.EDITOR;
+
+  afterEach(() => {
+    if (originalEditor === undefined) {
+      delete process.env.EDITOR;
+    } else {
+      process.env.EDITOR = originalEditor;
+    }
+    vi.mocked(spawnSync).mockClear();
+  });
+
+  it('splits $EDITOR flags: first token is the binary, repo path appended last', () => {
+    process.env.EDITOR = 'code --wait';
+
+    launchEditor('/repo/a');
+
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('code', ['--wait', '/repo/a'], { stdio: 'inherit' });
+  });
+
+  it('passes a bare $EDITOR binary with only the repo path', () => {
+    process.env.EDITOR = 'hx';
+
+    launchEditor('/repo/a');
+
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('hx', ['/repo/a'], { stdio: 'inherit' });
+  });
+
+  it('falls back to vi when $EDITOR is unset or blank', () => {
+    delete process.env.EDITOR;
+
+    launchEditor('/repo/a');
+
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('vi', ['/repo/a'], { stdio: 'inherit' });
+
+    process.env.EDITOR = '   ';
+    vi.mocked(spawnSync).mockClear();
+
+    launchEditor('/repo/b');
+
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('vi', ['/repo/b'], { stdio: 'inherit' });
+  });
+});
+
+describe('formatBlockerBody (story 3.4)', () => {
+  it('names the service, path, and kind for every blocker kind', () => {
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' })).toContain('/repo/a');
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' })).toContain('conflict');
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'mid-merge' })).toContain('mid-merge');
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'mid-rebase' })).toContain('mid-rebase');
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'mid-rebase' })).toContain('never touched');
   });
 });
 
@@ -294,5 +391,30 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('No active EDT');
     expect(output).toContain('no-active-edt');
+  });
+
+  it('a raised blocker renders the modal title, body, and all four choices', async () => {
+    const store = createAppStore();
+    store.setState({
+      updateStatus: 'running',
+      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' },
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain(UPDATE_BLOCKER_TITLE);
+    expect(output).toContain('svc-a');
+    expect(output).toContain('/repo/a');
+    for (const item of UPDATE_BLOCKER_MENU_ITEMS) {
+      expect(output).toContain(item.label);
+    }
+  });
+
+  it('no raised blocker renders no blocker modal', async () => {
+    const store = createAppStore();
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).not.toContain(UPDATE_BLOCKER_TITLE);
   });
 });
