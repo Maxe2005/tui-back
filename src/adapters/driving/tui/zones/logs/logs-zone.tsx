@@ -5,7 +5,7 @@
 // fullscreen) checked first, every keystroke decision delegated to a pure function from
 // logs-zone.logic.ts (or reused as-is from edts-zone.logic.ts where the logic is generic list
 // navigation, not EDT-specific — see that file's own header).
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
@@ -18,6 +18,7 @@ import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-s
 import { FullscreenPane } from './fullscreen-pane.js';
 import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
+import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
   jumpSelection,
   moveSelection,
@@ -170,44 +171,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     [activeRepoPaths, rows],
   );
 
-  // Reconciles docker subscriptions with whichever repoPaths are currently "active" (selected
-  // in either list, or the ad hoc fullscreen preview target) — I/O matrix SELECTION_CHANGE:
-  // "that stream stops"; FULLSCREEN_PREVIEW: "stream started ad hoc" / "Escape stops that ad
-  // hoc stream". A key both selected and previewed (Enter on an already-selected row) is only
-  // ever subscribed once (subscribeLogsPane/LogsManager.subscribe are both idempotent).
-  const previousActiveKeysRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const nextKeys = new Set(activeRepoPaths);
-    if (logsFullscreenTarget !== null) {
-      nextKeys.add(logsFullscreenTarget);
-    }
-    const previousKeys = previousActiveKeysRef.current;
-    for (const path of nextKeys) {
-      if (!previousKeys.has(path)) {
-        const service = rows.find((row) => row.path === path)?.service ?? path;
-        void subscribeLogsPane(path, service);
-      }
-    }
-    for (const path of previousKeys) {
-      if (!nextKeys.has(path)) {
-        unsubscribeLogsPane(path);
-      }
-    }
-    previousActiveKeysRef.current = nextKeys;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRepoPaths, logsFullscreenTarget, rows]);
-
-  // Leaving the Logs zone (unmount) must never leave a docker child process running
-  // unattended — tears down every still-active subscription.
-  useEffect(
-    () => () => {
-      for (const path of previousActiveKeysRef.current) {
-        unsubscribeLogsPane(path);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  useLogsSubscriptions({ activeRepoPaths, logsFullscreenTarget, rows, subscribeLogsPane, unsubscribeLogsPane });
 
   // Boundaries: "grid reflows and sub-focus moves to the nearest remaining pane".
   useEffect(() => {
