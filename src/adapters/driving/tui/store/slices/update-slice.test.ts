@@ -138,6 +138,22 @@ describe('update slice', () => {
     expect(store.getState().runInProgress).toBe(false);
   });
 
+  it('runGroupUpdate threads the scope: runGroupUpdate(all) lands done on the all-repos outcome', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().runGroupUpdate('all');
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateTopic).toBe('all-repos');
+    expect(store.getState().updateUlid).toBe('all');
+    expect(store.getState().updateScope).toBe('all');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    expect(store.getState().runInProgress).toBe(false);
+  });
+
   it('runGroupUpdate surfaces a top-level use-case failure as error with its code', async () => {
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok(null)),
@@ -250,6 +266,21 @@ describe('update slice', () => {
     expect(store.getState().edts).toHaveLength(1);
   });
 
+  it('markUpdateInterrupted after an all-repos run resets to idle without touching the EDT registry', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('all');
+    expect(store.getState().updateScope).toBe('all');
+    // The quit-confirm races real completion — the bypass only runs while still `running`.
+    store.setState({ updateStatus: 'running' });
+    await store.getState().markUpdateInterrupted();
+
+    expect(deps.edtRegistry.setStatus).not.toHaveBeenCalled();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().runInProgress).toBe(false);
+  });
+
   it('markUpdateInterrupted never marks a finished run — a quit-confirm racing completion leaves the healthy EDT alone', async () => {
     const deps = fakeDeps();
     const store = createAppStore(deps);
@@ -331,5 +362,6 @@ describe('update slice', () => {
     expect(store.getState().updateTopic).toBeNull();
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
+    expect(store.getState().updateScope).toBeNull();
   });
 });

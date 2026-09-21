@@ -7,6 +7,7 @@ import {
   groupUpdate as groupUpdateUseCase,
   markGroupUpdateInterrupted as markGroupUpdateInterruptedUseCase,
   type GroupUpdateRepoResult,
+  type GroupUpdateScope,
 } from '../../../../../core/scripts/group-update.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
@@ -25,11 +26,14 @@ export type UpdateSlice = {
   updateErrorCode: string | null;
   // The EDT ulid the current/last run targeted — captured at run start so
   // markUpdateInterrupted() marks the run's own EDT even if the active pointer moved.
+  // An all-repos run targets no EDT: `updateUlid` is `'all'` and `updateScope` is `'all'`.
   updateUlid: string | null;
+  updateScope: GroupUpdateScope | null;
   // Starts the core use-case in-process. A no-op-with-signal guard, not a throw, when the
   // store is unwired; a second call while a run is already in flight reports
   // `update-already-running` so double-Enter gives feedback instead of silence.
-  runGroupUpdate: () => Promise<void>;
+  // `scope` defaults to `'edt'` (bare update); `'all'` runs the all-repos maintenance mode.
+  runGroupUpdate: (scope?: GroupUpdateScope) => Promise<void>;
   // Marks the run's EDT `interrupted` after an abandoned run (quit-mid-run confirmation)
   // and refreshes `edts` so the next idle render offers a re-run — but only while a run
   // is actually in flight: a quit-confirm racing completion must never mark a healthy,
@@ -48,7 +52,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     updateError: null,
     updateErrorCode: null,
     updateUlid: null,
-    runGroupUpdate: async () => {
+    updateScope: null,
+    runGroupUpdate: async (scope: GroupUpdateScope = 'edt') => {
       if (!deps || !deps.container || !deps.migration) {
         set({
           updateStatus: 'error',
@@ -73,6 +78,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         updateError: null,
         updateErrorCode: null,
         updateUlid: null,
+        updateScope: scope,
       });
       get().setRunInProgress(true);
       // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
@@ -87,6 +93,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           container: deps.container,
           migration: deps.migration,
           lock: deps.lock,
+          registry: deps.registry,
+          scope,
         });
         if (result.ok) {
           set({
@@ -95,6 +103,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateNote: result.data.note ?? null,
             updateTopic: result.data.topic,
             updateUlid: result.data.ulid,
+            updateScope: result.data.scope,
           });
         } else {
           set({
@@ -118,6 +127,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         return;
       }
       const ulid = get().updateUlid ?? get().activeEdt;
+      // An all-repos run targets no EDT — there is nothing to mark interrupted. Reset to
+      // idle (and clear the flag) without touching the EDT registry.
+      if (get().updateScope === 'all' || ulid === 'all') {
+        get().setRunInProgress(false);
+        set({ updateStatus: 'idle' });
+        return;
+      }
       if (!deps || ulid === null) {
         get().setRunInProgress(false);
         set({ updateStatus: 'idle' });
@@ -151,6 +167,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         updateError: null,
         updateErrorCode: null,
         updateUlid: null,
+        updateScope: null,
       }),
   });
 }

@@ -34,7 +34,7 @@ const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}`;
-const UPDATE_USAGE = 'tui-back update';
+const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -133,23 +133,47 @@ export function buildSubcommands(deps: {
     {
       name: 'update',
       usage: UPDATE_USAGE,
-      // Story 3.2: the EDT-scoped group update now runs each member's manifest-declared
-      // `migrationCommand` between its pull/merge and its container restart (skipped
-      // without error when undeclared). Still bare invocation only — no all-repos mode or
-      // --all flag (story 3.3): any flag is an explicit invalid-argument rejection, never
-      // silently ignored.
-      run: async (args) =>
-        args.length === 0
-          ? groupUpdate({
-              edtRegistry: deps.edtRegistry,
-              state: deps.state,
-              manifest: deps.manifest,
-              git: deps.git,
-              container: deps.container,
-              migration: deps.migration,
-              lock: deps.lock,
-            })
-          : err('invalid-argument', `Usage: ${UPDATE_USAGE}`),
+      // Story 3.3: the bare invocation stays EDT-scoped (3.1/3.2, `--all` never implied);
+      // `--all --yes` (order-insensitive) runs the same per-service flow against every
+      // managed repo; `--all` alone is a `confirmation-required` rejection naming `--yes`
+      // (confirmation stays out of core — a driving concern). Any other flag is an explicit
+      // invalid-argument rejection, never silently ignored.
+      run: async (args) => {
+        if (args.length === 0) {
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'edt',
+          });
+        }
+        const sorted = [...args].sort();
+        if (sorted.length === 2 && sorted[0] === '--all' && sorted[1] === '--yes') {
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'all',
+          });
+        }
+        if (args.length === 1 && args[0] === '--all') {
+          return err(
+            'confirmation-required',
+            `All-repos update touches every managed repo — rerun with --all --yes to confirm. Usage: ${UPDATE_USAGE}`,
+          );
+        }
+        return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
+      },
     },
   ];
   assertUniqueSubcommandNames(subcommands);

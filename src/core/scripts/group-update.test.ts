@@ -10,6 +10,7 @@ import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { MigrationPort } from '../ports/migration.js';
+import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import {
   GROUP_UPDATE_LOCK_KEY,
@@ -107,6 +108,16 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
   };
 }
 
+function fakeRegistry(paths: string[] = []): RegistryPort {
+  return {
+    list: vi.fn(async () => ok(paths)),
+    add: vi.fn(async () => ok(undefined)),
+    exists: vi.fn(async () => ok(true)),
+    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+    reset: vi.fn(async () => ok({ path: '/p', backupPath: null })),
+  };
+}
+
 function member(service: string, repoPath: string, branch: string): EdtMember {
   return { service, repoPath, branch };
 }
@@ -179,6 +190,7 @@ describe('groupUpdate — active-EDT resolution', () => {
         topic: 'empty',
         results: [],
         note: expect.stringContaining('no member services'),
+        scope: 'edt',
       },
     });
     expect(calls(git.currentBranch)).toHaveLength(0);
@@ -202,6 +214,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
           { service: 'svc-a', outcome: 'updated' },
           { service: 'svc-b', outcome: 'updated' },
         ],
+        scope: 'edt',
       },
     });
     // Fetch of the shared branch, write-gate on the member branch with the EDT ulid, merge.
@@ -266,6 +279,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
         ulid: 'edt-shared',
         topic: 'shared',
         results: [{ service: 'svc-a', outcome: 'updated' }],
+        scope: 'edt',
       },
     });
     expect(calls(git.pull)).toEqual([['/repo/a']]);
@@ -942,5 +956,228 @@ describe('markGroupUpdateInterrupted', () => {
     const result = await markGroupUpdateInterrupted(edtRegistry, 'edt-gone');
 
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+  });
+});
+
+describe('groupUpdate — all-repos scope (story 3.3)', () => {
+  function allParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdateParams {
+    return {
+      ...makeParams(),
+      registry: overrides.registry ?? fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      ...overrides,
+    };
+  }
+
+  it('runs the same per-service flow for every managed repo, each in results', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+    const lock = fakeLock();
+
+    const result = await groupUpdate(allParams({ git, container, lock }));
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        ulid: 'all',
+        topic: 'all-repos',
+        results: [
+          { service: 'a', outcome: 'updated' },
+          { service: 'b', outcome: 'updated' },
+        ],
+        scope: 'all',
+      },
+    });
+    expect(calls(git.fetch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(container.restart)).toContainEqual(['ctr-a']);
+    expect(calls(container.restart)).toContainEqual(['ctr-b']);
+    // All-scope passes no EDT identity: the shared-branch gate applies, the cross-EDT
+    // ownership half is skipped.
+    expect(calls(git.assertAllowedBranch)).toContainEqual(['/repo/a', 'feat/a', undefined]);
+    expect(calls(git.assertAllowedBranch)).toContainEqual(['/repo/b', 'feat/b', undefined]);
+    // All-scope serializes on the global key only — never an edt:<ulid> key.
+    expect(calls(lock.acquire)).toEqual([[GROUP_UPDATE_LOCK_KEY]]);
+  });
+
+  it('operates on currentBranch as-is with no unexpected-branch gate', async () => {
+    const git = fakeGit({ currentBranch: vi.fn(async () => ok('feat/custom')) });
+    const container = fakeContainer();
+
+    const result = await groupUpdate(allParams({ git, container, registry: fakeRegistry(['/repo/a']) }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { ulid: 'all', topic: 'all-repos', scope: 'all', results: [{ service: 'a', outcome: 'updated' }] },
+    });
+    expect(calls(git.fetch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(container.restart)).toContainEqual(['ctr-a']);
+  });
+
+  it('never gates on EDT ownership: a branch owned by another EDT still updates', async () => {
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('feat/custom')),
+      assertAllowedBranch: vi.fn(async (_repoPath: string, _branch: string, edtId?: string) =>
+        edtId === undefined ? ok(undefined) : err('branch-owned-by-other-edt', 'claimed elsewhere'),
+      ),
+    });
+
+    const result = await groupUpdate(allParams({ git, registry: fakeRegistry(['/repo/a']) }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'a', outcome: 'updated' }] },
+    });
+  });
+
+  it('pulls when the repo already sits on the shared branch', async () => {    const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')) });
+
+    const result = await groupUpdate(allParams({ git, registry: fakeRegistry(['/repo/a']) }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'a', outcome: 'updated' }] },
+    });
+    expect(calls(git.pull)).toEqual([['/repo/a']]);
+    expect(calls(git.fetch)).toHaveLength(0);
+  });
+
+  it('returns an explicit no-op note for an empty registry without taking any lock', async () => {
+    const lock = fakeLock();
+    const git = fakeGit();
+
+    const result = await groupUpdate(allParams({ registry: fakeRegistry([]), lock, git }));
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        ulid: 'all',
+        topic: 'all-repos',
+        results: [],
+        note: expect.stringContaining('No managed repos'),
+        scope: 'all',
+      },
+    });
+    expect(calls(lock.acquire)).toHaveLength(0);
+    expect(calls(git.currentBranch)).toHaveLength(0);
+  });
+
+  it('returns an explicit no-op note when every registered path is unmanaged', async () => {
+    const manifest = fakeManifest({ load: vi.fn(async () => err('manifest-not-found', 'no manifest')) });
+
+    const result = await groupUpdate(allParams({ manifest, registry: fakeRegistry(['/repo/a', '/repo/b']) }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { ulid: 'all', topic: 'all-repos', scope: 'all', results: [] },
+    });
+    if (result.ok) {
+      expect(typeof result.data.note).toBe('string');
+      expect(result.data.note ?? '').toContain('No managed repos');
+    }
+  });
+
+  it('skips an unmanaged path like list-repos while the other repo still updates', async () => {
+    const manifest = fakeManifest({
+      load: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? err('manifest-not-found', 'no manifest') : ok(manifestFor('svc-b')),
+      ),
+    });
+    const git = fakeGit();
+
+    const result = await groupUpdate(allParams({ manifest, git }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(calls(git.currentBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('keeps per-repo isolation: one dirty/conflict/migrate/restart failure never blocks the other', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+    });
+    const container = fakeContainer();
+
+    const result = await groupUpdate(allParams({ git, container }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'a', outcome: 'skipped', detail: { code: 'dirty-worktree' } },
+          { service: 'b', outcome: 'updated' },
+        ],
+      },
+    });
+  });
+
+  it('reports a manifest load failure as a failed row labeled by path fallback, others continue', async () => {
+    const manifest = fakeManifest({
+      load: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? err('manifest-invalid-yaml', 'bad yaml') : ok(manifestFor('svc-b')),
+      ),
+    });
+
+    const result = await groupUpdate(allParams({ manifest }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'a', outcome: 'failed', detail: { code: 'manifest-invalid-yaml' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+  });
+
+  it('dedupes twice-registered paths by resolved path (first wins)', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(allParams({ git, container, registry: fakeRegistry(['/repo/a', '/repo/a/', '/repo/b', '/repo/a/../a', '']) }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'a', outcome: 'updated' },
+          { service: 'b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.fetch).filter(([path]) => path === '/repo/a' || path === '/repo/a/')).toHaveLength(1);
+    expect(calls(container.restart)).toHaveLength(2);
+  });
+
+  it('rejects with update-already-running when the global lock is held (cross-scope)', async () => {
+    const lock = fakeLock({ acquire: async () => err('action-in-progress', 'held') });
+
+    const result = await groupUpdate(allParams({ lock }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
+  });
+
+  it('fails with internal-error when the registry port is missing', async () => {
+    const params = makeParams();
+    delete (params as Partial<GroupUpdateParams>).registry;
+
+    const result = await groupUpdate({ ...params, scope: 'all' });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'internal-error' } });
+  });
+
+  it('propagates a registry.list() failure unchanged', async () => {
+    const registry: RegistryPort = {
+      ...fakeRegistry(),
+      list: vi.fn(async () => err('registry-invalid-yaml', 'bad yaml')),
+    };
+
+    const result = await groupUpdate(allParams({ registry }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'registry-invalid-yaml' } });
   });
 });

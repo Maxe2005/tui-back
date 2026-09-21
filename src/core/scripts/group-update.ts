@@ -20,14 +20,15 @@
 // manifest's `migrationCommand`, skipped without error when undeclared; a failure is a
 // `migration-failed` row with no restart) → `container.restart`. Dirty worktrees are
 // detected and reported only, never stashed or fixed.
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { MigrationPort } from '../ports/migration.js';
+import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
 
@@ -51,7 +52,10 @@ export interface GroupUpdateData {
   results: GroupUpdateRepoResult[];
   // Set only for the zero-member no-op — an explicit no-op message, never silent success.
   note?: string;
+  scope: 'edt' | 'all';
 }
+
+export type GroupUpdateScope = 'edt' | 'all';
 
 export interface GroupUpdateParams {
   edtRegistry: EdtRegistryPort;
@@ -61,9 +65,98 @@ export interface GroupUpdateParams {
   container: ContainerPort;
   migration: MigrationPort;
   lock: LockPort;
+  registry?: RegistryPort;
+  scope?: GroupUpdateScope;
 }
 
 export async function groupUpdate(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
+  const { scope = 'edt' } = params;
+  if (scope === 'all') {
+    return groupUpdateAll(params);
+  }
+  return groupUpdateEdt(params);
+}
+
+async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
+  const { manifest, git, container, migration, lock, registry } = params;
+  if (registry === undefined) {
+    return err('internal-error', 'Registry port is required for an all-repos group update');
+  }
+
+  const listed = await registry.list();
+  if (!listed.ok) {
+    return listed;
+  }
+
+  // Dedupe by resolved path (first wins) — the same normalization the EDT path uses, so
+  // trailing-slash/relative-segment variants of one repo still collapse. Blank entries
+  // never reach the filesystem: resolving '' would target the process cwd.
+  const seen = new Set<string>();
+  const paths = listed.data
+    .filter((candidate) => candidate.trim() !== '')
+    .filter((candidate) => {
+      const key = resolve(candidate);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+
+  // Zero registry entries: explicit no-op before any lock is taken (nothing to serialize).
+  if (paths.length === 0) {
+    return ok({
+      ulid: 'all',
+      topic: 'all-repos',
+      results: [],
+      note: 'No managed repos found — nothing to update.',
+      scope: 'all',
+    });
+  }
+
+  const run = await withActionLock(lock, GROUP_UPDATE_LOCK_KEY, async () => {
+    const results: GroupUpdateRepoResult[] = [];
+    for (const repoPath of paths) {
+      const loaded = await manifest.load(repoPath);
+      if (!loaded.ok) {
+        // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
+        if (loaded.error.code === 'manifest-not-found') {
+          continue;
+        }
+        results.push(failed(serviceFallback(repoPath), loaded.error));
+        continue;
+      }
+      results.push(
+        await updateWithLoadedManifest(loaded.data, git, container, migration, undefined, repoPath, loaded.data.service, undefined),
+      );
+    }
+    // Every registered path was unmanaged — an explicit no-op, never silent success.
+    if (results.length === 0) {
+      return ok({
+        ulid: 'all',
+        topic: 'all-repos',
+        results: [],
+        note: 'No managed repos found — nothing to update.',
+        scope: 'all' as const,
+      });
+    }
+    return ok({ ulid: 'all', topic: 'all-repos', results, scope: 'all' as const });
+  });
+  if (!run.ok && run.error.code === 'action-in-progress') {
+    return err(
+      'update-already-running',
+      'A group update is already in progress — wait for it to finish before starting another.',
+    );
+  }
+  return run;
+}
+
+function serviceFallback(repoPath: string): string {
+  const base = basename(repoPath);
+  return base !== '' ? base : repoPath;
+}
+
+async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
   const { edtRegistry, state, manifest, git, container, migration, lock } = params;
 
   const currentActive = await state.readActiveEdt();
@@ -91,6 +184,7 @@ export async function groupUpdate(params: GroupUpdateParams): Promise<Result<Gro
       topic: active.topic,
       results: [],
       note: `EDT "${active.topic}" has no member services — nothing to update.`,
+      scope: 'edt' as const,
     });
   }
 
@@ -125,7 +219,7 @@ export async function groupUpdate(params: GroupUpdateParams): Promise<Result<Gro
           return err(reactivated.error.code, reactivated.error.message, { results });
         }
       }
-      return ok({ ulid: active.ulid, topic: active.topic, results });
+      return ok({ ulid: active.ulid, topic: active.topic, results, scope: 'edt' as const });
     }),
   );
   if (!run.ok && run.error.code === 'action-in-progress') {
@@ -165,23 +259,42 @@ async function updateMember(
   if (!loaded.ok) {
     return failed(service, loaded.error);
   }
-  const { container: containerName, sharedBranch, migrationCommand } = loaded.data;
+
+  return updateWithLoadedManifest(loaded.data, git, container, migration, edtUlid, repoPath, service, branch);
+}
+
+// Shared per-service flow for both scopes (story 3.3 reuses the EDT mechanic unchanged):
+// pull/merge → migrate → restart. The EDT scope passes its recorded `branch` plus its ulid
+// (unexpected-branch gate + gated write); the all-repos scope passes neither, operating on
+// `currentBranch` as-is (`==sharedBranch` → `pull`, else `fetch` + ungated
+// `assertAllowedBranch` + `mergeBranch`).
+async function updateWithLoadedManifest(
+  loaded: Manifest,
+  git: GitPort,
+  container: ContainerPort,
+  migration: MigrationPort,
+  edtUlid: string | undefined,
+  repoPath: string,
+  service: string,
+  expectedBranch: string | undefined,
+): Promise<GroupUpdateRepoResult> {
+  const { container: containerName, sharedBranch, migrationCommand } = loaded;
 
   const current = await git.currentBranch(repoPath);
   if (!current.ok) {
     return failed(service, current.error);
   }
 
-  // The repo must sit on the member's own recorded branch — merging into (or pulling)
-  // whatever happens to be checked out would update the wrong line of work. No git write
-  // and no restart below this point runs for this repo.
-  if (current.data !== branch) {
+  // EDT scope only: the repo must sit on the member's own recorded branch — merging into
+  // (or pulling) whatever happens to be checked out would update the wrong line of work.
+  // No git write and no restart below this point runs for this repo.
+  if (expectedBranch !== undefined && current.data !== expectedBranch) {
     return {
       service,
       outcome: 'failed',
       detail: {
         code: 'unexpected-branch',
-        message: `Repo ${repoPath} is on branch "${current.data}" but the EDT expects "${branch}" — left untouched`,
+        message: `Repo ${repoPath} is on branch "${current.data}" but the EDT expects "${expectedBranch}" — left untouched`,
       },
     };
   }
@@ -216,7 +329,9 @@ async function updateMember(
       return failed(service, fetched.error);
     }
     // Re-verify before any git write (AD-8) — never assume the member branch is still safe.
-    const allowed = await git.assertAllowedBranch(repoPath, branch, edtUlid);
+    // All-repos scope passes no edtId: the shared-branch gate still applies, the cross-EDT
+    // half is skipped.
+    const allowed = await git.assertAllowedBranch(repoPath, current.data, edtUlid);
     if (!allowed.ok) {
       return failed(service, allowed.error);
     }

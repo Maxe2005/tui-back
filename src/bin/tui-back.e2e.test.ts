@@ -1416,6 +1416,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
           { service: 'route-explorer', outcome: 'updated' },
           { service: 'route-explorer', outcome: 'updated' },
         ],
+        scope: 'edt',
       },
     });
     // Both members now contain the origin's shared-branch advance.
@@ -1571,15 +1572,90 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await expect(access(join(a.repo, 'should-not-run.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('rejects any flag — bare update only, no --all (story 3.3)', async () => {
+  it('rejects unknown flags with invalid-argument, and gates --all behind --yes (story 3.3)', async () => {
     const xdg = await makeTempDir();
 
-    for (const args of [['update', '--all'], ['update', '--force'], ['update', 'extra']]) {
+    for (const args of [['update', '--force'], ['update', 'extra']]) {
       const { status, stdout } = runCli(args, createEnv(xdg));
 
       expect(status).toBe(1);
       expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     }
+
+    // --all without --yes never runs: one JSON line, confirmation-required, exit 1.
+    const { status, stdout } = runCli(['update', '--all'], createEnv(xdg));
+
+    expect(status).toBe(1);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('confirmation-required');
+    expect(parsed.error.message).toContain('--yes');
+  });
+
+  it('brings every managed repo up to date with update --all --yes, no EDT needed (story 3.3 AC1)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    const b = await makeBehindMember();
+    await registerRepos([a.repo, b.repo], env);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update', '--all', '--yes'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed).toEqual({
+      ok: true,
+      data: {
+        ulid: 'all',
+        topic: 'all-repos',
+        results: [
+          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated' },
+        ],
+        scope: 'all',
+      },
+    });
+    // Both repos now contain the origin's shared-branch advance — the same per-service flow.
+    for (const { origin, repo } of [a, b]) {
+      const originHead = runGit(origin, ['rev-parse', 'development']).stdout.trim();
+      expect(runGit(repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).toBe(0);
+    }
+  });
+
+  it('update --all --yes accepts either flag order (story 3.3)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    await registerRepos([a.repo], env);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update', '--yes', '--all'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toMatchObject({
+      ok: true,
+      data: { ulid: 'all', topic: 'all-repos', scope: 'all' },
+    });
+  });
+
+  it('reports an empty registry as an explicit no-op with a note, exit 0 (story 3.3 AC4)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const { status, stdout } = runCli(['update', '--all', '--yes'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.ulid).toBe('all');
+    expect(parsed.data.topic).toBe('all-repos');
+    expect(parsed.data.scope).toBe('all');
+    expect(parsed.data.results).toEqual([]);
+    expect(typeof parsed.data.note).toBe('string');
+    expect(parsed.data.note.length).toBeGreaterThan(0);
   });
 
   it('fails with no-active-edt when no EDT is active', async () => {
@@ -1630,5 +1706,25 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
 
     expect(status).toBe(1);
     expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
+  });
+
+  it('rejects update --all --yes while an EDT-scoped run holds the lock, and vice versa (story 3.3 AC3)', { timeout: 30000 }, async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember();
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    // A held global key blocks both scopes — the all-repos trigger serializes on the same
+    // key, never on a per-EDT key.
+    const lockDir = join(xdg, 'tui-back', 'locks');
+    const lockPath = lockPathFor(lockDir, 'group-update');
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, timestamp: Date.now() }), 'utf8');
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const blocked = runCli(['update', '--all', '--yes'], dockerEnv);
+
+    expect(blocked.status).toBe(1);
+    expect(JSON.parse(blocked.stdout.trim())).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
   });
 });

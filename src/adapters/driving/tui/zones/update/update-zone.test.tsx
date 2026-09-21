@@ -8,16 +8,24 @@ import { createElement } from 'react';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { createAppStore } from '../../store/app-store.js';
 import {
+  UPDATE_ALL_CONFIRM_BODY,
+  UPDATE_ALL_CONFIRM_TITLE,
+  UPDATE_ALL_REPOS_PROMPT,
+  UPDATE_ALL_RUNNING_LABEL,
   UPDATE_IDLE_PROMPT,
   UPDATE_INTERRUPTED_OFFER,
   UPDATE_LOADING_MEMBERS,
+  UPDATE_QUIT_CONFIRM_BODY,
+  UPDATE_QUIT_CONFIRM_BODY_ALL,
   UPDATE_RUNNING_LABEL,
   formatUpdateRow,
   formatUpdateSummary,
+  resolveAllConfirm,
   resolveQuitConfirm,
   resolveUpdateTone,
   shouldConfirmQuit,
   shouldOfferRerun,
+  shouldOpenAllConfirm,
   UpdateZone,
 } from './update-zone.js';
 
@@ -95,6 +103,16 @@ describe('resolveUpdateTone / formatUpdateSummary', () => {
       ]),
     ).toBe('EDT "demo": 1 updated, 1 skipped, 1 failed.');
   });
+
+  it('renders the all-repos title variant with no EDT topic to name', () => {
+    expect(
+      formatUpdateSummary('all-repos', [
+        { service: 'a', outcome: 'updated' },
+        { service: 'b', outcome: 'skipped', detail: { code: 'dirty-worktree', message: 'm' } },
+        { service: 'c', outcome: 'failed', detail: { code: 'merge-conflict', message: 'm' } },
+      ]),
+    ).toBe('All repos: 1 updated, 1 skipped, 1 failed.');
+  });
 });
 
 describe('shouldOfferRerun', () => {
@@ -124,13 +142,33 @@ describe('shouldConfirmQuit / resolveQuitConfirm', () => {
   });
 });
 
+describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
+  it('opens the confirm gate on a/A while idle/done/error, never mid-run', () => {
+    expect(shouldOpenAllConfirm('a', 'idle')).toBe(true);
+    expect(shouldOpenAllConfirm('A', 'done')).toBe(true);
+    expect(shouldOpenAllConfirm('a', 'error')).toBe(true);
+    expect(shouldOpenAllConfirm('a', 'running')).toBe(false);
+    expect(shouldOpenAllConfirm('A', 'running')).toBe(false);
+    expect(shouldOpenAllConfirm('x', 'idle')).toBe(false);
+  });
+
+  it('confirms only on Enter, cancels only on Escape — a stray keystroke never launches the run', () => {
+    expect(resolveAllConfirm('', { return: true })).toBe('confirm');
+    expect(resolveAllConfirm('', { escape: true })).toBe('cancel');
+    expect(resolveAllConfirm('a', {})).toBeNull();
+    expect(resolveAllConfirm('y', {})).toBeNull();
+    expect(resolveAllConfirm('', {})).toBeNull();
+  });
+});
+
 describe('UpdateZone rendering', () => {
-  it('idle with no interruption shows the Enter prompt', async () => {
+  it('idle with no interruption shows the Enter prompt plus the all-repos affordance', async () => {
     const store = createAppStore();
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_IDLE_PROMPT);
+    expect(output).toContain(UPDATE_ALL_REPOS_PROMPT);
   });
 
   it('idle with an interrupted active EDT shows the re-run offer', async () => {
@@ -160,6 +198,42 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain(UPDATE_RUNNING_LABEL);
     expect(output).toContain(UPDATE_LOADING_MEMBERS);
+  });
+
+  it('an all-repos run shows the all label with the generic loading line, never EDT member rows', async () => {
+    const store = createAppStore();
+    store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1', updateStatus: 'running', updateScope: 'all' });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain(UPDATE_ALL_RUNNING_LABEL);
+    expect(output).not.toContain(UPDATE_RUNNING_LABEL);
+    expect(output).toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).not.toContain('svc-a (feat/a)');
+  });
+
+  it('done with an all-repos outcome renders the All-repos title variant', async () => {
+    const store = createAppStore();
+    store.setState({
+      updateStatus: 'done',
+      updateTopic: 'all-repos',
+      updateScope: 'all',
+      updateResults: [{ service: 'a', outcome: 'updated' }],
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('ALL-REPOS UPDATE');
+    expect(output).toContain('All repos: 1 updated, 0 skipped, 0 failed.');
+  });
+
+  it('the quit-mid-run dialog names no EDT interruption during an all-repos run', async () => {
+    // The dialog copy is state-driven: render the open dialog through the store by
+    // forcing the running + all-scope state the dialog reads. The dialog itself opens
+    // via keystroke state, so assert the copy constants directly against the branch
+    // the component renders.
+    expect(UPDATE_QUIT_CONFIRM_BODY).toContain('mark this EDT interrupted');
+    expect(UPDATE_QUIT_CONFIRM_BODY_ALL).not.toContain('mark this EDT interrupted');
   });
 
   it('done shows every per-service row plus the summary counts', async () => {

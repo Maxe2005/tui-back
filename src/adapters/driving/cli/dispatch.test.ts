@@ -292,14 +292,37 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.1) rejects any flag — bare invocation only, no --all (story 3.3)', async () => {
+  it('update (story 3.3) gates the all-repos mode behind confirmation, rejecting unknown flags', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
 
-    for (const args of [['--all'], ['--force'], ['extra']]) {
+    // --all alone never runs: confirmation-required naming --yes.
+    const confirm = await update.run(['--all']);
+    expect(confirm).toMatchObject({ ok: false, error: { code: 'confirmation-required' } });
+    if (!confirm.ok) {
+      expect(confirm.error.message).toContain('--yes');
+    }
+
+    // Unknown flags are never ignored.
+    for (const args of [['--force'], ['extra'], ['--all', '--yes', 'extra']]) {
       const result = await update.run(args);
       expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+  });
+
+  it('update (story 3.3) runs the all-repos scope with --all --yes in any order', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    // The fixture registry is empty, so both orders land on the explicit no-op success.
+    for (const args of [['--all', '--yes'], ['--yes', '--all']]) {
+      const result = await update.run(args);
+      expect(result).toMatchObject({ ok: true, data: { ulid: 'all', topic: 'all-repos', scope: 'all', results: [] } });
+      if (result.ok) {
+        expect(typeof (result.data as { note?: unknown }).note).toBe('string');
+      }
     }
   });
 

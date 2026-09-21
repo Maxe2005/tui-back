@@ -20,11 +20,17 @@ import { DetailPane, ModalDialog, Spinner, type SummaryTone } from '../../shared
 import { colors, spacing } from '../../shared/theme/theme.js';
 
 export const UPDATE_IDLE_PROMPT = 'Press [Enter] to bring every member service up to date.';
+export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
 export const UPDATE_INTERRUPTED_OFFER = 'The last update was interrupted — press [Enter] to re-run it.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
+export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
 export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? ([y]/[n])';
+export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted? ([y]/[n])';
+export const UPDATE_ALL_CONFIRM_TITLE = 'ALL-REPOS UPDATE';
+export const UPDATE_ALL_CONFIRM_BODY =
+  'Update every managed repo (outside the active EDT too)? Press [Enter] to confirm, [Esc] to cancel.';
 
 // Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
 // always exactly one rendered line.
@@ -62,11 +68,15 @@ export function resolveUpdateTone(results: readonly GroupUpdateRepoResult[]): Su
 }
 
 // The DetailPane summary line for a finished run: every targeted service is named by count
-// with an outcome from the closed set — none silently absent.
+// with an outcome from the closed set — none silently absent. The all-repos scope renders
+// its own title variant (no EDT topic to name).
 export function formatUpdateSummary(topic: string, results: readonly GroupUpdateRepoResult[]): string {
   const updated = results.filter((row) => row.outcome === 'updated').length;
   const skipped = results.filter((row) => row.outcome === 'skipped').length;
   const failed = results.filter((row) => row.outcome === 'failed').length;
+  if (topic === 'all-repos') {
+    return `All repos: ${updated} updated, ${skipped} skipped, ${failed} failed.`;
+  }
   return `EDT "${topic}": ${updated} updated, ${skipped} skipped, ${failed} failed.`;
 }
 
@@ -85,6 +95,26 @@ export function shouldOfferRerun(
 
 export function shouldConfirmQuit(input: string, updateStatus: string): boolean {
   return input === 'q' && updateStatus === 'running';
+}
+
+// The separate all-repos trigger: `a` while idle/done/error opens the confirm gate (never
+// while a run is in flight — a second trigger is rejected by the core lock instead).
+export function shouldOpenAllConfirm(input: string, updateStatus: string): boolean {
+  return (input === 'a' || input === 'A') && updateStatus !== 'running';
+}
+
+export type AllConfirmDecision = 'confirm' | 'cancel';
+
+// The all-repos modal gate: [Enter] confirms (the run starts), [Esc] cancels. Anything
+// else is ignored so a stray keystroke never launches the wider-blast-radius run.
+export function resolveAllConfirm(input: string, key: { return?: boolean; escape?: boolean }): AllConfirmDecision | null {
+  if (key.return === true) {
+    return 'confirm';
+  }
+  if (key.escape === true) {
+    return 'cancel';
+  }
+  return null;
 }
 
 export type QuitConfirmDecision = 'confirm' | 'cancel';
@@ -106,6 +136,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateTopic = useStore((state) => state.updateTopic);
   const updateError = useStore((state) => state.updateError);
   const updateErrorCode = useStore((state) => state.updateErrorCode);
+  const updateScope = useStore((state) => state.updateScope);
   const runGroupUpdate = useStore((state) => state.runGroupUpdate);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
   const activeEdt = useStore((state) => state.activeEdt);
@@ -118,16 +149,27 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const resizeMode = useStore((state) => state.resizeMode);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
+  const [allConfirm, setAllConfirm] = useState(false);
 
-  // While the quit-confirm dialog owns the keystroke, every global shortcut (including `?`
+  // While either dialog owns the keystroke, every global shortcut (including `?`
   // help and the zone mnemonics) must not fire — the same zoneInputCaptured gate the EDTs
   // zone's own dialogs use.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm);
-  }, [quitConfirm, setZoneInputCaptured]);
+    setZoneInputCaptured(quitConfirm || allConfirm);
+  }, [quitConfirm, allConfirm, setZoneInputCaptured]);
 
   useInput(
     (input, key) => {
+      if (allConfirm) {
+        const decision = resolveAllConfirm(input, key);
+        if (decision === 'confirm') {
+          setAllConfirm(false);
+          void runGroupUpdate('all');
+        } else if (decision === 'cancel') {
+          setAllConfirm(false);
+        }
+        return;
+      }
       if (quitConfirm) {
         const decision = resolveQuitConfirm(input, key);
         if (decision === 'confirm') {
@@ -144,6 +186,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      if (shouldOpenAllConfirm(input, updateStatus)) {
+        setAllConfirm(true);
+        return;
+      }
       if (key.return) {
         void runGroupUpdate();
       }
@@ -152,9 +198,12 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   );
 
   // The active EDT's own membership — the per-service spinner rows during a run, before the
-  // core use-case resolves with its per-service outcome rows.
+  // core use-case resolves with its per-service outcome rows. An all-repos run targets no
+  // single EDT, so it shows the generic loading line instead of EDT member rows.
   const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
   const offerRerun = shouldOfferRerun(edts, activeEdt);
+  const isAllRun = updateScope === 'all';
+  const runningLabel = isAllRun ? UPDATE_ALL_RUNNING_LABEL : UPDATE_RUNNING_LABEL;
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']}>
@@ -163,9 +212,9 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         <Box flexDirection="column">
           <Box>
             <Spinner />
-            <Text color={colors.text}> {UPDATE_RUNNING_LABEL}</Text>
+            <Text color={colors.text}> {runningLabel}</Text>
           </Box>
-          {runningMembers.length === 0 ? (
+          {isAllRun || runningMembers.length === 0 ? (
             <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
           ) : (
             runningMembers.map((member) => (
@@ -196,7 +245,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               </Text>
             ))}
             <DetailPane
-              title="Group update"
+              title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
               summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
             >
               {updateNote ?? `Press [Enter] to run again.`}
@@ -216,10 +265,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {updateStatus === 'idle' ? (
         <Box flexDirection="column">
           <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
+          <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
         </Box>
       ) : null}
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
-        <Text color={colors.text}>{UPDATE_QUIT_CONFIRM_BODY}</Text>
+        <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
+      </ModalDialog>
+      <ModalDialog title={UPDATE_ALL_CONFIRM_TITLE} open={allConfirm} onConfirm={() => {}} onCancel={() => setAllConfirm(false)}>
+        <Text color={colors.text}>{UPDATE_ALL_CONFIRM_BODY}</Text>
       </ModalDialog>
     </Box>
   );

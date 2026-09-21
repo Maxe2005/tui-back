@@ -406,6 +406,7 @@ it('shouldQuit returns true for q', () => {
         updateError: null,
         updateErrorCode: null,
         updateUlid: null,
+        updateScope: null,
         runGroupUpdate: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
