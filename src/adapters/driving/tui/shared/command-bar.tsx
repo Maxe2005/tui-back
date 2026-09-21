@@ -26,6 +26,7 @@
 import { useState } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import { ModalDialog } from './components/modal-dialog.js';
+import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import { COMMANDS, matchCommands, findExactCommand, type Command } from '../commands/commands.js';
@@ -157,16 +158,32 @@ export function groupCommandsByColumn<T>(matches: readonly T[], maxRows: number)
   return columns;
 }
 
-export type GridTruncation = { left: boolean; right: boolean };
+// Story 5.5: `top`/`bottom` are optional — only ever present once a `verticalWindow` is passed
+// to `layoutCommandGrid` (the filter-history grid's own use inside LogFilterEditor). Every
+// other existing caller (this file's own command palette grid) never passes one, so its
+// `truncated` object stays exactly `{ left, right }`, byte-for-byte what it always was.
+export type GridTruncation = { left: boolean; right: boolean; top?: boolean; bottom?: boolean };
 
 export type CommandGridLayout<T> = {
   // Only the columns that actually fit `availableWidth` from `scrollOffset` onward — every
   // whole column, never a partial one (Boundaries: "only whole columns that fit render").
   columns: readonly T[][];
   truncated: GridTruncation;
-  // The (possibly clamped) scroll position this layout was actually computed from.
+  // The (possibly clamped) horizontal scroll position this layout was actually computed from.
   scrollOffset: number;
+  // Story 5.5: the (possibly clamped) *vertical* scroll position within each column — 0 and
+  // inert unless a `verticalWindow` was requested.
+  rowScrollOffset: number;
 };
+
+// Story 5.5: requests vertical pagination on top of the existing horizontal one — mirrors it
+// (Boundaries UX-DR30) rather than reimplementing a separate windowing scheme. `cursorRow` is
+// the currently-highlighted row *within whichever column owns the cursor* (moveGridCursorVertical's
+// own `row`, an absolute index into that column's full, unsliced array) — the window centers on
+// it once every column's tallest exceeds `maxVisibleRows`, reusing bounded-list.tsx's own
+// `resolveBoundedVisibility` (which itself reserves rows for its indicators) rather than a
+// second copy of the same budget/clamp math.
+export type GridVerticalWindow = { maxVisibleRows: number; cursorRow: number };
 
 // Review fix (story 5.4): exported so a second grid consumer (logs-zone.tsx's filter-history
 // browser) reuses this instead of reimplementing the same column-width reduction locally — per
@@ -187,14 +204,37 @@ export function columnDisplayWidth<T>(column: readonly T[], getLabel: (item: T) 
 // (logs-zone.tsx) can reuse this over plain query strings (`getLabel = (s) => s`) rather than
 // reimplementing the same column-width/truncation math — every existing call site passes
 // `getLabel = (c) => c.name`.
+//
+// Story 5.5: split into a private horizontal resolver (`resolveHorizontalGrid`, the exact
+// pre-5.5 logic, untouched) and a vertical-windowing pass (`applyVerticalWindow`) layered on
+// top of its result — `layoutCommandGrid` itself stays the single public entry point, its first
+// 5 params and their meaning completely unchanged (every pre-5.5 call site keeps compiling and
+// behaving identically since `verticalWindow` is optional and defaults to off).
 export function layoutCommandGrid<T>(
   matches: readonly T[],
   maxRows: number,
   availableWidth: number,
   getLabel: (item: T) => string,
   scrollOffset = 0,
+  verticalWindow?: GridVerticalWindow,
 ): CommandGridLayout<T> {
   const allColumns = groupCommandsByColumn(matches, maxRows);
+  const horizontal = resolveHorizontalGrid(allColumns, availableWidth, getLabel, scrollOffset);
+  return applyVerticalWindow(horizontal, verticalWindow);
+}
+
+type HorizontalGridLayout<T> = {
+  columns: readonly T[][];
+  truncated: { left: boolean; right: boolean };
+  scrollOffset: number;
+};
+
+function resolveHorizontalGrid<T>(
+  allColumns: readonly T[][],
+  availableWidth: number,
+  getLabel: (item: T) => string,
+  scrollOffset: number,
+): HorizontalGridLayout<T> {
   if (allColumns.length === 0) {
     return { columns: [], truncated: { left: false, right: false }, scrollOffset: 0 };
   }
@@ -250,6 +290,39 @@ export function layoutCommandGrid<T>(
     columns: allColumns.slice(start, end + 1),
     truncated: { left: start > 0, right: end < allColumns.length - 1 },
     scrollOffset: start,
+  };
+}
+
+// Story 5.5: mirrors the horizontal truncation/scroll above (UX-DR30) but for rows within each
+// already-horizontally-selected column. A no-op (columns/truncated/scrollOffset passed through
+// untouched, `rowScrollOffset: 0`) whenever no `verticalWindow` is requested or every column
+// already fits — the exact NO_OVERFLOW case every pre-5.5 caller (the command palette's own
+// grid) keeps hitting, since it never passes one.
+//
+// Review fix: this used to slice every column to the full `maxVisibleRows` and let
+// `logs-zone.tsx` render the `▲`/`▼` indicator lines as *additional* siblings around that —
+// so the grid's real on-screen footprint was `maxVisibleRows + up to 2`, over budget by
+// design. Reuses bounded-list.tsx's own `resolveBoundedVisibility` (over a synthetic row-index
+// array standing in for "the tallest column") instead of a second, easy-to-desync copy of the
+// same budget/cursor-follow math — this guarantees the exact same invariant BoundedList itself
+// guarantees: `columns[*].length + (top?1:0) + (bottom?1:0) <= maxVisibleRows`.
+function applyVerticalWindow<T>(
+  horizontal: HorizontalGridLayout<T>,
+  verticalWindow: GridVerticalWindow | undefined,
+): CommandGridLayout<T> {
+  if (!verticalWindow) {
+    return { ...horizontal, rowScrollOffset: 0 };
+  }
+
+  const tallest = horizontal.columns.reduce((max, column) => Math.max(max, column.length), 0);
+  const rowIndices = Array.from({ length: tallest }, (_, i) => i);
+  const visibility = resolveBoundedVisibility(rowIndices, verticalWindow.maxVisibleRows, verticalWindow.cursorRow);
+
+  return {
+    columns: horizontal.columns.map((column) => column.slice(visibility.scrollOffset, visibility.scrollOffset + visibility.visible.length)),
+    truncated: { ...horizontal.truncated, top: visibility.hasMoreAbove, bottom: visibility.hasMoreBelow },
+    scrollOffset: horizontal.scrollOffset,
+    rowScrollOffset: visibility.scrollOffset,
   };
 }
 

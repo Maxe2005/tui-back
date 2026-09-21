@@ -4,32 +4,18 @@ import { KEYBINDINGS, type NavigationKey } from '../../keybindings/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors } from '../theme/theme.js';
 import { ModalDialog } from './modal-dialog.js';
+import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 
 export const DEFAULT_HELP_VISIBLE_LINES = 10;
 
-export function clampHelpOffset(offset: number, maxOffset: number): number {
-  const safeOffset = Number.isFinite(offset) ? Math.floor(offset) : 0;
-  const safeMax = Number.isFinite(maxOffset) ? Math.max(0, Math.floor(maxOffset)) : 0;
-  if (safeOffset < 0) return 0;
-  if (safeOffset > safeMax) return safeMax;
-  return safeOffset;
-}
-
-export function resolveHelpWindow<T>(
-  items: readonly T[],
-  scrollOffset: number,
-  visibleLines: number,
-): { visible: readonly T[]; scrollOffset: number } {
-  const safeLines = Number.isFinite(visibleLines)
-    ? Math.max(0, Math.floor(visibleLines))
-    : 0;
-  const maxOffset = Math.max(0, items.length - safeLines);
-  const offset = clampHelpOffset(scrollOffset, maxOffset);
-  return {
-    visible: items.slice(offset, offset + safeLines),
-    scrollOffset: offset,
-  };
-}
+// Story 5.5: the window/clamp logic itself now lives in bounded-list.tsx
+// (resolveBoundedWindow/clampBoundedOffset — extracted verbatim from what used to be defined
+// here) so every bounded surface in the app shares one implementation. These two names stay
+// exported from this file as thin aliases — no behavior change for keybinding-help.tsx itself
+// (Code Map), and this component deliberately never renders the new shared primitive's
+// more-above/below indicator (KeybindingHelp had none before this story and still has none).
+export const clampHelpOffset = clampBoundedOffset;
+export const resolveHelpWindow = resolveBoundedWindow;
 
 // Story 2.7: canonical navigation contract retires j/k/g/G in favor of arrows/Home/End —
 // arrow/Home/End keys produce an empty `input` string in Ink, only `key` flags are set.

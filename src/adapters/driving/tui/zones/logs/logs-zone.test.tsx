@@ -251,4 +251,69 @@ describe('LogsZone (story 5.1)', () => {
     expect(output).toContain('○');
     expect(output).toContain('⣾');
   });
+
+  // Story 5.5: bounds the OTHER SERVICES list (and the hints panel below it) to the terminal's
+  // actual row count instead of rendering every row unconditionally (I/O matrix
+  // OVERFLOW_LOGS_LISTS) — the reported Ink diff-render corruption this story fixes.
+  it('OVERFLOW_LOGS_LISTS: a very long OTHER SERVICES list is bounded with a "more below" indicator, never rendering past the terminal', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: Array.from({ length: 60 }, (_, i) => service({ service: `svc-${i}`, path: `/repos/svc-${i}` })),
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('svc-0');
+    expect(output).not.toContain('svc-59');
+    expect(output).toContain('more below');
+  });
+
+  // NO_OVERFLOW regression guard: a handful of services never triggers the indicator.
+  it('NO_OVERFLOW: a short services list renders with no scroll indicator', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).not.toContain('more above');
+    expect(output).not.toContain('more below');
+  });
+
+  // Review fix: an empty ACTIVE EDT MEMBERS list still renders a 1-row "No active EDT."
+  // placeholder instead of the BoundedList's own 0 rows — the budget handed to OTHER SERVICES
+  // used to not subtract that row, leaving it 1 row over its true remaining budget. 30 services
+  // is the exact boundary at the default 120x40 test terminal (listsContentBudget 30, minus the
+  // 1 placeholder row = 29): pre-fix this count still fit (no indicator); post-fix it correctly
+  // overflows by exactly one.
+  it('review fix: the empty ACTIVE EDT MEMBERS placeholder counts toward the budget OTHER SERVICES is handed', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: Array.from({ length: 30 }, (_, i) => service({ service: `svc-${i}`, path: `/repos/svc-${i}` })),
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('No active EDT.');
+    expect(output).toContain('more below');
+  });
 });
