@@ -74,13 +74,13 @@ stale entries" action on the REPO REGISTRY screen — both list-then-confirm, ne
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/ports/registry.ts` -- add `remove(path): Promise<Result<void>>` to `RegistryPort` -- closes AC1
-- [ ] `src/adapters/driven/registry/index.ts` -- implement `removeRegistry`, wire into `createRegistryPort` -- closes AC1
-- [ ] `src/core/scripts/clean-registry.ts` (new) -- `classifyStaleRegistry` + `removeStaleRegistryEntries` -- closes AC2, AC3, AC5
-- [ ] `src/adapters/driving/cli/subcommands.ts` -- `registry clean` subcommand (interactive + `--yes --path` scripted) -- closes AC4
-- [ ] `src/adapters/driving/tui/store/slices/registry-slice.ts` -- clean-candidate scan/confirm actions -- closes AC5
-- [ ] `src/adapters/driving/tui/shared/repo-registry-screen.tsx` -- "Clean stale entries" action + new phases reusing existing checkbox/results rendering -- closes AC5
-- [ ] Tests: `clean-registry.ts` classification (unreachable / manifest-not-found / other-error-left-alone / EDT-member note); `removeRegistry` adapter (present path, absent-path no-op); `tui-back.e2e.test.ts` CLI coverage; `repo-registry-screen.test.tsx` new-phase interaction coverage
+- [x] `src/core/ports/registry.ts` -- add `remove(path): Promise<Result<void>>` to `RegistryPort` -- closes AC1
+- [x] `src/adapters/driven/registry/index.ts` -- implement `removeRegistry`, wire into `createRegistryPort` -- closes AC1
+- [x] `src/core/scripts/clean-registry.ts` (new) -- `classifyStaleRegistry` + `removeStaleRegistryEntries` -- closes AC2, AC3, AC5
+- [x] `src/adapters/driving/cli/subcommands.ts` -- `registry clean` subcommand (interactive + `--yes --path` scripted) -- closes AC4
+- [x] `src/adapters/driving/tui/store/slices/registry-slice.ts` -- clean-candidate scan/confirm actions -- closes AC5
+- [x] `src/adapters/driving/tui/shared/repo-registry-screen.tsx` -- "Clean stale entries" action (Ctrl+L) + new phases reusing existing checkbox/results rendering -- closes AC5
+- [x] Tests: `clean-registry.ts` classification (unreachable / manifest-not-found / other-error-left-alone / EDT-member note); `removeRegistry` adapter (present path, absent-path no-op); `tui-back.e2e.test.ts` CLI coverage; `repo-registry-screen.test.tsx` new-phase interaction coverage
 
 **Acceptance Criteria:**
 - Given `RegistryPort` extended with `remove`, when called on a currently-registered path, then it's removed from `registry.yaml`; when called on a path not registered, then it's a no-op success.
