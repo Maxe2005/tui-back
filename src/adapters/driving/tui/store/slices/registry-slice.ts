@@ -1,12 +1,19 @@
 // tui/store/slices: the repo registry screen — scan a root for `.tui-back.yaml`-carrying
-// candidates, register the selected ones, and the empty-registry check Dashboard uses for its
-// onboarding prompt (story 2.11). Extracted from app-store.ts (see that file's header for
+// candidates, register the selected ones, the empty-registry check Dashboard uses for its
+// onboarding prompt (story 2.11), and — story 2.33 — classify/remove stale registry entries
+// ("Clean stale entries" action). Extracted from app-store.ts (see that file's header for
 // why) — a StateCreator factory combined with the other slices into one Zustand store
 // (AD-10: still exactly one store/one hook).
 import type { StateCreator } from 'zustand';
 import type { ScanResult } from '../../../../../core/ports/registry.js';
 import { registerRepo } from '../../../../../core/scripts/register.js';
 import { scanRepos } from '../../../../../core/scripts/scan.js';
+import {
+  classifyStaleRegistry,
+  removeStaleRegistryEntries,
+  type StaleRegistryEntry,
+  type RemoveStaleRegistryEntryResult,
+} from '../../../../../core/scripts/clean-registry.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 // Story 2.11: a per-path register outcome, classified by snapshotting registry.list()
@@ -54,9 +61,23 @@ export type RegistrySlice = {
   registryRegisterStatus: 'idle' | 'loading';
   registryRegisterResults: RegistryRegisterResult[] | null;
   registerRegistryCandidates: (paths: string[]) => Promise<void>;
-  // Clears scan/register state back to a fresh root-input session — called once on every
-  // registry-screen mount so a closed-then-reopened screen (or a second, later `:` open)
-  // never shows a stale phase/result from the prior session.
+  // Story 2.33: "Clean stale entries" — classify (never write), then remove only the
+  // confirmed paths (list-then-confirm, never automatic/silent). registryCleanCandidates:
+  // null = not scanned yet this screen session; a `[]` result is the distinct "no stale
+  // entries" state (mirrors registryScanResult's own null-vs-empty-array convention).
+  registryCleanScanStatus: 'idle' | 'loading' | 'error';
+  registryCleanScanError: string | null;
+  registryCleanCandidates: StaleRegistryEntry[] | null;
+  scanRegistryStaleEntries: () => Promise<void>;
+  // registryCleanResults: null = not removed yet this screen session; populated once, one
+  // entry per confirmed path, in the order removal was attempted (mirrors
+  // registryRegisterResults' own convention).
+  registryCleanStatus: 'idle' | 'loading';
+  registryCleanResults: RemoveStaleRegistryEntryResult[] | null;
+  removeStaleRegistryCandidates: (paths: string[]) => Promise<void>;
+  // Clears scan/register/clean state back to a fresh root-input session — called once on
+  // every registry-screen mount so a closed-then-reopened screen (or a second, later `:`
+  // open) never shows a stale phase/result from the prior session.
   resetRegistryScreen: () => void;
 };
 
@@ -188,6 +209,78 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
       }
       set({ registryRegisterStatus: 'idle', registryRegisterResults: results });
     },
+    registryCleanScanStatus: 'idle',
+    registryCleanScanError: null,
+    registryCleanCandidates: null,
+    scanRegistryStaleEntries: async () => {
+      if (!deps) {
+        set({ registryCleanScanStatus: 'error', registryCleanScanError: 'No ports wired into the TUI store' });
+        return;
+      }
+      const sessionId = get().registrySessionId;
+      set({
+        registryCleanScanStatus: 'loading',
+        registryCleanScanError: null,
+        registryCleanCandidates: null,
+        // A fresh classify starts a fresh clean session — any prior removal results are
+        // stale once the candidate list they refer to is about to be replaced.
+        registryCleanStatus: 'idle',
+        registryCleanResults: null,
+      });
+      const result = await classifyStaleRegistry({
+        registry: deps.registry,
+        manifest: deps.manifest,
+        edtRegistry: deps.edtRegistry,
+      });
+      if (get().registrySessionId !== sessionId) {
+        return;
+      }
+      if (result.ok) {
+        set({ registryCleanScanStatus: 'idle', registryCleanCandidates: result.data.candidates });
+      } else {
+        set({ registryCleanScanStatus: 'error', registryCleanScanError: result.error.message, registryCleanCandidates: null });
+      }
+    },
+    registryCleanStatus: 'idle',
+    registryCleanResults: null,
+    removeStaleRegistryCandidates: async (paths) => {
+      if (!deps) {
+        set({
+          registryCleanStatus: 'idle',
+          registryCleanResults: paths.map((path) => ({
+            path,
+            outcome: 'failed' as const,
+            detail: { code: 'internal-error', message: 'No ports wired into the TUI store' },
+          })),
+        });
+        return;
+      }
+      const sessionId = get().registrySessionId;
+      set({ registryCleanStatus: 'loading' });
+      const removed = await removeStaleRegistryEntries(
+        { registry: deps.registry, lock: deps.lock, registryResourceKey: deps.registryResourceKey },
+        paths,
+      );
+      if (get().registrySessionId !== sessionId) {
+        return;
+      }
+      if (removed.ok) {
+        set({ registryCleanStatus: 'idle', registryCleanResults: removed.data.results });
+      } else {
+        // removeStaleRegistryEntries isolates every per-path failure internally and always
+        // resolves ok — this branch only guards a future signature change from silently
+        // losing the outcome the way registerRegistryCandidates' own before-snapshot-failure
+        // branch already does.
+        set({
+          registryCleanStatus: 'idle',
+          registryCleanResults: paths.map((path) => ({
+            path,
+            outcome: 'failed' as const,
+            detail: { code: removed.error.code, message: removed.error.message },
+          })),
+        });
+      }
+    },
     resetRegistryScreen: () =>
       set((state) => ({
         registrySessionId: state.registrySessionId + 1,
@@ -196,6 +289,11 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
         registryScanResult: null,
         registryRegisterStatus: 'idle',
         registryRegisterResults: null,
+        registryCleanScanStatus: 'idle',
+        registryCleanScanError: null,
+        registryCleanCandidates: null,
+        registryCleanStatus: 'idle',
+        registryCleanResults: null,
       })),
   });
 }
