@@ -46,6 +46,7 @@ const state = createStatePort(stateFile);
 // `edt create` locks on the EDT registry file the same way.
 const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
+const isTTY = process.stdout.isTTY === true;
 const subcommands = buildSubcommands({
   registry,
   manifest,
@@ -58,8 +59,9 @@ const subcommands = buildSubcommands({
   container,
   migration,
   state,
+  isTTY,
 });
 
-const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);
+const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);
 process.stdout.write(output);
 process.exitCode = exitCode;

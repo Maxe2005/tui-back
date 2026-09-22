@@ -5,7 +5,8 @@
 // Wrappers also validate argument cardinality so a typo'd or excess argument is an explicit
 // invalid-argument error instead of a silently ignored one.
 import { resolve } from 'node:path';
-import { err, type Result } from '../../../core/result.js';
+import { createInterface } from 'node:readline/promises';
+import { err, ok, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
 import { switchActiveEdt } from '../../../core/edt/switch.js';
@@ -13,6 +14,7 @@ import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
+import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
@@ -39,6 +41,9 @@ const EDT_DELETE_USAGE =
   '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
 const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
+const REGISTRY_CLEAN_USAGE =
+  'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
+const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -52,6 +57,11 @@ export function buildSubcommands(deps: {
   container: ContainerPort;
   migration: MigrationPort;
   state: StatePort;
+  // Story 2.33: gates `registry clean`'s bare-invocation interactive list-then-confirm
+  // prompt. Defaults to false (never prompts) so every existing deps-construction call site
+  // (tests, in particular) is unaffected — only bin/main.ts's composition root wires the
+  // real process.stdout.isTTY.
+  isTTY?: boolean;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -185,6 +195,20 @@ export function buildSubcommands(deps: {
           );
         }
         return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
+      },
+    },
+    {
+      name: 'registry',
+      usage: REGISTRY_USAGE,
+      // Story 2.33: verb-dispatch subcommand, same shape as `edt` above — today's only
+      // action is `clean`, but the dispatch shape leaves room for a future registry verb
+      // without renaming the subcommand.
+      run: async (args) => {
+        if (args[0] === 'clean') {
+          return runRegistryClean(deps, args.slice(1));
+        }
+        const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
+        return err('invalid-argument', `Unknown registry action: ${label}. Usage:\n${REGISTRY_USAGE}`);
       },
     },
   ];
@@ -607,6 +631,113 @@ async function runEdtDelete(
     topic,
     dispositions,
   });
+}
+
+// `registry clean` flag parsing + the interactive/scripted split (Boundaries: "list-then-
+// confirm interactive on a TTY; --yes + repeated --path <path> for scripted use, consistent
+// with update's --all --yes"). Scripted mode (--yes together with at least one --path) never
+// classifies — it removes exactly the given paths via removeStaleRegistryEntries, mirroring
+// AC4's `registry clean --yes --path <p1> --path <p2>` example. Bare invocation always
+// classifies first (so a zero-candidates registry is reported the same way regardless of
+// TTY-ness, matrix row "No candidates ... explicit result, never silent"); once candidates
+// exist, a non-TTY run is rejected with confirmation-required (same shape as update's `--all`
+// alone) rather than silently doing nothing, and a TTY run lists every candidate (path +
+// reason + memberOfEdts note) and prompts for one whole-list confirmation before removing.
+async function runRegistryClean(
+  deps: {
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    edtRegistry: EdtRegistryPort;
+    lock: LockPort;
+    registryResourceKey: string;
+    isTTY?: boolean;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let yes = false;
+  const paths: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    if (flag === '--yes') {
+      yes = true;
+      continue;
+    }
+    if (flag === '--path') {
+      const value = args[i + 1];
+      if (value === undefined) {
+        return err('invalid-argument', `Missing value for --path. Usage: ${REGISTRY_CLEAN_USAGE}`);
+      }
+      paths.push(resolve(value));
+      i += 1;
+      continue;
+    }
+    return err('invalid-argument', `Unknown registry clean option: "${flag}". Usage: ${REGISTRY_CLEAN_USAGE}`);
+  }
+
+  if (yes || paths.length > 0) {
+    if (!yes || paths.length === 0) {
+      return err(
+        'invalid-argument',
+        `Scripted use requires --yes together with at least one --path <path>. Usage: ${REGISTRY_CLEAN_USAGE}`,
+      );
+    }
+    return removeStaleRegistryEntries(
+      { registry: deps.registry, lock: deps.lock, registryResourceKey: deps.registryResourceKey },
+      paths,
+    );
+  }
+
+  const classified = await classifyStaleRegistry({
+    registry: deps.registry,
+    manifest: deps.manifest,
+    edtRegistry: deps.edtRegistry,
+  });
+  if (!classified.ok) {
+    return classified;
+  }
+  if (classified.data.candidates.length === 0) {
+    // Matrix: "No candidates ... explicit 'no stale entries' result, never silent" — reported
+    // the same way whether or not the run is interactive.
+    return ok({ candidates: [], results: [] });
+  }
+
+  if (deps.isTTY !== true) {
+    return err(
+      'confirmation-required',
+      `registry clean found ${classified.data.candidates.length} stale ` +
+        `${classified.data.candidates.length === 1 ? 'entry' : 'entries'} — rerun with --yes --path <path>... to ` +
+        `confirm removal. Usage: ${REGISTRY_CLEAN_USAGE}`,
+      { candidates: classified.data.candidates },
+    );
+  }
+
+  process.stdout.write(`Stale registry entries (${classified.data.candidates.length}):\n`);
+  for (const candidate of classified.data.candidates) {
+    const note = candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
+    process.stdout.write(`  ${candidate.path} — ${candidate.reason}${note}\n`);
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let answer: string;
+  try {
+    answer = await rl.question(`Remove ${classified.data.candidates.length === 1 ? 'this entry' : 'these entries'}? [y/N] `);
+  } finally {
+    rl.close();
+  }
+
+  if (!/^y(es)?$/i.test(answer.trim())) {
+    return ok({ candidates: classified.data.candidates, results: [] });
+  }
+
+  const removed = await removeStaleRegistryEntries(
+    { registry: deps.registry, lock: deps.lock, registryResourceKey: deps.registryResourceKey },
+    classified.data.candidates.map((candidate) => candidate.path),
+  );
+  if (!removed.ok) {
+    return removed;
+  }
+  return ok({ candidates: classified.data.candidates, results: removed.data.results });
 }
 
 export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {
