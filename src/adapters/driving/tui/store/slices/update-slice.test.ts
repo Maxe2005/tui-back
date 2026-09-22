@@ -16,6 +16,7 @@ import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { UPDATE_HEALTH_POLL_INTERVAL_MS } from './update-slice.js';
 
 const MEMBERS = [
   { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' },
@@ -450,5 +451,143 @@ describe('update slice', () => {
     expect(store.getState().updateError).toContain('stash exploded');
     expect(store.getState().updateBlocker).toBeNull();
     expect(store.getState().runInProgress).toBe(false);
+  });
+});
+
+// Story 3.6: the Update zone's own service-list health poll — mirrors app-store.test.ts's
+// "logs slice: inline service health & restart (story 5.3)" describe block (that story's own
+// precedent for testing a slice's fire-and-forget poll-timer behavior against fake ports),
+// but against startUpdateHealthPolling/stopUpdateHealthPolling/updateServiceHealth instead of
+// subscribeLogsPane/logsPanes — this poll is Update-zone-owned and independent (Never: "no
+// shared subscription" with Logs zone's own poll).
+describe('update slice: service health polling (story 3.6)', () => {
+  // A real setTimeout macrotask flush, not fake timers — lets every pending microtask from
+  // startUpdateHealthPolling's fire-and-forget pollServiceHealth chain (manifest.load then
+  // getContainerHealth, each a resolved-async mock) settle before assertions run.
+  async function flushPolls(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  function fakeDocker(getContainerHealth: DockerPort['getContainerHealth']): DockerPort {
+    return {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth,
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+  }
+
+  it('startUpdateHealthPolling polls every given repoPath\'s container health and reflects it on updateServiceHealth', async () => {
+    const getContainerHealth = vi.fn(async () => ok('up' as const));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a']);
+    await flushPolls();
+
+    expect(getContainerHealth).toHaveBeenCalledWith('ctr-a');
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+  });
+
+  it('polls every given repoPath independently, keyed by its own repoPath', async () => {
+    const getContainerHealth = vi.fn(async (container: string) => ok(container === 'ctr-a' ? ('up' as const) : ('down' as const)));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a', '/repo/b']);
+    await flushPolls();
+
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+    expect(store.getState().updateServiceHealth['/repo/b']).toBe('down');
+  });
+
+  it('I/O matrix "Manifest load fails during health poll for a service": manifest.load failing leaves updateServiceHealth untouched (silent no-op)', async () => {
+    vi.useFakeTimers();
+    try {
+      const manifestLoad = vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      );
+      const manifest: ManifestPort = { load: manifestLoad };
+      const getContainerHealth = vi.fn(async () => ok('up' as const));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth), manifest }));
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      // First drive the badge to a known non-default state — asserting the default `'down'`
+      // below would also pass vacuously if the failing poll simply never ran.
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+
+      manifestLoad.mockImplementation(async () => err('manifest-not-found', 'gone'));
+      const callsBefore = getContainerHealth.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The poll bailed before ever reaching the docker adapter — no inspect, no crash, and
+      // the last-known value is kept (never cleared/reset).
+      expect(getContainerHealth.mock.calls.length).toBe(callsBefore);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a getServiceHealth/getContainerHealth failure leaves updateServiceHealth untouched (silent no-op, same as manifest-load failure)', async () => {
+    vi.useFakeTimers();
+    try {
+      const getContainerHealth = vi.fn(async () => ok('up' as const));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+
+      getContainerHealth.mockImplementation(async () => err('docker-unavailable', 'daemon down'));
+      const callsBefore = getContainerHealth.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The failing poll really ran (guards a vacuous pass where the assertion below would
+      // hold simply because no second poll happened yet) and the value kept last-known.
+      expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('polls repeat on the configured interval and stop entirely once stopUpdateHealthPolling is called', async () => {
+    vi.useFakeTimers();
+    try {
+      const getContainerHealth = vi.fn(async () => ok('up' as const));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      const afterStart = getContainerHealth.mock.calls.length;
+      expect(afterStart).toBeGreaterThanOrEqual(1);
+
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      expect(getContainerHealth.mock.calls.length).toBeGreaterThan(afterStart);
+
+      const afterInterval = getContainerHealth.mock.calls.length;
+      store.getState().stopUpdateHealthPolling();
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS * 4);
+
+      // No further polls fire once stopped — the timer never outlives the zone.
+      expect(getContainerHealth.mock.calls.length).toBe(afterInterval);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('startUpdateHealthPolling on an unwired store is a no-op, never a throw', () => {
+    const store = createAppStore();
+
+    expect(() => store.getState().startUpdateHealthPolling(['/repo/a'])).not.toThrow();
+    expect(store.getState().updateServiceHealth).toEqual({});
   });
 });

@@ -418,6 +418,11 @@ it('shouldQuit returns true for q', () => {
         runGroupUpdate: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
+        // Story 3.6: Update zone service-list health poll + last-outcome map
+        updateServiceHealth: {},
+        lastServiceOutcomes: {},
+        startUpdateHealthPolling: () => {},
+        stopUpdateHealthPolling: () => {},
         // Story 5.1: Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],

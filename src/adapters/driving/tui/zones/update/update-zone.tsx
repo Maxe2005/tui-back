@@ -18,12 +18,30 @@
 // itself is never invoked by any test in the repo).
 import { spawnSync } from 'node:child_process';
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { DetailPane, ListRow, ModalDialog, Spinner, type SummaryTone } from '../../shared/components/index.js';
+import {
+  BoundedList,
+  DetailPane,
+  ListDetailSplit,
+  ListRow,
+  ModalDialog,
+  Spinner,
+  StatusBadge,
+  type SummaryTone,
+} from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
+import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
+import { deriveUpdateServiceStatus, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
+
+// Story 3.6: rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title
+// row, the list column's own section header/loading/error lines) subtracted from the raw
+// window size before the service list's own BoundedList ever sees it — mirrors
+// edts-zone.tsx's own EDTS_SERVICE_LISTS_CHROME_ROWS precedent ("an approximation is fine
+// here").
+const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
 export const UPDATE_IDLE_PROMPT = 'Press [Enter] to bring every member service up to date.';
 export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
@@ -240,9 +258,60 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const resizeMode = useStore((state) => state.resizeMode);
 
+  // Story 3.6: the always-visible service-list shell — the same active-EDT-scoped
+  // `edtsBranches` rows Logs/EDTs zones already load, plus this zone's own live health poll
+  // and last-run-outcome map (Code Map).
+  const services = useStore((state) => state.edtsBranches);
+  const servicesStatus = useStore((state) => state.edtsBranchesStatus);
+  const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
+  const loadEdts = useStore((state) => state.loadEdts);
+  const updateServiceHealth = useStore((state) => state.updateServiceHealth);
+  const lastServiceOutcomes = useStore((state) => state.lastServiceOutcomes);
+  const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
+  const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
+  const ratio = useStore((state) => state.splitterRatios.update);
+
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [allConfirm, setAllConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
+  // Story 3.6: the service list's own selection cursor — zone-local UI state (repo
+  // convention: only cross-visit/cross-run state belongs in update-slice.ts).
+  const [serviceCursor, setServiceCursor] = useState(0);
+
+  useEffect(() => {
+    void loadEdtsBranches();
+    void loadEdts();
+    // Fires once on mount only, mirrors logs-zone.tsx's own mount effect (Code Map:
+    // "pattern: logs-zone.tsx:225-230").
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const rows = servicesStatus === 'error' ? [] : (services ?? []);
+  const focusedEdt = (edts ?? []).find((entry) => entry.ulid === activeEdt);
+  const serviceRows = partitionUpdateServiceRows(rows, focusedEdt);
+  const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
+  const selectedServiceRow = serviceRows[clampedServiceCursor];
+
+  // Story 3.6: this run's currently-targeted services — an all-repos run targets every
+  // listed service; an EDT-scoped run targets only the active EDT's own members (the same
+  // `runningMembers` the running-state spinner below already reads).
+  const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
+  const isAllRun = updateScope === 'all';
+  const runningMemberPaths = new Set(runningMembers.map((member) => member.repoPath));
+
+  // Story 3.6: starts (or restarts, on a changed service list) this zone's own health poll
+  // whenever the loaded service list changes — independent of Logs zone's own pane
+  // subscriptions (Never: "no shared subscription"). Torn down on unmount so no poll timer
+  // outlives the zone.
+  const servicePaths = rows.map((row) => row.path).join('\u0000');
+  useEffect(() => {
+    if (servicePaths === '') {
+      return;
+    }
+    startUpdateHealthPolling(servicePaths.split('\u0000'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicePaths]);
+  useEffect(() => () => stopUpdateHealthPolling(), [stopUpdateHealthPolling]);
 
   // While any dialog owns the keystroke, every global shortcut (including `?`
   // help and the zone mnemonics) must not fire — the same zoneInputCaptured gate the EDTs
@@ -298,6 +367,19 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      // Story 3.6: the service list's own cursor — moves regardless of run state (browsing
+      // the always-visible list is harmless mid-run) and never conflicts with the existing
+      // 3.1–3.4 triggers below, none of which use arrow/Home/End.
+      const jump = resolveSelectionJump(key);
+      if (jump !== null) {
+        setServiceCursor(jumpSelection(jump, serviceRows.length));
+        return;
+      }
+      const direction = resolveSelectionDirection(key);
+      if (direction !== null) {
+        setServiceCursor((current) => moveSelection(current, direction, serviceRows.length));
+        return;
+      }
       if (updateStatus === 'running') {
         if (shouldConfirmQuit(input, updateStatus)) {
           setQuitConfirm(true);
@@ -318,74 +400,122 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // The active EDT's own membership — the per-service spinner rows during a run, before the
   // core use-case resolves with its per-service outcome rows. An all-repos run targets no
   // single EDT, so it shows the generic loading line instead of EDT member rows.
-  const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
   const offerRerun = shouldOfferRerun(edts, activeEdt);
-  const isAllRun = updateScope === 'all';
   const runningLabel = isAllRun ? UPDATE_ALL_RUNNING_LABEL : UPDATE_RUNNING_LABEL;
 
+  // Story 3.6: this zone's own service-list chrome budget (Code Map: "an approximation is
+  // fine here", mirrors edts-zone.tsx/logs-zone.tsx's own precedent).
+  const windowSize = useWindowSize();
+  const serviceListMaxVisibleRows = Math.max(windowSize.rows - UPDATE_SERVICE_LIST_CHROME_ROWS, 3);
+
+  const selectedLastOutcome = selectedServiceRow !== undefined ? lastServiceOutcomes[selectedServiceRow.service] : undefined;
+
   return (
-    <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']}>
+    <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       <Text color={colors['text-dim']}>UPDATE</Text>
-      {updateStatus === 'running' ? (
-        <Box flexDirection="column">
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> {runningLabel}</Text>
+      <ListDetailSplit
+        ratio={ratio[0]}
+        listSplitterTargeted={resizeMode?.zone === 'update' && resizeMode.targetBoundary === 0}
+        list={
+          <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+            <Text color={colors['text-dim']}>SERVICES</Text>
+            {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
+            {servicesStatus === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+            {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
+              <Text color={colors['text-dim']}>No managed services found.</Text>
+            ) : null}
+            {/* AC2/I-O matrix: every row always carries exactly one glyph from the closed
+                up/down/restarting/updating/migrating/error set — never blank, never bridged
+                through a generic state. */}
+            <BoundedList
+              items={serviceRows}
+              maxVisibleRows={serviceListMaxVisibleRows}
+              cursorIndex={clampedServiceCursor}
+              renderItem={(row, index) => {
+                const health = updateServiceHealth[row.path] ?? 'down';
+                const lastOutcome = lastServiceOutcomes[row.service];
+                const isTargeted = updateStatus === 'running' && (isAllRun || runningMemberPaths.has(row.path));
+                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted);
+                return (
+                  <Box key={row.path} flexDirection="row">
+                    <StatusBadge state={status} />
+                    <Box marginLeft={1} flexGrow={1} minWidth={0}>
+                      <ListRow label={row.service} meta={formatServiceMeta(row)} selected={index === clampedServiceCursor} />
+                    </Box>
+                  </Box>
+                );
+              }}
+            />
           </Box>
-          {isAllRun || runningMembers.length === 0 ? (
-            <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
-          ) : (
-            runningMembers.map((member) => (
-              <Box key={member.repoPath}>
-                <Spinner />
-                <Text color={colors.text}> {member.service} ({member.branch})</Text>
-              </Box>
-            ))
-          )}
-        </Box>
-      ) : null}
-      {updateStatus === 'done' && updateTopic !== null ? (
-        // The zero-member no-op carries its note as the primary outcome line — rendering
-        // the success-toned `0 updated, 0 skipped, 0 failed` counts DetailPane for it
-        // would overstate a no-op as a result.
-        updateNote !== null && updateResults.length === 0 ? (
-          <Box flexDirection="column">
-            <Text color={colors.text}>{updateNote}</Text>
-            <Text color={colors['text-dim']}>Press [Enter] to run again.</Text>
-          </Box>
-        ) : (
-          <Box flexDirection="column">
-            {updateResults.map((row, index) => (
-              // Duplicate service names occur within one EDT — key by service + index so
-              // React never drops a same-named row.
-              <Text key={`${row.service}-${index}`} color={colors.text}>
-                {formatUpdateRow(row)}
-              </Text>
-            ))}
-            <DetailPane
-              title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
-              summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
-            >
-              {updateNote ?? `Press [Enter] to run again.`}
+        }
+        detail={
+          <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+            <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>
+              {selectedServiceRow !== undefined ? formatServiceOutcomeDetail(selectedLastOutcome) : 'No service selected.'}
             </DetailPane>
+            {updateStatus === 'running' ? (
+              <Box flexDirection="column">
+                <Box>
+                  <Spinner />
+                  <Text color={colors.text}> {runningLabel}</Text>
+                </Box>
+                {isAllRun || runningMembers.length === 0 ? (
+                  <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
+                ) : (
+                  runningMembers.map((member) => (
+                    <Box key={member.repoPath}>
+                      <Spinner />
+                      <Text color={colors.text}> {member.service} ({member.branch})</Text>
+                    </Box>
+                  ))
+                )}
+              </Box>
+            ) : null}
+            {updateStatus === 'done' && updateTopic !== null ? (
+              // The zero-member no-op carries its note as the primary outcome line — rendering
+              // the success-toned `0 updated, 0 skipped, 0 failed` counts DetailPane for it
+              // would overstate a no-op as a result.
+              updateNote !== null && updateResults.length === 0 ? (
+                <Box flexDirection="column">
+                  <Text color={colors.text}>{updateNote}</Text>
+                  <Text color={colors['text-dim']}>Press [Enter] to run again.</Text>
+                </Box>
+              ) : (
+                <Box flexDirection="column">
+                  {updateResults.map((row, index) => (
+                    // Duplicate service names occur within one EDT — key by service + index so
+                    // React never drops a same-named row.
+                    <Text key={`${row.service}-${index}`} color={colors.text}>
+                      {formatUpdateRow(row)}
+                    </Text>
+                  ))}
+                  <DetailPane
+                    title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
+                    summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
+                  >
+                    {updateNote ?? `Press [Enter] to run again.`}
+                  </DetailPane>
+                </Box>
+              )
+            ) : null}
+            {updateStatus === 'error' ? (
+              <Box flexDirection="column">
+                <Text color={colors.error}>
+                  {updateError ?? 'Group update failed.'}
+                  {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
+                </Text>
+                <Text color={colors['text-dim']}>Press [Enter] to try again.</Text>
+              </Box>
+            ) : null}
+            {updateStatus === 'idle' ? (
+              <Box flexDirection="column">
+                <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
+                <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
+              </Box>
+            ) : null}
           </Box>
-        )
-      ) : null}
-      {updateStatus === 'error' ? (
-        <Box flexDirection="column">
-          <Text color={colors.error}>
-            {updateError ?? 'Group update failed.'}
-            {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
-          </Text>
-          <Text color={colors['text-dim']}>Press [Enter] to try again.</Text>
-        </Box>
-      ) : null}
-      {updateStatus === 'idle' ? (
-        <Box flexDirection="column">
-          <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
-          <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
-        </Box>
-      ) : null}
+        }
+      />
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>

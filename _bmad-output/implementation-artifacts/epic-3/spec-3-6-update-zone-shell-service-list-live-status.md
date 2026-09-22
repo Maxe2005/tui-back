@@ -58,11 +58,11 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `status-badge.tsx` -- add `restarting`/`updating`/`migrating`/`error` to `StatusBadgeState`/`STATUS_BADGES` with distinct glyphs/colors -- closed six-state set, never ambiguous, no reuse of the generic `in-progress` glyph for these.
-- [ ] `update-zone.logic.ts` (new) -- `deriveUpdateServiceStatus` + `UpdateServiceStatus` type + a partition helper for EDT-members-first ordering -- pure, independently unit-testable per repo's `useInput`-untested convention.
-- [ ] `update-slice.ts` -- add `updateServiceHealth`, `lastServiceOutcomes` state + poll start/stop actions mirroring `logs-slice.ts`'s health-poll pattern; merge (not replace) `lastServiceOutcomes` on run completion.
-- [ ] `update-zone.tsx` -- wrap existing content in `ListDetailSplit`/`ListRow`/`BoundedList`/`DetailPane`; wire mount-effect data loading + health poll start/stop; keep 3.1–3.4 triggers/modal behavior unchanged.
-- [ ] `update-zone.test.tsx` -- unit-test `deriveUpdateServiceStatus` and the partition helper across the I/O matrix rows; smoke-test idle/updating/error list+detail rendering.
+- [x] `status-badge.tsx` -- add `restarting`/`updating`/`migrating`/`error` to `StatusBadgeState`/`STATUS_BADGES` with distinct glyphs/colors -- closed six-state set, never ambiguous, no reuse of the generic `in-progress` glyph for these.
+- [x] `update-zone.logic.ts` (new) -- `deriveUpdateServiceStatus` + `UpdateServiceStatus` type + a partition helper for EDT-members-first ordering -- pure, independently unit-testable per repo's `useInput`-untested convention.
+- [x] `update-slice.ts` -- add `updateServiceHealth`, `lastServiceOutcomes` state + poll start/stop actions mirroring `logs-slice.ts`'s health-poll pattern; merge (not replace) `lastServiceOutcomes` on run completion.
+- [x] `update-zone.tsx` -- wrap existing content in `ListDetailSplit`/`ListRow`/`BoundedList`/`DetailPane`; wire mount-effect data loading + health poll start/stop; keep 3.1–3.4 triggers/modal behavior unchanged.
+- [x] `update-zone.test.tsx` -- unit-test `deriveUpdateServiceStatus` and the partition helper across the I/O matrix rows; smoke-test idle/updating/error list+detail rendering.
 
 **Acceptance Criteria:**
 - Given the developer opens the Update zone, when it renders, then the left pane lists every service (active EDT members first, others after) using the same list/detail split as EDT/Logs zones.

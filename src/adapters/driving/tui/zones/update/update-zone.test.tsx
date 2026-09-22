@@ -6,6 +6,7 @@
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
+import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { createAppStore } from '../../store/app-store.js';
 import {
@@ -34,6 +35,7 @@ import {
   shouldOpenAllConfirm,
   UpdateZone,
 } from './update-zone.js';
+import { deriveUpdateServiceStatus, formatServiceOutcomeDetail, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
@@ -49,6 +51,37 @@ const INTERRUPTED_EDTS = [
     members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
   },
 ];
+
+// Story 3.6: the Update zone's own always-visible service-list fixtures.
+const ACTIVE_EDT = {
+  ulid: 'edt-1',
+  topic: 'demo',
+  createdAt: '2026-09-17T00:00:00.000Z',
+  status: 'active' as const,
+  members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+};
+
+const SERVICE_A: ServiceBranchDivergence = {
+  service: 'svc-a',
+  path: '/repo/a',
+  isMember: true,
+  sharedBranch: 'development',
+  branch: 'feat/a',
+  ahead: 0,
+  behind: 0,
+  status: 'current',
+};
+
+const SERVICE_B: ServiceBranchDivergence = {
+  service: 'svc-b',
+  path: '/repo/b',
+  isMember: false,
+  sharedBranch: 'development',
+  branch: 'development',
+  ahead: 0,
+  behind: 0,
+  status: 'current',
+};
 
 describe('formatUpdateRow', () => {
   it('renders each outcome with a glyph paired to the outcome word, code, and message', () => {
@@ -416,5 +449,148 @@ describe('UpdateZone rendering', () => {
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).not.toContain(UPDATE_BLOCKER_TITLE);
+  });
+});
+
+describe('deriveUpdateServiceStatus (story 3.6)', () => {
+  it('a run currently targeting the service always wins, regardless of health or a stale failed outcome', () => {
+    expect(deriveUpdateServiceStatus('down', 'failed', true)).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true)).toBe('updating');
+  });
+
+  it('a failed last outcome outranks raw health when no run currently targets the service', () => {
+    expect(deriveUpdateServiceStatus('up', 'failed', false)).toBe('error');
+    expect(deriveUpdateServiceStatus('down', 'failed', false)).toBe('error');
+  });
+
+  it('raw health passes through unchanged with no run targeting the service and no failed outcome', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, false)).toBe('up');
+    expect(deriveUpdateServiceStatus('down', undefined, false)).toBe('down');
+    expect(deriveUpdateServiceStatus('restarting', undefined, false)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('up', 'updated', false)).toBe('up');
+    expect(deriveUpdateServiceStatus('up', 'skipped', false)).toBe('up');
+  });
+});
+
+describe('partitionUpdateServiceRows (story 3.6)', () => {
+  it('orders active-EDT members first, then the rest, tagging isMember on each row', () => {
+    const rows = partitionUpdateServiceRows([SERVICE_B, SERVICE_A], ACTIVE_EDT);
+
+    expect(rows.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+    expect(rows[0]).toMatchObject({ service: 'svc-a', isMember: true });
+    expect(rows[1]).toMatchObject({ service: 'svc-b', isMember: false });
+  });
+
+  it('marks every row isMember: false when no EDT is focused (mirrors logs-zone.tsx)', () => {
+    const rows = partitionUpdateServiceRows([SERVICE_A, SERVICE_B], undefined);
+
+    expect(rows.every((row) => row.isMember === false)).toBe(true);
+    expect(rows.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+  });
+});
+
+describe('formatServiceOutcomeDetail (story 3.6)', () => {
+  it('renders "idle" when no outcome has ever targeted this service', () => {
+    expect(formatServiceOutcomeDetail(undefined)).toBe('idle');
+  });
+
+  it('renders the outcome word plus code/message detail for a non-updated outcome', () => {
+    expect(formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'updated' })).toBe('updated');
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'merge-conflict', message: 'Automatic merge failed' },
+      }),
+    ).toBe('failed (merge-conflict): Automatic merge failed');
+    expect(formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'skipped' })).toBe('skipped (skipped)');
+  });
+});
+
+describe('mergeLastServiceOutcomes (story 3.6)', () => {
+  it('merges new results in without dropping an existing service outside this run\'s scope', () => {
+    const current = { 'svc-b': { service: 'svc-b', outcome: 'updated' as const } };
+
+    const next = mergeLastServiceOutcomes(current, [{ service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict', message: 'm' } }]);
+
+    expect(next['svc-b']).toEqual({ service: 'svc-b', outcome: 'updated' });
+    expect(next['svc-a']).toEqual({ service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict', message: 'm' } });
+  });
+
+  it('overwrites a service\'s previous outcome with its newest result', () => {
+    const current = { 'svc-a': { service: 'svc-a', outcome: 'failed' as const, detail: { code: 'merge-conflict', message: 'm' } } };
+
+    const next = mergeLastServiceOutcomes(current, [{ service: 'svc-a', outcome: 'updated' }]);
+
+    expect(next['svc-a']).toEqual({ service: 'svc-a', outcome: 'updated' });
+  });
+});
+
+// A no-op stub for every render test below: `createAppStore()` (no deps, the same default
+// every other zone test uses) still owns *real* loadEdtsBranches/loadEdts actions that
+// early-return an 'error'/no-op status when unwired — and UpdateZone calls both on mount.
+// Left un-stubbed, those real calls would race the state each test deliberately seeds and
+// clobber it out from under it (mirrors edts-zone.test.tsx's own noopLoad precedent).
+const noopLoad = async () => {};
+
+describe('UpdateZone service-list shell rendering (story 3.6)', () => {
+  it('idle: every service carries a glyph (health fallback down until the first poll resolves), selected detail shows idle', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('svc-a');
+    expect(output).toContain('svc-b');
+    // No health poll has resolved yet — the I/O matrix's "glyph falls back to down" —
+    // rendered as StatusBadge's down glyph.
+    expect(output).toContain('○');
+    // The first row (svc-a, the EDT member) is selected by default; no run has ever
+    // targeted it, so the detail pane reads "idle".
+    expect(output).toContain('idle');
+  });
+
+  it('updating: a service targeted by the in-flight EDT-scoped run shows the updating glyph', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('⇄');
+  });
+
+  it('error: a service whose last completed run failed shows the error glyph and the failure detail', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      lastServiceOutcomes: {
+        'svc-a': { service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict', message: 'Automatic merge failed' } },
+      },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('✖');
+    expect(output).toContain('failed (merge-conflict): Automatic merge failed');
   });
 });
