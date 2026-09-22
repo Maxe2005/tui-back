@@ -26,6 +26,7 @@ export function createRegistryPort(registryFile: string): RegistryPort {
     exists: (path) => registryPathExists(path),
     scan: (root) => scanRoot(root),
     reset: (path) => resetRegistry(registryFile, path),
+    remove: (path) => removeRegistry(registryFile, path),
   };
 }
 
@@ -93,6 +94,37 @@ export async function addRegistry(registryFile: string, path: string): Promise<R
 
   try {
     await writeFile(registryFile, stringify({ repos: [...listed.data, canonical] }), 'utf8');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return err('registry-write-error', `Failed to write registry file ${registryFile}: ${detail}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.33: `add`'s own read-modify-write shape, in reverse — read the list, drop the
+// canonicalized path if present, write back. Absent-path is a no-op success (never an
+// error), the same idempotency `add` already gives an already-present path (FR-1). Shares
+// `add`'s TOCTOU caveat (concurrent CLI/TUI writers can race a read-modify-write with no
+// file-level locking here — callers serialize through the advisory LockPort instead, same
+// as `add`).
+export async function removeRegistry(registryFile: string, path: string): Promise<Result<void>> {
+  const ensured = await ensureRegistryDir(registryFile);
+  if (!ensured.ok) {
+    return ensured;
+  }
+
+  const canonical = resolve(path);
+  const listed = await listRegistry(registryFile);
+  if (!listed.ok) {
+    return listed;
+  }
+  if (!listed.data.includes(canonical)) {
+    return ok(undefined);
+  }
+
+  const remaining = listed.data.filter((entry) => entry !== canonical);
+  try {
+    await writeFile(registryFile, stringify({ repos: remaining }), 'utf8');
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return err('registry-write-error', `Failed to write registry file ${registryFile}: ${detail}`);

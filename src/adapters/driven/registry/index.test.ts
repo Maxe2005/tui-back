@@ -11,6 +11,7 @@ import {
   addRegistry,
   listRegistry,
   registryPathExists,
+  removeRegistry,
   resetRegistry,
   scanRoot,
   resolveRegistryFile,
@@ -283,6 +284,62 @@ describe('scanRoot', () => {
     } finally {
       await chmod(protectedDir, 0o700);
     }
+  });
+});
+
+describe('removeRegistry', () => {
+  it('removes a present path, leaving the others untouched (AC1, story 2.33)', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'registry.yaml');
+    await addRegistry(file, '/m/a');
+    await addRegistry(file, '/m/b');
+
+    const result = await removeRegistry(file, '/m/a');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(parse(await readFile(file, 'utf8'))).toEqual({ repos: ['/m/b'] });
+  });
+
+  it('is a no-op success for a path that is not registered (AC1, story 2.33)', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'registry.yaml');
+    await addRegistry(file, '/m/a');
+
+    const result = await removeRegistry(file, '/m/never-registered');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(parse(await readFile(file, 'utf8'))).toEqual({ repos: ['/m/a'] });
+  });
+
+  it('is a no-op success against a registry file that does not exist yet', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'tui-back', 'registry.yaml');
+
+    const result = await removeRegistry(file, '/m/a');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+  });
+
+  it('normalizes a trailing-slash path the same way add/list do', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'registry.yaml');
+    await addRegistry(file, '/m/a');
+
+    const result = await removeRegistry(file, '/m/a/');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(parse(await readFile(file, 'utf8'))).toEqual({ repos: [] });
+  });
+
+  it('propagates a corrupt existing registry instead of silently overwriting it', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'registry.yaml');
+    await writeFile(file, 'a: [unclosed');
+
+    await expect(removeRegistry(file, '/m/a')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'registry-invalid-yaml' },
+    });
   });
 });
 

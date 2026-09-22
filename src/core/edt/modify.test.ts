@@ -56,6 +56,7 @@ function makeMockRegistry(initialPaths: Set<string> = new Set()): RegistryPort {
     exists: async (_path: string) => ok(false),
     scan: async (_root: string) => ok({ candidates: [], skipped: [] }),
     reset: async (_path: string) => ok({ path: _path, backupPath: null }),
+    remove: async (_path: string) => ok(undefined),
   };
 }
 

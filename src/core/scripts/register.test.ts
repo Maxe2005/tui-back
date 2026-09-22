@@ -23,6 +23,7 @@ function fakeRegistry(options: { add?: () => Promise<Result<void>> } = {}): Fake
     exists: async () => ok(false),
     scan: async () => ok({ candidates: [], skipped: [] }),
     reset: async () => ok({ path: '/x', backupPath: null }),
+    remove: async () => ok(undefined),
   };
   return { port, add };
 }
