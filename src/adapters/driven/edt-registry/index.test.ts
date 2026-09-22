@@ -387,6 +387,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       exists: async () => ok(true),
       scan: async () => ok({ candidates: [], skipped: [] }),
       reset: async () => ok({ path: paths[0] ?? '', backupPath: null }),
+      remove: async () => ok(undefined),
     };
   }
 

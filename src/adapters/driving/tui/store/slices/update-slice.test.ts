@@ -29,6 +29,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     exists: vi.fn(async () => ok(true)),
     scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
     reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
   };
   const manifest: ManifestPort = {
     load: vi.fn(async (repoPath: string) =>

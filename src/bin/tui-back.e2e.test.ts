@@ -493,7 +493,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'registry']);
   });
 });
 
@@ -1860,5 +1860,138 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
 
     expect(blocked.status).toBe(1);
     expect(JSON.parse(blocked.stdout.trim())).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
+  });
+});
+
+describe('tui-back registry clean (black-box, story 2.33)', () => {
+  function createEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  it('AC4: --yes --path <p1> --path <p2> removes both stale paths, one outcome row each', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const unreachable = await makeRepo(true);
+    const unmanaged = await makeRepo(false);
+    expect(runCli(['register', unreachable], env).status).toBe(0);
+    expect(runCli(['register', unmanaged], env).status).toBe(0);
+    await rm(unreachable, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(['registry', 'clean', '--yes', '--path', unreachable, '--path', unmanaged], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed).toEqual({
+      ok: true,
+      data: {
+        results: [
+          { path: unreachable, outcome: 'removed' },
+          { path: unmanaged, outcome: 'removed' },
+        ],
+      },
+    });
+    expect(parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'))).toEqual({ repos: [] });
+  });
+
+  it('scripted removal of an unregistered path is a no-op success, never touching the others', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const kept = await makeRepo(true);
+    expect(runCli(['register', kept], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'clean', '--yes', '--path', join(xdg, 'never-registered')], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.data.results).toEqual([{ path: join(xdg, 'never-registered'), outcome: 'removed' }]);
+    expect(parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'))).toEqual({ repos: [kept] });
+  });
+
+  it('a bare, non-interactive run on a fully healthy registry reports zero candidates explicitly, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const healthy = await makeRepo(true);
+    expect(runCli(['register', healthy], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'clean'], env);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { candidates: [], errors: [], results: [] } });
+  });
+
+  it('a bare, non-interactive run with stale entries present requires confirmation instead of silently removing anything', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const unreachable = await makeRepo(true);
+    expect(runCli(['register', unreachable], env).status).toBe(0);
+    await rm(unreachable, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(['registry', 'clean'], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('confirmation-required');
+    expect(parsed.error.details.candidates).toEqual([{ path: unreachable, reason: 'unreachable', memberOfEdts: [] }]);
+    // Reporting the candidates is never itself a removal — the registry file is untouched.
+    expect(parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'))).toEqual({ repos: [unreachable] });
+  });
+
+  it('rejects --path without --yes, and --yes without --path, with invalid-argument', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const pathOnly = runCli(['registry', 'clean', '--path', '/repo/a'], env);
+    const yesOnly = runCli(['registry', 'clean', '--yes'], env);
+
+    expect(JSON.parse(pathOnly.stdout.trim()).error.code).toBe('invalid-argument');
+    expect(JSON.parse(yesOnly.stdout.trim()).error.code).toBe('invalid-argument');
+  });
+
+  it('rejects a --path value that looks like another flag or is empty, instead of silently misinterpreting it (review fix)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const looksLikeFlag = runCli(['registry', 'clean', '--yes', '--path', '--yes'], env);
+    const empty = runCli(['registry', 'clean', '--yes', '--path', ''], env);
+
+    expect(JSON.parse(looksLikeFlag.stdout.trim()).error.code).toBe('invalid-argument');
+    expect(JSON.parse(empty.stdout.trim()).error.code).toBe('invalid-argument');
+  });
+
+  it('de-duplicates the same resolved path given via multiple --path flags (review fix)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const unreachable = await makeRepo(true);
+    expect(runCli(['register', unreachable], env).status).toBe(0);
+    await rm(unreachable, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(
+      ['registry', 'clean', '--yes', '--path', unreachable, '--path', unreachable],
+      env,
+    );
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [{ path: unreachable, outcome: 'removed' }] } });
+  });
+
+  it('flags a stale candidate that is still an EDT member with a memberOfEdts note, through the real CLI (AC3/AC6, review fix)', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+    const repo = await makeGitRepo();
+    expect(runCli(['register', repo], env).status).toBe(0);
+    const created = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
+      env,
+    );
+    expect(created.status).toBe(0);
+    await rm(repo, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(['registry', 'clean'], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.error.code).toBe('confirmation-required');
+    expect(parsed.error.details.candidates).toEqual([{ path: repo, reason: 'unreachable', memberOfEdts: ['demo'] }]);
   });
 });

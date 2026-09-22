@@ -28,6 +28,7 @@ export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-sli
 export type { CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
 export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/edt-slice.js';
 export type { RegistryOutcome, RegistryRegisterResult } from './slices/registry-slice.js';
+export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/scripts/clean-registry.js';
 export type { SettingsUpdate } from './slices/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
