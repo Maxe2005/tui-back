@@ -1,7 +1,8 @@
 // tui/zones/routes: render tests (AD-13 — Ink smoke coverage) for story 2.13's `disabled`
-// explanatory message, plus the unaffected `enabled`/`omitted` fallthrough to the existing
-// ZonePlaceholder stub (module-registry.ts stays empty in real usage — `disabled` is only
-// ever exercised here via a directly-seeded store fixture, per the spec's Boundaries).
+// explanatory message plus story 6.1's real list/detail content: spinner while loading,
+// the three visibly distinct failure/empty/not-activated states, and the route list itself
+// seeded straight into the store (renderToString performs one synchronous render pass, so
+// the mount-time loadRoutes effect is seeded around, not through).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
@@ -29,23 +30,78 @@ describe('RoutesZone (story 2.13)', () => {
     expect(output).toContain('orders-api');
     expect(output).not.toContain('ROUTES');
   });
+});
 
-  it('falls through to the normal ZonePlaceholder content when enabled', async () => {
+describe('RoutesZone (story 6.1)', () => {
+  it('shows a spinner while routes are loading', async () => {
     const store = createAppStore();
-    store.setState({
-      tabVisibility: {
-        routes: { status: 'enabled', carryingServices: ['api-gateway'] },
-        sharedTypes: { status: 'omitted', carryingServices: [] },
-      },
-    });
+    // One-shot render idiom (mirrors logs-zone.test.tsx): stub the mount-time loader so
+    // the seeded pre-load state survives to capture.
+    store.setState({ loadRoutes: async () => {} });
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('ROUTES');
-    expect(output).toContain('list pane');
+    expect(output).toContain('⣾');
+    expect(output).toContain('Loading routes');
   });
 
-  it('falls through to the normal ZonePlaceholder content by default (pre-load / omitted state)', async () => {
+  it('lists every discovered METHOD + path row with the focused route in the detail pane', async () => {
     const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+    });
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('ROUTES');
+    expect(output).toContain('GET /users');
+    expect(output).toContain('POST /users');
+    expect(output).toContain('List users');
+    expect(output).not.toContain('Loading routes');
+  });
+
+  it('shows a distinct scan-failure state carrying the reason, never an empty list', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'error',
+      routes: null,
+      routesError: { code: 'route-scan-failed', message: 'Route scan failed for /repos/gateway: bad spec' },
+      loadRoutes: async () => {},
+    });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('Route scan failed');
+    expect(output).toContain('bad spec');
+    expect(output).not.toContain('No routes discovered');
+  });
+
+  it('shows a distinct genuinely-empty state, visibly different from a failure', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/empty',
+      routes: [],
+      routesError: null,
+      loadRoutes: async () => {},
+    });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('No routes discovered for this repo.');
+    expect(output).not.toContain('Route scan failed');
+    expect(output).not.toContain('Loading routes');
+  });
+
+  it('shows no route list (named, not empty) when route exploration is not activated', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'error',
+      routes: null,
+      routesError: { code: 'route-exploration-not-activated', message: 'No route list for this repo' },
+      loadRoutes: async () => {},
+    });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('No route list for this repo.');
+    expect(output).not.toContain('No routes discovered');
+    expect(output).not.toContain('Route scan failed');
   });
 });

@@ -7,6 +7,7 @@ import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
+import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
@@ -177,6 +178,7 @@ describe('subcommand registry guards', () => {
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
     const container: ContainerPort = { restart: async () => ok(undefined) };
     const migration: MigrationPort = { run: async () => ok({ output: '' }) };
+    const scanner: RouteScannerPort = { scan: async () => ok([]) };
     const git: GitPort = {
       assertAllowedBranch: async () => ok(undefined),
       createBranch: async () => ok(undefined),
@@ -216,11 +218,12 @@ describe('subcommand registry guards', () => {
       container,
       migration,
       state: fakeState(),
+      scanner,
       ...overrides,
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/list-routes without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -231,6 +234,7 @@ describe('subcommand registry guards', () => {
       'edts',
       'edt',
       'update',
+      'list-routes',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
@@ -245,6 +249,25 @@ describe('subcommand registry guards', () => {
 
     const result = await edts.run([]);
     expect(result).toMatchObject({ ok: true, data: { services: [], unreachable: [], errors: [] } });
+  });
+
+  it('list-routes (story 6.1) rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
+    const subcommands = buildTestSubcommands();
+    const listRoutesCmd = subcommands.find((subcommand) => subcommand.name === 'list-routes');
+    if (!listRoutesCmd) throw new Error('expected list-routes subcommand');
+
+    expect(listRoutesCmd.usage).toBe('tui-back list-routes <repoPath>');
+
+    const missing = await listRoutesCmd.run([]);
+    expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+
+    const excess = await listRoutesCmd.run(['/a', '/b']);
+    expect(excess).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    // The fixture manifest answers manifest-not-found, which the use-case propagates —
+    // proving the wrapper reached the use-case itself rather than rejecting locally.
+    const result = await listRoutesCmd.run(['/repos/gateway']);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
   it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {

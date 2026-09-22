@@ -19,6 +19,8 @@ import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/regi
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
+import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
 
 const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
@@ -46,6 +48,15 @@ const state = createStatePort(stateFile);
 // `edt create` locks on the EDT registry file the same way.
 const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
+// Story 6.1: the route-explorer module's scanner, resolved out of the statically compiled
+// module registry by manifest module id (AD-5) — manifests only ever select this key,
+// never supply code. The lookup cannot fail in practice (registry and key are compiled
+// together); the throw is a loud programmer-error signal, raised before any stdout output
+// so the AD-3 envelope contract is unaffected.
+const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
+if (routeExplorer === undefined) {
+  throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
+}
 const subcommands = buildSubcommands({
   registry,
   manifest,
@@ -58,6 +69,7 @@ const subcommands = buildSubcommands({
   container,
   migration,
   state,
+  scanner: routeExplorer.scanner,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);

@@ -369,7 +369,7 @@ describe('tui-back list-repos (black-box)', () => {
         'migrationCommand: npm run migration:run',
         'sharedBranch: development',
         'modules:',
-        '  route-explorer: {}',
+        '  bogus-module: {}',
         '',
       ].join('\n'),
     );
@@ -417,6 +417,108 @@ describe('tui-back list-repos (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('registry-invalid-format');
+  });
+});
+
+describe('tui-back list-routes (black-box, story 6.1)', () => {
+  const routesManifest = [
+    'service: api-gateway',
+    'container: api-gateway',
+    'sharedBranch: development',
+    'modules:',
+    '  route-explorer: {}',
+    '',
+  ].join('\n');
+
+  const spec = {
+    openapi: '3.0.0',
+    info: { title: 'Gateway', version: '1.0.0' },
+    paths: {
+      '/users': { get: { summary: 'List users' }, post: { summary: 'Create a user' } },
+      '/health': { get: {} },
+    },
+  };
+
+  async function makeRoutesRepo(specContent: string | null): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'tui-back-e2e-routes-'));
+    tmpDirs.push(dir);
+    await writeFile(join(dir, '.tui-back.yaml'), routesManifest);
+    if (specContent !== null) {
+      await writeFile(join(dir, 'openapi.json'), specContent);
+    }
+    return dir;
+  }
+
+  it('lists every discovered METHOD + path row as exactly one JSON line, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRoutesRepo(JSON.stringify(spec));
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        routes: [
+          { method: 'GET', path: '/users', summary: 'List users' },
+          { method: 'POST', path: '/users', summary: 'Create a user' },
+          { method: 'GET', path: '/health' },
+        ],
+      },
+    });
+  });
+
+  it('rejects a repo whose manifest does not activate route-explorer with route-exploration-not-activated, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(true);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('route-exploration-not-activated');
+    expect(parsed.error.message).toContain('No route list for this repo');
+  });
+
+  it('reports an unparsable spec as route-scan-failed, never as an empty list, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRoutesRepo('{ not valid json, [unclosed');
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('route-scan-failed');
+  });
+
+  it('returns a genuinely-empty ok list for a spec with zero paths, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRoutesRepo(JSON.stringify({ openapi: '3.0.0', info: {}, paths: {} }));
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { routes: [] } });
+  });
+
+  it('rejects a missing repoPath with missing-argument and an excess argument with invalid-argument', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const missing = runCli(['list-routes'], env);
+    expect(missing.status).toBe(1);
+    expect(JSON.parse(missing.stdout.trim())).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+
+    const excess = runCli(['list-routes', '/a', '/b'], env);
+    expect(excess.status).toBe(1);
+    expect(JSON.parse(excess.stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
   });
 });
 
@@ -493,7 +595,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'list-routes']);
   });
 });
 

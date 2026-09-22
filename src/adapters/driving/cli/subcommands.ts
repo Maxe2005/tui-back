@@ -20,11 +20,13 @@ import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
+import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
 import { scanRepos } from '../../../core/scripts/scan.js';
+import { listRoutes } from '../../../core/routes/list-routes.js';
 import type { Subcommand } from './dispatch.js';
 
 const EDT_CREATE_USAGE =
@@ -52,6 +54,7 @@ export function buildSubcommands(deps: {
   container: ContainerPort;
   migration: MigrationPort;
   state: StatePort;
+  scanner: RouteScannerPort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -185,6 +188,23 @@ export function buildSubcommands(deps: {
           );
         }
         return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
+      },
+    },
+    {
+      name: 'list-routes',
+      usage: 'tui-back list-routes <repoPath>',
+      // Story 6.1: thin wrapper around core/routes/list-routes.ts (AD-2) — the wrapper owns
+      // argument cardinality (missing → missing-argument like scan/register, excess or blank
+      // → invalid-argument, never silently ignored); the use-case owns the manifest gate
+      // and the scanner delegation.
+      run: async (args) => {
+        if (args.length === 0) {
+          return err('missing-argument', 'Usage: tui-back list-routes <repoPath>');
+        }
+        if (args.length > 1 || args[0].trim() === '') {
+          return err('invalid-argument', 'Usage: tui-back list-routes <repoPath>');
+        }
+        return listRoutes({ manifest: deps.manifest, scanner: deps.scanner }, resolve(args[0]));
       },
     },
   ];

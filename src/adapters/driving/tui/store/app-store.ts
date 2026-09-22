@@ -15,6 +15,7 @@ import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
+import type { RouteScannerPort } from '../../../../core/ports/route-scanner.js';
 import type { SettingsPort } from '../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../core/ports/state.js';
 import { createNavigationSlice, type NavigationSlice } from './slices/navigation-slice.js';
@@ -23,6 +24,7 @@ import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
 import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
 import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
+import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
 export type { CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
@@ -31,6 +33,7 @@ export type { RegistryOutcome, RegistryRegisterResult } from './slices/registry-
 export type { SettingsUpdate } from './slices/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
+export type { RoutesStatus } from './slices/routes-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
@@ -67,9 +70,15 @@ export type AppStoreDeps = {
   // Story 5.1: the Logs zone's Docker touchpoint (AD-1/AD-2) — wrapped by a single
   // LogsManager instance the logs slice creates and closes over (see that file's header).
   docker: DockerPort;
+  // Story 6.1: the Routes zone's scanner touchpoint (AD-1/AD-2) — the routes slice calls
+  // core/routes/list-routes.ts in-process through it. Optional so every pre-existing
+  // `createAppStore()` call (tests, and the module-level `useAppStore` default below)
+  // keeps working unwired; loadRoutes degrades to an explicit error state rather than
+  // throwing when it is missing.
+  scanner?: RouteScannerPort;
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & RoutesSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -79,6 +88,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createSettingsSlice(deps)(...args),
     ...createUpdateSlice(deps)(...args),
     ...createLogsSlice(deps)(...args),
+    ...createRoutesSlice(deps)(...args),
   }));
 }
 
