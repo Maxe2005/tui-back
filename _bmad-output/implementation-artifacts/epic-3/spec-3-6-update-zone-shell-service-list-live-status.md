@@ -2,8 +2,9 @@
 title: 'Update Zone Shell — Service List & Live Status'
 type: 'feature'
 created: '2026-09-22'
-status: 'ready-for-dev'
+status: 'in-progress'
 review_loop_iteration: 0
+baseline_commit: '0a7d48a0e800f1060edad2f62e33db5ae7ce4f93'
 context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 ---
 
