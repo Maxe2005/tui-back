@@ -57,6 +57,9 @@ last_updated: 2026-09-21
 # below; story 5-4 confirmed unchanged, its own hint-panel-hidden-while-editing fix retained.
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) started (bmad-build).
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to done after code-done + patch loop (bmad-build).
+# 2026-09-22: Sprint Change Proposal (sprint-change-proposal-2026-09-22.md) appended story 2-33
+# (registry — deregister stale, unreachable, or unmanaged repos) to epic-2 — new backlog entry
+# below.
 project: tui-back
 # 2026-09-16: Sprint Change Proposal (sprint-change-proposal-2026-09-16.md) appended stories
 # 2-27..2-32 to epic-2 and amended story 2-26 in place (still `done`) — see that proposal for
@@ -116,6 +119,7 @@ development_status:
   2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: backlog
   2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
   2-32-text-input-line-cursor-navigation-app-wide-adoption: done
+  2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: backlog
   epic-2-retrospective: optional
 
   epic-3: in-progress
