@@ -158,6 +158,65 @@ describe('update slice', () => {
     expect(store.getState().runInProgress).toBe(false);
   });
 
+  // Review fix (story 3.6): exercises the real `set((state) => ({ ..., lastServiceOutcomes:
+  // mergeLastServiceOutcomes(...) }))` wiring through the actual runGroupUpdate flow —
+  // pure mergeLastServiceOutcomes unit tests and hand-seeded store.setState calls in zone
+  // render tests don't catch a bug in that wiring itself (e.g. the merge call dropped, or
+  // given the wrong arguments).
+  it('runGroupUpdate populates lastServiceOutcomes with the run\'s own per-service outcomes', async () => {
+    const store = createAppStore(fakeDeps());
+    expect(store.getState().lastServiceOutcomes).toEqual({});
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().lastServiceOutcomes).toEqual({
+      'svc-a': { service: 'svc-a', outcome: 'updated' },
+      'svc-b': { service: 'svc-b', outcome: 'updated' },
+    });
+  });
+
+  it('runGroupUpdate merges lastServiceOutcomes across runs — a service outside a later scoped run\'s scope keeps its earlier outcome', async () => {
+    // The active EDT has only svc-a as a member — the second (default-scoped, 'edt') run
+    // below targets svc-a alone, never svc-b.
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () =>
+        ok([
+          {
+            ulid: 'edt-1',
+            topic: 'demo',
+            createdAt: '2026-09-17T00:00:00.000Z',
+            status: 'active' as const,
+            members: [MEMBERS[0]!],
+          },
+        ]),
+      ),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ edtRegistry }));
+
+    // First run: scope 'all' targets every registered repo (svc-a and svc-b both succeed) —
+    // 'all' never reads edtRegistry, so this run is unaffected by the EDT override above.
+    await store.getState().runGroupUpdate('all');
+    expect(store.getState().lastServiceOutcomes).toEqual({
+      'svc-a': { service: 'svc-a', outcome: 'updated' },
+      'svc-b': { service: 'svc-b', outcome: 'updated' },
+    });
+
+    // Second run: the default EDT-scoped run, targeting only svc-a (the sole member above).
+    await store.getState().runGroupUpdate();
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+
+    // svc-b sat outside this second run's scope entirely — its earlier outcome must survive
+    // the merge, never be dropped by a wholesale replace.
+    expect(store.getState().lastServiceOutcomes).toEqual({
+      'svc-a': { service: 'svc-a', outcome: 'updated' },
+      'svc-b': { service: 'svc-b', outcome: 'updated' },
+    });
+  });
+
   it('runGroupUpdate threads the scope: runGroupUpdate(all) lands done on the all-repos outcome', async () => {
     const store = createAppStore(fakeDeps());
 

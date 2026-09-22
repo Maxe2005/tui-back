@@ -306,6 +306,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const servicePaths = rows.map((row) => row.path).join('\u0000');
   useEffect(() => {
     if (servicePaths === '') {
+      // Review fix: a service list that goes from non-empty to empty (edtsBranches becomes
+      // `[]`, or servicesStatus flips to 'error') must stop the previous poll cycle too —
+      // left un-stopped, a stale interval keeps polling repoPaths no longer displayed.
+      stopUpdateHealthPolling();
       return;
     }
     startUpdateHealthPolling(servicePaths.split('\u0000'));
@@ -412,7 +416,13 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
-      <Text color={colors['text-dim']}>UPDATE</Text>
+      {/* Review fix: only the title line carries the pre-3.6 left padding back — the outer
+          Box itself stays unpadded so it doesn't double up the list/detail panes' own
+          paddingX (each pane below already pads itself, matching edts-zone.tsx/
+          logs-zone.tsx's convention). */}
+      <Box paddingX={spacing['pane-padding-x']}>
+        <Text color={colors['text-dim']}>UPDATE</Text>
+      </Box>
       <ListDetailSplit
         ratio={ratio[0]}
         listSplitterTargeted={resizeMode?.zone === 'update' && resizeMode.targetBoundary === 0}

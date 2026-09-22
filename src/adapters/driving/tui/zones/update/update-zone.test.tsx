@@ -6,9 +6,21 @@
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
+import { render } from 'ink';
+import { ok } from '../../../../../core/result.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { DockerPort } from '../../../../../core/ports/docker.js';
+import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../../core/ports/registry.js';
+import type { SettingsPort } from '../../../../../core/ports/settings.js';
+import type { StatePort } from '../../../../../core/ports/state.js';
+import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { createAppStore } from '../../store/app-store.js';
+import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
+import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
 import {
   UPDATE_ALL_CONFIRM_BODY,
   UPDATE_ALL_CONFIRM_TITLE,
@@ -557,7 +569,7 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
     expect(output).toContain('idle');
   });
 
-  it('updating: a service targeted by the in-flight EDT-scoped run shows the updating glyph', async () => {
+  it('updating: only the service targeted by the in-flight EDT-scoped run shows the updating glyph — the non-targeted service keeps its raw-health glyph', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranches: [SERVICE_A, SERVICE_B],
@@ -570,8 +582,27 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const lines = output.split('\n');
 
-    expect(output).toContain('⇄');
+    // Review fix: isolate each service's own *list row* line (identified by its unique
+    // meta text "+0/-0", which only the list row — not the running-members spinner line
+    // that also mentions the service name — carries) so a bug that marks every row
+    // 'updating' regardless of scope (e.g. isTargeted collapsed to bare `updateStatus ===
+    // 'running'`) would actually fail this test.
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+    const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+    expect(svcARow).toBeDefined();
+    expect(svcBRow).toBeDefined();
+
+    // svc-a is the active EDT's sole member — targeted by this EDT-scoped run.
+    expect(svcARow).toContain('⇄');
+    expect(svcARow).not.toContain('○');
+
+    // svc-b is not an EDT member and no run has ever targeted it — no health poll has
+    // resolved yet either, so it still shows the raw-health `down` fallback, never
+    // 'updating'.
+    expect(svcBRow).toContain('○');
+    expect(svcBRow).not.toContain('⇄');
   });
 
   it('error: a service whose last completed run failed shows the error glyph and the failure detail', async () => {
@@ -592,5 +623,166 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
 
     expect(output).toContain('✖');
     expect(output).toContain('failed (merge-conflict): Automatic merge failed');
+  });
+});
+
+// Review fix (story 3.6): every render test above uses `createAppStore()` with no deps, under
+// which `pollServiceHealth` early-returns (`if (!deps) return;`) regardless of which
+// path/service values the mount effect passed it — so a bug that polled by `row.service`
+// instead of `row.path` (a plausible slip, since `updateServiceHealth[row.path]` reads by
+// path) would silently render every row stuck on the `down` fallback with zero test
+// failures. This block wires real (fake-port) deps into the store — mirroring
+// update-slice.test.ts's own story-3.6 health-polling fakeDeps — and mounts UpdateZone with
+// a real Ink render loop so the mount effect's fire-and-forget poll chain actually runs.
+function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
+  const registry: RegistryPort = {
+    list: vi.fn(async () => ok([])),
+    add: vi.fn(async () => ok(undefined)),
+    exists: vi.fn(async () => ok(true)),
+    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+    reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+  };
+  const manifest: ManifestPort = {
+    load: vi.fn(async (repoPath: string) =>
+      ok({
+        service: `svc-${repoPath.split('/').pop()}`,
+        container: `ctr-${repoPath.split('/').pop()}`,
+        migrationCommand: 'npm run migration:run',
+        sharedBranch: 'development',
+        modules: {},
+      }),
+    ),
+  };
+  const git: GitPort = {
+    assertAllowedBranch: vi.fn(async () => ok(undefined)),
+    createBranch: vi.fn(async () => ok(undefined)),
+    deleteBranch: vi.fn(async () => ok(undefined)),
+    currentBranch: vi.fn(async () => ok('feat/a')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+    checkout: vi.fn(async () => ok(undefined)),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    stashSave: vi.fn(async () => ok(undefined)),
+    restoreStash: vi.fn(async () => ok(undefined)),
+    branchExistsLocally: vi.fn(async () => ok(true)),
+    fetch: vi.fn(async () => ok(undefined)),
+    pull: vi.fn(async () => ok(undefined)),
+    mergeBranch: vi.fn(async () => ok(undefined)),
+    abortMerge: vi.fn(async () => ok(undefined)),
+    isMergeInProgress: vi.fn(async () => ok(false)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
+    listBranches: vi.fn(async () => ok([])),
+    renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
+  };
+  const edtRegistry: EdtRegistryPort = {
+    add: vi.fn(async () => ok(undefined)),
+    list: vi.fn(async () => ok([])),
+    setStatus: vi.fn(async () => ok(undefined)),
+    update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
+  };
+  const state: StatePort = {
+    readActiveEdt: vi.fn(async () => ok(null)),
+    writeActiveEdt: vi.fn(async () => ok(undefined)),
+    readSplitterRatios: vi.fn(async () => ok(null)),
+    writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
+  };
+  const lock: LockPort = {
+    acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
+    peek: vi.fn(async () => ok({ locked: false })),
+  };
+  const settings: SettingsPort = {
+    load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+    save: vi.fn(async () => ok(undefined)),
+  };
+  const docker: DockerPort = {
+    streamLogs: vi.fn(() => () => {}),
+    fetchLogsBefore: vi.fn(async () => ok([])),
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    restartContainer: vi.fn(async () => ok(undefined)),
+  };
+  return {
+    registry,
+    manifest,
+    git,
+    edtRegistry,
+    state,
+    lock,
+    edtRegistryResourceKey: '/tmp/edts.yaml',
+    edtsBaseDir: '/tmp/edts',
+    registryResourceKey: '/config/registry.yaml',
+    settings,
+    docker,
+    ...overrides,
+  };
+}
+
+describe('UpdateZone health-poll wiring against real (fake-port) deps (story 3.6)', () => {
+  it('polls each row by its own repoPath (never by service name) and the rendered row reflects the resolved health glyph', async () => {
+    // manifest.load resolves repoPath -> container ('ctr-a' for /repo/a, 'ctr-b' for
+    // /repo/b); getContainerHealth reports 'up' only for 'ctr-a'. If the poll effect were
+    // ever keyed by `row.service` instead of `row.path` (updateServiceHealth reads by
+    // path — see update-zone.tsx), the lookup would simply never resolve and every row
+    // would stay on the `down` fallback forever — both assertions below would fail
+    // together in that case.
+    const getContainerHealth = vi.fn(async (container: string) => ok(container === 'ctr-a' ? ('up' as const) : ('down' as const)));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth,
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeUpdateZoneDeps({ docker }));
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const stdout = new FakeTtyStdout();
+    const instance = render(createElement(UpdateZone, { useStore: store }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin: fakeTtyStdin(),
+      interactive: false,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      // Flushes the mount effect's fire-and-forget poll chain (manifest.load then
+      // getContainerHealth, each a resolved-async mock) — a real macrotask tick, mirrors
+      // update-slice.test.ts's own flushPolls helper — then waits for the state update's
+      // own React commit to actually paint.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await instance.waitUntilRenderFlush();
+
+      // Non-interactive Ink only actually flushes its buffered frame to the stream on
+      // unmount (mirrors render-to-string.ts's own waitUntilExit-after-unmount sequencing)
+      // — the poll above must resolve *before* this, not after, so the frame it unmounts
+      // with already reflects the resolved health.
+      const exit = instance.waitUntilExit();
+      instance.unmount();
+      await exit;
+
+      const lines = stdout.output.split('\n');
+      const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+      const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+      expect(svcARow).toBeDefined();
+      expect(svcBRow).toBeDefined();
+      expect(svcARow).toContain('●');
+      expect(svcBRow).toContain('○');
+    } catch (error) {
+      instance.unmount();
+      throw error;
+    }
   });
 });
