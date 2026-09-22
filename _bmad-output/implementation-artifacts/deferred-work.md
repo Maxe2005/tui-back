@@ -1,5 +1,27 @@
 # Deferred Work
 
+## Deferred from: review of 3-6-update-zone-shell-service-list-live-status (2026-09-22)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `pollServiceHealth` (update-slice.ts) has no try/catch around `deps.manifest.load`/`getServiceHealth` — an unexpected throw (vs. a returned `err(...)` Result) would produce an unhandled promise rejection instead of the intended silent per-poll no-op.
+  evidence: this mirrors `logs-slice.ts`'s own `pollPaneHealth`, which has the identical gap — the Code Map explicitly directed 3.6 to mirror that existing pattern, so the root cause (no defensive try/catch around a poll cycle) predates this story. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: The health-poll timer has no cancellation/generation guard — a poll cycle already in flight when `stopUpdateHealthPolling` runs (or `startUpdateHealthPolling` restarts with a new service list) can still resolve afterward and write a now-stale value into `updateServiceHealth`.
+  evidence: same shape as `logs-slice.ts`'s own health-poll timer, which has no such guard either — pre-existing pattern this story's Code Map directed it to mirror. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `UpdateZone`'s `runningMembers` (and now, via this story, the new per-service `isTargeted` status derivation) is computed from the currently *active* EDT, not from the EDT the in-flight run actually targets (`updateUlid`) — switching the active EDT while a scoped run is in progress can misattribute the `updating` status to the wrong EDT's services.
+  evidence: `runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? []` already existed before 3.6 (it fed the pre-existing running-spinner rows in stories 3.1-3.4) — this story only reused it to also drive the new status glyphs, so it did not introduce the root cause, just widened where it's visible. No guard anywhere in the TUI blocks switching the active EDT while `runInProgress` is true (confirmed: only the `q`/`:quit` gate reads `runInProgress`). Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `updateServiceHealth`/`lastServiceOutcomes` entries are never pruned when a service leaves the currently-tracked list (e.g. active EDT membership changes), so stale entries can persist and, on a very unlikely repoPath/service reuse, render an out-of-date glyph.
+  evidence: low real-world impact (the tracked set is bounded by the manifest registry's own service count, not unbounded growth), but confirmed no pruning logic exists in either `startUpdateHealthPolling` or the `lastServiceOutcomes` merge. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `lastServiceOutcomes` is keyed by bare `service` name; two repos sharing the same service name within one EDT (an already-acknowledged possibility elsewhere in this codebase) collide, and one's outcome silently overwrites the other's in the Update zone's new detail pane/status glyph.
+  evidence: `update-zone.tsx`'s own pre-existing `updateResults.map` already carries the comment "Duplicate service names occur within one EDT — key by service + index" — this is a known, pre-3.6 possibility. The root cause is that `GroupUpdateRepoResult` (from `group-update.ts`, story 3.1/3.2) never carries a repoPath to disambiguate by, and this spec explicitly put `group-update.ts` out of bounds ("Never: do not touch group-update.ts"), so a real fix is out of this story's scope. Surfaced incidentally by edge-case-hunter review layer.
+
 ## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
