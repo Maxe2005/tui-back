@@ -103,7 +103,7 @@ Défini dans
 Toute autre clé sous `modules` échoue la validation avec l'erreur
 `unknown-module`.
 
-##### Configuration du module `route-explorer`
+##### Configuration du module `route-explorer` — découverte (scanner)
 
 Définie dans
 [`src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`](../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts).
@@ -119,35 +119,67 @@ Si aucune de ces clés n'est fournie, le scanner cherche, dans l'ordre, les
 fichiers conventionnels suivants à la racine du dépôt : `openapi.json`,
 `openapi.yaml`, `openapi.yml`, `swagger.json`, `swagger.yaml`, `swagger.yml`.
 
-Exemple de configuration :
+Un scan qui échoue (spécification illisible ou non parsable) et une liste
+réellement vide sont deux états distincts — un échec n'est jamais rendu
+comme une liste vide.
+
+##### Configuration du module `route-explorer` — tir avec auth auto
+
+Définie dans
+[`src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`](../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts),
+consommée par le use-case
+[`src/core/routes/fire-request.ts`](../src/core/routes/fire-request.ts)
+(commande `tui-back fire-request <repoPath> <METHOD> <path>`, touche `Entrée`
+dans la zone Routes).
+
+L'auth est une **session cookie** : le module appelle
+`GET {baseUrl}{authPath}`, stocke la valeur `Set-Cookie` et l'envoie comme
+en-tête `Cookie` à chaque requête tirée. Le service émet son propre JWT —
+aucun secret ne figure dans le manifeste et le cookie n'est jamais loggé.
+
+- `baseUrl` — URL de base du service (ex. `http://localhost:3000`).
+  **Requise pour tirer** : absente → erreur `missing-base-url` avant tout
+  appel réseau. Ignorée par la simple liste des routes.
+- `authPath` — chemin de la route d'auth (défaut `/auth/me`).
+- `sessionTtlSec` — durée de vie de la session en secondes (défaut `300`,
+  avec 30 s de marge de rafraîchissement anticipé).
+
+Comportement du tir :
+
+- La route (`METHOD` + chemin) doit figurer au scan frais, sinon erreur
+  `unknown-route` — on ne tire jamais une route inconnue.
+- Session expirée → ré-auth silencieuse avant l'envoi ; `401` → ré-auth +
+  un seul nouvel essai (max 2 ré-auths consécutives, puis erreur
+  `auth-unauthorized`).
+- Route d'auth en échec (non-2xx ou réseau) → erreur `auth-endpoint-failed`,
+  aucun tir tenté.
+- `403` → erreur distincte `auth-forbidden` (mismatch de permission), sans
+  nouvel essai.
+
+> Note : toute autre clé sous une entrée de module est acceptée par le
+> schéma (les valeurs de `modules.<id>` sont un `Record<string, unknown>`
+> libre) mais n'a d'effet que si le code du module correspondant la lit.
+
+## Exemple complet — service `api-gateway` avec `route-explorer`
 
 ```yaml
-modules:
-  route-explorer:
-    scanner: nestjs-openapi
-    auth: jose-dev-jwt
-```
-
-> Note : `scanner` et `auth` sont des clés d'exemple utilisées dans les
-> tests/fixtures ; elles ne sont pas interprétées par le scanner
-> `route-explorer` lui-même (qui ne lit que `openapi`/`openapiPath`/
-> `specPath`/`openapiUrl`/`specUrl`). Toute autre clé sous une entrée de
-> module est acceptée par le schéma (les valeurs de `modules.<id>` sont un
-> `Record<string, unknown>` libre) mais n'a d'effet que si le code du
-> module correspondant la lit.
-
-## Exemple complet
-
-```yaml
-service: my-auth-service
-container: auth-api
-migrationCommand: docker exec my-auth-service npx prisma migrate deploy
+service: api-gateway
+container: api-gateway
+migrationCommand: docker exec api-gateway npx prisma migrate deploy
 sharedBranch: development
 modules:
   route-explorer:
-    scanner: nestjs-openapi
-    auth: jose-dev-jwt
+    # Découverte : spécification OpenAPI exposée par le service
+    openapiUrl: http://localhost:3000/api-json
+    # Tir avec auth auto : session cookie via GET {baseUrl}{authPath}
+    baseUrl: http://localhost:3000
+    authPath: /auth/me
+    sessionTtlSec: 300
 ```
+
+(`authPath` et `sessionTtlSec` pourraient être omis ici : leurs défauts
+`/auth/me` et `300` s'appliqueraient. `baseUrl` est en revanche obligatoire
+dès qu'on veut tirer des requêtes.)
 
 ## Exemple minimal
 
@@ -179,5 +211,7 @@ Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
 - Type `Manifest` : `src/core/ports/manifest.ts`
 - Loader : `src/adapters/driven/manifest/index.ts`
 - Registre des modules : `src/adapters/driven/modules/module-registry.ts`
-- Module `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
+- Scanner `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
+- Auth session cookie : `src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`
+- Tir de requête : `src/core/routes/fire-request.ts`
 - Tests de référence : `src/adapters/driven/manifest/index.test.ts`
