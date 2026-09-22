@@ -2,7 +2,7 @@
 title: 'Registry — Deregister Stale, Unreachable, or Unmanaged Repos'
 type: 'feature'
 created: '2026-09-22'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 context: []
 baseline_commit: '6a8813b568243bd9504598a192149d1cfef657f9'
