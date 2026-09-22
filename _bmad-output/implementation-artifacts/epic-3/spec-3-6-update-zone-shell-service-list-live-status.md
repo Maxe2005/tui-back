@@ -2,7 +2,7 @@
 title: 'Update Zone Shell — Service List & Live Status'
 type: 'feature'
 created: '2026-09-22'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: '0a7d48a0e800f1060edad2f62e33db5ae7ce4f93'
 context: [_bmad-output/implementation-artifacts/epic-3-context.md]
@@ -85,4 +85,65 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Manual checks (if no CLI):**
 - Launch the TUI, open the Update zone with no run yet started: every manifest service shows a glyph (not blank), EDT members listed first; selecting one shows "idle" in the detail pane.
 - Trigger a run; the targeted services' glyphs switch to `updating` for the run's duration, then reflect their outcome (`error` on failure) once it completes.
+
+## Suggested Review Order
+
+**Status derivation (core design)**
+
+- Entry point: the closed-set precedence rule — targeted run beats a stale failure, failure beats raw health
+  [`update-zone.logic.ts:26`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L26)
+
+- The six-state type itself, including why `migrating` is reserved but never produced here
+  [`update-zone.logic.ts:19`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L19)
+
+**Status vocabulary (glyph set)**
+
+- Four new closed-set members added to the shared badge type, not bridged through the generic spinner
+  [`status-badge.tsx:4`](../../../src/adapters/driving/tui/shared/components/status-badge.tsx#L4)
+
+- Each new state's own distinct glyph/color pairing
+  [`status-badge.tsx:33`](../../../src/adapters/driving/tui/shared/components/status-badge.tsx#L33)
+
+**Service list ordering**
+
+- Active-EDT-members-first partition, reusing the EDT/Logs zones' own membership helper
+  [`update-zone.logic.ts:50`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L50)
+
+**Live health poll (store)**
+
+- One shared poll cycle per service, keyed by repoPath — the wiring most at risk of a keying slip
+  [`update-slice.ts:283`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L283)
+
+- The per-service poll's silent no-op on manifest/health failure
+  [`update-slice.ts:99`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L99)
+
+**Last-run outcome persistence**
+
+- Merge (never replace) into `lastServiceOutcomes` on a successful run — protects partial-scope runs
+  [`update-slice.ts:206`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L206)
+
+- The merge function itself, keyed by `service` (results carry no repoPath)
+  [`update-zone.logic.ts:80`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L80)
+
+**Zone shell wiring (UI)**
+
+- The new list/detail split replacing the old flat run-log view
+  [`update-zone.tsx:426`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L426)
+
+- Per-row status/glyph assembly inside the always-visible service list
+  [`update-zone.tsx:440`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L440)
+
+- Poll start/stop lifecycle tied to the loaded service list and zone unmount
+  [`update-zone.tsx:312`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L312)
+
+**Tests**
+
+- Store-level coverage of the health poll and the `lastServiceOutcomes` merge, including the review-round additions
+  [`update-slice.test.ts`](../../../src/adapters/driving/tui/store/slices/update-slice.test.ts)
+
+- Zone-level coverage: status derivation, partitioning, and the render smoke tests per visual state
+  [`update-zone.test.tsx`](../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx)
+
+- New closed-set glyph assertions
+  [`status-badge.test.tsx`](../../../src/adapters/driving/tui/shared/components/status-badge.test.tsx)
 
