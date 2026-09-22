@@ -107,12 +107,13 @@ export async function addRegistry(registryFile: string, path: string): Promise<R
 // `add`'s TOCTOU caveat (concurrent CLI/TUI writers can race a read-modify-write with no
 // file-level locking here — callers serialize through the advisory LockPort instead, same
 // as `add`).
+//
+// Review fix (story 2.33): the no-op path must stay a *true* no-op — listRegistry() already
+// tolerates a missing registry file (ENOENT -> ok([])) without needing the config dir to
+// exist, so the membership check runs first; ensureRegistryDir (which mkdirSync's the XDG
+// config dir) is only called once a write is actually about to happen, never just to check
+// whether one is unregistered.
 export async function removeRegistry(registryFile: string, path: string): Promise<Result<void>> {
-  const ensured = await ensureRegistryDir(registryFile);
-  if (!ensured.ok) {
-    return ensured;
-  }
-
   const canonical = resolve(path);
   const listed = await listRegistry(registryFile);
   if (!listed.ok) {
@@ -120,6 +121,11 @@ export async function removeRegistry(registryFile: string, path: string): Promis
   }
   if (!listed.data.includes(canonical)) {
     return ok(undefined);
+  }
+
+  const ensured = await ensureRegistryDir(registryFile);
+  if (!ensured.ok) {
+    return ensured;
   }
 
   const remaining = listed.data.filter((entry) => entry !== canonical);

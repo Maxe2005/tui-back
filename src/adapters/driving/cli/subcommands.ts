@@ -59,8 +59,9 @@ export function buildSubcommands(deps: {
   state: StatePort;
   // Story 2.33: gates `registry clean`'s bare-invocation interactive list-then-confirm
   // prompt. Defaults to false (never prompts) so every existing deps-construction call site
-  // (tests, in particular) is unaffected — only bin/main.ts's composition root wires the
-  // real process.stdout.isTTY.
+  // (tests, in particular) is unaffected — only bin/main.ts's composition root wires this,
+  // and (review fix) only when BOTH stdout and stdin are real TTYs — a piped/redirected
+  // stdin must never let `rl.question()` block on or misread a nonexistent live answer.
   isTTY?: boolean;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
@@ -656,6 +657,10 @@ async function runRegistryClean(
 ): Promise<Result<unknown>> {
   let yes = false;
   const paths: string[] = [];
+  // Review fix: the same resolved path given via multiple --path flags used to call
+  // registry.remove twice and produce a duplicate outcome row — deduped here so
+  // removeStaleRegistryEntries only ever sees each path once.
+  const seenPaths = new Set<string>();
 
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
@@ -668,7 +673,24 @@ async function runRegistryClean(
       if (value === undefined) {
         return err('invalid-argument', `Missing value for --path. Usage: ${REGISTRY_CLEAN_USAGE}`);
       }
-      paths.push(resolve(value));
+      // Review fix: a value that looks like another flag (e.g. `--path --yes`) is a missing
+      // value in disguise, not a literal path — reject it instead of silently consuming it.
+      if (value.startsWith('--')) {
+        return err(
+          'invalid-argument',
+          `--path value must not look like a flag: "${value}". Usage: ${REGISTRY_CLEAN_USAGE}`,
+        );
+      }
+      // Review fix: `--path ""` used to resolve() to process.cwd() and could remove an
+      // unintended entry — reject an empty/whitespace-only value instead of guessing.
+      if (value.trim() === '') {
+        return err('invalid-argument', `--path value must not be empty. Usage: ${REGISTRY_CLEAN_USAGE}`);
+      }
+      const resolved = resolve(value);
+      if (!seenPaths.has(resolved)) {
+        seenPaths.add(resolved);
+        paths.push(resolved);
+      }
       i += 1;
       continue;
     }
@@ -698,8 +720,10 @@ async function runRegistryClean(
   }
   if (classified.data.candidates.length === 0) {
     // Matrix: "No candidates ... explicit 'no stale entries' result, never silent" — reported
-    // the same way whether or not the run is interactive.
-    return ok({ candidates: [], results: [] });
+    // the same way whether or not the run is interactive. `errors` still surfaces any path
+    // that couldn't even be checked (review fix) — a healthy-looking zero-candidates run
+    // never silently hides that.
+    return ok({ candidates: [], errors: classified.data.errors, results: [] });
   }
 
   if (deps.isTTY !== true) {
@@ -708,7 +732,7 @@ async function runRegistryClean(
       `registry clean found ${classified.data.candidates.length} stale ` +
         `${classified.data.candidates.length === 1 ? 'entry' : 'entries'} — rerun with --yes --path <path>... to ` +
         `confirm removal. Usage: ${REGISTRY_CLEAN_USAGE}`,
-      { candidates: classified.data.candidates },
+      { candidates: classified.data.candidates, errors: classified.data.errors },
     );
   }
 
@@ -716,6 +740,14 @@ async function runRegistryClean(
   for (const candidate of classified.data.candidates) {
     const note = candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
     process.stdout.write(`  ${candidate.path} — ${candidate.reason}${note}\n`);
+  }
+  // Review fix: a path that couldn't be checked at all used to be invisible — reported here
+  // too, distinct from the removable candidate list above.
+  if (classified.data.errors.length > 0) {
+    process.stdout.write(`Could not be checked (${classified.data.errors.length}, left alone):\n`);
+    for (const error of classified.data.errors) {
+      process.stdout.write(`  ${error.path} — ${error.code}: ${error.message}\n`);
+    }
   }
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -727,7 +759,7 @@ async function runRegistryClean(
   }
 
   if (!/^y(es)?$/i.test(answer.trim())) {
-    return ok({ candidates: classified.data.candidates, results: [] });
+    return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: [] });
   }
 
   const removed = await removeStaleRegistryEntries(
@@ -737,7 +769,7 @@ async function runRegistryClean(
   if (!removed.ok) {
     return removed;
   }
-  return ok({ candidates: classified.data.candidates, results: removed.data.results });
+  return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: removed.data.results });
 }
 
 export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {

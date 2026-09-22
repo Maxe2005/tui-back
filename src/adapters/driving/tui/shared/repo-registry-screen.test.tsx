@@ -335,6 +335,33 @@ describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
     expect(output).toContain('Space to toggle, Enter to remove the selection.');
   });
 
+  it('reports a path that could not even be checked, alongside the candidate list — never silently dropped (review fix)', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanScanStatus: 'idle',
+      registryCleanCandidates: [{ path: '/repos/gone', reason: 'unreachable', memberOfEdts: [] }],
+      registryCleanErrors: [{ path: '/repos/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('/repos/gone');
+    expect(output).toContain('could not be checked');
+    expect(output).toContain('/repos/unknown');
+    expect(output).toContain('registry-stat-error');
+  });
+
+  it('reports a could-not-be-checked path even when there are zero removable candidates', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanScanStatus: 'idle',
+      registryCleanCandidates: [],
+      registryCleanErrors: [{ path: '/repos/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('No stale registry entries found');
+    expect(output).toContain('could not be checked');
+    expect(output).toContain('/repos/unknown');
+  });
+
   it('shows a removing indicator while the removal run is in flight', async () => {
     const store = createAppStore();
     store.setState({

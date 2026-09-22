@@ -46,7 +46,14 @@ const state = createStatePort(stateFile);
 // `edt create` locks on the EDT registry file the same way.
 const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
+// AD-3's own isTTY (stdout-only) governs output rendering (human text vs. one JSON line).
+// Review fix (story 2.33): the *interactive-prompt* gate `registry clean` uses is a
+// different, stricter question — can we actually read a y/N answer back? — so it also
+// requires stdin to be a TTY. Piped/redirected stdin with a TTY stdout (e.g. a wrapper
+// script) must never let the CLI block on (or silently misread) an `rl.question()` prompt
+// with nothing live on the other end.
 const isTTY = process.stdout.isTTY === true;
+const interactiveIsTTY = isTTY && process.stdin.isTTY === true;
 const subcommands = buildSubcommands({
   registry,
   manifest,
@@ -59,7 +66,7 @@ const subcommands = buildSubcommands({
   container,
   migration,
   state,
-  isTTY,
+  isTTY: interactiveIsTTY,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);

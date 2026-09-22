@@ -76,7 +76,7 @@ describe('classifyStaleRegistry', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: [] }] },
+      data: { candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: [] }], errors: [] },
     });
   });
 
@@ -89,7 +89,7 @@ describe('classifyStaleRegistry', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { candidates: [{ path: '/repo/unmanaged', reason: 'manifest-not-found', memberOfEdts: [] }] },
+      data: { candidates: [{ path: '/repo/unmanaged', reason: 'manifest-not-found', memberOfEdts: [] }], errors: [] },
     });
   });
 
@@ -100,7 +100,7 @@ describe('classifyStaleRegistry', () => {
 
     const result = await classifyStaleRegistry({ registry, manifest, edtRegistry });
 
-    expect(result).toEqual({ ok: true, data: { candidates: [] } });
+    expect(result).toEqual({ ok: true, data: { candidates: [], errors: [] } });
   });
 
   it('leaves a path with a manifest-load error other than manifest-not-found alone (Story 2.28 territory)', async () => {
@@ -110,7 +110,7 @@ describe('classifyStaleRegistry', () => {
 
     const result = await classifyStaleRegistry({ registry, manifest, edtRegistry });
 
-    expect(result).toEqual({ ok: true, data: { candidates: [] } });
+    expect(result).toEqual({ ok: true, data: { candidates: [], errors: [] } });
   });
 
   it('flags a stale candidate that is also an EDT member with memberOfEdts, still offered for removal', async () => {
@@ -122,7 +122,7 @@ describe('classifyStaleRegistry', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: ['my-topic'] }] },
+      data: { candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: ['my-topic'] }], errors: [] },
     });
   });
 
@@ -133,7 +133,7 @@ describe('classifyStaleRegistry', () => {
 
     const result = await classifyStaleRegistry({ registry, manifest, edtRegistry });
 
-    expect(result).toEqual({ ok: true, data: { candidates: [] } });
+    expect(result).toEqual({ ok: true, data: { candidates: [], errors: [] } });
   });
 
   it('classifies a mixed registry into only the two stale reasons, in registry order', async () => {
@@ -155,6 +155,7 @@ describe('classifyStaleRegistry', () => {
           { path: '/repo/gone', reason: 'unreachable', memberOfEdts: [] },
           { path: '/repo/unmanaged', reason: 'manifest-not-found', memberOfEdts: [] },
         ],
+        errors: [],
       },
     });
   });
@@ -179,7 +180,7 @@ describe('classifyStaleRegistry', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-read-error' } });
   });
 
-  it('leaves a path alone when registry.exists() itself errors — inconclusive, not evidence of staleness', async () => {
+  it('reports a registry.exists() error in `errors`, never silently drops it and never treats it as evidence of staleness (review fix)', async () => {
     const registry = fakeRegistry(['/repo/unknown'], {
       exists: vi.fn(async () => err('registry-stat-error', 'permission denied')),
     });
@@ -188,7 +189,33 @@ describe('classifyStaleRegistry', () => {
 
     const result = await classifyStaleRegistry({ registry, manifest, edtRegistry });
 
-    expect(result).toEqual({ ok: true, data: { candidates: [] } });
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        candidates: [],
+        errors: [{ path: '/repo/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+      },
+    });
+  });
+
+  it('keeps a genuine stale candidate and an inconclusive exists() error in their own separate buckets', async () => {
+    const registry = fakeRegistry(['/repo/gone', '/repo/unknown'], {
+      exists: vi.fn(async (path: string) =>
+        path === '/repo/unknown' ? err('registry-stat-error', 'permission denied') : ok(false),
+      ),
+    });
+    const manifest = fakeManifest({});
+    const edtRegistry = fakeEdtRegistry();
+
+    const result = await classifyStaleRegistry({ registry, manifest, edtRegistry });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: [] }],
+        errors: [{ path: '/repo/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+      },
+    });
   });
 });
 

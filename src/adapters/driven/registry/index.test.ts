@@ -3,7 +3,7 @@
 // real filesystem manifests as Result errors (registry-invalid-yaml/-format, missing file
 // → empty list, scan-root-not-found) and how registry.yaml is persisted/deduped.
 import { describe, it, expect, afterEach } from 'vitest';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
@@ -311,13 +311,16 @@ describe('removeRegistry', () => {
     expect(parse(await readFile(file, 'utf8'))).toEqual({ repos: ['/m/a'] });
   });
 
-  it('is a no-op success against a registry file that does not exist yet', async () => {
+  it('is a no-op success against a registry file that does not exist yet, without creating the config dir (review fix)', async () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'registry.yaml');
 
     const result = await removeRegistry(file, '/m/a');
 
     expect(result).toEqual({ ok: true, data: undefined });
+    // A true no-op never mkdir's the XDG config dir just to discover there was nothing to
+    // remove — ensureRegistryDir must only run once a write is actually about to happen.
+    await expect(access(join(root, 'tui-back'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('normalizes a trailing-slash path the same way add/list do', async () => {

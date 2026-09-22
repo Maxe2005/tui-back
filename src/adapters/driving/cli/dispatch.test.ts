@@ -11,6 +11,16 @@ import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
 
+// Story 2.33 review fix: `registry clean`'s interactive TTY branch (subcommands.ts's
+// runRegistryClean) drives a real `node:readline/promises` prompt — mocked here so the
+// list-then-confirm flow itself is exercised under test instead of only ever being covered
+// manually (the e2e suite's spawnSync stdin is never a real TTY, same limitation this file's
+// own header already notes for the fullscreen TUI).
+vi.mock('node:readline/promises', () => ({
+  createInterface: vi.fn(),
+}));
+import { createInterface } from 'node:readline/promises';
+
 function fakeLock(): LockPort {
   return {
     acquire: async (resourceKey) => ok({ release: async () => ok(undefined) }),
@@ -490,6 +500,44 @@ describe('subcommand registry guards', () => {
       expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
+    it('rejects a --path value that looks like another flag instead of silently consuming it as a literal path (review fix)', async () => {
+      const registry = findRegistry(buildTestSubcommands());
+
+      const looksLikeYes = await registry.run(['clean', '--yes', '--path', '--yes']);
+      const looksLikePath = await registry.run(['clean', '--yes', '--path', '--path']);
+
+      expect(looksLikeYes).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(looksLikePath).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('rejects an empty-string --path value instead of silently resolving it to cwd (review fix)', async () => {
+      const registry = findRegistry(buildTestSubcommands());
+
+      const empty = await registry.run(['clean', '--yes', '--path', '']);
+      const blank = await registry.run(['clean', '--yes', '--path', '   ']);
+
+      expect(empty).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(blank).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('de-duplicates the same resolved path given via multiple --path flags, never a duplicate outcome row (review fix)', async () => {
+      const remove = vi.fn(async () => ok(undefined));
+      const registryPort: RegistryPort = {
+        list: async () => ok([]),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove,
+      };
+      const registry = findRegistry(buildTestSubcommands({ registry: registryPort }));
+
+      const result = await registry.run(['clean', '--yes', '--path', '/repo/a', '--path', '/repo/a']);
+
+      expect(result).toEqual({ ok: true, data: { results: [{ path: '/repo/a', outcome: 'removed' }] } });
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
     it('AC4: --yes --path <p1> --path <p2> removes each path via RegistryPort.remove, one path failing never blocking the other', async () => {
       const remove = vi.fn(async (path: string) =>
         path === '/repo/bad' ? err('registry-write-error', 'disk full') : ok(undefined),
@@ -541,7 +589,7 @@ describe('subcommand registry guards', () => {
 
       const result = await registry.run(['clean']);
 
-      expect(result).toEqual({ ok: true, data: { candidates: [], results: [] } });
+      expect(result).toEqual({ ok: true, data: { candidates: [], errors: [], results: [] } });
     });
 
     it('bare invocation off a TTY (isTTY not set) requires confirmation instead of silently doing nothing, and names the candidates', async () => {
@@ -565,7 +613,117 @@ describe('subcommand registry guards', () => {
         expect(result.error.message).toContain('--yes');
         expect(result.error.details).toMatchObject({
           candidates: [{ path: '/repo/gone', reason: 'unreachable' }],
+          errors: [],
         });
+      }
+    });
+
+    it('surfaces a path that could not even be checked in `errors`, never silently dropped (review fix)', async () => {
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/gone', '/repo/unknown']),
+        add: async () => ok(undefined),
+        exists: async (path: string) => (path === '/repo/unknown' ? err('registry-stat-error', 'permission denied') : ok(false)),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const registry = findRegistry(buildTestSubcommands({ registry: registryPort }));
+
+      const result = await registry.run(['clean']);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'confirmation-required',
+          details: {
+            candidates: [{ path: '/repo/gone', reason: 'unreachable' }],
+            errors: [{ path: '/repo/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+          },
+        },
+      });
+    });
+  });
+
+  describe('registry clean — interactive TTY flow (story 2.33 review fix)', () => {
+    function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
+      const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
+      if (!registry) throw new Error('expected registry subcommand');
+      return registry;
+    }
+
+    it('a confirmed ("y") answer prints the candidate list and removes exactly those paths', async () => {
+      const remove = vi.fn(async () => ok(undefined));
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/gone']),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove,
+      };
+      const question = vi.fn(async () => 'y');
+      const close = vi.fn();
+      vi.mocked(createInterface).mockReturnValue({ question, close } as unknown as ReturnType<typeof createInterface>);
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+      try {
+        const registry = findRegistry(buildTestSubcommands({ registry: registryPort, isTTY: true }));
+
+        const result = await registry.run(['clean']);
+
+        expect(result).toEqual({
+          ok: true,
+          data: {
+            candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: [] }],
+            errors: [],
+            results: [{ path: '/repo/gone', outcome: 'removed' }],
+          },
+        });
+        expect(remove).toHaveBeenCalledWith('/repo/gone');
+        expect(close).toHaveBeenCalled();
+        expect(question).toHaveBeenCalled();
+        const printed = writeSpy.mock.calls.map((call) => String(call[0])).join('');
+        expect(printed).toContain('/repo/gone');
+        expect(printed).toContain('unreachable');
+      } finally {
+        writeSpy.mockRestore();
+      }
+    });
+
+    it('a declined ("n") answer prints the list but never calls registry.remove, returning empty results', async () => {
+      const remove = vi.fn(async () => ok(undefined));
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/gone']),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove,
+      };
+      const question = vi.fn(async () => 'n');
+      const close = vi.fn();
+      vi.mocked(createInterface).mockReturnValue({ question, close } as unknown as ReturnType<typeof createInterface>);
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+      try {
+        const registry = findRegistry(buildTestSubcommands({ registry: registryPort, isTTY: true }));
+
+        const result = await registry.run(['clean']);
+
+        expect(result).toEqual({
+          ok: true,
+          data: {
+            candidates: [{ path: '/repo/gone', reason: 'unreachable', memberOfEdts: [] }],
+            errors: [],
+            results: [],
+          },
+        });
+        expect(remove).not.toHaveBeenCalled();
+        expect(close).toHaveBeenCalled();
+        const printed = writeSpy.mock.calls.map((call) => String(call[0])).join('');
+        expect(printed).toContain('/repo/gone');
+      } finally {
+        writeSpy.mockRestore();
       }
     });
   });

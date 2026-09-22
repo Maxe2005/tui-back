@@ -377,6 +377,7 @@ it('shouldQuit returns true for q', () => {
         registryCleanScanStatus: 'idle',
         registryCleanScanError: null,
         registryCleanCandidates: null,
+        registryCleanErrors: [],
         scanRegistryStaleEntries: async () => {},
         registryCleanStatus: 'idle',
         registryCleanResults: null,

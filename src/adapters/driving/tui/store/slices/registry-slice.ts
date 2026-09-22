@@ -13,6 +13,7 @@ import {
   removeStaleRegistryEntries,
   type StaleRegistryEntry,
   type RemoveStaleRegistryEntryResult,
+  type RegistryEntryError,
 } from '../../../../../core/scripts/clean-registry.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
@@ -68,6 +69,10 @@ export type RegistrySlice = {
   registryCleanScanStatus: 'idle' | 'loading' | 'error';
   registryCleanScanError: string | null;
   registryCleanCandidates: StaleRegistryEntry[] | null;
+  // Review fix: paths whose staleness couldn't even be checked (a registry.exists() error) —
+  // reported alongside candidates, never silently dropped. Always `[]` once a classify has
+  // resolved successfully with nothing inconclusive, never left stale/undefined.
+  registryCleanErrors: RegistryEntryError[];
   scanRegistryStaleEntries: () => Promise<void>;
   // registryCleanResults: null = not removed yet this screen session; populated once, one
   // entry per confirmed path, in the order removal was attempted (mirrors
@@ -212,6 +217,7 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
     registryCleanScanStatus: 'idle',
     registryCleanScanError: null,
     registryCleanCandidates: null,
+    registryCleanErrors: [],
     scanRegistryStaleEntries: async () => {
       if (!deps) {
         set({ registryCleanScanStatus: 'error', registryCleanScanError: 'No ports wired into the TUI store' });
@@ -222,6 +228,7 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
         registryCleanScanStatus: 'loading',
         registryCleanScanError: null,
         registryCleanCandidates: null,
+        registryCleanErrors: [],
         // A fresh classify starts a fresh clean session — any prior removal results are
         // stale once the candidate list they refer to is about to be replaced.
         registryCleanStatus: 'idle',
@@ -236,9 +243,18 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
         return;
       }
       if (result.ok) {
-        set({ registryCleanScanStatus: 'idle', registryCleanCandidates: result.data.candidates });
+        set({
+          registryCleanScanStatus: 'idle',
+          registryCleanCandidates: result.data.candidates,
+          registryCleanErrors: result.data.errors,
+        });
       } else {
-        set({ registryCleanScanStatus: 'error', registryCleanScanError: result.error.message, registryCleanCandidates: null });
+        set({
+          registryCleanScanStatus: 'error',
+          registryCleanScanError: result.error.message,
+          registryCleanCandidates: null,
+          registryCleanErrors: [],
+        });
       }
     },
     registryCleanStatus: 'idle',
@@ -292,6 +308,7 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
         registryCleanScanStatus: 'idle',
         registryCleanScanError: null,
         registryCleanCandidates: null,
+        registryCleanErrors: [],
         registryCleanStatus: 'idle',
         registryCleanResults: null,
       })),

@@ -186,6 +186,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const registryCleanScanStatus = useStore((state) => state.registryCleanScanStatus);
   const registryCleanScanError = useStore((state) => state.registryCleanScanError);
   const registryCleanCandidates = useStore((state) => state.registryCleanCandidates);
+  const registryCleanErrors = useStore((state) => state.registryCleanErrors);
   const scanRegistryStaleEntries = useStore((state) => state.scanRegistryStaleEntries);
   const registryCleanStatus = useStore((state) => state.registryCleanStatus);
   const registryCleanResults = useStore((state) => state.registryCleanResults);
@@ -394,6 +395,13 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               // visible state, same convention as the scan flow's own 'empty' phase.
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>No stale registry entries found.</Text>
+                {registryCleanErrors.length > 0 ? (
+                  <DimAnnotation
+                    text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
+                      .map((error) => `${error.path} (${error.code})`)
+                      .join(', ')}`}
+                  />
+                ) : null}
                 <DimAnnotation text="Esc to close." />
               </Box>
             ) : (
@@ -414,6 +422,16 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                     </Box>
                   );
                 })}
+                {registryCleanErrors.length > 0 ? (
+                  // Review fix: a path that couldn't even be checked (registry.exists()
+                  // errored) is never silently dropped — reported here, distinct from the
+                  // removable candidate list above, never gating or blocking it.
+                  <DimAnnotation
+                    text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
+                      .map((error) => `${error.path} (${error.code})`)
+                      .join(', ')}`}
+                  />
+                ) : null}
                 <DimAnnotation text="Space to toggle, Enter to remove the selection." />
               </Box>
             )}
