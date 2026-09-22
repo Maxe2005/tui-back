@@ -17,14 +17,18 @@ import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { ROUTES_MODULE_ID } from '../../../../../core/edt/resolve-tab-visibility.js';
 import type { Route } from '../../../../../core/ports/route-scanner.js';
+import { fireRequest, type FireResult } from '../../../../../core/routes/fire-request.js';
 import { listRoutes } from '../../../../../core/routes/list-routes.js';
 import { listRepos } from '../../../../../core/scripts/list-repos.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 const NO_SCANNER_ERROR = 'No route scanner wired into the TUI store';
+const NO_AUTH_ERROR = 'No dev auth wired into the TUI store';
 
 export type RoutesStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export type FireStatus = 'idle' | 'firing' | 'fired' | 'error';
 
 export type RoutesSlice = {
   routesRepoPath: string | null;
@@ -32,6 +36,10 @@ export type RoutesSlice = {
   routesStatus: RoutesStatus;
   routesError: { code: string; message: string } | null;
   loadRoutes: () => Promise<void>;
+  fireStatus: FireStatus;
+  fireResult: FireResult | null;
+  fireError: { code: string; message: string } | null;
+  fireRoute: (method: string, path: string) => Promise<void>;
 };
 
 export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], RoutesSlice> {
@@ -40,6 +48,9 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     routes: null,
     routesStatus: 'idle',
     routesError: null,
+    fireStatus: 'idle',
+    fireResult: null,
+    fireError: null,
     loadRoutes: async () => {
       if (!deps) {
         set({ routesStatus: 'error', routesError: { code: 'store-not-wired', message: NO_DEPS_ERROR } });
@@ -94,13 +105,72 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
 
       const result = await listRoutes({ manifest: deps.manifest, scanner: deps.scanner }, target.path);
       if (result.ok) {
-        set({ routesRepoPath: target.path, routes: result.data.routes, routesStatus: 'ready', routesError: null });
+        // A successful reload (repo switch included) drops any previous fire result — the
+        // old response belongs to another route list and must not linger in the detail pane.
+        set({
+          routesRepoPath: target.path,
+          routes: result.data.routes,
+          routesStatus: 'ready',
+          routesError: null,
+          fireStatus: 'idle',
+          fireResult: null,
+          fireError: null,
+        });
       } else {
         set({
           routesRepoPath: target.path,
           routes: null,
           routesStatus: 'error',
           routesError: { code: result.error.code, message: result.error.message },
+        });
+      }
+    },
+    // Story 6.2: fire the selected route through core/routes/fire-request.ts in-process
+    // (AD-2) — the same use-case `tui-back fire-request` runs out-of-process. The repo is
+    // the slice's own loaded routes repo (no logs pane — Story 6.4); a concurrent fire is
+    // dropped like loadRoutes drops a concurrent load. An unwired store (every pre-6.2
+    // `createAppStore()` call, including tests) degrades to an explicit error rather than
+    // throwing.
+    fireRoute: async (method: string, path: string) => {
+      if (!deps) {
+        set({ fireStatus: 'error', fireResult: null, fireError: { code: 'store-not-wired', message: NO_DEPS_ERROR } });
+        return;
+      }
+      if (!deps.scanner) {
+        set({ fireStatus: 'error', fireResult: null, fireError: { code: 'store-not-wired', message: NO_SCANNER_ERROR } });
+        return;
+      }
+      if (!deps.auth) {
+        set({ fireStatus: 'error', fireResult: null, fireError: { code: 'store-not-wired', message: NO_AUTH_ERROR } });
+        return;
+      }
+      if (get().fireStatus === 'firing') {
+        return;
+      }
+      const repoPath = get().routesRepoPath;
+      if (repoPath === null) {
+        set({
+          fireStatus: 'error',
+          fireResult: null,
+          fireError: { code: 'missing-argument', message: 'No routes repo selected' },
+        });
+        return;
+      }
+      set({ fireStatus: 'firing', fireResult: null, fireError: null });
+
+      const result = await fireRequest(
+        { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
+        repoPath,
+        method,
+        path,
+      );
+      if (result.ok) {
+        set({ fireStatus: 'fired', fireResult: result.data, fireError: null });
+      } else {
+        set({
+          fireStatus: 'error',
+          fireResult: null,
+          fireError: { code: result.error.code, message: result.error.message },
         });
       }
     },

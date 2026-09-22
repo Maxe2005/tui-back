@@ -450,6 +450,11 @@ it('shouldQuit returns true for q', () => {
         routesStatus: 'idle',
         routesError: null,
         loadRoutes: async () => {},
+        // Story 6.2: Routes zone fire state
+        fireStatus: 'idle',
+        fireResult: null,
+        fireError: null,
+        fireRoute: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

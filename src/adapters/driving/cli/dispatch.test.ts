@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
+import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
@@ -179,6 +180,7 @@ describe('subcommand registry guards', () => {
     const container: ContainerPort = { restart: async () => ok(undefined) };
     const migration: MigrationPort = { run: async () => ok({ output: '' }) };
     const scanner: RouteScannerPort = { scan: async () => ok([]) };
+    const auth: DevAuthPort = { getSession: async () => ok({ cookie: 'sid=abc' }) };
     const git: GitPort = {
       assertAllowedBranch: async () => ok(undefined),
       createBranch: async () => ok(undefined),
@@ -219,11 +221,12 @@ describe('subcommand registry guards', () => {
       migration,
       state: fakeState(),
       scanner,
+      auth,
       ...overrides,
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/list-routes without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/list-routes/fire-request without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -235,6 +238,7 @@ describe('subcommand registry guards', () => {
       'edt',
       'update',
       'list-routes',
+      'fire-request',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
@@ -267,6 +271,27 @@ describe('subcommand registry guards', () => {
     // The fixture manifest answers manifest-not-found, which the use-case propagates —
     // proving the wrapper reached the use-case itself rather than rejecting locally.
     const result = await listRoutesCmd.run(['/repos/gateway']);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+
+  it('fire-request (story 6.2) rejects missing/bad-arity/blank arguments and otherwise delegates to the use-case', async () => {
+    const subcommands = buildTestSubcommands();
+    const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+    if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+    expect(fireRequestCmd.usage).toBe('tui-back fire-request <repoPath> <METHOD> <path>');
+
+    const missing = await fireRequestCmd.run([]);
+    expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+
+    for (const args of [['/a'], ['/a', 'GET'], ['/a', 'GET', '/x', 'extra'], ['/a', '  ', '/x']]) {
+      const rejected = await fireRequestCmd.run(args);
+      expect(rejected).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+
+    // The fixture manifest answers manifest-not-found, which the use-case propagates —
+    // proving the wrapper reached the use-case itself rather than rejecting locally.
+    const result = await fireRequestCmd.run(['/repos/gateway', 'GET', '/users']);
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 

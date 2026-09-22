@@ -17,9 +17,12 @@ import { ListRow } from '../../shared/components/list-row.js';
 import { Spinner } from '../../shared/components/spinner.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
+  formatFireError,
+  formatFireResult,
   formatRouteDetail,
   formatRouteRow,
   moveRoutesSelection,
+  resolveEnterFireTarget,
   resolveRoutesDirection,
 } from './routes-zone.logic.js';
 
@@ -46,6 +49,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const routesError = useStore((state) => state.routesError);
   const routesRepoPath = useStore((state) => state.routesRepoPath);
   const loadRoutes = useStore((state) => state.loadRoutes);
+  const fireStatus = useStore((state) => state.fireStatus);
+  const fireResult = useStore((state) => state.fireResult);
+  const fireError = useStore((state) => state.fireError);
+  const fireRoute = useStore((state) => state.fireRoute);
 
   const [selected, setSelected] = useState(0);
   const windowSize = useWindowSize();
@@ -65,6 +72,16 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   useInput(
     (_input, key) => {
+      // Story 6.2: Enter fires the selected route (`[enter] fire`) — no body/header
+      // customization, no saving (Story 6.3 territory); the fire uses the discovered
+      // method + path as-is.
+      if (key.return === true) {
+        const target = resolveEnterFireTarget(routes, selected);
+        if (target !== undefined) {
+          void fireRoute(target.method, target.path);
+        }
+        return;
+      }
       const direction = resolveRoutesDirection(key);
       if (direction !== null) {
         setSelected((prev) => moveRoutesSelection(prev, direction, routes?.length ?? 0));
@@ -143,11 +160,24 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 return <ListRow key={`${route.method} ${route.path}`} label={row.label} meta={row.meta} selected={index === clamped} />;
               }}
             />
+            <DimAnnotation text="[enter] fire" />
           </Box>
         }
         detail={
           <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
             {focused ? <DetailPane title="Route">{formatRouteDetail(focused)}</DetailPane> : null}
+            {fireStatus === 'firing' ? (
+              <Box flexDirection="row">
+                <Spinner />
+                <Text color={colors['text-dim']}> Firing…</Text>
+              </Box>
+            ) : null}
+            {fireStatus === 'fired' && fireResult ? (
+              <DetailPane title="Response">{formatFireResult(fireResult)}</DetailPane>
+            ) : null}
+            {fireStatus === 'error' && fireError ? (
+              <Text color={colors.error}>{formatFireError(fireError.code, fireError.message)}</Text>
+            ) : null}
           </Box>
         }
       />

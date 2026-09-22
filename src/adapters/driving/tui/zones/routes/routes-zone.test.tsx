@@ -105,3 +105,57 @@ describe('RoutesZone (story 6.1)', () => {
     expect(output).not.toContain('Route scan failed');
   });
 });
+
+describe('RoutesZone (story 6.2)', () => {
+  function seedReadyRoutes(store: ReturnType<typeof createAppStore>) {
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+  }
+
+  it('hints [enter] fire next to the route list', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('[enter] fire');
+  });
+
+  it('shows a spinner while the fire is in flight', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    store.setState({ fireStatus: 'firing', fireResult: null, fireError: null });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('⣾');
+    expect(output).toContain('Firing');
+  });
+
+  it('shows the fired status + duration + body in the detail pane', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    store.setState({ fireStatus: 'fired', fireResult: { status: 200, durationMs: 42, body: '{"id":1}' }, fireError: null });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('200');
+    expect(output).toContain('42ms');
+    expect(output).toContain('{"id":1}');
+  });
+
+  it('shows a distinct auth error instead of a generic failure', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    store.setState({
+      fireStatus: 'error',
+      fireResult: null,
+      fireError: { code: 'auth-forbidden', message: 'Access forbidden for POST /users' },
+    });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('Access forbidden');
+  });
+});

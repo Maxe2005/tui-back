@@ -57,6 +57,11 @@ const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
 if (routeExplorer === undefined) {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
+// Story 6.2: the fire-request use-case needs the module's auth port alongside its
+// scanner — same static-registry reasoning as the scanner lookup above.
+if (routeExplorer.auth === undefined) {
+  throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
+}
 const subcommands = buildSubcommands({
   registry,
   manifest,
@@ -70,6 +75,7 @@ const subcommands = buildSubcommands({
   migration,
   state,
   scanner: routeExplorer.scanner,
+  auth: routeExplorer.auth,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);

@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import type { UseBoundStore, StoreApi } from 'zustand';
 import type { ContainerPort } from '../../../../core/ports/container.js';
+import type { DevAuthPort } from '../../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
@@ -34,6 +35,7 @@ export type { SettingsUpdate } from './slices/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
+export type { FireStatus } from './slices/routes-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
@@ -76,6 +78,11 @@ export type AppStoreDeps = {
   // keeps working unwired; loadRoutes degrades to an explicit error state rather than
   // throwing when it is missing.
   scanner?: RouteScannerPort;
+  // Story 6.2: the Routes zone's dev-auth touchpoint (AD-1/AD-2) — the routes slice calls
+  // core/routes/fire-request.ts in-process through it alongside the scanner above. Same
+  // optionality contract: fireRoute degrades to an explicit error state rather than
+  // throwing when it is missing.
+  auth?: DevAuthPort;
 };
 
 export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & RoutesSlice;

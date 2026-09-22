@@ -14,6 +14,7 @@ import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
+import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
@@ -27,6 +28,7 @@ import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
 import { scanRepos } from '../../../core/scripts/scan.js';
 import { listRoutes } from '../../../core/routes/list-routes.js';
+import { fireRequest } from '../../../core/routes/fire-request.js';
 import type { Subcommand } from './dispatch.js';
 
 const EDT_CREATE_USAGE =
@@ -55,6 +57,7 @@ export function buildSubcommands(deps: {
   migration: MigrationPort;
   state: StatePort;
   scanner: RouteScannerPort;
+  auth: DevAuthPort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -205,6 +208,28 @@ export function buildSubcommands(deps: {
           return err('invalid-argument', 'Usage: tui-back list-routes <repoPath>');
         }
         return listRoutes({ manifest: deps.manifest, scanner: deps.scanner }, resolve(args[0]));
+      },
+    },
+    {
+      name: 'fire-request',
+      usage: 'tui-back fire-request <repoPath> <METHOD> <path>',
+      // Story 6.2: thin wrapper around core/routes/fire-request.ts (AD-2) — the wrapper owns
+      // argument cardinality (missing → missing-argument like scan/register, any other arity
+      // or a blank argument → invalid-argument, never silently ignored); the use-case owns
+      // the manifest gate, the route-exists check, the session, and the fire itself.
+      run: async (args) => {
+        if (args.length === 0) {
+          return err('missing-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+        }
+        if (args.length !== 3 || args.some((arg) => arg.trim() === '')) {
+          return err('invalid-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+        }
+        return fireRequest(
+          { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
+          resolve(args[0]),
+          args[1],
+          args[2],
+        );
       },
     },
   ];

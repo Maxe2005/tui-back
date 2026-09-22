@@ -2,9 +2,12 @@
 // implementations are statically registered here and selected by a manifest's `modules`
 // key — never dynamically loaded from externally supplied paths. Story 6.1 registers the
 // first real module: `route-explorer` (the nestjs-openapi RouteScannerPort implementation
-// from Epic 6's backend). The manifest adapter's membership check (and list-repos
+// from Epic 6's backend, plus story 6.2's cookie-session DevAuthPort — the service owns
+// issuance, the module only acquires and carries its cookie). The manifest adapter's membership check (and list-repos
 // `moduleIds`) pick it up automatically via the derived `knownModuleIds` set.
 import { createNestjsOpenApiScanner } from './route-explorer/nestjs-openapi.js';
+import { createCookieSessionAuth } from './route-explorer/cookie-session-auth.js';
+import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 
 export type ModuleId = string;
@@ -12,10 +15,15 @@ export type ModuleId = string;
 export interface ModuleImplementation {
   kind: string;
   scanner: RouteScannerPort;
+  auth?: DevAuthPort;
 }
 
 export const moduleRegistry: Readonly<Record<ModuleId, ModuleImplementation>> = {
-  'route-explorer': { kind: 'route-explorer', scanner: createNestjsOpenApiScanner() },
+  'route-explorer': {
+    kind: 'route-explorer',
+    scanner: createNestjsOpenApiScanner(),
+    auth: createCookieSessionAuth(),
+  },
 };
 
 export const knownModuleIds: ReadonlySet<ModuleId> = new Set(Object.keys(moduleRegistry));

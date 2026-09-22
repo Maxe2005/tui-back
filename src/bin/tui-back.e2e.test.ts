@@ -522,6 +522,54 @@ describe('tui-back list-routes (black-box, story 6.1)', () => {
   });
 });
 
+describe('tui-back fire-request (black-box, story 6.2)', () => {
+  // AD-3 envelope + arg-validation only: every case below rejects before any network
+  // call, so no live dev-gateway is needed (the manual live-fire check stays a human
+  // step per the spec's Ask First constraint).
+  it('rejects a missing repoPath with missing-argument as exactly one JSON line, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['fire-request'], env);
+
+    expect(status).toBe(1);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+  });
+
+  it('rejects bad arity and blank arguments with invalid-argument as exactly one JSON line, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    for (const args of [
+      ['fire-request', '/a'],
+      ['fire-request', '/a', 'GET'],
+      ['fire-request', '/a', 'GET', '/x', 'extra'],
+      ['fire-request', '/a', '  ', '/x'],
+    ]) {
+      const { status, stdout } = runCli(args, env);
+
+      expect(status).toBe(1);
+      expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+      expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+  });
+
+  it('rejects a repo whose manifest does not activate route-explorer with route-exploration-not-activated, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(true);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['fire-request', repo, 'GET', '/users'], env);
+
+    expect(status).toBe(1);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('route-exploration-not-activated');
+  });
+});
+
 describe('tui-back scan (black-box)', () => {
   it('proposes candidate manifest-carrying dirs, sorted, without auto-registering (AD-6)', async () => {
     const xdg = await makeTempDir();
@@ -588,14 +636,14 @@ describe('tui-back scan (black-box)', () => {
 });
 
 describe('tui-back --help (black-box)', () => {
-  it('lists every registered command, including edts, edt, and update, exit 0', () => {
+  it('lists every registered command, including edts, edt, update, list-routes, and fire-request, exit 0', () => {
     const { status, stdout } = runCli(['--help']);
 
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'list-routes']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'list-routes', 'fire-request']);
   });
 });
 

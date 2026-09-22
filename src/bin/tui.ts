@@ -119,6 +119,12 @@ const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
 if (!routeExplorer) {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
+// Story 6.2: the Routes zone's fire path needs the module's auth port alongside its
+// scanner — mirrors src/bin/main.ts's own CLI wiring exactly so `tui-back fire-request`
+// and the Routes zone fire through the same implementations in and out of process.
+if (!routeExplorer.auth) {
+  throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
+}
 const store = createAppStore({
   registry,
   manifest,
@@ -134,6 +140,7 @@ const store = createAppStore({
   settings,
   docker,
   scanner: routeExplorer.scanner,
+  auth: routeExplorer.auth,
 });
 const onQuit = async () => {
   if (tuiLock) {
