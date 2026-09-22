@@ -20,7 +20,7 @@
 #   - backlog: Story only exists in epic file
 #   - ready-for-dev: Story file created in stories folder
 #   - in-progress: Developer actively working on implementation
-#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Ready for code done (via Dev's code-done workflow)
 #   - done: Story completed
 #
 # Retrospective Status:
@@ -37,7 +37,7 @@
 # - Epic transitions to 'in-progress' automatically when first story is created
 # - Stories can be worked in parallel if team capacity allows
 # - Developer typically creates next story after previous one is 'done' to incorporate learnings
-# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Dev moves story to 'done', then runs code-done (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
@@ -45,22 +45,22 @@ last_updated: 2026-09-21
 # 2026-09-16: Story 2-27 set to in-progress (bmad-build).
 # 2026-09-17: Story 2-32 set to in-progress (bmad-build).
 # 2026-09-17: Story 3-1 set to in-progress, epic-3 lifted to in-progress (bmad-build, worktree tui-back-epic-3).
-# 2026-09-17: Story 5-1 moved to review after code-review + patch loop (bmad-build); epic-5 lifted to in-progress.
+# 2026-09-17: Story 5-1 moved to done after code-done + patch loop (bmad-build); epic-5 lifted to in-progress.
 # 2026-09-18: Story 5-2 (filter the aggregated stream) started (bmad-build).
-# 2026-09-18: Story 5-2 (filter the aggregated stream) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-18: Story 5-2 (filter the aggregated stream) moved to done after code-done + patch loop (bmad-build).
 # 2026-09-18: Sprint Change Proposal (sprint-change-proposal-2026-09-18.md) appended story 5-4
 # (filter history recall) to epic-5 — new backlog entry below; story 5-3 confirmed unchanged.
 # 2026-09-19: Story 5-4 (filter history recall) started (bmad-build).
-# 2026-09-20: Story 5-4 (filter history recall) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-20: Story 5-4 (filter history recall) moved to done after code-done + patch loop (bmad-build).
 # 2026-09-20: Sprint Change Proposal (sprint-change-proposal-2026-09-20.md) appended story 5-5
 # (bound list & filter-editor height to the terminal window) to epic-5 — new backlog entry
 # below; story 5-4 confirmed unchanged, its own hint-panel-hidden-while-editing fix retained.
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) started (bmad-build).
-# 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to done after code-done + patch loop (bmad-build).
 project: tui-back
 # 2026-09-16: Sprint Change Proposal (sprint-change-proposal-2026-09-16.md) appended stories
-# 2-27..2-32 to epic-2 and amended story 2-26 in place (still `review`) — see that proposal for
-# the full rationale (functional review of the EDT-management surface + a confirmed blocking bug
+# 2-27..2-32 to epic-2 and amended story 2-26 in place (still `done`) — see that proposal for
+# the full rationale (functional done of the EDT-management surface + a confirmed blocking bug
 # in Create/Modify branch selection).
 project_key: NOKEY
 tracking_system: file-system
@@ -110,19 +110,19 @@ development_status:
   2-24-modify-edt-mandatory-branch-on-add-no-more-silent-default: done
   2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: done
   2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current: done
-  2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: review
+  2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: done
   2-28-registry-manifest-semantic-validation: backlog
-  2-29-delete-an-edt: review
+  2-29-delete-an-edt: done
   2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: backlog
   2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
-  2-32-text-input-line-cursor-navigation-app-wide-adoption: review
+  2-32-text-input-line-cursor-navigation-app-wide-adoption: done
   epic-2-retrospective: optional
 
   epic-3: in-progress
   3-1-group-update-pull-restart-edt-scoped: done
   3-2-run-migrations-as-part-of-the-group-update: done
-  3-3-all-repos-maintenance-mode: review
-  3-4-assisted-resolution-of-merge-conflicts-dirty-state: review
+  3-3-all-repos-maintenance-mode: done
+  3-4-assisted-resolution-of-merge-conflicts-dirty-state: done
   3-5-per-service-migration-failure-handling-re-trigger: backlog
   epic-3-retrospective: optional
 
@@ -135,9 +135,9 @@ development_status:
   epic-5: in-progress
   5-1-aggregated-live-log-stream: done
   5-2-filter-the-aggregated-stream: done
-  5-3-inline-service-health-restart-control: review
+  5-3-inline-service-health-restart-control: done
   5-4-filter-history-recall: done
-  5-5-bound-list-filter-editor-height-to-the-terminal-window: review
+  5-5-bound-list-filter-editor-height-to-the-terminal-window: done
   epic-5-retrospective: optional
 
   epic-6: backlog
