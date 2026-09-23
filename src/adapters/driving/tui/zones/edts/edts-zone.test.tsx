@@ -11,6 +11,7 @@ import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { NO_BRANCH_CREATION } from '../../store/app-store.js';
 import { EdtsZone } from './edts-zone.js';
+import { matchEdtsByPrefix as quickMatch, resolveQuickPickCandidates as quickCandidates } from './dialogs/quick-pick-dialog.js';
 import {
   advanceCreateFormFocus,
   appendHint,
@@ -1554,6 +1555,74 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="modify" />);
     expect(output).not.toContain('[Enter] switch/modify');
+  });
+});
+
+// ==========================================================================================
+// Story 2.30 — EDT quick-pick: shared filterable-list dialog for edt-switch/modify/delete's
+// no-argument path (edts-zone.tsx's currentEdtAction effect), plus the pure
+// matchEdtsByPrefix/resolveQuickPickCandidates helpers from quick-pick-dialog.tsx.
+// ==========================================================================================
+
+describe('quick-pick-dialog pure helpers (story 2.30)', () => {
+  it('matchEdtsByPrefix: case-insensitive prefix match on topic (Boundaries: same convention as matchCommands)', () => {
+    const edts = [edtEntry({ topic: 'Feature-Work' }), edtEntry({ topic: 'feature-bugfix' }), edtEntry({ topic: 'other' })];
+    expect(quickMatch('feat', edts).map((e) => e.topic)).toEqual(['Feature-Work', 'feature-bugfix']);
+    expect(quickMatch('', edts).map((e) => e.topic)).toEqual(['Feature-Work', 'feature-bugfix', 'other']);
+    expect(quickMatch('zzz', edts)).toEqual([]);
+  });
+
+  it('resolveQuickPickCandidates: switch mode excludes the active EDT (today\'s "first non-active EDT" invariant, preserved as the candidate pool)', () => {
+    const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
+    const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
+    const pool = quickCandidates('switch', [active, other], 'active-ulid');
+    expect(pool.map((e) => e.ulid)).toEqual(['other-ulid']);
+  });
+
+  it('resolveQuickPickCandidates: modify/delete modes include the active EDT', () => {
+    const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
+    const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
+    expect(quickCandidates('modify', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
+    expect(quickCandidates('delete', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
+  });
+});
+
+describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
+  it('renders the filter field, the matching rows, and the highlighted-row marker', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'feature-work' }), edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
+    expect(output).toContain('Filter');
+    expect(output).toContain('feature-work');
+    expect(output).toContain('other-work');
+    expect(output).toContain('›');
+  });
+
+  it('AC: zero matching EDTs shows an explicit "No matching EDT" state, never a silently-empty list', async () => {
+    const store = createAppStore();
+    // quick-pick's renderToString test-only seed always starts with an empty query
+    // (initialQuickPickDialog), so an empty pool — no EDT exists to match against — is the
+    // reachable way to exercise the same "zero matches" render this file's static snapshot
+    // can produce (real-keypress filtering is covered by edts-zone.interaction.test.tsx).
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
+    expect(output).toContain('No matching EDT');
   });
 });
 
