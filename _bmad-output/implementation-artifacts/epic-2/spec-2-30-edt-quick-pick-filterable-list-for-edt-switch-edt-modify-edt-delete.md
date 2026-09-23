@@ -2,7 +2,7 @@
 title: 'EDT Quick-Pick — Filterable List for edt-switch / edt-modify / edt-delete'
 type: 'feature'
 created: '2026-09-23'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: '120835ca0122d9eb3cc54e78ce712a78796745a4'
 context:
@@ -57,10 +57,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.logic.ts` -- add `QuickPickDialogState` (`kind: 'quick-pick'`, `mode: 'switch' | 'modify' | 'delete'`, `query`, `queryCursor`, `cursor`) to the `EdtDialogState` union, plus `initialQuickPickDialog(mode)` constructor -- TUI state shape
-- [ ] `src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx` (new) -- `matchEdtsByPrefix(query, edts)` (case-insensitive topic prefix match, honoring per-mode candidate pool), `createQuickPickDialogHandlers` (Esc cancels; Left/Right/Home/End/Backspace/typed-char edit the filter via `nextTextInputValue`; Up/Down move a row cursor clamped to `[0, matches.length-1]`; Enter opens `initialSwitchDialog`/`initialModifyDialog`/`initialDeleteDialog` on the highlighted match), `QuickPickDialogView` (`TextInputLine` filter field + `FilterableBranchList`-style row list + explicit "No matching EDT" empty state) -- the widget itself
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- `currentEdtAction` effect: replace the 3 no-topic fallbacks with `setDialog(initialQuickPickDialog(mode))`; instantiate `createQuickPickDialogHandlers`; add `useInput` dispatch branch; add render dispatch branch; add `'quick-pick'` to the `initialDialogKind` prop union -- wires the dialog into the zone
-- [ ] `src/adapters/driving/tui/zones/edts/edts-zone.{test,interaction.test}.tsx` -- extend for the quick-pick dialog kind: state/rendering plus real-keypress filter/arrow-nav/select/no-match/Esc coverage across all 3 modes, plus delete-mode selecting the active EDT surfacing the rejection message -- regression + new coverage
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.logic.ts` -- add `QuickPickDialogState` (`kind: 'quick-pick'`, `mode: 'switch' | 'modify' | 'delete'`, `query`, `queryCursor`, `cursor`) to the `EdtDialogState` union, plus `initialQuickPickDialog(mode)` constructor -- TUI state shape
+- [x] `src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx` (new) -- `matchEdtsByPrefix(query, edts)` (case-insensitive topic prefix match, honoring per-mode candidate pool), `createQuickPickDialogHandlers` (Esc cancels; Left/Right/Home/End/Backspace/typed-char edit the filter via `nextTextInputValue`; Up/Down move a row cursor clamped to `[0, matches.length-1]`; Enter opens `initialSwitchDialog`/`initialModifyDialog`/`initialDeleteDialog` on the highlighted match), `QuickPickDialogView` (`TextInputLine` filter field + `FilterableBranchList`-style row list + explicit "No matching EDT" empty state) -- the widget itself
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.tsx` -- `currentEdtAction` effect: replace the 3 no-topic fallbacks with `setDialog(initialQuickPickDialog(mode))`; instantiate `createQuickPickDialogHandlers`; add `useInput` dispatch branch; add render dispatch branch; add `'quick-pick'` to the `initialDialogKind` prop union -- wires the dialog into the zone
+- [x] `src/adapters/driving/tui/zones/edts/edts-zone.{test,interaction.test}.tsx` -- extend for the quick-pick dialog kind: state/rendering plus real-keypress filter/arrow-nav/select/no-match/Esc coverage across all 3 modes, plus delete-mode selecting the active EDT surfacing the rejection message -- regression + new coverage
 
 **Acceptance Criteria:**
 - Given the command bar, `edt-switch` run with no argument, when it executes, then quick-pick(switch) opens filtering every non-active EDT's topic.
@@ -91,3 +91,50 @@ context:
 
 **Manual checks:**
 - TUI: `edt-switch` with no argument shows a filterable list of non-active EDTs; `edt-modify`/`edt-delete` with no argument show the same list including the active EDT; selecting the active EDT under `edt-delete` shows the existing rejection message; Esc closes the list; a filter matching nothing shows "No matching EDT"; `edt-switch <topic>`/`edt-modify <topic>`/`edt-delete <topic>` behave exactly as before.
+
+## Suggested Review Order
+
+**The quick-pick widget itself**
+
+- Entry point — candidate-pool rule (switch excludes active, modify/delete include it) and the filter's prefix-match convention.
+  [`quick-pick-dialog.tsx:34`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L34)
+
+- Key dispatch: Esc cancels, arrows move a clamped row cursor, Enter opens the exact same pre-targeted dialog the topic-supplied path already opens.
+  [`quick-pick-dialog.tsx:66`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L66)
+
+- Filter-field text editing reuses `nextTextInputValue`; a pure caret move never resets the row cursor, only an actual text change does.
+  [`quick-pick-dialog.tsx:90`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L90)
+
+- Rendering: filter field + row list + the explicit "No matching EDT" empty state (never a silently-empty list).
+  [`quick-pick-dialog.tsx:122`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L122)
+
+**State shape**
+
+- `QuickPickDialogState`/`initialQuickPickDialog` — one dialog, one `mode` field, never three near-duplicate dialogs.
+  [`edts-zone.logic.ts:1098`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L1098)
+
+**Replacing the old guesswork**
+
+- The `currentEdtAction` effect's switch branch: quick-pick replaces the old "first non-active EDT" guess.
+  [`edts-zone.tsx:400`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L400)
+
+- The modify branch: quick-pick replaces the old "focused row" guess.
+  [`edts-zone.tsx:419`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L419)
+
+- The delete branch: quick-pick replaces the old "focused row" guess; selecting the active EDT still surfaces the existing rejection dialog, unchanged.
+  [`edts-zone.tsx:436`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L436)
+
+**Zone wiring**
+
+- Handler instantiation, `useInput` dispatch branch, and render dispatch branch — the 3 integration points into the zone.
+  [`edts-zone.tsx:549`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L549)
+  [`edts-zone.tsx:598`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L598)
+  [`edts-zone.tsx:876`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L876)
+
+**Tests**
+
+- Real-keypress coverage: per-mode candidate pool, Esc, filter+arrow-nav+Enter, zero-match state, caret-move-preserves-cursor, Enter-on-zero-matches no-op, delete-mode active-EDT rejection, topic-supplied path unchanged.
+  [`edts-zone.interaction.test.tsx:3090`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3090)
+
+- Pure-function unit tests for `matchEdtsByPrefix`/`resolveQuickPickCandidates` plus a static rendering snapshot.
+  [`edts-zone.test.tsx:1567`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L1567)
