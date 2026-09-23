@@ -440,6 +440,26 @@ describe('EdtsZone (story 2.6)', () => {
     const output = await renderToString(<EdtsZone useStore={store} />);
     expect(output).toContain('2 unreachable');
     expect(output).toContain('1 error');
+    // Story 2.34: the "[i] details" hint into the issues dialog, shown whenever the summary is.
+    expect(output).toContain('[i] details');
+  });
+
+  it('opens a read-only issues dialog explaining each unreachable/error entry (story 2.34)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranchesStatus: 'idle',
+      edtsBranches: [service({ service: 'api-gateway' })],
+      edtsUnreachable: ['/repos/gone-a'],
+      edtsErrors: [{ path: '/repos/bad', code: 'manifest-invalid-yaml', message: 'Invalid .tui-back.yaml' }],
+      loadEdtsBranches: noopLoad,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="issues" />);
+    expect(output).toContain('SERVICE LISTING ISSUES');
+    expect(output).toContain('/repos/gone-a');
+    expect(output).toContain('Clean stale entries');
+    expect(output).toContain('/repos/bad');
+    expect(output).toContain('Invalid .tui-back.yaml');
+    expect(output).toContain('YAML');
   });
 
   it('shows no summary line when unreachable/errors are both empty', async () => {
