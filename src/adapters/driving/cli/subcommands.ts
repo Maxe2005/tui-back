@@ -160,6 +160,10 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
+            // Story 3.7: the CLI takes no configuration — full default selection (no
+            // `selection` filter), migrate ON, clean restart OFF (no new flags).
+            runMigrations: true,
+            cleanRestart: false,
             onUpdateBlocker: undefined,
           });
         }
@@ -175,6 +179,9 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',
+            // Story 3.7: same full-default configuration as the bare invocation above.
+            runMigrations: true,
+            cleanRestart: false,
             onUpdateBlocker: undefined,
           });
         }

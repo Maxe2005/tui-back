@@ -650,3 +650,446 @@ describe('update slice: service health polling (story 3.6)', () => {
     expect(store.getState().updateServiceHealth).toEqual({});
   });
 });
+
+// Story 3.7: the pre-run configuration screen's store state — opening pre-scoped to the
+// trigger, confirming with exactly the confirmed configuration, and rejecting while a run
+// is in flight.
+describe('update slice: pre-run configuration screen (story 3.7)', () => {
+  it('openUpdateConfig(edt) pre-selects every member with the manifest sharedBranch default', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toEqual({
+      scope: 'edt',
+      rows: [
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+      ],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    });
+    // Opening the screen runs no git/docker action and starts no run.
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateConfig(all) lists every managed repo pre-selected', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig('all');
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'all',
+      rows: [
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+      ],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    });
+  });
+
+  it('openUpdateConfig({service}) pre-scopes to that single service', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-a' });
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'edt',
+      rows: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true }],
+    });
+  });
+
+  it('openUpdateConfig({service, repoPath}) fails with the underlying error when scope resolution cannot read state', async () => {
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => err('state-invalid-format', 'corrupt')),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+
+    // Never silently downgraded to `all` (which would drop the edt unexpected-branch
+    // gate) — the open fails with the read failure instead.
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('state-invalid-format');
+  });
+
+  it('openUpdateConfig({service}) for an unknown service fails service-not-found with no screen', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-nope' });
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('service-not-found');
+  });
+
+  it('openUpdateConfig(edt) with no active EDT fails no-active-edt with no screen', async () => {
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok(null)),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-active-edt');
+  });
+
+  it('openUpdateConfig while running is rejected update-already-running with no screen', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'running' });
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+  });
+
+  it('openUpdateConfig(edt) on a zero-member EDT fails no-services-selected with no screen', async () => {
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () =>
+        ok([
+          {
+            ulid: 'edt-empty',
+            topic: 'empty',
+            createdAt: '2026-09-17T00:00:00.000Z',
+            status: 'active' as const,
+            members: [],
+          },
+        ]),
+      ),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok('edt-empty')),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-services-selected');
+    expect(store.getState().updateError).toContain('empty');
+  });
+
+  it('openUpdateConfig(all) on an empty registry fails no-services-selected with no screen', async () => {
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([])),
+      add: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = createAppStore(fakeDeps({ registry }));
+
+    await store.getState().openUpdateConfig('all');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-services-selected');
+    expect(store.getState().updateError).toContain('No managed repos');
+  });
+
+  it('openUpdateConfig on an unwired store degrades to store-not-wired', async () => {
+    const store = createAppStore();
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('confirmUpdateConfig with zero selected is rejected inline: the screen stays open and nothing ran', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => ({ ...row, selected: false })),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('No services selected');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig with a blank branch on a selected row is rejected inline and nothing runs', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => (row.service === 'svc-a' ? { ...row, sourceBranch: '   ' } : row)),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('empty source branch');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig runs exactly the selected subset: the deselected service is absent from results', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => ({ ...row, selected: row.service === 'svc-a' })),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    // The screen closed and the run landed with only the selected service reported.
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(deps.container!.restart).toHaveBeenCalledTimes(1);
+    expect(deps.container!.restart).toHaveBeenCalledWith('ctr-a');
+  });
+
+  it('confirmUpdateConfig threads the toggles: runMigrations off never runs migrations', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({ ...draft!, runMigrations: false });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).toHaveBeenCalledTimes(2);
+  });
+
+  it('confirmUpdateConfig threads a per-service branch override as its merge source', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => (row.service === 'svc-a' ? { ...row, sourceBranch: 'release/1' } : row)),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(deps.git.fetch).toHaveBeenCalledWith('/repo/a', 'release/1');
+    expect(deps.git.mergeBranch).toHaveBeenCalledWith('/repo/a', 'release/1');
+  });
+
+  it('confirmUpdateConfig restores the screen inline on a core unknown-branch rejection: nothing ran', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      branchExistsLocally: vi.fn(async () => ok(false)),
+    };
+    const deps = fakeDeps({ git });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => (row.service === 'svc-a' ? { ...row, sourceBranch: 'nope/not-here' } : row)),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    // The screen stays open with the rejection inline; the run banner is back to idle.
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('nope/not-here');
+    expect(store.getState().updateConfig?.rows).toHaveLength(2);
+    expect(store.getState().updateConfig?.runMigrations).toBe(true);
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateError).toBeNull();
+    expect(store.getState().updateErrorCode).toBeNull();
+    // Pre-lock rejection means zero git writes, migrations, or restarts anywhere.
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig restores the screen inline on a core no-services-selected rejection', async () => {
+    const listMock = vi.fn(async () =>
+      ok([
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [
+            { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' },
+            { service: 'svc-b', repoPath: '/repo/b', branch: 'feat/b' },
+          ],
+        },
+      ]),
+    );
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: listMock,
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const deps = fakeDeps({ edtRegistry });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+    // Membership changed out from under the open screen: the confirmed selection matches
+    // nothing, so core rejects pre-lock and nothing runs.
+    listMock.mockResolvedValue(
+      ok([
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-z', repoPath: '/repo/z', branch: 'feat/z' }],
+        },
+      ]),
+    );
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('None of the selected services');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateErrorCode).toBeNull();
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('openUpdateConfig clears a stale done banner but keeps per-run history', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({
+      updateStatus: 'done',
+      updateTopic: 'demo',
+      updateResults: [{ service: 'svc-a', outcome: 'updated' }],
+      updateNote: 'stale note',
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+    });
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateError).toBeNull();
+    expect(store.getState().updateErrorCode).toBeNull();
+    expect(store.getState().updateNote).toBeNull();
+    // History survives: the results list and the per-service outcome map are untouched.
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(store.getState().lastServiceOutcomes).toEqual({ 'svc-a': { service: 'svc-a', outcome: 'updated' } });
+  });
+
+  it('openUpdateConfig clears a stale error banner', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'error', updateError: 'stale boom', updateErrorCode: 'internal-error' });
+
+    await store.getState().openUpdateConfig('all');
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateError).toBeNull();
+    expect(store.getState().updateErrorCode).toBeNull();
+  });
+
+  it('confirmUpdateConfig with no open screen is a no-op', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('closeUpdateConfig closes the screen without starting anything', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+
+    store.getState().closeUpdateConfig();
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('setUpdateConfig is a no-op without an open screen', () => {
+    const store = createAppStore(fakeDeps());
+
+    expect(() => store.getState().setUpdateConfig({
+      scope: 'edt',
+      rows: [],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    })).not.toThrow();
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('clearUpdate also closes an open configuration screen', async () => {
+    const store = createAppStore(fakeDeps());
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+
+    store.getState().clearUpdate();
+
+    expect(store.getState().updateConfig).toBeNull();
+  });
+});

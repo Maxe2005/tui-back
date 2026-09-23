@@ -467,3 +467,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
   summary: `filterHistoryKeyString`'s flat `service:${repoPath}:${mode}` encoding is ambiguous if a `repoPath` ever contains a literal colon (e.g. a Windows-style path) — safe today since the key is used only opaquely, but fragile for any future code that needs to decode it.
   evidence: `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`'s `filterHistoryKeyString` joins scope/repoPath/mode with `:` and is never parsed back today. Surfaced by review (blind-hunter). **Track:** switch to a safer separator or a structured (non-string) key before any decode-needing code (e.g. the manifest-removal GC above) is written against it.
+
+## Deferred from: code review of 3-7-pre-run-configuration-interface (2026-09-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
+  summary: The manifest schema accepts a whitespace-only `sharedBranch` (`z.string().min(1)` with no `.trim()`), which passes validation and later reaches git as a blank merge source on paths that bypass the TUI's inline blank-branch reject (e.g. a direct core call or the bare CLI with such a manifest).
+  evidence: `src/adapters/driven/manifest/schema.ts` declares `sharedBranch` without `.trim()`; the root cause (schema laxity) predates this story — the bare-CLI 3.1 path already merges `loaded.sharedBranch` verbatim. Surfaced incidentally by review (edge-case-hunter). **Track:** trim/normalize `sharedBranch` (and audit sibling string fields) as part of backlog story 2-28 (registry-manifest-semantic-validation).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
+  summary: `UpdateConfigDialog` renders every targeted-service row unconditionally with no `BoundedList` windowing or scroll, so a large fleet (dozens of managed repos) would clip rows inside the `ModalDialog` without any way to reach them.
+  evidence: `src/adapters/driving/tui/zones/update/update-config-dialog.tsx` maps all `draft.rows` directly, unlike the 3.6 shell which bounds the service list via `BoundedList` + terminal-height chrome budget. Surfaced by review (blind-hunter); v1 fleets are small so impact is theoretical today. **Track:** reuse the `BoundedList` + cursor-windowing pattern if a large-fleet case is ever observed.

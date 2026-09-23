@@ -416,6 +416,12 @@ it('shouldQuit returns true for q', () => {
         updateBlocker: null,
         resolveUpdateBlocker: () => {},
         runGroupUpdate: async () => {},
+        // Story 3.7: pre-run configuration screen state
+        updateConfig: null,
+        openUpdateConfig: async () => {},
+        setUpdateConfig: () => {},
+        closeUpdateConfig: () => {},
+        confirmUpdateConfig: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
         // Story 3.6: Update zone service-list health poll + last-outcome map

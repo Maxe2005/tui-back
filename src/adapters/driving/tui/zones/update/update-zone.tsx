@@ -35,6 +35,15 @@ import {
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { deriveUpdateServiceStatus, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { UpdateConfigDialog } from './update-config-dialog.js';
+import {
+  beginUpdateConfigBranchEdit,
+  clampUpdateConfigCursor,
+  commitUpdateConfigBranchEdit,
+  resolveUpdateConfigKey,
+  toggleUpdateConfigRow,
+  type TextInputState,
+} from './update-config-dialog.logic.js';
 
 // Story 3.6: rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title
 // row, the list column's own section header/loading/error lines) subtracted from the raw
@@ -125,6 +134,30 @@ export function shouldConfirmQuit(input: string, updateStatus: string): boolean 
 // while a run is in flight — a second trigger is rejected by the core lock instead).
 export function shouldOpenAllConfirm(input: string, updateStatus: string): boolean {
   return (input === 'a' || input === 'A') && updateStatus !== 'running';
+}
+
+// Story 3.7: the group-update trigger mapping — every trigger opens the shared pre-run
+// configuration screen first; no trigger ever starts an unconfigured run. Pure (the same
+// unit style as `shouldOpenAllConfirm`) because the zone's `useInput` is never driven in
+// tests, so an inline mapping would let a wiring regression back to a direct
+// `runGroupUpdate` go undetected.
+export type UpdateTriggerAction = 'open-all-config' | 'open-edt-config' | 'none';
+
+export function resolveUpdateTrigger(
+  input: string,
+  key: { return?: boolean },
+  updateStatus: string,
+): UpdateTriggerAction {
+  if (updateStatus === 'running') {
+    return 'none';
+  }
+  if (shouldOpenAllConfirm(input, updateStatus)) {
+    return 'open-all-config';
+  }
+  if (key.return === true) {
+    return 'open-edt-config';
+  }
+  return 'none';
 }
 
 export type AllConfirmDecision = 'confirm' | 'cancel';
@@ -247,7 +280,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateScope = useStore((state) => state.updateScope);
   const updateBlocker = useStore((state) => state.updateBlocker);
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
-  const runGroupUpdate = useStore((state) => state.runGroupUpdate);
+  const updateConfig = useStore((state) => state.updateConfig);
+  const openUpdateConfig = useStore((state) => state.openUpdateConfig);
+  const setUpdateConfig = useStore((state) => state.setUpdateConfig);
+  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
+  const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
   const activeEdt = useStore((state) => state.activeEdt);
   const edts = useStore((state) => state.edts);
@@ -272,11 +309,15 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const ratio = useStore((state) => state.splitterRatios.update);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
-  const [allConfirm, setAllConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
   // Story 3.6: the service list's own selection cursor — zone-local UI state (repo
   // convention: only cross-visit/cross-run state belongs in update-slice.ts).
   const [serviceCursor, setServiceCursor] = useState(0);
+  // Story 3.7: the config screen's own keyboard cursor + in-progress branch edit — also
+  // zone-local UI state. The draft itself (rows, toggles, error) is live run state in the
+  // store; these two only say where the cursor is and what is being typed.
+  const [configCursor, setConfigCursor] = useState(0);
+  const [configEditing, setConfigEditing] = useState<TextInputState | null>(null);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -322,8 +363,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // zone's own dialogs use. The blocker menu captures hardest: while a repo waits, no
   // other zone key may fire at all.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm || allConfirm || updateBlocker !== null);
-  }, [quitConfirm, allConfirm, updateBlocker, setZoneInputCaptured]);
+    setZoneInputCaptured(quitConfirm || updateConfig !== null || updateBlocker !== null);
+  }, [quitConfirm, updateConfig, updateBlocker, setZoneInputCaptured]);
 
   // A newly raised blocker always opens the menu on its first row.
   useEffect(() => {
@@ -331,6 +372,18 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       setBlockerCursor(0);
     }
   }, [updateBlocker]);
+
+  // A newly opened config screen always starts browsing on its first row with no branch
+  // edit in flight. Keyed on the open boolean — never the draft object — so a toggle or
+  // branch commit (which replaces the draft) doesn't snap the cursor back to 0 or wipe an
+  // edit session.
+  const isUpdateConfigOpen = updateConfig !== null;
+  useEffect(() => {
+    if (isUpdateConfigOpen) {
+      setConfigCursor(0);
+      setConfigEditing(null);
+    }
+  }, [isUpdateConfigOpen]);
 
   useInput(
     (input, key) => {
@@ -351,13 +404,41 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      if (allConfirm) {
-        const decision = resolveAllConfirm(input, key);
-        if (decision === 'confirm') {
-          setAllConfirm(false);
-          void runGroupUpdate('all');
-        } else if (decision === 'cancel') {
-          setAllConfirm(false);
+      // Story 3.7: while the pre-run configuration screen is open it owns every
+      // keystroke — the run starts only through its confirm path, with exactly the
+      // confirmed configuration.
+      if (updateConfig !== null) {
+        const step = resolveUpdateConfigKey(
+          input,
+          key,
+          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing },
+          updateConfig,
+        );
+        if (step.type === 'move') {
+          setConfigCursor(step.cursor);
+        } else if (step.type === 'toggle') {
+          setUpdateConfig(toggleUpdateConfigRow(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor)));
+        } else if (step.type === 'begin-edit') {
+          const editing = beginUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor));
+          if (editing !== null) {
+            setConfigEditing(editing);
+          }
+        } else if (step.type === 'edit') {
+          setConfigEditing(step.editing);
+        } else if (step.type === 'commit-edit') {
+          if (configEditing !== null) {
+            setUpdateConfig(
+              commitUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor), configEditing.value),
+            );
+            setConfigEditing(null);
+          }
+        } else if (step.type === 'cancel-edit') {
+          setConfigEditing(null);
+        } else if (step.type === 'confirm') {
+          void confirmUpdateConfig();
+        } else if (step.type === 'cancel') {
+          setConfigEditing(null);
+          closeUpdateConfig();
         }
         return;
       }
@@ -390,12 +471,16 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      if (shouldOpenAllConfirm(input, updateStatus)) {
-        setAllConfirm(true);
+      // Story 3.7: every group-update trigger opens the shared pre-run configuration
+      // screen first — no git/docker action runs before the screen is confirmed. `a`
+      // pre-scopes to every managed repo, `Enter` to the active EDT's members.
+      const trigger = resolveUpdateTrigger(input, key, updateStatus);
+      if (trigger === 'open-all-config') {
+        void openUpdateConfig('all');
         return;
       }
-      if (key.return) {
-        void runGroupUpdate();
+      if (trigger === 'open-edt-config') {
+        void openUpdateConfig('edt');
       }
     },
     { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
@@ -529,9 +614,12 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
-      <ModalDialog title={UPDATE_ALL_CONFIRM_TITLE} open={allConfirm} onConfirm={() => {}} onCancel={() => setAllConfirm(false)}>
-        <Text color={colors.text}>{UPDATE_ALL_CONFIRM_BODY}</Text>
-      </ModalDialog>
+      {updateConfig !== null ? (
+        <UpdateConfigDialog
+          draft={updateConfig}
+          view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
+        />
+      ) : null}
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">

@@ -41,6 +41,7 @@ import {
   resolveAllConfirm,
   resolveBlockerMenuKey,
   resolveQuitConfirm,
+  resolveUpdateTrigger,
   resolveUpdateTone,
   shouldConfirmQuit,
   shouldOfferRerun,
@@ -214,6 +215,50 @@ describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
     expect(resolveAllConfirm('a', {})).toBeNull();
     expect(resolveAllConfirm('y', {})).toBeNull();
     expect(resolveAllConfirm('', {})).toBeNull();
+  });
+});
+
+describe('resolveUpdateTrigger (story 3.7)', () => {
+  it('opens the all-repos config on a/A while idle/done/error', () => {
+    expect(resolveUpdateTrigger('a', {}, 'idle')).toBe('open-all-config');
+    expect(resolveUpdateTrigger('A', {}, 'done')).toBe('open-all-config');
+    expect(resolveUpdateTrigger('a', {}, 'error')).toBe('open-all-config');
+  });
+
+  it('opens the EDT config on Enter while idle/done/error', () => {
+    expect(resolveUpdateTrigger('', { return: true }, 'idle')).toBe('open-edt-config');
+    expect(resolveUpdateTrigger('', { return: true }, 'done')).toBe('open-edt-config');
+    expect(resolveUpdateTrigger('', { return: true }, 'error')).toBe('open-edt-config');
+  });
+
+  it('yields none mid-run — a second trigger never starts a direct unconfigured run', () => {
+    expect(resolveUpdateTrigger('a', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('A', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('', { return: true }, 'running')).toBe('none');
+  });
+
+  it('yields none for every other key while idle', () => {
+    expect(resolveUpdateTrigger('q', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('y', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('', { return: false }, 'idle')).toBe('none');
+  });
+
+  it('every mapping resolves to a config-screen action or none — no path starts a run directly', () => {
+    const actions = [
+      resolveUpdateTrigger('a', {}, 'idle'),
+      resolveUpdateTrigger('A', {}, 'done'),
+      resolveUpdateTrigger('', { return: true }, 'idle'),
+      resolveUpdateTrigger('', { return: true }, 'error'),
+      resolveUpdateTrigger('a', {}, 'running'),
+      resolveUpdateTrigger('', { return: true }, 'running'),
+      resolveUpdateTrigger('q', {}, 'idle'),
+    ];
+    for (const action of actions) {
+      expect(['open-all-config', 'open-edt-config', 'none']).toContain(action);
+    }
+    expect(actions).toContain('open-all-config');
+    expect(actions).toContain('open-edt-config');
   });
 });
 

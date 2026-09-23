@@ -1821,6 +1821,60 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(parsed.data.note.length).toBeGreaterThan(0);
   });
 
+  it('follows the new group-update signature with full defaults: one JSON line, scope edt, migrations on (story 3.7)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('touch migrated.txt');
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        ulid: expect.any(String),
+        topic: 'demo',
+        results: [{ service: 'route-explorer', outcome: 'updated' }],
+        scope: 'edt',
+      },
+    });
+    // runMigrations defaults to true with no new CLI flags: the marker migration ran.
+    await expect(access(join(a.repo, 'migrated.txt'))).resolves.toBeUndefined();
+  });
+
+  it('update --all --yes follows the new call-site defaults: scope all, migrations on, one JSON line (story 3.7)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('touch migrated.txt');
+    const b = await makeBehindMember('touch migrated.txt');
+    await registerRepos([a.repo, b.repo], env);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update', '--all', '--yes'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        ulid: 'all',
+        topic: 'all-repos',
+        results: [
+          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated' },
+        ],
+        scope: 'all',
+      },
+    });
+    // runMigrations defaults to true with no new CLI flags: both marker migrations ran.
+    await expect(access(join(a.repo, 'migrated.txt'))).resolves.toBeUndefined();
+    await expect(access(join(b.repo, 'migrated.txt'))).resolves.toBeUndefined();
+  });
+
   it('rejects a second run while one holds the lock with update-already-running (AC2)', { timeout: 30000 }, async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
