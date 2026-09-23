@@ -1086,6 +1086,31 @@ export function formatDeleteMemberMeta(row: DeleteMemberRow): string {
 // unlike every other dialog here there's nothing to seed on open.
 export type IssuesDialogState = { kind: 'issues' };
 
+// Story 2.30 -----------------------------------------------------------------------------
+// The shared EDT quick-pick — a filterable, arrow-navigable list of EDT topics — opened in
+// place of `edt-switch`/`edt-modify`/`edt-delete`'s old ad hoc no-argument fallbacks (guessing
+// "the first non-active EDT" / the currently-focused row). One dialog, one component, three
+// modes (Intent/Design Notes), never three near-duplicate dialogs. `mode` decides both the
+// candidate pool (quick-pick-dialog.tsx's resolveQuickPickCandidates: switch excludes the
+// active EDT, modify/delete include it) and which pre-targeted dialog Enter opens.
+export type QuickPickMode = 'switch' | 'modify' | 'delete';
+
+export type QuickPickDialogState = {
+  kind: 'quick-pick';
+  mode: QuickPickMode;
+  // The filter field's own value/caret — same TextInputState-shaped pair every other field in
+  // this file uses, fed through nextTextInputValue directly (Code Map: "reuse directly for the
+  // filter field's caret handling").
+  query: string;
+  queryCursor: number;
+  // The highlighted row within the *current* filtered match list — reset to 0 whenever the
+  // filter text itself changes (mirrors branch-picker.tsx's handlePickExistingKey: "a pure
+  // caret move leaves pickQuery's value unchanged ... only an actual filter-text change
+  // re-derives the match list and resets pickCursor to the top"), clamped to
+  // [0, matches.length - 1] by moveSelection on Up/Down.
+  cursor: number;
+};
+
 export type EdtDialogState =
   | { kind: 'none' }
   | CreateDialogState
@@ -1094,10 +1119,15 @@ export type EdtDialogState =
   | ServiceActionsDialogState
   | AddToEdtDialogState
   | DeleteDialogState
-  | IssuesDialogState;
+  | IssuesDialogState
+  | QuickPickDialogState;
 
 export function initialIssuesDialog(): IssuesDialogState {
   return { kind: 'issues' };
+}
+
+export function initialQuickPickDialog(mode: QuickPickMode): QuickPickDialogState {
+  return { kind: 'quick-pick', mode, query: '', queryCursor: 0, cursor: 0 };
 }
 
 export function initialCreateDialog(): CreateDialogState {

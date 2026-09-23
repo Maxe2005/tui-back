@@ -45,6 +45,7 @@ import {
   initialDeleteDialog,
   initialIssuesDialog,
   initialModifyDialog,
+  initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
   jumpSelection,
@@ -64,6 +65,7 @@ import { createCreateDialogHandlers, CreateDialogView } from './dialogs/create-d
 import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
 import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
+import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
 
@@ -101,7 +103,8 @@ export function EdtsZone({
     | 'delete-confirm'
     | 'delete-confirm-rejected'
     | 'delete-confirm-status-error'
-    | 'issues';
+    | 'issues'
+    | 'quick-pick';
 }) {
   // Story 2.21: splitterRatios.edts is now a 3-entry array — boundary 0 (index 0) drives the
   // existing list<->detail split below; boundaries 1/2 drive the list column's own two
@@ -194,6 +197,14 @@ export function EdtsZone({
     }
     if (initialDialogKind === 'issues') {
       return initialIssuesDialog();
+    }
+    if (initialDialogKind === 'quick-pick') {
+      // Test-only seed (mirrors 'create'/'issues' above): defaults to switch mode — a
+      // renderToString smoke test only needs one representative mode's chrome to render;
+      // real per-mode coverage (filter/arrow-nav/select/no-match/Esc across all 3 modes) goes
+      // through the real-keypress interaction tests, driving the actual currentEdtAction ->
+      // quick-pick effect below instead of this seed.
+      return initialQuickPickDialog('switch');
     }
     const target = useStore.getState().edts?.[0];
     if (target === undefined) {
@@ -399,16 +410,11 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         } else {
-          // No topic specified - the dialog will show quick-pick (handled by switch dialog logic)
-          // For now, open switch-confirm for the first non-active EDT
-          const nonActiveEdt = edtsRows.find((e) => e.ulid !== activeEdtUlid);
-          if (nonActiveEdt) {
-            setDialog(initialSwitchDialog(nonActiveEdt));
-            setCurrentEdtAction(null);
-          } else {
-            setDialog({ kind: 'none' });
-            setCurrentEdtAction(null);
-          }
+          // Story 2.30: no topic specified — open the quick-pick (switch mode) instead of
+          // guessing "the first non-active EDT". The picker's own Enter handler opens this
+          // exact initialSwitchDialog(target) once a topic is actually chosen.
+          setDialog(initialQuickPickDialog('switch'));
+          setCurrentEdtAction(null);
         }
       } else if (currentEdtAction.type === 'modify') {
         // If a topic was specified, find the EDT and open modify dialog pre-targeted
@@ -422,14 +428,10 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         } else {
-          // No topic specified - open modify for the focused EDT
-          if (focusedEdt) {
-            setDialog(initialModifyDialog(focusedEdt));
-            setCurrentEdtAction(null);
-          } else {
-            setDialog({ kind: 'none' });
-            setCurrentEdtAction(null);
-          }
+          // Story 2.30: no topic specified — open the quick-pick (modify mode), filtering
+          // every EDT (active included), instead of guessing "the focused row".
+          setDialog(initialQuickPickDialog('modify'));
+          setCurrentEdtAction(null);
         }
       } else if (currentEdtAction.type === 'delete') {
         // Boundary: "The active EDT can never be deleted ... reject before any git/file
@@ -446,20 +448,16 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         } else {
-          // No topic specified - open delete for the focused EDT (mirrors modify's own
-          // no-topic fallback, unlike switch's "first non-active" — a delete on the focused
-          // active EDT is exactly the case that should surface the rejection message).
-          if (focusedEdt) {
-            setDialog(initialDeleteDialog(focusedEdt, focusedEdt.ulid === activeEdtUlid));
-            setCurrentEdtAction(null);
-          } else {
-            setDialog({ kind: 'none' });
-            setCurrentEdtAction(null);
-          }
+          // Story 2.30: no topic specified — open the quick-pick (delete mode), filtering
+          // every EDT (active included). Selecting the active EDT there still opens the
+          // existing rejection dialog (initialDeleteDialog's own isActive check, unchanged) —
+          // just reached via the picker instead of the focused-row fallback.
+          setDialog(initialQuickPickDialog('delete'));
+          setCurrentEdtAction(null);
         }
       }
     }
-  }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, focusedEdt, setDialog, setCurrentEdtAction]);
+  }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, setDialog, setCurrentEdtAction]);
 
   // Story 2.15: load action log when an EDT row is focused
   // Track which EDT we've loaded to avoid infinite reload loops
@@ -548,6 +546,12 @@ export function EdtsZone({
     loadEdtsBranches,
     setCurrentEdtAction,
   });
+  const { handleQuickPickDialogInput } = createQuickPickDialogHandlers({
+    setDialog,
+    setCurrentEdtAction,
+    edtsRows,
+    activeEdtUlid,
+  });
 
   // Story 2.29: fetches the delete-confirm dialog's own per-member merge/clean statuses once,
   // when it opens with memberRows === null (mirrors the branch-picker fetch effect above) —
@@ -589,6 +593,10 @@ export function EdtsZone({
     }
     if (dialog.kind === 'delete-confirm') {
       handleDeleteDialogInput(dialog, input, key);
+      return;
+    }
+    if (dialog.kind === 'quick-pick') {
+      handleQuickPickDialogInput(dialog, input, key);
       return;
     }
     if (dialog.kind === 'issues') {
@@ -864,6 +872,10 @@ export function EdtsZone({
       {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} /> : null}
 
       {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
+
+      {dialog.kind === 'quick-pick' ? (
+        <QuickPickDialogView dialog={dialog} pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)} />
+      ) : null}
 
       {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}
     </Box>
