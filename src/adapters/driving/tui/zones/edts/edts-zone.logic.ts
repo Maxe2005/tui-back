@@ -86,6 +86,69 @@ export function formatIssuesSummary(unreachableCount: number, errorCount: number
   return parts.join(', ');
 }
 
+// Story 2.34: the summary above rendered uniformly dim, giving no visual cue that it's worth
+// stopping for — this picks which of the theme's two "something's wrong" colors it should
+// render with. `errors` (a genuine read failure) always outranks `unreachable` (a path just
+// not found) when both are present, same ranking `formatIssuesSummary`'s part order implies.
+export type IssuesSeverity = 'error' | 'warning';
+
+export function resolveIssuesSeverity(unreachableCount: number, errorCount: number): IssuesSeverity | null {
+  if (errorCount > 0) {
+    return 'error';
+  }
+  if (unreachableCount > 0) {
+    return 'warning';
+  }
+  return null;
+}
+
+export type IssueExplanation = {
+  reason: string;
+  suggestion: string;
+};
+
+// Story 2.34: a small extensible registry mapping a BranchDivergenceEntryError.code to a
+// plain-language reason + suggested next step — mirrors failed-result-list.tsx's
+// resolveAssistedAction precedent (a future code gets a new entry here, never a renderer
+// change). Codes come from registry.exists()/manifest.load() failures surfaced by
+// listEdtBranchesDivergence (core/edt/list.ts); manifest-not-found never reaches here — it's
+// silently skipped upstream as a genuinely unmanaged repo.
+const ISSUE_EXPLANATIONS: Record<string, IssueExplanation> = {
+  'manifest-invalid-yaml': {
+    reason: '.tui-back.yaml is not valid YAML',
+    suggestion: 'fix the file’s syntax, then reload this zone',
+  },
+  'manifest-validation-failed': {
+    reason: '.tui-back.yaml fails schema validation',
+    suggestion: 'check its fields against the manifest schema, then reload',
+  },
+  'unknown-module': {
+    reason: '.tui-back.yaml declares a module this tool does not recognize',
+    suggestion: 'fix the module name in the manifest, then reload',
+  },
+  'registry-stat-error': {
+    reason: 'this path could not be checked on disk',
+    suggestion: 'check filesystem permissions for this path',
+  },
+};
+
+export function explainIssueErrorCode(code: string): IssueExplanation {
+  // hasOwnProperty guard (mirrors resolveAssistedAction): a plain lookup would resolve an
+  // inherited Object.prototype key (e.g. a hypothetical code literally named "constructor")
+  // to a truthy non-IssueExplanation value.
+  if (!Object.prototype.hasOwnProperty.call(ISSUE_EXPLANATIONS, code)) {
+    return { reason: 'an unexpected error occurred', suggestion: 'check the message above, then reload this zone' };
+  }
+  return ISSUE_EXPLANATIONS[code] ?? { reason: 'an unexpected error occurred', suggestion: 'check the message above, then reload this zone' };
+}
+
+export function explainUnreachable(): IssueExplanation {
+  return {
+    reason: 'no longer found at this path (moved or deleted)',
+    suggestion: 'open Repo Registry → Clean stale entries to deregister it',
+  };
+}
+
 // Review patch: extracted so the arrow-key row-focus transition is unit-testable directly —
 // the shared renderToString test harness's fake stdin never emits data, so a useInput
 // callback itself is registered but never invoked by any test in the repo (mirrors
@@ -1018,6 +1081,11 @@ export function formatDeleteMemberMeta(row: DeleteMemberRow): string {
   return row.statusError !== undefined ? `${base} (status unknown — defaulted to leave)` : base;
 }
 
+// Story 2.34: the issues dialog is read-only and carries no payload of its own — the
+// unreachable/errors data it renders already lives in the zone's own store selectors, so
+// unlike every other dialog here there's nothing to seed on open.
+export type IssuesDialogState = { kind: 'issues' };
+
 export type EdtDialogState =
   | { kind: 'none' }
   | CreateDialogState
@@ -1025,7 +1093,12 @@ export type EdtDialogState =
   | ModifyDialogState
   | ServiceActionsDialogState
   | AddToEdtDialogState
-  | DeleteDialogState;
+  | DeleteDialogState
+  | IssuesDialogState;
+
+export function initialIssuesDialog(): IssuesDialogState {
+  return { kind: 'issues' };
+}
 
 export function initialCreateDialog(): CreateDialogState {
   return {

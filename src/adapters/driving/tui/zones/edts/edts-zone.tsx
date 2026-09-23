@@ -43,12 +43,14 @@ import {
   initialAddToEdtDialog,
   initialCreateDialog,
   initialDeleteDialog,
+  initialIssuesDialog,
   initialModifyDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
   jumpSelection,
   moveSelection,
   partitionServicesByEdtMembership,
+  resolveIssuesSeverity,
   type PaneFocus,
   resolveActionHint,
   resolveCandidateListState,
@@ -60,6 +62,7 @@ import {
 import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
 import { createCreateDialogHandlers, CreateDialogView } from './dialogs/create-dialog.js';
 import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
+import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
@@ -97,7 +100,8 @@ export function EdtsZone({
     | 'add-to-edt'
     | 'delete-confirm'
     | 'delete-confirm-rejected'
-    | 'delete-confirm-status-error';
+    | 'delete-confirm-status-error'
+    | 'issues';
 }) {
   // Story 2.21: splitterRatios.edts is now a 3-entry array — boundary 0 (index 0) drives the
   // existing list<->detail split below; boundaries 1/2 drive the list column's own two
@@ -169,6 +173,9 @@ export function EdtsZone({
   const rows = status === 'error' ? [] : (services ?? []);
   // Same "never a stale value on error" gating as `rows` above.
   const issuesSummary = status === 'error' ? null : formatIssuesSummary(unreachable.length, errors.length);
+  // Story 2.34: same gating as issuesSummary above — never a stale severity color on a load
+  // error either.
+  const issuesSeverity = status === 'error' ? null : resolveIssuesSeverity(unreachable.length, errors.length);
 
   // Story 2.9 -----------------------------------------------------------------------------
   const [paneFocus, setPaneFocus] = useState<PaneFocus>(initialPaneFocus);
@@ -184,6 +191,9 @@ export function EdtsZone({
     }
     if (initialDialogKind === 'create') {
       return initialCreateDialog();
+    }
+    if (initialDialogKind === 'issues') {
+      return initialIssuesDialog();
     }
     const target = useStore.getState().edts?.[0];
     if (target === undefined) {
@@ -581,12 +591,26 @@ export function EdtsZone({
       handleDeleteDialogInput(dialog, input, key);
       return;
     }
+    if (dialog.kind === 'issues') {
+      // Read-only dialog, no submit path — Esc or Enter both just close it.
+      if (key.escape || key.return) {
+        setDialog({ kind: 'none' });
+      }
+      return;
+    }
 
     // Base edt-list view (no dialog open): Tab cycles which of the three lists is focused;
     // arrows/Home/End move only the currently-focused list — all three stay independently
     // navigable.
     if (key.tab) {
       setPaneFocus((current) => cyclePaneFocus(current));
+      return;
+    }
+
+    // Story 2.34: opens the issues detail dialog from any pane, mirroring the summary line's
+    // own "[i] details" hint — only reachable when there's actually something to show.
+    if (input === 'i' && issuesSummary !== null) {
+      setDialog(initialIssuesDialog());
       return;
     }
 
@@ -721,7 +745,17 @@ export function EdtsZone({
                   unreported. */}
               {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
               {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
-              {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
+              {/* Story 2.34: colored by severity (never the uniform dim gray every other
+                  DimAnnotation line uses) so a listing problem is noticed, not skimmed past —
+                  plus an `[i] details` hint into the read-only issues dialog. */}
+              {issuesSummary ? (
+                <Box paddingLeft={2}>
+                  <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold>
+                    {issuesSeverity === 'error' ? '✖' : '▲'} {issuesSummary}
+                    {!dialogOpen ? '  [i] details' : ''}
+                  </Text>
+                </Box>
+              ) : null}
 
               <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).list} flexBasis={0} minHeight={0} overflow="hidden">
                 {focusedEdt !== undefined ? (
@@ -830,6 +864,8 @@ export function EdtsZone({
       {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} /> : null}
 
       {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
+
+      {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}
     </Box>
   );
 }

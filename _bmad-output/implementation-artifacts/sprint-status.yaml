@@ -41,7 +41,10 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-09-22
+last_updated: 2026-09-23
+# 2026-09-23: Story 2-34 (EDT zone — colored, explained service-listing issues) added directly
+# (not a full Sprint Change Proposal cycle), implemented, and moved to done (full test suite +
+# typecheck + depcheck all green; no separate code-review pass run).
 # 2026-09-22: Story 2-33 (registry deregister stale/unreachable/unmanaged repos) started (bmad-build).
 # 2026-09-22: Story 2-33 (registry deregister stale/unreachable/unmanaged repos) moved to review after code-review + patch loop (bmad-build).
 # 2026-09-16: Story 2-27 set to in-progress (bmad-build).
@@ -122,6 +125,7 @@ development_status:
   2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
   2-32-text-input-line-cursor-navigation-app-wide-adoption: done
   2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: review
+  2-34-edt-zone-colored-explained-service-listing-issues: done
   epic-2-retrospective: optional
 
   epic-3: in-progress

@@ -19,6 +19,8 @@ import {
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
+  explainIssueErrorCode,
+  explainUnreachable,
   formatAvailableActionsHint,
   formatEdtActionHistory,
   formatEdtDetail,
@@ -38,6 +40,7 @@ import {
   resolveBaseBranchMode,
   resolveCandidateListState,
   resolveActionHint,
+  resolveIssuesSeverity,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
@@ -153,6 +156,50 @@ describe('formatIssuesSummary', () => {
 
   it('combines both counts', () => {
     expect(formatIssuesSummary(3, 2)).toBe('3 unreachable, 2 errors');
+  });
+});
+
+// Story 2.34: severity picks which of the theme's two "something's wrong" colors the summary
+// line renders with.
+describe('resolveIssuesSeverity', () => {
+  it('returns null when there is nothing to report', () => {
+    expect(resolveIssuesSeverity(0, 0)).toBeNull();
+  });
+
+  it('returns warning when only unreachable is non-empty', () => {
+    expect(resolveIssuesSeverity(2, 0)).toBe('warning');
+  });
+
+  it('returns error when errors is non-empty, even alongside unreachable', () => {
+    expect(resolveIssuesSeverity(0, 1)).toBe('error');
+    expect(resolveIssuesSeverity(3, 1)).toBe('error');
+  });
+});
+
+describe('explainIssueErrorCode', () => {
+  it('resolves a known code to its reason + suggestion', () => {
+    const explanation = explainIssueErrorCode('manifest-invalid-yaml');
+    expect(explanation.reason).toContain('YAML');
+    expect(explanation.suggestion.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to a generic explanation for an unrecognized code, never a blank one', () => {
+    const explanation = explainIssueErrorCode('some-future-code');
+    expect(explanation.reason.length).toBeGreaterThan(0);
+    expect(explanation.suggestion.length).toBeGreaterThan(0);
+  });
+
+  it('guards against an inherited Object.prototype key (mirrors resolveAssistedAction)', () => {
+    const explanation = explainIssueErrorCode('constructor');
+    expect(explanation.reason).toBe('an unexpected error occurred');
+  });
+});
+
+describe('explainUnreachable', () => {
+  it('always points at Repo Registry -> Clean stale entries', () => {
+    const explanation = explainUnreachable();
+    expect(explanation.suggestion).toContain('Repo Registry');
+    expect(explanation.suggestion).toContain('Clean stale entries');
   });
 });
 
@@ -393,6 +440,26 @@ describe('EdtsZone (story 2.6)', () => {
     const output = await renderToString(<EdtsZone useStore={store} />);
     expect(output).toContain('2 unreachable');
     expect(output).toContain('1 error');
+    // Story 2.34: the "[i] details" hint into the issues dialog, shown whenever the summary is.
+    expect(output).toContain('[i] details');
+  });
+
+  it('opens a read-only issues dialog explaining each unreachable/error entry (story 2.34)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranchesStatus: 'idle',
+      edtsBranches: [service({ service: 'api-gateway' })],
+      edtsUnreachable: ['/repos/gone-a'],
+      edtsErrors: [{ path: '/repos/bad', code: 'manifest-invalid-yaml', message: 'Invalid .tui-back.yaml' }],
+      loadEdtsBranches: noopLoad,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="issues" />);
+    expect(output).toContain('SERVICE LISTING ISSUES');
+    expect(output).toContain('/repos/gone-a');
+    expect(output).toContain('Clean stale entries');
+    expect(output).toContain('/repos/bad');
+    expect(output).toContain('Invalid .tui-back.yaml');
+    expect(output).toContain('YAML');
   });
 
   it('shows no summary line when unreachable/errors are both empty', async () => {
