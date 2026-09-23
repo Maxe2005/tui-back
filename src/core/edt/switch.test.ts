@@ -132,6 +132,7 @@ function makeParams(overrides: Partial<SwitchActiveEdtParams> = {}): SwitchActiv
     edtRegistryResourceKey: overrides.edtRegistryResourceKey ?? '/cfg/edts.yaml',
     topic: overrides.topic ?? 'target-topic',
     force: overrides.force,
+    onDirtyReposBeforeSwitch: overrides.onDirtyReposBeforeSwitch,
   };
 }
 
@@ -242,9 +243,14 @@ describe('switchActiveEdt — happy path (target member + non-members)', () => {
     // to the shared branch, regardless of stale membership in the now-inactive outgoing EDT.
     expect(calls(git.checkout)).toContainEqual(['/repo/b', 'development']);
     expect(calls(git.checkout)).toContainEqual(['/repo/c', 'development']);
-    // Non-members are never stashed here (they reported clean) and never restoreStash'd.
+    // Non-members report clean here, so neither is stashed — but restoreStash is still called
+    // unconditionally for each of them (the fixed 'tui-back:shared' tag), mirroring the
+    // member's own unconditional post-checkout restore; both are no-ops since git.hasStash
+    // reports nothing to pop.
     expect(calls(git.stashSave)).toHaveLength(1);
-    expect(calls(git.restoreStash)).toHaveLength(1);
+    expect(calls(git.restoreStash)).toHaveLength(3);
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/b', 'tui-back:shared']);
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/c', 'tui-back:shared']);
 
     expect(calls(state.writeActiveEdt)).toEqual([['target-ulid']]);
     expect(calls(edtRegistry.setStatus)).toContainEqual(['target-ulid', 'active']);
@@ -281,8 +287,10 @@ describe('switchActiveEdt — happy path (target member + non-members)', () => {
       });
     }
     expect(calls(git.fetch)).toHaveLength(0);
-    // A checkout failure never reaches the restore step for that repo.
-    expect(calls(git.restoreStash)).toHaveLength(0);
+    // A checkout failure never reaches the restore step for that repo — but the two
+    // non-members (b, c) checked out fine and still get their unconditional restore call.
+    expect(calls(git.restoreStash)).not.toContainEqual(['/repo/a', expect.anything()]);
+    expect(calls(git.restoreStash)).toHaveLength(2);
     // state.json still gets written despite the per-repo failure (createEdt's philosophy).
   });
 });
@@ -558,5 +566,150 @@ describe('switchActiveEdt — target member deregistered from RegistryPort (revi
         detail: { code: 'repo-not-registered', message: 'Target member /repo/a is no longer in the managed-repo registry' },
       });
     }
+  });
+});
+
+// Bug fix: a dirty non-member's work used to be stashed under the outgoing EDT's ulid and
+// never restored by any code path (an invisible, permanently orphaned stash). It's now
+// tagged with a fixed, repo-scoped tag and popped back unconditionally, right after checkout,
+// in this same call.
+describe('switchActiveEdt — non-member stash round-trip (bug fix)', () => {
+  it('stashes a dirty non-member under the fixed shared tag and restores it after checkout, in call order', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({ service: 'svc-b', outcome: 'switched' });
+    }
+    expect(calls(git.stashSave)).toContainEqual(['/repo/b', 'tui-back:shared']);
+    expect(calls(git.checkout)).toContainEqual(['/repo/b', 'development']);
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/b', 'tui-back:shared']);
+
+    const stashCall = (git.stashSave as unknown as Mock).mock.invocationCallOrder[0];
+    const checkoutCall = (git.checkout as unknown as Mock).mock.invocationCallOrder.find(
+      (_order: number, index: number) => (git.checkout as unknown as Mock).mock.calls[index]?.[0] === '/repo/b',
+    );
+    const restoreCall = (git.restoreStash as unknown as Mock).mock.invocationCallOrder.find(
+      (_order: number, index: number) => (git.restoreStash as unknown as Mock).mock.calls[index]?.[0] === '/repo/b',
+    );
+    expect(stashCall).toBeLessThan(checkoutCall as number);
+    expect(checkoutCall as number).toBeLessThan(restoreCall as number);
+  });
+
+  it('still restores a clean non-member unconditionally (heals a pre-existing orphaned stash left by the old code path)', async () => {
+    const git = fakeGit(); // every repo reports clean by default
+
+    const result = await switchActiveEdt(makeParams({ git }));
+
+    expect(result.ok).toBe(true);
+    expect(calls(git.stashSave)).toHaveLength(0);
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/b', 'tui-back:shared']);
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/c', 'tui-back:shared']);
+  });
+
+  it('a stash-pop failure on a non-member is `failed`, never thrown, and leaves the stash recoverable via git itself', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      restoreStash: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/b' ? err('git-stash-pop-error', 'conflict popping stash') : ok(undefined),
+      ),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'failed',
+        detail: { code: 'git-stash-pop-error', message: 'conflict popping stash' },
+      });
+    }
+  });
+});
+
+// Bug fix: the preview/confirm seam. Only exercised when the caller opts in via
+// onDirtyReposBeforeSwitch — the CLI path never passes it and gets today's unchanged behavior.
+describe('switchActiveEdt — dirty-repo preview/confirm seam (bug fix)', () => {
+  it('does not run the preview scan at all when no callback is supplied (CLI parity)', async () => {
+    const git = fakeGit();
+
+    const result = await switchActiveEdt(makeParams({ git }));
+
+    expect(result.ok).toBe(true);
+    // One hasUncommittedChanges read per registered repo (3), not doubled by a preview pass.
+    expect(calls(git.hasUncommittedChanges)).toHaveLength(REPOS.length);
+  });
+
+  it('never invokes the callback when every repo is clean', async () => {
+    const git = fakeGit();
+    const onDirtyReposBeforeSwitch = vi.fn(async () => 'proceed' as const);
+
+    const result = await switchActiveEdt(makeParams({ git, onDirtyReposBeforeSwitch }));
+
+    expect(result.ok).toBe(true);
+    expect(calls(onDirtyReposBeforeSwitch)).toHaveLength(0);
+  });
+
+  it('passes one row per dirty repo (member and non-member), before any checkout, when the target and a non-member are both dirty', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' || repoPath === '/repo/b')),
+    });
+    let checkoutCallsWhenAsked = -1;
+    const onDirtyReposBeforeSwitch = vi.fn(async () => {
+      checkoutCallsWhenAsked = calls(git.checkout).length;
+      return 'proceed' as const;
+    });
+
+    const result = await switchActiveEdt(makeParams({ git, onDirtyReposBeforeSwitch }));
+
+    expect(result.ok).toBe(true);
+    expect(calls(onDirtyReposBeforeSwitch)).toEqual([
+      [
+        expect.arrayContaining([
+          { service: 'svc-a', repoPath: '/repo/a', scope: 'member' },
+          { service: 'svc-b', repoPath: '/repo/b', scope: 'non-member' },
+        ]),
+      ],
+    ]);
+    expect(calls(onDirtyReposBeforeSwitch)[0]?.[0]).toHaveLength(2);
+    // Called before any repo is touched.
+    expect(checkoutCallsWhenAsked).toBe(0);
+  });
+
+  it('a "cancel" answer aborts before any repo is touched and leaves state.json/edts.yaml untouched', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+    });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => 'cancel' as const);
+
+    const result = await switchActiveEdt(makeParams({ git, state, edtRegistry, onDirtyReposBeforeSwitch }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'switch-cancelled-by-user' } });
+    expect(calls(git.stashSave)).toHaveLength(0);
+    expect(calls(git.checkout)).toHaveLength(0);
+    expect(calls(state.writeActiveEdt)).toHaveLength(0);
+    expect(calls(edtRegistry.setStatus)).toHaveLength(0);
+  });
+
+  it('a "proceed" answer lets the switch continue exactly as usual', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+    });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => 'proceed' as const);
+
+    const result = await switchActiveEdt(makeParams({ git, onDirtyReposBeforeSwitch }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({ service: 'svc-b', outcome: 'switched' });
+    }
+    expect(calls(git.checkout)).toContainEqual(['/repo/b', 'development']);
   });
 });
