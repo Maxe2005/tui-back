@@ -19,6 +19,8 @@ import {
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
+  explainIssueErrorCode,
+  explainUnreachable,
   formatAvailableActionsHint,
   formatEdtActionHistory,
   formatEdtDetail,
@@ -38,6 +40,7 @@ import {
   resolveBaseBranchMode,
   resolveCandidateListState,
   resolveActionHint,
+  resolveIssuesSeverity,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
@@ -153,6 +156,50 @@ describe('formatIssuesSummary', () => {
 
   it('combines both counts', () => {
     expect(formatIssuesSummary(3, 2)).toBe('3 unreachable, 2 errors');
+  });
+});
+
+// Story 2.34: severity picks which of the theme's two "something's wrong" colors the summary
+// line renders with.
+describe('resolveIssuesSeverity', () => {
+  it('returns null when there is nothing to report', () => {
+    expect(resolveIssuesSeverity(0, 0)).toBeNull();
+  });
+
+  it('returns warning when only unreachable is non-empty', () => {
+    expect(resolveIssuesSeverity(2, 0)).toBe('warning');
+  });
+
+  it('returns error when errors is non-empty, even alongside unreachable', () => {
+    expect(resolveIssuesSeverity(0, 1)).toBe('error');
+    expect(resolveIssuesSeverity(3, 1)).toBe('error');
+  });
+});
+
+describe('explainIssueErrorCode', () => {
+  it('resolves a known code to its reason + suggestion', () => {
+    const explanation = explainIssueErrorCode('manifest-invalid-yaml');
+    expect(explanation.reason).toContain('YAML');
+    expect(explanation.suggestion.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to a generic explanation for an unrecognized code, never a blank one', () => {
+    const explanation = explainIssueErrorCode('some-future-code');
+    expect(explanation.reason.length).toBeGreaterThan(0);
+    expect(explanation.suggestion.length).toBeGreaterThan(0);
+  });
+
+  it('guards against an inherited Object.prototype key (mirrors resolveAssistedAction)', () => {
+    const explanation = explainIssueErrorCode('constructor');
+    expect(explanation.reason).toBe('an unexpected error occurred');
+  });
+});
+
+describe('explainUnreachable', () => {
+  it('always points at Repo Registry -> Clean stale entries', () => {
+    const explanation = explainUnreachable();
+    expect(explanation.suggestion).toContain('Repo Registry');
+    expect(explanation.suggestion).toContain('Clean stale entries');
   });
 });
 
