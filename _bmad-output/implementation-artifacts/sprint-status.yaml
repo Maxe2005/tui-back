@@ -124,7 +124,7 @@ development_status:
   2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: backlog
   2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
   2-32-text-input-line-cursor-navigation-app-wide-adoption: done
-  2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: review
+  2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: done
   2-34-edt-zone-colored-explained-service-listing-issues: done
   epic-2-retrospective: optional
 
