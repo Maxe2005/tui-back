@@ -1743,6 +1743,22 @@ As a developer, I want to review and remove stale entries from the managed-repo 
 
 **Implementation notes:** `core/scripts/clean-registry.ts` takes `{registry, manifest, edtRegistry}` and returns `{candidates: StaleRegistryEntry[]}` where `StaleRegistryEntry = {path, reason: 'unreachable' | 'manifest-not-found', memberOfEdts: string[]}` — `memberOfEdts` is populated purely for the AC6 display note, never used to gate removal. A second exported function (or a `paths: string[]` parameter on the same use-case) performs the confirmed removal, calling `registry.remove(path)` per confirmed path with per-path isolation, mirroring `create.ts`'s/`switch.ts`'s own per-repo isolation convention. CLI: `tui-back registry clean` (list-then-confirm interactive on a TTY; `--yes` with repeated `--path <path>` flags for scripted use, consistent with `update`'s `--all --yes` precedent). TUI: new `RegistryScreenPhase` states (`cleaning` → `clean-results`), reusing `repo-registry-screen.tsx`'s existing candidate-list/checkbox/results pattern (Story 1.9/2.11) rather than inventing a new component. Closes the `deferred-work.md` "`RegistryPort` has no unregister/remove" entry (Story 1.5 review) once shipped.
 
+### Story 2.34: EDT Zone — Colored, Explained Service-Listing Issues
+
+> Added 2026-09-23 (direct request, not a full Sprint Change Proposal cycle): the `unreachable`/`errors` counts `listEdtBranchesDivergence` already computes (Story 2.6, first surfaced by the "review patch" in Story 2.18) render today as a single dim, easy-to-miss line ("1 error" / "2 unreachable, 3 errors") with no way to see *which* repo is affected, *why*, or what to do about it. Real-usage feedback: the line blends into the rest of the dim UI chrome and gives no path to a fix.
+
+As a developer, I want the unreachable/error summary in the EDT zone to stand out and to explain each affected repo, so that I notice a listing problem immediately and know what to do about it instead of squinting at a vague count.
+
+**Acceptance Criteria:**
+
+**Given** `unreachable.length > 0` or `errors.length > 0` **When** the SERVICES list renders **Then** the summary line is colored by severity — `colors.error` (with a `✖` glyph) when `errors.length > 0`, else `colors.warning` (with a `▲` glyph) when only `unreachable` is non-empty — instead of the current uniform dim gray; the `status === 'error'` gating that already hides a stale summary during a load failure (Story 2.18 review fix) is unchanged.
+
+**Given** the colored summary line **When** no dialog is open **Then** it carries a `[i] details` hint, and pressing `i` from any of the three list panes opens a new read-only "SERVICE LISTING ISSUES" dialog — the zone's first dialog with no submit action, closed by `Esc` or `Enter`.
+
+**Given** the issues dialog **When** open **Then** it lists every `unreachable` path and every `errors` entry as its own row: the path, a plain-language reason, the original error message (errors only), and a suggested next step — `unreachable` rows point at the Repo Registry screen's "Clean stale entries" action (Story 2.33); `errors` rows resolve their `code` against a small extensible explanation registry (mirrors `resolveAssistedAction`'s precedent in `failed-result-list.tsx`), falling back to a generic "check the message above" note for an unrecognized code rather than rendering nothing.
+
+**Implementation notes:** `edts-zone.logic.ts` gains `resolveIssuesSeverity(unreachableCount, errorCount)` and an `ISSUE_EXPLANATIONS` registry (+ `explainIssueErrorCode`/`explainUnreachable`), pure and unit-tested directly, same convention as `formatIssuesSummary`. New `dialogs/issues-dialog.tsx` (`IssuesDialogView`) takes `unreachable`/`errors` as props (not dialog state — the dialog carries no payload of its own, just `{ kind: 'issues' }`, since the data already lives in the zone). No new store fields, no new port methods.
+
 ## Epic 3: Group Update & Migrations
 
 A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
