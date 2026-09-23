@@ -1181,7 +1181,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
   it('Down from the input enters the grid at the top of the first column; Enter on the highlighted cell completes the query and returns focus to the input (story 2.17)', async () => {
     const store = createAppStore();
-    const { instance, stdin } = mount(store);
+    const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, ':');
@@ -1197,7 +1197,12 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       // Enter (only reachable from input focus) now runs it.
       await press(instance, stdin, KEYS.enter);
 
-      expect(store.getState().currentEdtAction?.type).toBe('create');
+      // Started from the Dashboard zone (mount's default): running edt-create auto-switches to
+      // EDTs (runCommand) and the zone's own currentEdtAction effect immediately consumes the
+      // action and opens the create dialog — so the dialog itself, not the transient
+      // currentEdtAction flag, is what proves the command actually ran.
+      expect(store.getState().activeZone).toBe('edts');
+      expect(stdout.output).toContain('CREATE EDT');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

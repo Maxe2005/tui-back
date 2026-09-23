@@ -29,7 +29,7 @@ import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
-import { COMMANDS, matchCommands, findExactCommand, type Command } from '../commands/commands.js';
+import { COMMANDS, matchCommands, findExactCommand, runCommand, type Command } from '../commands/commands.js';
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same
 // query, with no intervening key, to reveal the grid (Boundaries: "TAB_DOUBLE_PRESS_WINDOW_MS
@@ -515,7 +515,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     if (key.return) {
       const exact = findExactCommand(query, COMMANDS);
       if (exact) {
-        exact.run(useStore, query);
+        runCommand(exact, useStore, query);
         onClose();
       } else {
         setUnknownCommand(true);
