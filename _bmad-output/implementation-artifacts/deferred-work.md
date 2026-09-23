@@ -1,5 +1,23 @@
 # Deferred Work
 
+## Deferred from: review of 2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify (2026-09-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: The quick-pick's `dialog.cursor` is a raw index into a match list recomputed fresh from the live store on every render/keypress, but `cursor` itself only updates on an arrow-key press or an actual filter-text edit — if `edtsRows`/`activeEdtUlid` change from a concurrent source (AD-10: `state.json` + `fs.watch` syncs a CLI-driven change into an open TUI) while the dialog is open and idle, the list can shrink/reorder under an unmoved cursor.
+  evidence: `quick-pick-dialog.tsx`'s `handleQuickPickDialogInput` only clamps `cursor` inside the Up/Down and text-edit branches (`moveSelection`, and `nextCursor = edited.value === current.query ? current.cursor : 0`); Enter's `matches[current.cursor]` guards only the exact `undefined` case (list shrank below the cursor), not a same-length reorder. Surfaced by edge-case-hunter + blind-hunter independently. In practice `QuickPickDialogView` re-renders live, so whatever is highlighted at Enter-time is what gets selected (no display/selection mismatch) — the risk is narrow (requires a concurrent external EDT mutation while the picker sits open and idle) and shared by every other positional-cursor list in this codebase (branch-picker's `pickCursor`, delete-dialog's `memberCursor`, the base EDT list's own focus tracking), none of which re-derive cursor identity against a live-reordering source either. **Track:** worth a codebase-wide look at cursor-by-identity vs. cursor-by-index for live-synced lists, not a fix scoped to this story alone.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: The spec's own Code Map named `edts-zone.styles.test.tsx`/`edts-zone.layout.test.tsx` among the "tests to extend" for the new `quick-pick` dialog kind (mirroring spec-2-29's pattern), but the Tasks & Acceptance checklist only required `.test.tsx`/`.interaction.test.tsx`, and the implementation followed the narrower Tasks list — so the new dialog kind has zero styles/layout coverage.
+  evidence: Flagged by blind-hunter; internal inconsistency between this spec's own Code Map and its Tasks section. Low risk (378 tests across the two extended files already exercise the dialog's behavior and one rendering snapshot), but worth closing the gap if `edts-zone.styles.test.tsx`/`.layout.test.tsx` turn out to assert something dialog-kind-specific that would have caught a real regression.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: No test opens quick-pick when the candidate pool is genuinely empty (not just filtered-to-zero) — reachable in switch mode whenever exactly one EDT exists total (it's active, so the non-active candidate pool is `[]`).
+  evidence: Flagged by blind-hunter. In the zero-*total*-EDTs case the zone's pre-existing "auto-open the create dialog" guard (`edts.length === 0 && dialog.kind === 'none'`, edts-zone.tsx:321) fires first and quick-pick can never open at all, so that sub-case is unreachable — but the "exactly 1 EDT, it's active" sub-case for switch mode specifically *is* reachable and untested.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: `QuickPickDialogView` renders the identical "No matching EDT" wording whether the pool is genuinely empty (nothing to select, ever, for this mode) or just the current filter text matches nothing — unlike the base EDT list's own distinct "No EDTs yet." message for its own true-empty state.
+  evidence: Flagged by blind-hunter. Not incorrect, just imprecise in the genuinely-empty-pool case (most reachable for switch mode with exactly one, active, EDT — see the entry above). Cosmetic wording polish, not a behavior bug.
+
 ## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
