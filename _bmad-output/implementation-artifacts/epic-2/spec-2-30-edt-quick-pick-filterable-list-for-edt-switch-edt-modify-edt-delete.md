@@ -2,8 +2,9 @@
 title: 'EDT Quick-Pick — Filterable List for edt-switch / edt-modify / edt-delete'
 type: 'feature'
 created: '2026-09-23'
-status: 'ready-for-dev'
+status: 'in-progress'
 review_loop_iteration: 0
+baseline_commit: '120835ca0122d9eb3cc54e78ce712a78796745a4'
 context:
   - `{project-root}/_bmad-output/implementation-artifacts/epic-2-context.md`
 ---
