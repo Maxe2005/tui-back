@@ -115,6 +115,119 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  // Bug fix: a dirty repo (member or non-member) about to be auto-stashed is previewed,
+  // by service, before the switch actually touches anything — the developer confirms or
+  // cancels. This fakes switchEdt driving the exact same store fields (switchDirtyRepos /
+  // resolveSwitchDirtyRepos) edt-slice.ts's real onDirtyReposBeforeSwitch seam does — the
+  // real end-to-end wiring through core/edt/switch.ts is covered by edt-slice.test.ts; this
+  // test is about the dialog's own rendering and keystroke routing.
+  it('a dirty-repo preview raised mid-switch renders per-service rows and resumes on Enter (bug fix)', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    let switchCalls = 0;
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
+        switchCalls += 1;
+        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member' }] });
+        const choice = await new Promise<'proceed' | 'cancel'>((resolve) => {
+          store.setState({
+            resolveSwitchDirtyRepos: (c) => {
+              store.setState({ switchDirtyRepos: null });
+              resolve(c);
+            },
+          });
+        });
+        if (choice === 'cancel') {
+          return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch cancelled' } };
+        }
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [], wasInterrupted: false } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open switch-confirm
+      await press(instance, stdin, KEYS.enter); // confirm switch -> raises the preview
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('svc-payments');
+      expect(stdout.output).toContain('outside this EDT');
+      expect(stdout.output).toContain('[Enter] continue anyway');
+
+      await press(instance, stdin, KEYS.enter); // proceed past the preview
+      await instance.waitUntilRenderFlush();
+
+      expect(switchCalls).toBe(1);
+      // Success closes the dialog entirely (and clears the preview along the way).
+      expect(store.getState().switchDirtyRepos).toBeNull();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc on a dirty-repo preview cancels the switch, touching nothing — the base confirm prompt is not re-shown as a fresh dialog', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    let switchCalls = 0;
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
+        switchCalls += 1;
+        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member' }] });
+        const choice = await new Promise<'proceed' | 'cancel'>((resolve) => {
+          store.setState({
+            resolveSwitchDirtyRepos: (c) => {
+              store.setState({ switchDirtyRepos: null });
+              resolve(c);
+            },
+          });
+        });
+        if (choice === 'cancel') {
+          return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch cancelled: uncommitted changes were present' } };
+        }
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [], wasInterrupted: false } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open switch-confirm
+      await press(instance, stdin, KEYS.enter); // confirm switch -> raises the preview
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('[Enter] continue anyway');
+
+      await pressEscape(instance, stdin); // cancel the preview, not the whole dialog
+      await instance.waitUntilRenderFlush();
+
+      expect(switchCalls).toBe(1);
+      expect(store.getState().switchDirtyRepos).toBeNull();
+      expect(stdout.output).toContain('Switch cancelled');
+      // Still in switch-confirm (not a fresh dialog) — a second Enter re-invokes switchEdt
+      // directly rather than opening a brand-new dialog.
+      await press(instance, stdin, KEYS.enter);
+      expect(switchCalls).toBe(2);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt, and Escape cancels without forcing', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });

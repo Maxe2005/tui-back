@@ -124,6 +124,9 @@ export function EdtsZone({
   const loadEdts = useStore((state) => state.loadEdts);
   const createEdtAction = useStore((state) => state.createEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
+  // Bug fix: the switch dirty-repo confirm seam (edt-slice.ts).
+  const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
+  const resolveSwitchDirtyRepos = useStore((state) => state.resolveSwitchDirtyRepos);
   const modifyEdtAction = useStore((state) => state.modifyEdt);
   const deleteEdtAction = useStore((state) => state.deleteEdt);
   const resolveMemberDeleteStatusesAction = useStore((state) => state.resolveMemberDeleteStatuses);
@@ -482,6 +485,8 @@ export function EdtsZone({
     logEdtAction,
     setCurrentEdtAction,
     focusedEdt,
+    switchDirtyRepos,
+    resolveSwitchDirtyRepos,
   });
   const { handleCreateInput } = createCreateDialogHandlers({
     setDialog,
@@ -863,7 +868,7 @@ export function EdtsZone({
 
       {dialog.kind === 'create' ? <CreateDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
 
-      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} /> : null}
+      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} /> : null}
 
       {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
 
