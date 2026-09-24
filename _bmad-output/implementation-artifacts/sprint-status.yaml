@@ -129,7 +129,7 @@ development_status:
   2-32-text-input-line-cursor-navigation-app-wide-adoption: done
   2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: done
   2-34-edt-zone-colored-explained-service-listing-issues: done
-  2-35-edt-creation-core-per-service-branch-plans-remote-branches: review
+  2-35-edt-creation-core-per-service-branch-plans-remote-branches: done
   2-36-edt-creation-wizard-shell-step-navigation-name-services-steps: backlog
   2-37-edt-creation-wizard-step-3-global-branch-strategy-per-service-overrides: backlog
   2-38-edt-creation-wizard-step-4-activation-switch-choice: backlog
