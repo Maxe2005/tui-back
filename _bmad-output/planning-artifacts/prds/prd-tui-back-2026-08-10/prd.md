@@ -142,6 +142,12 @@ At EDT creation, a developer can have the tool create a working branch in each s
 > TUI's mandatory flow — branch creation is no longer a developer choice in the TUI (always
 > happens when ≥1 member is selected), only the base branch and naming mode remain choices.
 > `core` still exposes the no-branch-creation shape for non-TUI driving adapters.
+>
+> Amended 2026-09-24 (Sprint Change Proposal, Stories 2.35/2.37): "One base-branch choice and one
+> naming mode apply to the whole creation action" becomes "one *global* branch strategy (base +
+> name) applies by default, and any member service may override it individually — create from its
+> own base, or attach an existing local/remote branch, optionally renamed". The TUI flow still
+> always gives every member a branch; the CLI keeps the original whole-action shape.
 
 #### FR-5: Modify an EDT after creation
 
@@ -417,6 +423,13 @@ These are trust bars every Must-scope capability already has to satisfy, not fea
 ### Safety — Data Loss
 
 - Uncommitted work is always auto-preserved on any tool-triggered branch switch — an EDT switch (FR-6) or a non-member repo being kept on `development` (FR-8) — checked, not assumed, before either proceeds.
+
+> Amended 2026-09-24 (Sprint Change Proposal, Story 2.38): single, consent-gated exception — when
+> activating the *first* EDT (no outgoing EDT exists to stash against), if a checkout would
+> overwrite uncommitted files, the tool pauses and lists them; the developer may retry after
+> fixing by hand, or explicitly choose to overwrite after a second confirmation naming every file
+> that will be discarded. Nothing is ever discarded without that explicit, file-listed consent;
+> every other tool-triggered switch keeps the auto-preserve guarantee unchanged.
 
 ## 5. Non-Goals (Explicit)
 
