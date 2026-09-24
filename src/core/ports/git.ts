@@ -31,6 +31,9 @@ export interface GitPort {
   // is passed (story 2.4) and the adapter has an EdtRegistryPort wired in, it additionally
   // rejects a branchName already registered as a *different* EDT's own branch for this repo.
   assertAllowedBranch(repoPath: string, branchName: string, edtId?: string): Promise<Result<void>>;
+  // Creates branchName from baseBranch without checking it out. Story 2.35: baseBranch may be
+  // a local branch (`refs/heads/`) or a remote-tracking ref (`refs/remotes/`, e.g.
+  // `origin/release`); the new branch never inherits an upstream from its base (`--no-track`).
   createBranch(repoPath: string, branchName: string, baseBranch: string): Promise<Result<void>>;
   // Deletes a branch ref that this tool created (rollback path: a failed EDT creation must
   // not leave orphaned branch refs behind) or that a developer explicitly chose to delete
@@ -136,8 +139,20 @@ export interface GitPort {
   // listBranches stays local-only") — never fetches, never lists remote-tracking refs.
   listBranches(repoPath: string): Promise<Result<string[]>>;
   // Story 2.26: renames a local branch ref (`git branch -m`) — backs both Pick existing's
-  // per-row inline-rename action and Rename current. Internally gates the *new* name via
+  // per-row inline-rename action and Rename current. Story 2.35: gates *both* names via
   // assertAllowedBranch (no edtId, mirroring createBranch's own gate) before touching git, so
-  // a rename can never land on a shared/protected branch name any more than a create can.
+  // a rename can never land on a shared/protected branch name any more than a create can, nor
+  // rename a shared/protected branch (e.g. `development`) away.
   renameBranch(repoPath: string, oldName: string, newName: string): Promise<Result<void>>;
+  // Story 2.35: the remote-tracking refs already known locally (`refs/remotes/`), as
+  // `<remote>/<branch>` names (e.g. `origin/feat/x`); the symbolic `<remote>/HEAD` ref is
+  // excluded. Never fetches — it lists only what the last fetch left behind. listBranches
+  // stays local-only; this is its remote-side sibling.
+  listRemoteBranches(repoPath: string): Promise<Result<string[]>>;
+  // Story 2.35: creates local branch `localName` tracking the remote-tracking ref `remoteRef`
+  // (`git branch --track -- <localName> <remoteRef>`) — a ref write only, never a checkout.
+  // Gates `localName` via assertAllowedBranch before any git call; `branch-exists` when
+  // `localName` already exists locally; `remote-branch-missing` when `refs/remotes/<remoteRef>`
+  // is absent (never fetches to find it).
+  createTrackingBranch(repoPath: string, localName: string, remoteRef: string): Promise<Result<void>>;
 }

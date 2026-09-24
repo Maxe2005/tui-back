@@ -463,3 +463,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
   summary: `filterHistoryKeyString`'s flat `service:${repoPath}:${mode}` encoding is ambiguous if a `repoPath` ever contains a literal colon (e.g. a Windows-style path) — safe today since the key is used only opaquely, but fragile for any future code that needs to decode it.
   evidence: `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`'s `filterHistoryKeyString` joins scope/repoPath/mode with `:` and is never parsed back today. Surfaced by review (blind-hunter). **Track:** switch to a safer separator or a structured (non-string) key before any decode-needing code (e.g. the manifest-removal GC above) is written against it.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-35-edt-creation-core-per-service-branch-plans-remote-branches.md`
+  summary: Remote-only branch plans derive the local name by stripping the first path segment, which is wrong for remote names containing a slash (e.g. `team/fork/feat/q` → `fork/feat/q`).
+  evidence: `listRemoteBranches` returns flat `<remote>/<branch>` strings, so core cannot tell where a slashed remote name ends; fixing it needs `git remote` or structured `{remote, branch}` entries.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-35-edt-creation-core-per-service-branch-plans-remote-branches.md`
+  summary: Picking `origin/x` in an `existing` plan when a local `x` already exists fails with `branch-exists` instead of offering the local branch — Story 2.37's wizard should steer the choice (or core should fall back to the gated local branch).
+  evidence: `createTrackingBranch` rejects a colliding local name by design; the re-attach case (local `x` already tracking `origin/x`) is common and currently a dead end.

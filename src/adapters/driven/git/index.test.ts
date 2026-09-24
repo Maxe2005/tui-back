@@ -22,6 +22,7 @@ import {
   checkoutBranch,
   createBranch,
   createGitPort,
+  createTrackingBranch,
   currentBranch,
   deleteBranch,
   discardPaths,
@@ -35,6 +36,7 @@ import {
   isRebaseInProgress,
   listBranches,
   listDirtyPaths,
+  listRemoteBranches,
   mergeBranch,
   pullBranch,
   renameBranch,
@@ -922,6 +924,185 @@ describe('renameBranch', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     expect(branchExists(repo, 'feat/old')).toBe(true);
   });
+
+  it('rejects an oldName that is a shared/protected branch before any git invocation (story 2.35)', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await renameBranch(manifest, repo, 'development', 'feat/renamed');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(repo, 'development')).toBe(true);
+    expect(branchExists(repo, 'feat/renamed')).toBe(false);
+  });
+
+  it('rejects an oldName equal to the repo manifest sharedBranch (story 2.35)', async () => {
+    const repo = await makeGitRepo('staging');
+    expect(runGit(repo, ['branch', 'staging']).status).toBe(0);
+
+    const result = await renameBranch(manifest, repo, 'staging', 'feat/renamed');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(repo, 'staging')).toBe(true);
+  });
+});
+
+// Story 2.35 — a clone of makeGitRepoOriginAndClone's origin carries no manifest (origin's
+// .tui-back.yaml is untracked, so it is never cloned); the gated writes below need one.
+async function makeManagedClone(): Promise<{ origin: string; clone: string }> {
+  const pair = await makeGitRepoOriginAndClone();
+  await writeFile(
+    join(pair.clone, '.tui-back.yaml'),
+    'service: clone\ncontainer: clone\nmigrationCommand: m\nmodules: {}\n',
+  );
+  return pair;
+}
+
+function remoteRefExists(dir: string, ref: string): boolean {
+  return runGit(dir, ['show-ref', '--verify', '--quiet', `refs/remotes/${ref}`]).status === 0;
+}
+
+function upstreamOf(dir: string, branch: string): string | null {
+  const result = runGit(dir, ['rev-parse', '--abbrev-ref', `${branch}@{u}`]);
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+describe('listRemoteBranches (story 2.35)', () => {
+  it('lists remote-tracking refs as <remote>/<branch>, excluding the symbolic <remote>/HEAD', async () => {
+    const { clone } = await makeGitRepoOriginAndClone();
+    expect(remoteRefExists(clone, 'origin/HEAD')).toBe(true);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect([...result.data].sort()).toEqual(['origin/development', 'origin/feat/remote-only']);
+      expect(result.data).not.toContain('origin');
+      expect(result.data).not.toContain('origin/HEAD');
+    }
+  });
+
+  it('keeps a real branch whose name ends in /HEAD, dropping only the symbolic origin/HEAD (review)', async () => {
+    const origin = await makeGitRepo();
+    expect(runGit(origin, ['branch', 'release/HEAD']).status).toBe(0);
+    const clone = await mkdtemp(join(tmpdir(), 'tui-back-git-clone-head-'));
+    tmpDirs.push(clone);
+    expect(spawnSync('git', ['clone', origin, clone], { encoding: 'utf8' }).status).toBe(0);
+    expect(remoteRefExists(clone, 'origin/HEAD')).toBe(true);
+    expect(remoteRefExists(clone, 'origin/release/HEAD')).toBe(true);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect([...result.data].sort()).toEqual(['origin/development', 'origin/release/HEAD']);
+    }
+  });
+
+  it('never fetches — a branch pushed to origin after the clone is not listed', async () => {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    expect(runGit(origin, ['branch', 'feat/after-clone']).status).toBe(0);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).not.toContain('origin/feat/after-clone');
+    }
+    expect(remoteRefExists(clone, 'origin/feat/after-clone')).toBe(false);
+  });
+
+  it('returns an empty list for a repo with no remotes', async () => {
+    const repo = await makeGitRepo();
+
+    expect(await listRemoteBranches(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('reports a controlled error outside a git repository', async () => {
+    const dir = await makePlainDir();
+
+    expect(await listRemoteBranches(dir)).toMatchObject({
+      ok: false,
+      error: { code: 'git-list-remote-branches-error' },
+    });
+  });
+});
+
+describe('createTrackingBranch (story 2.35)', () => {
+  it('creates a local branch tracking the remote ref, without checking it out', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createTrackingBranch(manifest, clone, 'feat/remote-only', 'origin/feat/remote-only');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(clone, 'feat/remote-only')).toBe(true);
+    expect(upstreamOf(clone, 'feat/remote-only')).toBe('origin/feat/remote-only');
+    expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+  });
+
+  it('accepts a local name different from the remote branch name', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createTrackingBranch(manifest, clone, 'mine', 'origin/feat/remote-only');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(upstreamOf(clone, 'mine')).toBe('origin/feat/remote-only');
+  });
+
+  it('rejects a shared/protected local name before any git invocation', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createTrackingBranch(manifest, clone, 'preprod', 'origin/feat/remote-only');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(clone, 'preprod')).toBe(false);
+  });
+
+  it('rejects an already-existing local name with branch-exists', async () => {
+    const { clone } = await makeManagedClone();
+    expect(runGit(clone, ['branch', 'feat/remote-only']).status).toBe(0);
+
+    const result = await createTrackingBranch(manifest, clone, 'feat/remote-only', 'origin/feat/remote-only');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-exists' } });
+    expect(upstreamOf(clone, 'feat/remote-only')).toBeNull();
+  });
+
+  it('rejects a missing remote ref with remote-branch-missing (never fetches it)', async () => {
+    const { origin, clone } = await makeManagedClone();
+    expect(runGit(origin, ['branch', 'feat/after-clone']).status).toBe(0);
+
+    const result = await createTrackingBranch(manifest, clone, 'feat/after-clone', 'origin/feat/after-clone');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'remote-branch-missing' } });
+    expect(branchExists(clone, 'feat/after-clone')).toBe(false);
+    expect(remoteRefExists(clone, 'origin/feat/after-clone')).toBe(false);
+  });
+});
+
+describe('createBranch — remote-tracking base (story 2.35)', () => {
+  it('creates a branch from a remote-tracking ref with no local counterpart, without an upstream', async () => {
+    const { clone } = await makeManagedClone();
+    expect(branchExists(clone, 'feat/remote-only')).toBe(false);
+
+    const result = await createBranch(manifest, clone, 'feat/cut', 'origin/feat/remote-only');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(clone, 'feat/cut')).toBe(true);
+    expect(runGit(clone, ['rev-parse', 'feat/cut']).stdout.trim()).toBe(
+      runGit(clone, ['rev-parse', 'refs/remotes/origin/feat/remote-only']).stdout.trim(),
+    );
+    expect(upstreamOf(clone, 'feat/cut')).toBeNull();
+    expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+  });
+
+  it('still reports base-branch-missing when neither a local nor a remote-tracking ref exists', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createBranch(manifest, clone, 'feat/cut', 'origin/nope');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'base-branch-missing' } });
+    expect(branchExists(clone, 'feat/cut')).toBe(false);
+  });
 });
 
 describe('fetchBranch', () => {
@@ -1252,6 +1433,22 @@ describe('createGitPort', () => {
     expect(await port.renameBranch(repo, 'feat/x', 'feat/y')).toEqual({ ok: true, data: undefined });
     expect(branchExists(repo, 'feat/x')).toBe(false);
     expect(branchExists(repo, 'feat/y')).toBe(true);
+  });
+
+  it('wires listRemoteBranches/createTrackingBranch (story 2.35) behind the factory pattern', async () => {
+    const { clone } = await makeManagedClone();
+    const port = createGitPort(manifest);
+
+    const listed = await port.listRemoteBranches(clone);
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.data).toContain('origin/feat/remote-only');
+    }
+    expect(await port.createTrackingBranch(clone, 'feat/q', 'origin/feat/remote-only')).toEqual({
+      ok: true,
+      data: undefined,
+    });
+    expect(upstreamOf(clone, 'feat/q')).toBe('origin/feat/remote-only');
   });
 
   it('wires the story 3.4 methods behind the factory pattern', async () => {

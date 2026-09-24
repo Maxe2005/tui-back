@@ -211,6 +211,8 @@ describe('subcommand registry guards', () => {
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
+      listRemoteBranches: async () => ok([]),
+      createTrackingBranch: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
     };

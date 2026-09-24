@@ -15,7 +15,7 @@ import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
-import { createEdt, type CreateBranchOptions, type CreateEdtParams } from './create.js';
+import { createEdt, type CreateBranchOptions, type CreateEdtParams, type MemberBranchPlan } from './create.js';
 
 const tmpDirs: string[] = [];
 
@@ -114,6 +114,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
     ...overrides,
@@ -595,5 +597,577 @@ describe('createEdt — registry write under lock (AD-9)', () => {
       ['/repo/b', 'feat/x', true],
     ]);
     expect(await readdir(params.edtsBaseDir)).toEqual([]);
+  });
+});
+
+// Story 2.35 — per-member branch plans (`memberPlans`), authoritative when present.
+describe('createEdt — per-member branch plans (story 2.35)', () => {
+  // A git fake whose local/remote branch state is declared per repo: branchExistsLocally and
+  // listRemoteBranches answer from these tables instead of fakeGit's blanket defaults.
+  function planGit(
+    state: { local?: Record<string, string[]>; remote?: Record<string, string[]> } = {},
+    overrides: Partial<GitPort> = {},
+  ): GitPort {
+    return fakeGit({
+      branchExistsLocally: vi.fn(async (repoPath: string, branchName: string) =>
+        ok((state.local?.[repoPath] ?? []).includes(branchName)),
+      ),
+      listRemoteBranches: vi.fn(async (repoPath: string) => ok(state.remote?.[repoPath] ?? [])),
+      ...overrides,
+    });
+  }
+
+  async function makePlanParams(
+    memberPlans: Record<string, MemberBranchPlan>,
+    overrides: Partial<CreateEdtParams> = {},
+  ): Promise<CreateEdtParams> {
+    const params = await makeParams(overrides);
+    delete params.branchOptions;
+    return { ...params, memberPlans };
+  }
+
+  function gitWrites(git: GitPort): number {
+    return (
+      calls(git.createBranch).length +
+      calls(git.createTrackingBranch).length +
+      calls(git.renameBranch).length +
+      calls(git.deleteBranch).length
+    );
+  }
+
+  function registeredMembers(params: CreateEdtParams): unknown {
+    return (calls(params.edtRegistry.add)[0][0] as EdtRegistryEntry).members;
+  }
+
+  describe('validation before any write', () => {
+    async function expectRejected(params: CreateEdtParams): Promise<void> {
+      const result = await createEdt(params);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(calls(params.edtRegistry.add)).toHaveLength(0);
+      expect(gitWrites(params.git)).toBe(0);
+      expect(calls(params.git.branchExistsLocally)).toHaveLength(0);
+      expect(await readdir(params.edtsBaseDir)).toEqual([]);
+    }
+
+    it('rejects when neither branchOptions nor memberPlans is provided', async () => {
+      const params = await makeParams();
+      delete params.branchOptions;
+
+      await expectRejected(params);
+    });
+
+    it('rejects a member without a plan', async () => {
+      await expectRejected(
+        await makePlanParams({ '/repo/a': { kind: 'create', base: 'development', name: 'feat/x' } }),
+      );
+    });
+
+    it('rejects a plan keyed by a path that is not a member', async () => {
+      await expectRejected(
+        await makePlanParams({
+          '/repo/a': { kind: 'create', base: 'development', name: 'feat/x' },
+          '/repo/b': { kind: 'create', base: 'development', name: 'feat/x' },
+          '/repo/c': { kind: 'create', base: 'development', name: 'feat/x' },
+        }),
+      );
+    });
+
+    it.each([
+      ['an empty create base', { kind: 'create', base: '', name: 'feat/x' }],
+      ['a blank create name', { kind: 'create', base: 'development', name: '  ' }],
+      ['an empty existing branch', { kind: 'existing', branch: '' }],
+      ['an empty existing renameTo', { kind: 'existing', branch: 'feat/y', renameTo: '' }],
+    ] as Array<[string, MemberBranchPlan]>)('rejects %s', async (_label, plan) => {
+      await expectRejected(
+        await makePlanParams({ '/repo/a': plan, '/repo/b': { kind: 'existing', branch: 'feat/y' } }),
+      );
+    });
+
+    it('rejects a null memberPlans (untyped caller) instead of throwing', async () => {
+      const params = await makePlanParams(null as unknown as Record<string, MemberBranchPlan>);
+
+      await expectRejected(params);
+    });
+
+    it('rejects two plan keys resolving to the same member', async () => {
+      await expectRejected(
+        await makePlanParams({
+          '/repo/a': { kind: 'create', base: 'development', name: 'feat/x' },
+          '/repo/a/': { kind: 'create', base: 'development', name: 'feat/y' },
+          '/repo/b': { kind: 'create', base: 'development', name: 'feat/x' },
+        }),
+      );
+    });
+
+    it.each([
+      ['an unknown plan kind', { kind: 'bogus', branch: 'feat/y' }],
+      ['a non-object plan', 'feat/y'],
+      ['a null plan', null],
+    ])('rejects %s (runtime guard)', async (_label, plan) => {
+      await expectRejected(
+        await makePlanParams({
+          '/repo/a': plan as unknown as MemberBranchPlan,
+          '/repo/b': { kind: 'existing', branch: 'feat/y' },
+        }),
+      );
+    });
+
+    it('resolve()s plan keys like members (a trailing slash still matches)', async () => {
+      const git = planGit();
+      const params = await makePlanParams(
+        {
+          '/repo/a/': { kind: 'create', base: 'development', name: 'feat/x' },
+          '/repo/b': { kind: 'create', base: 'development', name: 'feat/x' },
+        },
+        { git },
+      );
+
+      const result = await createEdt(params);
+
+      expect(result).toMatchObject({ ok: true });
+      expect(calls(git.createBranch)).toEqual([
+        ['/repo/a', 'feat/x', 'development'],
+        ['/repo/b', 'feat/x', 'development'],
+      ]);
+    });
+
+    it('ignores branchOptions entirely when memberPlans is present (authoritative)', async () => {
+      const git = planGit();
+      const params = await makePlanParams(
+        {
+          '/repo/a': { kind: 'create', base: 'develop', name: 'feat/a' },
+          '/repo/b': { kind: 'create', base: 'origin/release', name: 'feat/b' },
+        },
+        { git },
+      );
+      params.branchOptions = GROUPED;
+
+      const result = await createEdt(params);
+
+      expect(result).toMatchObject({ ok: true });
+      expect(calls(git.createBranch)).toEqual([
+        ['/repo/a', 'feat/a', 'develop'],
+        ['/repo/b', 'feat/b', 'origin/release'],
+      ]);
+    });
+  });
+
+  it('create plans: each member uses its own base and name (local and remote bases), never checked out', async () => {
+    const git = planGit();
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'create', base: 'develop', name: 'feat/x' },
+        '/repo/b': { kind: 'create', base: 'origin/release', name: 'feat/r' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results).toEqual([
+      { service: 'svc-/repo/a', outcome: 'created' },
+      { service: 'svc-/repo/b', outcome: 'created' },
+    ]);
+    expect(calls(git.createBranch)).toEqual([
+      ['/repo/a', 'feat/x', 'develop'],
+      ['/repo/b', 'feat/r', 'origin/release'],
+    ]);
+    expect(calls(git.checkout)).toHaveLength(0);
+    expect(calls(git.fetch)).toHaveLength(0);
+    expect(registeredMembers(params)).toEqual([
+      { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/x' },
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/r' },
+    ]);
+  });
+
+  it('create plan: a missing base fails only that member with base-branch-missing', async () => {
+    const git = planGit(
+      {},
+      {
+        createBranch: vi.fn(async (repoPath: string) =>
+          repoPath === '/repo/a' ? err('base-branch-missing', 'Base branch "origin/nope" does not exist') : ok(undefined),
+        ),
+      },
+    );
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'create', base: 'origin/nope', name: 'feat/x' },
+        '/repo/b': { kind: 'create', base: 'develop', name: 'feat/x' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'base-branch-missing' } });
+    expect(result.data.results[1]).toEqual({ service: 'svc-/repo/b', outcome: 'created' });
+    expect(registeredMembers(params)).toEqual([{ service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/x' }]);
+  });
+
+  it('existing local branch: gated, reused as-is with outcome existing-branch', async () => {
+    const git = planGit({ local: { '/repo/a': ['feat/y'], '/repo/b': ['feat/w'] } });
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'feat/y' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results.map((row) => row.outcome)).toEqual(['existing-branch', 'existing-branch']);
+    expect(calls(git.assertAllowedBranch)).toEqual([
+      ['/repo/a', 'feat/y', result.data.ulid],
+      ['/repo/b', 'feat/w', result.data.ulid],
+    ]);
+    expect(gitWrites(git)).toBe(0);
+    expect(calls(git.listRemoteBranches)).toHaveLength(0);
+    expect(registeredMembers(params)).toEqual([
+      { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/y' },
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' },
+    ]);
+  });
+
+  it('existing local protected branch fails with shared-branch-rejected and is not registered', async () => {
+    const git = planGit({ local: { '/repo/a': ['development'], '/repo/b': ['feat/w'] } });
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'development' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'shared-branch-rejected' } });
+    expect(result.data.results[1]).toEqual({ service: 'svc-/repo/b', outcome: 'existing-branch' });
+    expect(registeredMembers(params)).toEqual([{ service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' }]);
+  });
+
+  it('existing local branch + renameTo: renamed, registered under the new name', async () => {
+    const git = planGit({ local: { '/repo/a': ['feat/y'], '/repo/b': ['feat/w'] } });
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'existing', branch: 'feat/y', renameTo: 'feat/z' },
+        '/repo/b': { kind: 'existing', branch: 'feat/w' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'renamed' });
+    expect(calls(git.renameBranch)).toEqual([['/repo/a', 'feat/y', 'feat/z']]);
+    expect(registeredMembers(params)).toEqual([
+      { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/z' },
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' },
+    ]);
+  });
+
+  it('existing local branch + renameTo: a protected old or new name fails only that member', async () => {
+    const git = planGit(
+      { local: { '/repo/a': ['development'], '/repo/b': ['feat/w'] } },
+      {
+        renameBranch: vi.fn(async (_repoPath: string, oldName: string, newName: string) =>
+          SHARED_BRANCHES.includes(oldName) || SHARED_BRANCHES.includes(newName)
+            ? err('shared-branch-rejected', 'protected')
+            : ok(undefined),
+        ),
+      },
+    );
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'existing', branch: 'development', renameTo: 'feat/z' },
+        '/repo/b': { kind: 'existing', branch: 'feat/w', renameTo: 'prod' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results.map((row) => row.detail?.code)).toEqual([
+      'shared-branch-rejected',
+      'shared-branch-rejected',
+    ]);
+    expect(registeredMembers(params)).toEqual([]);
+  });
+
+  it('existing local branch + renameTo equal to branch: no rename, gated, outcome existing-branch', async () => {
+    const git = planGit({ local: { '/repo/a': ['feat/y'], '/repo/b': ['feat/w'] } });
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'existing', branch: 'feat/y', renameTo: 'feat/y' },
+        '/repo/b': { kind: 'existing', branch: 'feat/w' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'existing-branch' });
+    expect(calls(git.renameBranch)).toHaveLength(0);
+    expect(calls(git.assertAllowedBranch).map((args) => args.slice(0, 2))).toContainEqual(['/repo/a', 'feat/y']);
+    expect(registeredMembers(params)).toContainEqual({ service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/y' });
+  });
+
+  describe('cross-EDT gate on existing local branches (AD-8, review)', () => {
+    // Rejects feat/owned as another EDT's own branch whenever an edtId is passed.
+    function crossEdtGit(): GitPort {
+      return planGit(
+        { local: { '/repo/a': ['feat/owned'], '/repo/b': ['feat/w'] } },
+        {
+          assertAllowedBranch: vi.fn(async (_repoPath: string, branchName: string, edtId?: string) =>
+            edtId !== undefined && branchName === 'feat/owned'
+              ? err('branch-owned-by-other-edt', `Branch "${branchName}" belongs to another EDT`)
+              : ok(undefined),
+          ),
+        },
+      );
+    }
+
+    it.each([
+      ['attached as-is', { kind: 'existing', branch: 'feat/owned' }],
+      ['renamed away', { kind: 'existing', branch: 'feat/owned', renameTo: 'feat/mine' }],
+    ] as Array<[string, MemberBranchPlan]>)(
+      'rejects a branch owned by another EDT being %s, with the new EDT ulid as edtId',
+      async (_label, plan) => {
+        const git = crossEdtGit();
+        const params = await makePlanParams(
+          { '/repo/a': plan, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+          { git },
+        );
+
+        const result = await createEdt(params);
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.data.results[0]).toMatchObject({
+          outcome: 'failed',
+          detail: { code: 'branch-owned-by-other-edt' },
+        });
+        expect(result.data.results[1]).toEqual({ service: 'svc-/repo/b', outcome: 'existing-branch' });
+        expect(calls(git.renameBranch)).toHaveLength(0);
+        expect(calls(git.assertAllowedBranch)).toEqual([
+          ['/repo/a', 'feat/owned', result.data.ulid],
+          ['/repo/b', 'feat/w', result.data.ulid],
+        ]);
+        expect(registeredMembers(params)).toEqual([
+          { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' },
+        ]);
+      },
+    );
+  });
+
+  it('existing remote-only branch: tracking branch with the remote segment stripped, outcome created', async () => {
+    const git = planGit({ local: { '/repo/b': ['feat/w'] }, remote: { '/repo/a': ['origin/development', 'origin/feat/q'] } });
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'origin/feat/q' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'created' });
+    expect(calls(git.createTrackingBranch)).toEqual([['/repo/a', 'feat/q', 'origin/feat/q']]);
+    expect(calls(git.fetch)).toHaveLength(0);
+    expect(registeredMembers(params)).toEqual([
+      { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/q' },
+      { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' },
+    ]);
+  });
+
+  it('existing remote-only branch: a colliding local name surfaces branch-exists as that member\'s failure', async () => {
+    const git = planGit(
+      { local: { '/repo/b': ['feat/w'] }, remote: { '/repo/a': ['origin/feat/q'] } },
+      { createTrackingBranch: vi.fn(async () => err('branch-exists', 'Branch "feat/q" already exists')) },
+    );
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'origin/feat/q' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'branch-exists' } });
+    expect(registeredMembers(params)).toEqual([{ service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' }]);
+  });
+
+  it('existing remote-only branch + renameTo: tracking branch under the new name', async () => {
+    const git = planGit({ local: { '/repo/b': ['feat/w'] }, remote: { '/repo/a': ['origin/feat/q'] } });
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'existing', branch: 'origin/feat/q', renameTo: 'mine' },
+        '/repo/b': { kind: 'existing', branch: 'feat/w' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'created' });
+    expect(calls(git.createTrackingBranch)).toEqual([['/repo/a', 'mine', 'origin/feat/q']]);
+    expect(calls(git.renameBranch)).toHaveLength(0);
+    expect(registeredMembers(params)).toContainEqual({ service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'mine' });
+  });
+
+  it('existing remote-only branch + protected renameTo fails only that member', async () => {
+    const git = planGit(
+      { local: { '/repo/b': ['feat/w'] }, remote: { '/repo/a': ['origin/feat/q'] } },
+      {
+        createTrackingBranch: vi.fn(async (_repoPath: string, localName: string) =>
+          SHARED_BRANCHES.includes(localName) ? err('shared-branch-rejected', 'protected') : ok(undefined),
+        ),
+      },
+    );
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'existing', branch: 'origin/feat/q', renameTo: 'preprod' },
+        '/repo/b': { kind: 'existing', branch: 'feat/w' },
+      },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'shared-branch-rejected' } });
+    expect(registeredMembers(params)).toEqual([{ service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' }]);
+  });
+
+  it('existing branch found neither locally nor remotely fails with branch-missing; the EDT is still created', async () => {
+    const git = planGit({ local: { '/repo/b': ['feat/w'] }, remote: { '/repo/a': ['origin/feat/q'] } });
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'nope' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toMatchObject({ outcome: 'failed', detail: { code: 'branch-missing' } });
+    expect(gitWrites(git)).toBe(0);
+    expect(registeredMembers(params)).toEqual([{ service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' }]);
+  });
+
+  it('a local branch wins over a remote-tracking ref of the same spelling', async () => {
+    const git = planGit({
+      local: { '/repo/a': ['origin/feat/q'], '/repo/b': ['feat/w'] },
+      remote: { '/repo/a': ['origin/feat/q'] },
+    });
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'origin/feat/q' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'existing-branch' });
+    expect(calls(git.createTrackingBranch)).toHaveLength(0);
+  });
+
+  it('a git read error while resolving an existing branch fails only that member', async () => {
+    const git = planGit(
+      { local: { '/repo/b': ['feat/w'] } },
+      { listRemoteBranches: vi.fn(async () => err('git-list-remote-branches-error', 'boom')) },
+    );
+    const params = await makePlanParams(
+      { '/repo/a': { kind: 'existing', branch: 'origin/feat/q' }, '/repo/b': { kind: 'existing', branch: 'feat/w' } },
+      { git },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.results[0]).toMatchObject({
+      outcome: 'failed',
+      detail: { code: 'git-list-remote-branches-error' },
+    });
+    expect(result.data.results[1]).toEqual({ service: 'svc-/repo/b', outcome: 'existing-branch' });
+  });
+
+  it('registry write failure: created + tracking branches force-deleted, renamed branches renamed back, existing left alone', async () => {
+    const members = ['/repo/a', '/repo/b', '/repo/c', '/repo/d'];
+    const edtRegistry = fakeEdtRegistry({ add: async () => err('edt-registry-write-error', 'disk full') });
+    const git = planGit({
+      local: { '/repo/c': ['feat/y'], '/repo/d': ['feat/keep'] },
+      remote: { '/repo/b': ['origin/feat/q'] },
+    });
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'create', base: 'develop', name: 'feat/x' },
+        '/repo/b': { kind: 'existing', branch: 'origin/feat/q' },
+        '/repo/c': { kind: 'existing', branch: 'feat/y', renameTo: 'feat/z' },
+        '/repo/d': { kind: 'existing', branch: 'feat/keep' },
+      },
+      { edtRegistry, git, members },
+    );
+
+    const result = await createEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
+    expect(await readdir(params.edtsBaseDir)).toEqual([]);
+    expect(calls(git.deleteBranch)).toEqual([
+      ['/repo/a', 'feat/x', true],
+      ['/repo/b', 'feat/q', true],
+    ]);
+    expect(calls(git.renameBranch)).toEqual([
+      ['/repo/c', 'feat/y', 'feat/z'],
+      ['/repo/c', 'feat/z', 'feat/y'],
+    ]);
+  });
+
+  it('registry write failure: each rollback failure is logged, never thrown', async () => {
+    const edtRegistry = fakeEdtRegistry({ add: async () => err('edt-registry-write-error', 'disk full') });
+    const git = planGit(
+      { local: { '/repo/b': ['feat/y'] } },
+      {
+        deleteBranch: vi.fn(async () => err('git-delete-branch-error', 'delete boom')),
+        renameBranch: vi
+          .fn()
+          .mockResolvedValueOnce(ok(undefined))
+          .mockResolvedValueOnce(err('git-rename-branch-error', 'rename boom')),
+      },
+    );
+    const params = await makePlanParams(
+      {
+        '/repo/a': { kind: 'create', base: 'develop', name: 'feat/x' },
+        '/repo/b': { kind: 'existing', branch: 'feat/y', renameTo: 'feat/z' },
+      },
+      { edtRegistry, git },
+    );
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const result = await createEdt(params);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
+      const logged = consoleError.mock.calls.map((args) => args.join(' '));
+      expect(logged.some((line) => line.includes('feat/x') && line.includes('delete boom'))).toBe(true);
+      expect(logged.some((line) => line.includes('feat/z') && line.includes('rename boom'))).toBe(true);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
