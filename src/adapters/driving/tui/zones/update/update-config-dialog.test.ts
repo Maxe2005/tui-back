@@ -93,15 +93,26 @@ describe('branch editing', () => {
     const created = draft();
 
     const editing = beginUpdateConfigBranchEdit(created, 0);
-    expect(editing).toEqual({ value: 'development', cursor: 'development'.length });
+    expect(editing).toEqual({ value: 'development', cursor: 'development'.length, pickCursor: 0 });
 
-    const stepped = stepUpdateConfigBranchEdit(editing!, 'x', {});
-    expect(stepped).toEqual({ value: 'developmentx', cursor: 'development'.length + 1 });
+    const stepped = stepUpdateConfigBranchEdit(editing!, 'x', {}, []);
+    expect(stepped).toEqual({ value: 'developmentx', cursor: 'development'.length + 1, pickCursor: 0 });
 
     const committed = commitUpdateConfigBranchEdit(created, 0, stepped.value);
     expect(committed.rows[0]?.sourceBranch).toBe('developmentx');
     expect(committed.rows[1]?.sourceBranch).toBe('development');
     expect(committed.error).toBeNull();
+  });
+
+  it('steps Up/Down through the edited row branches without touching the caret', () => {
+    const editing = beginUpdateConfigBranchEdit(draft(), 0)!;
+    const branches = ['development', 'dev-fix', 'main'];
+
+    const down = stepUpdateConfigBranchEdit({ ...editing, value: 'dev', cursor: 3, pickCursor: 0 }, '', { downArrow: true }, branches);
+    expect(down).toEqual({ value: 'dev', cursor: 3, pickCursor: 1 });
+
+    const caret = stepUpdateConfigBranchEdit({ ...editing, value: 'dev', cursor: 3, pickCursor: 1 }, '', { leftArrow: true }, branches);
+    expect(caret).toEqual({ value: 'dev', cursor: 2, pickCursor: 1 });
   });
 
   it('rejects a blank branch inline and keeps the previous branch', () => {
@@ -241,13 +252,55 @@ describe('resolveUpdateConfigKey', () => {
 
   it('routes every keystroke to the branch editor while editing: typing steps, Enter commits, Esc cancels the edit', () => {
     const created = draft();
-    const editing = { value: 'developmen', cursor: 10 };
+    const editing = { value: 'developmen', cursor: 10, pickCursor: 0 };
 
     const stepped = resolveUpdateConfigKey('t', {}, { cursor: 0, editing }, created);
-    expect(stepped).toEqual({ type: 'edit', editing: { value: 'development', cursor: 11 } });
+    expect(stepped).toEqual({ type: 'edit', editing: { value: 'development', cursor: 11, pickCursor: 0 } });
     expect(resolveUpdateConfigKey('', { return: true }, { cursor: 0, editing }, created)).toEqual({ type: 'commit-edit' });
     expect(resolveUpdateConfigKey('', { escape: true }, { cursor: 0, editing }, created)).toEqual({ type: 'cancel-edit' });
     // Esc cancels the edit, never the dialog — and Ctrl stays inert inside the editor too.
     expect(resolveUpdateConfigKey('y', { ctrl: true }, { cursor: 0, editing }, created)).toEqual({ type: 'ignore' });
+  });
+
+  it('first Enter inserts the highlighted branch, second Enter commits (commit-through on zero matches)', () => {
+    const created = draft();
+    const branches = ['development', 'dev-fix', 'main'];
+    const editing = { value: 'dev', cursor: 3, pickCursor: 1 };
+
+    const inserted = resolveUpdateConfigKey('', { return: true }, { cursor: 0, editing }, created, branches);
+    expect(inserted).toEqual({ type: 'edit', editing: { value: 'dev-fix', cursor: 7, pickCursor: 0 } });
+
+    const committed = resolveUpdateConfigKey(
+      '',
+      { return: true },
+      { cursor: 0, editing: { value: 'dev-fix', cursor: 7, pickCursor: 0 } },
+      created,
+      branches,
+    );
+    expect(committed).toEqual({ type: 'commit-edit' });
+
+    // Zero matches: Enter falls straight through to the existing commit path.
+    const empty = resolveUpdateConfigKey('', { return: true }, { cursor: 0, editing: { value: 'zzz', cursor: 3, pickCursor: 0 } }, created, branches);
+    expect(empty).toEqual({ type: 'commit-edit' });
+  });
+
+  it('Enter on an exact value with a stray highlight elsewhere commits the exact value (never clobbers it)', () => {
+    const created = draft();
+    const branches = ['main', 'main-x'];
+    const editing = { value: 'main', cursor: 4, pickCursor: 1 };
+    expect(resolveUpdateConfigKey('', { return: true }, { cursor: 0, editing }, created, branches)).toEqual({
+      type: 'commit-edit',
+    });
+  });
+
+  it('Up/Down move the autocomplete highlight while editing, never the cursor', () => {
+    const created = draft();
+    const branches = ['development', 'dev-fix', 'main'];
+    const editing = { value: 'dev', cursor: 3, pickCursor: 0 };
+
+    expect(resolveUpdateConfigKey('', { downArrow: true }, { cursor: 0, editing }, created, branches)).toEqual({
+      type: 'edit',
+      editing: { value: 'dev', cursor: 3, pickCursor: 1 },
+    });
   });
 });

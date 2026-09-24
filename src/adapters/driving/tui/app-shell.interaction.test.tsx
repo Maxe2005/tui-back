@@ -1384,7 +1384,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1452,7 +1452,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: false },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
 
@@ -1589,7 +1589,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 9 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
@@ -1624,7 +1624,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
 
@@ -1660,7 +1660,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: {
           bufferSize: DEFAULT_SETTINGS.logs.bufferSize,
           startWithHistory: true,
@@ -1768,7 +1768,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
@@ -1801,7 +1801,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
