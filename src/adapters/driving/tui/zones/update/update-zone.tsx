@@ -42,7 +42,7 @@ import {
   commitUpdateConfigBranchEdit,
   resolveUpdateConfigKey,
   toggleUpdateConfigRow,
-  type TextInputState,
+  type BranchAutocompleteState,
 } from './update-config-dialog.logic.js';
 
 // Story 3.6: rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title
@@ -307,6 +307,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
   const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
   const ratio = useStore((state) => state.splitterRatios.update);
+  // The shared branch autocomplete's visible row cap + the edited row's own branch source —
+  // the same store actions the EDT zone's own picker sessions use (never `deps.git`
+  // directly).
+  const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
+  const listBranchesAction = useStore((state) => state.listBranches);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
@@ -315,9 +320,13 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [serviceCursor, setServiceCursor] = useState(0);
   // Story 3.7: the config screen's own keyboard cursor + in-progress branch edit — also
   // zone-local UI state. The draft itself (rows, toggles, error) is live run state in the
-  // store; these two only say where the cursor is and what is being typed.
+  // store; these two only say where the cursor is and what is being typed. The edit hosts
+  // the shared autocomplete state; its branch source lives in the two states below,
+  // fetched once per edit (mirroring the EDT zone's own fetch-once-per-session effect).
   const [configCursor, setConfigCursor] = useState(0);
-  const [configEditing, setConfigEditing] = useState<TextInputState | null>(null);
+  const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
+  const [configBranches, setConfigBranches] = useState<string[]>([]);
+  const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -382,8 +391,40 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     if (isUpdateConfigOpen) {
       setConfigCursor(0);
       setConfigEditing(null);
+      setConfigBranches([]);
+      setConfigBranchesStatus('loading');
     }
   }, [isUpdateConfigOpen]);
+
+  // Fetches the edited row's own listBranches(repoPath) once per branch-edit session —
+  // the same shape as the EDT zone's own branch-picker effect (keyed on primitives, stale
+  // responses dropped). Opening an edit resets the source to loading (see the begin-edit
+  // dispatch below); closing it leaves the last source in place, unused until the next
+  // edit re-arms it.
+  const editingRepoPath =
+    updateConfig !== null && configEditing !== null
+      ? (updateConfig.rows[clampUpdateConfigCursor(updateConfig, configCursor)]?.repoPath ?? null)
+      : null;
+  const isConfigEditing = configEditing !== null;
+  useEffect(() => {
+    if (editingRepoPath === null || !isConfigEditing || configBranchesStatus !== 'loading') {
+      return;
+    }
+    let cancelled = false;
+    const repoPath = editingRepoPath;
+    void (async () => {
+      const result = await listBranchesAction(repoPath);
+      if (cancelled) {
+        return;
+      }
+      setConfigBranches(result.ok ? result.data : []);
+      setConfigBranchesStatus(result.ok ? 'ready' : 'error');
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingRepoPath, isConfigEditing, configBranchesStatus, listBranchesAction]);
 
   useInput(
     (input, key) => {
@@ -413,6 +454,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           key,
           { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing },
           updateConfig,
+          configBranches,
         );
         if (step.type === 'move') {
           setConfigCursor(step.cursor);
@@ -422,6 +464,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           const editing = beginUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor));
           if (editing !== null) {
             setConfigEditing(editing);
+            // Re-arm the per-row branch source: a fresh edit always starts loading, and the
+            // effect above fetches this row's own listBranches once.
+            setConfigBranches([]);
+            setConfigBranchesStatus('loading');
           }
         } else if (step.type === 'edit') {
           setConfigEditing(step.editing);
@@ -618,6 +664,9 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         <UpdateConfigDialog
           draft={updateConfig}
           view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
+          branches={configBranches}
+          branchesStatus={configBranchesStatus}
+          maxRows={branchDropdownMaxRows}
         />
       ) : null}
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>

@@ -13,10 +13,12 @@ import {
   HIDEABLE_ACTION_TYPES,
   LOG_BUFFER_SIZE_STEP,
   LOGS_SETTINGS_GROUPS,
+  MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
   MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
+  MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
   MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
@@ -24,16 +26,19 @@ import {
   SETTINGS_GROUPS,
   SETTINGS_TABS,
   SettingsScreen,
+  adjustBranchDropdownMaxRows,
   adjustFilterHistoryGridMaxRows,
   adjustFilterHistorySize,
   adjustGridMaxRows,
   adjustLogBufferSize,
+  clampBranchDropdownMaxRows,
   clampFilterHistoryGridMaxRows,
   clampFilterHistorySize,
   clampGridMaxRows,
   clampLogBufferSize,
   moveHintCursor,
   nextSettingsTab,
+  parseBranchDropdownMaxRowsDigit,
   parseFilterHistoryGridMaxRowsDigit,
   parseGridMaxRowsDigit,
   parseLogBufferSizeDigit,
@@ -194,6 +199,67 @@ describe('parseFilterHistoryGridMaxRowsDigit (story 5.4)', () => {
   });
 });
 
+describe('clampBranchDropdownMaxRows / adjustBranchDropdownMaxRows (branch autocomplete shared component)', () => {
+  it('clamps to the minimum and maximum', () => {
+    expect(clampBranchDropdownMaxRows(0)).toBe(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
+    expect(clampBranchDropdownMaxRows(-5)).toBe(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
+    expect(clampBranchDropdownMaxRows(1000)).toBe(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
+  });
+
+  it('adjustBranchDropdownMaxRows increments/decrements by one', () => {
+    expect(adjustBranchDropdownMaxRows(5, 'up')).toBe(6);
+    expect(adjustBranchDropdownMaxRows(5, 'down')).toBe(4);
+  });
+
+  it('adjustBranchDropdownMaxRows never leaves [MIN, MAX]', () => {
+    expect(adjustBranchDropdownMaxRows(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS, 'down')).toBe(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
+    expect(adjustBranchDropdownMaxRows(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, 'up')).toBe(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
+  });
+
+  it('the range is 1–20 with a default of 5 (single source of truth in core/ports/settings.ts)', () => {
+    expect(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS).toBe(1);
+    expect(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS).toBe(20);
+    expect(DEFAULT_SETTINGS.edts.branchDropdownMaxRows).toBe(5);
+  });
+});
+
+describe('parseBranchDropdownMaxRowsDigit (branch autocomplete shared component)', () => {
+  it('parses a single digit 1-9 as the new value, clamped into range', () => {
+    expect(parseBranchDropdownMaxRowsDigit('5')).toBe(5);
+    expect(parseBranchDropdownMaxRowsDigit('9')).toBe(9);
+  });
+
+  it('rejects 0, non-digit, or multi-character input', () => {
+    expect(parseBranchDropdownMaxRowsDigit('0')).toBeNull();
+    expect(parseBranchDropdownMaxRowsDigit('a')).toBeNull();
+    expect(parseBranchDropdownMaxRowsDigit('12')).toBeNull();
+    expect(parseBranchDropdownMaxRowsDigit('')).toBeNull();
+  });
+});
+
+describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared component)', () => {
+  it('opens the EDTs tab on its group list including the new group', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
+    expect(output).toContain('Hint visibility');
+    expect(output).toContain('Recent action types');
+    expect(output).toContain('Branch dropdown rows');
+  });
+
+  it('drilled into "Branch dropdown rows", renders the live value with its adjust hint', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, edts: { ...DEFAULT_SETTINGS.edts, branchDropdownMaxRows: 12 } },
+    });
+    const output = await renderToString(
+      <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="branch-dropdown-rows" />,
+    );
+    expect(output).toContain('Branch dropdown max rows:');
+    expect(output).toContain('12');
+    expect(output).toContain('Up/Down or Left/Right to adjust, or type a digit (1-9).');
+  });
+});
+
 describe('LOGS_SETTINGS_GROUPS (amended 2026-09-20)', () => {
   it('lists exactly the six Logs-tab groups, in this order', () => {
     expect(LOGS_SETTINGS_GROUPS.map((group) => group.id)).toEqual([
@@ -253,9 +319,9 @@ describe('HIDEABLE_ACTION_TYPES (amended 2026-08-28, AC5)', () => {
 });
 
 describe('SETTINGS_GROUPS (amended 2026-08-28, AC6)', () => {
-  it('lists exactly the two EDTs-tab settings groups, in this order', () => {
-    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types']);
-    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types']);
+  it('lists exactly the three EDTs-tab settings groups, in this order', () => {
+    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types', 'branch-dropdown-rows']);
+    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types', 'Branch dropdown rows']);
   });
 });
 
@@ -301,7 +367,7 @@ describe('SettingsScreen (story 2.19)', () => {
   it('reflects hidden hints from the store for the EDTs tab data path', () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [] } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
     });
     expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edt-services']);
   });
@@ -309,7 +375,7 @@ describe('SettingsScreen (story 2.19)', () => {
   it('reflects hidden action types from the store for the EDTs tab data path (amended 2026-08-28, AC5)', () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
     });
     expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['modify']);
   });
@@ -360,7 +426,7 @@ describe('SettingsScreen (story 2.19)', () => {
   it('drilled into "Hint visibility", renders every hideable hint as a checkbox row, checked where hidden (I/O matrix "Toggle hidden hint")', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [] } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
     });
     const output = await renderToString(
       <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="hint-visibility" />,
@@ -378,7 +444,7 @@ describe('SettingsScreen (story 2.19)', () => {
   it('drilled into "Recent action types", renders create/switch/modify as a checkbox row, checked where hidden (amended 2026-08-28, AC5)', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
     });
     const output = await renderToString(
       <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="action-types" />,

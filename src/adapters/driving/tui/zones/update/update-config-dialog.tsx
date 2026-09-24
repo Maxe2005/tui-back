@@ -8,9 +8,9 @@
 // `useState` and the draft itself in the Zustand store.
 import { Box, Text } from 'ink';
 import { colors } from '../../shared/theme/theme.js';
+import { BranchAutocompleteInput, type BranchAutocompleteStatus } from '../../shared/components/branch-autocomplete-input.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
-import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { resolveRowLayout } from '../../shared/components/list-row.js';
 import {
   isCleanRestartRow,
@@ -52,7 +52,22 @@ function ConfigRow({
   );
 }
 
-export function UpdateConfigDialog({ draft, view }: { draft: UpdateConfigDraft; view: UpdateConfigViewState }) {
+export function UpdateConfigDialog({
+  draft,
+  view,
+  branches,
+  branchesStatus,
+  maxRows,
+}: {
+  draft: UpdateConfigDraft;
+  view: UpdateConfigViewState;
+  // The edited row's own `listBranches()` result (empty/loading while the zone's
+  // fetch-once-per-edit effect is still in flight) plus the shared dropdown cap from
+  // `settings.edts.branchDropdownMaxRows`. Only the open branch editor reads them.
+  branches: readonly string[];
+  branchesStatus: BranchAutocompleteStatus;
+  maxRows: number;
+}) {
   const count = updateConfigRowCount(draft);
   const cursor = Math.min(Math.max(view.cursor, 0), Math.max(count - 1, 0));
   const scopeLine =
@@ -75,7 +90,14 @@ export function UpdateConfigDialog({ draft, view }: { draft: UpdateConfigDraft; 
             <ConfigRow focused={focused || editingThis} checked={row.selected} label={row.service} meta={`${row.repoPath} ← ${row.sourceBranch}`} />
             {editingThis && view.editing !== null ? (
               <Box paddingLeft={4}>
-                <TextInputLine label="Merge from" value={view.editing.value} cursor={view.editing.cursor} focused />
+                <BranchAutocompleteInput
+                  label="Merge from"
+                  state={view.editing}
+                  branches={branches}
+                  branchesStatus={branchesStatus}
+                  maxRows={maxRows}
+                  focused
+                />
               </Box>
             ) : null}
           </Box>

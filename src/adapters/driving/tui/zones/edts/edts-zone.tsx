@@ -150,6 +150,9 @@ export function EdtsZone({
   // in the settings screen's EDTs tab.
   const hiddenActionHints = useStore((state) => state.settings.edts.hiddenActionHints);
   const hiddenActionTypes = useStore((state) => state.settings.edts.hiddenActionTypes);
+  // The shared branch autocomplete's visible row cap — threaded into every BranchPicker
+  // session's pick-existing filter (no per-service override, no new setting of its own).
+  const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -819,15 +822,15 @@ export function EdtsZone({
         }
       />
 
-      {dialog.kind === 'create' ? <CreateDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
+      {dialog.kind === 'create' ? <CreateDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
 
       {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} /> : null}
 
-      {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
+      {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
 
-      {dialog.kind === 'service-actions' ? <ServiceActionsDialogView dialog={dialog} /> : null}
+      {dialog.kind === 'service-actions' ? <ServiceActionsDialogView dialog={dialog} maxRows={branchDropdownMaxRows} /> : null}
 
-      {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} /> : null}
+      {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} maxRows={branchDropdownMaxRows} /> : null}
 
       {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
     </Box>

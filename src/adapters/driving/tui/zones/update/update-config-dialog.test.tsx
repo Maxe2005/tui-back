@@ -14,9 +14,11 @@ function edtDraft(): UpdateConfigDraft {
   ]);
 }
 
+const IDLE_SOURCE = { branches: [] as string[], branchesStatus: 'ready' as const, maxRows: 5 };
+
 describe('UpdateConfigDialog rendering', () => {
   it('lists every targeted service pre-selected with its branch plus both toggles and the hints', async () => {
-    const output = await renderToString(<UpdateConfigDialog draft={edtDraft()} view={{ cursor: 0, editing: null }} />);
+    const output = await renderToString(<UpdateConfigDialog draft={edtDraft()} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
 
     expect(output).toContain(UPDATE_CONFIG_TITLE_EDT);
     expect(output).toContain('svc-a');
@@ -33,7 +35,7 @@ describe('UpdateConfigDialog rendering', () => {
   it('renders the all-repos title variant when pre-scoped to every managed repo', async () => {
     const draft = createUpdateConfigDraft('all', [{ service: 'a', repoPath: '/repo/a', sourceBranch: 'development' }]);
 
-    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} />);
+    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
 
     expect(output).toContain(UPDATE_CONFIG_TITLE_ALL);
     expect(output).not.toContain(UPDATE_CONFIG_TITLE_EDT);
@@ -42,7 +44,7 @@ describe('UpdateConfigDialog rendering', () => {
   it('marks a deselected service [ ] while the others stay [x]', async () => {
     const draft = toggleUpdateConfigRow(edtDraft(), 1);
 
-    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} />);
+    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
 
     expect(output).toContain('[ ]');
     expect(output).toContain('[x]');
@@ -51,7 +53,7 @@ describe('UpdateConfigDialog rendering', () => {
   it('surfaces the inline error (zero-selection reject, blank branch) with the screen still open', async () => {
     const draft: UpdateConfigDraft = { ...edtDraft(), error: 'No services selected — select at least one service before starting the run.' };
 
-    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} />);
+    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
 
     expect(output).toContain('No services selected');
     // The screen is still open: rows and toggles still render alongside the error.
@@ -65,7 +67,7 @@ describe('UpdateConfigDialog rendering', () => {
       { service: 'svc-a-clone', repoPath: '/repo/a', sourceBranch: 'development' },
     ]);
 
-    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} />);
+    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
 
     expect(output).toContain('svc-a-clone');
     expect(output).toContain('svc-a');
@@ -73,10 +75,60 @@ describe('UpdateConfigDialog rendering', () => {
 
   it('renders the focused branch editor with its current value', async () => {
     const output = await renderToString(
-      <UpdateConfigDialog draft={edtDraft()} view={{ cursor: 0, editing: { value: 'release/', cursor: 8 } }} />,
+      <UpdateConfigDialog draft={edtDraft()} view={{ cursor: 0, editing: { value: 'release/', cursor: 8, pickCursor: 0 } }} {...IDLE_SOURCE} />,
     );
 
     expect(output).toContain('Merge from');
     expect(output).toContain('release/');
+  });
+
+  it('autocompletes the open editor from that row branches with validity, capped at maxRows', async () => {
+    const output = await renderToString(
+      <UpdateConfigDialog
+        draft={edtDraft()}
+        view={{ cursor: 0, editing: { value: '', cursor: 0, pickCursor: 0 } }}
+        branches={['b-one', 'b-two', 'b-three']}
+        branchesStatus="ready"
+        maxRows={2}
+      />,
+    );
+
+    expect(output).toContain('Merge from');
+    expect(output).toContain('b-one');
+    expect(output).toContain('b-two');
+    expect(output).not.toContain('b-three');
+    expect(output).toContain('… 1 more');
+    expect(output).toContain('✖');
+  });
+
+  it('shows ✔ when the open editor exactly matches a listed branch', async () => {
+    const output = await renderToString(
+      <UpdateConfigDialog
+        draft={edtDraft()}
+        view={{ cursor: 0, editing: { value: 'development', cursor: 11, pickCursor: 0 } }}
+        branches={['development', 'main']}
+        branchesStatus="ready"
+        maxRows={5}
+      />,
+    );
+
+    expect(output).toContain('✔');
+    expect(output).not.toContain('✖');
+  });
+
+  it('keeps the `Failed to load branches.` line with a usable field on branchesStatus=error', async () => {
+    const output = await renderToString(
+      <UpdateConfigDialog
+        draft={edtDraft()}
+        view={{ cursor: 0, editing: { value: 'dev', cursor: 3, pickCursor: 0 } }}
+        branches={[]}
+        branchesStatus="error"
+        maxRows={5}
+      />,
+    );
+
+    expect(output).toContain('Failed to load branches.');
+    expect(output).toContain('Merge from');
+    expect(output).toContain('dev');
   });
 });

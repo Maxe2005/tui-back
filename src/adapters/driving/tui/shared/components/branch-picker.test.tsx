@@ -232,7 +232,7 @@ describe('handleBranchPickerKey — Pick existing', () => {
     return baseState({ mode: 'pick-existing', pickQuery: '', pickCursor: 0, ...overrides });
   }
 
-  it('typing filters the branch list (case-insensitive prefix)', () => {
+  it('typing filters the branch list (case-insensitive substring, shared autocomplete)', () => {
     const state = pickState();
     const result = handleBranchPickerKey(state, ['feature-x', 'main'], [], 'f', {});
     expect(result.type).toBe('update');
@@ -240,12 +240,63 @@ describe('handleBranchPickerKey — Pick existing', () => {
       expect(result.state.pickQuery).toBe('f');
       expect(matchBranchesByPrefix(result.state.pickQuery, ['feature-x', 'main'])).toEqual(['feature-x']);
     }
+    // Substring (not just prefix): 'eat' still proposes 'feature-x' — pinned at the picker
+    // boundary (not just the helper), so a prefix-only regression fails here.
+    const sub = handleBranchPickerKey(pickState(), ['feature-x', 'main'], [], 'eat', {});
+    expect(sub.type).toBe('update');
+    if (sub.type !== 'update') return;
+    expect(sub.state.pickQuery).toBe('eat');
+    const inserted = handleBranchPickerKey(sub.state, ['feature-x', 'main'], [], '', { return: true });
+    expect(inserted.type).toBe('update');
+    if (inserted.type !== 'update') return;
+    expect(inserted.state.pickQuery).toBe('feature-x');
   });
 
-  it('select+confirm sets that branch — no branch created', () => {
+  it('first Enter inserts the highlighted branch, second Enter submits it — no branch created', () => {
     const state = pickState({ pickCursor: 0 });
+    const inserted = handleBranchPickerKey(state, ['feature-x', 'main'], [], '', { return: true });
+    expect(inserted.type).toBe('update');
+    if (inserted.type !== 'update') return;
+    expect(inserted.state.pickQuery).toBe('feature-x');
+    expect(inserted.state.pickQueryCursor).toBe('feature-x'.length);
+    const submitted = handleBranchPickerKey(inserted.state, ['feature-x', 'main'], [], '', { return: true });
+    expect(submitted).toEqual({ type: 'submit', outcome: { kind: 'set', branch: 'feature-x' } });
+  });
+
+  it('Enter on an exact filter value submits immediately (insert is a no-op there)', () => {
+    const state = pickState({ pickQuery: 'main', pickQueryCursor: 4, pickCursor: 0 });
     const result = handleBranchPickerKey(state, ['feature-x', 'main'], [], '', { return: true });
-    expect(result).toEqual({ type: 'submit', outcome: { kind: 'set', branch: 'feature-x' } });
+    expect(result).toEqual({ type: 'submit', outcome: { kind: 'set', branch: 'main' } });
+  });
+
+  it('Enter on an exact filter value with a stray highlight elsewhere still submits the exact value (never clobbers it)', () => {
+    const state = pickState({ pickQuery: 'main', pickQueryCursor: 4, pickCursor: 1 });
+    const result = handleBranchPickerKey(state, ['main', 'main-x'], [], '', { return: true });
+    expect(result).toEqual({ type: 'submit', outcome: { kind: 'set', branch: 'main' } });
+  });
+
+  it('Enter with zero substring matches keeps the existing `No branch selected` inline error', () => {
+    const state = pickState({ pickQuery: 'zzz', pickQueryCursor: 3, pickCursor: 0 });
+    const result = handleBranchPickerKey(state, ['feature-x', 'main'], [], '', { return: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.error).toBe('No branch selected');
+    }
+  });
+
+  it('Up/Down move the shared highlight without touching the caret; caret moves preserve it', () => {
+    const down = handleBranchPickerKey(pickState({ pickQuery: 'f', pickQueryCursor: 1, pickCursor: 0 }), ['feat-x', 'fix-y', 'main'], [], '', {
+      downArrow: true,
+    });
+    expect(down.type).toBe('update');
+    if (down.type !== 'update') return;
+    expect(down.state.pickCursor).toBe(1);
+    expect(down.state.pickQueryCursor).toBe(1);
+    const left = handleBranchPickerKey(down.state, ['feat-x', 'fix-y', 'main'], [], '', { leftArrow: true });
+    expect(left.type).toBe('update');
+    if (left.type !== 'update') return;
+    expect(left.state.pickQueryCursor).toBe(0);
+    expect(left.state.pickCursor).toBe(1);
   });
 
   it('Ctrl+R on a row opens its inline rename field, pre-filled with the selected branch', () => {
@@ -334,7 +385,7 @@ describe('BranchPicker rendering', () => {
       currentBranch: 'main',
     });
     const output = await renderToString(
-      <BranchPicker state={state} branches={['development']} branchesStatus="ready" otherMemberBranches={[]} />,
+      <BranchPicker state={state} branches={['development']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} />,
     );
     expect(output).toContain('[Create new]');
     expect(output).toContain('Pick existing');
@@ -351,17 +402,58 @@ describe('BranchPicker rendering', () => {
       currentBranch: '',
     });
     const output = await renderToString(
-      <BranchPicker state={state} branches={[]} branchesStatus="ready" otherMemberBranches={[]} />,
+      <BranchPicker state={state} branches={[]} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} />,
     );
     expect(output).not.toContain('Rename current');
   });
 
-  it('renders the filtered branch list in Pick existing mode', async () => {
-    const state = baseState({ mode: 'pick-existing', pickQuery: 'feat' });
+  it('renders the shared substring dropdown with validity in Pick existing mode', async () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'feat', pickQueryCursor: 4, pickCursor: 0 });
     const output = await renderToString(
-      <BranchPicker state={state} branches={['feature-x', 'main']} branchesStatus="ready" otherMemberBranches={[]} />,
+      <BranchPicker state={state} branches={['feature-x', 'main']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} />,
     );
     expect(output).toContain('feature-x');
     expect(output).not.toContain('main');
+    // Shared validity signal (advisory, never color alone).
+    expect(output).toContain('✖');
+  });
+
+  it('renders ✔ when the pick-existing filter exactly matches a listed branch', async () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'main', pickQueryCursor: 4, pickCursor: 0 });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={['feature-x', 'main']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} />,
+    );
+    expect(output).toContain('✔');
+    expect(output).not.toContain('✖');
+  });
+
+  it('caps the pick-existing dropdown at maxRows with an overflow line', async () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: '', pickQueryCursor: 0, pickCursor: 0 });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={['b-one', 'b-two', 'b-three']} branchesStatus="ready" otherMemberBranches={[]} maxRows={2} />,
+    );
+    expect(output).toContain('b-one');
+    expect(output).toContain('b-two');
+    expect(output).not.toContain('b-three');
+    expect(output).toContain('… 1 more');
+  });
+
+  it('keeps the `Failed to load branches.` line with a usable field on branchesStatus=error', async () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'f', pickQueryCursor: 1, pickCursor: 0 });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={[]} branchesStatus="error" otherMemberBranches={[]} maxRows={5} />,
+    );
+    expect(output).toContain('Failed to load branches.');
+    expect(output).toContain('Filter');
+  });
+
+  it('create-new mode renders byte-identical with no dropdown validity of its own', async () => {
+    const state = baseState({ baseFocused: false, nameValue: 'feature-x', nameValueCursor: 9 });
+    const output = await renderToString(
+      <BranchPicker state={state} branches={['development']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} />,
+    );
+    expect(output).toContain('Name: feature-x');
+    expect(output).not.toContain('✔');
+    expect(output).not.toContain('✖');
   });
 });

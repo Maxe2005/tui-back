@@ -1009,7 +1009,7 @@ describe("app store", () => {
             settings: {
               general: { quitShortcutEnabled: true },
               commandPalette: { gridMaxRows: 12 },
-              edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+              edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
               logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
@@ -1024,7 +1024,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 12 },
-        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
@@ -1074,7 +1074,7 @@ describe("app store", () => {
       expect(save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 15 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     });
@@ -1085,7 +1085,7 @@ describe("app store", () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 20 },
-          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [] },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
       });
@@ -1095,7 +1095,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 20 },
-        edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     });
@@ -1106,7 +1106,7 @@ describe("app store", () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 20 },
-          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"] },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
       });
@@ -1116,7 +1116,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 20 },
-        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"] },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     });
@@ -1222,7 +1222,7 @@ describe("app store", () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,

@@ -33,10 +33,12 @@ import { ModalDialog } from './components/modal-dialog.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
+  MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
   MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
+  MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
   MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
@@ -216,13 +218,38 @@ export const HIDEABLE_ACTION_TYPES: readonly HideableActionType[] = [
 // two checkbox lists (Boundaries: "a single flat checkbox list would conflate two unrelated
 // toggles"; Design Notes explains why this is a drill-down rather than a flat list or a nested
 // tab strip).
-export type SettingsGroupId = 'hint-visibility' | 'action-types';
+//
+// Branch autocomplete dropdown rows (shared BranchAutocompleteInput): the visible row count
+// before the `… N more` overflow line, reusing the exact clamp/adjust/parse-digit idiom the
+// Command Palette tab established for gridMaxRows (single source of truth: core's
+// MIN/MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, so the schema and the screen can't drift apart).
+export { MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS, MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS };
+
+export function clampBranchDropdownMaxRows(value: number): number {
+  return Math.min(Math.max(value, MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS), MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
+}
+
+export function adjustBranchDropdownMaxRows(current: number, direction: 'up' | 'down'): number {
+  return clampBranchDropdownMaxRows(current + (direction === 'up' ? 1 : -1));
+}
+
+// A typed digit sets the value directly (same value-set convention as parseGridMaxRowsDigit:
+// single digit 1-9 only; '0' is never valid and non-digits are ignored rather than appended).
+export function parseBranchDropdownMaxRowsDigit(input: string): number | null {
+  if (!/^[1-9]$/.test(input)) {
+    return null;
+  }
+  return clampBranchDropdownMaxRows(Number(input));
+}
+
+export type SettingsGroupId = 'hint-visibility' | 'action-types' | 'branch-dropdown-rows';
 
 export type SettingsGroup = { id: SettingsGroupId; label: string };
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'hint-visibility', label: 'Hint visibility' },
   { id: 'action-types', label: 'Recent action types' },
+  { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
 ];
 
 // Amended 2026-09-20 (visual-corruption fix): the Logs tab used to render all six fields as
@@ -574,6 +601,30 @@ export function SettingsScreen({
       return;
     }
 
+    if (edtsGroup === 'branch-dropdown-rows') {
+      // Numeric single-field group (mirrors the Command Palette tab's gridMaxRows idiom, plus
+      // the Logs tab's Left/Right convention): Up/Right steps up, Down/Left steps down, a typed
+      // digit 1-9 sets the value directly — always clamped live to [MIN, MAX], persisted via a
+      // single-field updateSettings call that leaves the group's sibling fields untouched.
+      if (key.upArrow || key.rightArrow) {
+        void updateSettings({
+          edts: { branchDropdownMaxRows: adjustBranchDropdownMaxRows(settings.edts.branchDropdownMaxRows, 'up') },
+        });
+        return;
+      }
+      if (key.downArrow || key.leftArrow) {
+        void updateSettings({
+          edts: { branchDropdownMaxRows: adjustBranchDropdownMaxRows(settings.edts.branchDropdownMaxRows, 'down') },
+        });
+        return;
+      }
+      const digit = parseBranchDropdownMaxRowsDigit(input);
+      if (digit !== null) {
+        void updateSettings({ edts: { branchDropdownMaxRows: digit } });
+      }
+      return;
+    }
+
     // edtsGroup === 'action-types'
     if (key.upArrow) {
       setActionTypeCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_TYPES.length));
@@ -788,6 +839,15 @@ export function SettingsScreen({
               );
             })}
             <DimAnnotation text="Space to toggle — checked hides that action type from the Recent actions log. Esc for the group list." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'branch-dropdown-rows' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>
+              Branch dropdown max rows: <Text color={colors.accent}>{settings.edts.branchDropdownMaxRows}</Text>
+            </Text>
+            <DimAnnotation text="Up/Down or Left/Right to adjust, or type a digit (1-9). Caps the branch autocomplete dropdown before its … N more line. Esc for the group list." />
           </Box>
         ) : null}
       </Box>

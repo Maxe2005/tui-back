@@ -104,7 +104,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
   return { handleAddToEdtInput };
 }
 
-export function AddToEdtDialogView({ dialog }: { dialog: AddToEdtDialogState }) {
+export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialogState; maxRows: number }) {
   return (
     <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
@@ -117,6 +117,7 @@ export function AddToEdtDialogView({ dialog }: { dialog: AddToEdtDialogState }) 
             branches={dialog.branchPicker.branches}
             branchesStatus={dialog.branchPicker.branchesStatus}
             otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
+            maxRows={maxRows}
           />
         ) : null}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}

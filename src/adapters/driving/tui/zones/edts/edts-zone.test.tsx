@@ -11,6 +11,7 @@ import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { NO_BRANCH_CREATION } from '../../store/app-store.js';
 import { EdtsZone } from './edts-zone.js';
+import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import {
   advanceCreateFormFocus,
   appendHint,
@@ -31,7 +32,6 @@ import {
   isSwitchBlockedError,
   jumpSelection,
   moveSelection,
-  nextTextInputValue,
   partitionServicesByEdtMembership,
   prefillBranchNames,
   prefillBaseBranches,
@@ -1707,7 +1707,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       settings: {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       },
     });
@@ -1754,7 +1754,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       settings: {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       },
     });

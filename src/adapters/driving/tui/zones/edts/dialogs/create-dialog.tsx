@@ -18,6 +18,7 @@ import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/text-input-line.js';
+import { nextTextInputValue } from '../../../shared/components/text-edit.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
@@ -31,7 +32,6 @@ import {
   jumpSelection,
   moveSelection,
   type NamingMode,
-  nextTextInputValue,
   prefillBranchNames,
   prefillBaseBranches,
   resolveBaseBranchMode,
@@ -508,10 +508,12 @@ export function CreateDialogView({
   dialog,
   candidates,
   candidateState,
+  maxRows,
 }: {
   dialog: CreateDialogState;
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
+  maxRows: number;
 }) {
   const baseBranchMode = resolveBaseBranchMode(dialog.selectedMembers, candidates);
   const branchPicker = dialog.branchPicker;
@@ -538,6 +540,7 @@ export function CreateDialogView({
                   branches={branchPicker.branches}
                   branchesStatus={branchPicker.branchesStatus}
                   otherMemberBranches={[]}
+                  maxRows={maxRows}
                   hideNestedBaseField
                 />
               </Box>

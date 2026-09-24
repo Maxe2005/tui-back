@@ -72,7 +72,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
-          edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'] },
+          edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
@@ -211,7 +211,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
@@ -264,12 +264,102 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 15 },
-          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
     });
+  });
+
+  it('loads a pre-existing file whose edts block predates branchDropdownMaxRows — defaults just that field, keeps hiddenActionHints', async () => {
+    // A settings.yaml written before this field existed has an `edts:` block without
+    // `branchDropdownMaxRows` at all. Mirrors the hiddenActionTypes precedent just above: must
+    // default branchDropdownMaxRows to 5 rather than falling back to every default (which would
+    // silently discard the developer's existing customizations).
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'commandPalette:\n  gridMaxRows: 15\nedts:\n  hiddenActionHints:\n    - edts\n');
+
+    const result = await loadSettings(file);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        settings: {
+          general: { quitShortcutEnabled: true },
+          commandPalette: { gridMaxRows: 15 },
+          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        },
+        warning: null,
+      },
+    });
+  });
+
+  it('loads a valid edts.branchDropdownMaxRows value as-is', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  branchDropdownMaxRows: 12\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings.edts.branchDropdownMaxRows).toBe(12);
+    expect(result.data.warning).toBeNull();
+  });
+
+  it('falls back to defaults with a field-naming warning when edts.branchDropdownMaxRows exceeds the upper bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  branchDropdownMaxRows: 21\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('edts.branchDropdownMaxRows');
+  });
+
+  it('falls back to defaults with a field-naming warning when edts.branchDropdownMaxRows is below the lower bound', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  branchDropdownMaxRows: 0\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('edts.branchDropdownMaxRows');
+  });
+
+  it('falls back to defaults with a field-naming warning when edts.branchDropdownMaxRows is not a number', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  branchDropdownMaxRows: "12"\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('edts.branchDropdownMaxRows');
+  });
+
+  it('falls back to defaults with a field-naming warning when edts.branchDropdownMaxRows is not an integer', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  branchDropdownMaxRows: 5.5\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('edts.branchDropdownMaxRows');
   });
 
   it('loads a pre-existing file whose logs block predates startWithHistory — defaults just that field, keeps bufferSize (review fix)', async () => {
@@ -289,7 +379,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 8 },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
@@ -312,7 +402,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true },
           commandPalette: { gridMaxRows: 12 },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
@@ -338,7 +428,7 @@ describe('saveSettings', () => {
     const settings = {
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 10 },
-      edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'] },
+      edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
@@ -356,14 +446,14 @@ describe('saveSettings', () => {
     await saveSettings(file, {
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
-      edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true },
       commandPalette: { gridMaxRows: 20 },
-      edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+      edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
   });
@@ -377,7 +467,7 @@ describe('createSettingsPort', () => {
     const settings = {
       general: { quitShortcutEnabled: false },
       commandPalette: { gridMaxRows: 5 },
-      edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'] },
+      edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 

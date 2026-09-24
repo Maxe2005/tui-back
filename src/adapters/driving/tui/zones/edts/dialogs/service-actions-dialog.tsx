@@ -224,7 +224,7 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
   return { handleServiceActionsInput };
 }
 
-export function ServiceActionsDialogView({ dialog }: { dialog: ServiceActionsDialogState }) {
+export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceActionsDialogState; maxRows: number }) {
   return (
     <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
@@ -236,6 +236,7 @@ export function ServiceActionsDialogView({ dialog }: { dialog: ServiceActionsDia
               branches={dialog.branchPicker.branches}
               branchesStatus={dialog.branchPicker.branchesStatus}
               otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
+              maxRows={maxRows}
             />
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}
