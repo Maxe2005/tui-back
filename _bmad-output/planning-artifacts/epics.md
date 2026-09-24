@@ -1821,6 +1821,10 @@ As a developer, I want to set one branch rule for all selected services and then
 
 **Acceptance Criteria:**
 
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** first run `git merge-base --is-ancestor epic-3-group-update-migrations epic-2-edt-workspace-management` (exit 0 = merge done) and confirm `src/adapters/driving/tui/shared/components/branch-autocomplete-input.tsx` exists on the epic branch; if either check fails, **HALT** — the epic-3 → epic-2 merge must be done first (4 expected conflicts: `deferred-work.md`, `sprint-status.yaml`, `sprint-change-proposal-2026-09-22.md`, `edts-zone.test.tsx`), and `BranchAutocompleteInput` must never be reimplemented or copied into this story.
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm `2-35-edt-creation-core-per-service-branch-plans-remote-branches` is `done` in `sprint-status.yaml` and merged into the epic branch (`memberPlans` on `CreateEdtParams`, `GitPort.listRemoteBranches` present); otherwise **HALT** — never stub or re-implement Story 2.35's core in this story.
+
 **Given** Step 3 **When** shown **Then** it has two vertically stacked panels — **A "STRATÉGIE GLOBALE"** (focused by default) and **B "RÉSUMÉ ET EXCEPTIONS PAR SERVICE"** — and `Tab` switches between them; a footer shows `[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Étape suivante`.
 
 **Given** Panel A **When** navigated **Then** `↑/↓` move between its two lines ("Branche source par défaut", "Nom global de la branche"); `Enter` enters edit mode on the focused line, `Esc` leaves it, and for the base line any printable key also enters edit mode with that character typed.
