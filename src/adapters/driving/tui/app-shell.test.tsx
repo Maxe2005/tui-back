@@ -389,6 +389,8 @@ it('shouldQuit returns true for q', () => {
         loadEdts: async () => {},
         createEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         switchEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        switchDirtyRepos: null,
+        resolveSwitchDirtyRepos: () => {},
         modifyEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         deleteEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         resolveMemberDeleteStatuses: async () => [],

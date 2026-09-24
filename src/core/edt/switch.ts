@@ -15,13 +15,34 @@
 //
 // Stash tagging (design note): the message tag `tui-back:<ulid>` uses the OUTGOING EDT's
 // ulid (or the target's own ulid on a first-ever switch, when there is no outgoing) for
-// every stash created *by this switch* — the dirty state being left behind belongs to
+// every MEMBER stash created *by this switch* — the dirty state being left behind belongs to
 // whatever context was active before. Immediately after checking a target member into its
 // own branch, this switch looks for a *target*-tagged stash (from a past switch away from
 // the target, when the target was itself the outgoing EDT and got tagged with its own ulid)
 // and pops it — the exact two-call symmetry that makes "switching back into an EDT that owns
 // a matching stash pops it" true across separate switch invocations, without needing to
 // consult every other EDT's membership to guess an owner.
+//
+// Non-member repos don't get this treatment: they aren't owned by any EDT, and every switch
+// (regardless of target) always checks them out to the same manifest `sharedBranch` — there
+// is no future "return to this EDT" event to tag a stash for. Bug fix: an earlier version
+// tagged a non-member's stash with the outgoing EDT's ulid, same as a member, but nothing
+// ever popped it — `switchNonMemberRepo` had a stash step with no matching restore anywhere
+// in the codebase, so a dirty non-member's work was silently, permanently orphaned in the
+// stash list (invisible: `git status` reads clean once the checkout succeeds). Non-member
+// stashes now use a single fixed, repo-scoped tag (`NON_MEMBER_STASH_TAG`) and are restored
+// unconditionally in the very same call, right after checkout — mirroring the member restore
+// call exactly, just keyed by "this repo, this fixed tag" instead of "this repo, this EDT's
+// ulid". This also opportunistically heals any stash left behind by the pre-fix code path the
+// next time that repo passes through a switch as a non-member.
+//
+// Preview/confirm seam (bug fix): before this switch touches any repo, and only when the
+// caller supplies `onDirtyReposBeforeSwitch`, every registered repo's dirty state is read
+// once (non-mutating) and, if any are dirty, handed to that callback in one batch — the
+// driving layer's chance to show a per-service list of what is about to be auto-stashed and
+// ask for confirmation before any git write happens. A `cancel` answer aborts with zero repos
+// touched and state.json/edts.yaml untouched. No callback (the CLI path) means this preview
+// pass is skipped entirely and behavior is unchanged from before this fix.
 //
 // The `edt:<outgoingUlid>` lock-peek is a non-blocking, non-mutating read (LockPort.peek) —
 // this story reserves the resource-key convention; no action acquires it yet (Epic 3+ group
@@ -42,6 +63,22 @@ export interface SwitchEdtRepoResult {
   outcome: 'switched' | 'failed';
   detail?: { code: string; message: string };
 }
+
+// Bug fix: the preview/confirm seam. One row per currently-dirty registered repo that this
+// switch is about to touch, computed before any git write. `scope` tells the driving layer
+// which restore path applies: a `member`'s stash is popped back onto its own branch, a
+// `non-member`'s is popped back onto the shared branch it's about to land on — both
+// round-trip within this same switch call (see the file header), so a driving layer can
+// truthfully describe this as "temporarily set aside and restored", not "lost".
+export interface SwitchDirtyRepo {
+  service: string;
+  repoPath: string;
+  scope: 'member' | 'non-member';
+}
+
+export type SwitchDirtyReposChoice = 'proceed' | 'cancel';
+
+export type OnDirtyReposBeforeSwitch = (dirty: SwitchDirtyRepo[]) => Promise<SwitchDirtyReposChoice>;
 
 export interface SwitchActiveEdtData {
   ulid: string;
@@ -65,6 +102,9 @@ export interface SwitchActiveEdtParams {
   edtRegistryResourceKey: string;
   topic: string;
   force?: boolean;
+  // Bug fix: optional preview/confirm seam (undefined on the CLI path, wired to a real prompt
+  // by the TUI) — see the file header and SwitchDirtyRepo's doc comment.
+  onDirtyReposBeforeSwitch?: OnDirtyReposBeforeSwitch;
 }
 
 export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Result<SwitchActiveEdtData>> {
@@ -133,6 +173,30 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   const targetMembersByPath = new Map(target.members.map((member) => [resolve(member.repoPath), member]));
   const registeredPaths = new Set(registered.data.map((rawPath) => resolve(rawPath)));
 
+  // Bug fix: preview/confirm seam, before any repo is touched. Best-effort — a repo whose
+  // dirty-state read itself fails here is just left out of the preview (never aborts the
+  // whole switch); the main loop below re-reads it anyway and reports that same failure as
+  // its own `failed` row, preserving per-repo isolation.
+  if (params.onDirtyReposBeforeSwitch !== undefined) {
+    const dirtyRepos: SwitchDirtyRepo[] = [];
+    for (const rawPath of registered.data) {
+      const repoPath = resolve(rawPath);
+      const member = targetMembersByPath.get(repoPath);
+      const dirty = await git.hasUncommittedChanges(repoPath);
+      if (!dirty.ok || !dirty.data) {
+        continue;
+      }
+      const service = member !== undefined ? member.service : await resolveNonMemberService(manifest, repoPath);
+      dirtyRepos.push({ service, repoPath, scope: member !== undefined ? 'member' : 'non-member' });
+    }
+    if (dirtyRepos.length > 0) {
+      const choice = await params.onDirtyReposBeforeSwitch(dirtyRepos);
+      if (choice === 'cancel') {
+        return err('switch-cancelled-by-user', `Switch to "${topic}" cancelled: uncommitted changes were present in one or more services.`);
+      }
+    }
+  }
+
   const results: SwitchEdtRepoResult[] = [];
   for (const rawPath of registered.data) {
     const repoPath = resolve(rawPath);
@@ -140,7 +204,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
     results.push(
       member !== undefined
         ? await switchMemberRepo(git, target.ulid, stashTagUlid, { ...member, repoPath })
-        : await switchNonMemberRepo(git, manifest, repoPath, stashTagUlid),
+        : await switchNonMemberRepo(git, manifest, repoPath),
     );
   }
 
@@ -205,6 +269,15 @@ function stashMessage(ulid: string): string {
   return `tui-back:${ulid}`;
 }
 
+// Bug fix: see the file header's "Non-member repos don't get this treatment" note — a single
+// fixed tag for every non-member stash, since a non-member repo has no EDT to be scoped to.
+const NON_MEMBER_STASH_TAG = 'tui-back:shared';
+
+async function resolveNonMemberService(manifest: ManifestPort, repoPath: string): Promise<string> {
+  const loaded = await manifest.load(repoPath);
+  return loaded.ok ? loaded.data.service : repoPath;
+}
+
 async function switchMemberRepo(
   git: GitPort,
   targetUlid: string,
@@ -249,12 +322,7 @@ async function switchMemberRepo(
   return { service, outcome: 'switched' };
 }
 
-async function switchNonMemberRepo(
-  git: GitPort,
-  manifest: ManifestPort,
-  repoPath: string,
-  stashTagUlid: string,
-): Promise<SwitchEdtRepoResult> {
+async function switchNonMemberRepo(git: GitPort, manifest: ManifestPort, repoPath: string): Promise<SwitchEdtRepoResult> {
   const loaded = await manifest.load(repoPath);
   const service = loaded.ok ? loaded.data.service : repoPath;
   if (!loaded.ok) {
@@ -268,7 +336,7 @@ async function switchNonMemberRepo(
     return failed(service, dirty.error);
   }
   if (dirty.data) {
-    const stashed = await git.stashSave(repoPath, stashMessage(stashTagUlid));
+    const stashed = await git.stashSave(repoPath, NON_MEMBER_STASH_TAG);
     if (!stashed.ok) {
       return failed(service, stashed.error);
     }
@@ -288,6 +356,15 @@ async function switchNonMemberRepo(
   const checkedOut = await git.checkout(repoPath, sharedBranch);
   if (!checkedOut.ok) {
     return failed(service, checkedOut.error);
+  }
+
+  // Bug fix: unconditional restore, mirroring switchMemberRepo's own post-checkout pop —
+  // closes the "dirty non-member stash left orphaned forever" gap (file header). A no-op
+  // success when nothing matches (RestoreStash's existing contract), so this is always safe
+  // to call, whether or not this exact invocation just stashed anything.
+  const popped = await git.restoreStash(repoPath, NON_MEMBER_STASH_TAG);
+  if (!popped.ok) {
+    return failed(service, popped.error);
   }
 
   return { service, outcome: 'switched' };

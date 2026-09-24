@@ -1181,12 +1181,14 @@ describe('tui-back edt switch (black-box)', () => {
         wasInterrupted: false,
       });
 
-      // r1: reset to the shared branch, working tree clean, uncommitted work preserved in a
-      // message-tagged stash (not lost).
+      // r1: reset to the shared branch, uncommitted work carried straight through (stashed
+      // then immediately restored in the same switch call — bug fix: it used to be left
+      // behind in a `tui-back:<ulid>`-tagged stash that no code path ever popped, an
+      // invisible, permanently orphaned stash even though `git status` read clean).
       expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
-      expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toBe('');
-      const r1Stash = runGit(r1, ['stash', 'list']).stdout;
-      expect(r1Stash).toContain(`tui-back:${ulidA}`);
+      expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toContain('wip.txt');
+      expect(await readFile(join(r1, 'wip.txt'), 'utf8')).toBe('uncommitted work');
+      expect(runGit(r1, ['stash', 'list']).stdout.trim()).toBe('');
 
       // r2: checked into its own branch (b's).
       expect(runGit(r2, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r2');

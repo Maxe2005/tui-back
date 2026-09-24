@@ -3,6 +3,7 @@
 // checklist, just a confirm/force-confirm/cancel prompt.
 import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { SwitchDirtyRepo } from '../../../../../../core/edt/switch.js';
 import type { AppState } from '../../../store/app-store.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
@@ -18,6 +19,13 @@ export type SwitchDialogDeps = {
   logEdtAction: AppState['logEdtAction'];
   setCurrentEdtAction: AppState['setCurrentEdtAction'];
   focusedEdt: EdtRegistryEntry | undefined;
+  // Bug fix: the dirty-repo confirm seam (edt-slice.ts) — non-null while switchEdtAction is
+  // paused waiting for a proceed/cancel choice on the batch of dirty repos it's about to
+  // auto-stash. Owned by the store (not local dialog state) for the same reason
+  // UpdateSlice's updateBlocker is: the seam callback that sets it lives inside the store
+  // action, not this component.
+  switchDirtyRepos: AppState['switchDirtyRepos'];
+  resolveSwitchDirtyRepos: AppState['resolveSwitchDirtyRepos'];
 };
 
 export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
@@ -69,6 +77,17 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   }
 
   function handleSwitchDialogInput(current: SwitchDialogState, _input: string, key: Key) {
+    // Bug fix: while the dirty-repo preview is raised, it owns every keystroke — Enter
+    // proceeds (the switch resumes and auto-stashes/restores as previewed), Esc cancels the
+    // whole switch with nothing touched (switch.ts's onDirtyReposBeforeSwitch contract).
+    if (deps.switchDirtyRepos !== null) {
+      if (key.return) {
+        deps.resolveSwitchDirtyRepos('proceed');
+      } else if (key.escape) {
+        deps.resolveSwitchDirtyRepos('cancel');
+      }
+      return;
+    }
     if (key.escape) {
       if (!current.submitting) {
         deps.setDialog({ kind: 'none' });
@@ -84,11 +103,33 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   return { handleSwitchDialogInput };
 }
 
-export function SwitchDialogView({ dialog }: { dialog: SwitchDialogState }) {
+// Bug fix: the per-service dirty preview shown while switchDirtyRepos is raised. Each row
+// names the service and, for a non-member, notes it sits outside the target EDT — the exact
+// distinction switch.ts's SwitchDirtyRepo.scope carries (see that file's header on why a
+// non-member's round-trip is still safe: stashed then restored on the shared branch in the
+// very same switch call).
+function DirtyReposPreview({ dirty }: { dirty: readonly SwitchDirtyRepo[] }) {
+  return (
+    <Box flexDirection="column">
+      <Text color={colors.warning}>These services have uncommitted changes that will be set aside and restored automatically:</Text>
+      {dirty.map((repo) => (
+        <Text key={repo.repoPath} color={colors.text}>
+          {'  '}• {repo.service}
+          {repo.scope === 'non-member' ? ' (outside this EDT — moves to its shared branch)' : ''}
+        </Text>
+      ))}
+      <Text color={colors.text}>[Enter] continue anyway  [Esc] cancel the switch</Text>
+    </Box>
+  );
+}
+
+export function SwitchDialogView({ dialog, switchDirtyRepos }: { dialog: SwitchDialogState; switchDirtyRepos: SwitchDirtyRepo[] | null }) {
   return (
     <ModalDialog title="SWITCH EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
-        {dialog.blocked ? (
+        {switchDirtyRepos !== null ? (
+          <DirtyReposPreview dirty={switchDirtyRepos} />
+        ) : dialog.blocked ? (
           <>
             <Text color={colors.warning}>Cannot switch away: an action is in progress on the current EDT.</Text>
             <Text color={colors.text}>[Enter] force switch anyway  [Esc] cancel</Text>
@@ -100,7 +141,7 @@ export function SwitchDialogView({ dialog }: { dialog: SwitchDialogState }) {
           </>
         )}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-        {dialog.submitting ? <DimAnnotation text="Switching…" /> : null}
+        {dialog.submitting && switchDirtyRepos === null ? <DimAnnotation text="Switching…" /> : null}
       </Box>
     </ModalDialog>
   );

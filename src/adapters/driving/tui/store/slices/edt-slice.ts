@@ -6,7 +6,12 @@
 // store (AD-10: still exactly one store/one hook).
 import type { StateCreator } from 'zustand';
 import { createEdt as createEdtUseCase, type CreateBranchOptions, type CreateEdtData } from '../../../../../core/edt/create.js';
-import { switchActiveEdt as switchActiveEdtUseCase, type SwitchActiveEdtData } from '../../../../../core/edt/switch.js';
+import {
+  switchActiveEdt as switchActiveEdtUseCase,
+  type SwitchActiveEdtData,
+  type SwitchDirtyRepo,
+  type SwitchDirtyReposChoice,
+} from '../../../../../core/edt/switch.js';
 import {
   modifyEdt as modifyEdtUseCase,
   createMemberBranch as createMemberBranchUseCase,
@@ -136,6 +141,13 @@ export type EdtSlice = {
   // throwing (every pre-2.9 `createAppStore()` call, including tests, stays usable).
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
+  // Bug fix: the switch dirty-repo confirm seam — mirrors UpdateSlice's updateBlocker/
+  // resolveUpdateBlocker (story 3.4). Non-null while switchActiveEdt is paused inside
+  // switchEdt, waiting for the developer's proceed/cancel choice on the batch of dirty repos
+  // it's about to auto-stash. The switch dialog renders the per-service preview while this is
+  // set and calls resolveSwitchDirtyRepos to resume the paused core call.
+  switchDirtyRepos: SwitchDirtyRepo[] | null;
+  resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
   // Story 2.29: mirrors createEdt/switchEdt/modifyEdt's own call shape — the delete dialog's
   // confirm calls core/edt/delete.ts's deleteEdt in-process (AD-2), never via the CLI.
@@ -173,6 +185,10 @@ export type EdtSlice = {
 };
 
 export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], EdtSlice> {
+  // Bug fix: the pending seam promise's resolver — installed when switchActiveEdt raises a
+  // dirty-repo preview, consumed when the dialog dispatches proceed/cancel. Held in closure,
+  // never in Zustand state (mirrors UpdateSlice's own pendingBlockerResolve).
+  let pendingSwitchDirtyResolve: ((choice: SwitchDirtyReposChoice) => void) | null = null;
   return (set, get) => ({
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
@@ -280,31 +296,56 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       return result;
     },
+    switchDirtyRepos: null,
+    resolveSwitchDirtyRepos: (choice) => {
+      const resolve = pendingSwitchDirtyResolve;
+      pendingSwitchDirtyResolve = null;
+      set({ switchDirtyRepos: null });
+      resolve?.(choice);
+    },
     switchEdt: async (params) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
-      const result = await switchActiveEdtUseCase({
-        edtRegistry: deps.edtRegistry,
-        edtRegistryResourceKey: deps.edtRegistryResourceKey,
-        registry: deps.registry,
-        manifest: deps.manifest,
-        git: deps.git,
-        lock: deps.lock,
-        state: deps.state,
-        topic: params.topic,
-        force: params.force,
-      });
-      if (result.ok) {
-        // Success updates the store's cached active-EDT pointer immediately — a direct
-        // consequence of this TUI-driven switch, not the continuous fs.watch/poll re-sync
-        // AD-10 also describes (that half stays out of this story's scope).
-        set({ activeEdt: result.data.ulid });
-        // Story 2.13: switching the active EDT swaps its whole member set — reload
-        // gated-tab visibility so a newly (in)active member's tab flips immediately.
-        void get().loadTabVisibility();
+      try {
+        const result = await switchActiveEdtUseCase({
+          edtRegistry: deps.edtRegistry,
+          edtRegistryResourceKey: deps.edtRegistryResourceKey,
+          registry: deps.registry,
+          manifest: deps.manifest,
+          git: deps.git,
+          lock: deps.lock,
+          state: deps.state,
+          topic: params.topic,
+          force: params.force,
+          // Bug fix: the TUI backs the dirty-repo confirm seam — core pauses the switch on
+          // the batch of dirty repos it's about to auto-stash and waits here while the
+          // switch dialog's preview collects the developer's proceed/cancel choice.
+          onDirtyReposBeforeSwitch: async (dirty) => {
+            set({ switchDirtyRepos: dirty });
+            return new Promise<SwitchDirtyReposChoice>((resolve) => {
+              pendingSwitchDirtyResolve = resolve;
+            });
+          },
+        });
+        if (result.ok) {
+          // Success updates the store's cached active-EDT pointer immediately — a direct
+          // consequence of this TUI-driven switch, not the continuous fs.watch/poll re-sync
+          // AD-10 also describes (that half stays out of this story's scope).
+          set({ activeEdt: result.data.ulid });
+          // Story 2.13: switching the active EDT swaps its whole member set — reload
+          // gated-tab visibility so a newly (in)active member's tab flips immediately.
+          void get().loadTabVisibility();
+        }
+        return result;
+      } finally {
+        // A run that threw (or resolved) while a preview was still raised must not leave the
+        // dialog stuck waiting forever — mirrors UpdateSlice's own defensive cleanup.
+        pendingSwitchDirtyResolve = null;
+        if (get().switchDirtyRepos !== null) {
+          set({ switchDirtyRepos: null });
+        }
       }
-      return result;
     },
     modifyEdt: async (params) => {
       if (!deps) {

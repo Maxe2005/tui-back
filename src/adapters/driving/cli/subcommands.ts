@@ -430,6 +430,10 @@ async function runEdtSwitch(
     state: deps.state,
     topic,
     force,
+    // Bug fix: the CLI explicitly passes no dirty-repo confirmation seam (mirroring the
+    // `update` subcommand's onUpdateBlocker: undefined below) — a dirty repo keeps today's
+    // non-interactive auto-stash behavior, with no prompt.
+    onDirtyReposBeforeSwitch: undefined,
   });
 }
 
