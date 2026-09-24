@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: sprint-change-proposal-2026-09-24-2 (edt switch three-state model) (2026-09-24)
+
+- source_spec: `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-24-2.md`
+  summary: Removing a member from an EDT (Story 2.24 modify / 2.29 delete) while a stash tagged `tui-back:<that ulid>` is still pending for that repo leaves the stash orphaned — nothing pops it once the repo is no longer a member of that EDT.
+  evidence: state-1 stashes (Story 2.39) and adopt stashes are popped only by a switch into the owning EDT where the repo is still a member (`switchMemberRepo`). Not introduced by this change (same gap exists today for member stashes) but made more reachable by adopt. **Track:** on member removal / EDT delete, either warn about a pending tagged stash (`git.hasStash`) or offer to restore/drop it.
+
 ## Deferred from: review of 2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify (2026-09-23)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`

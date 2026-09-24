@@ -45,6 +45,9 @@ last_updated: 2026-09-24
 # 2026-09-24: Sprint Change Proposal (sprint-change-proposal-2026-09-24.md) appended stories
 # 2-35..2-38 (edt-create 4-step wizard + per-service branch plans core) to epic-2 and amended
 # story 2-31 in place (still `backlog`, now sequenced after 2-37).
+# 2026-09-24 (2): Sprint Change Proposal (sprint-change-proposal-2026-09-24-2.md) appended stories
+# 2-39..2-41 (edt switch three-state model, dirty-service adopt/discard) to epic-2; story 2-38
+# now sequences after 2-41.
 # 2026-09-23: Story 2-34 (EDT zone — colored, explained service-listing issues) added directly
 # (not a full Sprint Change Proposal cycle), implemented, and moved to done (full test suite +
 # typecheck + depcheck all green; no separate code-review pass run).
@@ -133,6 +136,9 @@ development_status:
   2-36-edt-creation-wizard-shell-step-navigation-name-services-steps: backlog
   2-37-edt-creation-wizard-step-3-global-branch-strategy-per-service-overrides: backlog
   2-38-edt-creation-wizard-step-4-activation-switch-choice: backlog
+  2-39-edt-switch-core-three-state-partition-dirty-service-resolutions: backlog
+  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
+  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: backlog
   epic-2-retrospective: optional
 
   epic-3: in-progress

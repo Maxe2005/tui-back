@@ -122,6 +122,8 @@ graph LR
 - **Prevents:** a call site forgetting the rule and reaching a destructive git operation outside its intended scope.
 - **Rule:** every git write passes through `adapters/driven/git`, which rejects — before any `git` invocation — a write targeting `development`/preprod/prod or any branch not the current EDT's own registered branch for that service. The git-adapter resolves that allowed-branch context itself, by reading current EDT/manifest state directly at write time through `EdtStorePort`/`ManifestPort` — it never trusts a branch name passed in by the caller, closing the gap where a stale or malicious caller-supplied value could bypass the check. No commit or push happens without the developer's explicit approval at the moment it happens. Uncommitted work is always auto-preserved before a tool-triggered branch switch, and the resulting state is re-verified, never assumed.
 
+> Amended 2026-09-24 (Sprint Change Proposal, Story 2.39): `GitPort.discardAll` is the single destructive, non-branch-scoped write; it is guarded structurally (explicit per-repo `discard` resolution, still-dirty re-check, sole caller `switch.ts`) rather than by the branch-scope gate.
+
 ### AD-9 — Single-TUI enforcement plus a per-EDT/repo action lock
 
 - **Binds:** process lifecycle, all state-mutating use-cases

@@ -1851,7 +1851,7 @@ As a developer, I want to set one branch rule for all selected services and then
 
 ### Story 2.38: EDT Creation Wizard — Step 4: Activation & Switch Choice
 
-> Added 2026-09-24 (Sprint Change Proposal): Step 4 of the wizard. Fixes two defects: TUI creates silently became the active EDT without a protected switch (`edt-slice.ts:280-291`), and the create action-log entry went to the previously focused EDT (`create-dialog.tsx:491-510`). Relies on the switch dirty-repo confirm seam (branch `fix-edt-switch-dirty-service-confirmation`), which must be merged into epic-2 first.
+> Added 2026-09-24 (Sprint Change Proposal): Step 4 of the wizard. Fixes two defects: TUI creates silently became the active EDT without a protected switch (`edt-slice.ts:280-291`), and the create action-log entry went to the previously focused EDT (`create-dialog.tsx:491-510`). Relies on the switch resolution dialog of Story 2.41 (which supersedes the confirm seam of branch `fix-edt-switch-dirty-service-confirmation`); Stories 2.39 and 2.41 must be merged into epic-2 first (amended 2026-09-24, Sprint Change Proposal 2026-09-24 (2)).
 
 As a developer, I want the last step of EDT creation to make explicit whether the new EDT becomes active now — and, for my very first EDT, to put every repo on the right branch while showing me exactly which uncommitted files are in the way — so that creation never silently changes my working state.
 
@@ -1865,9 +1865,9 @@ As a developer, I want the last step of EDT creation to make explicit whether th
 
 **Given** a clean pre-flight (or after Retry/Overwrite) **When** activation proceeds **Then** every repo is checked out on its target branch, `state.json`'s active pointer is set to the new EDT, per-repo failures are shown via `FailedResultList`, and one failure never blocks the others.
 
-**Given** one or more EDTs already existed **When** Step 4 renders **Then** a radio toggle (`Space`/`↑↓`) offers `(•) Basculer immédiatement sur ce nouvel EDT` (default) and `( ) Créer sans basculer (rester sur l'EDT courant)`; under the switch option an info block states that uncommitted work in the outgoing EDT is auto-preserved (stash), that non-member services return to **their own shared branch (listed by name per service)**, and that member services move to their configured branches.
+**Given** one or more EDTs already existed **When** Step 4 renders **Then** a radio toggle (`Space`/`↑↓`) offers `(•) Basculer immédiatement sur ce nouvel EDT` (default) and `( ) Créer sans basculer (rester sur l'EDT courant)`; under the switch option an info block states that uncommitted work in the outgoing EDT's services is auto-preserved (stash) and that uncommitted work in any other service is listed so you choose to adopt it into the outgoing EDT or discard it, that non-member services return to **their own shared branch (listed by name per service)**, and that member services move to their configured branches.
 
-**Given** "Basculer immédiatement" **When** confirmed **Then** `createEdt` runs, then the existing protected switch (`switchEdt`, including the dirty-repo confirm seam) runs to the new EDT — never a direct `writeActiveEdt`.
+**Given** "Basculer immédiatement" **When** confirmed **Then** `createEdt` runs, then the existing protected switch (`switchActiveEdt`, including the Story 2.41 dirty-service resolution dialog) runs to the new EDT — never a direct `writeActiveEdt`.
 
 **Given** "Créer sans basculer" **When** confirmed **Then** only `createEdt` runs; the active EDT is unchanged.
 
@@ -1876,6 +1876,88 @@ As a developer, I want the last step of EDT creation to make explicit whether th
 **Given** any creation outcome **When** logged **Then** the action-log entry is written to the **new** EDT's database (success, partial failure, or activation stopped), never to the previously focused EDT.
 
 **Implementation notes:** `activateEdt` reuses `switch.ts`'s per-repo target computation (member → registered branch, non-member → `sharedBranch` + fetch-if-missing) but has no outgoing EDT, so no stash tagging; it takes an explicit `overwrite: string[]` per repo (paths the developer confirmed) and calls the existing `git.discardPaths` for exactly those. The overwrite path is the consent-gated exception recorded in the PRD amendment below. The pre-flight "would be overwritten" set needs one new read-only `GitPort` helper (`diffNameOnly(repoPath, from, to)`), gated nowhere (read-only).
+
+### Story 2.39: EDT Switch Core — Three-State Partition & Dirty-Service Resolutions
+
+> Added 2026-09-24 (Sprint Change Proposal): fixes `switch.ts` D1/D2 and replaces the informational dirty-repo seam with an authoritative per-service resolution. CLI wiring lands in 2.40, TUI dialog in 2.41.
+
+As a developer, I want a switch to know exactly whose uncommitted work each repo holds, so that the outgoing EDT's work is preserved for its return, and work that belongs to no outgoing member is never silently moved — I decide what happens to it.
+
+**Acceptance Criteria:**
+
+**Given** a switch **When** repos are classified **Then** membership is evaluated against the **outgoing** EDT: *state 1* = member of the outgoing EDT; *state 2* = member of another EDT (including the target) but not the outgoing one; *state 3* = member of no EDT. The target's membership still decides the destination branch (its own registered branch if a target member, else the repo's manifest `sharedBranch`, fetched first if absent locally — FR-8).
+
+**Given** a **state-1** repo that is dirty **When** switched **Then** it is stashed with `tui-back:<outgoing ulid>` **before** checkout, no resolution is needed, and it is popped only by a later switch **into** the outgoing EDT (that switch's `switchMemberRepo` pops the target-ulid-tagged stash, unchanged). A state-1 repo that is also a target member additionally pops its target-tagged stash after checkout (unchanged).
+
+**Given** a **state-2 or state-3** repo that is dirty **When** switched **Then** it requires an entry in the caller-supplied `dirtyResolutions: Record<repoPath, DirtyResolution>` where `DirtyResolution = { kind: 'adopt'; branch: string } | { kind: 'discard' }`. The fixed `NON_MEMBER_STASH_TAG` and its unconditional post-checkout pop are **removed**; D1 and D2 no longer exist (a target-only dirty member is state 2 and goes through resolution, never through an outgoing-tagged stash).
+
+**Given** the pre-flight **When** the switch starts **Then**, before any git write, dirtiness of every registered repo is re-read (`hasUncommittedChanges`); if any dirty state-2/3 repo has no resolution, the switch returns `switch-dirty-services-unresolved` whose `details` lists `{service, repoPath, scope: 'member-of-other-edt' | 'non-member', currentBranch}` per repo, with **zero repos touched** and `state.json`/`edts.yaml` untouched.
+
+**Given** the `onDirtyReposBeforeSwitch` seam **When** at least one state-2/3 repo is dirty **Then** it is invoked once with every dirty repo (state-1 rows flagged `resolution: 'auto-stash'` as read-only information; state-2/3 rows carrying their scope, current branch, whether that branch is shared, and the owning EDT topic(s) when state 2) and returns `{ kind: 'cancel' }` (→ `switch-cancelled-by-user`, zero writes) or `{ kind: 'proceed', resolutions }`. When only state-1 repos are dirty the seam is **not** invoked. Explicit `dirtyResolutions` in params take precedence and skip the seam (CLI path).
+
+**Given** an `adopt` resolution **When** executed **Then**, in order: (1) `git.assertAllowedBranch(repo, branch, outgoing.ulid)` — a shared/protected name or a branch claimed by another EDT for this repo is rejected before any write (FR-7, AD-8); (2) `stashSave` with `tui-back:<outgoing ulid>`; (3) if `branch` differs from the repo's current branch, `createBranch(repo, branch, <current HEAD branch>)` — never checked out; if it equals the current branch it must itself pass step 1 (i.e. not shared); (4) the repo is added to the outgoing EDT with `branch` as its registered branch (existing `modifyEdt` add-member path, under the edts.yaml lock); (5) checkout to the destination branch. A failure at any step after the stash restores the stash and reports `failed` — never an orphaned stash. Outcome `adopted`.
+
+**Given** a `discard` resolution **When** executed **Then** the repo must still be dirty at that instant, its dirty paths are captured via `git.listDirtyPaths` (untracked expanded to files), `git.discardAll(repo)` runs, then checkout to the destination branch. Outcome `discarded`, with `detail.discardedPaths` carrying the captured list. Ignored files are never touched.
+
+**Given** no outgoing EDT (first switch) **When** a state-2/3 repo is dirty **Then** an `adopt` resolution is rejected (`switch-adopt-without-outgoing`); only `discard` or cancel apply.
+
+**Given** the new `GitPort.discardAll(repoPath)` **When** implemented **Then** it runs `git reset --hard` then `git clean -fd` (never `-x`, never `-ff`), returns `git-discard-error` on failure, and its port doc comment records that it is the one consent-gated destructive primitive whose only permitted caller is `switch.ts` under an explicit `discard` resolution.
+
+**Given** a discard/adopt failure on one repo **When** reported **Then** it is a `failed` row for that repo; the others proceed (per-repo isolation unchanged). Idempotency, lock-peek/`--force`, AD-8 member re-verification and the final `state.json`/`edts.yaml` writes are unchanged.
+
+**Given** the TUI slice **When** this story lands **Then** its seam implementation compiles against the new signature and, for a dirty state-2/3 repo, returns `cancel` with an explanatory message (interim, safe; replaced by 2.41).
+
+**Implementation notes:** classification is a pure helper `classifySwitchRepos(registered, outgoing, target, allEdts)` unit-tested directly; `switchMemberRepo`/`switchNonMemberRepo` keep their names but take the resolved state + resolution. Unit tests use fake ports (AD-13); `discardAll` gets a real-git integration test (tracked-modified, untracked file, untracked dir, ignored file survives). Existing `switch.test.ts` cases that assert the `tui-back:shared` round-trip are rewritten, not patched.
+
+### Story 2.40: `edt switch` CLI — Fail-Safe Dirty Handling & Explicit Flags
+
+> Added 2026-09-24 (Sprint Change Proposal): CLI side of the 2.39 model. No dialog exists on this path.
+
+As a developer scripting or hand-running `tui-back edt switch`, I want a dirty service that belongs to no outgoing member to stop the switch unless I said what to do with it, so that no script ever silently moves or destroys work.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back edt switch --to <topic>` **When** a state-2/3 repo is dirty and no dirty flag is passed **Then** the command fails with `switch-dirty-services-unresolved` (exit 1, AD-3 envelope; `details` lists each service, scope and current branch) and touches nothing.
+
+**Given** `--discard-dirty` **When** passed **Then** every dirty state-2/3 repo is resolved as `discard` (2.39), and the JSON result lists each discarded path under that service's `detail.discardedPaths` (audit trail); the flag is the explicit consent — no interactive prompt on this path.
+
+**Given** `--adopt-dirty --adopt-branch <name>` **When** passed **Then** every dirty state-2/3 repo currently on a **shared** branch is adopted onto a new branch `<name>`, and every one on a **non-shared** branch is adopted keeping its current branch; a name rejected by the AD-8 gate or already existing in that repo fails that repo's row (`failed`), others proceed. `--adopt-dirty` without `--adopt-branch` while any such repo sits on a shared branch fails up front with `missing-argument` (zero writes).
+
+**Given** `--adopt-dirty` and `--discard-dirty` **When** both passed **Then** `invalid-argument`, zero writes. With no outgoing EDT, `--adopt-dirty` fails with `switch-adopt-without-outgoing`.
+
+**Given** the help text and `docs` for `edt switch` **When** updated **Then** both flags and the fail-safe default are documented, including that the previous silent stash-and-restore for these repos no longer happens.
+
+**Given** `tui-back.e2e.test.ts` **When** run **Then** its `edt switch` expectations are updated (dirty non-member → `switch-dirty-services-unresolved`; both flags exercised black-box in the non-TTY JSON branch).
+
+**Implementation notes:** `subcommands.ts:436` stops passing `onDirtyReposBeforeSwitch: undefined` and instead builds `dirtyResolutions` lazily: the flags produce a *policy* (`adopt(name)` | `discard`) that is turned into per-repo resolutions **after** the core's pre-flight classification (the CLI does not classify repos itself). Simplest shape: core accepts `dirtyPolicy?: { kind: 'adopt'; branch: string } | { kind: 'discard' }` as sugar that expands to resolutions per dirty state-2/3 repo (adopt: current branch kept when non-shared).
+
+### Story 2.41: EDT Switch Resolution Dialog — Global Strategy, Per-Service Overrides & Discard Confirmation
+
+> Added 2026-09-24 (Sprint Change Proposal): TUI side of the 2.39 model; mirrors the edt-create Step 3 pattern (Stories 2.35-2.37). Replaces the informative-only confirm added by `43d4087`.
+
+As a developer switching EDT with uncommitted work in services that don't belong to the EDT I'm leaving, I want to see exactly which services are affected and decide once for all of them — or service by service — whether to keep that work with my current EDT or throw it away, so that nothing is lost by accident and nothing pollutes the shared branches.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm Story 2.39 is `done` in `sprint-status.yaml` and merged into the epic branch (`dirtyResolutions`, `discardAll`, resolver-shaped seam present), and that Story 2.37's reusable table/override-box components exist on the epic branch (`branch-plan-table`); otherwise **HALT** — never re-implement either here.
+
+**Given** a switch with ≥1 dirty state-2/3 repo **When** the seam fires **Then** the SWITCH EDT dialog shows a two-panel resolution view — **A "STRATÉGIE GLOBALE"** (focused by default) and **B "SERVICES CONCERNÉS"** — with a footer `[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch`; an intro states which EDT is being left and that state-1 services are handled automatically.
+
+**Given** Panel A **When** navigated **Then** it has a line "Action par défaut" toggling `(•) Adopter dans <outgoing topic>  ( ) Écraser` (`Space`/`←→`) and, when *Adopter*, a line "Nom global de la branche" (a `TextInputLine`, pre-filled with the slug of the outgoing EDT's topic via `suggestBranchNameFromTopic`, touched-flag convention of Story 2.22) applied to every row on a **shared** branch. With no outgoing EDT only *Écraser* is offered, with an explanation.
+
+**Given** Panel B **When** rendered **Then** it is a height-bounded table (NFR-7) `Service | Portée | Branche actuelle | Action | Branche cible`, one row per dirty state-2/3 service (`Portée` = "membre de <topic>" or "hors EDT"); state-1 dirty services appear below as read-only dim rows "sera mis de côté pour <outgoing> (restauré au retour)"; modes per row: `[Adopter (Global)]`, `[Adopter (Perso)]`, `[Écraser]`; `↑/↓` move, `Enter` opens the override box.
+
+**Given** the override box "Configurer <service>" **When** open **Then** it offers `Action : (•) Adopter ( ) Écraser`; for *Adopter*, "Branche" is a `TextInputLine` — **always editable and pre-filled** (global name when the repo is on a shared branch, its current branch name otherwise) — validated live inline: a shared/protected name is rejected (FR-7), a name that already exists locally in that repo is rejected, an empty name is rejected; `Enter` on `[ Appliquer ]` sets the row to `[Adopter (Perso)]` or `[Écraser]`; `Ctrl+R` returns the row to the global strategy.
+
+**Given** `Ctrl+N` **When** every row is valid **Then**: if no row is `[Écraser]` the switch proceeds with the resolutions; if any row is `[Écraser]` a **second confirmation** first lists, per service, every file that will be destroyed (tracked modifications and untracked files, from `listDirtyPaths`), states that the action is irreversible and that ignored files are kept, and requires an explicit confirmation key (default action is *Retour*); `Esc` there returns to the table. Invalid rows block `Ctrl+N` with the inline error.
+
+**Given** `Esc` on the main view **When** pressed **Then** the switch is cancelled (`switch-cancelled-by-user`), nothing touched, and a message says so.
+
+**Given** the switch completes **When** results return **Then** `adopted` / `discarded` / `switched` / `failed` rows are shown via the existing structured result display (`FailedResultList` for failures), and the action-log entry (written to the **new active** EDT's database) records adopted branches and discarded paths.
+
+**Given** the `edt-*` auto-switch-tab command path (Story 670bfcb) and the quick-pick (Story 2.30) **When** they trigger a switch **Then** they go through the same seam, unchanged.
+
+**Implementation notes:** `edt-slice.ts` already parks the core call on a pending promise (`switchDirtyRepos` + `resolveSwitchDirtyRepos`); widen the resolver payload to the `{kind, resolutions}` shape and hold the dialog's draft state in the slice or dialog, not in core. Pure helpers in a new `switch-resolution.logic.ts`: `buildRows(dirty, global)`, `validateRow(row, branchesByService)`, `buildResolutions(rows)`. Per-service branch lists come from `listMemberBranches`.
 
 ## Epic 3: Group Update & Migrations
 
