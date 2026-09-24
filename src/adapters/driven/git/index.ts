@@ -59,6 +59,9 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
     renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
+    listRemoteBranches: (repoPath) => listRemoteBranches(repoPath),
+    createTrackingBranch: (repoPath, localName, remoteRef) =>
+      createTrackingBranch(manifest, repoPath, localName, remoteRef),
   };
 }
 
@@ -134,15 +137,31 @@ export async function createBranch(
     return err('git-create-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
   }
 
-  const base = showRef(repoPath, baseBranch);
-  if (base.kind === 'missing') {
-    return err('base-branch-missing', `Base branch "${baseBranch}" does not exist in ${repoPath}`);
+  // Story 2.35: the base may be a local branch or a remote-tracking ref (`origin/release`).
+  // A local branch wins when both exist; the resolved *full* ref is what git receives, so the
+  // start point can never be re-interpreted (e.g. as a same-named tag).
+  const localBase = showFullRef(repoPath, `refs/heads/${baseBranch}`);
+  if (localBase.kind === 'error') {
+    return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${localBase.detail}`);
   }
-  if (base.kind === 'error') {
-    return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${base.detail}`);
+  let baseRef = `refs/heads/${baseBranch}`;
+  if (localBase.kind === 'missing') {
+    const remoteBase = showFullRef(repoPath, `refs/remotes/${baseBranch}`);
+    if (remoteBase.kind === 'missing') {
+      return err('base-branch-missing', `Base branch "${baseBranch}" does not exist in ${repoPath}`);
+    }
+    if (remoteBase.kind === 'error') {
+      return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${remoteBase.detail}`);
+    }
+    baseRef = `refs/remotes/${baseBranch}`;
   }
 
-  const created = spawnSync('git', ['branch', '--', branchName, baseBranch], { cwd: repoPath, encoding: 'utf8' });
+  // `--no-track`: a branch cut from `origin/x` must not inherit `origin/x` as its upstream
+  // (that would skew Story 2.6's ahead/behind); harmless for a local base.
+  const created = spawnSync('git', ['branch', '--no-track', '--', branchName, baseRef], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
   if (created.status !== 0) {
     return err('git-create-branch-error', `git branch failed in ${repoPath}: ${spawnFailureDetail(created)}`);
   }
@@ -604,7 +623,9 @@ export async function listBranches(repoPath: string): Promise<Result<string[]>> 
   return ok(branches);
 }
 
-// Story 2.26 — renames a local branch ref. Gates the *new* name the same way createBranch
+// Story 2.26 — renames a local branch ref. Story 2.35: gates the *old* name too (before any
+// git call), so a shared/protected branch such as `development` can never be renamed away.
+// Gates the *new* name the same way createBranch
 // gates its own target (assertAllowedBranch, no edtId — a rename lands a branchName exactly
 // like a create does, so it must pass the identical shared-branch check). Reuses createBranch's
 // exact 'branch-exists' code when newName is already taken (Boundaries: "reuse createBranch's
@@ -617,6 +638,10 @@ export async function renameBranch(
   oldName: string,
   newName: string,
 ): Promise<Result<void>> {
+  const allowedOld = await assertAllowedBranch(manifest, repoPath, oldName);
+  if (!allowedOld.ok) {
+    return allowedOld;
+  }
   const allowed = await assertAllowedBranch(manifest, repoPath, newName);
   if (!allowed.ok) {
     return allowed;
@@ -652,6 +677,73 @@ export async function renameBranch(
   return ok(undefined);
 }
 
+// Story 2.35 — the remote-tracking refs already present locally, as `<remote>/<branch>`.
+// Uses the full `%(refname)` and strips `refs/remotes/` itself: `%(refname:short)` is unsafe
+// here, git shortens `refs/remotes/origin/HEAD` to a bare `origin`. The symbolic
+// `<remote>/HEAD` refs are dropped. Never fetches — only what the last fetch left behind.
+export async function listRemoteBranches(repoPath: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    return err(
+      'git-list-remote-branches-error',
+      `git for-each-ref failed in ${repoPath}: ${spawnFailureDetail(result)}`,
+    );
+  }
+  const prefix = 'refs/remotes/';
+  const branches = String(result.stdout)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(prefix) && !line.endsWith('/HEAD'))
+    .map((line) => line.slice(prefix.length));
+  return ok(branches);
+}
+
+// Story 2.35 — creates local branch `localName` tracking the remote-tracking ref `remoteRef`
+// (`git branch --track -- <localName> <remoteRef>`): a ref write only, never a checkout,
+// never a fetch. `localName` passes the shared-branch gate first (a tracking branch lands a
+// branchName exactly like a create does); an existing local `localName` is `branch-exists`
+// (createBranch's exact code); a `remoteRef` absent from `refs/remotes/` is
+// `remote-branch-missing`.
+export async function createTrackingBranch(
+  manifest: ManifestPort,
+  repoPath: string,
+  localName: string,
+  remoteRef: string,
+): Promise<Result<void>> {
+  const allowed = await assertAllowedBranch(manifest, repoPath, localName);
+  if (!allowed.ok) {
+    return allowed;
+  }
+
+  const target = showRef(repoPath, localName);
+  if (target.kind === 'exists') {
+    return err('branch-exists', `Branch "${localName}" already exists in ${repoPath}`);
+  }
+  if (target.kind === 'error') {
+    return err('git-create-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
+  }
+
+  const remote = showFullRef(repoPath, `refs/remotes/${remoteRef}`);
+  if (remote.kind === 'missing') {
+    return err('remote-branch-missing', `Remote branch "${remoteRef}" does not exist in ${repoPath}`);
+  }
+  if (remote.kind === 'error') {
+    return err('git-create-branch-error', `Cannot verify remote branch state in ${repoPath}: ${remote.detail}`);
+  }
+
+  const created = spawnSync('git', ['branch', '--track', '--', localName, `refs/remotes/${remoteRef}`], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (created.status !== 0) {
+    return err('git-create-branch-error', `git branch --track failed in ${repoPath}: ${spawnFailureDetail(created)}`);
+  }
+  return ok(undefined);
+}
+
 // git show-ref --verify --quiet exit-code taxonomy: 0 = the ref exists, 1 = the ref is
 // missing (quiet), anything else (e.g. 128 on a non-git directory) is a real git error.
 interface ShowRefOutcome {
@@ -677,7 +769,11 @@ function spawnFailureDetail(result: { status: number | null; stderr: string; err
 }
 
 function showRef(repoPath: string, branchName: string): ShowRefOutcome {
-  const result = spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`], {
+  return showFullRef(repoPath, `refs/heads/${branchName}`);
+}
+
+function showFullRef(repoPath: string, fullRef: string): ShowRefOutcome {
+  const result = spawnSync('git', ['show-ref', '--verify', '--quiet', fullRef], {
     cwd: repoPath,
     encoding: 'utf8',
   });

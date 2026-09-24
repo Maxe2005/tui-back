@@ -361,6 +361,8 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
+      listRemoteBranches: async () => ok([]),
+      createTrackingBranch: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
       ...overrides,
