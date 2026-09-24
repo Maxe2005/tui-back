@@ -288,7 +288,7 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   // member repos.
   const branchWrites: BranchWrite[] = [];
   for (const member of members) {
-    const resolved = await resolveMemberBranch(git, manifest, member, strategy);
+    const resolved = await resolveMemberBranch(git, manifest, member, strategy, ulid);
     results.push({ service: resolved.service, outcome: resolved.outcome, ...(resolved.detail !== undefined ? { detail: resolved.detail } : {}) });
     // A failed member is never registered as a member — closes the gap where a "best
     // effort" fallback branch (e.g. the repo's current branch) could itself be shared
@@ -367,6 +367,11 @@ function validateMemberPlans(
   members: string[],
   memberPlans: Record<string, MemberBranchPlan>,
 ): Result<Map<string, MemberBranchPlan>> {
+  // Runtime guard: an untyped caller may pass null / a non-object (Object.entries would throw).
+  const candidate: unknown = memberPlans;
+  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return err('invalid-argument', 'memberPlans must be an object keyed by member path');
+  }
   const memberSet = new Set(members);
   const plans = new Map<string, MemberBranchPlan>();
   for (const [key, plan] of Object.entries(memberPlans)) {
@@ -441,6 +446,7 @@ async function resolveMemberBranch(
   manifest: ManifestPort,
   member: string,
   strategy: BranchStrategy,
+  edtUlid: string,
 ): Promise<ResolvedMemberBranch> {
   const loaded = await manifest.load(member);
   const service = loaded.ok ? loaded.data.service : member;
@@ -455,7 +461,7 @@ async function resolveMemberBranch(
 
   if (strategy.kind === 'plans') {
     // validateMemberPlans guarantees every member has a plan.
-    return resolvePlannedMemberBranch(git, member, service, strategy.plans.get(member) as MemberBranchPlan);
+    return resolvePlannedMemberBranch(git, member, service, strategy.plans.get(member) as MemberBranchPlan, edtUlid);
   }
   const { options } = strategy;
 
@@ -502,6 +508,7 @@ async function resolvePlannedMemberBranch(
   member: string,
   service: string,
   plan: MemberBranchPlan,
+  edtUlid: string,
 ): Promise<ResolvedMemberBranch> {
   if (plan.kind === 'create') {
     const created = await git.createBranch(member, plan.name, plan.base);
@@ -523,8 +530,16 @@ async function resolvePlannedMemberBranch(
   }
 
   if (local.data) {
+    // An existing local branch is gated with the new EDT's ulid as edtId, so AD-8's
+    // cross-EDT half runs too: the EDT is not registered yet, so any registered owner of this
+    // branch is "another EDT" — attaching it, or renaming it away, is rejected
+    // (branch-owned-by-other-edt). renameBranch itself only runs the shared-branch gate.
+    const allowed = await git.assertAllowedBranch(member, plan.branch, edtUlid);
+    if (!allowed.ok) {
+      return failed(service, allowed.error);
+    }
     if (plan.renameTo !== undefined && plan.renameTo !== plan.branch) {
-      // renameBranch gates both the old and the new name (Story 2.35).
+      // renameBranch gates both the old and the new name against the shared set (Story 2.35).
       const renamed = await git.renameBranch(member, plan.branch, plan.renameTo);
       if (!renamed.ok) {
         return failed(service, renamed.error);
@@ -536,12 +551,8 @@ async function resolvePlannedMemberBranch(
         write: { kind: 'renamed', repoPath: member, originalName: plan.branch, renamedTo: plan.renameTo },
       };
     }
-    // Reused as-is: no git write gates it, so it must pass the shared-branch gate itself
-    // (Story 2.3 precedent for the branch-creation-disabled path).
-    const allowed = await git.assertAllowedBranch(member, plan.branch);
-    if (!allowed.ok) {
-      return failed(service, allowed.error);
-    }
+    // Reused as-is: no git write gates it, so the gate above is its only check (Story 2.3
+    // precedent for the branch-creation-disabled path).
     return { service, outcome: 'existing-branch', branch: plan.branch };
   }
 

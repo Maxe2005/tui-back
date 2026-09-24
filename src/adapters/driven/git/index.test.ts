@@ -981,6 +981,23 @@ describe('listRemoteBranches (story 2.35)', () => {
     }
   });
 
+  it('keeps a real branch whose name ends in /HEAD, dropping only the symbolic origin/HEAD (review)', async () => {
+    const origin = await makeGitRepo();
+    expect(runGit(origin, ['branch', 'release/HEAD']).status).toBe(0);
+    const clone = await mkdtemp(join(tmpdir(), 'tui-back-git-clone-head-'));
+    tmpDirs.push(clone);
+    expect(spawnSync('git', ['clone', origin, clone], { encoding: 'utf8' }).status).toBe(0);
+    expect(remoteRefExists(clone, 'origin/HEAD')).toBe(true);
+    expect(remoteRefExists(clone, 'origin/release/HEAD')).toBe(true);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect([...result.data].sort()).toEqual(['origin/development', 'origin/release/HEAD']);
+    }
+  });
+
   it('never fetches — a branch pushed to origin after the clone is not listed', async () => {
     const { origin, clone } = await makeGitRepoOriginAndClone();
     expect(runGit(origin, ['branch', 'feat/after-clone']).status).toBe(0);

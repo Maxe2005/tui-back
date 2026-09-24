@@ -623,11 +623,11 @@ export async function listBranches(repoPath: string): Promise<Result<string[]>> 
   return ok(branches);
 }
 
-// Story 2.26 — renames a local branch ref. Story 2.35: gates the *old* name too (before any
-// git call), so a shared/protected branch such as `development` can never be renamed away.
-// Gates the *new* name the same way createBranch
-// gates its own target (assertAllowedBranch, no edtId — a rename lands a branchName exactly
-// like a create does, so it must pass the identical shared-branch check). Reuses createBranch's
+// Story 2.26 — renames a local branch ref. Both names pass assertAllowedBranch (no edtId)
+// before any git call: the *new* name the same way createBranch gates its own target (a
+// rename lands a branchName exactly like a create does, so it must pass the identical
+// shared-branch check), and — since Story 2.35 — the *old* name too, so a shared/protected
+// branch such as `development` can never be renamed away. Reuses createBranch's
 // exact 'branch-exists' code when newName is already taken (Boundaries: "reuse createBranch's
 // exact code") so FailedResultList's registry entry for it applies uniformly regardless of
 // which git write produced the collision. A missing oldName is a distinct, new failure mode
@@ -679,10 +679,11 @@ export async function renameBranch(
 
 // Story 2.35 — the remote-tracking refs already present locally, as `<remote>/<branch>`.
 // Uses the full `%(refname)` and strips `refs/remotes/` itself: `%(refname:short)` is unsafe
-// here, git shortens `refs/remotes/origin/HEAD` to a bare `origin`. The symbolic
-// `<remote>/HEAD` refs are dropped. Never fetches — only what the last fetch left behind.
+// here, git shortens `refs/remotes/origin/HEAD` to a bare `origin`. Only *symbolic* refs
+// (non-empty `%(symref)`, i.e. `<remote>/HEAD`) are dropped — a real branch whose name ends
+// in `/HEAD` (e.g. `origin/release/HEAD`) is kept. Never fetches.
 export async function listRemoteBranches(repoPath: string): Promise<Result<string[]>> {
-  const result = spawnSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/'], {
+  const result = spawnSync('git', ['for-each-ref', '--format=%(refname)%09%(symref)', 'refs/remotes/'], {
     cwd: repoPath,
     encoding: 'utf8',
   });
@@ -693,11 +694,13 @@ export async function listRemoteBranches(repoPath: string): Promise<Result<strin
     );
   }
   const prefix = 'refs/remotes/';
-  const branches = String(result.stdout)
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith(prefix) && !line.endsWith('/HEAD'))
-    .map((line) => line.slice(prefix.length));
+  const branches: string[] = [];
+  for (const line of String(result.stdout).split('\n')) {
+    const [refname = '', symref = ''] = line.split('\t');
+    if (refname.startsWith(prefix) && symref.trim() === '') {
+      branches.push(refname.slice(prefix.length));
+    }
+  }
   return ok(branches);
 }
 
