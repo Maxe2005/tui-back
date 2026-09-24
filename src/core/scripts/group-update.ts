@@ -33,6 +33,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { MigrationPort } from '../ports/migration.js';
 import type { RegistryPort } from '../ports/registry.js';
+import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
 
@@ -126,6 +127,7 @@ export interface GroupUpdateParams {
   git: GitPort;
   container: ContainerPort;
   migration: MigrationPort;
+  restart: RestartPort;
   lock: LockPort;
   registry?: RegistryPort;
   scope?: GroupUpdateScope;
@@ -134,8 +136,8 @@ export interface GroupUpdateParams {
   // touched, never reported). Undefined means the full default selection (every enumerated
   // target); an empty array is an explicit `no-services-selected` rejection before any
   // lock is taken. `runMigrations` defaults to true (the migrate toggle ON); `cleanRestart`
-  // defaults to false and still performs today's plain container restart until story 3.8
-  // lands the `restartCommands` recipe.
+  // defaults to false — on it runs the manifest's `restartCommands` recipe in order when
+  // declared (story 3.8), falling back to today's plain container restart when absent.
   selection?: GroupUpdateSelectionItem[];
   runMigrations?: boolean;
   cleanRestart?: boolean;
@@ -194,7 +196,7 @@ export async function groupUpdate(params: GroupUpdateParams): Promise<Result<Gro
 }
 
 async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
-  const { manifest, git, container, migration, lock, registry, selection } = params;
+  const { manifest, git, container, migration, restart, lock, registry, selection } = params;
   const runMigrations = params.runMigrations ?? true;
   const cleanRestart = params.cleanRestart ?? false;
   if (registry === undefined) {
@@ -279,6 +281,7 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         git,
         container,
         migration,
+        restart,
         undefined,
         repoPath,
         loaded.data.service,
@@ -352,7 +355,7 @@ async function narrowAllTargets(
 }
 
 async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
-  const { edtRegistry, state, manifest, git, container, migration, lock, selection } = params;
+  const { edtRegistry, state, manifest, git, container, migration, restart, lock, selection } = params;
   const runMigrations = params.runMigrations ?? true;
   const cleanRestart = params.cleanRestart ?? false;
 
@@ -448,6 +451,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
           git,
           container,
           migration,
+          restart,
           active.ulid,
           member,
           params.onUpdateBlocker,
@@ -503,6 +507,7 @@ async function updateMember(
   git: GitPort,
   container: ContainerPort,
   migration: MigrationPort,
+  restart: RestartPort,
   edtUlid: string,
   member: { service: string; repoPath: string; branch: string },
   onUpdateBlocker?: OnUpdateBlocker,
@@ -522,6 +527,7 @@ async function updateMember(
     git,
     container,
     migration,
+    restart,
     edtUlid,
     repoPath,
     service,
@@ -555,8 +561,9 @@ function failedOutcome(service: string, error: ResultError): RepoOutcome {
 // `currentBranch` as-is (`==sourceBranch` → `pull`, else `fetch` + ungated
 // `assertAllowedBranch` + `mergeBranch`). Story 3.7: `sourceBranch` is the configured merge
 // source (manifest `sharedBranch` unless a per-service override was confirmed); the migrate
-// phase runs only when `runMigrations` is on; `cleanRestart` still performs today's plain
-// container restart until story 3.8 lands the `restartCommands` recipe.
+// phase runs only when `runMigrations` is on; story 3.8: `cleanRestart` runs the
+// manifest's `restartCommands` recipe in order when declared, else today's plain
+// container restart.
 //
 // Story 3.4 layers assisted resolution onto this flow: lockfile-only dirt is silently
 // discarded (the `update_repo.sh` convention, seam or not); a pre-existing
@@ -570,6 +577,7 @@ async function updateWithLoadedManifest(
   git: GitPort,
   container: ContainerPort,
   migration: MigrationPort,
+  restart: RestartPort,
   edtUlid: string | undefined,
   repoPath: string,
   service: string,
@@ -579,7 +587,7 @@ async function updateWithLoadedManifest(
   runMigrations = true,
   cleanRestart = false,
 ): Promise<RepoOutcome> {
-  const { container: containerName, migrationCommand } = loaded;
+  const { container: containerName, migrationCommand, restartCommands } = loaded;
   // Story 3.7: the configured merge source — the manifest `sharedBranch` unless the
   // pre-run screen confirmed a per-service override (trimmed once inside
   // `effectiveSourceBranch`, so padding never reaches fetch/merge). Merge stays
@@ -730,17 +738,33 @@ async function updateWithLoadedManifest(
     }
   }
 
-  // Story 3.7: `cleanRestart` is accepted and plumbed now but still performs today's plain
-  // container restart until story 3.8 lands the `restartCommands` recipe.
-  void cleanRestart;
-  const restarted = await container.restart(containerName);
-  if (!restarted.ok) {
-    // Every row's detail names its repoPath — with duplicate service names in one EDT,
-    // the code alone can't tell two rows apart.
-    return failedOutcome(service, {
-      code: restarted.error.code,
-      message: `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
-    });
+  // Story 3.8 — the restart phase: with `cleanRestart` on and a declared non-empty
+  // `restartCommands` recipe, each command runs in the repo's working directory in
+  // declared order via the restart port, stopping on the first failure — a `failed` row
+  // naming the service (via the row), the command, and the error output, never blocking
+  // or rolling back the other services. Otherwise (toggle off, or no recipe declared)
+  // today's plain container restart runs untouched — never both ports for the same
+  // service in the same action.
+  if (cleanRestart && restartCommands !== undefined && restartCommands.length > 0) {
+    for (const command of restartCommands) {
+      const restarted = await restart.run(repoPath, command);
+      if (!restarted.ok) {
+        return failedOutcome(service, {
+          code: 'restart-failed',
+          message: `Repo ${repoPath} restart "${command}" failed: ${restarted.error.message}`,
+        });
+      }
+    }
+  } else {
+    const restarted = await container.restart(containerName);
+    if (!restarted.ok) {
+      // Every row's detail names its repoPath — with duplicate service names in one EDT,
+      // the code alone can't tell two rows apart.
+      return failedOutcome(service, {
+        code: restarted.error.code,
+        message: `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
+      });
+    }
   }
 
   return { row: { service, outcome: 'updated' }, cancelRun: false };

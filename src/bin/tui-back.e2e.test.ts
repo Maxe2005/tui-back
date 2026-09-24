@@ -1449,6 +1449,20 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return [...lines, 'sharedBranch: development', 'modules: {}'].join('\n');
   }
 
+  // Story 3.8: the same manifest shape plus a declared clean-restart recipe. Commands are
+  // double-quoted so shell metacharacters survive the YAML round-trip.
+  function manifestYamlWithRestart(migrationCommand: string | null, restartCommands: string[]): string {
+    const lines = ['service: route-explorer', 'container: route-explorer'];
+    if (migrationCommand !== null) {
+      lines.push(`migrationCommand: "${migrationCommand}"`);
+    }
+    lines.push('sharedBranch: development', 'restartCommands:');
+    for (const command of restartCommands) {
+      lines.push(`  - "${command}"`);
+    }
+    return [...lines, 'modules: {}'].join('\n');
+  }
+
   async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
     for (const repo of repos) {
       expect(runCli(['register', repo], env).status).toBe(0);
@@ -1465,14 +1479,31 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return stubDir;
   }
 
+  // Story 3.8: the same stub, but recording every invocation's argv — proves which restart
+  // path a run took (plain `docker restart` vs the recipe, which never shells out to
+  // docker at all).
+  async function makeLoggingDockerStub(): Promise<{ stubDir: string; logPath: string }> {
+    const stubDir = await mkdtemp(join(tmpdir(), 'tui-back-e2e-docker-'));
+    tmpDirs.push(stubDir);
+    const logPath = join(stubDir, 'argv.log');
+    await writeFile(join(stubDir, 'docker'), `#!/bin/sh\necho "$@" >> "${logPath}"\nexit 0\n`, { mode: 0o755 });
+    return { stubDir, logPath };
+  }
+
   // A member repo cloned from its own origin, sitting on a feature branch behind the
   // origin's development — the "member on feature branch, behind shared branch, clean
   // tree" matrix row. The clone carries a committed manifest, so the tree starts clean.
   // `migrationCommand` selects the committed manifest variant: a shell command the update
   // really executes (default `true`), or null for a manifest declaring no migrations.
   async function makeBehindMember(migrationCommand: string | null = 'true'): Promise<{ origin: string; repo: string }> {
+    return makeBehindMemberWithManifest(manifestYamlWithMigration(migrationCommand));
+  }
+
+  // Story 3.8: the same behind-member fixture but with a caller-supplied manifest —
+  // the recipe variants commit a manifest declaring `restartCommands`.
+  async function makeBehindMemberWithManifest(manifestYaml: string): Promise<{ origin: string; repo: string }> {
     const origin = await makeGitRepo();
-    await writeFile(join(origin, '.tui-back.yaml'), manifestYamlWithMigration(migrationCommand));
+    await writeFile(join(origin, '.tui-back.yaml'), manifestYaml);
     commitManifest(origin);
     const repo = await mkdtemp(join(tmpdir(), 'tui-back-e2e-clone-'));
     tmpDirs.push(repo);
@@ -1873,6 +1904,44 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     // runMigrations defaults to true with no new CLI flags: both marker migrations ran.
     await expect(access(join(a.repo, 'migrated.txt'))).resolves.toBeUndefined();
     await expect(access(join(b.repo, 'migrated.txt'))).resolves.toBeUndefined();
+  });
+
+  it('falls back to the plain container restart when no recipe is declared (story 3.8)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMemberWithManifest(manifestYamlWithMigration(null));
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    const { stubDir, logPath } = await makeLoggingDockerStub();
+    const dockerEnv = withDocker(env, stubDir);
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    // No recipe declared, so the run took the plain container-restart path.
+    expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
+  });
+
+  it('leaves a declared recipe untouched without the clean-restart toggle: plain restart runs (story 3.8)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    // The recipe would fail loudly (and mark the working tree) if it ever ran — the CLI
+    // takes no configuration, so clean restart stays OFF and the recipe must stay untouched.
+    const a = await makeBehindMemberWithManifest(manifestYamlWithRestart(null, ['touch recipe-ran.txt', 'exit 3']));
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    const { stubDir, logPath } = await makeLoggingDockerStub();
+    const dockerEnv = withDocker(env, stubDir);
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    // The plain container restart ran instead of the recipe.
+    expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
+    // No recipe command ever executed in the repo working directory.
+    await expect(access(join(a.repo, 'recipe-ran.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('rejects a second run while one holds the lock with update-already-running (AC2)', { timeout: 30000 }, async () => {

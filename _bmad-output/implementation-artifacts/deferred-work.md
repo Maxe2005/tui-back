@@ -1,5 +1,15 @@
 # Deferred Work
 
+## Deferred from: review of 3-8-manifest-defined-clean-restart-recipe (2026-09-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-8-manifest-defined-clean-restart-recipe.md`
+  summary: `runRestart` (like the migration and container adapters it mirrors) runs `spawnSync` with no timeout — a hanging recipe command blocks the group update forever.
+  evidence: `src/adapters/driven/restart/index.ts`'s `spawnSync` call has no `timeout` option, matching `src/adapters/driven/migration/index.ts:42` and `src/adapters/driven/container/index.ts:29` exactly — a codebase-wide spawn-timeout decision, not a single-adapter fix. Surfaced by blind-hunter + edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-8-manifest-defined-clean-restart-recipe.md`
+  summary: `spawnFailureDetail` reports a signal-killed child as a bare `unknown error` instead of naming the signal.
+  evidence: `src/adapters/driven/restart/index.ts`'s null-status branch reads only `result.error.message/code`, which are undefined on signal kills (only `result.signal` is set) — the migration/container adapters share the identical shape, so fixing one adapter alone would diverge the trio. Surfaced by edge-case-hunter review layer.
+
 ## Deferred from: review of 3-6-update-zone-shell-service-list-live-status (2026-09-22)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
