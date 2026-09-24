@@ -390,7 +390,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         resolve?.(choice);
       },
       runGroupUpdate: async (scope: GroupUpdateScope = 'edt', opts: UpdateRunOptions = {}) => {
-        if (!deps || !deps.container || !deps.migration) {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
           set({
             updateStatus: 'error',
             updateError: 'No ports wired into the TUI store',
@@ -430,6 +430,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             git: deps.git,
             container: deps.container,
             migration: deps.migration,
+            restart: deps.restart,
             lock: deps.lock,
             registry: deps.registry,
             scope,
@@ -483,7 +484,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       },
       updateConfig: null,
       openUpdateConfig: async (target: OpenUpdateConfigTarget) => {
-        if (!deps || !deps.container || !deps.migration) {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
           set({
             updateStatus: 'error',
             updateError: 'No ports wired into the TUI store',

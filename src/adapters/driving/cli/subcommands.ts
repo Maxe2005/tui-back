@@ -17,6 +17,7 @@ import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
+import type { RestartPort } from '../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
@@ -51,6 +52,7 @@ export function buildSubcommands(deps: {
   git: GitPort;
   container: ContainerPort;
   migration: MigrationPort;
+  restart: RestartPort;
   state: StatePort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
@@ -157,6 +159,7 @@ export function buildSubcommands(deps: {
             git: deps.git,
             container: deps.container,
             migration: deps.migration,
+            restart: deps.restart,
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
@@ -176,6 +179,7 @@ export function buildSubcommands(deps: {
             git: deps.git,
             container: deps.container,
             migration: deps.migration,
+            restart: deps.restart,
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',

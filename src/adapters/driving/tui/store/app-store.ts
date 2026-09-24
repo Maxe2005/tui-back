@@ -14,6 +14,7 @@ import type { GitPort } from '../../../../core/ports/git.js';
 import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../../core/ports/migration.js';
+import type { RestartPort } from '../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../core/ports/state.js';
@@ -64,6 +65,11 @@ export type AppStoreDeps = {
   // manifest `migrationCommand` runs between pull/merge and restart). Same optionality
   // contract as `container` above — runGroupUpdate requires both before starting a run.
   migration?: MigrationPort;
+  // Story 3.8: the clean-restart recipe port the Update zone's runGroupUpdate closes
+  // over (one run per declared `restartCommands` entry, in order, when the clean-restart
+  // toggle calls for it). Same optionality contract as `container`/`migration` —
+  // runGroupUpdate requires all three before starting a run.
+  restart?: RestartPort;
   // Story 5.1: the Logs zone's Docker touchpoint (AD-1/AD-2) — wrapped by a single
   // LogsManager instance the logs slice creates and closes over (see that file's header).
   docker: DockerPort;

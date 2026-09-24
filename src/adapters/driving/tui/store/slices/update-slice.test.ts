@@ -11,6 +11,7 @@ import type { GitPort } from '../../../../../core/ports/git.js';
 import type { LockPort } from '../../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../../../core/ports/migration.js';
+import type { RestartPort } from '../../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
@@ -103,6 +104,9 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const migration: MigrationPort = {
     run: vi.fn(async () => ok({ output: '' })),
   };
+  const restart: RestartPort = {
+    run: vi.fn(async () => ok({ output: '' })),
+  };
   const settings: SettingsPort = {
     load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
     save: vi.fn(async () => ok(undefined)),
@@ -119,6 +123,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     git,
     container,
     migration,
+    restart,
     docker,
     edtRegistry,
     state,
@@ -276,6 +281,17 @@ describe('update slice', () => {
     const deps = fakeDeps();
     const { migration: _dropped, ...withoutMigration } = deps;
     const store = createAppStore(withoutMigration);
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('runGroupUpdate degrades to an explicit error when the restart port is missing', async () => {
+    const deps = fakeDeps();
+    const { restart: _dropped, ...withoutRestart } = deps;
+    const store = createAppStore(withoutRestart);
 
     await store.getState().runGroupUpdate();
 
@@ -825,6 +841,18 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(store.getState().updateErrorCode).toBe('store-not-wired');
   });
 
+  it('openUpdateConfig degrades to store-not-wired when only the restart port is missing', async () => {
+    const deps = fakeDeps();
+    const { restart: _dropped, ...withoutRestart } = deps;
+    const store = createAppStore(withoutRestart);
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
   it('confirmUpdateConfig with zero selected is rejected inline: the screen stays open and nothing ran', async () => {
     const deps = fakeDeps();
     const store = createAppStore(deps);
@@ -909,6 +937,35 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     ]);
     expect(deps.migration!.run).not.toHaveBeenCalled();
     expect(deps.container!.restart).toHaveBeenCalledTimes(2);
+  });
+
+  it('confirmUpdateConfig threads the clean-restart toggle: cleanRestart on runs the recipe, never the plain restart', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const deps = fakeDeps({ manifest });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({ ...draft!, cleanRestart: true });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(deps.restart!.run).toHaveBeenCalledTimes(2);
+    expect(deps.restart!.run).toHaveBeenCalledWith('/repo/a', 'npm ci');
+    expect(deps.restart!.run).toHaveBeenCalledWith('/repo/b', 'npm ci');
+    expect(deps.container!.restart).not.toHaveBeenCalled();
   });
 
   it('confirmUpdateConfig threads a per-service branch override as its merge source', async () => {

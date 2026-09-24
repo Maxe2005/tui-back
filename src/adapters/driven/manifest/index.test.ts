@@ -118,6 +118,62 @@ describe('loadManifest', () => {
     });
   });
 
+  it('loads a manifest omitting restartCommands as having no clean-restart recipe', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'modules: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.restartCommands).toBeUndefined();
+    }
+  });
+
+  it('loads a manifest declaring an ordered restartCommands recipe as-is', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'restartCommands:',
+        '  - npm ci',
+        '  - docker compose up -d --build',
+        'modules: {}',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { restartCommands: ['npm ci', 'docker compose up -d --build'] },
+    });
+  });
+
+  it('rejects a recipe containing a blank entry instead of running it', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'restartCommands:',
+        '  - npm ci',
+        '  - "   "',
+        'modules: {}',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('restartCommands'),
+      },
+    });
+  });
+
   it('treats a repo with no .tui-back.yaml as unmanaged (AC3), no throw', async () => {
     const repo = await tempRepo(null);
 

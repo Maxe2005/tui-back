@@ -13,6 +13,7 @@ import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
+import { createRestartPort } from '../adapters/driven/restart/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
@@ -34,6 +35,7 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
+const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 
@@ -57,6 +59,7 @@ const subcommands = buildSubcommands({
   git,
   container,
   migration,
+  restart,
   state,
 });
 
