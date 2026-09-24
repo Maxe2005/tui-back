@@ -45,6 +45,26 @@
 //     The member still gets a `failed` row in `results`, so the failure is never silently
 //     dropped, and the batch stays per-member isolated (one failure never blocks another
 //     member or the EDT's creation, even down to zero members — Story 2.5's invariant).
+//
+// Story 2.35 semantics (per-service branch plans, remote branches):
+//   - `memberPlans` (optional) carries one MemberBranchPlan per member — `create` (own base +
+//     name, the base may be a remote-tracking ref such as `origin/release`) or `existing`
+//     (attach a local or remote-only branch, optionally renaming it). When present it is
+//     authoritative: `branchOptions` is ignored and never converted into plans. Keys are
+//     resolve()d like `members`; a member without a plan, a plan for a non-member, a
+//     duplicate key after resolve(), or an empty base/name/branch/renameTo is rejected with
+//     invalid-argument before any write. `branchOptions` becomes optional; providing neither
+//     is invalid-argument. Without `memberPlans`, the Story 2.2/2.27 `branchOptions` path runs
+//     exactly as before.
+//   - `existing` resolution order: a local branch wins (gated via assertAllowedBranch, or
+//     renamed via renameBranch — which gates both names); else a remote-tracking ref listed
+//     by listRemoteBranches becomes a local tracking branch (default local name = the ref
+//     minus its remote segment, `origin/feat/q` -> `feat/q`, or `renameTo`); else the member
+//     fails with branch-missing. Nothing is ever checked out or fetched.
+//   - Outcomes widen to created | existing-branch | renamed | failed; per-member isolation is
+//     unchanged. Registry-write rollback is typed: created and tracking branches are
+//     force-deleted, renamed branches are renamed back; every rollback failure is
+//     console.error-logged, never thrown.
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
@@ -74,9 +94,14 @@ export interface CreateBranchOptions {
   names: Record<string, string>;
 }
 
+// Story 2.35: one member's authoritative branch plan (see the header comment).
+export type MemberBranchPlan =
+  | { kind: 'create'; base: string; name: string }
+  | { kind: 'existing'; branch: string; renameTo?: string };
+
 export interface CreateEdtMemberResult {
   service: string;
-  outcome: 'created' | 'existing-branch' | 'failed';
+  outcome: 'created' | 'existing-branch' | 'renamed' | 'failed';
   detail?: { code: string; message: string };
 }
 
@@ -96,7 +121,10 @@ export interface CreateEdtParams {
   git: GitPort;
   topic: string;
   members: string[];
-  branchOptions: CreateBranchOptions;
+  // Optional since Story 2.35: required unless `memberPlans` is provided.
+  branchOptions?: CreateBranchOptions;
+  // Story 2.35: per-member plans keyed by member repoPath; authoritative when present.
+  memberPlans?: Record<string, MemberBranchPlan>;
 }
 
 export async function createEdt(params: CreateEdtParams): Promise<Result<CreateEdtData>> {
@@ -144,11 +172,23 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
     return err('edt-topic-exists', `An EDT with topic "${topic}" already exists`);
   }
 
-  if (branchOptions.create) {
-    const unnamed = members.find((member) => branchOptions.names[member] === undefined);
-    if (unnamed !== undefined) {
-      return err('invalid-argument', `No branch name provided for member ${unnamed}`);
+  let strategy: BranchStrategy;
+  if (params.memberPlans !== undefined) {
+    const plans = validateMemberPlans(members, params.memberPlans);
+    if (!plans.ok) {
+      return plans;
     }
+    strategy = { kind: 'plans', plans: plans.data };
+  } else if (branchOptions !== undefined) {
+    if (branchOptions.create) {
+      const unnamed = members.find((member) => branchOptions.names[member] === undefined);
+      if (unnamed !== undefined) {
+        return err('invalid-argument', `No branch name provided for member ${unnamed}`);
+      }
+    }
+    strategy = { kind: 'options', options: branchOptions };
+  } else {
+    return err('invalid-argument', 'Either branchOptions or memberPlans is required to create an EDT');
   }
 
   const ulid = generateUlid();
@@ -242,12 +282,13 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   // others and never fails EDT creation.
   const results: CreateEdtMemberResult[] = [];
   const memberEntries: EdtMember[] = [];
-  // Branches successfully created in this run, tracked for rollback: if the registry write
-  // below fails, the EDT dir/db is cleaned up and these refs are deleted so a failed
-  // creation leaves no trace in the member repos.
-  const createdBranches: Array<{ repoPath: string; branchName: string }> = [];
+  // Branch writes made in this run, tracked for rollback: if the registry write below fails,
+  // the EDT dir/db is cleaned up and each write is undone (created/tracking branches deleted,
+  // renamed branches renamed back — Story 2.35) so a failed creation leaves no trace in the
+  // member repos.
+  const branchWrites: BranchWrite[] = [];
   for (const member of members) {
-    const resolved = await resolveMemberBranch(git, manifest, member, branchOptions);
+    const resolved = await resolveMemberBranch(git, manifest, member, strategy);
     results.push({ service: resolved.service, outcome: resolved.outcome, ...(resolved.detail !== undefined ? { detail: resolved.detail } : {}) });
     // A failed member is never registered as a member — closes the gap where a "best
     // effort" fallback branch (e.g. the repo's current branch) could itself be shared
@@ -256,8 +297,8 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
     if (resolved.branch !== undefined) {
       memberEntries.push({ service: resolved.service, repoPath: member, branch: resolved.branch });
     }
-    if (resolved.outcome === 'created') {
-      createdBranches.push({ repoPath: member, branchName: branchOptions.names[member] });
+    if (resolved.write !== undefined) {
+      branchWrites.push(resolved.write);
     }
   }
 
@@ -278,21 +319,106 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   });
   if (!registeredEntry.ok) {
     rollback();
-    for (const { repoPath, branchName } of createdBranches) {
-      // Story 2.29: deleteBranch now requires an explicit force flag — `true` preserves this
-      // rollback path's pre-existing `-D` (unconditional) behavior exactly.
-      const deleted = await git.deleteBranch(repoPath, branchName, true);
-      if (!deleted.ok) {
-        console.error(
-          `Failed to delete branch ${branchName} in ${repoPath} after a failed EDT creation:`,
-          deleted.error.message,
-        );
+    for (const write of branchWrites) {
+      if (write.kind === 'created') {
+        // Story 2.29: deleteBranch now requires an explicit force flag — `true` preserves this
+        // rollback path's pre-existing `-D` (unconditional) behavior exactly.
+        const deleted = await git.deleteBranch(write.repoPath, write.branchName, true);
+        if (!deleted.ok) {
+          console.error(
+            `Failed to delete branch ${write.branchName} in ${write.repoPath} after a failed EDT creation:`,
+            deleted.error.message,
+          );
+        }
+      } else {
+        // Story 2.35: a rename only succeeded if neither name was protected, so renaming back
+        // cannot hit renameBranch's old-name gate.
+        const restored = await git.renameBranch(write.repoPath, write.renamedTo, write.originalName);
+        if (!restored.ok) {
+          console.error(
+            `Failed to rename branch ${write.renamedTo} back to ${write.originalName} in ${write.repoPath} after a failed EDT creation:`,
+            restored.error.message,
+          );
+        }
       }
     }
     return registeredEntry;
   }
 
   return ok({ ulid, topic, results });
+}
+
+// Story 2.35: how members' branches are resolved — the legacy uniform `branchOptions`, or the
+// authoritative per-member plans (keys already resolve()d and validated).
+type BranchStrategy =
+  | { kind: 'options'; options: CreateBranchOptions }
+  | { kind: 'plans'; plans: Map<string, MemberBranchPlan> };
+
+// Story 2.35: a git write made for one member, recorded so a registry-write failure can undo
+// it — `created` covers both createBranch and createTrackingBranch (force-deleted on
+// rollback), `renamed` a renameBranch (renamed back on rollback).
+type BranchWrite =
+  | { kind: 'created'; repoPath: string; branchName: string }
+  | { kind: 'renamed'; repoPath: string; originalName: string; renamedTo: string };
+
+// Story 2.35: validates `memberPlans` against the resolve()d members before any write —
+// returns the plans keyed by resolved path, or invalid-argument.
+function validateMemberPlans(
+  members: string[],
+  memberPlans: Record<string, MemberBranchPlan>,
+): Result<Map<string, MemberBranchPlan>> {
+  const memberSet = new Set(members);
+  const plans = new Map<string, MemberBranchPlan>();
+  for (const [key, plan] of Object.entries(memberPlans)) {
+    const path = resolve(key);
+    if (!memberSet.has(path)) {
+      return err('invalid-argument', `Branch plan provided for a non-member: ${key}`);
+    }
+    if (plans.has(path)) {
+      return err('invalid-argument', `Duplicate branch plan for member ${path}`);
+    }
+    const invalid = invalidPlanReason(plan);
+    if (invalid !== undefined) {
+      return err('invalid-argument', `Invalid branch plan for member ${path}: ${invalid}`);
+    }
+    plans.set(path, plan);
+  }
+  const unplanned = members.find((member) => !plans.has(member));
+  if (unplanned !== undefined) {
+    return err('invalid-argument', `No branch plan provided for member ${unplanned}`);
+  }
+  return ok(plans);
+}
+
+function isBlank(value: unknown): boolean {
+  return typeof value !== 'string' || value.trim() === '';
+}
+
+function invalidPlanReason(plan: MemberBranchPlan): string | undefined {
+  // Runtime guard: callers may bypass the type (untyped JS, JSON input).
+  const candidate = plan as { kind?: unknown } | null | undefined;
+  if (candidate === null || typeof candidate !== 'object') {
+    return 'plan must be an object';
+  }
+  if (plan.kind === 'create') {
+    if (isBlank(plan.base)) {
+      return 'empty base';
+    }
+    if (isBlank(plan.name)) {
+      return 'empty name';
+    }
+    return undefined;
+  }
+  if (plan.kind === 'existing') {
+    if (isBlank(plan.branch)) {
+      return 'empty branch';
+    }
+    if (plan.renameTo !== undefined && isBlank(plan.renameTo)) {
+      return 'empty renameTo';
+    }
+    return undefined;
+  }
+  return `unknown plan kind ${String(candidate.kind)}`;
 }
 
 interface ResolvedMemberBranch {
@@ -302,13 +428,19 @@ interface ResolvedMemberBranch {
   // Set only when outcome !== 'failed': a failed member is never registered as an EDT
   // member (story 2.3), so there is nothing to compute a fallback value for.
   branch?: string;
+  // Story 2.35: the git write this member's resolution made, for registry-write rollback.
+  write?: BranchWrite;
+}
+
+function failed(service: string, error: { code: string; message: string }): ResolvedMemberBranch {
+  return { service, outcome: 'failed', detail: { code: error.code, message: error.message } };
 }
 
 async function resolveMemberBranch(
   git: GitPort,
   manifest: ManifestPort,
   member: string,
-  options: CreateBranchOptions,
+  strategy: BranchStrategy,
 ): Promise<ResolvedMemberBranch> {
   const loaded = await manifest.load(member);
   const service = loaded.ok ? loaded.data.service : member;
@@ -320,6 +452,12 @@ async function resolveMemberBranch(
   if (!loaded.ok) {
     return { service, outcome: 'failed', detail: { code: loaded.error.code, message: loaded.error.message } };
   }
+
+  if (strategy.kind === 'plans') {
+    // validateMemberPlans guarantees every member has a plan.
+    return resolvePlannedMemberBranch(git, member, service, strategy.plans.get(member) as MemberBranchPlan);
+  }
+  const { options } = strategy;
 
   if (!options.create) {
     const current = await git.currentBranch(member);
@@ -343,11 +481,97 @@ async function resolveMemberBranch(
   // treats an empty override the same as an absent one.
   const created = await git.createBranch(member, options.names[member], options.bases?.[member] || options.base);
   if (created.ok) {
-    return { service, outcome: 'created', branch: options.names[member] };
+    return {
+      service,
+      outcome: 'created',
+      branch: options.names[member],
+      write: { kind: 'created', repoPath: member, branchName: options.names[member] },
+    };
   }
 
   // The branch could not be created. A failed member is never registered as an EDT member
   // any more (story 2.3), so there is no fallback branch to compute — unlike pre-2.3, this
   // no longer reads the member's current branch as a "best effort" substitute.
   return { service, outcome: 'failed', detail: { code: created.error.code, message: created.error.message } };
+}
+
+// Story 2.35: executes one member's authoritative plan. Never checks out, never fetches;
+// every git write is gated by the adapter (AD-8, FR-7).
+async function resolvePlannedMemberBranch(
+  git: GitPort,
+  member: string,
+  service: string,
+  plan: MemberBranchPlan,
+): Promise<ResolvedMemberBranch> {
+  if (plan.kind === 'create') {
+    const created = await git.createBranch(member, plan.name, plan.base);
+    if (!created.ok) {
+      return failed(service, created.error);
+    }
+    return {
+      service,
+      outcome: 'created',
+      branch: plan.name,
+      write: { kind: 'created', repoPath: member, branchName: plan.name },
+    };
+  }
+
+  // `existing`: a local branch wins over a remote-tracking ref of the same spelling.
+  const local = await git.branchExistsLocally(member, plan.branch);
+  if (!local.ok) {
+    return failed(service, local.error);
+  }
+
+  if (local.data) {
+    if (plan.renameTo !== undefined && plan.renameTo !== plan.branch) {
+      // renameBranch gates both the old and the new name (Story 2.35).
+      const renamed = await git.renameBranch(member, plan.branch, plan.renameTo);
+      if (!renamed.ok) {
+        return failed(service, renamed.error);
+      }
+      return {
+        service,
+        outcome: 'renamed',
+        branch: plan.renameTo,
+        write: { kind: 'renamed', repoPath: member, originalName: plan.branch, renamedTo: plan.renameTo },
+      };
+    }
+    // Reused as-is: no git write gates it, so it must pass the shared-branch gate itself
+    // (Story 2.3 precedent for the branch-creation-disabled path).
+    const allowed = await git.assertAllowedBranch(member, plan.branch);
+    if (!allowed.ok) {
+      return failed(service, allowed.error);
+    }
+    return { service, outcome: 'existing-branch', branch: plan.branch };
+  }
+
+  const remotes = await git.listRemoteBranches(member);
+  if (!remotes.ok) {
+    return failed(service, remotes.error);
+  }
+  if (!remotes.data.includes(plan.branch)) {
+    return failed(service, {
+      code: 'branch-missing',
+      message: `Branch "${plan.branch}" exists neither locally nor as a remote-tracking ref in ${member}`,
+    });
+  }
+
+  // Default local name: the remote ref minus its remote segment (`origin/feat/q` -> `feat/q`).
+  const localName = plan.renameTo ?? plan.branch.slice(plan.branch.indexOf('/') + 1);
+  if (localName === '' || !plan.branch.includes('/')) {
+    return failed(service, {
+      code: 'invalid-argument',
+      message: `Cannot derive a local branch name from remote ref "${plan.branch}" in ${member}`,
+    });
+  }
+  const tracked = await git.createTrackingBranch(member, localName, plan.branch);
+  if (!tracked.ok) {
+    return failed(service, tracked.error);
+  }
+  return {
+    service,
+    outcome: 'created',
+    branch: localName,
+    write: { kind: 'created', repoPath: member, branchName: localName },
+  };
 }
