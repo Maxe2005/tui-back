@@ -136,7 +136,7 @@ development_status:
   # Change Proposal sprint-change-proposal-2026-09-22.md) — split into 3-9 and 3-10 below,
   # never started (was `backlog`), no requirement dropped.
   3-6-update-zone-shell-service-list-live-status: done
-  3-7-pre-run-configuration-interface: review
+  3-7-pre-run-configuration-interface: done
   3-8-manifest-defined-clean-restart-recipe: backlog
   3-9-per-service-actions-clean-restart-single-service-update: backlog
   3-10-live-per-service-run-tracking-current-step-issue-log: backlog
