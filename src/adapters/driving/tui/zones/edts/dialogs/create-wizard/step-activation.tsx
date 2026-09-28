@@ -5,7 +5,19 @@
 import { Box, Text } from 'ink';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
-import { buildStep3Rows, type BranchCandidate } from './wizard.logic.js';
+import { buildStep3Rows, type BranchCandidate, type RowView } from './wizard.logic.js';
+
+// The branch part of a recap line: `base → target`, except a rename (its target already reads
+// `-> new`) and an [Existante] row attached under its own name, printed once.
+export function recapBranches(row: RowView): string {
+  if (row.mode === 'rename') {
+    return `${row.base} ${row.target}`;
+  }
+  if (row.mode === 'existing' && row.base === row.target) {
+    return row.base;
+  }
+  return `${row.base} → ${row.target}`;
+}
 
 export function ActivationStepView({
   dialog,
@@ -25,7 +37,7 @@ export function ActivationStepView({
       {rows.map((row) => (
         <Text key={row.path} color={colors['text-dim']}>
           {'  '}
-          {row.service} : {row.modeLabel} {row.base} {row.mode === 'rename' ? row.target : `→ ${row.target}`}
+          {row.service} : {row.modeLabel} {recapBranches(row)}
         </Text>
       ))}
       {showConfirm ? <Text color={colors.accent}>[Entrée] Créer l'EDT</Text> : null}

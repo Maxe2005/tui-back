@@ -1068,26 +1068,36 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     const candidates = [
       service({ service: 'api-gateway', path: '/repos/api-gateway', sharedBranch: 'development' }),
       service({ service: 'billing', path: '/repos/billing', sharedBranch: 'main' }),
+      service({ service: 'crm', path: '/repos/crm', sharedBranch: 'main' }),
+      service({ service: 'docs', path: '/repos/docs', sharedBranch: 'main' }),
     ];
-    const ready = { status: 'ready' as const, local: ['development', 'main'], remote: [] };
+    const ready = { status: 'ready' as const, local: ['development', 'main', 'feat/crm'], remote: ['origin/feat/docs'] };
     const base = initialCreateDialog();
     const dialog = {
       ...base,
       step: 4 as const,
       topic: ' auth-flow ',
-      selectedMembers: ['/repos/api-gateway', '/repos/billing'],
+      selectedMembers: ['/repos/api-gateway', '/repos/billing', '/repos/crm', '/repos/docs'],
       branches: {
         ...base.branches,
         globalName: { value: 'auth-flow', cursor: 9 },
-        lists: { '/repos/api-gateway': ready, '/repos/billing': ready },
-        overrides: { '/repos/billing': { kind: 'existing' as const, branch: 'feat/bill', renameTo: 'feat/b2' } },
+        lists: { '/repos/api-gateway': ready, '/repos/billing': ready, '/repos/crm': ready, '/repos/docs': ready },
+        overrides: {
+          '/repos/billing': { kind: 'existing' as const, branch: 'feat/bill', renameTo: 'feat/b2' },
+          '/repos/crm': { kind: 'existing' as const, branch: 'feat/crm' },
+          '/repos/docs': { kind: 'existing' as const, branch: 'origin/feat/docs' },
+        },
       },
     };
     const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} />);
     expect(output).toContain('Nom : auth-flow');
-    expect(output).toContain('Services : api-gateway, billing');
+    expect(output).toContain('Services : api-gateway, billing, crm, docs');
     expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
     expect(output).toContain('billing : [Renommer] feat/bill -> feat/b2');
+    // An [Existante] branch attached under its own name is printed once; a remote one still
+    // shows the local name it lands on.
+    expect(output).toMatch(/crm : \[Existante\] feat\/crm\s*\n/);
+    expect(output).toContain('docs : [Existante] origin/feat/docs → feat/docs');
     expect(output).toContain("[Entrée] Créer l'EDT");
 
     const acknowledged = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} showConfirm={false} />);
