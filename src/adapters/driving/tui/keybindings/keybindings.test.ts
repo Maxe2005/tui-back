@@ -31,10 +31,12 @@ const EXPECTED = [
     '← / →',
     'Switch to previous/next zone tab, wrapping at the ends',
   ],
+  ['Ctrl+→ / Ctrl+N', 'Create-EDT wizard: next step (only if the current step is valid)'],
+  ['Ctrl+← / Ctrl+P', 'Create-EDT wizard: previous step (always allowed, choices kept)'],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 14 canonical bindings in documented order (AC2, story 2.12)', () => {
+  it('lists exactly the 16 canonical bindings in documented order (AC2, story 2.12; wizard keys, story 2.36)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),

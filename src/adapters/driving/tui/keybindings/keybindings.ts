@@ -79,4 +79,13 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: '← / →',
     description: 'Switch to previous/next zone tab, wrapping at the ends',
   },
+  // Story 2.36: wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
+  {
+    keys: 'Ctrl+→ / Ctrl+N',
+    description: 'Create-EDT wizard: next step (only if the current step is valid)',
+  },
+  {
+    keys: 'Ctrl+← / Ctrl+P',
+    description: 'Create-EDT wizard: previous step (always allowed, choices kept)',
+  },
 ];

@@ -11,9 +11,12 @@ import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { NO_BRANCH_CREATION } from '../../store/app-store.js';
 import { EdtsZone } from './edts-zone.js';
+import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
+import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
 import { matchEdtsByPrefix as quickMatch, resolveQuickPickCandidates as quickCandidates } from './dialogs/quick-pick-dialog.js';
 import {
   advanceCreateFormFocus,
+  initialCreateDialog,
   appendHint,
   buildCreateBranchOptions,
   buildDeleteMemberRows,
@@ -1235,7 +1238,7 @@ describe('formatEdtActionHistory hiddenActionTypes filter (story 2.19 amended, A
 const noopAsync = async () => {};
 
 describe('EdtsZone (story 2.9 zone states)', () => {
-  it('AC1: no EDT exists -> the create prompt auto-opens with topic input + member checklist, never a bare empty list', async () => {
+  it('AC1 / story 2.36: no EDT exists -> the create wizard opens on Step 1 with its breadcrumb, intro and name field', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1246,40 +1249,62 @@ describe('EdtsZone (story 2.9 zone states)', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain('CREATE EDT');
-    expect(output).toContain('Topic:');
-    expect(output).toContain('api-gateway');
+    expect(output).toContain("EDT Wizard: Création d'un espace de travail");
+    expect(output).toContain('[▶ 1. Nom ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
+    expect(output).toContain('Choisissez un nom unique');
+    expect(output).toContain('Nom:');
+    // With zero EDTs, Esc has nothing to cancel back to — the hint says it quits.
+    expect(output).toContain('[Esc] Quitter');
   });
 
-  it('AC1: the create prompt shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
-    const store = createAppStore();
-    store.setState({
-      edts: [],
-      edtsStatus: 'idle',
-      edtsBranches: null,
-      edtsBranchesStatus: 'loading',
-      loadEdts: noopAsync,
-      loadEdtsBranches: noopAsync,
-    });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain('CREATE EDT');
+  it('story 2.36: Step 2 shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
+    const output = await renderToString(
+      <ServicesStepView dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members' }} candidates={[]} candidateState="loading" />,
+    );
     expect(output).toContain('Loading services');
     expect(output).not.toContain('No registered services available');
   });
 
-  it('AC1: the create prompt shows a genuinely-empty registry distinctly from loading', async () => {
-    const store = createAppStore();
-    store.setState({
-      edts: [],
-      edtsStatus: 'idle',
-      edtsBranches: [],
-      edtsBranchesStatus: 'idle',
-      loadEdts: noopAsync,
-      loadEdtsBranches: noopAsync,
-    });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain('CREATE EDT');
+  it('story 2.36: Step 2 shows a genuinely-empty registry distinctly from loading', async () => {
+    const output = await renderToString(
+      <ServicesStepView dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members' }} candidates={[]} candidateState="empty" />,
+    );
     expect(output).toContain('No registered services available.');
+  });
+
+  it('story 2.36: the Step 4 recap shows each service\'s own branch and base in individual mode', async () => {
+    const candidates = [service({ service: 'api-gateway', path: '/repos/api-gateway' }), service({ service: 'billing', path: '/repos/billing' })];
+    const dialog = {
+      ...initialCreateDialog(),
+      step: 4 as const,
+      topic: ' auth-flow ',
+      selectedMembers: ['/repos/api-gateway', '/repos/billing'],
+      namingMode: 'individual' as const,
+      branchNames: { '/repos/api-gateway': 'feat/gw', '/repos/billing': 'feat/bill' },
+      baseBranches: { '/repos/api-gateway': 'development', '/repos/billing': 'main' },
+    };
+    const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} />);
+    expect(output).toContain('Nom : auth-flow');
+    expect(output).toContain('Services : api-gateway, billing');
+    expect(output).toContain('api-gateway : feat/gw (depuis development)');
+    expect(output).toContain('billing : feat/bill (depuis main)');
+    expect(output).toContain("[Entrée] Créer l'EDT");
+
+    const acknowledged = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} showConfirm={false} />);
+    expect(acknowledged).not.toContain("[Entrée] Créer l'EDT");
+  });
+
+  it('story 2.36: Step 2 lists every registered managed repo as a checkbox row', async () => {
+    const candidates = [service({ service: 'api-gateway', path: '/repos/api-gateway' }), service({ service: 'billing', path: '/repos/billing' })];
+    const output = await renderToString(
+      <ServicesStepView
+        dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members', selectedMembers: ['/repos/billing'] }}
+        candidates={candidates}
+        candidateState="ready"
+      />,
+    );
+    expect(output).toContain('›[ ] api-gateway');
+    expect(output).toContain('[x] billing');
   });
 
   it('shows the EDT selector above the flat SERVICES list once EDTs exist — the flat list is never replaced (AC5)', async () => {

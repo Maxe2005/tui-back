@@ -93,4 +93,8 @@ export const KEYS = {
   // parse-keypress.js decodes into `key.ctrl: true` alongside `key.leftArrow`/`key.rightArrow`.
   ctrlLeft: '\x1b[1;5D',
   ctrlRight: '\x1b[1;5C',
+  // Story 2.36: the create wizard's Ctrl+N / Ctrl+P step-navigation fallbacks ('n' = 0x0e,
+  // 'p' = 0x10, same codepoint-1..26 encoding as ctrlW above).
+  ctrlN: '\x0e',
+  ctrlP: '\x10',
 } as const;

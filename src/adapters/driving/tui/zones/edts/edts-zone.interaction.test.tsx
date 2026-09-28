@@ -15,6 +15,7 @@ import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
 import { createAppStore, type CreateEdtParams, type ModifyEdtParams } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { EdtsZone } from './edts-zone.js';
+import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from './dialogs/create-wizard/create-wizard.js';
 
 function edt(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
   return {
@@ -800,16 +801,31 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       },
     });
 
-    const { instance, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create prompt auto-opens, topic-focused by default.
+      // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
       await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (base-branch picker open)
+      await press(instance, stdin, KEYS.enter); // confirm the pre-filled base branch -> branch-mode
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
       await press(instance, stdin, KEYS.enter); // submit #1 — starts, awaits the pending promise
       expect(createCalls).toBe(1);
 
       await press(instance, stdin, KEYS.enter); // submit #2 — guarded by `submitting`
       expect(createCalls).toBe(1);
+
+      // Story 2.36: every key is inert while the submit is in flight — Esc would otherwise
+      // request a quit here (zero EDTs), and Ctrl+P would step back mid-submit.
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.ctrlP);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().quitRequested).toBe(false);
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(lastFrame).toContain('▶ 4. Activation ◀');
+      expect(lastFrame).toContain('Création…');
 
       release?.();
       await instance.waitUntilRenderFlush();
@@ -835,23 +851,23 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create prompt auto-opens, topic-focused by default.
+      // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
       await type(instance, stdin, 'abd'); // cursor trails at 3
       await press(instance, stdin, KEYS.left); // cursor -> 2
       // Mid-string insert (I/O matrix): typing 'c' at cursor 2 in "abd" must produce "abcd" —
       // if Left had stayed a no-op (pre-story behavior), this would append at the end instead,
       // producing "abdc".
       await type(instance, stdin, 'c');
-      expect(stdout.output).toContain('Topic: abcd');
-      expect(stdout.output).not.toContain('Topic: abdc');
+      expect(stdout.output).toContain('Nom: abcd');
+      expect(stdout.output).not.toContain('Nom: abdc');
 
       await press(instance, stdin, KEYS.home); // cursor -> 0
       await press(instance, stdin, KEYS.backspace); // cursor:0 -> no-op (I/O matrix)
-      expect(stdout.output).toContain('Topic: abcd');
+      expect(stdout.output).toContain('Nom: abcd');
 
       await press(instance, stdin, KEYS.end); // cursor -> 4 (value.length)
       await press(instance, stdin, KEYS.backspace); // removes 'd' before cursor
-      expect(stdout.output).toContain('Topic: abc');
+      expect(stdout.output).toContain('Nom: abc');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -909,16 +925,21 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create prompt auto-opens, topic-focused by default.
+      // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select the one candidate member
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (base-branch picker open)
+      await press(instance, stdin, KEYS.enter); // confirm the pre-filled base branch -> branch-mode
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      // The loaded EDT list is empty, so Step 1's live check passed — only the core can still
+      // reject the topic (e.g. an EDT created concurrently from the CLI).
       await press(instance, stdin, KEYS.enter); // submit -> rejected
 
       expect(createCalls).toHaveLength(1);
       expect(stdout.output).toContain('An EDT with topic "demo" already exists');
       // Still the create dialog, not silently torn down to a bare/empty list.
-      expect(stdout.output).toContain('CREATE EDT');
+      expect(stdout.output).toContain(WIZARD_TITLE);
 
       // The rejection didn't wedge the form: a further submit attempt calls createEdt again.
       await press(instance, stdin, KEYS.enter);
@@ -929,7 +950,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('matrix: create with zero members selected — rejected before any write, inline message, form stays open', async () => {
+  it('story 2.36 matrix: zero services checked blocks leaving Step 2 — inline message, no createEdt call', async () => {
     const store = createAppStore();
     const createCalls: CreateEdtParams[] = [];
     store.setState({
@@ -941,23 +962,24 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       loadEdtsBranches: async () => {},
       createEdt: async (params): Promise<Result<CreateEdtData>> => {
         createCalls.push(params);
-        return { ok: false, error: { code: 'invalid-member', message: 'At least one member service is required to create an EDT' } };
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
       },
     });
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create prompt auto-opens, topic-focused by default. Submit with
-      // no member ever checked.
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.enter); // submit -> rejected, zero members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
+      await press(instance, stdin, KEYS.enter); // no service checked -> blocked
+      await press(instance, stdin, KEYS.ctrlN); // Ctrl+N is gated by the same check
+      await press(instance, stdin, KEYS.ctrlRight); // and so is Ctrl+→
 
-      expect(createCalls).toHaveLength(1);
-      expect(createCalls[0]?.members).toEqual([]);
-      expect(stdout.output).toContain('At least one member service is required to create an EDT');
-      // Still the create dialog, not silently torn down to a bare/empty list.
-      expect(stdout.output).toContain('CREATE EDT');
+      expect(stdout.output).toContain('Sélectionnez au moins un service');
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(lastFrame).toContain('▶ 2. Services ◀');
+      expect(stdout.output).not.toContain('▶ 3. Branches ◀');
+      expect(createCalls).toHaveLength(0);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1000,21 +1022,35 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create prompt auto-opens. Select both candidates.
+      // AC1: zero EDTs -> the create wizard auto-opens. Select both candidates.
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space);
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (base-branch picker open)
+      await press(instance, stdin, KEYS.enter); // confirm the pre-filled base branch -> branch-mode
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
       await press(instance, stdin, KEYS.enter); // submit
 
       // The EDT was created (loadEdts ran) but the dialog stays open with the per-member
       // failure surfaced inline — it must never silently close as if every requested
       // member had actually been added.
       expect(loadCalls).toBeGreaterThan(0);
-      expect(stdout.output).toContain('CREATE EDT');
+      expect(stdout.output).toContain(WIZARD_TITLE);
       expect(stdout.output).toContain('svc-b');
       expect(stdout.output).toContain('shared/protected');
+
+      // Story 2.36 (review): the EDT already exists — nothing may re-submit or navigate away;
+      // the failure rows stay until acknowledged, and Enter closes the wizard.
+      expect(stdout.output).toContain('[Entrée/Esc] Fermer');
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('shared/protected');
+      const beforeClose = stdout.output.length;
+      await press(instance, stdin, KEYS.enter);
+      const afterClose = stdout.output.slice(beforeClose);
+      expect(afterClose.length).toBeGreaterThan(0);
+      expect(afterClose).not.toContain(WIZARD_TITLE);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1022,7 +1058,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
   });
 
   // Story 2.22: the mandatory branch-setup step -----------------------------------------
-  it('Tab past the checklist (>=1 member selected) reveals the branch-setup step, pre-filled from the topic', async () => {
+  it('story 2.36: leaving Step 2 (>=1 service checked) enters Step 3, its branch fields pre-filled from the name', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1037,9 +1073,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'Fix Auth Bug');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select the one candidate
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step: opens the shared
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-setup step: opens the shared
       // BranchPicker over the base-branch field (Create new mode, story 2.27), pre-filled from
       // svc-a's own manifest-declared sharedBranch — never DEFAULT_BASE_BRANCH.
       expect(stdout.output).toContain('Base branch:');
@@ -1073,9 +1109,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'Fix Auth Bug');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a -> branchName auto-fills 'fix-auth-bug' (untouched)
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (opens the base-branch picker)
       await press(instance, stdin, KEYS.enter); // confirm base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name, focused: 'fix-auth-bug'
       expect(stdout.output).toContain('Branch name: fix-auth-bug');
@@ -1087,7 +1123,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.left);
       await press(instance, stdin, KEYS.home);
 
-      await press(instance, stdin, KEYS.tab); // branch-name (grouped) -> wraps back to topic
+      await press(instance, stdin, KEYS.tab); // branch-name (grouped) -> wraps to branch-base (Step 3's own Tab cycle)
+      await press(instance, stdin, KEYS.ctrlLeft); // Step 3 -> Step 2
+      await press(instance, stdin, KEYS.ctrlP); // Step 2 -> Step 1 (Ctrl+← fallback)
 
       // Clear and retype the topic — a genuinely new topic slug only shows up in the
       // branch-name field if it's still untouched. Captured *after* the assertion above (which
@@ -1098,8 +1136,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'New Auth');
-      await press(instance, stdin, KEYS.tab); // topic -> members
-      await press(instance, stdin, KEYS.tab); // members -> branch-base: re-triggers prefillBranchNames
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base: re-triggers prefillBranchNames
 
       // If the earlier cursor-only move had wrongly set branchNameTouched, every frame from
       // here on would still read 'fix-auth-bug' (frozen) instead of picking up the new topic's
@@ -1112,25 +1150,57 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('zero members selected never reaches the branch-setup step: Tab from the checklist loops straight back to topic', async () => {
+  it('story 2.36 matrix: Ctrl+← twice from Step 3 goes back to Step 1, keeping the name, the selection and the branch fields', async () => {
     const store = createAppStore();
+    let createParams: CreateEdtParams | undefined;
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+      ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      createEdt: async (params): Promise<Result<CreateEdtData>> => {
+        createParams = params;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
     });
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.tab); // topic -> members (no member ever checked)
-      await press(instance, stdin, KEYS.tab); // members -> topic (Boundaries: "no branch step")
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.ctrlN); // Step 1 -> Step 2
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space); // select svc-b only
+      // Step 2's checklist renders inside the wizard through EdtsZone's own candidate wiring.
+      const step2Frame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(step2Frame).toContain('[ ] svc-a');
+      expect(step2Frame).toContain('[x] svc-b');
+      await press(instance, stdin, KEYS.ctrlRight); // Step 2 -> Step 3 (base-branch picker open)
+      await press(instance, stdin, KEYS.enter); // confirm the base branch -> branch-mode
+      await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ('demo')
+      await type(instance, stdin, '-x'); // touched: 'demo-x'
+      expect(stdout.output).toContain('[1. Nom: demo] ── [2. Services (1)] ── [▶ 3. Branches ◀]');
 
-      expect(stdout.output).not.toContain('Base branch:');
-      expect(stdout.output).not.toContain('Naming:');
+      await press(instance, stdin, KEYS.ctrlLeft); // Step 3 -> Step 2
+      await press(instance, stdin, KEYS.ctrlLeft); // Step 2 -> Step 1
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(lastFrame).toContain('▶ 1. Nom ◀');
+      expect(lastFrame).toContain('Nom: demo');
+
+      // Everything decided before going back is still there on the way forward.
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (svc-b still checked)
+      await press(instance, stdin, KEYS.enter); // confirm the base branch -> branch-mode
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.enter); // submit
+
+      expect(createParams?.members).toEqual(['/repos/b']);
+      expect(createParams?.branchOptions).toMatchObject({ mode: 'grouped', names: { '/repos/b': 'demo-x' } });
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1160,14 +1230,15 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step (opens the shared
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-setup step (opens the shared
       // base-branch picker — both members' sharedBranch is unanimous 'development')
       await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
-      await press(instance, stdin, KEYS.enter); // confirm the whole form — pre-filled grouped name still applies
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.enter); // confirm Step 4 — pre-filled grouped name still applies
 
       expect(createParams?.branchOptions).toEqual({
         create: true,
@@ -1215,11 +1286,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the shared
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (opens the shared
       // base-branch picker — both members' sharedBranch is unanimous 'development')
       await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.space); // toggle grouped -> individual
@@ -1227,6 +1298,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await type(instance, stdin, '-a');
       await press(instance, stdin, KEYS.tab); // svc-a's field -> svc-b's field (pre-filled "demo")
       await type(instance, stdin, '-b');
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
       await press(instance, stdin, KEYS.enter); // confirm
       // submitCreate's own continuation (loadEdts -> failedSummary -> setDialog) commits over
       // several microtask hops beyond the single flush `press` already awaited.
@@ -1276,11 +1348,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (svc-a's own picker, "main")
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (svc-a's own picker, "main")
 
       expect(stdout.output).toContain('Base branch for svc-a:');
       expect(stdout.output).toContain('Base branch: main');
@@ -1291,7 +1363,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       expect(stdout.output).toContain('Base branch: master');
 
       await press(instance, stdin, KEYS.enter); // confirm svc-b -> both done, advances to branch-mode
-      await press(instance, stdin, KEYS.enter); // confirm the whole form (grouped naming still applies)
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.enter); // confirm Step 4 (grouped naming still applies)
 
       expect(createParams?.branchOptions).toEqual({
         create: true,
@@ -1333,11 +1406,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (svc-a's own picker, "main")
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (svc-a's own picker, "main")
 
       expect(stdout.output).toContain('Base branch for svc-a:');
       expect(stdout.output).toContain('Base branch: main');
@@ -1353,6 +1426,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await type(instance, stdin, '-a');
       await press(instance, stdin, KEYS.tab); // svc-a's field -> svc-b's field (pre-filled "demo")
       await type(instance, stdin, '-b');
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
       await press(instance, stdin, KEYS.enter); // confirm
 
       expect(createParams?.branchOptions).toEqual({
@@ -1373,7 +1447,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
   // seed baseBranch/baseBranches via prefillBaseBranches — every other interaction test reaches
   // submitCreate via the branch-base step first, so this specific prefill-on-select wiring was
   // otherwise never exercised end-to-end.
-  it('direct Enter-to-submit from the members checklist (skipping branch-base) still carries the manifest-derived base branch', async () => {
+  it('confirming Step 3 without editing the base-branch picker still carries the manifest-derived base branch', async () => {
     const store = createAppStore();
     let createParams: CreateEdtParams | undefined;
     store.setState({
@@ -1393,9 +1467,12 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a (seeds baseBranch from its sharedBranch)
-      await press(instance, stdin, KEYS.enter); // Enter directly from the checklist — never Tabs into branch-base
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (picker pre-filled from svc-a's sharedBranch)
+      await press(instance, stdin, KEYS.enter); // confirm the suggestion untouched -> branch-mode
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.enter); // submit
       await instance.waitUntilRenderFlush();
 
       expect(createParams?.branchOptions).toEqual({
@@ -1435,16 +1512,16 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (Create new, pre-filled "main")
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (Create new, pre-filled "main")
       await instance.waitUntilRenderFlush(); // let listBranches resolve
 
       await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
       expect(stdout.output).toContain('[Pick existing]');
 
       await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm "develop"
-      await press(instance, stdin, KEYS.enter); // confirm branch-mode (grouped naming, "demo" pre-filled)
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4 (grouped naming, "demo" pre-filled)
       await press(instance, stdin, KEYS.enter); // submit
 
       expect(createParams?.branchOptions).toEqual({
@@ -1463,7 +1540,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
   // Story 2.27 code review (patch): Escape mid the base-branch picker is the routing's other
   // untested branch — it must step back to the member checklist, the same convention every
   // other branch-step field's own Escape already uses (create-dialog.tsx's handleCreateInput).
-  it('base-branch picker: Escape steps back to the member checklist, never tearing down the dialog', async () => {
+  it('story 2.36 matrix: Esc in the open base-branch picker closes only the picker — the wizard stays on Step 3', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1478,25 +1555,26 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the picker)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (opens the picker)
+      expect(stdout.output).toContain('Base branch:');
 
-      const lastFrameWhileOpen = stdout.output.slice(stdout.output.lastIndexOf('CREATE EDT'));
-      expect(lastFrameWhileOpen).toContain('Naming:');
+      await pressEscape(instance, stdin); // innermost sub-field first: closes the picker only
 
-      await pressEscape(instance, stdin); // cancel the picker, back to the member checklist
-
-      const lastFrameAfterClose = stdout.output.slice(stdout.output.lastIndexOf('CREATE EDT'));
-      expect(lastFrameAfterClose).toContain('Topic:');
-      expect(lastFrameAfterClose).not.toContain('Naming:');
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(lastFrame).toContain('▶ 3. Branches ◀');
+      expect(lastFrame).toContain('Base branch: development');
+      expect(lastFrame).toContain('Naming:');
+      // Never escalated to the zero-EDT quit request.
+      expect(store.getState().quitRequested).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
     }
   });
 
-  it('an emptied required branch-name field blocks confirm — no core call, dialog stays open', async () => {
+  it('story 2.36 matrix: an emptied required branch-name field blocks leaving Step 3 — no core call, wizard stays open', async () => {
     const store = createAppStore();
     let createCalls = 0;
     store.setState({
@@ -1516,24 +1594,31 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (opens the base-branch picker)
       await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
       for (let i = 0; i < 'demo'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
-      await press(instance, stdin, KEYS.enter); // confirm attempted on the now-emptied field
+      await press(instance, stdin, KEYS.enter); // leaving Step 3 attempted on the now-emptied field
+      await press(instance, stdin, KEYS.ctrlN); // Ctrl+N is gated by the same Step 3 check
 
       expect(createCalls).toBe(0);
       expect(stdout.output).toContain('Branch name must not be empty');
-      // Still the create dialog, never silently torn down.
-      expect(stdout.output).toContain('CREATE EDT');
+      // Still the wizard, still on Step 3 — never silently torn down or advanced.
+      expect(stdout.output).not.toContain('▶ 4. Activation ◀');
 
-      // The rejection didn't wedge the field: typing a valid value and confirming now works.
+      // The rejection didn't wedge the field: typing a valid value clears the error, and
+      // confirming now works — the stale error never follows onto Step 4.
       await type(instance, stdin, 'feature-y');
-      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).not.toContain('Branch name must not be empty');
+      const beforeStep4 = stdout.output.length;
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      expect(stdout.output.slice(beforeStep4)).toContain('▶ 4. Activation ◀');
+      expect(stdout.output.slice(beforeStep4)).not.toContain('Branch name must not be empty');
+      await press(instance, stdin, KEYS.enter); // submit
       expect(createCalls).toBe(1);
     } finally {
       instance.unmount();
@@ -1569,9 +1654,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a (pre-fills the grouped field to "demo")
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (opens the base-branch picker)
       await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ("demo")
       for (let i = 0; i < 'demo'.length; i += 1) {
@@ -1579,13 +1664,13 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       }
       expect(stdout.output).toContain('Branch name: ');
 
-      // Back to the checklist and select a second, unrelated member — this used to
+      // Back to the checklist (Ctrl+←) and select a second, unrelated member — this used to
       // re-trigger prefillBranchNames and silently repopulate the field with "demo".
-      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.ctrlLeft);
       const beforeSecondSelection = stdout.output.length;
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b too
-      await press(instance, stdin, KEYS.tab); // members -> branch-base (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3, branch-base (opens the base-branch picker)
       await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name
 
@@ -1603,36 +1688,92 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('zero members selected still passes a real (NO_BRANCH_CREATION) branchOptions through to createEdtAction', async () => {
+  it('story 2.36 matrix: Esc outside the picker cancels the whole creation (>=1 EDT) — nothing written, no quit', async () => {
     const store = createAppStore();
-    let createParams: CreateEdtParams | undefined;
+    let createCalls = 0;
     store.setState({
-      edts: [],
+      edts: [edt({ ulid: 'other-ulid', topic: 'other' })],
       edtsStatus: 'idle',
-      edtsBranches: [],
+      activeEdt: null,
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      createEdt: async (params): Promise<Result<CreateEdtData>> => {
-        createParams = params;
-        return { ok: false, error: { code: 'invalid-member', message: 'At least one member service is required to create an EDT' } };
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
       },
     });
 
-    const { instance, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, { initialDialogKind: 'create' });
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.enter); // submit directly — zero members ever selected
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
+      await press(instance, stdin, KEYS.space); // select svc-a
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (picker open)
+      await pressEscape(instance, stdin); // closes the picker only
+      expect(stdout.output).toContain('▶ 3. Branches ◀');
 
-      expect(createParams?.branchOptions).toEqual({ create: false, base: 'development', mode: 'grouped', names: {} });
+      const beforeCancel = stdout.output.length;
+      await pressEscape(instance, stdin); // nothing left open -> cancels the whole creation
+
+      const afterCancel = stdout.output.slice(beforeCancel);
+      // A real cancel commits a new frame — the populated EDT list, wizard gone.
+      expect(afterCancel).toContain('other');
+      expect(afterCancel).not.toContain(WIZARD_TITLE);
+      expect(createCalls).toBe(0);
+      expect(store.getState().quitRequested).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
     }
   });
 
-  it('Escape from inside the branch-setup step steps back to the member checklist rather than closing the dialog', async () => {
+  it('story 2.36 matrix: a name taken by a loaded EDT (trimmed) shows "déjà pris" live and blocks Step 1; a case variant stays available', async () => {
+    const store = createAppStore();
+    let createCalls = 0;
+    store.setState({
+      edts: [edt({ ulid: 'demo-ulid', topic: 'demo' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'Demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store, { initialDialogKind: 'create' });
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, ' demo ');
+      expect(stdout.output).toContain('✖ déjà pris');
+      await press(instance, stdin, KEYS.enter); // blocked
+      await press(instance, stdin, KEYS.ctrlRight); // blocked too
+      expect(stdout.output).toContain('Ce nom est déjà pris par un autre EDT');
+      expect(stdout.output).not.toContain('▶ 2. Services ◀');
+
+      // Rewrite it as "Demo": case-sensitive, so available — checked on every keystroke.
+      for (let i = 0; i < ' demo '.length; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      const beforeAvailable = stdout.output.length;
+      await type(instance, stdin, 'Demo');
+      expect(stdout.output.slice(beforeAvailable)).toContain('✔ disponible');
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('▶ 2. Services ◀');
+      expect(createCalls).toBe(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.36 (review): Step 4 re-checks the name — a clash appearing after Step 1 blocks the submit with the wizard message', async () => {
     const store = createAppStore();
     let createCalls = 0;
     store.setState({
@@ -1652,22 +1793,42 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
-      await press(instance, stdin, KEYS.space); // select svc-a
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step
-      expect(stdout.output).toContain('Base branch:');
-
-      await pressEscape(instance, stdin);
-
-      // Back on the member checklist — the checkbox selection survived, and the dialog
-      // itself never closed (createCalls still 0, no submit happened).
-      expect(stdout.output).toContain('CREATE EDT');
-      expect(createCalls).toBe(0);
-      // Space here still toggles the (already-checked) candidate rather than doing nothing —
-      // proof formFocus really is back on 'members', not stuck in the branch step.
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
       await press(instance, stdin, KEYS.space);
-      await press(instance, stdin, KEYS.enter); // now zero members selected -> submits directly
-      expect(createCalls).toBe(1);
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3
+      await press(instance, stdin, KEYS.enter); // confirm the base branch
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      // Meanwhile an EDT named "demo" appears (e.g. created from the CLI).
+      store.setState({ edts: [edt({ ulid: 'cli-ulid', topic: 'demo' })] });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // submit attempt
+
+      expect(createCalls).toBe(0);
+      expect(stdout.output).toContain('Ce nom est déjà pris par un autre EDT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.36 matrix: an empty (or blank) name blocks Step 1 with an inline message', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, '   ');
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('Le nom ne doit pas être vide');
+      expect(stdout.output).not.toContain('▶ 2. Services ◀');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -2912,11 +3073,12 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, 'demo');
-      await press(instance, stdin, KEYS.tab); // topic -> members
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
-      await press(instance, stdin, KEYS.tab); // members -> branch-setup step (opens the base-branch picker)
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (opens the base-branch picker)
       await press(instance, stdin, KEYS.enter); // confirm the base-branch picker -> branch-mode
-      await press(instance, stdin, KEYS.enter); // confirm the whole form
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.enter); // confirm Step 4
       await instance.waitUntilRenderFlush();
 
       expect(stdout.output).toContain('svc-a');
