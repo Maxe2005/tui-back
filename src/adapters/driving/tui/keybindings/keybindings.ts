@@ -88,6 +88,16 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+← / Ctrl+P',
     description: 'Create-EDT wizard: previous step (always allowed, choices kept)',
   },
+  // Story 2.37: scoped to the create-EDT wizard's Step 3 — the generic Tab/Enter rows above
+  // stay true elsewhere; these spell out what the two keys do on that step.
+  {
+    keys: 'Tab (wizard Step 3)',
+    description: 'Create-EDT wizard, Step 3: switch between the global strategy and the per-service table',
+  },
+  {
+    keys: 'Enter (wizard Step 3)',
+    description: 'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
+  },
   // Story 2.37: scoped to the create-EDT wizard's Step 3 "Configurer <service>" box — no
   // collision: BranchPicker's own Ctrl+R (rename a row) lives in other modals, and the wizard
   // no longer hosts a BranchPicker.
