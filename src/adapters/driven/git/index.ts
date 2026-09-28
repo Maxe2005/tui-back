@@ -29,8 +29,8 @@ import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
-
-const SHARED_BRANCHES: readonly string[] = ['development', 'preprod', 'prod'];
+// Story 2.37: the FR-7 shared-branch rule lives in core, shared with the TUI's advisory check.
+import { isSharedBranch } from '../../../core/edt/shared-branches.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
   return {
@@ -338,10 +338,6 @@ function readBranchConfig(repoPath: string, branch: string, key: 'remote' | 'mer
     return { kind: 'unset', value: '', detail: '' };
   }
   return { kind: 'error', value: '', detail: spawnFailureDetail(result) };
-}
-
-function isSharedBranch(branchName: string, manifestSharedBranch: string): boolean {
-  return SHARED_BRANCHES.includes(branchName) || branchName === manifestSharedBranch;
 }
 
 // Story 2.4 — Moves the working tree onto branchName. The trailing `--` (git-checkout(1)'s
