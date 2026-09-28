@@ -196,7 +196,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const outgoing = edt({ ulid: 'outgoing-ulid', topic: 'Mon Topic', status: 'active' });
     const hasOutgoing = options.activeTopic !== null;
     const log: Array<{ ulid: string; outcome: string; detail: string }> = [];
-    const probe = { switchCalls: 0, resolvedWith: null as SwitchDirtyReposChoice | null, log };
+    const probe = { switchCalls: 0, resolvedWith: null as SwitchDirtyReposChoice | null, resolutions: [] as SwitchDirtyReposChoice[], log };
     store.setState({
       edts: hasOutgoing ? [target, outgoing] : [target],
       edtsStatus: 'idle',
@@ -223,6 +223,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
           store.setState({
             resolveSwitchDirtyRepos: (c) => {
               probe.resolvedWith = c;
+              probe.resolutions.push(c);
               store.setState({ switchDirtyRepos: null });
               resolve(c);
             },
@@ -346,9 +347,19 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       expect(probe.resolvedWith).toEqual({ kind: 'cancel' });
       expect(store.getState().switchDirtyRepos).toBeNull();
       expect(stdout.output).toContain('cancelled');
-      // Still in switch-confirm (not a fresh dialog) — a second Enter re-invokes switchEdt.
+      // Still in switch-confirm (not a fresh dialog) — a second Enter re-invokes switchEdt,
+      // which raises a fresh resolution view that Esc cancels again.
       await press(instance, stdin, KEYS.enter);
       expect(probe.switchCalls).toBe(2);
+      await settle(instance);
+      await settle(instance);
+      const retryFrame = stdout.output.slice(stdout.output.lastIndexOf('cancelled'));
+      expect(retryFrame).toContain('STRATÉGIE GLOBALE');
+      expect(retryFrame).toContain('SERVICES CONCERNÉS');
+      await pressEscape(instance, stdin);
+      await settle(instance);
+      expect(probe.resolutions).toEqual([{ kind: 'cancel' }, { kind: 'cancel' }]);
+      expect(store.getState().switchDirtyRepos).toBeNull();
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -3073,6 +3084,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
   it('matrix: branch-owned-by-other-edt inside a Switch result renders a plain line — no retry affordance', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    const logged: Array<{ ulid: string; outcome: string; detail: string }> = [];
     store.setState({
       edts: [target],
       edtsStatus: 'idle',
@@ -3081,6 +3093,10 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      loadEdtActionLog: async () => {},
+      logEdtAction: async (ulid, _actionType, outcome, detail) => {
+        logged.push({ ulid, outcome, detail });
+      },
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => ({
         ok: true,
         data: {
@@ -3108,6 +3124,11 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       expect(stdout.output).toContain('svc-a');
       expect(stdout.output).toContain('already registered as a different EDT');
       expect(stdout.output).not.toContain('[Enter] try a different branch');
+      // Story 2.41 review: the heading says failures happened, and the entry goes to the NEW
+      // active EDT's log as `failed`, carrying the failure.
+      expect(stdout.output).toContain('effectuée avec des échecs');
+      await settle(instance);
+      expect(logged).toEqual([{ ulid: 'target-ulid', outcome: 'failed', detail: expect.stringContaining('svc-a: Branch "other" is already registered') }]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
