@@ -13,6 +13,7 @@ import {
   type UpdateBlocker,
   type UpdateBlockerChoice,
 } from '../../../../../core/scripts/group-update.js';
+import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
 import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
@@ -100,6 +101,19 @@ export type UpdateSlice = {
   // is actually in flight: a quit-confirm racing completion must never mark a healthy,
   // already-finished EDT interrupted. Never throws when unwired or when no run ever
   // targeted an EDT.
+  // Story 3.9: per-service standalone clean-restart in-flight map, keyed by resolved
+  // repoPath (the core `service:<resolved-repoPath>` lock identity). Checked alongside the
+  // global `updateStatus === 'running'` guard in both directions: a group run never starts
+  // while any standalone restart is in flight, and a standalone restart never starts while
+  // a group run (or the same service's own restart) is in flight. Serialization stays per
+  // service — a different idle service stays triggerable while one restarts.
+  serviceRestartInFlight: Record<string, 'restart'>;
+  // Runs story 3.9's standalone single-service clean restart in-process (recipe or plain
+  // fallback, core-side decision). The row shows `restarting` while the map holds its
+  // repoPath; the final `{service, outcome, detail?}` row merges into `lastServiceOutcomes`
+  // (never into the group run's `updateResults`). Contention surfaces as
+  // `update-already-running`, nothing started.
+  runServiceRestart: (repoPath: string) => Promise<void>;
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
@@ -406,6 +420,14 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           });
           return;
         }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
         set({
           updateStatus: 'running',
           updateResults: [],
@@ -483,6 +505,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         }
       },
       updateConfig: null,
+      serviceRestartInFlight: {},
       openUpdateConfig: async (target: OpenUpdateConfigTarget) => {
         if (!deps || !deps.container || !deps.migration || !deps.restart) {
           set({
@@ -496,6 +519,14 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           set({
             updateStatus: 'error',
             updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
             updateErrorCode: 'update-already-running',
           });
           return;
@@ -533,6 +564,15 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           });
           return;
         }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateConfig: {
+              ...draft,
+              error: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            },
+          });
+          return;
+        }
         const confirmed = confirmUpdateConfigDraft(draft);
         if (!confirmed.ok) {
           set({ updateConfig: { ...draft, error: confirmed.error } });
@@ -560,6 +600,71 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateNote: null,
             updateScope: null,
             updateUlid: null,
+          });
+        }
+      },
+      runServiceRestart: async (repoPath: string) => {
+        if (!deps || !deps.container || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        const key = resolve(repoPath);
+        if (get().serviceRestartInFlight[key] !== undefined) {
+          set({
+            updateStatus: 'error',
+            updateError: `A restart for ${repoPath} is already in progress — wait for it to finish before starting another.`,
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        // A stale contention banner from an earlier rejection must not linger underneath
+        // a newly started restart — the row's own `restarting` badge is the live signal.
+        if (get().updateStatus === 'error' && get().updateErrorCode === 'update-already-running') {
+          set({ updateStatus: 'idle', updateError: null, updateErrorCode: null });
+        }
+        set((state) => ({ serviceRestartInFlight: { ...state.serviceRestartInFlight, [key]: 'restart' as const } }));
+        try {
+          const result = await serviceRestartUseCase({
+            manifest: deps.manifest,
+            container: deps.container,
+            restart: deps.restart,
+            lock: deps.lock,
+            repoPath,
+          });
+          if (result.ok) {
+            set((state) => ({
+              lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, [result.data]),
+            }));
+          } else {
+            set({
+              updateStatus: 'error',
+              updateError: result.error.message,
+              updateErrorCode: result.error.code,
+            });
+          }
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
+        } finally {
+          set((state) => {
+            if (state.serviceRestartInFlight[key] === undefined) {
+              return {};
+            }
+            const next = { ...state.serviceRestartInFlight };
+            delete next[key];
+            return { serviceRestartInFlight: next };
           });
         }
       },
@@ -614,6 +719,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateScope: null,
           updateBlocker: null,
           updateConfig: null,
+          serviceRestartInFlight: {},
         }),
 
       updateServiceHealth: {},

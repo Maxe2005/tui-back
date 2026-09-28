@@ -19,17 +19,23 @@ import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'error';
 
 // Precedence (Design Notes): a run currently targeting this service always wins ('updating'
-// outranks everything, including a stale 'error' from a previous run); otherwise a failed
-// last outcome outranks raw health (a container can report `up` right after a failed
+// outranks everything, including a stale 'error' from a previous run); otherwise a
+// standalone clean restart in flight on this service wins ('restarting' — story 3.9's
+// coarse in-flight flag, no step detail until story 3.10); otherwise a failed last
+// outcome outranks raw health (a container can report `up` right after a failed
 // migration — the old process is still running); otherwise raw health passes through
 // unchanged ('migrating' is never returned here — see the type's own comment above).
 export function deriveUpdateServiceStatus(
   health: HealthState,
   lastOutcome: GroupUpdateRepoResult['outcome'] | undefined,
   isTargetedByRunningRun: boolean,
+  isRestarting = false,
 ): UpdateServiceStatus {
   if (isTargetedByRunningRun) {
     return 'updating';
+  }
+  if (isRestarting) {
+    return 'restarting';
   }
   if (lastOutcome === 'failed') {
     return 'error';

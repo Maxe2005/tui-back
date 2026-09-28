@@ -41,7 +41,9 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-09-23
+last_updated: 2026-09-24
+# 2026-09-24: Story 3-9 (per-service actions — clean restart & single-service update) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-24: Story 3-9 (per-service actions — clean restart & single-service update) spec approved (ready-for-dev), implementation started (bmad-build, worktree tui-back-epic-3, branch story-3-9).
 # 2026-09-23: Stories 3-3, 3-4, 3-6 moved review -> done (specs already status done; human sign-off, bmad-build).
 # 2026-09-23: Story 3-7 (pre-run configuration interface) moved to review after code-review + patch loop (bmad-build).
 # 2026-09-16: Story 2-27 set to in-progress (bmad-build).
@@ -138,7 +140,7 @@ development_status:
   3-6-update-zone-shell-service-list-live-status: done
   3-7-pre-run-configuration-interface: done
   3-8-manifest-defined-clean-restart-recipe: review
-  3-9-per-service-actions-clean-restart-single-service-update: backlog
+  3-9-per-service-actions-clean-restart-single-service-update: review
   3-10-live-per-service-run-tracking-current-step-issue-log: backlog
   3-11-update-commands-main-all-repos-single-service: backlog
   epic-3-retrospective: optional

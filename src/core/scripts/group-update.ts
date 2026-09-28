@@ -498,6 +498,48 @@ export async function markGroupUpdateInterrupted(
   return edtRegistry.setStatus(ulid, 'interrupted');
 }
 
+// Story 3.9: the shared restart step — the story 3.8 recipe-vs-plain branch extracted so
+// `updateWithLoadedManifest` and the standalone single-service use-case both call it.
+// Recipe (cleanRestart on + non-empty `restartCommands`): each command runs in the repo's
+// working directory in declared order via the restart port, stopping on the first failure
+// (normalized to a `restart-failed` detail naming the repo, the command, and the error
+// output). Otherwise today's plain container restart runs untouched — never both ports
+// for the same service in the same action.
+export interface RestartStepInput {
+  container: ContainerPort;
+  restart: RestartPort;
+  containerName: string;
+  restartCommands: string[] | undefined;
+  repoPath: string;
+  cleanRestart: boolean;
+}
+
+export async function runRestartStep(input: RestartStepInput): Promise<Result<void>> {
+  const { container, restart, containerName, restartCommands, repoPath, cleanRestart } = input;
+  if (cleanRestart && restartCommands !== undefined && restartCommands.length > 0) {
+    for (const command of restartCommands) {
+      const restarted = await restart.run(repoPath, command);
+      if (!restarted.ok) {
+        return err(
+          'restart-failed',
+          `Repo ${repoPath} restart "${command}" failed: ${restarted.error.message}`,
+        );
+      }
+    }
+    return ok(undefined);
+  }
+  const restarted = await container.restart(containerName);
+  if (!restarted.ok) {
+    // Every row's detail names its repoPath — with duplicate service names in one EDT,
+    // the code alone can't tell two rows apart.
+    return err(
+      restarted.error.code,
+      `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
+    );
+  }
+  return ok(undefined);
+}
+
 function failed(service: string, error: ResultError): GroupUpdateRepoResult {
   return { service, outcome: 'failed', detail: { code: error.code, message: error.message } };
 }
@@ -738,33 +780,11 @@ async function updateWithLoadedManifest(
     }
   }
 
-  // Story 3.8 — the restart phase: with `cleanRestart` on and a declared non-empty
-  // `restartCommands` recipe, each command runs in the repo's working directory in
-  // declared order via the restart port, stopping on the first failure — a `failed` row
-  // naming the service (via the row), the command, and the error output, never blocking
-  // or rolling back the other services. Otherwise (toggle off, or no recipe declared)
-  // today's plain container restart runs untouched — never both ports for the same
-  // service in the same action.
-  if (cleanRestart && restartCommands !== undefined && restartCommands.length > 0) {
-    for (const command of restartCommands) {
-      const restarted = await restart.run(repoPath, command);
-      if (!restarted.ok) {
-        return failedOutcome(service, {
-          code: 'restart-failed',
-          message: `Repo ${repoPath} restart "${command}" failed: ${restarted.error.message}`,
-        });
-      }
-    }
-  } else {
-    const restarted = await container.restart(containerName);
-    if (!restarted.ok) {
-      // Every row's detail names its repoPath — with duplicate service names in one EDT,
-      // the code alone can't tell two rows apart.
-      return failedOutcome(service, {
-        code: restarted.error.code,
-        message: `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
-      });
-    }
+  // Story 3.8 — the restart phase (story 3.9: shared via runRestartStep so the
+  // standalone single-service use-case runs the identical recipe-or-fallback).
+  const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart });
+  if (!restarted.ok) {
+    return failedOutcome(service, restarted.error);
   }
 
   return { row: { service, outcome: 'updated' }, cancelRun: false };

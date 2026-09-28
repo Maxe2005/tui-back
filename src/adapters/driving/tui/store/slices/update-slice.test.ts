@@ -718,6 +718,21 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     });
   });
 
+  it('openUpdateConfig({service, repoPath}) opens a one-row draft for the pinned repo (story 3.9)', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-b', repoPath: '/repo/b' });
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'edt',
+      rows: [{ service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true }],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    });
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
   it('openUpdateConfig({service, repoPath}) fails with the underlying error when scope resolution cannot read state', async () => {
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => err('state-invalid-format', 'corrupt')),
@@ -1148,5 +1163,266 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     store.getState().clearUpdate();
 
     expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('starts with no standalone restart in flight', () => {
+    const store = createAppStore(fakeDeps());
+
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('runServiceRestart restarts only that service and merges its row into lastServiceOutcomes', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toEqual({ service: 'svc-a', outcome: 'updated' });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+    // Only that service's repo was touched — the plain fallback ran for its container.
+    expect(deps.container!.restart).toHaveBeenCalledTimes(1);
+    expect(deps.container!.restart).toHaveBeenCalledWith('ctr-a');
+    // A standalone restart never fabricates a group run summary.
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateResults).toEqual([]);
+  });
+
+  it('runServiceRestart merges a failed row without blocking the next service', async () => {
+    const restart: RestartPort = { run: vi.fn(async () => err('restart-failed', 'boom')) };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({
+      service: 'svc-a',
+      outcome: 'failed',
+      detail: { code: 'restart-failed' },
+    });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+
+    await store.getState().runServiceRestart('/repo/b');
+
+    expect(store.getState().lastServiceOutcomes['svc-b']).toMatchObject({ service: 'svc-b', outcome: 'failed' });
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ service: 'svc-a', outcome: 'failed' });
+  });
+
+  it('a second trigger on the same service while its restart runs is rejected update-already-running', async () => {
+    let resolveRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      resolveRestart = resolve;
+    });
+    const restart: RestartPort = {
+      run: vi.fn(async () => {
+        await gate;
+        return ok({ output: '' });
+      }),
+    };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    const first = store.getState().runServiceRestart('/repo/a');
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    await store.getState().runServiceRestart('/repo/a');
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    // The first restart still holds its own slot — the rejected second trigger never stole it.
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    resolveRestart?.();
+    await first;
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ outcome: 'updated' });
+    expect(restart.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('a different idle service stays triggerable while one restart runs — per-service, not global', async () => {
+    let resolveRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      resolveRestart = resolve;
+    });
+    const restart: RestartPort = {
+      run: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a') {
+          await gate;
+        }
+        return ok({ output: '' });
+      }),
+    };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    const first = store.getState().runServiceRestart('/repo/a');
+    await store.getState().runServiceRestart('/repo/b');
+
+    expect(store.getState().lastServiceOutcomes['svc-b']).toMatchObject({ outcome: 'updated' });
+
+    resolveRestart?.();
+    await first;
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ outcome: 'updated' });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('runServiceRestart while a group run is in flight is rejected update-already-running, nothing started', async () => {
+    let resolveFetch: (() => void) | undefined;
+    const fetchGate = new Promise<void>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      fetch: vi.fn(async () => {
+        await fetchGate;
+        return ok(undefined);
+      }),
+    };
+    const deps = fakeDeps({ git });
+    const store = createAppStore(deps);
+
+    const group = store.getState().runGroupUpdate();
+    expect(store.getState().updateStatus).toBe('running');
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+
+    resolveFetch?.();
+    await group;
+  });
+
+  it('runGroupUpdate while a standalone restart is in flight is rejected update-already-running', async () => {
+    let resolveRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      resolveRestart = resolve;
+    });
+    const restart: RestartPort = {
+      run: vi.fn(async () => {
+        await gate;
+        return ok({ output: '' });
+      }),
+    };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    const standalone = store.getState().runServiceRestart('/repo/a');
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    await store.getState().runGroupUpdate();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+
+    resolveRestart?.();
+    await standalone;
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('openUpdateConfig while a standalone restart is in flight is rejected update-already-running', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('runServiceRestart surfaces a core lock-contention backstop as update-already-running', async () => {
+    const lock: LockPort = {
+      acquire: vi.fn(async () => err('action-in-progress', 'held')),
+      peek: vi.fn(async () => ok({ locked: true })),
+    };
+    const store = createAppStore(fakeDeps({ lock }));
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('runServiceRestart degrades to store-not-wired when the restart port is missing', async () => {
+    const deps = fakeDeps();
+    const { restart: _dropped, ...withoutRestart } = deps;
+    const store = createAppStore(withoutRestart);
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('clearUpdate drops the in-flight map alongside the run state', () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    store.getState().clearUpdate();
+
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('confirmUpdateConfig while a standalone restart is in flight stays open with the inline error (story 3.9)', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('already in progress');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
   });
 });

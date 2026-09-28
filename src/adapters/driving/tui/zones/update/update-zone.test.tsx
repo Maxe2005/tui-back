@@ -218,17 +218,17 @@ describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
   });
 });
 
-describe('resolveUpdateTrigger (story 3.7)', () => {
+describe('resolveUpdateTrigger (story 3.7, menu in 3.9)', () => {
   it('opens the all-repos config on a/A while idle/done/error', () => {
     expect(resolveUpdateTrigger('a', {}, 'idle')).toBe('open-all-config');
     expect(resolveUpdateTrigger('A', {}, 'done')).toBe('open-all-config');
     expect(resolveUpdateTrigger('a', {}, 'error')).toBe('open-all-config');
   });
 
-  it('opens the EDT config on Enter while idle/done/error', () => {
-    expect(resolveUpdateTrigger('', { return: true }, 'idle')).toBe('open-edt-config');
-    expect(resolveUpdateTrigger('', { return: true }, 'done')).toBe('open-edt-config');
-    expect(resolveUpdateTrigger('', { return: true }, 'error')).toBe('open-edt-config');
+  it('opens the row-local service menu on Enter while idle/done/error', () => {
+    expect(resolveUpdateTrigger('', { return: true }, 'idle')).toBe('open-service-menu');
+    expect(resolveUpdateTrigger('', { return: true }, 'done')).toBe('open-service-menu');
+    expect(resolveUpdateTrigger('', { return: true }, 'error')).toBe('open-service-menu');
   });
 
   it('yields none mid-run — a second trigger never starts a direct unconfigured run', () => {
@@ -244,7 +244,7 @@ describe('resolveUpdateTrigger (story 3.7)', () => {
     expect(resolveUpdateTrigger('', { return: false }, 'idle')).toBe('none');
   });
 
-  it('every mapping resolves to a config-screen action or none — no path starts a run directly', () => {
+  it('every mapping resolves to a config-screen/menu action or none — no path starts a run directly', () => {
     const actions = [
       resolveUpdateTrigger('a', {}, 'idle'),
       resolveUpdateTrigger('A', {}, 'done'),
@@ -255,10 +255,10 @@ describe('resolveUpdateTrigger (story 3.7)', () => {
       resolveUpdateTrigger('q', {}, 'idle'),
     ];
     for (const action of actions) {
-      expect(['open-all-config', 'open-edt-config', 'none']).toContain(action);
+      expect(['open-all-config', 'open-service-menu', 'none']).toContain(action);
     }
     expect(actions).toContain('open-all-config');
-    expect(actions).toContain('open-edt-config');
+    expect(actions).toContain('open-service-menu');
   });
 });
 
@@ -367,6 +367,11 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain(UPDATE_INTERRUPTED_OFFER);
   });
 
+  it('the interrupted offer routes through the service-actions menu, never a direct re-run', () => {
+    expect(UPDATE_INTERRUPTED_OFFER).toContain('for service actions');
+    expect(UPDATE_INTERRUPTED_OFFER).not.toContain('to re-run');
+  });
+
   it('running shows the spinner label plus one row per active-EDT member', async () => {
     const store = createAppStore();
     store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1', updateStatus: 'running' });
@@ -439,6 +444,10 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('✔ svc-a — updated');
     expect(output).toContain('✖ svc-b — failed (merge-conflict): conflict');
     expect(output).toContain('1 updated, 0 skipped, 1 failed');
+    // Story 3.9: Enter opens the row-local service menu — the follow-up hint promises
+    // the menu, never a direct re-run.
+    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).not.toContain('to run again');
   });
 
   it('done renders duplicate service names as separate rows (keyed by service + index)', async () => {
@@ -471,6 +480,7 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('has no member services');
     expect(output).not.toContain('0 updated, 0 skipped, 0 failed');
+    expect(output).toContain('Press [Enter] for service actions.');
   });
 
   it('error shows the message, the kebab-case code, and the retry hint', async () => {
@@ -481,6 +491,9 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('No active EDT');
     expect(output).toContain('no-active-edt');
+    // Story 3.9: the retry hint promises the service-actions menu, never a direct retry.
+    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).not.toContain('to try again');
   });
 
   it('a raised blocker renders the modal title, body, and all four choices', async () => {
@@ -509,10 +522,16 @@ describe('UpdateZone rendering', () => {
   });
 });
 
-describe('deriveUpdateServiceStatus (story 3.6)', () => {
+describe('deriveUpdateServiceStatus (story 3.6, restarting in 3.9)', () => {
   it('a run currently targeting the service always wins, regardless of health or a stale failed outcome', () => {
     expect(deriveUpdateServiceStatus('down', 'failed', true)).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true)).toBe('updating');
+  });
+
+  it('a standalone restart in flight derives restarting, outranked only by a group-run target', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, false, true)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('down', 'failed', false, true)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('down', 'failed', true, true)).toBe('updating');
   });
 
   it('a failed last outcome outranks raw health when no run currently targets the service', () => {
