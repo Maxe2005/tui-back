@@ -446,9 +446,10 @@ async function runEdtSwitch(
     state: deps.state,
     topic,
     force,
-    // Bug fix: the CLI explicitly passes no dirty-repo confirmation seam (mirroring the
-    // `update` subcommand's onUpdateBlocker: undefined below) — a dirty repo keeps today's
-    // non-interactive auto-stash behavior, with no prompt.
+    // Story 2.39: the CLI passes neither a seam nor dirtyResolutions yet (its explicit
+    // --adopt-dirty/--discard-dirty flags land in story 2.40), so it fails safe: a dirty
+    // outgoing-EDT member is still auto-stashed, but any other dirty service makes the switch
+    // exit non-zero with switch-dirty-services-unresolved before any git write.
     onDirtyReposBeforeSwitch: undefined,
   });
 }
