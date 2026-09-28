@@ -5,6 +5,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RestartPort } from '../ports/restart.js';
 import { serviceRestart, serviceRestartLockKey, type ServiceRestartParams } from './service-restart.js';
+import type { UpdatePhase } from './group-update.js';
 
 function calls(fn: unknown): Array<unknown[]> {
   return (fn as unknown as Mock).mock.calls;
@@ -221,5 +222,40 @@ describe('serviceRestart — standalone single-service clean restart (story 3.9)
   it('the per-service key is the resolved repoPath — trailing-slash variants serialize together', async () => {
     expect(serviceRestartLockKey('/repo/a/')).toBe(serviceRestartLockKey('/repo/a'));
     expect(serviceRestartLockKey('/repo/a')).toBe('service:/repo/a');
+  });
+
+  it('emits the restarting phase once through the shared channel (story 3.10)', async () => {
+    const seen: Array<[string, UpdatePhase]> = [];
+    const onPhase = vi.fn((service: string, phase: UpdatePhase) => {
+      seen.push([service, phase]);
+    });
+
+    const result = await serviceRestart(makeParams({ onPhase }));
+
+    expect(result).toMatchObject({ ok: true, data: { service: 'svc-a', outcome: 'updated' } });
+    expect(seen).toEqual([['svc-a', 'restarting']]);
+  });
+
+  it('emits restarting once for the plain fallback too', async () => {
+    const seen: Array<[string, UpdatePhase]> = [];
+    const onPhase = vi.fn((service: string, phase: UpdatePhase) => {
+      seen.push([service, phase]);
+    });
+    const manifest = fakeManifest({ ...manifestFor('svc-a'), restartCommands: undefined });
+
+    const result = await serviceRestart(makeParams({ manifest, onPhase }));
+
+    expect(result).toMatchObject({ ok: true, data: { service: 'svc-a', outcome: 'updated' } });
+    expect(seen).toEqual([['svc-a', 'restarting']]);
+  });
+
+  it('a throwing observer never breaks the standalone restart', async () => {
+    const onPhase = vi.fn(() => {
+      throw new Error('driving-side bug');
+    });
+
+    const result = await serviceRestart(makeParams({ onPhase }));
+
+    expect(result).toMatchObject({ ok: true, data: { service: 'svc-a', outcome: 'updated' } });
   });
 });

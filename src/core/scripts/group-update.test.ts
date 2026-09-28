@@ -22,6 +22,7 @@ import {
   type OnUpdateBlocker,
   type UpdateBlocker,
   type UpdateBlockerChoice,
+  type UpdatePhase,
 } from './group-update.js';
 
 function calls(fn: unknown): Array<unknown[]> {
@@ -168,6 +169,7 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.selection !== undefined ? { selection: overrides.selection } : {}),
     ...(overrides.runMigrations !== undefined ? { runMigrations: overrides.runMigrations } : {}),
     ...(overrides.cleanRestart !== undefined ? { cleanRestart: overrides.cleanRestart } : {}),
+    ...(overrides.onPhase !== undefined ? { onPhase: overrides.onPhase } : {}),
   };
 }
 
@@ -2226,5 +2228,172 @@ describe('groupUpdate — clean-restart recipe (story 3.8)', () => {
       ['/repo/b', 'docker compose up -d --build'],
     ]);
     expect(calls(container.restart)).toHaveLength(0);
+  });
+});
+
+describe('groupUpdate — live per-service phase tracking (story 3.10)', () => {
+  function recordPhases() {
+    const seen: Array<[string, UpdatePhase]> = [];
+    const onPhase = vi.fn((service: string, phase: UpdatePhase) => {
+      seen.push([service, phase]);
+    });
+    return { seen, onPhase };
+  }
+
+  it('fetch+merge path emits merging → migrating → restarting in order per service', async () => {
+    const { seen, onPhase } = recordPhases();
+
+    const result = await groupUpdate(makeParams({ onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      ['svc-a', 'merging'],
+      ['svc-a', 'migrating'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'merging'],
+      ['svc-b', 'migrating'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('pull path emits pulling instead of merging when already on the shared branch', async () => {
+    const { seen, onPhase } = recordPhases();
+    // Each member's configured merge source equals its own recorded branch (the EDT
+    // unexpected-branch gate still passes), so every service pulls.
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), sharedBranch: repoPath === '/repo/b' ? 'feat/b' : 'feat/a' }),
+      ),
+    };
+    const git = fakeGit();
+
+    const result = await groupUpdate(makeParams({ git, manifest, onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(calls(git.pull)).toHaveLength(2);
+    expect(seen).toEqual([
+      ['svc-a', 'pulling'],
+      ['svc-a', 'migrating'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'pulling'],
+      ['svc-b', 'migrating'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('runMigrations off skips the migrating phase without touching migration.run', async () => {
+    const { seen, onPhase } = recordPhases();
+    const migration = fakeMigration();
+
+    const result = await groupUpdate(makeParams({ migration, runMigrations: false, onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      ['svc-a', 'merging'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'merging'],
+      ['svc-b', 'restarting'],
+    ]);
+    expect(calls(migration.run)).toHaveLength(0);
+  });
+
+  it('a blank migrationCommand skips the migrating phase', async () => {
+    const { seen, onPhase } = recordPhases();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) => ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), migrationCommand: '  ' })),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      ['svc-a', 'merging'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'merging'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('a throwing observer never breaks the pipeline — both services still update', async () => {
+    const onPhase = vi.fn(() => {
+      throw new Error('driving-side bug');
+    });
+
+    const result = await groupUpdate(makeParams({ onPhase }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+  });
+
+  it('mid-recipe stop still emits restarting exactly once per service and fails only that service', async () => {
+    const { seen, onPhase } = recordPhases();
+    const restart = fakeRestart({
+      run: vi.fn(async (repoPath: string, command: string) =>
+        repoPath === '/repo/a' && command === 'npm ci' ? err('restart-failed', 'compose up blew up') : ok({ output: '' }),
+      ),
+    });
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), restartCommands: ['npm ci', 'docker compose up -d --build'] }),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, cleanRestart: true, onPhase }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    // One `restarting` emission per service even though svc-a's recipe stopped mid-way.
+    expect(seen.filter(([, phase]) => phase === 'restarting')).toEqual([
+      ['svc-a', 'restarting'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('an observer returning a rejected promise never breaks the pipeline nor leaks an unhandled rejection', async () => {
+    const onPhase = vi.fn(() => Promise.reject(new Error('driving-side bug')));
+
+    const result = await groupUpdate(makeParams({ onPhase }));
+    // Flush the rejection microtask — an unhandled rejection would fail the run.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(onPhase).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+  });
+
+  it('lock contention emits no phase — a rejected run starts nothing', async () => {
+    const { seen, onPhase } = recordPhases();
+    const lock = fakeLock({ acquire: async () => err('action-in-progress', 'held') });
+
+    const result = await groupUpdate(makeParams({ lock, onPhase }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
+    expect(seen).toEqual([]);
+  });
+
+  it('no-callback default runs the full flow with no observer and unchanged rows', async () => {
+    const result = await groupUpdate(makeParams({}));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
   });
 });

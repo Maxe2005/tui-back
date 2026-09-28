@@ -147,6 +147,11 @@ export interface GroupUpdateParams {
   // the driving side owns only menu rendering and the editor process (core only ever sees
   // the `edited` choice, never an editor).
   onUpdateBlocker?: OnUpdateBlocker;
+  // Story 3.10: the live per-service step observer. Absent by default (the CLI path
+  // passes no observer); the TUI store backs it with its live phase map. Emitted at
+  // phase boundaries (pulling/merging → migrating → restarting), never allowed to throw
+  // into the pipeline — a throwing observer is swallowed per emission.
+  onPhase?: OnUpdatePhase;
 }
 
 // Story 3.4: the resolution seam shape (Design Notes). `kind` distinguishes a dirty
@@ -163,6 +168,39 @@ export interface UpdateBlocker {
 export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
 
 export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerChoice>;
+
+// Story 3.10: the live per-service step vocabulary (the I/O matrix's current-step set).
+// Mirrors the `onUpdateBlocker` seam shape rather than inventing an event bus: one
+// optional callback, set by the store, no-op by default.
+export type UpdatePhase = 'pulling' | 'merging' | 'migrating' | 'restarting';
+
+export type OnUpdatePhase = (service: string, phase: UpdatePhase) => void;
+
+// Story 3.10: a driving-side phase observer must never break the pipeline — a throwing
+// observer (a driving-side bug) is swallowed per emission so one repo's live view never
+// strands the others' rows (the story 3.4 `askSeam` precedent, sync variant). A
+// misbehaving observer that returns a rejected promise past the `void` contract is
+// sunk the same way, so it never surfaces as an unhandled rejection.
+function emitPhase(onPhase: OnUpdatePhase | undefined, service: string, phase: UpdatePhase): void {
+  if (onPhase === undefined) {
+    return;
+  }
+  try {
+    const result = onPhase(service, phase) as unknown;
+    if (result instanceof Promise) {
+      result.catch(() => {
+        // Observer-only — the run continues with the phase untracked.
+      });
+    }
+  } catch {
+    // Observer-only — the run continues with the phase untracked.
+  }
+}
+
+// Story 3.2, shared with the driving layer (review hardening, story 3.10): the
+// normalized row-detail code for a failed migration — a named export instead of a
+// magic string, so the TUI's live issue log cannot drift from core's contract.
+export const MIGRATION_FAILED_CODE = 'migration-failed';
 
 // Story 3.4: lockfile-only dirt (the `update_repo.sh` convention) is silently discarded,
 // everything else pauses on the seam. Basename-matched at any depth ("any scope").
@@ -290,6 +328,7 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
         runMigrations,
         cleanRestart,
+        params.onPhase,
       );
       results.push(outcome.row);
       if (outcome.cancelRun) {
@@ -458,6 +497,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
           sourceBranch,
           runMigrations,
           cleanRestart,
+          params.onPhase,
         );
         results.push(outcome.row);
         if (outcome.cancelRun) {
@@ -512,10 +552,17 @@ export interface RestartStepInput {
   restartCommands: string[] | undefined;
   repoPath: string;
   cleanRestart: boolean;
+  // Story 3.10: the service label the phase observer reports under, plus the observer
+  // itself — emitted once at the restart boundary so both the group and the standalone
+  // paths share the same `restarting` signal (mid-recipe stop still reports the failure
+  // below, never a second phase).
+  service: string;
+  onPhase?: OnUpdatePhase;
 }
 
 export async function runRestartStep(input: RestartStepInput): Promise<Result<void>> {
-  const { container, restart, containerName, restartCommands, repoPath, cleanRestart } = input;
+  const { container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase } = input;
+  emitPhase(onPhase, service, 'restarting');
   if (cleanRestart && restartCommands !== undefined && restartCommands.length > 0) {
     for (const command of restartCommands) {
       const restarted = await restart.run(repoPath, command);
@@ -556,6 +603,7 @@ async function updateMember(
   sourceBranch?: string,
   runMigrations = true,
   cleanRestart = false,
+  onPhase?: OnUpdatePhase,
 ): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
@@ -578,6 +626,7 @@ async function updateMember(
     effectiveSourceBranch(loaded.data.sharedBranch, sourceBranch),
     runMigrations,
     cleanRestart,
+    onPhase,
   );
 }
 
@@ -628,6 +677,7 @@ async function updateWithLoadedManifest(
   sourceBranch?: string,
   runMigrations = true,
   cleanRestart = false,
+  onPhase?: OnUpdatePhase,
 ): Promise<RepoOutcome> {
   const { container: containerName, migrationCommand, restartCommands } = loaded;
   // Story 3.7: the configured merge source — the manifest `sharedBranch` unless the
@@ -703,6 +753,8 @@ async function updateWithLoadedManifest(
   }
 
   if (current.data === mergeSource) {
+    // Story 3.10: the live current-step signal for the pull path.
+    emitPhase(onPhase, service, 'pulling');
     const pulled = await git.pull(repoPath);
     if (!pulled.ok) {
       // A conflicting pull leaves the repo mid-merge exactly like a conflicting merge
@@ -730,6 +782,8 @@ async function updateWithLoadedManifest(
       }
     }
   } else {
+    // Story 3.10: the live current-step signal for the fetch+merge path.
+    emitPhase(onPhase, service, 'merging');
     const fetched = await git.fetch(repoPath, mergeSource);
     if (!fetched.ok) {
       return failedOutcome(service, fetched.error);
@@ -771,18 +825,23 @@ async function updateWithLoadedManifest(
   // Story 3.7: the run-wide migrate toggle gates the whole phase — off means no
   // `migration.run` executes for this service even when a command is declared.
   if (runMigrations && migrationCommand !== undefined && migrationCommand.trim() !== '') {
+    // Story 3.10: the live current-step signal for the migrate phase — the first (and
+    // only) producer of the `migrating` glyph's underlying phase.
+    emitPhase(onPhase, service, 'migrating');
     const migrated = await migration.run(repoPath, migrationCommand);
     if (!migrated.ok) {
       return failedOutcome(service, {
-        code: 'migration-failed',
+        code: MIGRATION_FAILED_CODE,
         message: `Repo ${repoPath} migration "${migrationCommand}" failed: ${migrated.error.message}`,
       });
     }
   }
 
   // Story 3.8 — the restart phase (story 3.9: shared via runRestartStep so the
-  // standalone single-service use-case runs the identical recipe-or-fallback).
-  const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart });
+  // standalone single-service use-case runs the identical recipe-or-fallback). Story
+  // 3.10: the `restarting` phase itself is emitted inside runRestartStep so both paths
+  // share it.
+  const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });
   if (!restarted.ok) {
     return failedOutcome(service, restarted.error);
   }

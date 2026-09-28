@@ -48,7 +48,7 @@ import {
   shouldOpenAllConfirm,
   UpdateZone,
 } from './update-zone.js';
-import { deriveUpdateServiceStatus, formatServiceOutcomeDetail, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
@@ -546,6 +546,23 @@ describe('deriveUpdateServiceStatus (story 3.6, restarting in 3.9)', () => {
     expect(deriveUpdateServiceStatus('up', 'updated', false)).toBe('up');
     expect(deriveUpdateServiceStatus('up', 'skipped', false)).toBe('up');
   });
+
+  it('a targeted service in its migrate phase derives migrating — the first producer of the reserved glyph (story 3.10)', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'migrating')).toBe('migrating');
+    expect(deriveUpdateServiceStatus('down', 'failed', true, false, 'migrating')).toBe('migrating');
+  });
+
+  it('a targeted service in any other live phase still derives updating (story 3.10)', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'pulling')).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging')).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'restarting')).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, undefined)).toBe('updating');
+  });
+
+  it('a live phase never leaks into the status when no run targets the service (story 3.10)', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, false, false, 'migrating')).toBe('up');
+    expect(deriveUpdateServiceStatus('up', 'failed', false, false, 'migrating')).toBe('error');
+  });
 });
 
 describe('partitionUpdateServiceRows (story 3.6)', () => {
@@ -580,6 +597,42 @@ describe('formatServiceOutcomeDetail (story 3.6)', () => {
       }),
     ).toBe('failed (merge-conflict): Automatic merge failed');
     expect(formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'skipped' })).toBe('skipped (skipped)');
+  });
+});
+
+describe('formatLiveServiceDetail (story 3.10)', () => {
+  it('renders the current step with no issues', () => {
+    expect(formatLiveServiceDetail('pulling', [])).toBe('step: pulling');
+    expect(formatLiveServiceDetail('migrating', [])).toBe('step: migrating');
+  });
+
+  it('renders starting when the targeted service has emitted no phase yet', () => {
+    expect(formatLiveServiceDetail(undefined, [])).toBe('step: starting');
+  });
+
+  it('marks each issue resolved/unresolved beside its kind and detail', () => {
+    expect(
+      formatLiveServiceDetail('merging', [
+        { kind: 'dirty-worktree', detail: '/repo/a', resolved: false },
+        { kind: 'merge-conflict', detail: '/repo/a', resolved: true },
+      ]),
+    ).toBe('step: merging\n○ dirty-worktree — /repo/a (unresolved)\n✔ merge-conflict — /repo/a (resolved)');
+  });
+
+  it('renders a migration failure as an unresolved entry', () => {
+    expect(
+      formatLiveServiceDetail('migrating', [
+        { kind: 'migration-failed', detail: 'Repo /repo/a migration "npm run migration:run" failed: boom', resolved: false },
+      ]),
+    ).toContain('○ migration-failed — Repo /repo/a migration "npm run migration:run" failed: boom (unresolved)');
+  });
+
+  it('collapses embedded newlines in issue detail so one issue stays one row', () => {
+    expect(
+      formatLiveServiceDetail('migrating', [
+        { kind: 'migration-failed', detail: 'line one\nline two\nline three', resolved: false },
+      ]),
+    ).toBe('step: migrating\n○ migration-failed — line one line two line three (unresolved)');
   });
 });
 
@@ -848,5 +901,155 @@ describe('UpdateZone health-poll wiring against real (fake-port) deps (story 3.6
       instance.unmount();
       throw error;
     }
+  });
+});
+
+describe('UpdateZone live per-service detail (story 3.10)', () => {
+  it('running with the selected service targeted shows its live step plus the issue log instead of the last outcome', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServicePhase: { 'svc-a': 'pulling' },
+      liveServiceIssues: {
+        'svc-a': [
+          { kind: 'dirty-worktree', detail: '/repo/a', resolved: false },
+          { kind: 'merge-conflict', detail: '/repo/a', resolved: true },
+        ],
+      },
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    // The first row (svc-a, the EDT member) is selected and targeted — the live view
+    // replaces the last-outcome view that would otherwise read "updated".
+    expect(output).toContain('step: pulling');
+    expect(output).toContain('○ dirty-worktree — /repo/a (unresolved)');
+    expect(output).toContain('✔ merge-conflict — /repo/a (resolved)');
+  });
+
+  it('running with the selected service targeted but no phase yet shows the starting step', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('step: starting');
+  });
+
+  it('running with the migrate phase targeted shows the migrating glyph on that service’s own row', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServicePhase: { 'svc-a': 'migrating' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const lines = output.split('\n');
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+
+    expect(svcARow).toBeDefined();
+    expect(svcARow).toContain('⇒');
+    expect(output).toContain('step: migrating');
+  });
+
+  it('running with a non-targeted service selected keeps the last-outcome view, never the live step', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServicePhase: { 'svc-a': 'pulling' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    // svc-b is selected but no EDT-scoped run targets it — the idle last-outcome view.
+    expect(output).not.toContain('step:');
+    expect(output).toContain('idle');
+  });
+
+  it('done reverts to the final per-service outcome even with a stale live phase in the map', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'done',
+      updateTopic: 'demo',
+      updateResults: [{ service: 'svc-a', outcome: 'updated' }],
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      liveServicePhase: { 'svc-a': 'pulling' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).not.toContain('step:');
+  });
+
+  it('idle with a standalone restart in flight on the selected service shows its live restarting step', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'idle',
+      serviceRestartInFlight: { '/repo/a': 'restart' },
+      liveServicePhase: { 'svc-a': 'restarting' },
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('step: restarting');
+  });
+
+  it('idle with a standalone restart in flight but no emission yet shows starting, never a stale outcome', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'idle',
+      serviceRestartInFlight: { '/repo/a': 'restart' },
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('step: starting');
   });
 });

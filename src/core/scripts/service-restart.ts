@@ -5,7 +5,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
-import { runRestartStep, type GroupUpdateRepoResult } from './group-update.js';
+import { runRestartStep, type GroupUpdateRepoResult, type OnUpdatePhase } from './group-update.js';
 
 // core/scripts/service-restart: the standalone single-service clean restart (story 3.9).
 // Runs story 3.8's recipe-or-fallback for exactly one service — the manifest's
@@ -25,6 +25,10 @@ export interface ServiceRestartParams {
   restart: RestartPort;
   lock: LockPort;
   repoPath: string;
+  // Story 3.10: the same live-phase observer the group update threads through
+  // `runRestartStep` — absent by default; the TUI store backs it with its live phase map
+  // so the standalone path reports `restarting` through the identical channel.
+  onPhase?: OnUpdatePhase;
 }
 
 export function serviceRestartLockKey(repoPath: string): string {
@@ -40,7 +44,7 @@ function serviceFallback(repoPath: string): string {
 }
 
 export async function serviceRestart(params: ServiceRestartParams): Promise<Result<GroupUpdateRepoResult>> {
-  const { manifest, container, restart, lock, repoPath } = params;
+  const { manifest, container, restart, lock, repoPath, onPhase } = params;
   // A blank repoPath would resolve to the process cwd and lock/target the wrong directory
   // before manifest.load ever fails — reject before acquiring anything.
   if (repoPath.trim() === '') {
@@ -63,6 +67,8 @@ export async function serviceRestart(params: ServiceRestartParams): Promise<Resu
       restartCommands,
       repoPath,
       cleanRestart: true,
+      service,
+      onPhase,
     });
     if (!restarted.ok) {
       return ok({ service, outcome: 'failed', detail: { code: restarted.error.code, message: restarted.error.message } } as GroupUpdateRepoResult);
