@@ -1484,6 +1484,47 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  it('story 2.37 (review): a list landing clears a stale "chargement des branches en cours" message', async () => {
+    let release: (() => void) | undefined;
+    const { store } = step3Store({
+      listCreateBranches: () =>
+        new Promise<ListsResult>((resolve) => {
+          release = () => resolve({ ok: true, data: { local: ['main'], remote: [] } });
+        }),
+    });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await reachStep3(instance, stdin, 'demo', 1);
+      await press(instance, stdin, KEYS.ctrlN); // blocked while loading
+      const count = (frame: string) => frame.split('chargement des branches en cours').length - 1;
+      expect(count(lastWizardFrame(stdout))).toBe(2); // the row's detail line + the wizard's message
+      release?.();
+      await settle(instance);
+      const frame = lastWizardFrame(stdout);
+      expect(count(frame)).toBe(0);
+      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ main +│ demo/);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.37 (review): a rejected list load becomes a row error instead of loading forever', async () => {
+    const { store } = step3Store({
+      listCreateBranches: async () => {
+        throw new Error('spawn git ENOENT');
+      },
+    });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await reachStep3(instance, stdin, 'demo', 1);
+      expect(lastWizardFrame(stdout)).toContain('✖ svc-a : échec du chargement des branches : spawn git ENOENT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('story 2.37 matrix: a failed list load shows on the row, blocks Ctrl+N, and is retried on the next entry', async () => {
     let attempts = 0;
     const { store, createCalls } = step3Store({

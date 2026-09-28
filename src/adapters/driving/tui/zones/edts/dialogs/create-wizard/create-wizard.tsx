@@ -164,17 +164,31 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return { ...prev, branches: { ...prev.branches, lists } };
     });
     for (const path of paths) {
-      void deps.listCreateBranches(path).then((result) => {
-        deps.setDialog((prev) => {
-          if (prev.kind !== 'create' || prev.branches.lists[path]?.status !== 'loading') {
-            return prev;
-          }
-          const loaded = result.ok
-            ? { status: 'ready' as const, local: result.data.local, remote: result.data.remote }
-            : { status: 'error' as const, local: [], remote: [], error: result.error.message };
-          return { ...prev, branches: { ...prev.branches, lists: { ...prev.branches.lists, [path]: loaded } } };
+      // A rejected promise (a throw inside the store action) becomes an error result, so the
+      // row never stays `loading` forever.
+      void deps
+        .listCreateBranches(path)
+        .catch((error: unknown) => ({
+          ok: false as const,
+          error: { code: 'list-branches-failed', message: error instanceof Error ? error.message : String(error) },
+        }))
+        .then((result) => {
+          deps.setDialog((prev) => {
+            if (prev.kind !== 'create' || prev.branches.lists[path]?.status !== 'loading') {
+              return prev;
+            }
+            const loaded = result.ok
+              ? { status: 'ready' as const, local: result.data.local, remote: result.data.remote }
+              : { status: 'error' as const, local: [], remote: [], error: result.error.message };
+            // The rows changed under a possibly-stale "can't leave Step 3" message (e.g.
+            // "chargement des branches en cours"): clear it, the rows show the live state.
+            return {
+              ...prev,
+              error: prev.step === 3 ? null : prev.error,
+              branches: { ...prev.branches, lists: { ...prev.branches.lists, [path]: loaded } },
+            };
+          });
         });
-      });
     }
   }
 
