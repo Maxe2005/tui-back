@@ -7,7 +7,7 @@
 // a git failure (any git invocation there would have failed as "not a git repository").
 import { describe, expect, it, afterEach } from 'vitest';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -1551,10 +1551,36 @@ describe('discardAll', () => {
     expect(existsSync(join(repo, 'wip.txt'))).toBe(false);
   });
 
-  it('reports git-discard-error on a non-git directory', async () => {
+  it('reports git-discard-error naming the reset step on a non-git directory', async () => {
     const dir = await makeDirWithManifestOnly();
 
-    expect(await discardAll(dir)).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
+    expect(await discardAll(dir)).toMatchObject({
+      ok: false,
+      error: { code: 'git-discard-error', message: expect.stringContaining('step 1/2 (git reset --hard)') },
+    });
+  });
+
+  // Root ignores directory permissions, so the clean could not be made to fail there.
+  it.skipIf(process.getuid?.() === 0)('names the clean step, after the reset already ran, when an untracked file cannot be removed', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked']).status).toBe(0);
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await mkdir(join(repo, 'locked'));
+    await writeFile(join(repo, 'locked', 'f.txt'), 'x');
+    await chmod(join(repo, 'locked'), 0o500);
+    try {
+      const result = await discardAll(repo);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'git-discard-error', message: expect.stringContaining('step 2/2 (git clean -fd)') },
+      });
+      expect(await readFile(join(repo, 'tracked.txt'), 'utf8')).toBe('v1');
+    } finally {
+      await chmod(join(repo, 'locked'), 0o700);
+    }
   });
 });
 

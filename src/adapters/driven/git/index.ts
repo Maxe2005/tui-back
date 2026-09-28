@@ -579,11 +579,17 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
 export async function discardAll(repoPath: string): Promise<Result<void>> {
   const reset = spawnSync('git', ['reset', '--hard'], { cwd: repoPath, encoding: 'utf8' });
   if (reset.status !== 0) {
-    return err('git-discard-error', `git reset --hard failed in ${repoPath}: ${spawnFailureDetail(reset)}`);
+    return err(
+      'git-discard-error',
+      `discardAll step 1/2 (git reset --hard) failed in ${repoPath}; untracked files were not cleaned: ${spawnFailureDetail(reset)}`,
+    );
   }
   const clean = spawnSync('git', ['clean', '-fd'], { cwd: repoPath, encoding: 'utf8' });
   if (clean.status !== 0) {
-    return err('git-discard-error', `git clean -fd failed in ${repoPath}: ${spawnFailureDetail(clean)}`);
+    return err(
+      'git-discard-error',
+      `discardAll step 2/2 (git clean -fd) failed in ${repoPath} after tracked changes were already reset: ${spawnFailureDetail(clean)}`,
+    );
   }
   return ok(undefined);
 }
