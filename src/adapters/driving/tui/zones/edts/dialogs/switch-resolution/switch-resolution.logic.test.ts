@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
+import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { TextEditKey } from '../../../../shared/components/text-edit.js';
 import {
   buildResolutions,
@@ -230,7 +230,7 @@ describe('reduceSwitchResolutionKey (story 2.41)', () => {
 describe('results & log detail (story 2.41)', () => {
   it('keeps the dialog open on anything beyond a plain switch and records adopted branches and discarded paths', () => {
     expect(needsResultsView([{ service: 'a', outcome: 'switched' }])).toBe(false);
-    const results = [
+    const results: SwitchEdtRepoResult[] = [
       { service: 'a', outcome: 'adopted', detail: { code: 'adopted', message: 'm', adoptedBranch: 'mon-topic' } },
       { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: 'm', discardedPaths: ['x.txt', 'y/z.txt'] } },
     ];
@@ -238,5 +238,17 @@ describe('results & log detail (story 2.41)', () => {
     const detail = describeSwitchForLog('Target', false, results);
     expect(detail).toContain('a → mon-topic');
     expect(detail).toContain('b (x.txt, y/z.txt)');
+  });
+
+  it('lists discarded rows by outcome (a failed row with discardedPaths is not "discarded") and caps paths per service', () => {
+    const many = Array.from({ length: 25 }, (_, index) => `f${index}.txt`);
+    const detail = describeSwitchForLog('Target', false, [
+      { service: 'big', outcome: 'discarded', detail: { code: 'discarded', message: 'm', discardedPaths: many } },
+      { service: 'half', outcome: 'failed', detail: { code: 'git-clean-error', message: 'boom', discardedPaths: ['p.txt'] } },
+    ]);
+    expect(detail).toContain('f19.txt (+5 more)');
+    expect(detail).not.toContain('f20.txt');
+    expect(detail).not.toContain('half (p.txt)');
+    expect(detail).toContain('failed: half: boom');
   });
 });

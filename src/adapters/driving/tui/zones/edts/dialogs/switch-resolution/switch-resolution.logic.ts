@@ -20,7 +20,7 @@
 //   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation);
 //     on the main view it cancels the whole switch.
 import { resolve } from 'node:path';
-import type { DirtyResolution, SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
+import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
 import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
@@ -538,15 +538,21 @@ export function reduceSwitchResolutionKey(
 
 // ---- Results & logging -----------------------------------------------------------------------
 
-type ResultRow = { service: string; outcome: string; detail?: { code: string; message: string; discardedPaths?: string[]; adoptedBranch?: string } };
+// How many discarded paths the log lists per service before summarizing the rest.
+export const LOGGED_DISCARDED_PATHS = 20;
+
+function loggedPaths(paths: readonly string[]): string {
+  const shown = paths.slice(0, LOGGED_DISCARDED_PATHS).join(', ');
+  return paths.length > LOGGED_DISCARDED_PATHS ? `${shown} (+${paths.length - LOGGED_DISCARDED_PATHS} more)` : shown;
+}
 
 // The dialog stays open on a results summary when anything beyond a plain switch happened.
-export function needsResultsView(results: readonly ResultRow[]): boolean {
+export function needsResultsView(results: readonly SwitchEdtRepoResult[]): boolean {
   return results.some((row) => row.outcome !== 'switched');
 }
 
 // The action-log detail: adopted branches and discarded paths (Story 2.41).
-export function describeSwitchForLog(targetTopic: string, forced: boolean, results: readonly ResultRow[]): string {
+export function describeSwitchForLog(targetTopic: string, forced: boolean, results: readonly SwitchEdtRepoResult[]): string {
   const parts = [`Switched to EDT "${targetTopic}"${forced ? ' (forced)' : ''}`];
   const adopted = results
     .filter((row) => row.outcome === 'adopted')
@@ -555,8 +561,8 @@ export function describeSwitchForLog(targetTopic: string, forced: boolean, resul
     parts.push(`adopted: ${adopted.join(', ')}`);
   }
   const discarded = results
-    .filter((row) => (row.detail?.discardedPaths?.length ?? 0) > 0)
-    .map((row) => `${row.service} (${(row.detail?.discardedPaths ?? []).join(', ')})`);
+    .filter((row) => row.outcome === 'discarded')
+    .map((row) => `${row.service} (${loggedPaths(row.detail?.discardedPaths ?? [])})`);
   if (discarded.length > 0) {
     parts.push(`discarded: ${discarded.join('; ')}`);
   }
