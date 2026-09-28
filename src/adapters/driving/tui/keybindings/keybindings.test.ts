@@ -39,10 +39,22 @@ const EXPECTED = [
     'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   ],
   ['Ctrl+R', 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy'],
+  ['Tab (switch resolution)', 'Switch EDT, dirty services: switch between the global strategy and the per-service table'],
+  ['Enter (switch resolution)', 'Switch EDT, dirty services: edit the global branch name / configure the focused service row'],
+  [
+    'Ctrl+N (switch resolution)',
+    'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
+  ],
+  ['Ctrl+R (switch resolution)', 'Switch EDT, "Configurer" box: return the service to the global strategy'],
+  ['Ctrl+E (switch resolution)', 'Switch EDT, discard confirmation: destroy the listed files and proceed (Enter/Esc go back)'],
+  [
+    'Esc (switch resolution)',
+    'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
+  ],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 19 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37)', () => {
+  it('lists exactly the 25 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37; switch resolution keys, story 2.41)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),

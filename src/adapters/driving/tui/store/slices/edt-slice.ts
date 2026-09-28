@@ -154,9 +154,10 @@ export type EdtSlice = {
   // (story 3.4). Non-null while switchActiveEdt is paused inside switchEdt: story 2.39 raises
   // it only when a state-2/3 repo (outside the outgoing EDT) is dirty, and waits for a
   // SwitchDirtyReposChoice (`cancel`, or `proceed` with per-repo adopt/discard resolutions).
-  // The switch dialog renders the preview while this is set and calls
-  // resolveSwitchDirtyRepos to resume the paused core call. Interim (until story 2.41's
-  // resolution dialog): the dialog only ever resolves `{ kind: 'cancel' }`.
+  // While this is set the switch dialog renders story 2.41's resolution view (global strategy,
+  // per-service overrides, discard confirmation — its draft lives in the dialog state, never
+  // here or in core) and calls resolveSwitchDirtyRepos to resume the paused core call with
+  // `{ kind: 'proceed', resolutions }` or `{ kind: 'cancel' }`.
   switchDirtyRepos: SwitchDirtyRepo[] | null;
   resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
@@ -335,7 +336,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           force: params.force,
           // The TUI backs the dirty-repo seam — core pauses the switch (before any git
           // write) on the batch of dirty repos and waits here while the switch dialog's
-          // preview collects the developer's choice. No explicit dirtyResolutions: the seam
+          // resolution view (story 2.41) collects the developer's choice. No explicit dirtyResolutions: the seam
           // is the TUI's only resolution source.
           onDirtyReposBeforeSwitch: async (dirty) => {
             set({ switchDirtyRepos: dirty });
