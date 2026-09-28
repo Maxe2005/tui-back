@@ -208,6 +208,7 @@ describe('subcommand registry guards', () => {
       isMergeInProgress: async () => ok(false),
       listDirtyPaths: async () => ok([]),
       discardPaths: async () => ok(undefined),
+      discardAll: async () => ok(undefined),
       isRebaseInProgress: async () => ok(false),
       hasUnmergedPaths: async () => ok(false),
       finalizeMerge: async () => ok(undefined),

@@ -116,11 +116,19 @@ export interface GitPort {
   abortMerge(repoPath: string): Promise<Result<void>>;
   // Story 3.4: porcelain file list backing the lockfile-only classifier — the raw
   // `git status --porcelain` paths (one entry per dirty path; renames surface both sides so
-  // the classifier stays conservative). Empty when the tree is clean.
-  listDirtyPaths(repoPath: string): Promise<Result<string[]>>;
+  // the classifier stays conservative). Empty when the tree is clean. Story 2.39: the opt-in
+  // `expandUntracked` lists every file inside an untracked directory (`--untracked-files=all`)
+  // instead of the directory itself — used by switch.ts to capture exactly what a `discard`
+  // resolution removes. Story 3.4's classifier keeps the default (collapsed) listing.
+  listDirtyPaths(repoPath: string, opts?: { expandUntracked?: boolean }): Promise<Result<string[]>>;
   // Story 3.4: path-scoped discard (`git checkout -- <paths>` equivalent) for the
   // lockfile-only auto-fix. Never touches paths outside the given list.
   discardPaths(repoPath: string, paths: string[]): Promise<Result<void>>;
+  // Story 2.39: THE one consent-gated destructive primitive — `git reset --hard` then
+  // `git clean -fd` (never `-x`: ignored files are never touched; never `-ff`: nested repos
+  // are never removed). Its only permitted caller is core/edt/switch.ts, and only under an
+  // explicit per-repo `discard` resolution supplied by the developer. Fails `git-discard-error`.
+  discardAll(repoPath: string): Promise<Result<void>>;
   // Story 3.4: true while a `git rebase` is still in progress (rebase-merge/rebase-apply
   // state dirs exist under the repo's git dir). The tool never touches a rebase — this is
   // only a detector so a pre-existing mid-rebase surfaces as its own distinct state.

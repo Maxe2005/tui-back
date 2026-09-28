@@ -6,6 +6,7 @@
 // manifest-only directory that is NOT a git repository still gets the gate error rather than
 // a git failure (any git invocation there would have failed as "not a git repository").
 import { describe, expect, it, afterEach } from 'vitest';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -25,6 +26,7 @@ import {
   createTrackingBranch,
   currentBranch,
   deleteBranch,
+  discardAll,
   discardPaths,
   fetchBranch,
   finalizeMerge,
@@ -1491,12 +1493,68 @@ describe('listDirtyPaths', () => {
     }
   });
 
+  it('collapses an untracked directory by default, expands it file by file on opt-in (story 2.39)', async () => {
+    const repo = await makeCleanGitRepo();
+    await mkdir(join(repo, 'newdir', 'nested'), { recursive: true });
+    await writeFile(join(repo, 'newdir', 'a.txt'), 'a');
+    await writeFile(join(repo, 'newdir', 'nested', 'b.txt'), 'b');
+
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: ['newdir/'] });
+    const expanded = await listDirtyPaths(repo, { expandUntracked: true });
+    expect(expanded.ok).toBe(true);
+    if (expanded.ok) {
+      expect([...expanded.data].sort()).toEqual(['newdir/a.txt', 'newdir/nested/b.txt']);
+    }
+  });
+
   it('reports a controlled error on a non-git directory', async () => {
     const dir = await makeDirWithManifestOnly();
 
     const result = await listDirtyPaths(dir);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-status-error' } });
+  });
+});
+
+// Story 2.39 — the consent-gated destructive primitive, proven against real git.
+describe('discardAll', () => {
+  it('drops tracked modifications, untracked files and untracked dirs, but never ignored files', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, '.gitignore'), '.env\n');
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', '.gitignore', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked + ignore']).status).toBe(0);
+
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await writeFile(join(repo, 'staged.txt'), 'staged');
+    runGit(repo, ['add', 'staged.txt']);
+    await writeFile(join(repo, 'untracked.txt'), 'new');
+    await mkdir(join(repo, 'newdir'), { recursive: true });
+    await writeFile(join(repo, 'newdir', 'inner.txt'), 'inner');
+    await writeFile(join(repo, '.env'), 'SECRET=1');
+
+    expect(await discardAll(repo)).toEqual({ ok: true, data: undefined });
+
+    expect(await readFile(join(repo, 'tracked.txt'), 'utf8')).toBe('v1');
+    expect(existsSync(join(repo, 'staged.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'untracked.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'newdir'))).toBe(false);
+    expect(await readFile(join(repo, '.env'), 'utf8')).toBe('SECRET=1');
+    expect(await hasUncommittedChanges(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('is wired behind the factory', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'wip.txt'), 'work');
+
+    expect(await createGitPort(manifest).discardAll(repo)).toEqual({ ok: true, data: undefined });
+    expect(existsSync(join(repo, 'wip.txt'))).toBe(false);
+  });
+
+  it('reports git-discard-error on a non-git directory', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    expect(await discardAll(dir)).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
   });
 });
 
