@@ -3,6 +3,9 @@
 // so these verify the wiring (switchDirtyRepos raised/cleared, resolveSwitchDirtyRepos
 // resuming the paused core call) rather than re-testing switchActiveEdt's own matrix, already
 // covered in core/edt/switch.test.ts. Mirrors update-slice.test.ts's onUpdateBlocker tests.
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../core/result.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
@@ -205,3 +208,46 @@ describe('edt slice — switch dirty-repo confirm seam (bug fix)', () => {
 function calls(fn: unknown): Array<unknown[]> {
   return (fn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
 }
+
+describe('edt slice — create wizard Step 3 wiring (story 2.37)', () => {
+  it('listCreateBranches returns the local and remote-tracking lists through core', async () => {
+    const deps = fakeDeps();
+    (deps.git.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(['main']));
+    (deps.git.listRemoteBranches as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(['origin/main']));
+    const store = createAppStore(deps);
+    const result = await store.getState().listCreateBranches('/repo/a');
+    expect(result).toEqual({ ok: true, data: { local: ['main'], remote: ['origin/main'] } });
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+  });
+
+  it('listCreateBranches surfaces a list failure', async () => {
+    const deps = fakeDeps();
+    (deps.git.listRemoteBranches as ReturnType<typeof vi.fn>).mockImplementation(async () => err('git-error', 'boom'));
+    const store = createAppStore(deps);
+    const result = await store.getState().listCreateBranches('/repo/a');
+    expect(result.ok).toBe(false);
+  });
+
+  it('listCreateBranches on an unwired store is a store-not-wired error, never a throw', async () => {
+    const result = await createAppStore().getState().listCreateBranches('/repo/a');
+    expect(result).toEqual({ ok: false, error: { code: 'store-not-wired', message: 'No ports wired into the TUI store' } });
+  });
+
+  it('createEdt forwards memberPlans to core without any branchOptions', async () => {
+    const edtsBaseDir = await mkdtemp(join(tmpdir(), 'tui-back-edt-slice-'));
+    try {
+      const deps = fakeDeps({ edtsBaseDir });
+      (deps.edtRegistry.list as ReturnType<typeof vi.fn>).mockImplementation(async () => ok([]));
+      const store = createAppStore(deps);
+      const result = await store.getState().createEdt({
+        topic: 'auth-flow',
+        members: ['/repo/a'],
+        memberPlans: { '/repo/a': { kind: 'create', base: 'origin/rel', name: 'auth-flow' } },
+      });
+      expect(result.ok).toBe(true);
+      expect(deps.git.createBranch).toHaveBeenCalledWith('/repo/a', 'auth-flow', 'origin/rel');
+    } finally {
+      await rm(edtsBaseDir, { recursive: true, force: true });
+    }
+  });
+});
