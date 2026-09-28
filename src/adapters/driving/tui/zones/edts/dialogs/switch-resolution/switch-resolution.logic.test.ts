@@ -78,6 +78,14 @@ describe('switch-resolution rows (story 2.41)', () => {
     });
   });
 
+  it('buildResolutions pins each discard to its row\'s dirtyPaths (confirmedPaths)', () => {
+    const state = { ...initialSwitchResolution('Mon Topic', DIRTY), globalAction: 'discard' as const };
+    expect(buildResolutions(buildRows(DIRTY, globalOf(state)))).toEqual({
+      '/repo/a': { kind: 'discard', confirmedPaths: ['a.txt'] },
+      '/repo/b': { kind: 'discard', confirmedPaths: ['a.txt'] },
+    });
+  });
+
   it('no outgoing EDT: every row defaults to Écraser and Panel A cannot toggle to Adopter', () => {
     const state = initialSwitchResolution(null, DIRTY);
     expect(state.globalAction).toBe('discard');
@@ -150,15 +158,26 @@ describe('reduceSwitchResolutionKey (story 2.41)', () => {
   it('any Écraser row opens the discard confirmation: Enter/Esc go back, only Ctrl+E proceeds', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     const confirming = press(state, SPACE, CTRL_N);
-    expect(confirming.confirm).toEqual({ scroll: 0 });
+    expect(confirming.confirm).toEqual({ scroll: 0, error: null });
     expect(confirming.decision).toBeNull();
     expect(press(confirming, ENTER).confirm).toBeNull();
     expect(press(confirming, ESC).confirm).toBeNull();
     expect(press(confirming, ['y', {}]).decision).toBeNull();
     expect(press(confirming, CTRL_E).decision).toEqual({
       kind: 'proceed',
-      resolutions: { '/repo/a': { kind: 'discard' }, '/repo/b': { kind: 'discard' } },
+      resolutions: { '/repo/a': { kind: 'discard', confirmedPaths: ['a.txt'] }, '/repo/b': { kind: 'discard', confirmedPaths: ['a.txt'] } },
     });
+  });
+
+  it('Ctrl+E is blocked inline when a discard row has no file list (pre-flight read failed)', () => {
+    const unlisted = repo({ service: 'svc-u', repoPath: '/repo/u', dirtyPaths: undefined });
+    const dirty = [unlisted];
+    const state = ready(initialSwitchResolution(null, dirty));
+    const confirming = reduceSwitchResolutionKey(state, dirty, 'n', { ctrl: true });
+    expect(confirming.confirm).not.toBeNull();
+    const refused = reduceSwitchResolutionKey(confirming, dirty, 'e', { ctrl: true });
+    expect(refused.decision).toBeNull();
+    expect(refused.confirm?.error).toBe('liste des fichiers indisponible pour svc-u — annulez et relancez la bascule');
   });
 
   it('Esc closes the innermost element first, then cancels the switch', () => {

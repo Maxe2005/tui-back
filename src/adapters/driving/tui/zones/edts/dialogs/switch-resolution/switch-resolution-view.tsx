@@ -111,7 +111,17 @@ export function discardConfirmLines(rows: readonly ResolutionRow[]): ConfirmLine
   return lines;
 }
 
-function DiscardConfirmView({ rows, scroll, maxVisibleRows }: { rows: readonly ResolutionRow[]; scroll: number; maxVisibleRows: number }) {
+function DiscardConfirmView({
+  rows,
+  scroll,
+  error,
+  maxVisibleRows,
+}: {
+  rows: readonly ResolutionRow[];
+  scroll: number;
+  error: string | null;
+  maxVisibleRows: number;
+}) {
   const lines = discardConfirmLines(rows);
   const cursor = Math.min(scroll, Math.max(lines.length - 1, 0));
   return (
@@ -134,6 +144,7 @@ function DiscardConfirmView({ rows, scroll, maxVisibleRows }: { rows: readonly R
           </Text>
         )}
       />
+      {error !== null ? <Text color={colors.error}>✖ {error}</Text> : null}
       <Text color={colors['text-dim']}>{DISCARD_CONFIRM_FOOTER}</Text>
     </Box>
   );
@@ -155,7 +166,7 @@ export function SwitchResolutionView({
   const rows = buildRows(dirty, global);
 
   if (state.confirm !== null) {
-    return <DiscardConfirmView rows={rows} scroll={state.confirm.scroll} maxVisibleRows={maxVisibleRows} />;
+    return <DiscardConfirmView rows={rows} scroll={state.confirm.scroll} error={state.confirm.error} maxVisibleRows={maxVisibleRows} />;
   }
 
   const box = state.box;

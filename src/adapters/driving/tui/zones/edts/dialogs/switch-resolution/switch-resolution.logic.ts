@@ -65,8 +65,9 @@ export type SwitchResolutionState = {
   overrides: Readonly<Record<string, ResolutionOverride>>;
   lists: Readonly<Record<string, LocalBranchList>>;
   box: SwitchResolutionBox | null;
-  // The discard confirmation (second view), with its file-list scroll position.
-  confirm: { scroll: number } | null;
+  // The discard confirmation (second view), with its file-list scroll position and the
+  // inline error of a refused Ctrl+E.
+  confirm: { scroll: number; error: string | null } | null;
   // Ctrl+N refused: the blocking message shown under the table until a row changes.
   error: string | null;
   // Raised by the reducer; the zone dispatches it to the parked core call exactly once.
@@ -86,6 +87,12 @@ export const RESOLUTION_ERRORS = {
   noOutgoing: 'Aucun EDT sortant — seul [Écraser] est possible',
   blocked: 'Corrigez les lignes invalides avant de confirmer',
 } as const;
+
+// Ctrl+E refused: this discard row's file list could not be read by the pre-flight, so what
+// would be destroyed cannot be shown (nor pinned through `confirmedPaths`).
+export function unlistedDiscardError(service: string): string {
+  return `liste des fichiers indisponible pour ${service} — annulez et relancez la bascule`;
+}
 
 // The rows needing a decision: dirty state-2/3 repos (state-1 rows are auto-stashed).
 export function resolutionRepos(dirty: readonly SwitchDirtyRepo[]): SwitchDirtyRepo[] {
@@ -210,7 +217,14 @@ export function validateRow(row: ResolutionRow, localBranchesByPath: Readonly<Re
 export function buildResolutions(rows: readonly ResolutionRow[]): Record<string, DirtyResolution> {
   const resolutions: Record<string, DirtyResolution> = {};
   for (const row of rows) {
-    resolutions[row.repo.repoPath] = row.plan.kind === 'adopt' ? { kind: 'adopt', branch: row.plan.branch } : { kind: 'discard' };
+    if (row.plan.kind === 'adopt') {
+      resolutions[row.repo.repoPath] = { kind: 'adopt', branch: row.plan.branch };
+    } else {
+      // Story 2.41 review: pins the discard to the files the confirmation listed — core
+      // refuses it if the fresh capture holds anything else.
+      const paths = row.repo.dirtyPaths;
+      resolutions[row.repo.repoPath] = paths !== undefined ? { kind: 'discard', confirmedPaths: [...paths] } : { kind: 'discard' };
+    }
   }
   return resolutions;
 }
@@ -355,6 +369,10 @@ export function reduceSwitchResolutionKey(
   // The discard confirmation: default is Retour; only Ctrl+E confirms.
   if (state.confirm !== null) {
     if (isCtrl(input, key, 'e')) {
+      const unlisted = rows.find((row) => row.plan.kind === 'discard' && row.repo.dirtyPaths === undefined);
+      if (unlisted !== undefined) {
+        return { ...state, confirm: { ...state.confirm, error: unlistedDiscardError(unlisted.repo.service) } };
+      }
       return { ...state, decision: { kind: 'proceed', resolutions: buildResolutions(rows) } };
     }
     if (key.escape || key.return) {
@@ -366,7 +384,7 @@ export function reduceSwitchResolutionKey(
         .filter((row) => row.plan.kind === 'discard')
         .reduce((total, row) => total + 1 + (row.repo.dirtyPaths?.length ?? 0), 0);
       const scroll = Math.min(Math.max(state.confirm.scroll + (key.downArrow ? 1 : -1), 0), Math.max(lineCount - 1, 0));
-      return { ...state, confirm: { scroll } };
+      return { ...state, confirm: { ...state.confirm, scroll } };
     }
     return state;
   }
@@ -398,7 +416,7 @@ export function reduceSwitchResolutionKey(
       return { ...state, editing: false, error: RESOLUTION_ERRORS.blocked };
     }
     if (rows.some((row) => row.plan.kind === 'discard')) {
-      return { ...state, editing: false, confirm: { scroll: 0 } };
+      return { ...state, editing: false, confirm: { scroll: 0, error: null } };
     }
     return { ...state, editing: false, decision: { kind: 'proceed', resolutions: buildResolutions(rows) } };
   }

@@ -2,7 +2,7 @@
 title: 'EDT Switch Resolution Dialog — Global Strategy, Per-Service Overrides & Discard Confirmation'
 type: 'feature'
 created: '2026-09-28'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 context: []
 baseline_commit: '588856b1cdda5421bd18befad43e666bec699161'

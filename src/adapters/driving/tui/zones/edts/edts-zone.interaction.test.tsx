@@ -323,7 +323,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
 
       expect(probe.resolvedWith).toEqual({
         kind: 'proceed',
-        resolutions: { '/repo/payments': { kind: 'discard' }, '/repo/billing': { kind: 'discard' } },
+        resolutions: {
+          '/repo/payments': { kind: 'discard', confirmedPaths: ['pay.ts', 'tmp/new.txt'] },
+          '/repo/billing': { kind: 'discard', confirmedPaths: ['bill.ts'] },
+        },
       });
     } finally {
       instance.unmount();
