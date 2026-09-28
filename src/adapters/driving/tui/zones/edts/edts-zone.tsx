@@ -61,7 +61,7 @@ import {
   type EdtDialogState,
 } from './edts-zone.logic.js';
 import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
-import { createCreateDialogHandlers, CreateDialogView } from './dialogs/create-dialog.js';
+import { createCreateWizardHandlers, CreateWizardView } from './dialogs/create-wizard/create-wizard.js';
 import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
 import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
@@ -488,7 +488,7 @@ export function EdtsZone({
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
   });
-  const { handleCreateInput } = createCreateDialogHandlers({
+  const { handleCreateInput } = createCreateWizardHandlers({
     setDialog,
     createEdtAction,
     loadEdts,
@@ -866,7 +866,9 @@ export function EdtsZone({
         }
       />
 
-      {dialog.kind === 'create' ? <CreateDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
+      {dialog.kind === 'create' ? (
+        <CreateWizardView dialog={dialog} candidates={candidates} candidateState={candidateState} edtsRows={edtsRows} />
+      ) : null}
 
       {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} /> : null}
 

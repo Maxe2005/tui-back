@@ -1201,10 +1201,10 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
       // Started from the Dashboard zone (mount's default): running edt-create auto-switches to
       // EDTs (runCommand) and the zone's own currentEdtAction effect immediately consumes the
-      // action and opens the create dialog — so the dialog itself, not the transient
+      // action and opens the create wizard — so the dialog itself, not the transient
       // currentEdtAction flag, is what proves the command actually ran.
       expect(store.getState().activeZone).toBe('edts');
-      expect(stdout.output).toContain('CREATE EDT');
+      expect(stdout.output).toContain("EDT Wizard: Création d'un espace de travail");
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

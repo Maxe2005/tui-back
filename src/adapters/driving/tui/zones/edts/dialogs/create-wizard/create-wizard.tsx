@@ -1,0 +1,266 @@
+// tui/zones/edts/dialogs/create-wizard: Story 2.36 — the create-EDT wizard modal, replacing the
+// flat CREATE EDT dialog (Stories 2.9/2.22/2.27) behind the same `edt-create` / zero-EDT entry
+// points. A breadcrumb shows where the developer is and what's decided; each step opens with a
+// short intro; step navigation is explicit:
+//   - Ctrl+→ / Ctrl+N: next step, only if the current step is valid (else its inline error)
+//   - Ctrl+← / Ctrl+P: back one step, always, state kept
+//   - Tab: moves within the current step only; Enter: advances on Steps 1-3, confirms on Step 4
+//   - Esc: closes the innermost open sub-field first (Step 3's base-branch picker), else cancels
+//     with nothing written — or requests quit when no EDT exists yet (nothing to cancel back to)
+//
+// Steps 3-4 are interim until Stories 2.37/2.38 (today's branch fields, then a plain confirm
+// running today's submitCreate unchanged). The pure logic lives in wizard.logic.ts.
+import { Box, Text, type Key } from 'ink';
+import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
+import { NO_BRANCH_CREATION, type AppState } from '../../../../store/app-store.js';
+import { DimAnnotation } from '../../../../shared/components/dim-annotation.js';
+import { FailedResultList } from '../../../../shared/components/failed-result-list.js';
+import { ModalDialog } from '../../../../shared/components/modal-dialog.js';
+import { colors } from '../../../../shared/theme/theme.js';
+import {
+  buildCreateBranchOptions,
+  type CandidateListState,
+  type CreateDialogState,
+  type EdtDialogState,
+  stripAssistedActionCodes,
+  summarizeFailedResults,
+  validateCreateBranchFields,
+  type WizardStep,
+} from '../../edts-zone.logic.js';
+import { ActivationStepView } from './step-activation.js';
+import { BranchStepView, createBranchStepHandlers } from './step-branches.js';
+import { handleNameStepInput, NameStepView } from './step-name.js';
+import { handleServicesStepInput, ServicesStepView } from './step-services.js';
+import { buildBreadcrumb, canAdvance, checkNameAvailability, resolveWizardNavKey, STEP_INTROS, type BreadcrumbTone } from './wizard.logic.js';
+
+export const CREATE_WIZARD_TITLE = "EDT Wizard: Création d'un espace de travail";
+
+export type CreateWizardDeps = {
+  setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
+  createEdtAction: AppState['createEdt'];
+  loadEdts: AppState['loadEdts'];
+  loadEdtsBranches: AppState['loadEdtsBranches'];
+  logEdtAction: AppState['logEdtAction'];
+  requestQuit: AppState['requestQuit'];
+  setCurrentEdtAction: AppState['setCurrentEdtAction'];
+  focusedEdt: EdtRegistryEntry | undefined;
+  edtsRows: readonly EdtRegistryEntry[];
+  candidates: readonly ServiceBranchDivergence[];
+};
+
+export function createCreateWizardHandlers(deps: CreateWizardDeps) {
+  const branchStep = createBranchStepHandlers({ setDialog: deps.setDialog, candidates: deps.candidates });
+
+  // Moved unchanged from the retired create-dialog.tsx (Story 2.36 Always boundary: same
+  // createEdt params, logging and FailedResultList as before — Story 2.38 fixes the activation
+  // and action-log target).
+  async function submitCreate(current: CreateDialogState) {
+    if (current.submitting) {
+      return;
+    }
+    // Review patch (story 2.9): reject an empty topic inline rather than letting it reach
+    // createEdt, whose `missing-argument` error is a raw CLI usage string.
+    if (current.topic.trim() === '') {
+      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error: 'Topic must not be empty' } : prev));
+      return;
+    }
+    // Every selected member's base-branch and branch-name field is validated inline before
+    // createEdtAction is ever reached (Stories 2.22/2.27).
+    const branchFieldError = validateCreateBranchFields(
+      current.namingMode,
+      current.selectedMembers,
+      current.branchName,
+      current.branchNames,
+      current.baseBranches,
+    );
+    if (branchFieldError !== null) {
+      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error: branchFieldError } : prev));
+      return;
+    }
+    const branchOptions = buildCreateBranchOptions(
+      current.selectedMembers,
+      current.namingMode,
+      current.branchName,
+      current.branchNames,
+      current.baseBranches,
+      NO_BRANCH_CREATION,
+    );
+    deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
+    const result = await deps.createEdtAction({ topic: current.topic, members: [...current.selectedMembers], branchOptions });
+    if (result.ok) {
+      // Awaited (not fire-and-forget) so `edtsRows` reflects the newly-created EDT before this
+      // function returns — Escape's cancel-vs-quit choice depends on it.
+      await deps.loadEdts();
+      void deps.loadEdtsBranches();
+      // Story 2.25: structured per-repo rows (FailedResultList); create never wires a retry.
+      const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
+      if (failedRows.length > 0) {
+        deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: false, failedRows } : prev));
+        if (deps.focusedEdt) {
+          await deps.logEdtAction(deps.focusedEdt.ulid, 'create', 'failed', failedRows.map((row) => row.message).join('; '));
+        }
+        return;
+      }
+      deps.setDialog({ kind: 'none' });
+      if (deps.focusedEdt) {
+        await deps.logEdtAction(
+          deps.focusedEdt.ulid,
+          'create',
+          'success',
+          `Created EDT "${current.topic}" with ${current.selectedMembers.length} member(s)`,
+        );
+      }
+    } else {
+      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: false, error: result.error.message } : prev));
+      if (deps.focusedEdt) {
+        await deps.logEdtAction(deps.focusedEdt.ulid, 'create', 'failed', result.error.message);
+      }
+    }
+  }
+
+  // Moving to any step clears the previous step's error/failure rows and drops Step 3's picker
+  // session; entering Step 3 re-runs its prefill and opens a fresh picker (re-entry convention).
+  function enterStep(state: CreateDialogState, target: WizardStep): CreateDialogState {
+    const base: CreateDialogState = { ...state, step: target, error: null, failedRows: [], branchPicker: null };
+    if (target === 1) {
+      return { ...base, formFocus: 'topic' };
+    }
+    if (target === 2) {
+      return { ...base, formFocus: 'members' };
+    }
+    if (target === 3) {
+      return branchStep.enterBranchStep(base);
+    }
+    return base;
+  }
+
+  function goNext(current: CreateDialogState) {
+    if (current.step === 4) {
+      return;
+    }
+    const check = canAdvance(current.step, current, deps.edtsRows);
+    if (!check.ok) {
+      const error = check.error;
+      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error } : prev));
+      return;
+    }
+    const target = (current.step + 1) as WizardStep;
+    deps.setDialog((prev) => (prev.kind === 'create' ? enterStep(prev, target) : prev));
+  }
+
+  function goBack(current: CreateDialogState) {
+    if (current.step === 1) {
+      return;
+    }
+    const target = (current.step - 1) as WizardStep;
+    deps.setDialog((prev) => (prev.kind === 'create' ? enterStep(prev, target) : prev));
+  }
+
+  // Review patch (story 2.9): with an EDT list to go back to, Escape cancels; with none (the
+  // forced zero-EDT prompt) it requests a quit instead of leaving no way out short of Ctrl+C.
+  function cancel() {
+    if (deps.edtsRows.length > 0) {
+      deps.setDialog({ kind: 'none' });
+      deps.setCurrentEdtAction(null);
+      return;
+    }
+    deps.requestQuit();
+  }
+
+  function handleCreateInput(current: CreateDialogState, input: string, key: Key) {
+    // Every key is inert while a submit is in flight (never tear down or re-enter it).
+    if (current.submitting) {
+      return;
+    }
+    const nav = resolveWizardNavKey(input, key);
+    if (nav === 'next') {
+      goNext(current);
+      return;
+    }
+    if (nav === 'back') {
+      goBack(current);
+      return;
+    }
+    // Step 3's open base-branch picker is the innermost sub-field: it owns every other key,
+    // including Esc (closes just the picker) and Enter (confirms its value).
+    if (current.step === 3 && current.formFocus === 'branch-base' && current.branchPicker !== null) {
+      branchStep.handleBaseBranchInput(current, input, key);
+      return;
+    }
+    if (key.escape) {
+      cancel();
+      return;
+    }
+    if (key.return) {
+      if (current.step === 4) {
+        void submitCreate(current);
+      } else {
+        goNext(current);
+      }
+      return;
+    }
+    if (current.step === 1) {
+      handleNameStepInput(deps.setDialog, input, key);
+      return;
+    }
+    if (current.step === 2) {
+      handleServicesStepInput(deps.setDialog, deps.candidates, current, input, key);
+      return;
+    }
+    if (current.step === 3) {
+      if (key.tab) {
+        branchStep.cycleBranchFocus();
+        return;
+      }
+      branchStep.handleBranchFieldInput(current, input, key);
+    }
+  }
+
+  return { handleCreateInput };
+}
+
+const BREADCRUMB_COLORS: Readonly<Record<BreadcrumbTone, string>> = {
+  current: colors.accent,
+  done: colors.text,
+  pending: colors.text,
+  unreachable: colors['text-dim'],
+};
+
+export function CreateWizardView({
+  dialog,
+  candidates,
+  candidateState,
+  edtsRows,
+}: {
+  dialog: CreateDialogState;
+  candidates: readonly ServiceBranchDivergence[];
+  candidateState: CandidateListState;
+  edtsRows: readonly EdtRegistryEntry[];
+}) {
+  const breadcrumb = buildBreadcrumb(dialog, edtsRows);
+  const cancelHint = edtsRows.length > 0 ? '[Esc] Annuler' : '[Esc] Quitter';
+  return (
+    <ModalDialog title={CREATE_WIZARD_TITLE} onConfirm={() => {}} onCancel={() => {}} open={true}>
+      <Box flexDirection="column">
+        <Box flexWrap="wrap">
+          {breadcrumb.map((item, index) => (
+            <Text key={item.step} color={BREADCRUMB_COLORS[item.tone]} bold={item.tone === 'current'} dimColor={item.tone === 'unreachable'}>
+              {index > 0 ? ' ── ' : ''}[{item.text}]
+            </Text>
+          ))}
+        </Box>
+        <Text color={colors['text-dim']}>{STEP_INTROS[dialog.step]}</Text>
+        {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
+        {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
+        {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} /> : null}
+        {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} /> : null}
+        {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+        {dialog.submitting ? <DimAnnotation text="Création…" /> : null}
+        <Text color={colors['text-dim']}>
+          [Ctrl+→/Ctrl+N] Étape suivante • [Ctrl+←/Ctrl+P] Étape précédente • {cancelHint}
+        </Text>
+      </Box>
+    </ModalDialog>
+  );
+}
