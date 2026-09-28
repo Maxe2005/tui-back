@@ -221,6 +221,8 @@ export function createBranchStepHandlers(deps: BranchStepDeps) {
               branchName: next.value,
               branchNameCursor: next.cursor,
               branchNameTouched: next.value !== current.branchName ? true : prev.branchNameTouched,
+              // A value change clears a stale "can't leave Step 3" error.
+              error: next.value !== current.branchName ? null : prev.error,
             }
           : prev,
       );
@@ -245,6 +247,7 @@ export function createBranchStepHandlers(deps: BranchStepDeps) {
         branchNames: { ...prev.branchNames, [path]: next.value },
         branchNameCursors: { ...prev.branchNameCursors, [path]: next.cursor },
         branchNamesTouched: next.value !== existingValue ? { ...prev.branchNamesTouched, [path]: true } : prev.branchNamesTouched,
+        error: next.value !== existingValue ? null : prev.error,
       };
     });
   }

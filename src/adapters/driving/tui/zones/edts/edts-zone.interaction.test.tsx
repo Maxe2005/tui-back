@@ -801,7 +801,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       },
     });
 
-    const { instance, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
@@ -816,6 +816,16 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
 
       await press(instance, stdin, KEYS.enter); // submit #2 — guarded by `submitting`
       expect(createCalls).toBe(1);
+
+      // Story 2.36: every key is inert while the submit is in flight — Esc would otherwise
+      // request a quit here (zero EDTs), and Ctrl+P would step back mid-submit.
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.ctrlP);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().quitRequested).toBe(false);
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(lastFrame).toContain('▶ 4. Activation ◀');
+      expect(lastFrame).toContain('Création…');
 
       release?.();
       await instance.waitUntilRenderFlush();
@@ -1030,6 +1040,17 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       expect(stdout.output).toContain(WIZARD_TITLE);
       expect(stdout.output).toContain('svc-b');
       expect(stdout.output).toContain('shared/protected');
+
+      // Story 2.36 (review): the EDT already exists — nothing may re-submit or navigate away;
+      // the failure rows stay until acknowledged, and Enter closes the wizard.
+      expect(stdout.output).toContain('[Entrée/Esc] Fermer');
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('shared/protected');
+      const beforeClose = stdout.output.length;
+      await press(instance, stdin, KEYS.enter);
+      const afterClose = stdout.output.slice(beforeClose);
+      expect(afterClose.length).toBeGreaterThan(0);
+      expect(afterClose).not.toContain(WIZARD_TITLE);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1155,6 +1176,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.ctrlN); // Step 1 -> Step 2
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space); // select svc-b only
+      // Step 2's checklist renders inside the wizard through EdtsZone's own candidate wiring.
+      const step2Frame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
+      expect(step2Frame).toContain('[ ] svc-a');
+      expect(step2Frame).toContain('[x] svc-b');
       await press(instance, stdin, KEYS.ctrlRight); // Step 2 -> Step 3 (base-branch picker open)
       await press(instance, stdin, KEYS.enter); // confirm the base branch -> branch-mode
       await press(instance, stdin, KEYS.tab); // branch-mode -> branch-name ('demo')
@@ -1585,9 +1610,14 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       // Still the wizard, still on Step 3 — never silently torn down or advanced.
       expect(stdout.output).not.toContain('▶ 4. Activation ◀');
 
-      // The rejection didn't wedge the field: typing a valid value and confirming now works.
+      // The rejection didn't wedge the field: typing a valid value clears the error, and
+      // confirming now works — the stale error never follows onto Step 4.
       await type(instance, stdin, 'feature-y');
+      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).not.toContain('Branch name must not be empty');
+      const beforeStep4 = stdout.output.length;
       await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      expect(stdout.output.slice(beforeStep4)).toContain('▶ 4. Activation ◀');
+      expect(stdout.output.slice(beforeStep4)).not.toContain('Branch name must not be empty');
       await press(instance, stdin, KEYS.enter); // submit
       expect(createCalls).toBe(1);
     } finally {
@@ -1688,7 +1718,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       const beforeCancel = stdout.output.length;
       await pressEscape(instance, stdin); // nothing left open -> cancels the whole creation
 
-      expect(stdout.output.slice(beforeCancel)).not.toContain(WIZARD_TITLE);
+      const afterCancel = stdout.output.slice(beforeCancel);
+      // A real cancel commits a new frame — the populated EDT list, wizard gone.
+      expect(afterCancel).toContain('other');
+      expect(afterCancel).not.toContain(WIZARD_TITLE);
       expect(createCalls).toBe(0);
       expect(store.getState().quitRequested).toBe(false);
     } finally {
@@ -1734,6 +1767,44 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter);
       expect(stdout.output).toContain('▶ 2. Services ◀');
       expect(createCalls).toBe(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.36 (review): Step 4 re-checks the name — a clash appearing after Step 1 blocks the submit with the wizard message', async () => {
+    const store = createAppStore();
+    let createCalls = 0;
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      createEdt: async (): Promise<Result<CreateEdtData>> => {
+        createCalls += 1;
+        return { ok: true, data: { ulid: 'new-ulid', topic: 'demo', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'demo');
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3
+      await press(instance, stdin, KEYS.enter); // confirm the base branch
+      await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4
+      // Meanwhile an EDT named "demo" appears (e.g. created from the CLI).
+      store.setState({ edts: [edt({ ulid: 'cli-ulid', topic: 'demo' })] });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // submit attempt
+
+      expect(createCalls).toBe(0);
+      expect(stdout.output).toContain('Ce nom est déjà pris par un autre EDT');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

@@ -37,7 +37,7 @@ export function checkNameAvailability(topic: string, edts: readonly Pick<EdtRegi
   if (trimmed === '') {
     return 'empty';
   }
-  return edts.some((entry) => entry.topic.trim() === trimmed) ? 'taken' : 'available';
+  return edts.some((entry) => entry.topic === trimmed) ? 'taken' : 'available';
 }
 
 export type AdvanceCheck = { ok: true } | { ok: false; error: string };

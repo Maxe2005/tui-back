@@ -6,7 +6,16 @@ import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
 
-export function ActivationStepView({ dialog, candidates }: { dialog: CreateDialogState; candidates: readonly ServiceBranchDivergence[] }) {
+export function ActivationStepView({
+  dialog,
+  candidates,
+  showConfirm = true,
+}: {
+  dialog: CreateDialogState;
+  candidates: readonly ServiceBranchDivergence[];
+  // false once a partial-failure create already wrote the EDT — nothing left to confirm.
+  showConfirm?: boolean;
+}) {
   const serviceName = (path: string) => candidates.find((candidate) => candidate.path === path)?.service ?? path;
   return (
     <Box flexDirection="column">
@@ -21,7 +30,7 @@ export function ActivationStepView({ dialog, candidates }: { dialog: CreateDialo
           </Text>
         );
       })}
-      <Text color={colors.accent}>[Entrée] Créer l'EDT</Text>
+      {showConfirm ? <Text color={colors.accent}>[Entrée] Créer l'EDT</Text> : null}
     </Box>
   );
 }

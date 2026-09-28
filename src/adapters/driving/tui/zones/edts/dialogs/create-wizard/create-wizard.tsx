@@ -135,34 +135,46 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     return base;
   }
 
-  function goNext(current: CreateDialogState) {
-    if (current.step === 4) {
-      return;
-    }
-    const check = canAdvance(current.step, current, deps.edtsRows);
-    if (!check.ok) {
-      const error = check.error;
-      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error } : prev));
-      return;
-    }
-    const target = (current.step + 1) as WizardStep;
-    deps.setDialog((prev) => (prev.kind === 'create' ? enterStep(prev, target) : prev));
+  // Validated inside the updater, against `prev` — never the keypress-time closure — so edits
+  // and a step key arriving in the same input chunk can't validate one state and advance another.
+  function goNext() {
+    deps.setDialog((prev) => {
+      if (prev.kind !== 'create' || prev.step === 4) {
+        return prev;
+      }
+      const check = canAdvance(prev.step, prev, deps.edtsRows);
+      return check.ok ? enterStep(prev, (prev.step + 1) as WizardStep) : { ...prev, error: check.error };
+    });
   }
 
-  function goBack(current: CreateDialogState) {
-    if (current.step === 1) {
-      return;
+  // Step 4's confirm re-checks Steps 1-3 first (e.g. the name became taken by an EDT created
+  // from the CLI meanwhile), surfacing the wizard's own message rather than the core's.
+  function confirmStep4(current: CreateDialogState) {
+    for (const step of [1, 2, 3] as const) {
+      const check = canAdvance(step, current, deps.edtsRows);
+      if (!check.ok) {
+        const error = check.error;
+        deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error } : prev));
+        return;
+      }
     }
-    const target = (current.step - 1) as WizardStep;
-    deps.setDialog((prev) => (prev.kind === 'create' ? enterStep(prev, target) : prev));
+    void submitCreate(current);
+  }
+
+  function close() {
+    deps.setDialog({ kind: 'none' });
+    deps.setCurrentEdtAction(null);
+  }
+
+  function goBack() {
+    deps.setDialog((prev) => (prev.kind === 'create' && prev.step > 1 ? enterStep(prev, (prev.step - 1) as WizardStep) : prev));
   }
 
   // Review patch (story 2.9): with an EDT list to go back to, Escape cancels; with none (the
   // forced zero-EDT prompt) it requests a quit instead of leaving no way out short of Ctrl+C.
   function cancel() {
     if (deps.edtsRows.length > 0) {
-      deps.setDialog({ kind: 'none' });
-      deps.setCurrentEdtAction(null);
+      close();
       return;
     }
     deps.requestQuit();
@@ -173,13 +185,21 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     if (current.submitting) {
       return;
     }
+    // A partial-failure create already wrote the EDT: the per-repo failure rows stay on screen
+    // until acknowledged (Enter or Esc closes), and nothing can re-submit or navigate away.
+    if (isCreatedWithFailures(current)) {
+      if (key.return || key.escape) {
+        close();
+      }
+      return;
+    }
     const nav = resolveWizardNavKey(input, key);
     if (nav === 'next') {
-      goNext(current);
+      goNext();
       return;
     }
     if (nav === 'back') {
-      goBack(current);
+      goBack();
       return;
     }
     // Step 3's open base-branch picker is the innermost sub-field: it owns every other key,
@@ -194,9 +214,9 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     }
     if (key.return) {
       if (current.step === 4) {
-        void submitCreate(current);
+        confirmStep4(current);
       } else {
-        goNext(current);
+        goNext();
       }
       return;
     }
@@ -220,6 +240,11 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
   return { handleCreateInput };
 }
 
+// failedRows are only ever set by submitCreate after an ok:true (partial-failure) create.
+export function isCreatedWithFailures(dialog: CreateDialogState): boolean {
+  return dialog.step === 4 && dialog.failedRows.length > 0;
+}
+
 const BREADCRUMB_COLORS: Readonly<Record<BreadcrumbTone, string>> = {
   current: colors.accent,
   done: colors.text,
@@ -240,6 +265,7 @@ export function CreateWizardView({
 }) {
   const breadcrumb = buildBreadcrumb(dialog, edtsRows);
   const cancelHint = edtsRows.length > 0 ? '[Esc] Annuler' : '[Esc] Quitter';
+  const createdWithFailures = isCreatedWithFailures(dialog);
   return (
     <ModalDialog title={CREATE_WIZARD_TITLE} onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
@@ -254,12 +280,16 @@ export function CreateWizardView({
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
         {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} /> : null}
-        {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} /> : null}
+        {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} showConfirm={!createdWithFailures} /> : null}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
         {dialog.submitting ? <DimAnnotation text="Création…" /> : null}
-        <Text color={colors['text-dim']}>
-          [Ctrl+→/Ctrl+N] Étape suivante • [Ctrl+←/Ctrl+P] Étape précédente • {cancelHint}
-        </Text>
+        {createdWithFailures ? (
+          <Text color={colors['text-dim']}>EDT créé, avec des échecs par service ci-dessus • [Entrée/Esc] Fermer</Text>
+        ) : (
+          <Text color={colors['text-dim']}>
+            [Ctrl+→/Ctrl+N] Étape suivante • [Ctrl+←/Ctrl+P] Étape précédente • {cancelHint}
+          </Text>
+        )}
       </Box>
     </ModalDialog>
   );
