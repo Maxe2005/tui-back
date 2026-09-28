@@ -3,7 +3,10 @@ import {
   openOverrideBox,
   overrideBoxLines,
   OVERRIDE_BOX_ERRORS,
+  existingTargetError,
+  noopRenameError,
   protectedExistingError,
+  protectedSourceError,
   protectedNameError,
   reduceOverrideBoxKey,
   shadowedRemoteError,
@@ -16,7 +19,7 @@ import {
 const CONTEXT: OverrideBoxContext = {
   status: 'ready',
   local: ['main', 'x', 'prod', 'feat/z'],
-  remote: ['origin/dev', 'origin/x', 'origin/w'],
+  remote: ['origin/dev', 'origin/x', 'origin/w', 'origin/prod'],
   sharedBranch: 'main',
 };
 
@@ -139,13 +142,35 @@ describe('validateOverrideBox (story 2.37)', () => {
     expect(validateOverrideBox(box({ name: { value: 'main', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('main') });
   });
 
-  it('Protected: an existing protected branch without a rename is refused; a protected new name too', () => {
+  it('Protected: a local protected branch is refused even with a rename (renameBranch gates the old name too)', () => {
     const existing = box({ mode: 'existing', existing: { value: 'prod', cursor: 4, pickCursor: 0 } });
-    expect(validateOverrideBox(existing, CONTEXT)).toEqual({ ok: false, error: protectedExistingError('prod') });
-    expect(validateOverrideBox({ ...existing, rename: true, newName: { value: 'preprod', cursor: 7 } }, CONTEXT)).toEqual({
+    expect(validateOverrideBox(existing, CONTEXT)).toEqual({ ok: false, error: protectedSourceError('prod') });
+    expect(validateOverrideBox({ ...existing, rename: true, newName: { value: 'p2', cursor: 2 } }, CONTEXT)).toEqual({
+      ok: false,
+      error: protectedSourceError('prod'),
+    });
+  });
+
+  it('Protected: a remote origin/prod needs a non-protected rename', () => {
+    const remote = box({ mode: 'existing', existing: { value: 'origin/prod', cursor: 11, pickCursor: 0 } });
+    expect(validateOverrideBox(remote, CONTEXT)).toEqual({ ok: false, error: protectedExistingError('prod') });
+    expect(validateOverrideBox({ ...remote, rename: true, newName: { value: 'preprod', cursor: 7 } }, CONTEXT)).toEqual({
       ok: false,
       error: protectedNameError('preprod'),
     });
+    expect(validateOverrideBox({ ...remote, rename: true, newName: { value: 'p2', cursor: 2 } }, CONTEXT)).toEqual({
+      ok: true,
+      plan: { kind: 'existing', branch: 'origin/prod', renameTo: 'p2' },
+    });
+  });
+
+  it('a Perso name or a rename target that already exists locally is refused, and so is a no-op rename', () => {
+    expect(validateOverrideBox(box({ name: { value: 'feat/z', cursor: 6 } }), CONTEXT)).toEqual({ ok: false, error: existingTargetError('feat/z') });
+    const existing = box({ mode: 'existing', rename: true, existing: { value: 'origin/w', cursor: 8, pickCursor: 0 } });
+    expect(validateOverrideBox({ ...existing, newName: { value: 'feat/z', cursor: 6 } }, CONTEXT)).toEqual({ ok: false, error: existingTargetError('feat/z') });
+    expect(validateOverrideBox({ ...existing, newName: { value: 'w', cursor: 1 } }, CONTEXT)).toEqual({ ok: false, error: noopRenameError('w') });
+    const local = box({ mode: 'existing', rename: true, existing: { value: 'feat/z', cursor: 6, pickCursor: 0 }, newName: { value: 'feat/z', cursor: 6 } });
+    expect(validateOverrideBox(local, CONTEXT)).toEqual({ ok: false, error: noopRenameError('feat/z') });
   });
 
   it('Remote shadowed: origin/x while a local x exists, without a rename, is refused', () => {

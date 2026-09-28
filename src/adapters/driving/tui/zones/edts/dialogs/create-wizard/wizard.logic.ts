@@ -59,7 +59,7 @@ export function canAdvance(
   step: WizardStep,
   state: CreateDialogState,
   edts: readonly Pick<EdtRegistryEntry, 'topic'>[],
-  candidates: readonly BranchCandidate[] = [],
+  candidates: readonly BranchCandidate[],
 ): AdvanceCheck {
   if (step === 1) {
     const availability = checkNameAvailability(state.topic, edts);
@@ -85,7 +85,7 @@ export function canAdvance(
 export function reachableSteps(
   state: CreateDialogState,
   edts: readonly Pick<EdtRegistryEntry, 'topic'>[],
-  candidates: readonly BranchCandidate[] = [],
+  candidates: readonly BranchCandidate[],
 ): WizardStep[] {
   const reachable: WizardStep[] = [];
   for (const step of WIZARD_STEPS) {
@@ -121,7 +121,7 @@ export type BreadcrumbItem = { step: WizardStep; text: string; tone: BreadcrumbT
 export function buildBreadcrumb(
   state: CreateDialogState,
   edts: readonly Pick<EdtRegistryEntry, 'topic'>[],
-  candidates: readonly BranchCandidate[] = [],
+  candidates: readonly BranchCandidate[],
 ): BreadcrumbItem[] {
   const reachable = reachableSteps(state, edts, candidates);
   return WIZARD_STEPS.map((step) => {
@@ -190,9 +190,11 @@ export type BaseResolution =
   | { kind: 'not-found' };
 
 // Resolves Panel A's global base for one service. The lists must be loaded first (a load
-// error blocks the row). An empty input means "this service's own manifest sharedBranch".
-// Otherwise: the exact local branch wins, then `origin/<x>` in the remote list (an input that
-// already is an exact remote-tracking ref is accepted as-is), else not-found. Never fetches.
+// error blocks the row). An empty input means "this service's own manifest sharedBranch",
+// resolved against the lists exactly like a typed base (a sharedBranch missing from the repo
+// must fail here, not later in core's createBranch): the exact local branch wins, then
+// `origin/<x>` in the remote list (an input that already is an exact remote-tracking ref is
+// accepted as-is), else not-found. Never fetches.
 export function resolveGlobalBase(input: string, lists: BranchListState | undefined, sharedBranch: string): BaseResolution {
   if (lists === undefined || lists.status === 'pending' || lists.status === 'loading') {
     return { kind: 'loading' };
@@ -200,9 +202,9 @@ export function resolveGlobalBase(input: string, lists: BranchListState | undefi
   if (lists.status === 'error') {
     return { kind: 'load-error', message: lists.error ?? '' };
   }
-  const wanted = input.trim();
+  const wanted = input.trim() === '' ? sharedBranch.trim() : input.trim();
   if (wanted === '') {
-    return sharedBranch.trim() === '' ? { kind: 'not-found' } : { kind: 'resolved', base: sharedBranch };
+    return { kind: 'not-found' };
   }
   if (lists.local.includes(wanted)) {
     return { kind: 'resolved', base: wanted };
@@ -231,7 +233,83 @@ export const ROW_ERRORS = {
   notFound: 'branche introuvable',
   emptyName: 'nom de branche vide',
   protected: 'branche protégée (FR-7)',
+  exists: 'branche déjà existante',
+  noopRename: 'renommage sans effet',
+  shadowed: 'branche locale du même nom déjà existante',
 } as const;
+
+// Why a plan's target cannot work, checked inline (advisory — the git gate and core stay
+// authoritative). Shared by the Panel B rows and the override box's Apply, which word it
+// differently. `lists` must be loaded for the existence checks; without them only the
+// name-only checks run.
+export type PlanIssue =
+  | { kind: 'empty-name' }
+  | { kind: 'protected-name'; name: string } // a new/renamed target in the FR-7 set
+  | { kind: 'protected-source'; branch: string } // a local protected branch: attach and rename are both gated
+  | { kind: 'protected-existing'; name: string } // attaching (no rename) lands on a protected local name
+  | { kind: 'exists'; name: string } // the new/renamed target already exists locally
+  | { kind: 'noop-rename'; name: string } // renameTo equals the branch's own local name
+  | { kind: 'shadowed'; name: string }; // remote-only pick whose local name already exists
+
+export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undefined, sharedBranch: string): PlanIssue | null {
+  const known = lists !== undefined && lists.status === 'ready' ? lists : undefined;
+  const existsLocally = (name: string) => known !== undefined && known.local.includes(name);
+  if (plan.kind === 'create') {
+    const name = plan.name.trim();
+    if (name === '') {
+      return { kind: 'empty-name' };
+    }
+    if (isProtectedTarget(name, sharedBranch)) {
+      return { kind: 'protected-name', name };
+    }
+    return existsLocally(name) ? { kind: 'exists', name } : null;
+  }
+  const branch = plan.branch.trim();
+  // Unknown lists: assume local (the conservative reading — the gate would reject it anyway).
+  const isLocal = known === undefined || known.local.includes(branch);
+  if (isLocal && isProtectedTarget(branch, sharedBranch)) {
+    // The adapter's renameBranch gates the old name too, so a rename cannot rescue it.
+    return { kind: 'protected-source', branch };
+  }
+  const localName = localNameOf(branch, known);
+  if (plan.renameTo !== undefined) {
+    const renameTo = plan.renameTo.trim();
+    if (renameTo === '') {
+      return { kind: 'empty-name' };
+    }
+    if (isProtectedTarget(renameTo, sharedBranch)) {
+      return { kind: 'protected-name', name: renameTo };
+    }
+    if (renameTo === localName) {
+      return { kind: 'noop-rename', name: renameTo };
+    }
+    return existsLocally(renameTo) ? { kind: 'exists', name: renameTo } : null;
+  }
+  if (isProtectedTarget(localName, sharedBranch)) {
+    return { kind: 'protected-existing', name: localName };
+  }
+  if (!isLocal && existsLocally(localName)) {
+    return { kind: 'shadowed', name: localName };
+  }
+  return null;
+}
+
+export function rowIssueMessage(issue: PlanIssue): string {
+  switch (issue.kind) {
+    case 'empty-name':
+      return ROW_ERRORS.emptyName;
+    case 'protected-name':
+    case 'protected-source':
+    case 'protected-existing':
+      return ROW_ERRORS.protected;
+    case 'exists':
+      return ROW_ERRORS.exists;
+    case 'noop-rename':
+      return ROW_ERRORS.noopRename;
+    case 'shadowed':
+      return ROW_ERRORS.shadowed;
+  }
+}
 
 // One Panel B row, ready to render: display texts for the Base / Source and Branche cible
 // columns, the blocking error (if any, on the column it belongs to), and the resulting plan.
@@ -258,13 +336,16 @@ export function buildRowView(
   if (override === undefined) {
     const resolution = resolveGlobalBase(global.base, lists, sharedBranch);
     const name = global.name.trim();
-    const targetError = name === '' ? ROW_ERRORS.emptyName : isProtectedTarget(name, sharedBranch) ? ROW_ERRORS.protected : null;
+    const issue = checkPlan({ kind: 'create', base: '', name }, lists, sharedBranch);
+    const targetError = issue === null ? null : rowIssueMessage(issue);
     const common = { path, service, mode: 'global' as const, modeLabel: ROW_MODE_LABELS.global, target: name, targetError };
     if (resolution.kind === 'loading') {
       return { ...common, base: 'Chargement…', baseStatus: 'loading', error: ROW_ERRORS.loading, plan: null };
     }
     if (resolution.kind === 'load-error') {
-      return { ...common, base: ROW_ERRORS.loadError, baseStatus: 'error', error: ROW_ERRORS.loadError, plan: null };
+      // The real cause (e.g. git's own message), not only the generic label.
+      const message = resolution.message.trim() === '' ? ROW_ERRORS.loadError : `${ROW_ERRORS.loadError} : ${resolution.message.trim()}`;
+      return { ...common, base: message, baseStatus: 'error', error: message, plan: null };
     }
     if (resolution.kind === 'not-found') {
       return { ...common, base: ROW_ERRORS.notFound, baseStatus: 'error', error: ROW_ERRORS.notFound, plan: null };
@@ -277,9 +358,11 @@ export function buildRowView(
       plan: targetError === null ? { kind: 'create', base: resolution.base, name } : null,
     };
   }
+  // Overrides were validated by the box's Apply, but are re-checked here: the lists can have
+  // been reloaded since, and a row must never hand core a plan the box would now refuse.
+  const issue = checkPlan(override, lists, sharedBranch);
+  const targetError = issue === null ? null : rowIssueMessage(issue);
   if (override.kind === 'create') {
-    const name = override.name.trim();
-    const targetError = name === '' ? ROW_ERRORS.emptyName : isProtectedTarget(name, sharedBranch) ? ROW_ERRORS.protected : null;
     return {
       path,
       service,
@@ -287,7 +370,7 @@ export function buildRowView(
       modeLabel: ROW_MODE_LABELS.perso,
       base: override.base,
       baseStatus: 'ok',
-      target: name,
+      target: override.name.trim(),
       targetError,
       error: targetError,
       plan: targetError === null ? override : null,
@@ -295,7 +378,6 @@ export function buildRowView(
   }
   const renamed = override.renameTo !== undefined;
   const finalName = renamed ? (override.renameTo ?? '').trim() : localNameOf(override.branch, lists);
-  const targetError = finalName === '' ? ROW_ERRORS.emptyName : isProtectedTarget(finalName, sharedBranch) ? ROW_ERRORS.protected : null;
   const mode: RowMode = renamed ? 'rename' : 'existing';
   return {
     path,

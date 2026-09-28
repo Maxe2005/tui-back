@@ -23,7 +23,7 @@ import {
   type BranchAutocompleteState,
 } from '../../../../shared/components/branch-autocomplete-input.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
-import { isProtectedTarget, localNameOf } from './wizard.logic.js';
+import { checkPlan, type PlanIssue } from './wizard.logic.js';
 
 export type OverrideBoxMode = 'create' | 'existing';
 
@@ -120,57 +120,69 @@ export function overrideBoxBranches(context: Pick<OverrideBoxContext, 'local' | 
   return [...context.local, ...context.remote];
 }
 
-// The Apply gate (advisory — the git gate stays authoritative). Returns the plan, or the
-// inline error that refuses Apply.
+export function protectedSourceError(branch: string): string {
+  return `« ${branch} » est une branche locale protégée (FR-7) — elle ne peut être ni reprise ni renommée`;
+}
+
+export function existingTargetError(name: string): string {
+  return `La branche « ${name} » existe déjà dans ce service`;
+}
+
+export function noopRenameError(name: string): string {
+  return `« ${name} » est déjà le nom local de cette branche — décochez « Renommer la branche locale » ou changez le nom`;
+}
+
+// The box's wording of wizard.logic.ts's shared PlanIssue (the rows use a short form).
+export function boxIssueMessage(issue: PlanIssue, mode: OverrideBoxMode): string {
+  switch (issue.kind) {
+    case 'empty-name':
+      return mode === 'create' ? OVERRIDE_BOX_ERRORS.nameRequired : OVERRIDE_BOX_ERRORS.newNameRequired;
+    case 'protected-name':
+      return protectedNameError(issue.name);
+    case 'protected-source':
+      return protectedSourceError(issue.branch);
+    case 'protected-existing':
+      return protectedExistingError(issue.name);
+    case 'exists':
+      return existingTargetError(issue.name);
+    case 'noop-rename':
+      return noopRenameError(issue.name);
+    case 'shadowed':
+      return shadowedRemoteError(issue.name);
+  }
+}
+
+// The Apply gate (advisory — the git gate stays authoritative). Checks the fields the box
+// owns (base/branch picked from the lists), then the target through wizard.logic.ts's
+// checkPlan — the same check the Panel B row re-runs. Returns the plan, or the inline error
+// that refuses Apply.
 export function validateOverrideBox(box: OverrideBoxState, context: OverrideBoxContext): { ok: true; plan: MemberBranchPlan } | { ok: false; error: string } {
   if (context.status !== 'ready') {
     return { ok: false, error: OVERRIDE_BOX_ERRORS.listsUnavailable };
   }
   const branches = overrideBoxBranches(context);
+  let plan: MemberBranchPlan;
   if (box.mode === 'create') {
     const base = box.base.value.trim();
-    const name = box.name.value.trim();
     if (base === '') {
       return { ok: false, error: OVERRIDE_BOX_ERRORS.baseRequired };
     }
     if (!branches.includes(base)) {
       return { ok: false, error: OVERRIDE_BOX_ERRORS.baseNotFound };
     }
-    if (name === '') {
-      return { ok: false, error: OVERRIDE_BOX_ERRORS.nameRequired };
+    plan = { kind: 'create', base, name: box.name.value.trim() };
+  } else {
+    const branch = box.existing.value.trim();
+    if (branch === '') {
+      return { ok: false, error: OVERRIDE_BOX_ERRORS.existingRequired };
     }
-    if (isProtectedTarget(name, context.sharedBranch)) {
-      return { ok: false, error: protectedNameError(name) };
+    if (!branches.includes(branch)) {
+      return { ok: false, error: OVERRIDE_BOX_ERRORS.existingNotFound };
     }
-    return { ok: true, plan: { kind: 'create', base, name } };
+    plan = box.rename ? { kind: 'existing', branch, renameTo: box.newName.value.trim() } : { kind: 'existing', branch };
   }
-  const branch = box.existing.value.trim();
-  if (branch === '') {
-    return { ok: false, error: OVERRIDE_BOX_ERRORS.existingRequired };
-  }
-  if (!branches.includes(branch)) {
-    return { ok: false, error: OVERRIDE_BOX_ERRORS.existingNotFound };
-  }
-  if (box.rename) {
-    const renameTo = box.newName.value.trim();
-    if (renameTo === '') {
-      return { ok: false, error: OVERRIDE_BOX_ERRORS.newNameRequired };
-    }
-    if (isProtectedTarget(renameTo, context.sharedBranch)) {
-      return { ok: false, error: protectedNameError(renameTo) };
-    }
-    return { ok: true, plan: { kind: 'existing', branch, renameTo } };
-  }
-  const localName = localNameOf(branch, context);
-  if (isProtectedTarget(localName, context.sharedBranch)) {
-    return { ok: false, error: protectedExistingError(localName) };
-  }
-  // A remote-only pick whose derived local name is already a local branch: core would fail
-  // creating the tracking branch — pick the local one, or rename.
-  if (!context.local.includes(branch) && context.local.includes(localName)) {
-    return { ok: false, error: shadowedRemoteError(localName) };
-  }
-  return { ok: true, plan: { kind: 'existing', branch } };
+  const issue = checkPlan(plan, { status: 'ready', local: context.local, remote: context.remote }, context.sharedBranch);
+  return issue === null ? { ok: true, plan } : { ok: false, error: boxIssueMessage(issue, box.mode) };
 }
 
 function update(box: OverrideBoxState): OverrideBoxKeyResult {

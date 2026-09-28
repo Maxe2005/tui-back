@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initialCreateDialog, type BranchListState, type BranchStepState, type CreateDialogState } from '../../edts-zone.logic.js';
+import { initialCreateDialog, type BranchListState, type BranchStepState, type CreateDialogState, type RowOverride } from '../../edts-zone.logic.js';
 import {
   buildBreadcrumb,
   buildMemberPlans,
@@ -74,14 +74,14 @@ describe('checkNameAvailability (story 2.36)', () => {
 
 describe('canAdvance (story 2.36)', () => {
   it('Step 1: free name passes, taken or empty name blocks with its own message', () => {
-    expect(canAdvance(1, state({ topic: 'auth-flow' }), EDTS)).toEqual({ ok: true });
-    expect(canAdvance(1, state({ topic: ' demo ' }), EDTS)).toEqual({ ok: false, error: TAKEN_NAME_ERROR });
-    expect(canAdvance(1, state({ topic: '   ' }), EDTS)).toEqual({ ok: false, error: EMPTY_NAME_ERROR });
+    expect(canAdvance(1, state({ topic: 'auth-flow' }), EDTS, CANDIDATES)).toEqual({ ok: true });
+    expect(canAdvance(1, state({ topic: ' demo ' }), EDTS, CANDIDATES)).toEqual({ ok: false, error: TAKEN_NAME_ERROR });
+    expect(canAdvance(1, state({ topic: '   ' }), EDTS, CANDIDATES)).toEqual({ ok: false, error: EMPTY_NAME_ERROR });
   });
 
   it('Step 2: zero checked services blocks, one is enough', () => {
-    expect(canAdvance(2, state(), EDTS)).toEqual({ ok: false, error: NO_SERVICE_ERROR });
-    expect(canAdvance(2, state({ selectedMembers: ['/repos/a'] }), EDTS)).toEqual({ ok: true });
+    expect(canAdvance(2, state(), EDTS, CANDIDATES)).toEqual({ ok: false, error: NO_SERVICE_ERROR });
+    expect(canAdvance(2, state({ selectedMembers: ['/repos/a'] }), EDTS, CANDIDATES)).toEqual({ ok: true });
   });
 
   it('Step 3 (story 2.37): every row must resolve — an emptied name, a missing base or a loading list blocks, named by service', () => {
@@ -107,8 +107,8 @@ describe('canAdvance (story 2.36)', () => {
 
 describe('reachableSteps (story 2.36)', () => {
   it('stops at the first blocked step, inclusive', () => {
-    expect(reachableSteps(state(), EDTS)).toEqual([1]);
-    expect(reachableSteps(state({ topic: 'auth-flow' }), EDTS)).toEqual([1, 2]);
+    expect(reachableSteps(state(), EDTS, CANDIDATES)).toEqual([1]);
+    expect(reachableSteps(state({ topic: 'auth-flow' }), EDTS, CANDIDATES)).toEqual([1, 2]);
     expect(reachableSteps(validThroughStep3({}, { globalName: { value: '', cursor: 0 } }), EDTS, CANDIDATES)).toEqual([1, 2, 3]);
     expect(reachableSteps(validThroughStep3(), EDTS, CANDIDATES)).toEqual([1, 2, 3, 4]);
   });
@@ -125,7 +125,7 @@ describe('stepSummary / buildBreadcrumb (story 2.36)', () => {
   });
 
   it('marks the current step, summarizes earlier ones and dims unreachable ones', () => {
-    const breadcrumb = buildBreadcrumb(state({ step: 2, topic: 'auth-flow' }), EDTS);
+    const breadcrumb = buildBreadcrumb(state({ step: 2, topic: 'auth-flow' }), EDTS, CANDIDATES);
     expect(breadcrumb).toEqual([
       { step: 1, text: '1. Nom: auth-flow', tone: 'done' },
       { step: 2, text: '▶ 2. Services ◀', tone: 'current' },
@@ -135,7 +135,7 @@ describe('stepSummary / buildBreadcrumb (story 2.36)', () => {
   });
 
   it('a reachable step after the current one is pending, not dim', () => {
-    const breadcrumb = buildBreadcrumb(state({ topic: 'auth-flow' }), EDTS);
+    const breadcrumb = buildBreadcrumb(state({ topic: 'auth-flow' }), EDTS, CANDIDATES);
     expect(breadcrumb[1]).toEqual({ step: 2, text: '2. Services', tone: 'pending' });
   });
 });
@@ -173,8 +173,14 @@ describe('isProtectedTarget / localNameOf (story 2.37)', () => {
 });
 
 describe('resolveGlobalBase (story 2.37)', () => {
-  it('Default: an empty base uses the service\'s manifest sharedBranch', () => {
-    expect(resolveGlobalBase('', ready([]), 'main')).toEqual({ kind: 'resolved', base: 'main' });
+  it('Default: an empty base uses the service\'s manifest sharedBranch, resolved like a typed base', () => {
+    expect(resolveGlobalBase('', ready(['main']), 'main')).toEqual({ kind: 'resolved', base: 'main' });
+    expect(resolveGlobalBase('', ready([], ['origin/main']), 'main')).toEqual({ kind: 'resolved', base: 'origin/main' });
+  });
+
+  it('a manifest sharedBranch missing from the repo is not found, never passed through', () => {
+    expect(resolveGlobalBase('', ready(['development']), 'main')).toEqual({ kind: 'not-found' });
+    expect(resolveGlobalBase('', ready(['main']), '')).toEqual({ kind: 'not-found' });
   });
 
   it('Local preferred: an exact local match wins over origin/<x>', () => {
@@ -211,9 +217,30 @@ describe('buildRowView / buildMemberPlans (story 2.37)', () => {
     expect(buildMemberPlans([row])).toBeNull();
   });
 
-  it('List load fails: the row shows the load error', () => {
-    const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, global, { status: 'error', local: [], remote: [] }, 'main');
-    expect(row).toMatchObject({ baseStatus: 'error', error: 'échec du chargement des branches' });
+  it('List load fails: the row shows the real load error', () => {
+    const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, global, { status: 'error', local: [], remote: [], error: 'not a git repository' }, 'main');
+    expect(row).toMatchObject({ baseStatus: 'error', error: 'échec du chargement des branches : not a git repository' });
+  });
+
+  it('a global or Perso target that already exists locally is a row error', () => {
+    const global = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'feat/q' }, ready(['main', 'feat/q']), 'main');
+    expect(global).toMatchObject({ targetError: 'branche déjà existante', plan: null });
+    const perso = buildRowView(
+      { path: '/repos/a', service: 'svc-a', override: { kind: 'create', base: 'main', name: 'feat/q' } },
+      { base: '', name: 'x' },
+      ready(['main', 'feat/q']),
+      'main',
+    );
+    expect(perso).toMatchObject({ error: 'branche déjà existante', plan: null });
+  });
+
+  it('existing overrides are re-checked on the row: local protected even with a rename, shadowed remote, taken or no-op rename', () => {
+    const view = (override: RowOverride, lists: BranchListState) => buildRowView({ path: '/repos/a', service: 'svc-a', override }, global, lists, 'main');
+    expect(view({ kind: 'existing', branch: 'prod', renameTo: 'p2' }, ready(['prod'])).error).toBe('branche protégée (FR-7)');
+    expect(view({ kind: 'existing', branch: 'origin/prod', renameTo: 'p2' }, ready([], ['origin/prod'])).error).toBeNull();
+    expect(view({ kind: 'existing', branch: 'origin/x' }, ready(['x'], ['origin/x'])).error).toBe('branche locale du même nom déjà existante');
+    expect(view({ kind: 'existing', branch: 'feat/z', renameTo: 'main2' }, ready(['feat/z', 'main2'])).error).toBe('branche déjà existante');
+    expect(view({ kind: 'existing', branch: 'origin/w', renameTo: 'w' }, ready([], ['origin/w'])).error).toBe('renommage sans effet');
   });
 
   it('Protected: a global name equal to a shared branch is rejected on the target column', () => {

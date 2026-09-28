@@ -1341,7 +1341,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter); // apply -> refused (protected, no rename)
       let frame = lastWizardFrame(stdout);
       expect(frame).toContain('Configurer svc-a');
-      expect(frame).toContain('« prod » est une branche protégée (FR-7)');
+      expect(frame).toContain('« prod » est une branche locale protégée (FR-7)');
 
       await press(instance, stdin, KEYS.up); // rename checkbox
       await press(instance, stdin, KEYS.up); // "Branche existante"
@@ -1415,9 +1415,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await reachStep3(instance, stdin, 'demo', 1);
-      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Créer \(Global\)\] │ ✖ échec du chargement des branches/);
       await press(instance, stdin, KEYS.ctrlN);
-      expect(lastWizardFrame(stdout)).toContain('svc-a : échec du chargement des branches');
+      // The real cause, not only the generic label.
+      expect(lastWizardFrame(stdout)).toContain('svc-a : échec du chargement des branches : boom');
       expect(attempts).toBe(1);
 
       await press(instance, stdin, KEYS.ctrlLeft); // Step 2
