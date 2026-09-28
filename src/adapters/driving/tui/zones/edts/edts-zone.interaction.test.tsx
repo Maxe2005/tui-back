@@ -6,7 +6,7 @@
 // keypress parser — no pty required.
 import { createElement } from 'react';
 import { render } from 'ink';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { Result } from '../../../../../core/result.js';
 import type { CreateCandidateBranches, CreateEdtData } from '../../../../../core/edt/create.js';
@@ -1393,9 +1393,13 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
 
       const beforeCancel = stdout.output.length;
       await pressEscape(instance, stdin); // nothing left open -> cancels the whole creation
-      const afterCancel = stdout.output.slice(beforeCancel);
-      expect(afterCancel).toContain('other');
-      expect(afterCancel).not.toContain(WIZARD_TITLE);
+      // The cancel's side effect runs from an effect one commit after the Esc updater raised
+      // `cancelRequested` — wait for that extra render instead of racing it under load.
+      await vi.waitFor(() => {
+        const afterCancel = stdout.output.slice(beforeCancel);
+        expect(afterCancel).toContain('other');
+        expect(afterCancel).not.toContain(WIZARD_TITLE);
+      });
       expect(createCalls).toHaveLength(0);
       expect(store.getState().quitRequested).toBe(false);
     } finally {
@@ -1456,7 +1460,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       expect(lastWizardFrame(stdout)).toContain('▶ 3. Branches ◀');
 
       await pressEscape(instance, stdin); // nothing open: the zero-EDT wizard requests a quit
-      expect(store.getState().quitRequested).toBe(true);
+      // The quit runs from an effect one commit after the Esc updater (cancelRequested).
+      await vi.waitFor(() => expect(store.getState().quitRequested).toBe(true));
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1691,7 +1696,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
 
       await pressEscape(instance, stdin);
 
-      expect(store.getState().quitRequested).toBe(true);
+      // The quit runs from an effect one commit after the Esc updater (cancelRequested).
+      await vi.waitFor(() => expect(store.getState().quitRequested).toBe(true));
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
