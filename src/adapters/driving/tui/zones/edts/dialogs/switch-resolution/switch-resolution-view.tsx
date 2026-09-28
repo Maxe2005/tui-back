@@ -45,19 +45,10 @@ function rowCells(row: ResolutionRow, lists: Readonly<Record<string, LocalBranch
   ];
 }
 
-function ResolutionBoxView({
-  box,
-  repo,
-  hasOutgoing,
-  lists,
-}: {
-  box: SwitchResolutionBox;
-  repo: SwitchDirtyRepo;
-  hasOutgoing: boolean;
-  lists: LocalBranchList | undefined;
-}) {
+function ResolutionBoxView({ box, row, lists }: { box: SwitchResolutionBox; row: ResolutionRow; lists: LocalBranchList | undefined }) {
+  const { repo, hasOutgoing } = row;
   const focused = (line: SwitchResolutionBox['line']) => box.line === line;
-  const live = boxError(box, repo, hasOutgoing, lists);
+  const live = boxError(box, row, lists);
   const error = live ?? box.error;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
@@ -170,9 +161,9 @@ export function SwitchResolutionView({
   }
 
   const box = state.box;
-  const boxRepo = box !== null ? rows.find((row) => row.repo.repoPath === box.repoPath)?.repo : undefined;
-  if (box !== null && boxRepo !== undefined) {
-    return <ResolutionBoxView box={box} repo={boxRepo} hasOutgoing={global.hasOutgoing} lists={state.lists[box.repoPath]} />;
+  const boxRow = box !== null ? rows.find((row) => row.repo.repoPath === box.repoPath) : undefined;
+  if (box !== null && boxRow !== undefined) {
+    return <ResolutionBoxView box={box} row={boxRow} lists={state.lists[box.repoPath]} />;
   }
 
   const outgoing = state.outgoingTopic;

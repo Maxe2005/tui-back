@@ -19,7 +19,9 @@
 //     the discard confirmation (files per service, default Retour, `Ctrl+E` confirms).
 //   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation);
 //     on the main view it cancels the whole switch.
+import { resolve } from 'node:path';
 import type { DirtyResolution, SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
 import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
@@ -32,6 +34,26 @@ export type ResolutionOverride = { kind: 'adopt'; branch: string } | { kind: 'di
 
 // A row's effective plan: `override ?? global`.
 export type RowPlan = { kind: 'adopt'; branch: string; source: 'global' | 'perso' } | { kind: 'discard'; source: 'global' | 'perso' };
+
+// Story 2.41 review: the branches OTHER EDTs (every one but the outgoing EDT) register for a
+// repo, keyed by resolved repoPath — plain data computed once when the view opens. Adopting
+// onto such a branch would steal it from that EDT (the git gate rejects it anyway).
+export type EdtBranchClaim = { branch: string; topic: string };
+export type OtherEdtBranches = Readonly<Record<string, readonly EdtBranchClaim[]>>;
+
+export function otherEdtBranches(edts: readonly EdtRegistryEntry[], outgoingUlid: string | null): OtherEdtBranches {
+  const claims: Record<string, EdtBranchClaim[]> = {};
+  for (const entry of edts) {
+    if (entry.ulid === outgoingUlid) {
+      continue;
+    }
+    for (const member of entry.members) {
+      const path = resolve(member.repoPath);
+      (claims[path] ??= []).push({ branch: member.branch, topic: entry.topic });
+    }
+  }
+  return claims;
+}
 
 // One repo's local branch list, loaded once when the view opens (listMemberBranches). While
 // loading or after a failed load, the "exists locally" check is skipped (the git gate stays
@@ -64,6 +86,8 @@ export type SwitchResolutionState = {
   rowCursor: number;
   overrides: Readonly<Record<string, ResolutionOverride>>;
   lists: Readonly<Record<string, LocalBranchList>>;
+  // Branches registered by other EDTs, per repo (see otherEdtBranches).
+  claims: OtherEdtBranches;
   box: SwitchResolutionBox | null;
   // The discard confirmation (second view), with its file-list scroll position and the
   // inline error of a refused Ctrl+E.
@@ -103,7 +127,11 @@ export function autoStashedRepos(dirty: readonly SwitchDirtyRepo[]): SwitchDirty
   return dirty.filter((repo) => repo.scope === 'outgoing-member');
 }
 
-export function initialSwitchResolution(outgoingTopic: string | null, dirty: readonly SwitchDirtyRepo[]): SwitchResolutionState {
+export function initialSwitchResolution(
+  outgoingTopic: string | null,
+  dirty: readonly SwitchDirtyRepo[],
+  claims: OtherEdtBranches = {},
+): SwitchResolutionState {
   const name = outgoingTopic !== null ? suggestBranchNameFromTopic(outgoingTopic) : '';
   const lists: Record<string, LocalBranchList> = {};
   for (const repo of resolutionRepos(dirty)) {
@@ -120,6 +148,7 @@ export function initialSwitchResolution(outgoingTopic: string | null, dirty: rea
     rowCursor: 0,
     overrides: {},
     lists,
+    claims,
     box: null,
     confirm: null,
     error: null,
@@ -127,10 +156,15 @@ export function initialSwitchResolution(outgoingTopic: string | null, dirty: rea
   };
 }
 
+export function claimOf(branch: string, claims: readonly EdtBranchClaim[]): EdtBranchClaim | undefined {
+  return claims.find((claim) => claim.branch === branch);
+}
+
 // The branch a global (or box-prefilled) adopt targets: the global name when the repo sits on a
-// shared branch, its current branch otherwise.
-export function globalAdoptTarget(repo: SwitchDirtyRepo, globalName: string): string {
-  return repo.currentBranchShared ? globalName.trim() : repo.currentBranch;
+// shared branch or on a branch another EDT registers for it (story 2.41 review), its current
+// branch otherwise.
+export function globalAdoptTarget(repo: SwitchDirtyRepo, globalName: string, claims: readonly EdtBranchClaim[] = []): string {
+  return repo.currentBranchShared || claimOf(repo.currentBranch, claims) !== undefined ? globalName.trim() : repo.currentBranch;
 }
 
 export type ResolutionGlobal = {
@@ -138,11 +172,14 @@ export type ResolutionGlobal = {
   action: ResolutionAction;
   name: string;
   overrides: Readonly<Record<string, ResolutionOverride>>;
+  claims: OtherEdtBranches;
 };
 
 export type ResolutionRow = {
   repo: SwitchDirtyRepo;
   hasOutgoing: boolean;
+  // The branches other EDTs register for this repo.
+  claims: readonly EdtBranchClaim[];
   plan: RowPlan;
 };
 
@@ -152,10 +189,11 @@ export function globalOf(state: SwitchResolutionState): ResolutionGlobal {
     action: state.globalAction,
     name: state.globalName.value,
     overrides: state.overrides,
+    claims: state.claims,
   };
 }
 
-function planFor(repo: SwitchDirtyRepo, global: ResolutionGlobal): RowPlan {
+function planFor(repo: SwitchDirtyRepo, global: ResolutionGlobal, claims: readonly EdtBranchClaim[]): RowPlan {
   const override = global.overrides[repo.repoPath];
   if (override !== undefined) {
     return override.kind === 'adopt' ? { kind: 'adopt', branch: override.branch.trim(), source: 'perso' } : { kind: 'discard', source: 'perso' };
@@ -163,12 +201,15 @@ function planFor(repo: SwitchDirtyRepo, global: ResolutionGlobal): RowPlan {
   if (!global.hasOutgoing || global.action === 'discard') {
     return { kind: 'discard', source: 'global' };
   }
-  return { kind: 'adopt', branch: globalAdoptTarget(repo, global.name), source: 'global' };
+  return { kind: 'adopt', branch: globalAdoptTarget(repo, global.name, claims), source: 'global' };
 }
 
 // One row per dirty state-2/3 repo, in the seam's order.
 export function buildRows(dirty: readonly SwitchDirtyRepo[], global: ResolutionGlobal): ResolutionRow[] {
-  return resolutionRepos(dirty).map((repo) => ({ repo, hasOutgoing: global.hasOutgoing, plan: planFor(repo, global) }));
+  return resolutionRepos(dirty).map((repo) => {
+    const claims = global.claims[repo.repoPath] ?? [];
+    return { repo, hasOutgoing: global.hasOutgoing, claims, plan: planFor(repo, global, claims) };
+  });
 }
 
 export function modeLabel(plan: RowPlan): string {
@@ -185,9 +226,19 @@ export function scopeLabel(repo: SwitchDirtyRepo): string {
   return 'hors EDT';
 }
 
+export function claimedBranchError(topic: string): string {
+  return `utilisée par l'EDT « ${topic} » — la reprendre casserait cet EDT`;
+}
+
 // Advisory (the git gate stays authoritative). Order: detached HEAD, then empty, protected
-// (FR-7, the same isProtectedTarget rule Step 3 uses), already existing locally (≠ current).
-export function validateAdoptBranch(repo: SwitchDirtyRepo, branch: string, lists: LocalBranchList | undefined): string | null {
+// (FR-7, the same isProtectedTarget rule Step 3 uses), registered by another EDT for this repo,
+// already existing locally (≠ current).
+export function validateAdoptBranch(
+  repo: SwitchDirtyRepo,
+  branch: string,
+  lists: LocalBranchList | undefined,
+  claims: readonly EdtBranchClaim[] = [],
+): string | null {
   if (repo.currentBranch === 'HEAD') {
     return RESOLUTION_ERRORS.detachedHead;
   }
@@ -197,6 +248,10 @@ export function validateAdoptBranch(repo: SwitchDirtyRepo, branch: string, lists
   }
   if (isProtectedTarget(name, repo.sharedBranch ?? '')) {
     return protectedNameError(name);
+  }
+  const claim = claimOf(name, claims);
+  if (claim !== undefined) {
+    return claimedBranchError(claim.topic);
   }
   if (lists?.status === 'ready' && lists.branches.includes(name) && name !== repo.currentBranch) {
     return existingTargetError(name);
@@ -211,7 +266,7 @@ export function validateRow(row: ResolutionRow, localBranchesByPath: Readonly<Re
   if (!row.hasOutgoing) {
     return RESOLUTION_ERRORS.noOutgoing;
   }
-  return validateAdoptBranch(row.repo, row.plan.branch, localBranchesByPath[row.repo.repoPath]);
+  return validateAdoptBranch(row.repo, row.plan.branch, localBranchesByPath[row.repo.repoPath], row.claims);
 }
 
 export function buildResolutions(rows: readonly ResolutionRow[]): Record<string, DirtyResolution> {
@@ -259,7 +314,7 @@ export function boxLines(box: Pick<SwitchResolutionBox, 'action'>): SwitchResolu
 // Opens the box on a row: its action is the row's current plan; its branch field is always
 // pre-filled with the row's computed adopt target.
 export function openResolutionBox(row: ResolutionRow, globalName: string): SwitchResolutionBox {
-  const branch = row.plan.kind === 'adopt' ? row.plan.branch : globalAdoptTarget(row.repo, globalName);
+  const branch = row.plan.kind === 'adopt' ? row.plan.branch : globalAdoptTarget(row.repo, globalName, row.claims);
   return {
     repoPath: row.repo.repoPath,
     action: row.hasOutgoing ? row.plan.kind : 'discard',
@@ -271,14 +326,14 @@ export function openResolutionBox(row: ResolutionRow, globalName: string): Switc
 }
 
 // The box's live inline error (null when Apply would be accepted).
-export function boxError(box: SwitchResolutionBox, repo: SwitchDirtyRepo, hasOutgoing: boolean, lists: LocalBranchList | undefined): string | null {
+export function boxError(box: SwitchResolutionBox, row: ResolutionRow, lists: LocalBranchList | undefined): string | null {
   if (box.action === 'discard') {
     return null;
   }
-  if (!hasOutgoing) {
+  if (!row.hasOutgoing) {
     return RESOLUTION_ERRORS.noOutgoing;
   }
-  return validateAdoptBranch(repo, box.branch.value, lists);
+  return validateAdoptBranch(row.repo, box.branch.value, lists, row.claims);
 }
 
 type BoxKeyResult =
@@ -298,8 +353,7 @@ function isCtrl(input: string, key: TextEditKey, letter: string): boolean {
 
 export function reduceResolutionBoxKey(
   box: SwitchResolutionBox,
-  repo: SwitchDirtyRepo,
-  hasOutgoing: boolean,
+  row: ResolutionRow,
   lists: LocalBranchList | undefined,
   input: string,
   key: TextEditKey,
@@ -328,7 +382,7 @@ export function reduceResolutionBoxKey(
   if (box.line === 'action') {
     if (input === ' ' || key.tab || key.leftArrow || key.rightArrow) {
       // With no outgoing EDT only Écraser is offered.
-      return hasOutgoing ? { type: 'update', box: { ...box, action: box.action === 'adopt' ? 'discard' : 'adopt', error: null } } : { type: 'update', box };
+      return row.hasOutgoing ? { type: 'update', box: { ...box, action: box.action === 'adopt' ? 'discard' : 'adopt', error: null } } : { type: 'update', box };
     }
     return { type: 'update', box: key.return ? { ...box, line: nextBoxLine(box) } : box };
   }
@@ -339,7 +393,7 @@ export function reduceResolutionBoxKey(
   if (!key.return) {
     return { type: 'update', box };
   }
-  const error = boxError(box, repo, hasOutgoing, lists);
+  const error = boxError(box, row, lists);
   if (error !== null) {
     return { type: 'update', box: { ...box, error } };
   }
@@ -392,11 +446,11 @@ export function reduceSwitchResolutionKey(
   // The box owns every key while open.
   const box = state.box;
   if (box !== null) {
-    const repo = rows.find((row) => row.repo.repoPath === box.repoPath)?.repo;
-    if (repo === undefined) {
+    const boxRow = rows.find((row) => row.repo.repoPath === box.repoPath);
+    if (boxRow === undefined) {
       return { ...state, box: null };
     }
-    const result = reduceResolutionBoxKey(box, repo, global.hasOutgoing, state.lists[box.repoPath], input, key);
+    const result = reduceResolutionBoxKey(box, boxRow, state.lists[box.repoPath], input, key);
     if (result.type === 'update') {
       return { ...state, box: result.box };
     }

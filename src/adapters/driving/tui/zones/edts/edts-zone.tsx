@@ -68,7 +68,7 @@ import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-d
 import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
-import { autoStashedRepos, initialSwitchResolution, resolutionRepos } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import { autoStashedRepos, initialSwitchResolution, otherEdtBranches, resolutionRepos } from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // Story 5.5: rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above
 // the splitter, both section headers, and the loading/error/issues lines) subtracted from the
@@ -519,8 +519,13 @@ export function EdtsZone({
     }
     const dirty = switchDirtyRepos;
     const outgoingTopic = activeEdtUlid !== null ? (edtsRows.find((entry) => entry.ulid === activeEdtUlid)?.topic ?? null) : null;
+    // Story 2.41 review: branches other EDTs register per repo, so a row sitting on one is
+    // retargeted to the global name and such a name is rejected inline.
+    const claims = otherEdtBranches(edtsRows, activeEdtUlid);
     setDialog((prev) =>
-      prev.kind === 'switch-confirm' && prev.resolution === null ? { ...prev, resolution: initialSwitchResolution(outgoingTopic, dirty) } : prev,
+      prev.kind === 'switch-confirm' && prev.resolution === null
+        ? { ...prev, resolution: initialSwitchResolution(outgoingTopic, dirty, claims) }
+        : prev,
     );
     for (const repo of resolutionRepos(dirty)) {
       const repoPath = repo.repoPath;

@@ -9,6 +9,7 @@ import {
   initialSwitchResolution,
   modeLabel,
   needsResultsView,
+  otherEdtBranches,
   reduceSwitchResolutionKey,
   RESOLUTION_ERRORS,
   SWITCH_RESOLUTION_FOOTER,
@@ -95,7 +96,7 @@ describe('switch-resolution rows (story 2.41)', () => {
 
   it('validateRow: empty, protected, existing-locally (≠ current) and detached HEAD are rejected', () => {
     const lists = { '/repo/a': { status: 'ready' as const, branches: ['taken', 'development'] } };
-    const row = (branch: string, base = SHARED) => ({ repo: base, hasOutgoing: true, plan: { kind: 'adopt' as const, branch, source: 'perso' as const } });
+    const row = (branch: string, base = SHARED) => ({ repo: base, hasOutgoing: true, claims: [], plan: { kind: 'adopt' as const, branch, source: 'perso' as const } });
     expect(validateRow(row(''), lists)).toBe('Nom de branche requis');
     expect(validateRow(row('prod'), lists)).toContain('protégée');
     expect(validateRow(row('taken'), lists)).toContain('existe déjà');
@@ -106,7 +107,28 @@ describe('switch-resolution rows (story 2.41)', () => {
     expect(validateRow(row('taken'), { '/repo/a': { status: 'loading', branches: [] } })).toBeNull();
     const detached = repo({ service: 'svc-d', repoPath: '/repo/d', currentBranch: 'HEAD', currentBranchShared: false });
     expect(validateRow(row('HEAD', detached), {})).toBe(RESOLUTION_ERRORS.detachedHead);
-    expect(validateRow({ repo: detached, hasOutgoing: true, plan: { kind: 'discard', source: 'perso' } }, {})).toBeNull();
+    expect(validateRow({ repo: detached, hasOutgoing: true, claims: [], plan: { kind: 'discard', source: 'perso' } }, {})).toBeNull();
+  });
+
+  it('a row on a branch another EDT registers for that repo targets the global name; that branch is rejected inline', () => {
+    const edts = [
+      { ulid: 'out', topic: 'Mon Topic', createdAt: '', status: 'active' as const, members: [{ service: 'svc-b', repoPath: '/repo/b/', branch: 'feat/mine' }] },
+      { ulid: 'third', topic: 'Other', createdAt: '', status: 'inactive' as const, members: [{ service: 'svc-b', repoPath: '/repo/b/', branch: 'feat/x' }] },
+    ];
+    const claims = otherEdtBranches(edts, 'out');
+    // The outgoing EDT's own registrations are not claims; paths are resolved.
+    expect(claims).toEqual({ '/repo/b': [{ branch: 'feat/x', topic: 'Other' }] });
+
+    const state = initialSwitchResolution('Mon Topic', DIRTY, claims);
+    const rows = buildRows(DIRTY, globalOf(state));
+    expect(rows[1]!.plan).toEqual({ kind: 'adopt', branch: 'mon-topic', source: 'global' });
+    expect(validateRow(rows[1]!, {})).toBeNull();
+
+    const kept = { ...rows[1]!, plan: { kind: 'adopt' as const, branch: 'feat/x', source: 'perso' as const } };
+    expect(validateRow(kept, {})).toBe("utilisée par l'EDT « Other » — la reprendre casserait cet EDT");
+    // The box pre-fills the global name for such a row, and rejects the claimed branch too.
+    const opened = press(ready(state), TAB, DOWN, ENTER);
+    expect(opened.box?.branch.value).toBe('mon-topic');
   });
 });
 
