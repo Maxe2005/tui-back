@@ -526,7 +526,19 @@ async function executeDirtyPlan(
       }
       const discarded = await git.discardAll(repoPath);
       if (!discarded.ok) {
-        return { ok: false, row: failed(service, discarded.error) };
+        // The reset may already have run before the clean failed: report what was targeted.
+        return {
+          ok: false,
+          row: {
+            service,
+            outcome: 'failed',
+            detail: {
+              code: discarded.error.code,
+              message: `${discarded.error.message}. The uncommitted changes may have been partially discarded.`,
+              discardedPaths: captured.data,
+            },
+          },
+        };
       }
       return { ok: true, value: { outcome: 'discarded', discardedPaths: captured.data } };
     }
@@ -633,6 +645,29 @@ async function failAfterPrepare(
   return restoreAndFail(git, service, repoPath, prepared.stashTag, error, note);
 }
 
+// The checkout landed but a later step (the target-stash pop) failed: nothing is undone —
+// the row keeps what the dirty plan already did so it is never silently lost from the report.
+function failAfterCheckout(service: string, prepared: Prepared, error: ResultError): SwitchEdtRepoResult {
+  if (prepared.outcome === 'discarded') {
+    return {
+      service,
+      outcome: 'failed',
+      detail: {
+        code: error.code,
+        message: `${error.message}. The uncommitted changes had already been discarded.`,
+        discardedPaths: prepared.discardedPaths,
+      },
+    };
+  }
+  if (prepared.adoptedInto !== undefined) {
+    return failed(service, {
+      code: error.code,
+      message: `${error.message}. The adoption into "${prepared.adoptedInto.topic}" on "${prepared.adoptedBranch}" succeeded; the adopted work sits in its stash "${prepared.stashTag}".`,
+    });
+  }
+  return failed(service, error);
+}
+
 function succeeded(service: string, prepared: Prepared): SwitchEdtRepoResult {
   if (prepared.outcome === 'discarded') {
     const paths = prepared.discardedPaths ?? [];
@@ -697,7 +732,7 @@ async function switchMemberRepo(
 
   const popped = await git.restoreStash(repoPath, stashMessage(target.ulid));
   if (!popped.ok) {
-    return failed(service, popped.error);
+    return failAfterCheckout(service, prepared.value, popped.error);
   }
 
   return succeeded(service, prepared.value);

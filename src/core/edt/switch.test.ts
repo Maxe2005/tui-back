@@ -1021,7 +1021,11 @@ describe('switchActiveEdt — discard resolution (story 2.39)', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.results).toContainEqual({ service: 'svc-b', outcome: 'failed', detail: { code: 'git-discard-error', message: 'reset failed' } });
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'failed',
+        detail: { code: 'git-discard-error', message: expect.stringContaining('reset failed'), discardedPaths: ['a.txt'] },
+      });
     }
     expect(calls(git.checkout)).not.toContainEqual(['/repo/b', 'development']);
   });
@@ -1121,6 +1125,109 @@ describe('switchActiveEdt — review patches (story 2.39)', () => {
     expect(calls(git.fetch)).toHaveLength(0);
     for (const method of WRITE_METHODS) {
       expect(calls(git[method]).filter((args) => args[0] === '/repo/a'), `git.${method}`).toHaveLength(0);
+    }
+  });
+
+  it('a target-stash pop failure after a discard keeps discardedPaths and says the changes were already discarded', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      listDirtyPaths: vi.fn(async () => ok(['x.txt'])),
+      restoreStash: vi.fn(async () => err('git-stash-pop-error', 'conflict')),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git, dirtyResolutions: { '/repo/a': { kind: 'discard' } } }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'git-stash-pop-error', message: expect.stringContaining('already been discarded'), discardedPaths: ['x.txt'] },
+      });
+    }
+  });
+
+  it('a target-stash pop failure after an adopt says the adoption succeeded and where the work sits', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      currentBranch: vi.fn(async () => ok('development')),
+      restoreStash: vi.fn(async (_repoPath: string, tag: string) =>
+        tag === 'tui-back:target-ulid' ? err('git-stash-pop-error', 'conflict') : ok(undefined),
+      ),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git, dirtyResolutions: { '/repo/a': { kind: 'adopt', branch: 'feat/a-out' } } }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: {
+          code: 'git-stash-pop-error',
+          message: expect.stringMatching(/adoption into "outgoing-topic" on "feat\/a-out" succeeded.*tui-back:outgoing-ulid/),
+        },
+      });
+    }
+  });
+
+  it('a discardAll failure keeps the captured paths and says they may be partially discarded', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      listDirtyPaths: vi.fn(async () => ok(['a.txt', 'dir/b.txt'])),
+      discardAll: vi.fn(async () => err('git-discard-error', 'git clean -fd failed')),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git, dirtyResolutions: { '/repo/b': { kind: 'discard' } } }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'failed',
+        detail: { code: 'git-discard-error', message: expect.stringContaining('partially discarded'), discardedPaths: ['a.txt', 'dir/b.txt'] },
+      });
+    }
+    expect(calls(git.checkout)).not.toContainEqual(['/repo/b', 'development']);
+  });
+
+  it('a checkout failure on a repo in both outgoing and target restores the outgoing-tagged stash', async () => {
+    const outgoing = edtEntry('outgoing-ulid', 'outgoing-topic', [member('svc-a', '/repo/a', 'feat/a-out'), member('svc-c', '/repo/c', 'feat/c')]);
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      checkout: vi.fn(async (repoPath: string) => (repoPath === '/repo/a' ? err('git-checkout-error', 'blocked') : ok(undefined))),
+    });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, outgoing])) });
+
+    const result = await switchActiveEdt(makeParams({ git, edtRegistry }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'git-checkout-error', message: expect.stringContaining('restored') },
+      });
+    }
+    expect(calls(git.restoreStash)).toEqual([['/repo/a', 'tui-back:outgoing-ulid']]);
+  });
+
+  it('a checkout failure after a successful discard (non-member) keeps discardedPaths and says already discarded', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      listDirtyPaths: vi.fn(async () => ok(['a.txt'])),
+      checkout: vi.fn(async (repoPath: string) => (repoPath === '/repo/b' ? err('git-checkout-error', 'blocked') : ok(undefined))),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git, dirtyResolutions: { '/repo/b': { kind: 'discard' } } }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'failed',
+        detail: { code: 'git-checkout-error', message: expect.stringContaining('already been discarded'), discardedPaths: ['a.txt'] },
+      });
     }
   });
 });
