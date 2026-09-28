@@ -17,6 +17,7 @@
 // the shared renderToString harness's fake stdin never emits data, so a useInput callback
 // itself is never invoked by any test in the repo).
 import { spawnSync } from 'node:child_process';
+import { resolve as resolvePath } from 'node:path';
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
@@ -36,6 +37,7 @@ import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { deriveUpdateServiceStatus, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
+import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import {
   beginUpdateConfigBranchEdit,
   clampUpdateConfigCursor,
@@ -52,9 +54,9 @@ import {
 // here").
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
-export const UPDATE_IDLE_PROMPT = 'Press [Enter] to bring every member service up to date.';
+export const UPDATE_IDLE_PROMPT = 'Press [Enter] for service actions.';
 export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
-export const UPDATE_INTERRUPTED_OFFER = 'The last update was interrupted — press [Enter] to re-run it.';
+export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
@@ -136,12 +138,14 @@ export function shouldOpenAllConfirm(input: string, updateStatus: string): boole
   return (input === 'a' || input === 'A') && updateStatus !== 'running';
 }
 
-// Story 3.7: the group-update trigger mapping — every trigger opens the shared pre-run
-// configuration screen first; no trigger ever starts an unconfigured run. Pure (the same
-// unit style as `shouldOpenAllConfirm`) because the zone's `useInput` is never driven in
-// tests, so an inline mapping would let a wiring regression back to a direct
-// `runGroupUpdate` go undetected.
-export type UpdateTriggerAction = 'open-all-config' | 'open-edt-config' | 'none';
+// Story 3.9: the row-local trigger mapping — `a` still opens the shared pre-run
+// configuration screen pre-scoped to every managed repo; `Enter` opens the per-service
+// action menu for the selected row (Update this service / Clean restart / Cancel, the
+// EDTs zone's own service-menu pattern). No trigger ever starts an unconfigured run.
+// Pure (the same unit style as `shouldOpenAllConfirm`) because the zone's `useInput` is
+// never driven in tests, so an inline mapping would let a wiring regression back to a
+// direct `runGroupUpdate` go undetected.
+export type UpdateTriggerAction = 'open-all-config' | 'open-service-menu' | 'none';
 
 export function resolveUpdateTrigger(
   input: string,
@@ -155,7 +159,7 @@ export function resolveUpdateTrigger(
     return 'open-all-config';
   }
   if (key.return === true) {
-    return 'open-edt-config';
+    return 'open-service-menu';
   }
   return 'none';
 }
@@ -285,6 +289,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const setUpdateConfig = useStore((state) => state.setUpdateConfig);
   const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
   const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
+  const serviceRestartInFlight = useStore((state) => state.serviceRestartInFlight);
+  const runServiceRestart = useStore((state) => state.runServiceRestart);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
   const activeEdt = useStore((state) => state.activeEdt);
   const edts = useStore((state) => state.edts);
@@ -315,6 +321,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
+  // Story 3.9: the row-local action menu's own target + cursor — zone-local UI state (the
+  // same convention as the service-list cursor above; only cross-visit/cross-run state
+  // belongs in update-slice.ts). Null when no menu is open.
+  const [serviceMenu, setServiceMenu] = useState<{ service: string; repoPath: string } | null>(null);
+  const [serviceMenuCursor, setServiceMenuCursor] = useState(0);
   // Story 3.6: the service list's own selection cursor — zone-local UI state (repo
   // convention: only cross-visit/cross-run state belongs in update-slice.ts).
   const [serviceCursor, setServiceCursor] = useState(0);
@@ -372,8 +383,15 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // zone's own dialogs use. The blocker menu captures hardest: while a repo waits, no
   // other zone key may fire at all.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm || updateConfig !== null || updateBlocker !== null);
-  }, [quitConfirm, updateConfig, updateBlocker, setZoneInputCaptured]);
+    setZoneInputCaptured(quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null);
+  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, setZoneInputCaptured]);
+
+  // A newly opened service menu always starts browsing on its first row.
+  useEffect(() => {
+    if (serviceMenu !== null) {
+      setServiceMenuCursor(0);
+    }
+  }, [serviceMenu]);
 
   // A newly raised blocker always opens the menu on its first row.
   useEffect(() => {
@@ -498,6 +516,28 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      // Story 3.9: while the row-local action menu is open it owns every keystroke —
+      // arrows/Home/End move, Enter chooses, Esc cancels (the EDTs service-menu pattern).
+      // Update routes to the 3.7 config screen pre-scoped to that single service; clean
+      // restart runs the standalone single-service use-case for that repo alone.
+      if (serviceMenu !== null) {
+        const step = resolveServiceMenuKey(input, key, serviceMenuCursor);
+        if (step.type === 'move') {
+          setServiceMenuCursor(step.cursor);
+        } else if (step.type === 'choose') {
+          const action = resolveServiceMenuChoice(step.choice, serviceMenu);
+          if (action.type === 'open-config') {
+            setServiceMenu(null);
+            void openUpdateConfig({ service: action.service, repoPath: action.repoPath });
+          } else if (action.type === 'restart') {
+            setServiceMenu(null);
+            void runServiceRestart(action.repoPath);
+          } else {
+            setServiceMenu(null);
+          }
+        }
+        return;
+      }
       // Story 3.6: the service list's own cursor — moves regardless of run state (browsing
       // the always-visible list is harmless mid-run) and never conflicts with the existing
       // 3.1–3.4 triggers below, none of which use arrow/Home/End.
@@ -517,16 +557,19 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      // Story 3.7: every group-update trigger opens the shared pre-run configuration
-      // screen first — no git/docker action runs before the screen is confirmed. `a`
-      // pre-scopes to every managed repo, `Enter` to the active EDT's members.
+      // Story 3.9: `a` pre-scopes the shared pre-run configuration screen to every
+      // managed repo; `Enter` opens the row-local action menu for the selected service
+      // (update this service / clean restart / cancel) — no git/docker action runs before
+      // the menu choice is confirmed through its own path.
       const trigger = resolveUpdateTrigger(input, key, updateStatus);
       if (trigger === 'open-all-config') {
         void openUpdateConfig('all');
         return;
       }
-      if (trigger === 'open-edt-config') {
-        void openUpdateConfig('edt');
+      if (trigger === 'open-service-menu') {
+        if (selectedServiceRow !== undefined) {
+          setServiceMenu({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+        }
       }
     },
     { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
@@ -576,7 +619,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 const health = updateServiceHealth[row.path] ?? 'down';
                 const lastOutcome = lastServiceOutcomes[row.service];
                 const isTargeted = updateStatus === 'running' && (isAllRun || runningMemberPaths.has(row.path));
-                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted);
+                // Story 3.9: the coarse standalone-restart flag — the in-flight map holds
+                // this service's resolved repoPath for the duration, no step detail.
+                const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
+                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting);
                 return (
                   <Box key={row.path} flexDirection="row">
                     <StatusBadge state={status} />
@@ -619,7 +665,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               updateNote !== null && updateResults.length === 0 ? (
                 <Box flexDirection="column">
                   <Text color={colors.text}>{updateNote}</Text>
-                  <Text color={colors['text-dim']}>Press [Enter] to run again.</Text>
+                  <Text color={colors['text-dim']}>Press [Enter] for service actions.</Text>
                 </Box>
               ) : (
                 <Box flexDirection="column">
@@ -634,7 +680,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                     title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
                     summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
                   >
-                    {updateNote ?? `Press [Enter] to run again.`}
+                    {updateNote ?? `Press [Enter] for service actions.`}
                   </DetailPane>
                 </Box>
               )
@@ -645,7 +691,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                   {updateError ?? 'Group update failed.'}
                   {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
                 </Text>
-                <Text color={colors['text-dim']}>Press [Enter] to try again.</Text>
+                <Text color={colors['text-dim']}>Press [Enter] for service actions.</Text>
               </Box>
             ) : null}
             {updateStatus === 'idle' ? (
@@ -669,6 +715,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           maxRows={branchDropdownMaxRows}
         />
       ) : null}
+      {serviceMenu !== null ? <UpdateServiceMenuDialog service={serviceMenu.service} cursor={serviceMenuCursor} /> : null}
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">

@@ -487,3 +487,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
   summary: `UpdateConfigDialog` renders every targeted-service row unconditionally with no `BoundedList` windowing or scroll, so a large fleet (dozens of managed repos) would clip rows inside the `ModalDialog` without any way to reach them.
   evidence: `src/adapters/driving/tui/zones/update/update-config-dialog.tsx` maps all `draft.rows` directly, unlike the 3.6 shell which bounds the service list via `BoundedList` + terminal-height chrome budget. Surfaced by review (blind-hunter); v1 fleets are small so impact is theoretical today. **Track:** reuse the `BoundedList` + cursor-windowing pattern if a large-fleet case is ever observed.
+
+## Deferred from: review of 3-9-per-service-actions-clean-restart-single-service-update (2026-09-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
+  summary: A CLI group update and a TUI standalone restart can overlap on the same repo — core locks don't intersect (`service:<repoPath>` vs global/`edt:<ulid>`), only the TUI store guards separate them.
+  evidence: `src/core/scripts/service-restart.ts` takes only the per-service lock while `group-update.ts` takes global (+edt) locks; no CLI entry for the standalone action exists yet, so the race needs concurrent CLI+TUI use. Surfaced by blind-hunter review layer. **Track:** resolve when Story 3.11 adds CLI commands (taking the global lock in serviceRestart is NOT the fix — it would serialize standalone restarts across different services, violating the per-service matrix row).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
+  summary: A clean restart (recipe commands like `npm ci` / compose rebuild) runs on a single menu Enter with no confirmation step, unlike the update path's config-screen gate.
+  evidence: `src/adapters/driving/tui/zones/update/update-zone.tsx`'s menu-choice branch runs `runServiceRestart` immediately after `setServiceMenu(null)`; the approved spec mandates no confirm step. Surfaced by blind-hunter review layer. **Track:** human UX-safety decision — confirm dialog, dry-run hint, or keep as-is — for Story 3.10/3.11 or a later pass.

@@ -422,6 +422,9 @@ it('shouldQuit returns true for q', () => {
         setUpdateConfig: () => {},
         closeUpdateConfig: () => {},
         confirmUpdateConfig: async () => {},
+        // Story 3.9: per-service standalone restart in-flight map + runner
+        serviceRestartInFlight: {},
+        runServiceRestart: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
         // Story 3.6: Update zone service-list health poll + last-outcome map
