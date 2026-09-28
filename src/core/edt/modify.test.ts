@@ -14,6 +14,8 @@ import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches, 
 import type { ModifyEdtResult, ModifyEdtData } from './modify.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { ManifestPort } from '../ports/manifest.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
+import type { LockPort } from '../ports/lock.js';
 import { Result, err, ok } from '../result.js';
 
 const tmpDirs: string[] = [];
@@ -683,34 +685,56 @@ describe('listMemberBranches (story 2.26)', () => {
     expect(result).toEqual({ ok: true, data: ['development', 'feature-x'] });
   });
 });
+
 describe('addMemberUnderLock (story 2.39)', () => {
   const base = { ulid: '01JOUT', topic: 'out', createdAt: '2026-09-28T00:00:00.000Z', status: 'active' as const };
-  const existing = { service: 'a', repoPath: '/repos/a', branch: 'feat/a' };
+  const existing: EdtMember = { service: 'a', repoPath: '/repos/a', branch: 'feat/a' };
+  type RegistryPatch = { topic?: string; members?: EdtMember[] };
 
-  function fakeLock(events: string[]): any {
+  function fakeLock(events: string[]): LockPort {
     return {
       acquire: async (key: string) => {
         events.push(`acquire:${key}`);
-        return ok({ release: async () => { events.push('release'); return ok(undefined); } });
+        return ok({
+          release: async () => {
+            events.push('release');
+            return ok(undefined);
+          },
+        });
       },
       peek: async () => ok({ locked: false }),
     };
   }
 
+  function fakeEdtRegistry(
+    entries: EdtRegistryEntry[],
+    update: (ulid: string, patch: RegistryPatch) => Promise<Result<void>>,
+    onList: () => void = () => {},
+  ): EdtRegistryPort {
+    return {
+      add: async () => ok(undefined),
+      list: async () => {
+        onList();
+        return ok(entries);
+      },
+      update,
+      setStatus: async () => ok(undefined),
+      remove: async () => ok(undefined),
+    };
+  }
+
   it('appends the member under the edts.yaml lock, re-reading the authoritative list, never touching git', async () => {
     const events: string[] = [];
-    const updates: Array<{ ulid: string; patch: any }> = [];
-    const edtRegistry: any = {
-      list: async () => {
-        events.push('list');
-        return ok([{ ...base, members: [existing] }]);
-      },
-      update: async (ulid: string, patch: any) => {
+    const updates: Array<{ ulid: string; patch: RegistryPatch }> = [];
+    const edtRegistry = fakeEdtRegistry(
+      [{ ...base, members: [existing] }],
+      async (ulid, patch) => {
         events.push('update');
         updates.push({ ulid, patch });
         return ok(undefined);
       },
-    };
+      () => events.push('list'),
+    );
 
     const result = await addMemberUnderLock({
       edtRegistry,
@@ -728,14 +752,11 @@ describe('addMemberUnderLock (story 2.39)', () => {
   });
 
   it('is a no-op add when a racing writer already registered the same repo (no duplicate)', async () => {
-    const updates: any[] = [];
-    const edtRegistry: any = {
-      list: async () => ok([{ ...base, members: [existing] }]),
-      update: async (_ulid: string, patch: any) => {
-        updates.push(patch);
-        return ok(undefined);
-      },
-    };
+    const patches: RegistryPatch[] = [];
+    const edtRegistry = fakeEdtRegistry([{ ...base, members: [existing] }], async (_ulid, patch) => {
+      patches.push(patch);
+      return ok(undefined);
+    });
 
     const result = await addMemberUnderLock({
       edtRegistry,
@@ -746,14 +767,11 @@ describe('addMemberUnderLock (story 2.39)', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(updates[0].members).toEqual([existing]);
+    expect(patches[0]?.members).toEqual([existing]);
   });
 
   it('propagates a write failure and an unknown EDT', async () => {
-    const failing: any = {
-      list: async () => ok([{ ...base, members: [] }]),
-      update: async () => err('edt-registry-write-error', 'disk full'),
-    };
+    const failing = fakeEdtRegistry([{ ...base, members: [] }], async () => err('edt-registry-write-error', 'disk full'));
     const written = await addMemberUnderLock({
       edtRegistry: failing,
       lock: fakeLock([]),
@@ -763,7 +781,7 @@ describe('addMemberUnderLock (story 2.39)', () => {
     });
     expect(written).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
 
-    const gone: any = { list: async () => ok([]), update: async () => ok(undefined) };
+    const gone = fakeEdtRegistry([], async () => ok(undefined));
     const missing = await addMemberUnderLock({
       edtRegistry: gone,
       lock: fakeLock([]),
