@@ -2,7 +2,7 @@
 title: 'EDT Switch Core — Three-State Partition & Dirty-Service Resolutions'
 type: 'feature'
 created: '2026-09-28'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 context: []
 baseline_commit: '1d4abf4a74b2288cd2d8aecd42dbc98d8db2f6f2'
@@ -88,12 +88,12 @@ baseline_commit: '1d4abf4a74b2288cd2d8aecd42dbc98d8db2f6f2'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `core/ports/git.ts`, `adapters/driven/git/index.ts` (+ test), all GitPort fakes -- `discardAll` and expanded `listDirtyPaths` -- the destructive primitive with real-git proof.
-- [ ] `core/edt/modify.ts` (+ test) -- export the lock-held add-member helper -- the single persistence path for adopt.
-- [ ] `core/edt/switch.ts` -- classification helper, pre-flight, seam, resolutions, adopt/discard, per-repo rewrite -- the story core.
-- [ ] `core/edt/switch.test.ts` -- rewrite and cover every matrix row, plus `classifySwitchRepos` unit tests.
-- [ ] `edt-slice.ts`, `switch-dialog.tsx` (+ tests) -- the interim cancel-only preview with explanation.
-- [ ] `cli/subcommands.ts` comment, `tui-back.e2e.test.ts` -- fail-safe CLI and state-1 stash round-trip e2e.
+- [x] `core/ports/git.ts`, `adapters/driven/git/index.ts` (+ test), all GitPort fakes -- `discardAll` and expanded `listDirtyPaths` -- the destructive primitive with real-git proof.
+- [x] `core/edt/modify.ts` (+ test) -- export the lock-held add-member helper -- the single persistence path for adopt.
+- [x] `core/edt/switch.ts` -- classification helper, pre-flight, seam, resolutions, adopt/discard, per-repo rewrite -- the story core.
+- [x] `core/edt/switch.test.ts` -- rewrite and cover every matrix row, plus `classifySwitchRepos` unit tests.
+- [x] `edt-slice.ts`, `switch-dialog.tsx` (+ tests) -- the interim cancel-only preview with explanation.
+- [x] `cli/subcommands.ts` comment, `tui-back.e2e.test.ts` -- fail-safe CLI and state-1 stash round-trip e2e.
 
 **Acceptance Criteria:**
 - Given a dirty state-2/3 repo and no resolution from any source, when the switch runs, then no git write command is issued on any repo and state.json/edts.yaml are unchanged.

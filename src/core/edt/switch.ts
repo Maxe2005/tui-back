@@ -670,12 +670,26 @@ async function switchMemberRepo(
   if (!plan.ok) {
     return plan.row;
   }
+
+  // Resolve the destination before touching the working tree, so a missing member branch
+  // never follows an irreversible discard (or a needless stash). A member's own branch is
+  // never fetched or auto-created: missing (or unreadable) means `failed`, repo untouched.
+  const branchExists = await git.branchExistsLocally(repoPath, branch);
+  if (!branchExists.ok) {
+    return failed(service, branchExists.error);
+  }
+  if (!branchExists.data) {
+    return failed(service, {
+      code: 'member-branch-missing',
+      message: `Member branch "${branch}" does not exist locally in ${repoPath} — left untouched`,
+    });
+  }
+
   const prepared = await executeDirtyPlan(context, service, repoPath, plan.value);
   if (!prepared.ok) {
     return prepared.row;
   }
 
-  // A missing member branch (never auto-created here) surfaces as a checkout failure.
   const checkedOut = await git.checkout(repoPath, branch);
   if (!checkedOut.ok) {
     return failAfterPrepare(git, service, repoPath, prepared.value, checkedOut.error);

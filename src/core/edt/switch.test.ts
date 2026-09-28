@@ -1098,3 +1098,29 @@ describe('switchActiveEdt — state-1 stash safety (story 2.39)', () => {
     }
   });
 });
+
+describe('switchActiveEdt — review patches (story 2.39)', () => {
+  it('a discard on a target member whose own branch is missing fails before touching the repo', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+      listDirtyPaths: vi.fn(async () => ok(['x.txt'])),
+      branchExistsLocally: vi.fn(async (repoPath: string) => ok(repoPath !== '/repo/a')),
+    });
+
+    const result = await switchActiveEdt(makeParams({ git, dirtyResolutions: { '/repo/a': { kind: 'discard' } } }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'member-branch-missing', message: expect.stringContaining('feat/a') },
+      });
+    }
+    expect(calls(git.discardAll)).toHaveLength(0);
+    expect(calls(git.fetch)).toHaveLength(0);
+    for (const method of WRITE_METHODS) {
+      expect(calls(git[method]).filter((args) => args[0] === '/repo/a'), `git.${method}`).toHaveLength(0);
+    }
+  });
+});
