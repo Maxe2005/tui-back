@@ -593,15 +593,15 @@ async function resolvePlannedMemberBranch(
 // reads: nothing is ever fetched, so the remote list is whatever the last fetch left behind.
 // Either read failing fails the whole call — a half-known list would make the wizard's
 // "local preferred over origin/<x>" resolution silently wrong.
-export async function listCreateCandidateBranches(
-  git: GitPort,
-  repoPath: string,
-): Promise<Result<{ local: string[]; remote: string[] }>> {
-  const local = await git.listBranches(repoPath);
+// Story 2.37: one service's candidate branches — local names plus remote-tracking refs.
+export type CreateCandidateBranches = { local: string[]; remote: string[] };
+
+export async function listCreateCandidateBranches(git: GitPort, repoPath: string): Promise<Result<CreateCandidateBranches>> {
+  // Both reads are independent: run them side by side.
+  const [local, remote] = await Promise.all([git.listBranches(repoPath), git.listRemoteBranches(repoPath)]);
   if (!local.ok) {
     return local;
   }
-  const remote = await git.listRemoteBranches(repoPath);
   if (!remote.ok) {
     return remote;
   }

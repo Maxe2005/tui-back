@@ -1187,7 +1187,6 @@ describe('listCreateCandidateBranches (story 2.37)', () => {
     const git = fakeGit({ listBranches: vi.fn(async () => err('git-error', 'boom')) });
     const result = await listCreateCandidateBranches(git, '/repo/a');
     expect(result.ok).toBe(false);
-    expect(calls(git.listRemoteBranches)).toHaveLength(0);
   });
 
   it('fails when the remote list cannot be read', async () => {

@@ -2,7 +2,7 @@
 title: 'EDT Creation Wizard — Step 3: Global Branch Strategy & Per-Service Overrides'
 type: 'feature'
 created: '2026-09-28'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 context: []
 baseline_commit: '1cd597a4f69fe35379599293db16e0de4d28c147'
@@ -93,14 +93,14 @@ baseline_commit: '1cd597a4f69fe35379599293db16e0de4d28c147'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/edt/shared-branches.ts` (+ test), `src/adapters/driven/git/index.ts` -- move the shared-branch rule into core -- a single FR-7 definition for the gate and the UI.
-- [ ] `src/core/edt/create.ts` (+ test), `store/slices/edt-slice.ts` (+ test) -- `listCreateCandidateBranches`, `listCreateBranches`, and `memberPlans` passthrough -- the store boundary.
-- [ ] `edts-zone.logic.ts` -- new `BranchStepState` and `RowOverride` types; retire the old fields and helpers -- a single source of truth for Step 3.
-- [ ] `create-wizard/wizard.logic.ts` (+ test) -- the pure resolution, row-view, validation and plan helpers -- covers every matrix row at logic level.
-- [ ] `create-wizard/override-box.tsx` (+ test) -- the box reducer and view.
-- [ ] `create-wizard/step-branches.tsx`, `create-wizard.tsx`, `step-activation.tsx`, `step-services.tsx`, `edts-zone.tsx` -- Panel A/B, dispatch, list loading, recap and submit.
-- [ ] Interaction tests -- rewrite the Step 3 flows. Cover: default submit to `memberPlans`; not-found blocked; perso/existing/rename via the box; Ctrl+R; Esc layering; Tab panels.
-- [ ] `keybindings.ts` (+ test), `EXPERIENCE.md` -- key docs.
+- [x] `src/core/edt/shared-branches.ts` (+ test), `src/adapters/driven/git/index.ts` -- move the shared-branch rule into core -- a single FR-7 definition for the gate and the UI.
+- [x] `src/core/edt/create.ts` (+ test), `store/slices/edt-slice.ts` (+ test) -- `listCreateCandidateBranches`, `listCreateBranches`, and `memberPlans` passthrough -- the store boundary.
+- [x] `edts-zone.logic.ts` -- new `BranchStepState` and `RowOverride` types; retire the old fields and helpers -- a single source of truth for Step 3.
+- [x] `create-wizard/wizard.logic.ts` (+ test) -- the pure resolution, row-view, validation and plan helpers -- covers every matrix row at logic level.
+- [x] `create-wizard/override-box.tsx` (+ test) -- the box reducer and view.
+- [x] `create-wizard/step-branches.tsx`, `create-wizard.tsx`, `step-activation.tsx`, `step-services.tsx`, `edts-zone.tsx` -- Panel A/B, dispatch, list loading, recap and submit.
+- [x] Interaction tests -- rewrite the Step 3 flows. Cover: default submit to `memberPlans`; not-found blocked; perso/existing/rename via the box; Ctrl+R; Esc layering; Tab panels.
+- [x] `keybindings.ts` (+ test), `EXPERIENCE.md` -- key docs.
 
 **Acceptance Criteria:**
 - Given Steps 1–2 done, when Step 3 opens, then Panel A is focused, the base shows `<shared-branch>`, the name shows the topic slug, and every row reads `[Créer (Global)]`.

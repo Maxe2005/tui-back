@@ -9,7 +9,7 @@ import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { Result } from '../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../core/edt/create.js';
+import type { CreateCandidateBranches, CreateEdtData } from '../../../../../core/edt/create.js';
 import type { SwitchActiveEdtData } from '../../../../../core/edt/switch.js';
 import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
 import { createAppStore, type CreateEdtParams, type ModifyEdtParams } from '../../store/app-store.js';
@@ -54,7 +54,7 @@ async function type(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStrea
 }
 
 // Story 2.37: Step 3 loads each selected service's branch lists on entry (never fetching).
-type ListsResult = Result<{ local: string[]; remote: string[] }>;
+type ListsResult = Result<CreateCandidateBranches>;
 const readyBranches = async (): Promise<ListsResult> => ({ ok: true, data: { local: ['main', 'development'], remote: [] } });
 
 // Lets the async list loads settle (a resolved promise, then React's commit).
@@ -70,7 +70,7 @@ function lastWizardFrame(stdout: FakeTtyStdout): string {
 // Two services with diverging manifest sharedBranch values (svc-a: main, svc-b: development).
 function step3Store(
   options: {
-    lists?: Record<string, { local: string[]; remote: string[] }>;
+    lists?: Record<string, CreateCandidateBranches>;
     listCreateBranches?: (repoPath: string) => Promise<ListsResult>;
     edts?: EdtRegistryEntry[];
   } = {},

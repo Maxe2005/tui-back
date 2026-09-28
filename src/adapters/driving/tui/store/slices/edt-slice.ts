@@ -9,6 +9,7 @@ import {
   createEdt as createEdtUseCase,
   listCreateCandidateBranches as listCreateCandidateBranchesUseCase,
   type CreateBranchOptions,
+  type CreateCandidateBranches,
   type CreateEdtData,
   type MemberBranchPlan,
 } from '../../../../../core/edt/create.js';
@@ -48,22 +49,20 @@ export const DEFAULT_BASE_BRANCH = 'development';
 // scoped it to topic + member selection only). Story 2.22 adds the mandatory branch-setup
 // step, so this is no longer the store's own unconditional default — it's now the exact
 // value the zone itself passes through `createEdt`'s `branchOptions` param for the
-// zero-member case (core's `branchOptions` stays mandatory even then). Exported so the zone
-// doesn't need to duplicate the literal.
+// zero-member case. Story 2.37: the create wizard now sends `memberPlans` instead, so this
+// only remains the canonical "reuse each current branch" value for `branchOptions` callers.
 export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DEFAULT_BASE_BRANCH, mode: 'grouped', names: {} };
 
 export type CreateEdtParams = {
   topic: string;
   members: string[];
-  // Story 2.22: the create-EDT dialog now always builds and passes a real
-  // CreateBranchOptions (grouped/individual naming, base branch) instead of the store
-  // hardcoding NO_BRANCH_CREATION for every call — mandatory, not optional, so every caller
-  // makes its own branch-creation choice explicit (zero members still passes
-  // NO_BRANCH_CREATION below, exported so the zone can reuse the exact same value).
-  // Story 2.37: optional — the create wizard now passes `memberPlans` instead (core's
-  // Story 2.35 contract: one of the two is required, `memberPlans` wins when both are set).
+  // Exactly one of the two branch strategies is expected (core rejects a call carrying
+  // neither with invalid-argument; `memberPlans` wins when both are set):
+  //   - `branchOptions` (Stories 2.22/2.27): one CreateBranchOptions for every member — the
+  //     CLI-shaped path, e.g. NO_BRANCH_CREATION above for "reuse each current branch".
+  //   - `memberPlans` (Story 2.35, used by the create wizard since Story 2.37): one plan per
+  //     member repoPath, built from the wizard's Step 3 rows.
   branchOptions?: CreateBranchOptions;
-  // Story 2.37: one plan per member (keyed by repoPath), built from the wizard's Step 3 rows.
   memberPlans?: Record<string, MemberBranchPlan>;
 };
 
@@ -177,7 +176,7 @@ export type EdtSlice = {
   listBranches: (repoPath: string) => Promise<Result<string[]>>;
   // Story 2.37: the create wizard's Step 3 per-service lists (local + remote-tracking refs),
   // wrapping core/edt/create.ts's listCreateCandidateBranches — never fetches.
-  listCreateBranches: (repoPath: string) => Promise<Result<{ local: string[]; remote: string[] }>>;
+  listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
   renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<Result<void>>;
   // Story 2.15: EDT action state for the detail pane — tracks in-progress action and
