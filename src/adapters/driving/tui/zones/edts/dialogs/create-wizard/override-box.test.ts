@@ -11,7 +11,7 @@ import {
   type OverrideBoxContext,
   type OverrideBoxKeyResult,
   type OverrideBoxState,
-} from './override-box.js';
+} from './override-box.logic.js';
 
 const CONTEXT: OverrideBoxContext = {
   status: 'ready',

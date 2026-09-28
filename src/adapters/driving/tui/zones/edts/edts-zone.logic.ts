@@ -12,7 +12,7 @@ import type { NavigationKey } from '../../keybindings/index.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
-import type { OverrideBoxState } from './dialogs/create-wizard/override-box.js';
+import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
 
 // A fixed max width (the spec's "ellipsizes past a fixed max width") — generous enough for
 // most feature-branch naming conventions while keeping the list column narrow. The full,

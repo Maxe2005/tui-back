@@ -18,7 +18,8 @@ import { nextTextInputValue, type TextEditKey } from '../../../../shared/compone
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../edts-zone.logic.js';
-import { openOverrideBox, OverrideBoxView, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.js';
+import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
+import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, type BranchCandidate, type RowView } from './wizard.logic.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
