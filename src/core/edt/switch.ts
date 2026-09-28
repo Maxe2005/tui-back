@@ -65,7 +65,9 @@ export interface SwitchEdtRepoResult {
   outcome: 'switched' | 'adopted' | 'discarded' | 'failed';
   // `discardedPaths` (story 2.39): on a `discarded` row, exactly the paths the discard removed
   // (captured before `discardAll`, untracked directories expanded to files).
-  detail?: { code: string; message: string; discardedPaths?: string[] };
+  // `adoptedBranch` (story 2.41): on an `adopted` row, the branch the work was adopted onto
+  // in the outgoing EDT (the TUI's action log records it).
+  detail?: { code: string; message: string; discardedPaths?: string[]; adoptedBranch?: string };
 }
 
 // Story 2.39: a caller's explicit decision for one dirty state-2/3 repo (see the file header).
@@ -77,13 +79,19 @@ export type SwitchDirtyScope = 'outgoing-member' | 'member-of-other-edt' | 'non-
 // (`outgoing-member`) carry `resolution: 'auto-stash'` — read-only information, they need no
 // decision. State-2/3 rows are the ones a resolution is required for; `owningEdtTopics` lists
 // the other EDTs claiming the repo (empty for a non-member).
+// Story 2.41: `sharedBranch` is the repo's manifest shared branch (null when the manifest could
+// not be loaded) — the TUI's advisory protected-name check needs it. `dirtyPaths` (state-2/3
+// rows only) is a read-only `listDirtyPaths(..., {expandUntracked: true})` snapshot the TUI's
+// discard confirmation lists; a failed read leaves it unset.
 export interface SwitchDirtyRepo {
   service: string;
   repoPath: string;
   scope: SwitchDirtyScope;
   currentBranch: string;
   currentBranchShared: boolean;
+  sharedBranch: string | null;
   owningEdtTopics: string[];
+  dirtyPaths?: string[];
   resolution?: 'auto-stash';
 }
 
@@ -422,10 +430,16 @@ async function describeDirtyRepo(
     scope: scopeOf(repo.state),
     currentBranch,
     currentBranchShared,
+    sharedBranch: loaded.ok ? loaded.data.sharedBranch : null,
     owningEdtTopics: repo.owningTopics,
   };
   if (repo.state === 1) {
     row.resolution = 'auto-stash';
+  } else {
+    const paths = await git.listDirtyPaths(repo.repoPath, { expandUntracked: true });
+    if (paths.ok) {
+      row.dirtyPaths = paths.data;
+    }
   }
   return row;
 }
@@ -692,6 +706,18 @@ function succeeded(service: string, prepared: Prepared): SwitchEdtRepoResult {
         code: 'discarded',
         message: `Discarded ${paths.length} uncommitted path(s)`,
         discardedPaths: paths,
+      },
+    };
+  }
+  if (prepared.outcome === 'adopted' && prepared.adoptedBranch !== undefined) {
+    const into = prepared.adoptedInto !== undefined ? ` into "${prepared.adoptedInto.topic}"` : '';
+    return {
+      service,
+      outcome: 'adopted',
+      detail: {
+        code: 'adopted',
+        message: `Uncommitted work adopted${into} on branch "${prepared.adoptedBranch}"`,
+        adoptedBranch: prepared.adoptedBranch,
       },
     };
   }

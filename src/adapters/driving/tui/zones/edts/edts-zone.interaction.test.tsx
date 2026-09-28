@@ -203,7 +203,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       loadEdtsBranches: async () => {},
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
         switchCalls += 1;
-        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, owningEdtTopics: [], resolution: 'auto-stash' }] });
+        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: [], resolution: 'auto-stash' }] });
         const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
           store.setState({
             resolveSwitchDirtyRepos: (c) => {
@@ -262,7 +262,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       loadEdtsBranches: async () => {},
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
         switchCalls += 1;
-        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, owningEdtTopics: [], resolution: 'auto-stash' }] });
+        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: [], resolution: 'auto-stash' }] });
         const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
           store.setState({
             resolveSwitchDirtyRepos: (c) => {
