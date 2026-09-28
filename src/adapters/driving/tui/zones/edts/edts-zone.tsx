@@ -76,8 +76,9 @@ import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-d
 const EDTS_SERVICE_LISTS_CHROME_ROWS = 12;
 // Story 2.37: rows the create wizard spends around Step 3's Panel B table — modal border and
 // title, breadcrumb, intro, Panel A (title + 2 lines + a field's edit hint), Panel B title and
-// column header, Step 3 footer, error line and the wizard footer. An approximation, as above.
-const CREATE_WIZARD_CHROME_ROWS = 16;
+// column header, the blocked-row detail line, Step 3 footer, error line and the wizard footer.
+// An approximation, as above.
+const CREATE_WIZARD_CHROME_ROWS = 17;
 
 export function EdtsZone({
   useStore = useAppStore,

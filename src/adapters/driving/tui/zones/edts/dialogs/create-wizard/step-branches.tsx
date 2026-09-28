@@ -17,7 +17,7 @@ import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../edts-zone.logic.js';
+import { BRANCH_MAX_WIDTH, truncateBranchLabel, type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, type BranchCandidate, type RowView } from './wizard.logic.js';
@@ -164,26 +164,35 @@ export function createBranchStepHandlers(deps: {
 
 const COLUMN_HEADERS = ['Service', 'Mode', 'Base / Source', 'Branche cible'] as const;
 
-function columnWidths(rows: readonly RowView[]): [number, number, number] {
-  const width = (values: readonly string[], header: string) => Math.max(header.length, ...values.map((value) => value.length));
-  return [
-    width(
-      rows.map((row) => row.service),
-      COLUMN_HEADERS[0],
-    ),
-    width(
-      rows.map((row) => row.modeLabel),
-      COLUMN_HEADERS[1],
-    ),
-    width(
-      rows.map((row) => baseCell(row)),
-      COLUMN_HEADERS[2],
-    ),
-  ];
+// Every free-text cell (service name, branch ref, error label) is capped with the list's own
+// truncateBranchLabel/BRANCH_MAX_WIDTH, so no column can push the table past the modal; the
+// full text of a blocking error is shown once, on the detail line under the table.
+function cell(text: string): string {
+  return truncateBranchLabel(text, BRANCH_MAX_WIDTH);
+}
+
+function serviceCell(row: RowView): string {
+  return cell(row.service);
 }
 
 function baseCell(row: RowView): string {
-  return row.baseStatus === 'error' ? `✖ ${row.base}` : row.base;
+  return cell(row.baseStatus === 'error' ? `✖ ${row.base}` : row.base);
+}
+
+function targetCell(row: RowView): string {
+  return cell(row.targetError !== null ? `✖ ${row.target === '' ? '—' : row.target}` : row.target);
+}
+
+function columnWidths(rows: readonly RowView[]): [number, number, number] {
+  const width = (values: readonly string[], header: string) => Math.max(header.length, ...values.map((value) => value.length));
+  return [width(rows.map(serviceCell), COLUMN_HEADERS[0]), width(rows.map((row) => row.modeLabel), COLUMN_HEADERS[1]), width(rows.map(baseCell), COLUMN_HEADERS[2])];
+}
+
+// The row whose blocking error the detail line spells out: the row under the cursor when it
+// is blocked, otherwise the first blocked row.
+export function detailRow(rows: readonly RowView[], rowCursor: number): RowView | undefined {
+  const focused = rows[rowCursor];
+  return focused !== undefined && focused.error !== null ? focused : rows.find((row) => row.error !== null);
 }
 
 function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
@@ -219,6 +228,7 @@ export function BranchStepView({
   const lineFocused = (line: 'base' | 'name') => globalFocused && branches.globalLine === line;
   const [serviceWidth, modeWidth, baseWidth] = columnWidths(rows);
   const rowsFocused = branches.panel === 'rows';
+  const blocked = detailRow(rows, branches.rowCursor);
   return (
     <Box flexDirection="column">
       <PanelTitle text="STRATÉGIE GLOBALE" focused={globalFocused} />
@@ -247,7 +257,7 @@ export function BranchStepView({
         />
       </Box>
       <PanelTitle text="RÉSUMÉ ET EXCEPTIONS PAR SERVICE" focused={rowsFocused} />
-      <Text color={colors['text-dim']}>
+      <Text color={colors['text-dim']} wrap="truncate-end">
         {'  '}
         {COLUMN_HEADERS[0].padEnd(serviceWidth)} │ {COLUMN_HEADERS[1].padEnd(modeWidth)} │ {COLUMN_HEADERS[2].padEnd(baseWidth)} │ {COLUMN_HEADERS[3]}
       </Text>
@@ -261,22 +271,25 @@ export function BranchStepView({
           const selected = rowsFocused && index === branches.rowCursor;
           const textColor = selected ? colors.accent : colors.text;
           return (
-            <Box key={row.path}>
+            <Text key={row.path} wrap="truncate-end">
               <Text color={colors.accent}>{selected ? '› ' : '  '}</Text>
               <Text color={textColor}>
-                {row.service.padEnd(serviceWidth)} │ {row.modeLabel.padEnd(modeWidth)} │{' '}
+                {serviceCell(row).padEnd(serviceWidth)} │ {row.modeLabel.padEnd(modeWidth)} │{' '}
               </Text>
               <Text color={row.baseStatus === 'error' ? colors.error : row.baseStatus === 'loading' ? colors['text-dim'] : textColor}>
                 {baseCell(row).padEnd(baseWidth)}
               </Text>
               <Text color={textColor}> │ </Text>
-              <Text color={row.targetError !== null ? colors.error : textColor}>
-                {row.targetError !== null ? `${row.target} ✖ ${row.targetError}`.trim() : row.target}
-              </Text>
-            </Box>
+              <Text color={row.targetError !== null ? colors.error : textColor}>{targetCell(row)}</Text>
+            </Text>
           );
         }}
       />
+      {blocked !== undefined ? (
+        <Text color={colors.error}>
+          ✖ {blocked.service} : {blocked.error}
+        </Text>
+      ) : null}
       <Text color={colors['text-dim']}>{STEP3_FOOTER}</Text>
     </Box>
   );

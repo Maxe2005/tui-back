@@ -1415,9 +1415,13 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await reachStep3(instance, stdin, 'demo', 1);
+      let frame = lastWizardFrame(stdout);
+      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ ✖ échec du chargement/);
+      // The real cause, spelled out on the detail line under the table.
+      expect(frame).toContain('✖ svc-a : échec du chargement des branches : boom');
       await press(instance, stdin, KEYS.ctrlN);
-      // The real cause, not only the generic label.
-      expect(lastWizardFrame(stdout)).toContain('svc-a : échec du chargement des branches : boom');
+      frame = lastWizardFrame(stdout);
+      expect(frame).toContain('▶ 3. Branches ◀');
       expect(attempts).toBe(1);
 
       await press(instance, stdin, KEYS.ctrlLeft); // Step 2
