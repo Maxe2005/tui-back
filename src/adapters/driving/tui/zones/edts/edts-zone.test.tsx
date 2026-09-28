@@ -9,17 +9,14 @@ import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
-import { NO_BRANCH_CREATION } from '../../store/app-store.js';
 import { EdtsZone } from './edts-zone.js';
 import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
 import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
 import { matchEdtsByPrefix as quickMatch, resolveQuickPickCandidates as quickCandidates } from './dialogs/quick-pick-dialog.js';
 import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import {
-  advanceCreateFormFocus,
   initialCreateDialog,
   appendHint,
-  buildCreateBranchOptions,
   buildDeleteMemberRows,
   canEditMemberBranch,
   cycleFormFocus,
@@ -34,14 +31,10 @@ import {
   formatIssuesSummary,
   formatServiceDetail,
   formatServiceMeta,
-  isBranchStepFocus,
   isSwitchBlockedError,
   jumpSelection,
   moveSelection,
   partitionServicesByEdtMembership,
-  prefillBranchNames,
-  prefillBaseBranches,
-  resolveBaseBranchMode,
   resolveCandidateListState,
   resolveActionHint,
   resolveIssuesSeverity,
@@ -49,14 +42,12 @@ import {
   resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
-  suggestBaseBranchFor,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
   toggleMemberSelection,
   truncateBranchLabel,
   validateBranchEditValue,
-  validateCreateBranchFields,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.logic.js';
 
@@ -626,205 +617,6 @@ describe('suggestBranchNameFromTopic (story 2.22)', () => {
   });
 });
 
-describe('isBranchStepFocus (story 2.22)', () => {
-  it('is true for every branch-step field, false for topic/members', () => {
-    expect(isBranchStepFocus('branch-base')).toBe(true);
-    expect(isBranchStepFocus('branch-mode')).toBe(true);
-    expect(isBranchStepFocus('branch-name')).toBe(true);
-    expect(isBranchStepFocus('topic')).toBe(false);
-    expect(isBranchStepFocus('members')).toBe(false);
-  });
-});
-
-describe('advanceCreateFormFocus (story 2.22)', () => {
-  it('topic -> members unconditionally', () => {
-    expect(advanceCreateFormFocus('topic', false, 'grouped', 0, 1)).toEqual({ focus: 'members', nameIndex: 0 });
-  });
-
-  it('members -> branch-base once >=1 member is selected', () => {
-    expect(advanceCreateFormFocus('members', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-base', nameIndex: 0 });
-  });
-
-  it('members -> topic when zero members are selected (Boundaries: no branch step)', () => {
-    expect(advanceCreateFormFocus('members', false, 'grouped', 0, 0)).toEqual({ focus: 'topic', nameIndex: 0 });
-  });
-
-  it('branch-base -> branch-mode -> branch-name', () => {
-    expect(advanceCreateFormFocus('branch-base', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-mode', nameIndex: 0 });
-    expect(advanceCreateFormFocus('branch-mode', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-name', nameIndex: 0 });
-  });
-
-  it('grouped mode has exactly one name field: branch-name wraps straight back to topic', () => {
-    expect(advanceCreateFormFocus('branch-name', true, 'grouped', 0, 1)).toEqual({ focus: 'topic', nameIndex: 0 });
-  });
-
-  it('individual mode advances through each per-member name field before wrapping to topic', () => {
-    expect(advanceCreateFormFocus('branch-name', true, 'individual', 0, 3)).toEqual({ focus: 'branch-name', nameIndex: 1 });
-    expect(advanceCreateFormFocus('branch-name', true, 'individual', 1, 3)).toEqual({ focus: 'branch-name', nameIndex: 2 });
-    expect(advanceCreateFormFocus('branch-name', true, 'individual', 2, 3)).toEqual({ focus: 'topic', nameIndex: 0 });
-  });
-});
-
-describe('prefillBranchNames (story 2.22)', () => {
-  it('grouped mode fills the shared field from the topic slug when untouched', () => {
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {}, false, {})).toEqual({
-      branchName: 'fix-auth-bug',
-      branchNames: {},
-    });
-  });
-
-  it('grouped mode never overwrites a value the developer already typed (touched)', () => {
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], 'my-custom-name', {}, true, {})).toEqual({
-      branchName: 'my-custom-name',
-      branchNames: {},
-    });
-  });
-
-  it('individual mode fills every untouched selected member, leaves touched entries untouched', () => {
-    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': 'kept' }, false, { '/a': true })).toEqual({
-      branchName: '',
-      branchNames: { '/a': 'kept', '/b': 'fix-auth-bug' },
-    });
-  });
-
-  // Review fix (story 2.22): the original version gated on "is the value currently empty",
-  // which conflated "never touched" with "touched, then deliberately cleared" — a developer
-  // who backspaced a field to '' (to exercise the empty-value rejection) would see the very
-  // next prefill call (a further member toggled, or the naming mode switched) silently
-  // resurrect the old suggestion. Gating on the explicit touched flag instead of the value
-  // fixes this: once touched, a field's '' stays '' no matter how many more prefill calls
-  // follow.
-  it('never re-fills a field the developer deliberately cleared back to empty, even on a later prefill call', () => {
-    // Simulates: the field was filled once, then the developer backspaced it to '' — the
-    // touched flag flips true at that point (handleCreateBranchStepInput), so a second
-    // prefill call (e.g. a further member toggled) must leave it exactly as the developer
-    // left it: ''.
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {}, true, {})).toEqual({ branchName: '', branchNames: {} });
-  });
-
-  it('individual mode: a member field cleared and touched stays empty on a later prefill call', () => {
-    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': '' }, false, { '/a': true })).toEqual({
-      branchName: '',
-      branchNames: { '/a': '', '/b': 'fix-auth-bug' },
-    });
-  });
-});
-
-describe('buildCreateBranchOptions (story 2.22, signature updated story 2.27)', () => {
-  it('zero members -> the exact NO_BRANCH_CREATION value (core param is mandatory)', () => {
-    expect(buildCreateBranchOptions([], 'grouped', 'unused', {}, {}, NO_BRANCH_CREATION)).toBe(NO_BRANCH_CREATION);
-  });
-
-  it('grouped mode: the identical name for every selected member, per-member bases threaded through', () => {
-    expect(
-      buildCreateBranchOptions(['/a', '/b'], 'grouped', 'feature-x', {}, { '/a': 'development', '/b': 'development' }, NO_BRANCH_CREATION),
-    ).toEqual({
-      create: true,
-      base: 'development',
-      bases: { '/a': 'development', '/b': 'development' },
-      mode: 'grouped',
-      names: { '/a': 'feature-x', '/b': 'feature-x' },
-    });
-  });
-
-  it('individual mode: a per-repoPath name map, and a per-repoPath base map (diverging sharedBranch)', () => {
-    expect(
-      buildCreateBranchOptions(
-        ['/a', '/b'],
-        'individual',
-        'unused',
-        { '/a': 'feature-a', '/b': 'feature-b' },
-        { '/a': 'main', '/b': 'master' },
-        NO_BRANCH_CREATION,
-      ),
-    ).toEqual({
-      create: true,
-      base: 'main',
-      bases: { '/a': 'main', '/b': 'master' },
-      mode: 'individual',
-      names: { '/a': 'feature-a', '/b': 'feature-b' },
-    });
-  });
-});
-
-describe('validateCreateBranchFields (story 2.22, base-branch validation added story 2.27)', () => {
-  it('zero members: nothing to validate', () => {
-    expect(validateCreateBranchFields('grouped', [], '', {}, {})).toBeNull();
-  });
-
-  it('grouped mode: rejects an empty shared name field', () => {
-    expect(validateCreateBranchFields('grouped', ['/a'], '', {}, { '/a': 'development' })).toBe('Branch name must not be empty');
-    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {}, { '/a': 'development' })).toBeNull();
-  });
-
-  it('individual mode: rejects if any selected member is missing a name', () => {
-    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a' }, { '/a': 'development', '/b': 'development' })).toBe(
-      'Branch name must not be empty',
-    );
-    expect(
-      validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a', '/b': 'feature-b' }, { '/a': 'development', '/b': 'development' }),
-    ).toBeNull();
-  });
-
-  it('rejects an empty base-branch field before ever checking the name field(s)', () => {
-    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {}, { '/a': '' })).toBe('Base branch: Branch name must not be empty');
-  });
-});
-
-describe('resolveBaseBranchMode (story 2.27)', () => {
-  it('a single selected member is always "shared"', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(resolveBaseBranchMode(['/a'], candidates)).toBe('shared');
-  });
-
-  it('>=2 members with a unanimous sharedBranch stay "shared"', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'main' })];
-    expect(resolveBaseBranchMode(['/a', '/b'], candidates)).toBe('shared');
-  });
-
-  it('>=2 members with a diverging sharedBranch are forced "per-member"', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'master' })];
-    expect(resolveBaseBranchMode(['/a', '/b'], candidates)).toBe('per-member');
-  });
-});
-
-describe('suggestBaseBranchFor (story 2.27)', () => {
-  it("suggests the repo's own manifest-declared sharedBranch, never a hardcoded literal", () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(suggestBaseBranchFor('/a', candidates)).toBe('main');
-  });
-
-  it('falls back to an empty string when the path is not among the known candidates', () => {
-    expect(suggestBaseBranchFor('/unknown', [])).toBe('');
-  });
-});
-
-describe('prefillBaseBranches (story 2.27)', () => {
-  it('single repo: fills the shared field from that repo\'s own sharedBranch when untouched', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(prefillBaseBranches(['/a'], candidates, '', {}, false, {})).toEqual({
-      baseBranch: 'main',
-      baseBranches: { '/a': 'main' },
-    });
-  });
-
-  it('never overwrites a value the developer already typed (touched)', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(prefillBaseBranches(['/a'], candidates, 'my-custom-base', {}, true, {})).toEqual({
-      baseBranch: 'my-custom-base',
-      baseBranches: { '/a': 'main' },
-    });
-  });
-
-  it('fills every untouched selected member from its own sharedBranch, leaves touched entries untouched', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'master' })];
-    expect(prefillBaseBranches(['/a', '/b'], candidates, '', { '/a': 'kept' }, false, { '/a': true })).toEqual({
-      baseBranch: 'main',
-      baseBranches: { '/a': 'kept', '/b': 'master' },
-    });
-  });
-});
-
 describe('isSwitchBlockedError', () => {
   it('matches only the lock-block error code', () => {
     expect(isSwitchBlockedError('switch-blocked-action-in-progress')).toBe(true);
@@ -1272,22 +1064,30 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('No registered services available.');
   });
 
-  it('story 2.36: the Step 4 recap shows each service\'s own branch and base in individual mode', async () => {
-    const candidates = [service({ service: 'api-gateway', path: '/repos/api-gateway' }), service({ service: 'billing', path: '/repos/billing' })];
+  it("story 2.37: the Step 4 recap shows each service's row (mode, base, target) from Step 3", async () => {
+    const candidates = [
+      service({ service: 'api-gateway', path: '/repos/api-gateway', sharedBranch: 'development' }),
+      service({ service: 'billing', path: '/repos/billing', sharedBranch: 'main' }),
+    ];
+    const ready = { status: 'ready' as const, local: ['development', 'main'], remote: [] };
+    const base = initialCreateDialog();
     const dialog = {
-      ...initialCreateDialog(),
+      ...base,
       step: 4 as const,
       topic: ' auth-flow ',
       selectedMembers: ['/repos/api-gateway', '/repos/billing'],
-      namingMode: 'individual' as const,
-      branchNames: { '/repos/api-gateway': 'feat/gw', '/repos/billing': 'feat/bill' },
-      baseBranches: { '/repos/api-gateway': 'development', '/repos/billing': 'main' },
+      branches: {
+        ...base.branches,
+        globalName: { value: 'auth-flow', cursor: 9 },
+        lists: { '/repos/api-gateway': ready, '/repos/billing': ready },
+        overrides: { '/repos/billing': { kind: 'existing' as const, branch: 'feat/bill', renameTo: 'feat/b2' } },
+      },
     };
     const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} />);
     expect(output).toContain('Nom : auth-flow');
     expect(output).toContain('Services : api-gateway, billing');
-    expect(output).toContain('api-gateway : feat/gw (depuis development)');
-    expect(output).toContain('billing : feat/bill (depuis main)');
+    expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
+    expect(output).toContain('billing : [Renommer] feat/bill -> feat/b2');
     expect(output).toContain("[Entrée] Créer l'EDT");
 
     const acknowledged = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} showConfirm={false} />);

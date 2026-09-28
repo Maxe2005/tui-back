@@ -97,4 +97,6 @@ export const KEYS = {
   // 'p' = 0x10, same codepoint-1..26 encoding as ctrlW above).
   ctrlN: '\x0e',
   ctrlP: '\x10',
+  // Story 2.37: the create wizard's override-box revert ('r' = 0x12).
+  ctrlR: '\x12',
 } as const;
