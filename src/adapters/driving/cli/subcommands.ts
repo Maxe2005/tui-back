@@ -168,6 +168,9 @@ export function buildSubcommands(deps: {
             runMigrations: true,
             cleanRestart: false,
             onUpdateBlocker: undefined,
+            // Story 3.10: the CLI takes no live observer either — no new flags, and the
+            // single-line JSON output is unchanged.
+            onPhase: undefined,
           });
         }
         const sorted = [...args].sort();
@@ -187,6 +190,8 @@ export function buildSubcommands(deps: {
             runMigrations: true,
             cleanRestart: false,
             onUpdateBlocker: undefined,
+            // Story 3.10: same no-observer wiring as above.
+            onPhase: undefined,
           });
         }
         if (args.length === 1 && args[0] === '--all') {

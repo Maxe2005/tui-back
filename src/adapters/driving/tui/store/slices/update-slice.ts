@@ -7,17 +7,20 @@ import type { StateCreator } from 'zustand';
 import {
   groupUpdate as groupUpdateUseCase,
   markGroupUpdateInterrupted as markGroupUpdateInterruptedUseCase,
+  MIGRATION_FAILED_CODE,
   type GroupUpdateRepoResult,
   type GroupUpdateScope,
   type GroupUpdateSelectionItem,
+  type OnUpdatePhase,
   type UpdateBlocker,
   type UpdateBlockerChoice,
+  type UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
 import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
 import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
-import { mergeLastServiceOutcomes } from '../../zones/update/update-zone.logic.js';
+import { mergeLastServiceOutcomes, type ServiceIssue } from '../../zones/update/update-zone.logic.js';
 import {
   confirmUpdateConfigDraft,
   createUpdateConfigDraft,
@@ -70,6 +73,17 @@ export type UpdateSlice = {
   // driving side owns only menu rendering and the editor process.
   updateBlocker: UpdateBlocker | null;
   resolveUpdateBlocker: (choice: UpdateBlockerChoice) => void;
+  // Story 3.10: the live per-service run tracking. `liveServicePhase` holds the current
+  // step core's `onPhase` observer reported per service (cleared when the run lands);
+  // `liveServiceIssues` holds the per-service issue log — a blocker firing appends an
+  // unresolved entry, the next phase for that service flips its unresolved entries to
+  // resolved (core resumed, so the re-verify passed; a failed re-verify never emits the
+  // next phase), and a mid-run migration failure appends an unresolved `migration-failed`
+  // entry at completion. Both maps are cleared per run (at start, and on top-level
+  // error); the issue map additionally survives completion so a migration failure that
+  // ended its service mid-run stays inspectable until the next run clears it.
+  liveServicePhase: Record<string, UpdatePhase>;
+  liveServiceIssues: Record<string, ServiceIssue[]>;
   // Starts the core use-case in-process. A no-op-with-signal guard, not a throw, when the
   // store is unwired; a second call while a run is already in flight reports
   // `update-already-running` so double-Enter gives feedback instead of silence.
@@ -136,6 +150,32 @@ export type UpdateSlice = {
   startUpdateHealthPolling: (repoPaths: readonly string[]) => void;
   stopUpdateHealthPolling: () => void;
 };
+
+// Story 3.10: appends an unresolved issue entry for a service, deduped — a re-presented
+// menu for the same still-blocked kind (core loops the seam until re-verification passes)
+// must not stack duplicate rows; the single entry flips to resolved once the run resumes.
+function appendLiveIssue(
+  issues: Record<string, ServiceIssue[]>,
+  service: string,
+  issue: ServiceIssue,
+): Record<string, ServiceIssue[]> {
+  const existing = issues[service] ?? [];
+  if (existing.some((entry) => entry.kind === issue.kind && !entry.resolved)) {
+    return issues;
+  }
+  return { ...issues, [service]: [...existing, issue] };
+}
+
+// Story 3.10: marks a service's unresolved entries resolved — called when core emits the
+// service's next phase, which only happens after a passing re-verification (a failed
+// re-verify re-presents the menu instead of advancing the pipeline).
+function resolveLiveIssues(issues: Record<string, ServiceIssue[]>, service: string): Record<string, ServiceIssue[]> {
+  const existing = issues[service];
+  if (existing === undefined || existing.every((entry) => entry.resolved)) {
+    return issues;
+  }
+  return { ...issues, [service]: existing.map((entry) => (entry.resolved ? entry : { ...entry, resolved: true })) };
+}
 
 export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], UpdateSlice> {
   // Story 3.4: the pending seam promise's resolver — installed when core raises a blocker,
@@ -397,6 +437,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateUlid: null,
       updateScope: null,
       updateBlocker: null,
+      liveServicePhase: {},
+      liveServiceIssues: {},
       resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
         const resolve = pendingBlockerResolve;
         pendingBlockerResolve = null;
@@ -438,6 +480,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateUlid: null,
           updateScope: scope,
           updateBlocker: null,
+          // Story 3.10: a fresh run starts with a fresh live view — stale phases and
+          // resolved/unresolved entries from the previous run never leak into this one.
+          liveServicePhase: {},
+          liveServiceIssues: {},
         });
         pendingBlockerResolve = null;
         get().setRunInProgress(true);
@@ -464,35 +510,84 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             // Story 3.4: the TUI backs the assisted-resolution seam — core pauses the run on
             // each dirty/conflicted repo and waits here while the zone's modal menu collects
             // the developer's choice (stash / open in editor / cancel repo / cancel run).
+            // Story 3.10: raising the menu also appends the live issue-log entry (unresolved
+            // until the run re-verifies and moves on).
             onUpdateBlocker: async (blocker) => {
-              set({ updateBlocker: blocker });
+              set((state) => ({
+                updateBlocker: blocker,
+                liveServiceIssues: appendLiveIssue(state.liveServiceIssues, blocker.service, {
+                  kind: blocker.kind,
+                  detail: blocker.repoPath,
+                  resolved: false,
+                }),
+              }));
               return new Promise<UpdateBlockerChoice>((resolve) => {
                 pendingBlockerResolve = resolve;
               });
             },
+            // Story 3.10: the TUI backs the live-phase observer — core reports each
+            // service's current step at its phase boundaries. The next phase for a service
+            // implies its re-verification passed, so its unresolved entries flip to
+            // resolved here (a failed re-verify never advances the pipeline).
+            onPhase: ((service: string, phase: UpdatePhase) => {
+              set((state) => ({
+                liveServicePhase: { ...state.liveServicePhase, [service]: phase },
+                liveServiceIssues: resolveLiveIssues(state.liveServiceIssues, service),
+              }));
+            }) satisfies OnUpdatePhase,
           });
           if (result.ok) {
-            set((state) => ({
-              updateStatus: 'done',
-              updateResults: result.data.results,
-              updateNote: result.data.note ?? null,
-              updateTopic: result.data.topic,
-              updateUlid: result.data.ulid,
-              updateScope: result.data.scope,
-              // Story 3.6: merged, never wholesale-replaced — a partial-scope run (a single
-              // EDT) must never drop another service's earlier outcome.
-              lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, result.data.results),
-            }));
+            set((state) => {
+              // Story 3.10: a migration failure ends its service mid-run while the run
+              // continues — core reports it only in the final rows, so the unresolved
+              // `migration-failed` entries are derived here at completion (the detail pane
+              // itself reverts to the final-outcome view; the entries stay inspectable in
+              // the map until the next run clears them).
+              let liveServiceIssues = state.liveServiceIssues;
+              for (const row of result.data.results) {
+                if (row.outcome === 'failed' && row.detail?.code === MIGRATION_FAILED_CODE) {
+                  liveServiceIssues = appendLiveIssue(liveServiceIssues, row.service, {
+                    kind: 'migration-failed',
+                    detail: row.detail.message,
+                    resolved: false,
+                  });
+                }
+              }
+              return {
+                updateStatus: 'done',
+                updateResults: result.data.results,
+                updateNote: result.data.note ?? null,
+                updateTopic: result.data.topic,
+                updateUlid: result.data.ulid,
+                updateScope: result.data.scope,
+                // Story 3.10: the live step clears with the run — revisiting a covered
+                // service shows the final per-service outcome (the 3.6 idle view).
+                liveServicePhase: {},
+                liveServiceIssues,
+                // Story 3.6: merged, never wholesale-replaced — a partial-scope run (a single
+                // EDT) must never drop another service's earlier outcome.
+                lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, result.data.results),
+              };
+            });
           } else {
             set({
               updateStatus: 'error',
               updateError: result.error.message,
               updateErrorCode: result.error.code,
+              // Story 3.10: a top-level rejection ran nothing — no live state survives it.
+              liveServicePhase: {},
+              liveServiceIssues: {},
             });
           }
         } catch (error) {
           const detail = error instanceof Error ? error.message : String(error);
-          set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
+          set({
+            updateStatus: 'error',
+            updateError: detail,
+            updateErrorCode: 'internal-error',
+            liveServicePhase: {},
+            liveServiceIssues: {},
+          });
         } finally {
           // A run that threw while a blocker was still raised (a rejecting fake port under a
           // test, a truly unexpected failure in production) must not leave the menu raised
@@ -635,6 +730,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           set({ updateStatus: 'idle', updateError: null, updateErrorCode: null });
         }
         set((state) => ({ serviceRestartInFlight: { ...state.serviceRestartInFlight, [key]: 'restart' as const } }));
+        // Story 3.10: the standalone path reports through the same live-phase channel —
+        // the emitted service name is captured so only this service's key is cleared below
+        // (a group run can never be in flight alongside, per the guards above).
+        let restartService: string | null = null;
         try {
           const result = await serviceRestartUseCase({
             manifest: deps.manifest,
@@ -642,6 +741,22 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             restart: deps.restart,
             lock: deps.lock,
             repoPath,
+            onPhase: ((service: string, phase: UpdatePhase) => {
+              restartService = service;
+              set((state) => {
+                const liveServicePhase = { ...state.liveServicePhase, [service]: phase };
+                // Story 3.10 review fix: a standalone restart opens with a fresh issue
+                // log for its service — stale group-run entries never render under its
+                // live step. The use-case emits exactly once (at the restart boundary),
+                // so resetting on emission is start-scoped, never mid-run.
+                if (state.liveServiceIssues[service] === undefined) {
+                  return { liveServicePhase };
+                }
+                const liveServiceIssues = { ...state.liveServiceIssues };
+                delete liveServiceIssues[service];
+                return { liveServicePhase, liveServiceIssues };
+              });
+            }) satisfies OnUpdatePhase,
           });
           if (result.ok) {
             set((state) => ({
@@ -664,7 +779,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             }
             const next = { ...state.serviceRestartInFlight };
             delete next[key];
-            return { serviceRestartInFlight: next };
+            // Story 3.10: the standalone live step clears with its action.
+            if (restartService === null || state.liveServicePhase[restartService] === undefined) {
+              return { serviceRestartInFlight: next };
+            }
+            const phases = { ...state.liveServicePhase };
+            delete phases[restartService];
+            return { serviceRestartInFlight: next, liveServicePhase: phases };
           });
         }
       },
@@ -720,6 +841,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateBlocker: null,
           updateConfig: null,
           serviceRestartInFlight: {},
+          liveServicePhase: {},
+          liveServiceIssues: {},
         }),
 
       updateServiceHealth: {},

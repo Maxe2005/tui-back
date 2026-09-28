@@ -35,7 +35,7 @@ import {
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
-import { deriveUpdateServiceStatus, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import {
@@ -310,6 +310,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const loadEdts = useStore((state) => state.loadEdts);
   const updateServiceHealth = useStore((state) => state.updateServiceHealth);
   const lastServiceOutcomes = useStore((state) => state.lastServiceOutcomes);
+  const liveServicePhase = useStore((state) => state.liveServicePhase);
+  const liveServiceIssues = useStore((state) => state.liveServiceIssues);
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
   const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
   const ratio = useStore((state) => state.splitterRatios.update);
@@ -588,6 +590,25 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const selectedLastOutcome = selectedServiceRow !== undefined ? lastServiceOutcomes[selectedServiceRow.service] : undefined;
 
+  // Story 3.10: the live per-service view — while a run targets the selected service the
+  // detail pane shows its current step plus the issue log (resolved/unresolved) instead
+  // of the last-outcome view; afterwards it reverts to the final outcome. A standalone
+  // restart reports through the same channel, so its in-flight step renders live too —
+  // before its first emission the formatter reports `starting`, never a stale outcome.
+  const selectedLivePhase = selectedServiceRow !== undefined ? liveServicePhase[selectedServiceRow.service] : undefined;
+  const selectedLiveIssues = selectedServiceRow !== undefined ? (liveServiceIssues[selectedServiceRow.service] ?? []) : [];
+  const isSelectedTargeted =
+    selectedServiceRow !== undefined && updateStatus === 'running' && (isAllRun || runningMemberPaths.has(selectedServiceRow.path));
+  const isSelectedRestarting =
+    selectedServiceRow !== undefined && serviceRestartInFlight[resolvePath(selectedServiceRow.path)] !== undefined;
+  const showLiveDetail = isSelectedTargeted || isSelectedRestarting;
+  const detailBody =
+    selectedServiceRow === undefined
+      ? 'No service selected.'
+      : showLiveDetail
+        ? formatLiveServiceDetail(selectedLivePhase, selectedLiveIssues)
+        : formatServiceOutcomeDetail(selectedLastOutcome);
+
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       {/* Review fix: only the title line carries the pre-3.6 left padding back — the outer
@@ -621,8 +642,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 const isTargeted = updateStatus === 'running' && (isAllRun || runningMemberPaths.has(row.path));
                 // Story 3.9: the coarse standalone-restart flag — the in-flight map holds
                 // this service's resolved repoPath for the duration, no step detail.
+                // Story 3.10: the live phase for this service refines the glyph — the
+                // migrate step finally produces `migrating`.
                 const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
-                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting);
+                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
                 return (
                   <Box key={row.path} flexDirection="row">
                     <StatusBadge state={status} />
@@ -638,7 +661,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         detail={
           <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>
-              {selectedServiceRow !== undefined ? formatServiceOutcomeDetail(selectedLastOutcome) : 'No service selected.'}
+              {detailBody}
             </DetailPane>
             {updateStatus === 'running' ? (
               <Box flexDirection="column">

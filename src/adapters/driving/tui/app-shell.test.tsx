@@ -432,6 +432,9 @@ it('shouldQuit returns true for q', () => {
         lastServiceOutcomes: {},
         startUpdateHealthPolling: () => {},
         stopUpdateHealthPolling: () => {},
+        // Story 3.10: live per-service run tracking + issue log
+        liveServicePhase: {},
+        liveServiceIssues: {},
         // Story 5.1: Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],
