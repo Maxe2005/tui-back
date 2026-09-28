@@ -151,14 +151,14 @@ development_status:
   2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: done
   2-28-registry-manifest-semantic-validation: backlog
   2-29-delete-an-edt: done
-  2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: review
+  2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: done
   2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
   2-32-text-input-line-cursor-navigation-app-wide-adoption: done
   2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: done
   2-34-edt-zone-colored-explained-service-listing-issues: done
   2-35-edt-creation-core-per-service-branch-plans-remote-branches: done
   2-36-edt-creation-wizard-shell-step-navigation-name-services-steps: done
-  2-37-edt-creation-wizard-step-3-global-branch-strategy-per-service-overrides: review
+  2-37-edt-creation-wizard-step-3-global-branch-strategy-per-service-overrides: done
   2-38-edt-creation-wizard-step-4-activation-switch-choice: backlog
   2-39-edt-switch-core-three-state-partition-dirty-service-resolutions: backlog
   2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
