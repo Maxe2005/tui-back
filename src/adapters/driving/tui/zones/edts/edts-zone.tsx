@@ -19,7 +19,7 @@
 // This file holds the Ink component only — the pure formatting/selection/form-focus logic
 // and the 5 dialogs' state shapes/initializers live in edts-zone.logic.ts (kept in one place
 // so the component here stays scannable; see that file's own header for why).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -68,7 +68,13 @@ import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-d
 import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
-import { autoStashedRepos, initialSwitchResolution, otherEdtBranches, resolutionRepos } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import {
+  autoStashedRepos,
+  initialSwitchResolution,
+  otherEdtBranches,
+  resolutionRepos,
+  type LocalBranchList,
+} from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // Story 5.5: rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above
 // the splitter, both section headers, and the loading/error/issues lines) subtracted from the
@@ -512,6 +518,7 @@ export function EdtsZone({
   // a fresh draft — the outgoing EDT is the store's active one (null on a first switch) — and
   // load each state-2/3 repo's local branch list once (listMemberBranches, via the store), for
   // the advisory "already exists" check. Keyed on primitives, never on the dialog object.
+  const switchResolutionDraftCounter = useRef(0);
   const switchResolutionNeeded = dialog.kind === 'switch-confirm' && switchDirtyRepos !== null && dialog.resolution === null;
   useEffect(() => {
     if (!switchResolutionNeeded || switchDirtyRepos === null) {
@@ -522,22 +529,34 @@ export function EdtsZone({
     // Story 2.41 review: branches other EDTs register per repo, so a row sitting on one is
     // retargeted to the global name and such a name is rejected inline.
     const claims = otherEdtBranches(edtsRows, activeEdtUlid);
+    // Story 2.41 review: each draft is tagged, so a late list load from an earlier attempt
+    // never lands in a newer draft; a rejected load settles as 'error', never stuck 'loading'.
+    switchResolutionDraftCounter.current += 1;
+    const draftId = switchResolutionDraftCounter.current;
     setDialog((prev) =>
       prev.kind === 'switch-confirm' && prev.resolution === null
-        ? { ...prev, resolution: initialSwitchResolution(outgoingTopic, dirty, claims) }
+        ? { ...prev, resolution: initialSwitchResolution(outgoingTopic, dirty, claims, draftId) }
         : prev,
     );
     for (const repo of resolutionRepos(dirty)) {
       const repoPath = repo.repoPath;
-      void listBranchesAction(repoPath).then((result) => {
+      const apply = (list: LocalBranchList) => {
         setDialog((prev) => {
-          if (prev.kind !== 'switch-confirm' || prev.resolution === null || prev.resolution.lists[repoPath]?.status !== 'loading') {
+          if (
+            prev.kind !== 'switch-confirm' ||
+            prev.resolution === null ||
+            prev.resolution.draftId !== draftId ||
+            prev.resolution.lists[repoPath]?.status !== 'loading'
+          ) {
             return prev;
           }
-          const list = result.ok ? { status: 'ready' as const, branches: result.data } : { status: 'error' as const, branches: [] };
           return { ...prev, resolution: { ...prev.resolution, lists: { ...prev.resolution.lists, [repoPath]: list } } };
         });
-      });
+      };
+      listBranchesAction(repoPath).then(
+        (result) => apply(result.ok ? { status: 'ready', branches: result.data } : { status: 'error', branches: [] }),
+        () => apply({ status: 'error', branches: [] }),
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switchResolutionNeeded]);

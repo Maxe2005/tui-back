@@ -75,6 +75,9 @@ export type SwitchResolutionBox = {
 export type SwitchResolutionDecision = { kind: 'cancel' } | { kind: 'proceed'; resolutions: Record<string, DirtyResolution> };
 
 export type SwitchResolutionState = {
+  // Identifies this draft (one per seam raise): an async branch-list load started for an
+  // earlier draft never writes into a newer one.
+  draftId: number;
   // The EDT being left; null on a first switch (nothing to adopt into).
   outgoingTopic: string | null;
   panel: 'global' | 'rows';
@@ -133,6 +136,7 @@ export function initialSwitchResolution(
   outgoingTopic: string | null,
   dirty: readonly SwitchDirtyRepo[],
   claims: OtherEdtBranches = {},
+  draftId = 0,
 ): SwitchResolutionState {
   const name = outgoingTopic !== null ? suggestBranchNameFromTopic(outgoingTopic) : '';
   const lists: Record<string, LocalBranchList> = {};
@@ -140,6 +144,7 @@ export function initialSwitchResolution(
     lists[repo.repoPath] = { status: 'loading', branches: [] };
   }
   return {
+    draftId,
     outgoingTopic,
     panel: 'global',
     globalLine: 'action',
