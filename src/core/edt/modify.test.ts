@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ulid as generateUlid } from 'ulid';
 import { stringify } from 'yaml';
-import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches } from './modify.js';
+import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches, addMemberUnderLock } from './modify.js';
 import type { ModifyEdtResult, ModifyEdtData } from './modify.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { ManifestPort } from '../ports/manifest.js';
@@ -681,5 +681,96 @@ describe('listMemberBranches (story 2.26)', () => {
     const result = await listMemberBranches(git, '/repos/a');
 
     expect(result).toEqual({ ok: true, data: ['development', 'feature-x'] });
+  });
+});
+describe('addMemberUnderLock (story 2.39)', () => {
+  const base = { ulid: '01JOUT', topic: 'out', createdAt: '2026-09-28T00:00:00.000Z', status: 'active' as const };
+  const existing = { service: 'a', repoPath: '/repos/a', branch: 'feat/a' };
+
+  function fakeLock(events: string[]): any {
+    return {
+      acquire: async (key: string) => {
+        events.push(`acquire:${key}`);
+        return ok({ release: async () => { events.push('release'); return ok(undefined); } });
+      },
+      peek: async () => ok({ locked: false }),
+    };
+  }
+
+  it('appends the member under the edts.yaml lock, re-reading the authoritative list, never touching git', async () => {
+    const events: string[] = [];
+    const updates: Array<{ ulid: string; patch: any }> = [];
+    const edtRegistry: any = {
+      list: async () => {
+        events.push('list');
+        return ok([{ ...base, members: [existing] }]);
+      },
+      update: async (ulid: string, patch: any) => {
+        events.push('update');
+        updates.push({ ulid, patch });
+        return ok(undefined);
+      },
+    };
+
+    const result = await addMemberUnderLock({
+      edtRegistry,
+      lock: fakeLock(events),
+      edtRegistryResourceKey: '/cfg/edts.yaml',
+      edt: { ...base, members: [] },
+      member: { service: 'b', repoPath: '/repos/b/', branch: 'feat/b' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(events).toEqual(['acquire:/cfg/edts.yaml', 'list', 'update', 'release']);
+    expect(updates).toEqual([
+      { ulid: '01JOUT', patch: { topic: 'out', members: [existing, { service: 'b', repoPath: '/repos/b', branch: 'feat/b' }] } },
+    ]);
+  });
+
+  it('is a no-op add when a racing writer already registered the same repo (no duplicate)', async () => {
+    const updates: any[] = [];
+    const edtRegistry: any = {
+      list: async () => ok([{ ...base, members: [existing] }]),
+      update: async (_ulid: string, patch: any) => {
+        updates.push(patch);
+        return ok(undefined);
+      },
+    };
+
+    const result = await addMemberUnderLock({
+      edtRegistry,
+      lock: fakeLock([]),
+      edtRegistryResourceKey: 'k',
+      edt: { ...base, members: [] },
+      member: { service: 'a', repoPath: '/repos/a', branch: 'other' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updates[0].members).toEqual([existing]);
+  });
+
+  it('propagates a write failure and an unknown EDT', async () => {
+    const failing: any = {
+      list: async () => ok([{ ...base, members: [] }]),
+      update: async () => err('edt-registry-write-error', 'disk full'),
+    };
+    const written = await addMemberUnderLock({
+      edtRegistry: failing,
+      lock: fakeLock([]),
+      edtRegistryResourceKey: 'k',
+      edt: { ...base, members: [] },
+      member: { service: 'b', repoPath: '/repos/b', branch: 'feat/b' },
+    });
+    expect(written).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
+
+    const gone: any = { list: async () => ok([]), update: async () => ok(undefined) };
+    const missing = await addMemberUnderLock({
+      edtRegistry: gone,
+      lock: fakeLock([]),
+      edtRegistryResourceKey: 'k',
+      edt: { ...base, members: [] },
+      member: { service: 'b', repoPath: '/repos/b', branch: 'feat/b' },
+    });
+    expect(missing).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
   });
 });
