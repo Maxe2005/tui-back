@@ -11,6 +11,7 @@ import {
   needsResultsView,
   reduceSwitchResolutionKey,
   RESOLUTION_ERRORS,
+  SWITCH_RESOLUTION_FOOTER,
   validateRow,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
@@ -59,6 +60,10 @@ function type(text: string): Array<[string, TextEditKey]> {
 }
 
 describe('switch-resolution rows (story 2.41)', () => {
+  it('pins the AC footer verbatim', () => {
+    expect(SWITCH_RESOLUTION_FOOTER).toBe('[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch');
+  });
+
   it('global adopt: a shared-branch repo targets the outgoing slug, a non-shared one keeps its branch; state-1 rows are left out', () => {
     const state = initialSwitchResolution('Mon Topic', DIRTY);
     const rows = buildRows(DIRTY, globalOf(state));

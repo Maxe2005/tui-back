@@ -7,12 +7,14 @@
 import type { MemberBranchPlan } from '../../../../../core/edt/create.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
+import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // A fixed max width (the spec's "ellipsizes past a fixed max width") — generous enough for
 // most feature-branch naming conventions while keeping the list column narrow. The full,
@@ -659,6 +661,12 @@ export type SwitchDialogState = {
   error: string | null;
   failedRows: FailedResultRow[];
   blocked: boolean;
+  // Story 2.41: the dirty-service resolution draft, non-null while the core switch is parked on
+  // the edt-slice seam (initialized by the zone when `switchDirtyRepos` turns non-null).
+  resolution: SwitchResolutionState | null;
+  // Story 2.41: an ok switch that adopted/discarded/failed anything keeps the dialog open on
+  // this per-repo summary (Enter/Esc close it); an all-`switched` run closes as before.
+  results?: SwitchEdtRepoResult[];
 };
 
 // Story 2.26: a live branch-picker session, opened over any of the 3 non-creation branch-entry
@@ -910,7 +918,7 @@ export function initialCreateDialog(): CreateDialogState {
 }
 
 export function initialSwitchDialog(target: EdtRegistryEntry): SwitchDialogState {
-  return { kind: 'switch-confirm', target, submitting: false, error: null, failedRows: [], blocked: false };
+  return { kind: 'switch-confirm', target, submitting: false, error: null, failedRows: [], blocked: false, resolution: null };
 }
 
 export function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {

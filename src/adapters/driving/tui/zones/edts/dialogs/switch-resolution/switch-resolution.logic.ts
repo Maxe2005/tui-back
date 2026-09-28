@@ -361,7 +361,12 @@ export function reduceSwitchResolutionKey(
       return { ...state, confirm: null };
     }
     if (key.upArrow || key.downArrow) {
-      return { ...state, confirm: { scroll: Math.max(state.confirm.scroll + (key.downArrow ? 1 : -1), 0) } };
+      // One line per discarded service plus one per file (the view's discardConfirmLines).
+      const lineCount = rows
+        .filter((row) => row.plan.kind === 'discard')
+        .reduce((total, row) => total + 1 + (row.repo.dirtyPaths?.length ?? 0), 0);
+      const scroll = Math.min(Math.max(state.confirm.scroll + (key.downArrow ? 1 : -1), 0), Math.max(lineCount - 1, 0));
+      return { ...state, confirm: { scroll } };
     }
     return state;
   }

@@ -99,4 +99,6 @@ export const KEYS = {
   ctrlP: '\x10',
   // Story 2.37: the create wizard's override-box revert ('r' = 0x12).
   ctrlR: '\x12',
+  // Story 2.41: the switch discard confirmation's explicit confirm key ('e' = 0x05).
+  ctrlE: '\x05',
 } as const;
