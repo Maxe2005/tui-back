@@ -2,7 +2,7 @@
 title: 'EDT Switch Resolution Dialog — Global Strategy, Per-Service Overrides & Discard Confirmation'
 type: 'feature'
 created: '2026-09-28'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 context: []
 baseline_commit: '588856b1cdda5421bd18befad43e666bec699161'
@@ -122,3 +122,69 @@ The box's branch field is pre-filled with that computed target. Validation runs 
 
 **Manual checks:**
 - TUI: switch with a dirty non-member → adopt globally → the repo lands in the outgoing EDT. Switch again → Écraser → the confirmation lists the files → confirm → the files are gone and ignored files are kept.
+
+## Suggested Review Order
+
+**Resolution model (the decision point)**
+
+- Entry point: the pure key reducer that drives panels, box, confirmation and the final decision.
+  [`switch-resolution.logic.ts:422`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L422)
+
+- Global adopt target: shared or other-EDT-owned current branch → global name, else keep it.
+  [`switch-resolution.logic.ts:173`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L173)
+
+- Inline validation: empty, protected, unreadable manifest, owned, existing-local, detached HEAD.
+  [`switch-resolution.logic.ts:244`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L244)
+
+- Rows → core resolutions; discards carry the confirmed file list.
+  [`switch-resolution.logic.ts:283`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L283)
+
+- Branches registered by other EDTs, computed as plain data for the pure logic.
+  [`switch-resolution.logic.ts:44`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L44)
+
+**Core safety (approved Ask-First change)**
+
+- Discard refuses when the fresh capture holds a path the user never confirmed.
+  [`switch.ts:572`](../../../src/core/edt/switch.ts#L572)
+
+- Resolution type: optional `confirmedPaths`, never set by the CLI.
+  [`switch.ts:79`](../../../src/core/edt/switch.ts#L79)
+
+- Dirty rows now carry `sharedBranch` and a read-only `dirtyPaths` snapshot.
+  [`switch.ts:438`](../../../src/core/edt/switch.ts#L438)
+
+**UI wiring**
+
+- Seam: keys go to the reducer; the decision resumes the paused core switch.
+  [`switch-dialog.tsx:99`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L99)
+
+- Action log targets the new active EDT with adopted branches and discarded paths.
+  [`switch-dialog.tsx:57`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L57)
+
+- Draft initialised per seam raise; branch-list loads scoped to their draft id.
+  [`edts-zone.tsx:522`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L522)
+
+- Discard confirmation lists every file per service; blocked when the list is unknown.
+  [`switch-resolution-view.tsx:86`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution-view.tsx#L86)
+
+- Main view: Panel A, Panel B through the shared table, dim state-1 rows.
+  [`switch-resolution-view.tsx:144`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution-view.tsx#L144)
+
+**Shared table extraction (behaviour-neutral)**
+
+- Generic bounded table + panel title, reused by wizard Step 3 and the switch view.
+  [`branch-plan-table.tsx:44`](../../../src/adapters/driving/tui/zones/edts/dialogs/branch-plan-table.tsx#L44)
+
+- Step 3 now composes the shared table.
+  [`step-branches.tsx:253`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L253)
+
+**Peripherals**
+
+- Switch-resolution key help rows.
+  [`keybindings.ts:111`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L111)
+
+- Core confirmedPaths tests.
+  [`switch.test.ts:1032`](../../../src/core/edt/switch.test.ts#L1032)
+
+- End-to-end dialog interactions: adopt, discard confirm, cancel/retry, invalid, no outgoing.
+  [`edts-zone.interaction.test.tsx:249`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L249)
