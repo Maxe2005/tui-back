@@ -107,6 +107,9 @@ describe('switch-resolution rows (story 2.41)', () => {
     expect(validateRow(row('taken'), { '/repo/a': { status: 'loading', branches: [] } })).toBeNull();
     const detached = repo({ service: 'svc-d', repoPath: '/repo/d', currentBranch: 'HEAD', currentBranchShared: false });
     expect(validateRow(row('HEAD', detached), {})).toBe(RESOLUTION_ERRORS.detachedHead);
+    expect(RESOLUTION_ERRORS.detachedHead).toBe('HEAD détachée ou branche illisible — seul Écraser est possible');
+    const noManifest = repo({ service: 'svc-m', repoPath: '/repo/m', sharedBranch: null });
+    expect(validateRow(row('fresh', noManifest), {})).toBe('manifeste illisible — impossible de valider la branche ; choisissez Écraser ou annulez');
     expect(validateRow({ repo: detached, hasOutgoing: true, claims: [], plan: { kind: 'discard', source: 'perso' } }, {})).toBeNull();
   });
 

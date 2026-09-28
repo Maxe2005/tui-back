@@ -107,7 +107,9 @@ export const RESOLUTION_MODE_LABELS = {
 } as const;
 
 export const RESOLUTION_ERRORS = {
-  detachedHead: 'HEAD détachée — seul [Écraser] est possible',
+  // `currentBranch === 'HEAD'` also covers a branch core could not read.
+  detachedHead: 'HEAD détachée ou branche illisible — seul Écraser est possible',
+  unreadableManifest: 'manifeste illisible — impossible de valider la branche ; choisissez Écraser ou annulez',
   noOutgoing: 'Aucun EDT sortant — seul [Écraser] est possible',
   blocked: 'Corrigez les lignes invalides avant de confirmer',
 } as const;
@@ -230,7 +232,8 @@ export function claimedBranchError(topic: string): string {
   return `utilisée par l'EDT « ${topic} » — la reprendre casserait cet EDT`;
 }
 
-// Advisory (the git gate stays authoritative). Order: detached HEAD, then empty, protected
+// Advisory (the git gate stays authoritative). Order: detached HEAD, unreadable manifest (no
+// sharedBranch to check against — never a silently weakened check), then empty, protected
 // (FR-7, the same isProtectedTarget rule Step 3 uses), registered by another EDT for this repo,
 // already existing locally (≠ current).
 export function validateAdoptBranch(
@@ -242,11 +245,14 @@ export function validateAdoptBranch(
   if (repo.currentBranch === 'HEAD') {
     return RESOLUTION_ERRORS.detachedHead;
   }
+  if (repo.sharedBranch === null) {
+    return RESOLUTION_ERRORS.unreadableManifest;
+  }
   const name = branch.trim();
   if (name === '') {
     return OVERRIDE_BOX_ERRORS.nameRequired;
   }
-  if (isProtectedTarget(name, repo.sharedBranch ?? '')) {
+  if (isProtectedTarget(name, repo.sharedBranch)) {
     return protectedNameError(name);
   }
   const claim = claimOf(name, claims);
