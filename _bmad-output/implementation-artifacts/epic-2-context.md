@@ -4,7 +4,7 @@
 
 ## Goal
 
-A developer can create, modify, safely switch between, and delete EDTs. An EDT is an isolated coding-session workspace spanning a manually chosen set of managed repos. None of this may ever lose uncommitted work. Every managed repo shows its branch and divergence, and non-member repos are guaranteed to stay on their configured shared branch. This is the first FR-bearing epic after Epic 1's navigation shell. Its branch stayed open long enough to absorb cross-cutting TUI infrastructure (command bar, settings screen, resizable multi-pane layout, structured failure display, text-input primitives). Its final batch (2.35–2.38) replaces the flat create-EDT dialog with a 4-step creation wizard (Name → Services → Branches → Activation). The wizard adds per-service branch plans, attaching remote branches and an explicit activation choice. It also fixes three defects:
+A developer can create, modify, safely switch between, and delete EDTs. An EDT is an isolated coding-session workspace spanning a manually chosen set of managed repos. None of this may ever lose uncommitted work. Every managed repo shows its branch and divergence, and non-member repos are guaranteed to stay on their configured shared branch. This is the first FR-bearing epic after Epic 1's navigation shell. Its branch stayed open long enough to absorb cross-cutting TUI infrastructure (command bar, settings screen, resizable multi-pane layout, structured failure display, text-input primitives). Its final batch (2.35–2.38) replaces the flat create-EDT dialog with a 4-step creation wizard (Name → Services → Branches → Activation). The wizard adds per-service branch plans, attaching remote branches and an explicit activation choice. A second batch (2.39–2.41) replaces the switch's informational dirty-repo confirm with an authoritative three-state model where dirty work outside the outgoing EDT must be explicitly adopted or discarded. The wizard batch also fixes three defects:
 - TUI creates silently became the active EDT.
 - The create log entry was written to the wrong EDT.
 - `renameBranch` did not gate the old name.
@@ -49,6 +49,9 @@ A developer can create, modify, safely switch between, and delete EDTs. An EDT i
 - Story 2.36: EDT creation wizard — shell, step navigation, name & services steps
 - Story 2.37: EDT creation wizard — Step 3: global branch strategy & per-service overrides
 - Story 2.38: EDT creation wizard — Step 4: activation & switch choice
+- Story 2.39: EDT switch core — three-state partition & dirty-service resolutions
+- Story 2.40: `edt switch` CLI — fail-safe dirty handling & explicit flags
+- Story 2.41: EDT switch resolution dialog — global strategy, per-service overrides & discard confirmation
 
 ## Requirements & Constraints
 
@@ -56,7 +59,9 @@ A developer can create, modify, safely switch between, and delete EDTs. An EDT i
 - Every member always gets a branch on the TUI path. One global strategy applies by default: the base is each repo's manifest `sharedBranch` unless one is typed, and the name is the topic slug. Any service can override it: create a branch from its own base, or attach an existing local or remote branch, optionally renamed. The CLI `edt create` keeps its original shape (one base and one naming mode for the whole action), and its behavior and tests must stay unchanged. A failure on one service never aborts the others.
 - A shared/protected branch (`development`, preprod, prod) can never become an EDT's own branch. The tool rejects it with an explanation before any git write, at create, modify, rename or attach time. Renaming a protected branch *away* is refused as well.
 - Switching the active EDT:
-  - auto-preserves uncommitted work everywhere affected;
+  - classifies repos against the **outgoing** EDT: state 1 = outgoing member (dirty → auto-stashed with the outgoing ulid, popped on return); state 2 = member of another EDT only; state 3 = member of no EDT;
+  - a dirty state-2/3 repo needs an explicit resolution — `adopt` (onto a branch registered in the outgoing EDT, never a shared one) or `discard` (consent-gated `reset --hard` + `clean -fd`, ignored files kept); unresolved → `switch-dirty-services-unresolved` with zero writes. The old fixed `tui-back:shared` stash round-trip is removed;
+  - the CLI fails safe by default and takes `--adopt-dirty --adopt-branch <name>` or `--discard-dirty`; the TUI resolves through a two-panel dialog mirroring wizard Step 3;
   - resets non-member repos to their shared branch, fetching it first if it is missing locally;
   - is blocked while a locked action runs on the outgoing EDT, with a stop-and-resume offer.
 - Activation after creation is always explicit, and the store never writes the active pointer on create.
@@ -126,7 +131,8 @@ A developer can create, modify, safely switch between, and delete EDTs. An EDT i
 - Wizard order:
   - 2.35 (core) and 2.36 (shell) can proceed independently of each other.
   - 2.37 **blocks until** 2.35 is done and merged **and** `epic-3-group-update-migrations` is merged into epic-2. That merge brings `BranchAutocompleteInput` and has 4 expected conflicts. It had not happened when this was compiled.
-  - 2.38 needs 2.35, 2.36 and the switch dirty-repo confirm step (`fix-edt-switch-dirty-service-confirmation`, already merged).
+  - 2.38 needs 2.35, 2.36, 2.39 and 2.41 (the switch resolution dialog supersedes the `fix-edt-switch-dirty-service-confirmation` confirm seam); it is sequenced after 2.41.
+  - Switch batch: 2.39 (core) → 2.40 (CLI) and 2.41 (TUI dialog); 2.41 also needs 2.37's reusable table/override-box components.
   - 2.31 comes after 2.30 and 2.37. It pre-selects Step 2 and pre-sets Step 3 rows to `[Créer (Perso)]` from the root EDT.
   - Until 2.37 and 2.38 land, Steps 3 and 4 keep today's branch setup and plain confirm, so the epic branch stays shippable.
 - Epics 3–5 depend on this epic's git safety gate and its assisted-resolution mechanism. The deferred "Restart" action depends on Epic 5 (Story 5.3). Merging epic-3 into epic-2 means the epic-2 → `devlopment` PR will also carry Stories 3.6–3.8.
