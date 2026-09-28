@@ -74,6 +74,11 @@ import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-d
 // raw window size before either service list's own BoundedList ever sees it — mirrors
 // logs-zone.tsx's own CHROME_ROWS ("an approximation is fine here").
 const EDTS_SERVICE_LISTS_CHROME_ROWS = 12;
+// Story 2.37: rows the create wizard spends around Step 3's Panel B table — modal border and
+// title, breadcrumb, intro, Panel A (title + 2 lines + a field's edit hint), Panel B title and
+// column header, the blocked-row detail line, Step 3 footer, error line and the wizard footer.
+// An approximation, as above.
+const CREATE_WIZARD_CHROME_ROWS = 17;
 
 export function EdtsZone({
   useStore = useAppStore,
@@ -134,6 +139,8 @@ export function EdtsZone({
   // still never touched directly from this zone — these wrap core/edt/modify.ts's
   // listMemberBranches/createMemberBranch/renameMemberBranch exports).
   const listBranchesAction = useStore((state) => state.listBranches);
+  // Story 2.37: the create wizard's Step 3 per-service lists (local + remote-tracking refs).
+  const listCreateBranchesAction = useStore((state) => state.listCreateBranches);
   const createMemberBranchAction = useStore((state) => state.createMemberBranch);
   const renameBranchAction = useStore((state) => state.renameBranch);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
@@ -309,6 +316,8 @@ export function EdtsZone({
   // a short EDT SERVICES list leaves more room for OTHER SERVICES.
   const windowSize = useWindowSize();
   const servicesListsAvailableHeight = Math.max(windowSize.rows - EDTS_SERVICE_LISTS_CHROME_ROWS, 4);
+  // Story 2.37 (NFR-7): the create wizard's Step 3 table budget, same live pattern as above.
+  const createWizardTableMaxRows = Math.max(windowSize.rows - CREATE_WIZARD_CHROME_ROWS, 3);
   const edtServicesMaxVisibleRows = servicesListsAvailableHeight;
   // Review fix: an empty EDT SERVICES list still renders a 1-row placeholder ("No services in
   // this EDT.") instead of the BoundedList's own 0 rows — `Math.min(edtServices.length, …)` was
@@ -354,13 +363,10 @@ export function EdtsZone({
   // "fetched on the relevant change, not continuously re-synced" convention. A stale response
   // (the picker closed, or a different repoPath's session opened, before this resolved) is
   // dropped rather than applied.
-  // Story 2.27: extended to also key off dialog.kind === 'create' — the create-EDT dialog's
-  // own base-branch step now opens the same kind of session and needs its own listBranches
-  // fetch through this exact effect, not a second parallel one.
+  // Story 2.37: the create wizard no longer opens a picker session — its Step 3 lists load
+  // through the wizard's own loadPendingBranchLists (effect below).
   const activeBranchPicker =
-    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' || dialog.kind === 'create'
-      ? dialog.branchPicker
-      : null;
+    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' ? dialog.branchPicker : null;
   // Keyed on repoPath/branchesStatus (primitives) rather than the activeBranchPicker object
   // itself — that object is freshly spread on every keystroke inside the picker (session.state
   // updates), which would otherwise re-fire this effect (and spawn a new listBranches() git
@@ -379,7 +385,7 @@ export function EdtsZone({
         return;
       }
       setDialog((prev) => {
-        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt' && prev.kind !== 'create') {
+        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt') {
           return prev;
         }
         if (prev.branchPicker === null || prev.branchPicker.repoPath !== repoPath || prev.branchPicker.branchesStatus !== 'loading') {
@@ -491,7 +497,7 @@ export function EdtsZone({
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
   });
-  const { handleCreateInput } = createCreateWizardHandlers({
+  const { handleCreateInput, loadPendingBranchLists, handleCancelRequest } = createCreateWizardHandlers({
     setDialog,
     createEdtAction,
     loadEdts,
@@ -502,7 +508,37 @@ export function EdtsZone({
     focusedEdt,
     edtsRows,
     candidates,
+    listCreateBranches: listCreateBranchesAction,
   });
+
+  // Story 2.37: entering the create wizard's Step 3 queues every service whose lists are not
+  // loaded yet (or failed last time) as `pending`; this effect hands them to the wizard, which
+  // flips them to `loading` at once — so each service is loaded once per entry. Keyed on the
+  // joined pending paths (a primitive), never on the dialog object itself.
+  const pendingCreateListPaths =
+    dialog.kind === 'create'
+      ? Object.entries(dialog.branches.lists)
+          .filter(([, lists]) => lists.status === 'pending')
+          .map(([path]) => path)
+          .sort()
+          .join('\n')
+      : '';
+  useEffect(() => {
+    if (pendingCreateListPaths !== '') {
+      loadPendingBranchLists(pendingCreateListPaths.split('\n'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCreateListPaths]);
+
+  // Story 2.37 (review): Step 3 decides an Esc-cancel against the latest state inside its
+  // updater and raises `cancelRequested`; the cancel's side effects (close / quit) run here.
+  const createCancelRequested = dialog.kind === 'create' && dialog.cancelRequested;
+  useEffect(() => {
+    if (createCancelRequested) {
+      handleCancelRequest();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createCancelRequested]);
 
   function openEdtAction() {
     const target = edtsRows[clampedEdtsSelected];
@@ -870,7 +906,14 @@ export function EdtsZone({
       />
 
       {dialog.kind === 'create' ? (
-        <CreateWizardView dialog={dialog} candidates={candidates} candidateState={candidateState} edtsRows={edtsRows} maxRows={branchDropdownMaxRows} />
+        <CreateWizardView
+          dialog={dialog}
+          candidates={candidates}
+          candidateState={candidateState}
+          edtsRows={edtsRows}
+          maxRows={branchDropdownMaxRows}
+          maxVisibleRows={createWizardTableMaxRows}
+        />
       ) : null}
 
       {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} /> : null}

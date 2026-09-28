@@ -5,7 +5,14 @@
 // header for why) — a StateCreator factory combined with the other slices into one Zustand
 // store (AD-10: still exactly one store/one hook).
 import type { StateCreator } from 'zustand';
-import { createEdt as createEdtUseCase, type CreateBranchOptions, type CreateEdtData } from '../../../../../core/edt/create.js';
+import {
+  createEdt as createEdtUseCase,
+  listCreateCandidateBranches as listCreateCandidateBranchesUseCase,
+  type CreateBranchOptions,
+  type CreateCandidateBranches,
+  type CreateEdtData,
+  type MemberBranchPlan,
+} from '../../../../../core/edt/create.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,
   type SwitchActiveEdtData,
@@ -42,19 +49,21 @@ export const DEFAULT_BASE_BRANCH = 'development';
 // scoped it to topic + member selection only). Story 2.22 adds the mandatory branch-setup
 // step, so this is no longer the store's own unconditional default — it's now the exact
 // value the zone itself passes through `createEdt`'s `branchOptions` param for the
-// zero-member case (core's `branchOptions` stays mandatory even then). Exported so the zone
-// doesn't need to duplicate the literal.
+// zero-member case. Story 2.37: the create wizard now sends `memberPlans` instead, so this
+// only remains the canonical "reuse each current branch" value for `branchOptions` callers.
 export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DEFAULT_BASE_BRANCH, mode: 'grouped', names: {} };
 
 export type CreateEdtParams = {
   topic: string;
   members: string[];
-  // Story 2.22: the create-EDT dialog now always builds and passes a real
-  // CreateBranchOptions (grouped/individual naming, base branch) instead of the store
-  // hardcoding NO_BRANCH_CREATION for every call — mandatory, not optional, so every caller
-  // makes its own branch-creation choice explicit (zero members still passes
-  // NO_BRANCH_CREATION below, exported so the zone can reuse the exact same value).
-  branchOptions: CreateBranchOptions;
+  // Exactly one of the two branch strategies is expected (core rejects a call carrying
+  // neither with invalid-argument; `memberPlans` wins when both are set):
+  //   - `branchOptions` (Stories 2.22/2.27): one CreateBranchOptions for every member — the
+  //     CLI-shaped path, e.g. NO_BRANCH_CREATION above for "reuse each current branch".
+  //   - `memberPlans` (Story 2.35, used by the create wizard since Story 2.37): one plan per
+  //     member repoPath, built from the wizard's Step 3 rows.
+  branchOptions?: CreateBranchOptions;
+  memberPlans?: Record<string, MemberBranchPlan>;
 };
 
 export type SwitchEdtParams = {
@@ -165,6 +174,9 @@ export type EdtSlice = {
   // entry point where modifyEdt's own `renameBranches` param structurally cannot apply (no
   // existing membership to resolve `oldName` from).
   listBranches: (repoPath: string) => Promise<Result<string[]>>;
+  // Story 2.37: the create wizard's Step 3 per-service lists (local + remote-tracking refs),
+  // wrapping core/edt/create.ts's listCreateCandidateBranches — never fetches.
+  listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
   renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<Result<void>>;
   // Story 2.15: EDT action state for the detail pane — tracks in-progress action and
@@ -275,6 +287,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         topic: params.topic,
         members: params.members,
         branchOptions: params.branchOptions,
+        memberPlans: params.memberPlans,
       });
       if (result.ok) {
         // Review patch (story 2.9): unlike switchEdt, createEdt itself never writes
@@ -405,6 +418,12 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
       return listMemberBranchesUseCase(deps.git, repoPath);
+    },
+    listCreateBranches: async (repoPath) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return listCreateCandidateBranchesUseCase(deps.git, repoPath);
     },
     createMemberBranch: async (repoPath, branchName, baseBranch) => {
       if (!deps) {

@@ -11,13 +11,10 @@ import {
   type EdtDialogState,
   jumpSelection,
   moveSelection,
-  prefillBaseBranches,
-  prefillBranchNames,
   resolveSelectionDirection,
   resolveSelectionJump,
   toggleMemberSelection,
 } from '../../edts-zone.logic.js';
-import { withPrefillCursors } from './wizard.logic.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,
@@ -47,29 +44,9 @@ export function handleServicesStepInput(
     if (prev.kind !== 'create') {
       return prev;
     }
+    // Story 2.37: Step 3 seeds itself on entry (enterBranchStep) — nothing to prefill here.
     const nextSelected = toggleMemberSelection(prev.selectedMembers, path);
-    // The branch fields keep tracking the selection (untouched fields only) exactly as the
-    // pre-wizard dialog did, so Step 3 always opens on a sane default.
-    const filled = prefillBranchNames(
-      prev.namingMode,
-      prev.topic,
-      nextSelected,
-      prev.branchName,
-      prev.branchNames,
-      prev.branchNameTouched,
-      prev.branchNamesTouched,
-    );
-    const baseFilled = prefillBaseBranches(nextSelected, candidates, prev.baseBranch, prev.baseBranches, prev.baseBranchTouched, prev.baseBranchesTouched);
-    return {
-      ...prev,
-      selectedMembers: nextSelected,
-      error: nextSelected.length > 0 ? null : prev.error,
-      branchName: filled.branchName,
-      branchNames: filled.branchNames,
-      baseBranch: baseFilled.baseBranch,
-      baseBranches: baseFilled.baseBranches,
-      ...withPrefillCursors(prev, filled),
-    };
+    return { ...prev, selectedMembers: nextSelected, error: nextSelected.length > 0 ? null : prev.error };
   });
 }
 

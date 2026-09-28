@@ -15,7 +15,7 @@ import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
-import { createEdt, type CreateBranchOptions, type CreateEdtParams, type MemberBranchPlan } from './create.js';
+import { createEdt, listCreateCandidateBranches, type CreateBranchOptions, type CreateEdtParams, type MemberBranchPlan } from './create.js';
 
 const tmpDirs: string[] = [];
 
@@ -1169,5 +1169,29 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+});
+
+describe('listCreateCandidateBranches (story 2.37)', () => {
+  it('returns the local and remote-tracking lists side by side, never fetching', async () => {
+    const git = fakeGit({
+      listBranches: vi.fn(async () => ok(['main', 'rel'])),
+      listRemoteBranches: vi.fn(async () => ok(['origin/rel', 'origin/x'])),
+    });
+    const result = await listCreateCandidateBranches(git, '/repo/a');
+    expect(result).toEqual({ ok: true, data: { local: ['main', 'rel'], remote: ['origin/rel', 'origin/x'] } });
+    expect(calls(git.fetch)).toHaveLength(0);
+  });
+
+  it('fails when the local list cannot be read', async () => {
+    const git = fakeGit({ listBranches: vi.fn(async () => err('git-error', 'boom')) });
+    const result = await listCreateCandidateBranches(git, '/repo/a');
+    expect(result.ok).toBe(false);
+  });
+
+  it('fails when the remote list cannot be read', async () => {
+    const git = fakeGit({ listRemoteBranches: vi.fn(async () => err('git-error', 'boom')) });
+    const result = await listCreateCandidateBranches(git, '/repo/a');
+    expect(result).toEqual({ ok: false, error: { code: 'git-error', message: 'boom' } });
   });
 });

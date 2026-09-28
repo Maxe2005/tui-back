@@ -395,6 +395,7 @@ it('shouldQuit returns true for q', () => {
         deleteEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         resolveMemberDeleteStatuses: async () => [],
         listBranches: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        listCreateBranches: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         createMemberBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         renameBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         zoneInputCaptured: false,

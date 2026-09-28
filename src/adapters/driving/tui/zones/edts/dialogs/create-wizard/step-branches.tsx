@@ -1,318 +1,301 @@
-// tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" — interim (Story 2.36). Hosts the
-// pre-wizard dialog's mandatory branch-setup fields (Story 2.22) and their base-branch
-// BranchPicker (Story 2.27) unchanged, moved here verbatim from the retired create-dialog.tsx;
-// Story 2.37 replaces them with the global strategy + per-service table.
-//
-// The base-branch field reuses the shared BranchPicker (Pick existing / Create new only —
-// `hasCurrentBranch: false`, no Rename current, since nothing exists yet) and its suggestion is
-// manifest-driven (each selected member's own sharedBranch, core/edt/list.ts). The branch-name
-// field(s) are plain TextInputLines.
+// tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" (Story 2.37) — one global branch
+// rule for every selected service, then per-service exceptions.
+//   - Panel A "STRATÉGIE GLOBALE" (focused on entry): "Branche source par défaut" (empty = a
+//     dim `<shared-branch>` placeholder: each service uses its own manifest sharedBranch) and
+//     "Nom global de la branche" (the Step 1 slug until edited). `↑/↓` move between the two
+//     lines, `Enter` enters edit mode, `Esc` leaves it; on the base line any printable key
+//     also enters edit mode with that character typed.
+//   - Panel B "RÉSUMÉ ET EXCEPTIONS PAR SERVICE": a height-bounded table, one row per selected
+//     service (`Service | Mode | Base / Source | Branche cible`). `↑/↓` move the row cursor,
+//     `Enter` opens the "Configurer <service>" override box (override-box.tsx).
+//   - `Tab` switches panels. `Enter` never advances the wizard here; `Ctrl+N`/`Ctrl+→` do.
+//   - `Esc` closes the innermost element first: a field in edit, then the box, then Panel A's
+//     edit mode, then (reported as `cancel`) the whole wizard.
+// The key handling is a pure reducer over the dialog state (reduceBranchStepKey).
 import { Box, Text, type Key } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
+import { BoundedList } from '../../../../shared/components/bounded-list.js';
+import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
-import { nextTextInputValue } from '../../../../shared/components/text-edit.js';
-import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../../shared/components/branch-picker.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import {
-  advanceCreateFormFocus,
-  createPickerSession,
-  type CreateDialogState,
-  type EdtDialogState,
-  type NamingMode,
-  prefillBaseBranches,
-  prefillBranchNames,
-  resolveBaseBranchMode,
-  suggestBaseBranchFor,
-} from '../../edts-zone.logic.js';
-import { withPrefillCursors } from './wizard.logic.js';
+import { BRANCH_MAX_WIDTH, truncateBranchLabel, type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
+import { OverrideBoxView } from './override-box.js';
+import { buildStep3Rows, type BranchCandidate, type RowView } from './wizard.logic.js';
 
-export type BranchStepDeps = {
+export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
+export const STEP3_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Étape suivante';
+
+export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {
+  const lists = state.branches.lists[path];
+  return {
+    status: lists?.status ?? 'pending',
+    local: lists?.local ?? [],
+    remote: lists?.remote ?? [],
+    sharedBranch: candidates.find((candidate) => candidate.path === path)?.sharedBranch ?? '',
+  };
+}
+
+// A printable, non-blank key: Space never starts the base line's edit mode (no branch name
+// starts with a space).
+function isPrintable(input: string, key: TextEditKey): boolean {
+  return (
+    input.trim().length > 0 &&
+    !key.ctrl &&
+    !key.meta &&
+    !key.return &&
+    !key.escape &&
+    !key.tab &&
+    !key.backspace &&
+    !key.delete &&
+    !key.upArrow &&
+    !key.downArrow &&
+    !key.leftArrow &&
+    !key.rightArrow
+  );
+}
+
+// Clears the wizard's stale "can't leave Step 3" error once anything that feeds the rows
+// changed (global base/name, an override).
+function withBranches(state: CreateDialogState, branches: BranchStepState): CreateDialogState {
+  const rowsChanged =
+    branches.globalBase.value !== state.branches.globalBase.value ||
+    branches.globalName.value !== state.branches.globalName.value ||
+    branches.overrides !== state.branches.overrides;
+  return { ...state, branches, error: rowsChanged ? null : state.error };
+}
+
+export type BranchStepKeyResult = { state: CreateDialogState; cancel: boolean };
+
+export function reduceBranchStepKey(
+  state: CreateDialogState,
+  candidates: readonly BranchCandidate[],
+  input: string,
+  key: TextEditKey,
+): BranchStepKeyResult {
+  const { branches } = state;
+  const box = branches.box;
+  // The override box is the innermost element: it owns every key while open.
+  if (box !== null) {
+    const result = reduceOverrideBoxKey(box, overrideBoxContextFor(state, box.path, candidates), input, key);
+    if (result.type === 'update') {
+      return { state: withBranches(state, { ...branches, box: result.box }), cancel: false };
+    }
+    if (result.type === 'close') {
+      return { state: withBranches(state, { ...branches, box: null }), cancel: false };
+    }
+    if (result.type === 'revert') {
+      const overrides = { ...branches.overrides };
+      delete overrides[box.path];
+      return { state: withBranches(state, { ...branches, overrides, box: null }), cancel: false };
+    }
+    return { state: withBranches(state, { ...branches, overrides: { ...branches.overrides, [box.path]: result.plan }, box: null }), cancel: false };
+  }
+
+  if (key.tab) {
+    return { state: withBranches(state, { ...branches, panel: branches.panel === 'global' ? 'rows' : 'global', editing: false }), cancel: false };
+  }
+
+  if (branches.panel === 'global') {
+    const field = branches.globalLine === 'base' ? 'globalBase' : 'globalName';
+    if (branches.editing) {
+      if (key.escape || key.return) {
+        return { state: withBranches(state, { ...branches, editing: false }), cancel: false };
+      }
+      const next = nextTextInputValue(branches[field], input, key);
+      const touched = field === 'globalName' && next.value !== branches.globalName.value ? true : branches.globalNameTouched;
+      return { state: withBranches(state, { ...branches, [field]: next, globalNameTouched: touched }), cancel: false };
+    }
+    if (key.escape) {
+      return { state, cancel: true };
+    }
+    if (key.upArrow || key.downArrow) {
+      return { state: withBranches(state, { ...branches, globalLine: key.downArrow ? 'name' : 'base' }), cancel: false };
+    }
+    if (key.return) {
+      return { state: withBranches(state, { ...branches, editing: true }), cancel: false };
+    }
+    if (branches.globalLine === 'base' && isPrintable(input, key)) {
+      const next = nextTextInputValue(branches.globalBase, input, key);
+      return { state: withBranches(state, { ...branches, editing: true, globalBase: next }), cancel: false };
+    }
+    return { state, cancel: false };
+  }
+
+  // Panel B.
+  if (key.escape) {
+    return { state, cancel: true };
+  }
+  const rowCount = state.selectedMembers.length;
+  if (key.upArrow || key.downArrow) {
+    const rowCursor = Math.min(Math.max(branches.rowCursor + (key.downArrow ? 1 : -1), 0), Math.max(rowCount - 1, 0));
+    return { state: withBranches(state, { ...branches, rowCursor }), cancel: false };
+  }
+  if (key.return) {
+    const row = buildStep3Rows(state, candidates)[branches.rowCursor];
+    if (row === undefined) {
+      return { state, cancel: false };
+    }
+    const context = overrideBoxContextFor(state, row.path, candidates);
+    // A global row's box starts from what the row currently shows: its resolved base (or the
+    // raw input / sharedBranch when unresolved) and the global name.
+    const base = row.mode === 'global' && row.baseStatus === 'ok' ? row.base : branches.globalBase.value.trim() || context.sharedBranch;
+    const override = branches.overrides[row.path];
+    const opened = openOverrideBox(row.path, { ...(override !== undefined ? { override } : {}), base, name: branches.globalName.value.trim() });
+    return { state: withBranches(state, { ...branches, box: opened }), cancel: false };
+  }
+  return { state, cancel: false };
+}
+
+export function createBranchStepHandlers(deps: {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
-  candidates: readonly ServiceBranchDivergence[];
-};
-
-export function createBranchStepHandlers(deps: BranchStepDeps) {
-  // Opens a fresh base-branch picker session for whichever field is "current" —
-  // `selectedMembers[0]` when resolveBaseBranchMode is 'shared' (single repo, or >=2 members
-  // whose sharedBranch is unanimous), or `selectedMembers[index]` when forced per-member
-  // (diverging sharedBranch). Every entry into the field gets a fresh session, pre-filled from
-  // whatever is already committed (touched) or the manifest suggestion otherwise.
-  function openBaseBranchPickerAt(state: CreateDialogState, index: number): CreateDialogState {
-    const mode = resolveBaseBranchMode(state.selectedMembers, deps.candidates);
-    const path = mode === 'shared' ? state.selectedMembers[0] : state.selectedMembers[index];
-    if (path === undefined) {
-      return { ...state, formFocus: 'branch-mode', branchPicker: null };
-    }
-    const suggestion =
-      mode === 'shared'
-        ? state.baseBranch
-        : state.baseBranchesTouched[path]
-          ? (state.baseBranches[path] ?? '')
-          : suggestBaseBranchFor(path, deps.candidates);
-    // No sensible nested default for the picker's own "Create new" sub-base field here (this
-    // session's confirmed value never triggers a real git write) — left blank, still typable.
-    const session = createPickerSession(path, { suggestedName: suggestion, defaultBaseBranch: '', hasCurrentBranch: false, currentBranch: '' });
-    return {
-      ...state,
-      baseBranchIndex: index,
-      // Opens straight onto the Name field, not the picker's own inner "base for a brand-new
-      // base branch" sub-field — that nested field is unused clutter here, so a single Enter
-      // confirms the value.
-      branchPicker: { ...session, state: { ...session.state, baseFocused: false } },
-    };
-  }
-
-  // Entering Step 3 (forward or back from Step 4): fields pre-fill via
-  // suggestBranchNameFromTopic(topic) / the manifest sharedBranch — never forcing a field the
-  // developer already touched — and a fresh base-branch picker session opens.
-  function enterBranchStep(state: CreateDialogState): CreateDialogState {
-    const filled = prefillBranchNames(
-      state.namingMode,
-      state.topic,
-      state.selectedMembers,
-      state.branchName,
-      state.branchNames,
-      state.branchNameTouched,
-      state.branchNamesTouched,
-    );
-    const baseFilled = prefillBaseBranches(
-      state.selectedMembers,
-      deps.candidates,
-      state.baseBranch,
-      state.baseBranches,
-      state.baseBranchTouched,
-      state.baseBranchesTouched,
-    );
-    const next: CreateDialogState = {
-      ...state,
-      formFocus: 'branch-base',
-      branchNameIndex: 0,
-      branchName: filled.branchName,
-      branchNames: filled.branchNames,
-      baseBranch: baseFilled.baseBranch,
-      baseBranches: baseFilled.baseBranches,
-      ...withPrefillCursors(state, filled),
-    };
-    return openBaseBranchPickerAt(next, 0);
-  }
-
-  // Applies a confirmed base-branch picker outcome. Never performs a git write — 'set'/'create'/
-  // 'rename' all collapse to "the resulting string", which becomes the base branch submitCreate
-  // later feeds into `git.createBranch(member, name, base)` per selected member.
-  function applyBaseBranchOutcome(outcome: BranchPickerOutcome) {
-    const value = outcome.kind === 'set' ? outcome.branch : outcome.kind === 'create' ? outcome.branchName : outcome.newName;
+  candidates: readonly BranchCandidate[];
+}) {
+  // Every decision — the cancel included — is taken against `prev`, the latest state, the same
+  // way goNext validates: keys arriving in one input chunk (e.g. Enter then Esc) each see the
+  // previous key's result, never the render-time state. A cancel cannot run its side effects
+  // inside the updater, so it raises `cancelRequested` for the zone to act on.
+  function handleBranchStepInput(input: string, key: Key) {
     deps.setDialog((prev) => {
-      if (prev.kind !== 'create') {
+      if (prev.kind !== 'create' || prev.step !== 3) {
         return prev;
       }
-      const mode = resolveBaseBranchMode(prev.selectedMembers, deps.candidates);
-      const path = mode === 'shared' ? prev.selectedMembers[0] : prev.selectedMembers[prev.baseBranchIndex];
-      if (path === undefined) {
-        return { ...prev, formFocus: 'branch-mode', branchPicker: null };
-      }
-      const nextBaseBranches =
-        mode === 'shared' ? Object.fromEntries(prev.selectedMembers.map((member) => [member, value])) : { ...prev.baseBranches, [path]: value };
-      const nextBaseBranchesTouched =
-        mode === 'shared'
-          ? Object.fromEntries(prev.selectedMembers.map((member) => [member, true]))
-          : { ...prev.baseBranchesTouched, [path]: true };
-      const applied: CreateDialogState = {
-        ...prev,
-        baseBranch: mode === 'shared' ? value : prev.baseBranch,
-        baseBranchTouched: mode === 'shared' ? true : prev.baseBranchTouched,
-        baseBranches: nextBaseBranches,
-        baseBranchesTouched: nextBaseBranchesTouched,
-      };
-      // Per-member mode cycles through every selected member's own field before the field is
-      // "done", driven by confirm (Tab is the picker's own mode switch while it is open).
-      if (mode === 'per-member') {
-        const nextIndex = prev.baseBranchIndex + 1;
-        if (nextIndex < prev.selectedMembers.length) {
-          return openBaseBranchPickerAt(applied, nextIndex);
-        }
-      }
-      return { ...applied, formFocus: 'branch-mode', branchPicker: null, baseBranchIndex: 0 };
+      const result = reduceBranchStepKey(prev, deps.candidates, input, key);
+      return result.cancel ? { ...prev, cancelRequested: true } : result.state;
     });
   }
 
-  // While the base-branch picker session is open it owns every keystroke (Tab cycles its own
-  // Pick existing/Create new mode) except the wizard's own Ctrl step-navigation keys, which the
-  // wizard dispatcher intercepts first.
-  function handleBaseBranchInput(current: CreateDialogState, input: string, key: Key) {
-    const session = current.branchPicker;
-    if (session === null) {
-      return;
-    }
-    const result = handleBranchPickerKey(session.state, session.branches, [], input, key);
-    if (result.type === 'cancel') {
-      // Story 2.36: Esc closes this innermost sub-field only — the wizard stays on Step 3.
-      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, formFocus: 'branch-mode', branchPicker: null, baseBranchIndex: 0 } : prev));
-      return;
-    }
-    if (result.type === 'submit') {
-      applyBaseBranchOutcome(result.outcome);
-      return;
-    }
-    deps.setDialog((prev) =>
-      prev.kind === 'create' && prev.branchPicker !== null ? { ...prev, branchPicker: { ...prev.branchPicker, state: result.state } } : prev,
-    );
-  }
+  return { handleBranchStepInput };
+}
 
-  // Tab cycles Step 3's own fields only: base -> mode -> name field(s) -> base (advanceCreateFormFocus's
-  // exit to `topic` is mapped back onto the base-branch field, reopening its picker).
-  function cycleBranchFocus() {
-    deps.setDialog((prev) => {
-      if (prev.kind !== 'create') {
-        return prev;
-      }
-      const nameFieldCount = prev.namingMode === 'individual' ? prev.selectedMembers.length : 1;
-      const { focus, nameIndex } = advanceCreateFormFocus(prev.formFocus, true, prev.namingMode, prev.branchNameIndex, nameFieldCount);
-      if (focus === 'topic' || focus === 'branch-base') {
-        return openBaseBranchPickerAt({ ...prev, formFocus: 'branch-base', branchNameIndex: 0 }, 0);
-      }
-      return { ...prev, formFocus: focus, branchNameIndex: nameIndex };
-    });
-  }
+const COLUMN_HEADERS = ['Service', 'Mode', 'Base / Source', 'Branche cible'] as const;
 
-  // Space toggles the naming mode; typing edits the focused branch-name field. Touched only
-  // flips true when the developer's own edit actually changes the *value* — a pure cursor move
-  // never freezes a field out of future auto-fill.
-  function handleBranchFieldInput(current: CreateDialogState, input: string, key: Key) {
-    if (current.formFocus === 'branch-mode') {
-      if (input === ' ') {
-        deps.setDialog((prev) => {
-          if (prev.kind !== 'create') {
-            return prev;
-          }
-          const nextMode: NamingMode = prev.namingMode === 'grouped' ? 'individual' : 'grouped';
-          const filled = prefillBranchNames(
-            nextMode,
-            prev.topic,
-            prev.selectedMembers,
-            prev.branchName,
-            prev.branchNames,
-            prev.branchNameTouched,
-            prev.branchNamesTouched,
-          );
-          return {
-            ...prev,
-            namingMode: nextMode,
-            branchName: filled.branchName,
-            branchNames: filled.branchNames,
-            branchNameIndex: 0,
-            ...withPrefillCursors(prev, filled),
-          };
-        });
-      }
-      return;
-    }
-    if (current.formFocus !== 'branch-name') {
-      return;
-    }
-    if (current.namingMode === 'grouped') {
-      const next = nextTextInputValue({ value: current.branchName, cursor: current.branchNameCursor }, input, key);
-      if (next.value === current.branchName && next.cursor === current.branchNameCursor) {
-        return;
-      }
-      deps.setDialog((prev) =>
-        prev.kind === 'create'
-          ? {
-              ...prev,
-              branchName: next.value,
-              branchNameCursor: next.cursor,
-              branchNameTouched: next.value !== current.branchName ? true : prev.branchNameTouched,
-              // A value change clears a stale "can't leave Step 3" error.
-              error: next.value !== current.branchName ? null : prev.error,
-            }
-          : prev,
-      );
-      return;
-    }
-    const path = current.selectedMembers[current.branchNameIndex];
-    if (path === undefined) {
-      return;
-    }
-    const existingValue = current.branchNames[path] ?? '';
-    const existingCursor = current.branchNameCursors[path] ?? existingValue.length;
-    const next = nextTextInputValue({ value: existingValue, cursor: existingCursor }, input, key);
-    if (next.value === existingValue && next.cursor === existingCursor) {
-      return;
-    }
-    deps.setDialog((prev) => {
-      if (prev.kind !== 'create') {
-        return prev;
-      }
-      return {
-        ...prev,
-        branchNames: { ...prev.branchNames, [path]: next.value },
-        branchNameCursors: { ...prev.branchNameCursors, [path]: next.cursor },
-        branchNamesTouched: next.value !== existingValue ? { ...prev.branchNamesTouched, [path]: true } : prev.branchNamesTouched,
-        error: next.value !== existingValue ? null : prev.error,
-      };
-    });
-  }
+// Every free-text cell (service name, branch ref, error label) is capped with the list's own
+// truncateBranchLabel/BRANCH_MAX_WIDTH, so no column can push the table past the modal; the
+// full text of a blocking error is shown once, on the detail line under the table.
+function cell(text: string): string {
+  return truncateBranchLabel(text, BRANCH_MAX_WIDTH);
+}
 
-  return { enterBranchStep, handleBaseBranchInput, cycleBranchFocus, handleBranchFieldInput };
+function serviceCell(row: RowView): string {
+  return cell(row.service);
+}
+
+function baseCell(row: RowView): string {
+  return cell(row.baseStatus === 'error' ? `✖ ${row.base}` : row.base);
+}
+
+function targetCell(row: RowView): string {
+  return cell(row.targetError !== null ? `✖ ${row.target === '' ? '—' : row.target}` : row.target);
+}
+
+function columnWidths(rows: readonly RowView[]): [number, number, number] {
+  const width = (values: readonly string[], header: string) => Math.max(header.length, ...values.map((value) => value.length));
+  return [width(rows.map(serviceCell), COLUMN_HEADERS[0]), width(rows.map((row) => row.modeLabel), COLUMN_HEADERS[1]), width(rows.map(baseCell), COLUMN_HEADERS[2])];
+}
+
+// The row whose blocking error the detail line spells out: the row under the cursor when it
+// is blocked, otherwise the first blocked row.
+export function detailRow(rows: readonly RowView[], rowCursor: number): RowView | undefined {
+  const focused = rows[rowCursor];
+  return focused !== undefined && focused.error !== null ? focused : rows.find((row) => row.error !== null);
+}
+
+function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
+  return (
+    <Text color={focused ? colors.accent : colors.text} bold={focused}>
+      {focused ? '▶ ' : '  '}
+      {text}
+    </Text>
+  );
 }
 
 export function BranchStepView({
   dialog,
   candidates,
   maxRows,
+  maxVisibleRows,
 }: {
   dialog: CreateDialogState;
-  candidates: readonly ServiceBranchDivergence[];
+  candidates: readonly BranchCandidate[];
+  // The override box's autocomplete dropdown cap (settings.edts.branchDropdownMaxRows).
   maxRows: number;
+  // Panel B's table height budget (NFR-7), derived live from the terminal size.
+  maxVisibleRows: number;
 }) {
-  const baseBranchMode = resolveBaseBranchMode(dialog.selectedMembers, candidates);
-  const branchPicker = dialog.branchPicker;
-  const serviceName = (path: string) => candidates.find((candidate) => candidate.path === path)?.service ?? path;
+  const { branches } = dialog;
+  const rows = buildStep3Rows(dialog, candidates);
+  const box = branches.box;
+  if (box !== null) {
+    const service = candidates.find((candidate) => candidate.path === box.path)?.service ?? box.path;
+    return <OverrideBoxView box={box} service={service} context={overrideBoxContextFor(dialog, box.path, candidates)} maxRows={maxRows} />;
+  }
+  const globalFocused = branches.panel === 'global';
+  const lineFocused = (line: 'base' | 'name') => globalFocused && branches.globalLine === line;
+  const [serviceWidth, modeWidth, baseWidth] = columnWidths(rows);
+  const rowsFocused = branches.panel === 'rows';
+  const blocked = detailRow(rows, branches.rowCursor);
   return (
     <Box flexDirection="column">
-      {dialog.formFocus === 'branch-base' && branchPicker !== null ? (
-        <Box flexDirection="column">
-          <Text color={colors.accent}>
-            Base branch
-            {baseBranchMode === 'per-member' ? ` for ${serviceName(branchPicker.repoPath)}` : ''}:
+      <PanelTitle text="STRATÉGIE GLOBALE" focused={globalFocused} />
+      <Box>
+        <Text color={colors.accent}>{lineFocused('base') ? '› ' : '  '}</Text>
+        {branches.globalBase.value === '' ? (
+          <Text color={lineFocused('base') ? colors.accent : colors.text}>
+            Branche source par défaut: <Text color={colors['text-dim']}>{SHARED_BRANCH_PLACEHOLDER}</Text>
           </Text>
-          <BranchPicker
-            state={branchPicker.state}
-            branches={branchPicker.branches}
-            branchesStatus={branchPicker.branchesStatus}
-            otherMemberBranches={[]}
-            maxRows={maxRows}
-            hideNestedBaseField
+        ) : (
+          <TextInputLine
+            label="Branche source par défaut"
+            value={branches.globalBase.value}
+            cursor={branches.globalBase.cursor}
+            focused={lineFocused('base') && branches.editing}
           />
-        </Box>
-      ) : (
-        <Text color={dialog.formFocus === 'branch-base' ? colors.accent : colors.text}>
-          Base branch:{' '}
-          {baseBranchMode === 'per-member'
-            ? // Labelled by service — a diverging per-member summary like "main, master" would
-              // otherwise give no indication which value belongs to which service.
-              dialog.selectedMembers.map((path) => `${serviceName(path)}: ${dialog.baseBranches[path] ?? ''}`).join(', ')
-            : dialog.baseBranch}
-        </Text>
-      )}
-      <Text color={dialog.formFocus === 'branch-mode' ? colors.accent : colors.text}>
-        Naming: {dialog.namingMode === 'grouped' ? 'Grouped (same branch for every service)' : 'Individual (one branch per service)'} [Space] toggle
+        )}
+      </Box>
+      <Box>
+        <Text color={colors.accent}>{lineFocused('name') ? '› ' : '  '}</Text>
+        <TextInputLine
+          label="Nom global de la branche"
+          value={branches.globalName.value}
+          cursor={branches.globalName.cursor}
+          focused={lineFocused('name') && branches.editing}
+        />
+      </Box>
+      <PanelTitle text="RÉSUMÉ ET EXCEPTIONS PAR SERVICE" focused={rowsFocused} />
+      <Text color={colors['text-dim']} wrap="truncate-end">
+        {'  '}
+        {COLUMN_HEADERS[0].padEnd(serviceWidth)} │ {COLUMN_HEADERS[1].padEnd(modeWidth)} │ {COLUMN_HEADERS[2].padEnd(baseWidth)} │ {COLUMN_HEADERS[3]}
       </Text>
-      {dialog.namingMode === 'grouped' ? (
-        <TextInputLine label="Branch name" value={dialog.branchName} cursor={dialog.branchNameCursor} focused={dialog.formFocus === 'branch-name'} />
-      ) : (
-        dialog.selectedMembers.map((path, index) => {
-          const value = dialog.branchNames[path] ?? '';
+      <BoundedList
+        items={rows}
+        maxVisibleRows={maxVisibleRows}
+        cursorIndex={branches.rowCursor}
+        moreAboveLabel="services au-dessus"
+        moreBelowLabel="services en dessous"
+        renderItem={(row, index) => {
+          const selected = rowsFocused && index === branches.rowCursor;
+          const textColor = selected ? colors.accent : colors.text;
           return (
-            <TextInputLine
-              key={path}
-              label={serviceName(path)}
-              value={value}
-              cursor={dialog.branchNameCursors[path] ?? value.length}
-              focused={dialog.formFocus === 'branch-name' && index === dialog.branchNameIndex}
-            />
+            <Text key={row.path} wrap="truncate-end">
+              <Text color={colors.accent}>{selected ? '› ' : '  '}</Text>
+              <Text color={textColor}>
+                {serviceCell(row).padEnd(serviceWidth)} │ {row.modeLabel.padEnd(modeWidth)} │{' '}
+              </Text>
+              <Text color={row.baseStatus === 'error' ? colors.error : row.baseStatus === 'loading' ? colors['text-dim'] : textColor}>
+                {baseCell(row).padEnd(baseWidth)}
+              </Text>
+              <Text color={textColor}> │ </Text>
+              <Text color={row.targetError !== null ? colors.error : textColor}>{targetCell(row)}</Text>
+            </Text>
           );
-        })
-      )}
+        }}
+      />
+      {blocked !== undefined ? (
+        <Text color={colors.error}>
+          ✖ {blocked.service} : {blocked.error}
+        </Text>
+      ) : null}
+      <Text color={colors['text-dim']}>{STEP3_FOOTER}</Text>
     </Box>
   );
 }

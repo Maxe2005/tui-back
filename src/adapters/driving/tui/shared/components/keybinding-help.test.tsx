@@ -51,8 +51,8 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
     expect(down.scrollOffset).toBe(1);
 
     const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    // Story 2.36 appended the create-wizard's step keys, so its "previous step" row is now last.
-    expect(atBottom.visible.at(-1)?.keys).toBe('Ctrl+← / Ctrl+P');
+    // Story 2.37 appended the create-wizard's override-box revert key, so it is now last.
+    expect(atBottom.visible.at(-1)?.keys).toBe('Ctrl+R');
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
     const backUp = resolveHelpWindow(KEYBINDINGS, atBottom.scrollOffset - 1, 10);

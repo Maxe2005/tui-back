@@ -586,3 +586,24 @@ async function resolvePlannedMemberBranch(
     write: { kind: 'created', repoPath: member, branchName: localName },
   };
 }
+
+// Story 2.37: the create wizard's Step 3 per-service branch lists — local branches plus
+// remote-tracking refs (`origin/x`), read through the caller's GitPort (the TUI never touches
+// deps.git directly, mirroring modify.ts's listMemberBranches thin-wrapper precedent). Pure
+// reads: nothing is ever fetched, so the remote list is whatever the last fetch left behind.
+// Either read failing fails the whole call — a half-known list would make the wizard's
+// "local preferred over origin/<x>" resolution silently wrong.
+// Story 2.37: one service's candidate branches — local names plus remote-tracking refs.
+export type CreateCandidateBranches = { local: string[]; remote: string[] };
+
+export async function listCreateCandidateBranches(git: GitPort, repoPath: string): Promise<Result<CreateCandidateBranches>> {
+  // Both reads are independent: run them side by side.
+  const [local, remote] = await Promise.all([git.listBranches(repoPath), git.listRemoteBranches(repoPath)]);
+  if (!local.ok) {
+    return local;
+  }
+  if (!remote.ok) {
+    return remote;
+  }
+  return ok({ local: local.data, remote: remote.data });
+}
