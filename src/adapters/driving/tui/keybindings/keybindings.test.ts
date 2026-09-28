@@ -33,10 +33,11 @@ const EXPECTED = [
   ],
   ['Ctrl+→ / Ctrl+N', 'Create-EDT wizard: next step (only if the current step is valid)'],
   ['Ctrl+← / Ctrl+P', 'Create-EDT wizard: previous step (always allowed, choices kept)'],
+  ['Ctrl+R', 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy'],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 16 canonical bindings in documented order (AC2, story 2.12; wizard keys, story 2.36)', () => {
+  it('lists exactly the 17 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),
