@@ -23,7 +23,7 @@ FR-3: A developer can create a new EDT by giving it a topic and manually selecti
 FR-4: At EDT creation, a developer can have the tool create a working branch in each selected member service, based on `development` by default or another chosen base branch, named either as one shared name across all selected services or individually per service.
 FR-5: A developer can add or remove member services from an existing EDT, and change a member service's working branch, after the EDT has been created.
 FR-6: A developer can switch the active EDT at any time; the tool auto-preserves any uncommitted work in every affected repo of the outgoing EDT before switching.
-FR-7: Assigning a shared/protected branch (`development`, preprod, prod) as an EDT's "own" branch for a service is rejected.
+FR-7: Assigning a shared/protected branch (the service manifest's `protectedBranches` ∪ its `sharedBranch` — amended 2026-09-28) as an EDT's "own" branch for a service is rejected.
 FR-8: While an EDT is active, every managed repo that is not one of its member services is kept on `development` (or its configured shared branch).
 FR-9: Every managed service is displayed with its current branch and how far that branch has diverged from its own origin/upstream, in both directions — ahead and behind.
 FR-10: A developer can run a group update — pull `development`, run migrations, restart containers — against either the active EDT's member services (default) or explicitly against all managed repos regardless of EDT (maintenance mode).
@@ -643,7 +643,9 @@ So that I don't create each branch by hand before starting.
 
 As a developer,
 I want the tool to categorically refuse to register a shared branch as an EDT's own branch,
-So that an EDT can never gain write authority over `development`/preprod/prod.
+So that an EDT can never gain write authority over a protected branch of that service (Story 2.42: manifest `protectedBranches` ∪ `sharedBranch`).
+
+> Amended 2026-09-28 (Sprint Change Proposal): protected set now manifest-defined, see Story 2.42.
 
 **Acceptance Criteria:**
 
@@ -651,7 +653,7 @@ So that an EDT can never gain write authority over `development`/preprod/prod.
 **When** about to execute
 **Then** it passes through the centralized git-adapter, which resolves the allowed-branch context itself from EDT/manifest state — never trusting a caller-supplied branch name (AD-8)
 
-**Given** a developer attempts to register `development`/preprod/prod as an EDT's own branch (at creation via Story 2.2 or later via Story 2.5)
+**Given** a developer attempts to register a protected branch of that service (Story 2.42: manifest `protectedBranches` ∪ `sharedBranch`) as an EDT's own branch (at creation via Story 2.2 or later via Story 2.5)
 **When** attempted
 **Then** it is rejected with a clear explanation before any git write happens (FR-7)
 
@@ -1958,6 +1960,73 @@ As a developer switching EDT with uncommitted work in services that don't belong
 **Given** the `edt-*` auto-switch-tab command path (Story 670bfcb) and the quick-pick (Story 2.30) **When** they trigger a switch **Then** they go through the same seam, unchanged.
 
 **Implementation notes:** `edt-slice.ts` already parks the core call on a pending promise (`switchDirtyRepos` + `resolveSwitchDirtyRepos`); widen the resolver payload to the `{kind, resolutions}` shape and hold the dialog's draft state in the slice or dialog, not in core. Pure helpers in a new `switch-resolution.logic.ts`: `buildRows(dirty, global)`, `validateRow(row, branchesByService)`, `buildResolutions(rows)`. Per-service branch lists come from `listMemberBranches`.
+
+### Story 2.42: Manifest-Defined Protected Branches per Service
+
+> Added 2026-09-28 (Sprint Change Proposal): replaces FR-7's hardcoded `development`/preprod/prod set with a per-service manifest list. Sequenced after Story 2.37, which moved the rule into `src/core/edt/shared-branches.ts`.
+
+As a developer onboarding services that follow different branching models, I want each service's `.tui-back.yaml` to declare which branches are protected, so that the tool guards exactly that service's release branches instead of a fixed list that fits no one exactly.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm Story 2.37 is `done` and merged into the epic branch (`src/core/edt/shared-branches.ts` present); otherwise **HALT**.
+
+**Given** a manifest **When** loaded **Then** it accepts an optional `protectedBranches: string[]` (each entry trimmed, non-empty; duplicates tolerated). A malformed value (not a list, an empty string) is a manifest validation error, reported like any other schema error (Story 1.4). The `Manifest` type gains `protectedBranches?: string[]`.
+
+**Given** a service **When** its protected set is computed **Then** it is exactly `protectedBranches ∪ {sharedBranch}`. `development`/`preprod`/`prod` are no longer protected implicitly. Without `protectedBranches`, only `sharedBranch` is protected (and `sharedBranch` itself still defaults to `development`).
+
+**Given** any git write, rename or registration **When** the gate runs (`assertAllowedBranch`, `createBranch`, `renameBranch` old and new names, `createTrackingBranch`) **Then** it uses that service's manifest-defined set, resolved from the manifest at write time (AD-8), through the single core helper `isProtectedBranch(name, manifest)` that replaces `SHARED_BRANCHES`/`isSharedBranch`. No hardcoded branch list remains in `src/`.
+
+**Given** the create wizard (Step 3 rows and the "Configurer" box) and every other inline FR-7 check **When** they judge a name **Then** they use the same helper with that service's own manifest data. `ServiceBranchDivergence` (`core/edt/list.ts`) carries `protectedBranches` next to `sharedBranch`.
+
+**Given** a rejection **When** shown **Then** the message names the branch and says it is protected by that service's manifest (e.g. `Branch "preprod" is protected by svc-a's manifest`).
+
+**Given** the `manifest-generator` skill **When** it writes a manifest **Then** it emits `protectedBranches: [development, preprod, prod]` by default (documented in its field table) so new manifests keep today's protection.
+
+**Rollout note (not code):** existing managed repos keep working, but without the new line only their `sharedBranch` stays protected. Add `protectedBranches: [development, preprod, prod]` to each existing `.tui-back.yaml` to keep today's behavior.
+
+**Implementation notes:**
+- Schema change in `adapters/driven/manifest/schema.ts`.
+- The gate in `adapters/driven/git/index.ts` reads `loaded.data`.
+- Hardcoded `['development', 'preprod', 'prod']` fixtures in the git adapter and `create.test.ts` become manifest fixtures.
+
+### Story 2.43: Cross-EDT Branch Usage — Alerts in Branch Choosers & Rename Gate
+
+> Added 2026-09-28 (Sprint Change Proposal): makes another EDT's ownership of a branch visible before it is chosen, and closes the ungated rename of such a branch. Sequenced after Story 2.37 (Step 3 table and box). Independent of 2.42.
+
+As a developer choosing or renaming a branch, I want to see which branches another EDT already relies on, and be stopped before I take or rename one, so that working in one EDT can never silently break another.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm Story 2.37 is `done` and merged into the epic branch; otherwise **HALT**.
+
+**Given** a rename of branch `old` → `new` in repo R **When** the git adapter's `renameBranch` runs **Then**, besides the FR-7 checks, it rejects with `branch-owned-by-other-edt` when `old` or `new` is registered as the own branch of an EDT other than the caller's. `GitPort.renameBranch` gains an optional `edtId`; with no `edtId`, any registered owner blocks. Callers pass their EDT:
+- `modify.ts` rename → the target's ulid;
+- `renameMemberBranch` (Add-to-EDT) → the target EDT's ulid;
+- `create.ts` existing + rename → the new EDT's ulid;
+- `create.ts` rollback → the new EDT's ulid.
+
+This happens before any `git` invocation (AD-8).
+
+**Given** a pure helper `branchOwners(edts, repoPath, branch, excludeUlid)` → the owning EDT topics (paths compared after `resolve()`, like the gate) **When** any branch chooser lists candidates **Then** every candidate owned by another EDT is annotated `⚠ EDT « <topic> »` (glyph + warning color). The candidates owned by the EDT being edited, or none when creating, are excluded. The choosers covered:
+- the wizard Step 3 "Configurer" box (existing-branch and base fields);
+- the `BranchPicker` pick-existing list (Modify, Add-to-EDT, service actions).
+
+`BranchAutocompleteInput` gains an optional generic `annotations?: Record<branch, string>` prop and stays EDT-agnostic.
+
+**Given** the wizard box, or `BranchPicker`, **When** the developer applies an owned branch as an existing branch, with or without rename, or renames a member's current branch that another EDT also owns **Then** it is refused inline with `utilisée par l'EDT « <topic> » — la reprendre ou la renommer casserait cet EDT`. A Step 3 row carrying such a plan shows the same error and blocks `Ctrl+N`.
+
+**Given** a branch used only as a **base** (create a new branch from it) **When** it is owned by another EDT **Then** it is annotated but allowed, since creating from it never modifies it.
+
+**Given** core **When** reached with an owned branch anyway (CLI, stale UI) **Then** the existing `branch-owned-by-other-edt` failure (Story 2.25 assisted resolution) is unchanged.
+
+**Implementation notes:**
+- The owners come from the store's loaded `edts` list: members carry `{repoPath, branch}`. No new port.
+- Tests:
+  - adapter `renameBranch` owner checks (old and new name, with and without `edtId`);
+  - `branchOwners`;
+  - the annotation rendering;
+  - inline refusals in the wizard box and in `BranchPicker`.
 
 ## Epic 3: Group Update & Migrations
 

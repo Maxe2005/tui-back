@@ -174,10 +174,14 @@ A developer can switch the active EDT at any time; the tool auto-preserves any u
 
 #### FR-7: An EDT never claims a shared branch
 
-Assigning a shared/protected branch (`development`, preprod, prod) as an EDT's "own" branch for a service is rejected.
+Assigning a protected branch as an EDT's "own" branch for a service is rejected. A service's protected branches are the ones its manifest lists in `protectedBranches`, plus its `sharedBranch`, which is always protected. Without `protectedBranches`, only `sharedBranch` is protected.
 
 **Consequences (testable):**
 - Attempting to register a protected branch to an EDT fails with a clear explanation, before any git write happens.
+- Renaming a protected branch, in either direction, is refused.
+- A branch registered as another EDT's own branch for that service can be neither attached nor renamed. Every branch chooser shows which EDT uses it before the developer picks it.
+
+> Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): the fixed `development`/preprod/prod set is replaced by the per-service manifest list, and the cross-EDT consequence is added.
 
 #### FR-8: Non-member managed repos stay on `development`
 
