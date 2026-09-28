@@ -92,12 +92,12 @@ The Step 3 table is first extracted into a shared `branch-plan-table` component 
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `sprint-status.yaml` -- 2-39 → done, 2-41 → in-progress -- prerequisite, human-approved.
-- [ ] `branch-plan-table.tsx`, `step-branches.tsx` -- behavior-neutral extraction -- 2.37 reuse prerequisite.
-- [ ] `core/edt/switch.ts` (+ test) -- `sharedBranch`, `dirtyPaths`, adopted detail -- the facts the dialog and the log need.
-- [ ] `switch-resolution.logic.ts` (+ test) -- state, reducer, rows, validation, resolutions -- covers every matrix row.
-- [ ] `switch-resolution-view.tsx`, `switch-dialog.tsx`, `edts-zone.logic.ts`, `edts-zone.tsx` -- UI wiring, results and logging.
-- [ ] `keybindings.ts`, `edt-slice.ts` comment, interaction/slice tests.
+- [x] `sprint-status.yaml` -- 2-39 → done, 2-41 → in-progress -- prerequisite, human-approved.
+- [x] `branch-plan-table.tsx`, `step-branches.tsx` -- behavior-neutral extraction -- 2.37 reuse prerequisite.
+- [x] `core/edt/switch.ts` (+ test) -- `sharedBranch`, `dirtyPaths`, adopted detail -- the facts the dialog and the log need.
+- [x] `switch-resolution.logic.ts` (+ test) -- state, reducer, rows, validation, resolutions -- covers every matrix row.
+- [x] `switch-resolution-view.tsx`, `switch-dialog.tsx`, `edts-zone.logic.ts`, `edts-zone.tsx` -- UI wiring, results and logging.
+- [x] `keybindings.ts`, `edt-slice.ts` comment, interaction/slice tests.
 
 **Acceptance Criteria:**
 - Given a dirty state-2/3 service, when the seam fires, then the resolution view shows the intro naming the outgoing EDT, both panels and the exact footer.
