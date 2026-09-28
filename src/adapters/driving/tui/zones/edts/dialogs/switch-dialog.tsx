@@ -151,7 +151,11 @@ function resultLabel(row: SwitchEdtRepoResult): string | null {
 function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; results: readonly SwitchEdtRepoResult[] }) {
   return (
     <>
-      <Text color={colors.text}>Bascule vers « {dialog.target.topic} » terminée.</Text>
+      {results.some((row) => row.outcome === 'failed') ? (
+        <Text color={colors.warning}>Bascule vers « {dialog.target.topic} » effectuée avec des échecs.</Text>
+      ) : (
+        <Text color={colors.text}>Bascule vers « {dialog.target.topic} » terminée.</Text>
+      )}
       {results.map((row, index) => {
         const label = resultLabel(row);
         return label !== null ? (
