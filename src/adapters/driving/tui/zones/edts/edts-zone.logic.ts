@@ -645,6 +645,11 @@ export type CreateDialogState = {
   // Story 2.37: Step 3's whole state (global strategy, per-service overrides, branch lists,
   // override box) — replaces the pre-wizard branch-setup fields (Stories 2.22/2.27/2.32).
   branches: BranchStepState;
+  // Story 2.37 (review): Step 3 decides "Esc cancels the wizard" against the latest state,
+  // inside the setDialog updater, where the side effects of a cancel (closing, requesting a
+  // quit) cannot run. It raises this flag instead; the zone's effect then runs the wizard's
+  // cancel (see create-wizard.tsx's handleCancelRequest).
+  cancelRequested: boolean;
 };
 
 export type SwitchDialogState = {
@@ -900,6 +905,7 @@ export function initialCreateDialog(): CreateDialogState {
     failedRows: [],
     // Story 2.37: seeded (name slug, list loads) when Step 3 is entered — see create-wizard.tsx.
     branches: initialBranchStepState(),
+    cancelRequested: false,
   };
 }
 

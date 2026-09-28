@@ -497,7 +497,7 @@ export function EdtsZone({
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
   });
-  const { handleCreateInput, loadPendingBranchLists } = createCreateWizardHandlers({
+  const { handleCreateInput, loadPendingBranchLists, handleCancelRequest } = createCreateWizardHandlers({
     setDialog,
     createEdtAction,
     loadEdts,
@@ -529,6 +529,16 @@ export function EdtsZone({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCreateListPaths]);
+
+  // Story 2.37 (review): Step 3 decides an Esc-cancel against the latest state inside its
+  // updater and raises `cancelRequested`; the cancel's side effects (close / quit) run here.
+  const createCancelRequested = dialog.kind === 'create' && dialog.cancelRequested;
+  useEffect(() => {
+    if (createCancelRequested) {
+      handleCancelRequest();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createCancelRequested]);
 
   function openEdtAction() {
     const target = edtsRows[clampedEdtsSelected];

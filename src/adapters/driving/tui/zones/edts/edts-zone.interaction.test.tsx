@@ -1404,6 +1404,86 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
+  it('story 2.37 (review): step navigation is inert while the box is open or a field is in edit — nothing unapplied is lost', async () => {
+    const { store, createCalls } = step3Store();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await reachStep3(instance, stdin, 'demo', 1);
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // open the box
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down); // name line
+      await press(instance, stdin, KEYS.enter); // edit
+      await type(instance, stdin, '-x');
+      for (const key of [KEYS.ctrlN, KEYS.ctrlRight, KEYS.ctrlP, KEYS.ctrlLeft]) {
+        await press(instance, stdin, key); // inert inside a box field
+      }
+      let frame = lastWizardFrame(stdout);
+      expect(frame).toContain('▶ 3. Branches ◀');
+      expect(frame).toContain('Configurer svc-a');
+      expect(frame).toContain('Nom de la branche: demo-x');
+
+      await pressEscape(instance, stdin); // leave the field — the box is still open
+      await press(instance, stdin, KEYS.ctrlN); // inert with the box open
+      await press(instance, stdin, KEYS.ctrlP);
+      frame = lastWizardFrame(stdout);
+      expect(frame).toContain('Configurer svc-a');
+      expect(frame).toContain('Nom de la branche: demo-x');
+
+      await pressEscape(instance, stdin); // close the box
+      await press(instance, stdin, KEYS.tab); // Panel A
+      await press(instance, stdin, KEYS.enter); // edit the base line
+      await press(instance, stdin, KEYS.ctrlN); // inert while Panel A edits
+      expect(lastWizardFrame(stdout)).toContain('▶ 3. Branches ◀');
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.ctrlN); // nothing open any more: advances
+      expect(lastWizardFrame(stdout)).toContain('▶ 4. Activation ◀');
+      expect(createCalls).toHaveLength(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.37 (review): a Step 3 Esc-cancel decided in the state updater still reaches the zone — zero EDTs requests a quit', async () => {
+    const { store } = step3Store();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await reachStep3(instance, stdin, 'demo', 1);
+      await press(instance, stdin, KEYS.enter); // edit the base line
+      await pressEscape(instance, stdin); // leaves edit mode only
+      expect(store.getState().quitRequested).toBe(false);
+      expect(lastWizardFrame(stdout)).toContain('▶ 3. Branches ◀');
+
+      await pressEscape(instance, stdin); // nothing open: the zero-EDT wizard requests a quit
+      expect(store.getState().quitRequested).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.37 (review): after a blocked Ctrl+N, editing the base clears the wizard message while the row keeps its own', async () => {
+    const { store } = step3Store();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await reachStep3(instance, stdin, 'demo', 1);
+      await type(instance, stdin, 'nope');
+      await press(instance, stdin, KEYS.enter); // commit the field
+      await press(instance, stdin, KEYS.ctrlN); // blocked
+      const count = (frame: string) => frame.split('svc-a : branche introuvable').length - 1;
+      expect(count(lastWizardFrame(stdout))).toBe(2); // the detail line + the wizard's message
+      await press(instance, stdin, KEYS.enter); // edit again
+      await press(instance, stdin, KEYS.backspace); // 'nop': still not found
+      const frame = lastWizardFrame(stdout);
+      expect(frame).toContain('▶ 3. Branches ◀');
+      expect(count(frame)).toBe(1); // only the row's own detail line is left
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('story 2.37 matrix: a failed list load shows on the row, blocks Ctrl+N, and is retried on the next entry', async () => {
     let attempts = 0;
     const { store, createCalls } = step3Store({

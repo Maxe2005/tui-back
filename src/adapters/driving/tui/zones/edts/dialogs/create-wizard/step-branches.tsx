@@ -35,9 +35,11 @@ export function overrideBoxContextFor(state: CreateDialogState, path: string, ca
   };
 }
 
+// A printable, non-blank key: Space never starts the base line's edit mode (no branch name
+// starts with a space).
 function isPrintable(input: string, key: TextEditKey): boolean {
   return (
-    input.length > 0 &&
+    input.trim().length > 0 &&
     !key.ctrl &&
     !key.meta &&
     !key.return &&
@@ -147,16 +149,19 @@ export function reduceBranchStepKey(
 export function createBranchStepHandlers(deps: {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
   candidates: readonly BranchCandidate[];
-  cancel: () => void;
 }) {
-  // The cancel decision is taken on the keypress-time state (the reducer is pure, so running
-  // it here and again inside the updater is safe); every state change runs against `prev`.
-  function handleBranchStepInput(current: CreateDialogState, input: string, key: Key) {
-    if (reduceBranchStepKey(current, deps.candidates, input, key).cancel) {
-      deps.cancel();
-      return;
-    }
-    deps.setDialog((prev) => (prev.kind === 'create' && prev.step === 3 ? reduceBranchStepKey(prev, deps.candidates, input, key).state : prev));
+  // Every decision — the cancel included — is taken against `prev`, the latest state, the same
+  // way goNext validates: keys arriving in one input chunk (e.g. Enter then Esc) each see the
+  // previous key's result, never the render-time state. A cancel cannot run its side effects
+  // inside the updater, so it raises `cancelRequested` for the zone to act on.
+  function handleBranchStepInput(input: string, key: Key) {
+    deps.setDialog((prev) => {
+      if (prev.kind !== 'create' || prev.step !== 3) {
+        return prev;
+      }
+      const result = reduceBranchStepKey(prev, deps.candidates, input, key);
+      return result.cancel ? { ...prev, cancelRequested: true } : result.state;
+    });
   }
 
   return { handleBranchStepInput };

@@ -422,6 +422,13 @@ export function buildMemberPlans(rows: readonly RowView[]): Record<string, Membe
   return plans;
 }
 
+// Story 2.37 (review): while Step 3's override box is open or a Panel A / box field is in
+// edit, wizard step navigation is inert — the innermost element owns the keys, and moving
+// away would silently drop edits that were never applied.
+export function isStep3Busy(state: Pick<CreateDialogState, 'step' | 'branches'>): boolean {
+  return state.step === 3 && (state.branches.box !== null || state.branches.editing);
+}
+
 // Entering Step 3 (forward from Step 2 or back from Step 4): an untouched global name tracks
 // Step 1's slug again; every selected service without a loaded list (never loaded, or failed
 // last time) is queued for a load; focus resets to Panel A, nothing in edit, box closed.

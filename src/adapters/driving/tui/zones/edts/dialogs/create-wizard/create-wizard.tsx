@@ -39,6 +39,7 @@ import {
   canAdvance,
   checkNameAvailability,
   enterBranchStep,
+  isStep3Busy,
   resolveWizardNavKey,
   STEP_INTROS,
   type BreadcrumbTone,
@@ -62,7 +63,7 @@ export type CreateWizardDeps = {
 };
 
 export function createCreateWizardHandlers(deps: CreateWizardDeps) {
-  const branchStep = createBranchStepHandlers({ setDialog: deps.setDialog, candidates: deps.candidates, cancel });
+  const branchStep = createBranchStepHandlers({ setDialog: deps.setDialog, candidates: deps.candidates });
 
   // Moved unchanged from the retired create-dialog.tsx (Story 2.36 Always boundary: same
   // createEdt params, logging and FailedResultList as before — Story 2.38 fixes the activation
@@ -181,7 +182,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
   // and a step key arriving in the same input chunk can't validate one state and advance another.
   function goNext() {
     deps.setDialog((prev) => {
-      if (prev.kind !== 'create' || prev.step === 4) {
+      if (prev.kind !== 'create' || prev.step === 4 || isStep3Busy(prev)) {
         return prev;
       }
       const check = canAdvance(prev.step, prev, deps.edtsRows, deps.candidates);
@@ -209,7 +210,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
   }
 
   function goBack() {
-    deps.setDialog((prev) => (prev.kind === 'create' && prev.step > 1 ? enterStep(prev, (prev.step - 1) as WizardStep) : prev));
+    deps.setDialog((prev) => (prev.kind === 'create' && prev.step > 1 && !isStep3Busy(prev) ? enterStep(prev, (prev.step - 1) as WizardStep) : prev));
   }
 
   // Review patch (story 2.9): with an EDT list to go back to, Escape cancels; with none (the
@@ -220,6 +221,14 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return;
     }
     deps.requestQuit();
+  }
+
+  // Story 2.37 (review): runs a cancel Step 3 requested from inside its state updater (see
+  // CreateDialogState.cancelRequested). The flag is lowered first so a quit request (the
+  // wizard stays open) can be raised again by the next Esc.
+  function handleCancelRequest() {
+    deps.setDialog((prev) => (prev.kind === 'create' && prev.cancelRequested ? { ...prev, cancelRequested: false } : prev));
+    cancel();
   }
 
   function handleCreateInput(current: CreateDialogState, input: string, key: Key) {
@@ -236,6 +245,11 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return;
     }
     const nav = resolveWizardNavKey(input, key);
+    // Story 2.37 (review): innermost-first — step navigation is inert while Step 3's box is
+    // open or a field is in edit (goNext/goBack re-check this against the latest state).
+    if (nav !== null && isStep3Busy(current)) {
+      return;
+    }
     if (nav === 'next') {
       goNext();
       return;
@@ -247,7 +261,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     // Story 2.37: Step 3 owns every other key — Enter edits/configures (never advances), Esc
     // closes its innermost element first and only then cancels the wizard.
     if (current.step === 3) {
-      branchStep.handleBranchStepInput(current, input, key);
+      branchStep.handleBranchStepInput(input, key);
       return;
     }
     if (key.escape) {
@@ -271,7 +285,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     }
   }
 
-  return { handleCreateInput, loadPendingBranchLists };
+  return { handleCreateInput, loadPendingBranchLists, handleCancelRequest };
 }
 
 // failedRows are only ever set by submitCreate after an ok:true (partial-failure) create.
