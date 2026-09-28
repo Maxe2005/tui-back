@@ -181,121 +181,220 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await instance.waitUntilExit();
     }
   });
-
-  // Story 2.39 (interim until 2.41): when a service outside the outgoing EDT is dirty, the
-  // preview explains why the switch is blocked and lists it; Enter and Esc both cancel —
-  // the preview never proceeds. This fakes switchEdt driving the exact same store fields (switchDirtyRepos /
-  // resolveSwitchDirtyRepos) edt-slice.ts's real onDirtyReposBeforeSwitch seam does — the
-  // real end-to-end wiring through core/edt/switch.ts is covered by edt-slice.test.ts; this
-  // test is about the dialog's own rendering and keystroke routing.
-  it('a dirty-repo preview explains the block, lists the services, and Enter cancels — never proceeds (story 2.39)', async () => {
+  // Story 2.41: when a service outside the outgoing EDT is dirty, the switch dialog shows the
+  // two-panel resolution view. These fake switchEdt driving the exact same store fields
+  // (switchDirtyRepos / resolveSwitchDirtyRepos) edt-slice.ts's real onDirtyReposBeforeSwitch
+  // seam does — the real end-to-end wiring through core/edt/switch.ts is covered by
+  // edt-slice.test.ts; these are about the dialog's rendering and keystroke routing.
+  function resolutionStore(options: {
+    activeTopic?: string | null;
+    localBranches?: Record<string, string[]>;
+    results?: SwitchActiveEdtData['results'];
+  } = {}) {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });
-    let switchCalls = 0;
-    let resolvedWith: SwitchDirtyReposChoice | null = null;
+    const outgoing = edt({ ulid: 'outgoing-ulid', topic: 'Mon Topic', status: 'active' });
+    const hasOutgoing = options.activeTopic !== null;
+    const log: Array<{ ulid: string; outcome: string; detail: string }> = [];
+    const probe = { switchCalls: 0, resolvedWith: null as SwitchDirtyReposChoice | null, resolutions: [] as SwitchDirtyReposChoice[], log };
     store.setState({
-      edts: [target],
+      edts: hasOutgoing ? [target, outgoing] : [target],
       edtsStatus: 'idle',
-      activeEdt: null,
+      activeEdt: hasOutgoing ? outgoing.ulid : null,
       edtsBranches: [],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      loadEdtActionLog: async () => {},
+      logEdtAction: async (ulid, _actionType, outcome, detail) => {
+        log.push({ ulid, outcome, detail });
+      },
+      listBranches: async (repoPath) => ({ ok: true, data: options.localBranches?.[repoPath] ?? ['development'] }),
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
-        switchCalls += 1;
-        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, owningEdtTopics: [], resolution: 'auto-stash' }] });
+        probe.switchCalls += 1;
+        store.setState({
+          switchDirtyRepos: [
+            { service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'development', currentBranchShared: true, sharedBranch: 'development', owningEdtTopics: [], dirtyPaths: ['pay.ts', 'tmp/new.txt'] },
+            { service: 'svc-billing', repoPath: '/repo/billing', scope: 'member-of-other-edt', currentBranch: 'feat/x', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: ['third'], dirtyPaths: ['bill.ts'] },
+            { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: [], resolution: 'auto-stash' },
+          ],
+        });
         const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
           store.setState({
             resolveSwitchDirtyRepos: (c) => {
-              resolvedWith = c;
+              probe.resolvedWith = c;
+              probe.resolutions.push(c);
               store.setState({ switchDirtyRepos: null });
               resolve(c);
             },
           });
         });
         if (choice.kind === 'cancel') {
-          return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch cancelled' } };
+          return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch to "other" cancelled: uncommitted changes were present' } };
         }
-        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [], wasInterrupted: false } };
+        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: options.results ?? [], wasInterrupted: false } };
       },
     });
+    return { store, probe };
+  }
 
+  async function openResolution(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+    await instance.waitUntilRenderFlush();
+    await press(instance, stdin, KEYS.enter); // open switch-confirm on the focused (non-active) EDT
+    await press(instance, stdin, KEYS.enter); // confirm switch -> raises the seam
+    await settle(instance); // the view initializes and the local branch lists load
+    await settle(instance);
+  }
+
+  it('story 2.41: the resolution view shows the intro, both panels and the footer; a global adopt proceeds with 2 adopt resolutions and shows the results', async () => {
+    const { store, probe } = resolutionStore({
+      results: [
+        { service: 'svc-payments', outcome: 'adopted', detail: { code: 'adopted', message: 'ok', adoptedBranch: 'mon-topic' } },
+        { service: 'svc-billing', outcome: 'adopted', detail: { code: 'adopted', message: 'ok', adoptedBranch: 'feat/x' } },
+        { service: 'svc-orders', outcome: 'switched' },
+      ],
+    });
     const { instance, stdout, stdin } = mount(store);
     try {
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // open switch-confirm
-      await press(instance, stdin, KEYS.enter); // confirm switch -> raises the preview
-      await instance.waitUntilRenderFlush();
+      await openResolution(instance, stdin);
 
-      expect(stdout.output).toContain('Bascule bloquée');
-      expect(stdout.output).toContain('svc-payments');
-      expect(stdout.output).toContain('hors de tout EDT');
-      expect(stdout.output).toContain('wip/pay');
-      expect(stdout.output).toContain('à la main');
-      expect(stdout.output).toContain('svc-orders');
-      expect(stdout.output).toContain('mis de côté automatiquement');
+      expect(stdout.output).toContain("Vous quittez l'EDT « Mon Topic »");
+      expect(stdout.output).toContain('STRATÉGIE GLOBALE');
+      expect(stdout.output).toContain('SERVICES CONCERNÉS');
+      expect(stdout.output).toContain('Action par défaut : (•) Adopter dans Mon Topic  ( ) Écraser');
+      expect(stdout.output).toContain('Nom global de la branche');
+      expect(stdout.output).toContain('mon-topic');
+      // The footer wraps at the fake TTY's 80 columns; its exact text is pinned by
+      // switch-resolution.logic.test.ts (SWITCH_RESOLUTION_FOOTER).
+      for (const part of ['[Tab] Changer de zone', '[Entrée] Configurer la ligne', '[Ctrl+N] Confirmer', '[Esc] Annuler le switch']) {
+        expect(stdout.output).toContain(part);
+      }
+      expect(stdout.output).toContain('hors EDT');
+      expect(stdout.output).toContain('membre de third');
+      expect(stdout.output).toContain('[Adopter (Global)]');
+      expect(stdout.output).toContain('svc-orders — sera mis de côté pour Mon Topic (restauré au retour)');
 
-      await press(instance, stdin, KEYS.enter); // Enter cancels too (interim)
-      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.ctrlN);
+      await settle(instance);
+      await settle(instance);
 
-      expect(switchCalls).toBe(1);
-      expect(resolvedWith).toEqual({ kind: 'cancel' });
-      expect(store.getState().switchDirtyRepos).toBeNull();
-      expect(stdout.output).toContain('Switch cancelled');
+      expect(probe.switchCalls).toBe(1);
+      expect(probe.resolvedWith).toEqual({
+        kind: 'proceed',
+        resolutions: { '/repo/payments': { kind: 'adopt', branch: 'mon-topic' }, '/repo/billing': { kind: 'adopt', branch: 'feat/x' } },
+      });
+      // Results stay on screen; the log goes to the NEW active EDT with the adopted branches.
+      expect(stdout.output).toContain('svc-payments — adopté sur mon-topic');
+      expect(probe.log).toEqual([{ ulid: 'target-ulid', outcome: 'success', detail: expect.stringContaining('svc-payments → mon-topic') }]);
+
+      expect(store.getState().zoneInputCaptured).toBe(true);
+      await press(instance, stdin, KEYS.enter); // Enter closes the results
+      await settle(instance);
+      expect(store.getState().zoneInputCaptured).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
     }
   });
 
-  it('Esc on a dirty-repo preview cancels the switch, touching nothing — the base confirm prompt is not re-shown as a fresh dialog', async () => {
-    const store = createAppStore();
-    const target = edt({ ulid: 'target-ulid', topic: 'other' });
-    let switchCalls = 0;
-    store.setState({
-      edts: [target],
-      edtsStatus: 'idle',
-      activeEdt: null,
-      edtsBranches: [],
-      edtsBranchesStatus: 'idle',
-      loadEdts: async () => {},
-      loadEdtsBranches: async () => {},
-      switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
-        switchCalls += 1;
-        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, owningEdtTopics: [], resolution: 'auto-stash' }] });
-        const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
-          store.setState({
-            resolveSwitchDirtyRepos: (c) => {
-              store.setState({ switchDirtyRepos: null });
-              resolve(c);
-            },
-          });
-        });
-        if (choice.kind === 'cancel') {
-          return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch cancelled: uncommitted changes were present' } };
-        }
-        return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [], wasInterrupted: false } };
-      },
-    });
-
+  it('story 2.41: an Écraser strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
+    const { store, probe } = resolutionStore();
     const { instance, stdout, stdin } = mount(store);
     try {
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // open switch-confirm
-      await press(instance, stdin, KEYS.enter); // confirm switch -> raises the preview
-      await instance.waitUntilRenderFlush();
-      expect(stdout.output).toContain('annuler la bascule');
+      await openResolution(instance, stdin);
+      await press(instance, stdin, KEYS.space); // Panel A: Adopter -> Écraser
+      await press(instance, stdin, KEYS.ctrlN);
 
-      await pressEscape(instance, stdin); // cancel the preview, not the whole dialog
-      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain("CONFIRMER L'ÉCRASEMENT");
+      expect(stdout.output).toContain('svc-payments (2 fichier(s))');
+      expect(stdout.output).toContain('tmp/new.txt');
+      expect(stdout.output).toContain('bill.ts');
+      expect(stdout.output).toContain('irréversible');
+      expect(stdout.output).toContain('ignorés');
+      expect(stdout.output).toContain('conservés');
 
-      expect(switchCalls).toBe(1);
+      await press(instance, stdin, KEYS.enter); // default: Retour
+      await settle(instance);
+      expect(probe.resolvedWith).toBeNull();
+
+      await press(instance, stdin, KEYS.ctrlN);
+      await press(instance, stdin, KEYS.ctrlE);
+      await settle(instance);
+      await settle(instance);
+
+      expect(probe.resolvedWith).toEqual({
+        kind: 'proceed',
+        resolutions: {
+          '/repo/payments': { kind: 'discard', confirmedPaths: ['pay.ts', 'tmp/new.txt'] },
+          '/repo/billing': { kind: 'discard', confirmedPaths: ['bill.ts'] },
+        },
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.41: Esc on the resolution view cancels the switch, touching nothing, and says so', async () => {
+    const { store, probe } = resolutionStore();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await openResolution(instance, stdin);
+      await pressEscape(instance, stdin);
+      await settle(instance);
+
+      expect(probe.switchCalls).toBe(1);
+      expect(probe.resolvedWith).toEqual({ kind: 'cancel' });
       expect(store.getState().switchDirtyRepos).toBeNull();
-      expect(stdout.output).toContain('Switch cancelled');
-      // Still in switch-confirm (not a fresh dialog) — a second Enter re-invokes switchEdt
-      // directly rather than opening a brand-new dialog.
+      expect(stdout.output).toContain('cancelled');
+      // Still in switch-confirm (not a fresh dialog) — a second Enter re-invokes switchEdt,
+      // which raises a fresh resolution view that Esc cancels again.
       await press(instance, stdin, KEYS.enter);
-      expect(switchCalls).toBe(2);
+      expect(probe.switchCalls).toBe(2);
+      await settle(instance);
+      await settle(instance);
+      const retryFrame = stdout.output.slice(stdout.output.lastIndexOf('cancelled'));
+      expect(retryFrame).toContain('STRATÉGIE GLOBALE');
+      expect(retryFrame).toContain('SERVICES CONCERNÉS');
+      await pressEscape(instance, stdin);
+      await settle(instance);
+      expect(probe.resolutions).toEqual([{ kind: 'cancel' }, { kind: 'cancel' }]);
+      expect(store.getState().switchDirtyRepos).toBeNull();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.41: an invalid adopt target (already exists locally) is shown inline and blocks Ctrl+N', async () => {
+    const { store, probe } = resolutionStore({ localBranches: { '/repo/payments': ['development', 'mon-topic'] } });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await openResolution(instance, stdin);
+
+      expect(stdout.output).toContain('La branche « mon-topic » existe déjà dans ce service');
+
+      await press(instance, stdin, KEYS.ctrlN);
+      await settle(instance);
+
+      expect(probe.resolvedWith).toBeNull();
+      expect(stdout.output).toContain('Corrigez les lignes invalides avant de confirmer');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('story 2.41: with no outgoing EDT only Écraser is offered, with an explanation', async () => {
+    const { store } = resolutionStore({ activeTopic: null });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await openResolution(instance, stdin);
+
+      expect(stdout.output).toContain('Action par défaut : (•) Écraser');
+      expect(stdout.output).toContain('Aucun EDT sortant');
+      expect(stdout.output).toContain('[Écraser]');
+      expect(stdout.output).not.toContain('[Adopter (Global)]');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -2985,6 +3084,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
   it('matrix: branch-owned-by-other-edt inside a Switch result renders a plain line — no retry affordance', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    const logged: Array<{ ulid: string; outcome: string; detail: string }> = [];
     store.setState({
       edts: [target],
       edtsStatus: 'idle',
@@ -2993,6 +3093,10 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
+      loadEdtActionLog: async () => {},
+      logEdtAction: async (ulid, _actionType, outcome, detail) => {
+        logged.push({ ulid, outcome, detail });
+      },
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => ({
         ok: true,
         data: {
@@ -3020,6 +3124,11 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       expect(stdout.output).toContain('svc-a');
       expect(stdout.output).toContain('already registered as a different EDT');
       expect(stdout.output).not.toContain('[Enter] try a different branch');
+      // Story 2.41 review: the heading says failures happened, and the entry goes to the NEW
+      // active EDT's log as `failed`, carrying the failure.
+      expect(stdout.output).toContain('effectuée avec des échecs');
+      await settle(instance);
+      expect(logged).toEqual([{ ulid: 'target-ulid', outcome: 'failed', detail: expect.stringContaining('svc-a: Branch "other" is already registered') }]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

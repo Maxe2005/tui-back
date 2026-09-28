@@ -65,11 +65,18 @@ export interface SwitchEdtRepoResult {
   outcome: 'switched' | 'adopted' | 'discarded' | 'failed';
   // `discardedPaths` (story 2.39): on a `discarded` row, exactly the paths the discard removed
   // (captured before `discardAll`, untracked directories expanded to files).
-  detail?: { code: string; message: string; discardedPaths?: string[] };
+  // `adoptedBranch` (story 2.41): on an `adopted` row, the branch the work was adopted onto
+  // in the outgoing EDT (the TUI's action log records it).
+  detail?: { code: string; message: string; discardedPaths?: string[]; adoptedBranch?: string };
 }
 
 // Story 2.39: a caller's explicit decision for one dirty state-2/3 repo (see the file header).
-export type DirtyResolution = { kind: 'adopt'; branch: string } | { kind: 'discard' };
+// `confirmedPaths` (story 2.41 review): the exact paths the user confirmed destroying (the TUI's
+// discard confirmation, from the pre-flight `dirtyPaths` snapshot). When set, the discard step
+// refuses — `failed` row `switch-discard-paths-changed`, repo untouched — if its fresh capture
+// holds any path outside it (a file changed while the dialog was open). The CLI never sets it,
+// so its discard behavior is unchanged.
+export type DirtyResolution = { kind: 'adopt'; branch: string } | { kind: 'discard'; confirmedPaths?: string[] };
 
 export type SwitchDirtyScope = 'outgoing-member' | 'member-of-other-edt' | 'non-member';
 
@@ -77,13 +84,19 @@ export type SwitchDirtyScope = 'outgoing-member' | 'member-of-other-edt' | 'non-
 // (`outgoing-member`) carry `resolution: 'auto-stash'` — read-only information, they need no
 // decision. State-2/3 rows are the ones a resolution is required for; `owningEdtTopics` lists
 // the other EDTs claiming the repo (empty for a non-member).
+// Story 2.41: `sharedBranch` is the repo's manifest shared branch (null when the manifest could
+// not be loaded) — the TUI's advisory protected-name check needs it. `dirtyPaths` (state-2/3
+// rows only) is a read-only `listDirtyPaths(..., {expandUntracked: true})` snapshot the TUI's
+// discard confirmation lists; a failed read leaves it unset.
 export interface SwitchDirtyRepo {
   service: string;
   repoPath: string;
   scope: SwitchDirtyScope;
   currentBranch: string;
   currentBranchShared: boolean;
+  sharedBranch: string | null;
   owningEdtTopics: string[];
+  dirtyPaths?: string[];
   resolution?: 'auto-stash';
 }
 
@@ -422,10 +435,16 @@ async function describeDirtyRepo(
     scope: scopeOf(repo.state),
     currentBranch,
     currentBranchShared,
+    sharedBranch: loaded.ok ? loaded.data.sharedBranch : null,
     owningEdtTopics: repo.owningTopics,
   };
   if (repo.state === 1) {
     row.resolution = 'auto-stash';
+  } else {
+    const paths = await git.listDirtyPaths(repo.repoPath, { expandUntracked: true });
+    if (paths.ok) {
+      row.dirtyPaths = paths.data;
+    }
   }
   return row;
 }
@@ -447,7 +466,7 @@ type DirtyPlan =
   | { kind: 'none' }
   | { kind: 'stash'; outgoingUlid: string }
   | { kind: 'adopt'; outgoing: EdtRegistryEntry; branch: string }
-  | { kind: 'discard' };
+  | { kind: 'discard'; confirmedPaths?: string[] };
 
 // The executed plan's effect, carried to the checkout step.
 interface Prepared {
@@ -488,7 +507,10 @@ async function planDirtyWork(
     };
   }
   if (resolution.kind === 'discard') {
-    return { ok: true, value: { kind: 'discard' } };
+    return {
+      ok: true,
+      value: resolution.confirmedPaths !== undefined ? { kind: 'discard', confirmedPaths: resolution.confirmedPaths } : { kind: 'discard' },
+    };
   }
   if (context.outgoing === undefined) {
     return {
@@ -538,6 +560,21 @@ async function executeDirtyPlan(
       if (captured.data.length === 0) {
         return { ok: true, value: { outcome: 'switched' } };
       }
+      if (plan.confirmedPaths !== undefined) {
+        const confirmed = new Set(plan.confirmedPaths);
+        const unconfirmed = captured.data.filter((path) => !confirmed.has(path));
+        if (unconfirmed.length > 0) {
+          const shown = unconfirmed.slice(0, UNCONFIRMED_PATHS_SHOWN).join(', ');
+          const more = unconfirmed.length > UNCONFIRMED_PATHS_SHOWN ? ` (+${unconfirmed.length - UNCONFIRMED_PATHS_SHOWN} more)` : '';
+          return {
+            ok: false,
+            row: failed(service, {
+              code: 'switch-discard-paths-changed',
+              message: `Uncommitted changes in ${repoPath} changed since the discard was confirmed (not confirmed: ${shown}${more}) — nothing discarded, left untouched`,
+            }),
+          };
+        }
+      }
       const discarded = await git.discardAll(repoPath);
       if (!discarded.ok) {
         // The reset may already have run before the clean failed: report what was targeted.
@@ -560,6 +597,9 @@ async function executeDirtyPlan(
       return adoptDirtyWork(context, service, repoPath, plan.outgoing, plan.branch);
   }
 }
+
+// How many unconfirmed paths a `switch-discard-paths-changed` message names.
+const UNCONFIRMED_PATHS_SHOWN = 10;
 
 // The adopt steps, in the AC's order: (1) gate, (2) stash under the outgoing tag, (3) create
 // the branch from the current HEAD branch if it differs (never checked out), (4) register the
@@ -692,6 +732,18 @@ function succeeded(service: string, prepared: Prepared): SwitchEdtRepoResult {
         code: 'discarded',
         message: `Discarded ${paths.length} uncommitted path(s)`,
         discardedPaths: paths,
+      },
+    };
+  }
+  if (prepared.outcome === 'adopted' && prepared.adoptedBranch !== undefined) {
+    const into = prepared.adoptedInto !== undefined ? ` into "${prepared.adoptedInto.topic}"` : '';
+    return {
+      service,
+      outcome: 'adopted',
+      detail: {
+        code: 'adopted',
+        message: `Uncommitted work adopted${into} on branch "${prepared.adoptedBranch}"`,
+        adoptedBranch: prepared.adoptedBranch,
       },
     };
   }

@@ -546,3 +546,11 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
   summary: Stashes left under the removed fixed `tui-back:shared` tag (by a pre-2.39 switch whose restore failed) are no longer popped or surfaced by any code path.
   evidence: story 2.39 removed `NON_MEMBER_STASH_TAG` and its unconditional post-checkout pop from `src/core/edt/switch.ts` (required by the AC); the old pop also healed leftovers. Surfaced by edge-case-hunter and blind-hunter. **Track:** a one-off detection (dirty preview note or a doctor/status check) if any user reports such a stash.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation.md`
+  summary: A deliberate cancel from the switch dialog (`switch-cancelled-by-user`) is still written to the action log as a `failed` action on the focused EDT, and every non-ok switch still logs to the focused EDT rather than a defined target.
+  evidence: `handleSwitchConfirm` error branch in `src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx` predates 2.41 (kept unchanged by its spec); surfaced by blind-hunter.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation.md`
+  summary: Branch names typed in the switch resolution dialog (and the create wizard) are not checked against git ref-name rules, so an invalid name passes inline validation and only fails the row at `createBranch`.
+  evidence: no `check-ref-format`-style validator exists in the TUI layer; the git gate stays authoritative. Surfaced by edge-case-hunter.

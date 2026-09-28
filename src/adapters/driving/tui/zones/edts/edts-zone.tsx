@@ -19,7 +19,7 @@
 // This file holds the Ink component only — the pure formatting/selection/form-focus logic
 // and the 5 dialogs' state shapes/initializers live in edts-zone.logic.ts (kept in one place
 // so the component here stays scannable; see that file's own header for why).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -68,6 +68,13 @@ import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-d
 import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
+import {
+  autoStashedRepos,
+  initialSwitchResolution,
+  otherEdtBranches,
+  resolutionRepos,
+  type LocalBranchList,
+} from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // Story 5.5: rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above
 // the splitter, both section headers, and the loading/error/issues lines) subtracted from the
@@ -79,6 +86,11 @@ const EDTS_SERVICE_LISTS_CHROME_ROWS = 12;
 // column header, the blocked-row detail line, Step 3 footer, error line and the wizard footer.
 // An approximation, as above.
 const CREATE_WIZARD_CHROME_ROWS = 17;
+// Story 2.41: rows the switch resolution view spends around its Panel B table — modal border
+// and title, the (wrapping) intro, Panel A (title + 2 lines + the no-outgoing note), Panel B
+// title and column header, the blocked-row detail, the Ctrl+N error, the list-loading note and
+// the footer. The read-only state-1 rows below the table are added on top. An approximation.
+const SWITCH_RESOLUTION_CHROME_ROWS = 17;
 
 export function EdtsZone({
   useStore = useAppStore,
@@ -318,6 +330,11 @@ export function EdtsZone({
   const servicesListsAvailableHeight = Math.max(windowSize.rows - EDTS_SERVICE_LISTS_CHROME_ROWS, 4);
   // Story 2.37 (NFR-7): the create wizard's Step 3 table budget, same live pattern as above.
   const createWizardTableMaxRows = Math.max(windowSize.rows - CREATE_WIZARD_CHROME_ROWS, 3);
+  // Story 2.41 (NFR-7): the switch resolution table / discard file-list budget, same pattern.
+  const switchResolutionMaxRows = Math.max(
+    windowSize.rows - SWITCH_RESOLUTION_CHROME_ROWS - (switchDirtyRepos !== null ? autoStashedRepos(switchDirtyRepos).length : 0),
+    3,
+  );
   const edtServicesMaxVisibleRows = servicesListsAvailableHeight;
   // Review fix: an empty EDT SERVICES list still renders a 1-row placeholder ("No services in
   // this EDT.") instead of the BoundedList's own 0 rows — `Math.min(edtServices.length, …)` was
@@ -486,7 +503,7 @@ export function EdtsZone({
   // under dialogs/ (see edts-zone.tsx's header) — these factories close over this render's own
   // values (deps object recreated every render, same as the handlers it replaces were), so
   // behavior is unchanged; only the code's location moved.
-  const { handleSwitchDialogInput } = createSwitchDialogHandlers({
+  const { handleSwitchDialogInput, dispatchResolutionDecision } = createSwitchDialogHandlers({
     setDialog,
     switchEdtAction,
     loadEdts,
@@ -497,6 +514,63 @@ export function EdtsZone({
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
   });
+  // Story 2.41: once the core switch parks on the dirty-repo seam, open the resolution view on
+  // a fresh draft — the outgoing EDT is the store's active one (null on a first switch) — and
+  // load each state-2/3 repo's local branch list once (listMemberBranches, via the store), for
+  // the advisory "already exists" check. Keyed on primitives, never on the dialog object.
+  const switchResolutionDraftCounter = useRef(0);
+  const switchResolutionNeeded = dialog.kind === 'switch-confirm' && switchDirtyRepos !== null && dialog.resolution === null;
+  useEffect(() => {
+    if (!switchResolutionNeeded || switchDirtyRepos === null) {
+      return;
+    }
+    const dirty = switchDirtyRepos;
+    const outgoingTopic = activeEdtUlid !== null ? (edtsRows.find((entry) => entry.ulid === activeEdtUlid)?.topic ?? null) : null;
+    // Story 2.41 review: branches other EDTs register per repo, so a row sitting on one is
+    // retargeted to the global name and such a name is rejected inline.
+    const claims = otherEdtBranches(edtsRows, activeEdtUlid);
+    // Story 2.41 review: each draft is tagged, so a late list load from an earlier attempt
+    // never lands in a newer draft; a rejected load settles as 'error', never stuck 'loading'.
+    switchResolutionDraftCounter.current += 1;
+    const draftId = switchResolutionDraftCounter.current;
+    setDialog((prev) =>
+      prev.kind === 'switch-confirm' && prev.resolution === null
+        ? { ...prev, resolution: initialSwitchResolution(outgoingTopic, dirty, claims, draftId) }
+        : prev,
+    );
+    for (const repo of resolutionRepos(dirty)) {
+      const repoPath = repo.repoPath;
+      const apply = (list: LocalBranchList) => {
+        setDialog((prev) => {
+          if (
+            prev.kind !== 'switch-confirm' ||
+            prev.resolution === null ||
+            prev.resolution.draftId !== draftId ||
+            prev.resolution.lists[repoPath]?.status !== 'loading'
+          ) {
+            return prev;
+          }
+          return { ...prev, resolution: { ...prev.resolution, lists: { ...prev.resolution.lists, [repoPath]: list } } };
+        });
+      };
+      listBranchesAction(repoPath).then(
+        (result) => apply(result.ok ? { status: 'ready', branches: result.data } : { status: 'error', branches: [] }),
+        () => apply({ status: 'error', branches: [] }),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switchResolutionNeeded]);
+
+  // Story 2.41: the resolution view's decision (raised inside its key reducer) resumes the
+  // parked core switch here, outside any state updater.
+  const switchResolutionDecision = dialog.kind === 'switch-confirm' ? (dialog.resolution?.decision ?? null) : null;
+  useEffect(() => {
+    if (switchResolutionDecision !== null && dialog.kind === 'switch-confirm') {
+      dispatchResolutionDecision(dialog);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switchResolutionDecision]);
+
   const { handleCreateInput, loadPendingBranchLists, handleCancelRequest } = createCreateWizardHandlers({
     setDialog,
     createEdtAction,
@@ -916,7 +990,7 @@ export function EdtsZone({
         />
       ) : null}
 
-      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} /> : null}
+      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} maxVisibleRows={switchResolutionMaxRows} /> : null}
 
       {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
 

@@ -158,7 +158,9 @@ describe('edt slice — switch dirty-repo seam (story 2.39)', () => {
           scope: 'non-member',
           currentBranch: 'development',
           currentBranchShared: true,
+          sharedBranch: 'development',
           owningEdtTopics: [],
+          dirtyPaths: ['junk.txt'],
         },
       ]);
     });
@@ -170,6 +172,34 @@ describe('edt slice — switch dirty-repo seam (story 2.39)', () => {
     expect(calls(git.discardAll)).toEqual([['/repo/b']]);
     expect(store.getState().switchDirtyRepos).toBeNull();
     expect(store.getState().activeEdt).toBe('target-ulid');
+  });
+
+  it('a proceed payload carrying an adopt resolution (story 2.41) reaches core: branch created, repo adopted into the outgoing EDT', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+    };
+    const deps = fakeDeps({ git });
+    const store = createAppStore(deps);
+
+    const run = store.getState().switchEdt({ topic: 'target-topic' });
+    await vi.waitFor(() => {
+      expect(store.getState().switchDirtyRepos).not.toBeNull();
+    });
+
+    store.getState().resolveSwitchDirtyRepos({ kind: 'proceed', resolutions: { '/repo/b': { kind: 'adopt', branch: 'outgoing-topic' } } });
+    const result = await run;
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'adopted',
+        detail: expect.objectContaining({ code: 'adopted', adoptedBranch: 'outgoing-topic' }),
+      });
+    }
+    expect(calls(git.createBranch)).toEqual([['/repo/b', 'outgoing-topic', 'development']]);
+    expect(calls(deps.edtRegistry.update)).toHaveLength(1);
   });
 
   it('a cancel choice settles as switch-cancelled-by-user, clears the preview, and never touches activeEdt', async () => {

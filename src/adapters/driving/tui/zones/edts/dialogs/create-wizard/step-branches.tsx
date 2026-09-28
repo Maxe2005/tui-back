@@ -13,11 +13,11 @@
 //     edit mode, then (reported as `cancel`) the whole wizard.
 // The key handling is a pure reducer over the dialog state (reduceBranchStepKey).
 import { Box, Text, type Key } from 'ink';
-import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { BRANCH_MAX_WIDTH, truncateBranchLabel, type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import { type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, type BranchCandidate, type RowView } from './wizard.logic.js';
@@ -169,28 +169,26 @@ export function createBranchStepHandlers(deps: {
 
 const COLUMN_HEADERS = ['Service', 'Mode', 'Base / Source', 'Branche cible'] as const;
 
-// Every free-text cell (service name, branch ref, error label) is capped with the list's own
-// truncateBranchLabel/BRANCH_MAX_WIDTH, so no column can push the table past the modal; the
-// full text of a blocking error is shown once, on the detail line under the table.
-function cell(text: string): string {
-  return truncateBranchLabel(text, BRANCH_MAX_WIDTH);
+// The full text of a blocking error is shown once, on the detail line under the table (the
+// shared table truncates every cell).
+function baseText(row: RowView): string {
+  return row.baseStatus === 'error' ? `✖ ${row.base}` : row.base;
 }
 
-function serviceCell(row: RowView): string {
-  return cell(row.service);
+function targetText(row: RowView): string {
+  return row.targetError !== null ? `✖ ${row.target === '' ? '—' : row.target}` : row.target;
 }
 
-function baseCell(row: RowView): string {
-  return cell(row.baseStatus === 'error' ? `✖ ${row.base}` : row.base);
-}
-
-function targetCell(row: RowView): string {
-  return cell(row.targetError !== null ? `✖ ${row.target === '' ? '—' : row.target}` : row.target);
-}
-
-function columnWidths(rows: readonly RowView[]): [number, number, number] {
-  const width = (values: readonly string[], header: string) => Math.max(header.length, ...values.map((value) => value.length));
-  return [width(rows.map(serviceCell), COLUMN_HEADERS[0]), width(rows.map((row) => row.modeLabel), COLUMN_HEADERS[1]), width(rows.map(baseCell), COLUMN_HEADERS[2])];
+function rowCells(row: RowView): BranchPlanCell[] {
+  return [
+    { text: row.service },
+    { text: row.modeLabel },
+    {
+      text: baseText(row),
+      ...(row.baseStatus === 'error' ? { color: colors.error } : row.baseStatus === 'loading' ? { color: colors['text-dim'] } : {}),
+    },
+    { text: targetText(row), ...(row.targetError !== null ? { color: colors.error } : {}) },
+  ];
 }
 
 // The row whose blocking error the detail line spells out: the row under the cursor when it
@@ -198,15 +196,6 @@ function columnWidths(rows: readonly RowView[]): [number, number, number] {
 export function detailRow(rows: readonly RowView[], rowCursor: number): RowView | undefined {
   const focused = rows[rowCursor];
   return focused !== undefined && focused.error !== null ? focused : rows.find((row) => row.error !== null);
-}
-
-function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
-  return (
-    <Text color={focused ? colors.accent : colors.text} bold={focused}>
-      {focused ? '▶ ' : '  '}
-      {text}
-    </Text>
-  );
 }
 
 export function BranchStepView({
@@ -231,7 +220,6 @@ export function BranchStepView({
   }
   const globalFocused = branches.panel === 'global';
   const lineFocused = (line: 'base' | 'name') => globalFocused && branches.globalLine === line;
-  const [serviceWidth, modeWidth, baseWidth] = columnWidths(rows);
   const rowsFocused = branches.panel === 'rows';
   const blocked = detailRow(rows, branches.rowCursor);
   return (
@@ -262,33 +250,15 @@ export function BranchStepView({
         />
       </Box>
       <PanelTitle text="RÉSUMÉ ET EXCEPTIONS PAR SERVICE" focused={rowsFocused} />
-      <Text color={colors['text-dim']} wrap="truncate-end">
-        {'  '}
-        {COLUMN_HEADERS[0].padEnd(serviceWidth)} │ {COLUMN_HEADERS[1].padEnd(modeWidth)} │ {COLUMN_HEADERS[2].padEnd(baseWidth)} │ {COLUMN_HEADERS[3]}
-      </Text>
-      <BoundedList
-        items={rows}
+      <BranchPlanTable
+        headers={COLUMN_HEADERS}
+        rows={rows}
+        rowKey={(row) => row.path}
+        cells={rowCells}
+        cursor={branches.rowCursor}
+        focused={rowsFocused}
         maxVisibleRows={maxVisibleRows}
-        cursorIndex={branches.rowCursor}
-        moreAboveLabel="services au-dessus"
-        moreBelowLabel="services en dessous"
-        renderItem={(row, index) => {
-          const selected = rowsFocused && index === branches.rowCursor;
-          const textColor = selected ? colors.accent : colors.text;
-          return (
-            <Text key={row.path} wrap="truncate-end">
-              <Text color={colors.accent}>{selected ? '› ' : '  '}</Text>
-              <Text color={textColor}>
-                {serviceCell(row).padEnd(serviceWidth)} │ {row.modeLabel.padEnd(modeWidth)} │{' '}
-              </Text>
-              <Text color={row.baseStatus === 'error' ? colors.error : row.baseStatus === 'loading' ? colors['text-dim'] : textColor}>
-                {baseCell(row).padEnd(baseWidth)}
-              </Text>
-              <Text color={textColor}> │ </Text>
-              <Text color={row.targetError !== null ? colors.error : textColor}>{targetCell(row)}</Text>
-            </Text>
-          );
-        }}
+        labels={{ moreAbove: 'services au-dessus', moreBelow: 'services en dessous' }}
       />
       {blocked !== undefined ? (
         <Text color={colors.error}>

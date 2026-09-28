@@ -782,7 +782,9 @@ describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () =
             scope: 'member-of-other-edt',
             currentBranch: 'development',
             currentBranchShared: true,
+            sharedBranch: 'development',
             owningEdtTopics: ['other-topic'],
+            dirtyPaths: [],
           },
           {
             service: 'svc-c',
@@ -790,6 +792,7 @@ describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () =
             scope: 'outgoing-member',
             currentBranch: 'feat/c',
             currentBranchShared: false,
+            sharedBranch: 'development',
             owningEdtTopics: [],
             resolution: 'auto-stash',
           },
@@ -852,6 +855,41 @@ describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () =
   });
 });
 
+describe('switchActiveEdt — seam row facts for the TUI dialog (story 2.41)', () => {
+  it('carries the manifest sharedBranch and a read-only expanded dirtyPaths snapshot on state-2/3 rows only', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath !== '/repo/a')),
+      listDirtyPaths: vi.fn(async () => ok(['x.txt', 'dir/y.txt'])),
+    });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => ({ kind: 'cancel' as const }));
+
+    await switchActiveEdt(makeParams({ git, onDirtyReposBeforeSwitch }));
+
+    const rows = calls(onDirtyReposBeforeSwitch)[0]![0] as Array<Record<string, unknown>>;
+    expect(rows.find((row) => row.repoPath === '/repo/b')).toMatchObject({ sharedBranch: 'development', dirtyPaths: ['x.txt', 'dir/y.txt'] });
+    const stateOne = rows.find((row) => row.repoPath === '/repo/c');
+    expect(stateOne).toMatchObject({ sharedBranch: 'development', resolution: 'auto-stash' });
+    expect(stateOne).not.toHaveProperty('dirtyPaths');
+    expect(calls(git.listDirtyPaths)).toEqual([['/repo/b', { expandUntracked: true }]]);
+    expectZeroWrites(git);
+  });
+
+  it('a failed dirtyPaths read leaves the field unset; a failed manifest load yields sharedBranch null', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      listDirtyPaths: vi.fn(async () => err('git-status-error', 'boom')),
+    });
+    const manifest = fakeManifest({ load: vi.fn(async () => err('manifest-not-found', 'missing')) });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => ({ kind: 'cancel' as const }));
+
+    await switchActiveEdt(makeParams({ git, manifest, onDirtyReposBeforeSwitch }));
+
+    const [row] = calls(onDirtyReposBeforeSwitch)[0]![0] as Array<Record<string, unknown>>;
+    expect(row).toMatchObject({ repoPath: '/repo/b', sharedBranch: null });
+    expect(row).not.toHaveProperty('dirtyPaths');
+  });
+});
+
 describe('switchActiveEdt — adopt resolution (story 2.39)', () => {
   function adoptSetup(gitOverrides: Partial<GitPort> = {}, registryOverrides: Partial<EdtRegistryPort> = {}) {
     const git = fakeGit({
@@ -872,7 +910,11 @@ describe('switchActiveEdt — adopt resolution (story 2.39)', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.results).toContainEqual({ service: 'svc-b', outcome: 'adopted' });
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'adopted',
+        detail: { code: 'adopted', message: expect.stringContaining('feat/b'), adoptedBranch: 'feat/b' },
+      });
     }
     const isB = (args: unknown[]) => args[0] === '/repo/b';
     expect(calls(git.assertAllowedBranch)).toContainEqual(['/repo/b', 'feat/b', 'outgoing-ulid']);
@@ -987,6 +1029,55 @@ describe('switchActiveEdt — adopt resolution (story 2.39)', () => {
   });
 });
 
+describe('switchActiveEdt — discard confirmedPaths (story 2.41 review)', () => {
+  function discardWith(captured: string[], confirmedPaths?: string[]) {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      listDirtyPaths: vi.fn(async () => ok(captured)),
+    });
+    const resolution = confirmedPaths !== undefined ? { kind: 'discard' as const, confirmedPaths } : { kind: 'discard' as const };
+    return { git, params: makeParams({ git, dirtyResolutions: { '/repo/b': resolution } }) };
+  }
+
+  it('a fresh capture holding a path outside confirmedPaths fails the row, nothing discarded or checked out', async () => {
+    const { git, params } = discardWith(['a.txt', 'late.txt'], ['a.txt']);
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual({
+        service: 'svc-b',
+        outcome: 'failed',
+        detail: { code: 'switch-discard-paths-changed', message: expect.stringContaining('late.txt') },
+      });
+    }
+    expect(calls(git.discardAll)).toHaveLength(0);
+    expect(calls(git.checkout)).not.toContainEqual(['/repo/b', 'development']);
+    expect(calls(git.stashSave)).toHaveLength(0);
+  });
+
+  it('a capture equal to (or a subset of) confirmedPaths discards as usual', async () => {
+    for (const captured of [['a.txt', 'b.txt'], ['a.txt']]) {
+      const { git, params } = discardWith(captured, ['a.txt', 'b.txt']);
+
+      const result = await switchActiveEdt(params);
+
+      expect(result.ok && result.data.results.find((row) => row.service === 'svc-b')?.outcome).toBe('discarded');
+      expect(calls(git.discardAll)).toEqual([['/repo/b']]);
+    }
+  });
+
+  it('without confirmedPaths (the CLI) the discard is unchanged', async () => {
+    const { git, params } = discardWith(['a.txt', 'late.txt']);
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok && result.data.results.find((row) => row.service === 'svc-b')?.outcome).toBe('discarded');
+    expect(calls(git.discardAll)).toEqual([['/repo/b']]);
+  });
+});
+
 describe('switchActiveEdt — discard resolution (story 2.39)', () => {
   it('captures the expanded dirty paths, discards, checks out: outcome discarded with detail.discardedPaths', async () => {
     const git = fakeGit({
@@ -1004,7 +1095,11 @@ describe('switchActiveEdt — discard resolution (story 2.39)', () => {
         detail: { code: 'discarded', message: 'Discarded 2 uncommitted path(s)', discardedPaths: ['a.txt', 'newdir/b.txt'] },
       });
     }
-    expect(calls(git.listDirtyPaths)).toEqual([['/repo/b', { expandUntracked: true }]]);
+    // Once read-only by the pre-flight (story 2.41 `dirtyPaths`), once to capture before the discard.
+    expect(calls(git.listDirtyPaths)).toEqual([
+      ['/repo/b', { expandUntracked: true }],
+      ['/repo/b', { expandUntracked: true }],
+    ]);
     expect(calls(git.discardAll)).toEqual([['/repo/b']]);
     expect(calls(git.stashSave)).toHaveLength(0);
     expect(callOrder(git.discardAll)).toBeLessThan(callOrder(git.checkout, (args) => args[0] === '/repo/b'));

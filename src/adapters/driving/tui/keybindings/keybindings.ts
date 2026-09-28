@@ -105,4 +105,38 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+R',
     description: 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy',
   },
+  // Story 2.41: scoped to the SWITCH EDT resolution view (dirty services outside the EDT being
+  // left) — same Tab/Enter/Ctrl+R meanings as the wizard's Step 3 it mirrors.
+  {
+    keys: 'Tab (switch resolution)',
+    description: 'Switch EDT, dirty services: switch between the global strategy and the per-service table',
+  },
+  {
+    keys: 'Enter (switch resolution)',
+    description: 'Switch EDT, dirty services: edit the global branch name / configure the focused service row',
+  },
+  {
+    keys: 'Ctrl+N (switch resolution)',
+    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
+  },
+  {
+    keys: 'Ctrl+R (switch resolution)',
+    description: 'Switch EDT, "Configurer" box: return the service to the global strategy',
+  },
+  {
+    keys: 'Space / ← → (switch resolution)',
+    description: 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser',
+  },
+  {
+    keys: '↑ / ↓ (switch discard confirmation)',
+    description: 'Switch EDT, discard confirmation: scroll the list of files to be destroyed',
+  },
+  {
+    keys: 'Ctrl+E (switch resolution)',
+    description: 'Switch EDT, discard confirmation: destroy the listed files and proceed (Enter/Esc go back)',
+  },
+  {
+    keys: 'Esc (switch resolution)',
+    description: 'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
+  },
 ];
