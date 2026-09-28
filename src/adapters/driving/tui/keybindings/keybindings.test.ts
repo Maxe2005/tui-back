@@ -46,6 +46,8 @@ const EXPECTED = [
     'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
   ],
   ['Ctrl+R (switch resolution)', 'Switch EDT, "Configurer" box: return the service to the global strategy'],
+  ['Space / ← → (switch resolution)', 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser'],
+  ['↑ / ↓ (switch discard confirmation)', 'Switch EDT, discard confirmation: scroll the list of files to be destroyed'],
   ['Ctrl+E (switch resolution)', 'Switch EDT, discard confirmation: destroy the listed files and proceed (Enter/Esc go back)'],
   [
     'Esc (switch resolution)',
@@ -54,7 +56,7 @@ const EXPECTED = [
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 25 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37; switch resolution keys, story 2.41)', () => {
+  it('lists exactly the 27 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37; switch resolution keys, story 2.41)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),

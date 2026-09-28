@@ -71,7 +71,8 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
       return;
     }
     deps.setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: false, resolution: null, error: result.error.message } : prev));
-    // Log failed action
+    // A switch that did not happen (refused, cancelled, errored) is logged against the
+    // focused EDT, not a new active one — there is none.
     if (deps.focusedEdt) {
       await deps.logEdtAction(deps.focusedEdt.ulid, 'switch', 'failed', result.error.message);
     }

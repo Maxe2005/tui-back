@@ -124,6 +124,14 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Switch EDT, "Configurer" box: return the service to the global strategy',
   },
   {
+    keys: 'Space / ← → (switch resolution)',
+    description: 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser',
+  },
+  {
+    keys: '↑ / ↓ (switch discard confirmation)',
+    description: 'Switch EDT, discard confirmation: scroll the list of files to be destroyed',
+  },
+  {
     keys: 'Ctrl+E (switch resolution)',
     description: 'Switch EDT, discard confirmation: destroy the listed files and proceed (Enter/Esc go back)',
   },

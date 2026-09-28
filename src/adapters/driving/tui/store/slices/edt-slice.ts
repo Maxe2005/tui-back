@@ -336,8 +336,8 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           force: params.force,
           // The TUI backs the dirty-repo seam — core pauses the switch (before any git
           // write) on the batch of dirty repos and waits here while the switch dialog's
-          // resolution view (story 2.41) collects the developer's choice. No explicit dirtyResolutions: the seam
-          // is the TUI's only resolution source.
+          // resolution view (story 2.41) collects the developer's choice. No explicit
+          // dirtyResolutions: the seam is the TUI's only resolution source.
           onDirtyReposBeforeSwitch: async (dirty) => {
             set({ switchDirtyRepos: dirty });
             return new Promise<SwitchDirtyReposChoice>((resolve) => {
