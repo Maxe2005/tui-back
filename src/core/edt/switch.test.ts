@@ -1230,4 +1230,46 @@ describe('switchActiveEdt — review patches (story 2.39)', () => {
       });
     }
   });
+
+  it('a first-ever switch ignores a stale adopt resolution for a clean repo and proceeds', async () => {
+    const git = fakeGit();
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok(null)) });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
+
+    const result = await switchActiveEdt(
+      makeParams({ git, state, edtRegistry, dirtyResolutions: { '/repo/b': { kind: 'adopt', branch: 'feat/b' } } }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls(state.writeActiveEdt)).toEqual([['target-ulid']]);
+    expect(calls(git.createBranch)).toHaveLength(0);
+  });
+
+  it('trims the adopt branch everywhere downstream (gate, createBranch, membership)', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      currentBranch: vi.fn(async () => ok('development')),
+    });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
+
+    const result = await switchActiveEdt(makeParams({ git, edtRegistry, dirtyResolutions: { '/repo/b': { kind: 'adopt', branch: ' feat/b ' } } }));
+
+    expect(result.ok).toBe(true);
+    expect(calls(git.assertAllowedBranch)).toContainEqual(['/repo/b', 'feat/b', 'outgoing-ulid']);
+    expect(calls(git.createBranch)).toEqual([['/repo/b', 'feat/b', 'development']]);
+    expect(calls(edtRegistry.update)).toEqual([
+      ['outgoing-ulid', { topic: 'outgoing-topic', members: [...OUTGOING.members, member('svc-b', '/repo/b', 'feat/b')] }],
+    ]);
+  });
+
+  it('an adopt with a blank branch is invalid-argument with zero git writes', async () => {
+    const git = fakeGit({ hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')) });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) });
+
+    const result = await switchActiveEdt(makeParams({ git, state, dirtyResolutions: { '/repo/b': { kind: 'adopt', branch: '  ' } } }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expectZeroWrites(git);
+    expect(calls(state.writeActiveEdt)).toHaveLength(0);
+  });
 });

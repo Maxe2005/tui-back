@@ -378,19 +378,21 @@ async function resolveDirtyRepos(input: {
     );
   }
 
-  const registered = new Set(classified.map((repo) => repo.repoPath));
-  for (const [repoPath, resolution] of resolutions) {
-    if (resolution.kind !== 'adopt' || !registered.has(repoPath)) {
+  // Only the rows that actually need a resolution are validated: a stale adopt entry for a
+  // clean or state-1 repo is a no-op in the main loop, so it must not abort the switch.
+  for (const row of needingResolution) {
+    const resolution = resolutions.get(row.repoPath);
+    if (resolution?.kind !== 'adopt') {
       continue;
     }
     if (outgoing === undefined) {
       return err(
         'switch-adopt-without-outgoing',
-        `Cannot adopt uncommitted changes in ${repoPath}: there is no active EDT to adopt them into. Discard them or cancel. Nothing was touched.`,
+        `Cannot adopt uncommitted changes in ${row.repoPath}: there is no active EDT to adopt them into. Discard them or cancel. Nothing was touched.`,
       );
     }
     if (resolution.branch.trim() === '') {
-      return err('invalid-argument', `An adopt resolution for ${repoPath} needs a branch name. Nothing was touched.`);
+      return err('invalid-argument', `An adopt resolution for ${row.repoPath} needs a branch name. Nothing was touched.`);
     }
   }
 
@@ -495,7 +497,17 @@ async function planDirtyWork(
       }),
     };
   }
-  return { ok: true, value: { kind: 'adopt', outgoing: context.outgoing, branch: resolution.branch } };
+  const branch = resolution.branch.trim();
+  if (branch === '') {
+    return {
+      ok: false,
+      row: failed(service, {
+        code: 'invalid-argument',
+        message: `An adopt resolution for ${repo.repoPath} needs a branch name — left untouched`,
+      }),
+    };
+  }
+  return { ok: true, value: { kind: 'adopt', outgoing: context.outgoing, branch } };
 }
 
 async function executeDirtyPlan(
