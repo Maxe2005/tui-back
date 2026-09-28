@@ -2,7 +2,7 @@
 title: 'EDT Creation Wizard — Step 3: Global Branch Strategy & Per-Service Overrides'
 type: 'feature'
 created: '2026-09-28'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 context: []
 baseline_commit: '1cd597a4f69fe35379599293db16e0de4d28c147'
@@ -120,3 +120,87 @@ baseline_commit: '1cd597a4f69fe35379599293db16e0de4d28c147'
 
 **Manual checks:**
 - In a real terminal: Step 3 panels, the box, and Ctrl+R.
+
+## Suggested Review Order
+
+**Step 3 rules (pure core of the change)**
+
+- Entry point: one plan check shared by rows and the box — mirrors what git/core will refuse.
+  [`wizard.logic.ts:254`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L254)
+
+- Global base resolution: empty → manifest sharedBranch, then local, then `origin/<x>`.
+  [`wizard.logic.ts:198`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L198)
+
+- Row view: mode label, base/source, target and blocking error per service.
+  [`wizard.logic.ts:329`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L329)
+
+- Rows become Story 2.35 memberPlans; null while any row is blocked.
+  [`wizard.logic.ts:414`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L414)
+
+- Step 3 gate now reads the row views instead of the retired branch fields.
+  [`wizard.logic.ts:58`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L58)
+
+- Entry re-seeds focus, keeps a touched name, queues unloaded/failed lists.
+  [`wizard.logic.ts:436`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L436)
+
+**Keys & layering**
+
+- Step 3 reducer: innermost-first Esc, Panel A editing, touched flag, stale-error clear.
+  [`step-branches.tsx:69`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L69)
+
+- Override box reducer: mode toggle, autocomplete commit rule, Ctrl+R revert, Apply.
+  [`override-box.logic.ts:214`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.logic.ts#L214)
+
+- Box Apply validation reuses checkPlan with box-specific wording.
+  [`override-box.logic.ts:159`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.logic.ts#L159)
+
+- Step navigation inert while the box or a field is open (checked in the updater).
+  [`create-wizard.tsx:199`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L199)
+
+- Esc cancel raised in the updater, side effects run from a zone effect.
+  [`create-wizard.tsx:243`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L243)
+
+**Data flow**
+
+- Per-service lists loaded once per entry, rejected promises folded into error rows.
+  [`create-wizard.tsx:149`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L149)
+
+- Submit sends memberPlans only; branchOptions no longer used by the wizard.
+  [`create-wizard.tsx:71`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L71)
+
+- Core read of local + remote lists in parallel, never fetching.
+  [`create.ts:599`](../../../src/core/edt/create.ts#L599)
+
+- Store: optional branchOptions/memberPlans, new listCreateBranches wrapper.
+  [`edt-slice.ts:66`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L66)
+
+- FR-7 shared-branch rule moved to core; the git gate imports it back.
+  [`shared-branches.ts:8`](../../../src/core/edt/shared-branches.ts#L8)
+
+**Views & wiring**
+
+- Panels A/B, bounded truncated table, detail line for a blocked row.
+  [`step-branches.tsx:212`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L212)
+
+- Configurer box view reusing BranchAutocompleteInput and TextInputLine.
+  [`override-box.tsx:68`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.tsx#L68)
+
+- Zone wiring: table height budget, list-load and cancel effects.
+  [`edts-zone.tsx:320`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L320)
+
+- Single BranchStepState replaces the retired flat branch fields.
+  [`edts-zone.logic.ts:308`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L308)
+
+**Docs & tests**
+
+- Step 3 Tab/Enter and box-scoped Ctrl+R in the keybinding contract.
+  [`keybindings.ts:94`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L94)
+
+- Matrix rows at logic level.
+  [`wizard.logic.test.ts:175`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.test.ts#L175)
+
+- Reducer unit tests: touched flag, stale error, Esc layering.
+  [`step-branches.test.tsx:1`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.test.tsx#L1)
+
+- Box reducer and Apply validation tests.
+  [`override-box.test.ts:62`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.test.ts#L62)
