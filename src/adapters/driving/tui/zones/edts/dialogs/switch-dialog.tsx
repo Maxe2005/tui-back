@@ -119,7 +119,7 @@ function DirtyReposPreview({ dirty }: { dirty: readonly SwitchDirtyRepo[] }) {
   const autoStashed = dirty.filter((repo) => repo.scope === 'outgoing-member');
   return (
     <Box flexDirection="column">
-      <Text color={colors.warning}>Bascule bloquée : ces services ont des modifications non commitées qui n'appartiennent pas à l'EDT courant.</Text>
+      <Text color={colors.warning}>Bascule bloquée : ces services ont des modifications non commitées alors qu'ils ne sont pas membres de l'EDT sortant.</Text>
       {blocking.map((repo) => (
         <Text key={repo.repoPath} color={colors.text}>
           {'  '}• {repo.service} — {scopeLabel(repo)}, branche {repo.currentBranch}

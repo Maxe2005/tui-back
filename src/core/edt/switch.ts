@@ -373,7 +373,7 @@ async function resolveDirtyRepos(input: {
   if (unresolved.length > 0) {
     return err(
       'switch-dirty-services-unresolved',
-      `Switch to "${topic}" refused: uncommitted changes in ${unresolved.map((row) => row.service).join(', ')} belong to no member of the outgoing EDT — adopt them into it or discard them explicitly. Nothing was touched.`,
+      `Switch to "${topic}" refused: uncommitted changes in ${unresolved.map((row) => row.service).join(', ')} are not in the outgoing EDT and have no resolution — commit or stash them by hand, then switch again (they can also be adopted or discarded from the TUI once available). Nothing was touched.`,
       unresolved,
     );
   }
@@ -410,8 +410,10 @@ async function describeDirtyRepo(
   const service =
     repo.targetMember?.service ?? outgoingMember?.service ?? (loaded.ok ? loaded.data.service : repo.repoPath);
   const current = await git.currentBranch(repo.repoPath);
-  // A detached/unreadable HEAD is shown as git's own `HEAD` — never a real branch name, and
-  // never "shared": an adopt from it will fail its own currentBranch read, before any write.
+  // GitPort.currentBranch fails on a detached or unborn HEAD (the adapter never returns the
+  // literal `HEAD` as a branch) or on any git error; the row then shows `HEAD`, flagged
+  // not-shared. An adopt of such a repo fails at its own currentBranch read — after the
+  // read-only gate, before the stash — so it is a `failed` row with the repo untouched.
   const currentBranch = current.ok ? current.data : 'HEAD';
   const currentBranchShared = current.ok && loaded.ok ? isSharedBranch(currentBranch, loaded.data.sharedBranch) : false;
   const row: SwitchDirtyRepo = {
@@ -481,7 +483,7 @@ async function planDirtyWork(
       ok: false,
       row: failed(service, {
         code: 'switch-dirty-unresolved',
-        message: `${repo.repoPath} has uncommitted changes (appeared after the pre-flight) and no resolution — left untouched`,
+        message: `${repo.repoPath} has uncommitted changes and no resolution (not covered by the pre-flight) — left untouched`,
       }),
     };
   }
