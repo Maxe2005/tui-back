@@ -232,15 +232,16 @@ configured shared branch) and whether it carries uncommitted work.
 
 **Functional Requirements:**
 
-#### FR-10: Run a group update, EDT-scoped or all-repos
+#### FR-10: Run a group update, EDT-scoped, all-repos, or single-service
 
-A developer can run a group update — pull `development`, run migrations, restart containers — against either the active EDT's member services (default) or explicitly against all managed repos regardless of EDT (maintenance mode, preserving today's `update-services.sh` usage pattern, roughly every 2–3 days).
+A developer can run a group update — pull/merge the update, run migrations, restart containers — against the active EDT's member services (default), explicitly against all managed repos regardless of EDT (maintenance mode, preserving today's `update-services.sh` usage pattern, roughly every 2–3 days), or against exactly one service.
 
 **Consequences (testable):**
 - The all-repos mode is always explicitly invoked, never the default, and requires an explicit confirmation step before running, since its blast radius extends beyond the active EDT's scope.
+- Before any of the three run kinds starts, the developer reviews and can adjust its scope and settings through one shared configuration interface (FR-25) — which services are included, which branch each brings in, whether migrations run, and whether a clean restart (FR-26) replaces the plain container restart.
 - The end-of-run summary accounts for every targeted service by outcome (updated / skipped / failed) — no service is silently absent from the summary.
 - A group update triggered on an EDT with zero member services is a no-op, with an explicit message rather than silent success.
-- A second group-update run is rejected while one is already in progress, in either scope.
+- A second group-update run is rejected while one is already in progress, in any scope.
 
 #### FR-11: Assisted resolution of merge conflicts / dirty state
 
@@ -262,6 +263,35 @@ When a migration fails during a group update, the tool surfaces which service, w
 - A migration failure on one service does not block or roll back updates that already succeeded on other services in the same run.
 - Re-running a fixed migration re-verifies success before that service is marked caught up.
 - Repeated failures on the same migration are surfaced the same way each time; no retry limit or escalation path is enforced in v1.
+- The re-trigger action is available directly from the affected service's own row/detail view in the Update zone, using the same single-service configuration interface as a full single-service update (FR-25) — no separate flow to remember.
+
+#### FR-25: Configure a group update before it runs
+
+Before any group update starts — EDT-scoped, all-repos, or scoped to a single service — the developer sees and can adjust its targeted scope: which services are included (deselecting some from the EDT-scoped default), and for each included service, which branch holds the update to bring in. Two run-wide toggles control whether migrations run and whether a clean restart (FR-26) replaces the plain container restart.
+
+**Consequences (testable):**
+- Deselecting a service excludes it from the run entirely — it is never targeted, not merely skipped after the fact.
+- Each selected service's source branch defaults to the manifest's `sharedBranch`, but can be changed to any branch the tool can resolve for that repo before the run starts.
+- The migrate toggle and the clean-restart toggle apply uniformly to every service selected for that run.
+- The same configuration screen backs the EDT-scoped update, the all-repos update (still gated by its own explicit confirmation, FR-10), and a single-service update triggered directly from that service's row in the Update zone.
+
+#### FR-26: Manifest-defined clean restart
+
+A repo's manifest can declare a clean-restart recipe (an ordered list of commands, e.g. `npm i` then `npm run d:up`) distinct from the plain container restart FR-10 uses today. When a run's clean-restart toggle (FR-25) is on, or when a developer triggers a clean restart directly for one service, the tool runs that recipe instead of a plain container restart.
+
+**Consequences (testable):**
+- A service with no clean-restart recipe declared falls back to today's plain container restart, without error.
+- Each command in the recipe runs in the repo's working directory, in declared order; a failing command stops the recipe and is reported as that service's failure detail, via the same per-service failure reporting FR-12 already guarantees.
+- The clean-restart recipe is independently triggerable for a single service, outside of any group-update run — a standalone quick action from the Update zone.
+
+#### FR-27: Live per-service status and detail in the Update zone
+
+At any time in the Update zone, the developer sees a list of services (active EDT members and non-members, mirroring the EDT/Logs zones' list) with each one's current status from a closed set: up, down, restarting, updating, migrating, or error. During a run, selecting a service shows its current step and any problem encountered, marked clearly as resolved or unresolved.
+
+**Consequences (testable):**
+- The status list is visible whether or not a run is in progress.
+- A service's status during a run reflects its actual current step (updating vs. migrating vs. restarting), never a single generic "in progress" state.
+- A problem encountered on a service appears in that service's own detail view, distinguished as resolved (after assisted resolution, FR-11) or unresolved (still blocking).
 
 ---
 

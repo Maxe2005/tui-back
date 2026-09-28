@@ -26,7 +26,7 @@ Six permanent zones, always reachable from the top bar:
 |---|---|---|
 | Dashboard | Landing surface on launch: summarizes the active EDT, service health, and the last group-update outcome; offers to enter an EDT with the last-used one pre-selected as default. | (summary surface; draws on FR-9's branch/health visibility) |
 | EDTs | Create, modify, and protected-switch EDTs; membership and per-service working branches. | FR-3–FR-9 |
-| Update | Run a Group update — EDT-scoped or all-repos — with per-service outcome, assisted resolution of conflicts, and migration-failure handling. | FR-10–FR-12 |
+| Update | A permanent left-hand service list with live status (up/down/restarting/updating/migrating/error); a shared configuration screen (service selection, per-service source branch, migrate/clean-restart toggles) gates every run — EDT-scoped, all-repos, or single-service — followed by live per-service tracking, assisted resolution of conflicts, and migration-failure handling. Per-service quick actions (clean restart, single-service update) are available from the list at any time. | FR-10–FR-12, FR-25–FR-27 |
 | Logs | Aggregated live log stream across the active EDT's services (or a chosen subset), filterable, with inline health and developer-triggered restart. | FR-16–FR-18 |
 | Routes | Route-explorer module: discover routes, fire requests with automatic dev-mode auth, save/customize/re-fire, response + correlated logs together, global saved-request library. | FR-19–FR-23 |
 | shared-types | Publish a new `shared-types` version, see Propagation status for the active EDT's member services, propagate to chosen ones. | FR-13–FR-15 |
@@ -112,15 +112,19 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 **Update**
 | State | Treatment |
 |---|---|
-| Idle | No run in progress; last outcome summary remains visible. |
-| No-op | A group update triggered on a zero-member EDT shows an explicit message, never silent success (FR-10). |
-| All-repos confirmation gate | Maintenance-mode (all-managed-repos) runs require an explicit confirmation step before starting, since the blast radius exceeds the active EDT (FR-10). |
-| Second-run blocked | A second group update is rejected while one is already running, in either scope (FR-10). |
-| In progress | Per-service spinner while that service's step (pull/migrate/restart) runs. |
+| Service list (always visible) | Left-hand list — active EDT members then other managed services — each carrying a status glyph from the closed set up / down / restarting / updating / migrating / error, visible whether or not a run is in progress (FR-27). |
+| Idle | No run in progress; selecting a service shows its last outcome in the detail pane. |
+| Configuration screen | Opens before any of the three triggers (main, all-repos, single-service) runs anything: per-service checkbox + source-branch field (defaulting to the manifest's `sharedBranch`), plus two run-wide toggles — run migrations, clean restart. Confirming with zero services selected is rejected the same way a zero-member EDT is (FR-25). |
+| No-op | A group update triggered on a zero-member EDT, or confirmed from the configuration screen with nothing selected, shows an explicit message, never silent success (FR-10, FR-25). |
+| All-repos confirmation gate | The configuration screen opens first, pre-selecting every managed repo; maintenance-mode's own explicit confirmation step follows it before anything starts, since the blast radius exceeds the active EDT (FR-10). |
+| Second-run blocked | A second group update is rejected while one is already running, in any scope — including a single-service run already in flight for that same service (FR-10). |
+| In progress | Selecting a targeted service shows its current step live — pulling / merging / migrating / restarting — replacing the idle last-outcome view (FR-27). |
+| Clean-restart step | When the run's clean-restart toggle is on (or a standalone clean-restart is triggered on one service), that service's current step shows the manifest's declared restart recipe running, command by command; absent a recipe, it falls back to a plain container restart without error (FR-26). |
 | Per-service outcome | Each targeted service ends in updated / skipped / failed — the summary line accounts for every one, none silently absent (FR-10). |
-| Assisted-resolution menu | A dirty/conflicted repo not covered by the known-safe auto-fix (package.json/lockfile-only) presents the guided menu: stash / open in editor / cancel this repo / cancel the whole run (FR-11). |
+| Assisted-resolution menu | A dirty/conflicted repo not covered by the known-safe auto-fix (package.json/lockfile-only) presents the guided menu: stash / open in editor / cancel this repo / cancel the whole run (FR-11) — rendered in front of that service's live detail pane. |
 | Mid-merge/mid-rebase | Detected as its own distinct state — surfaced explicitly before the guided menu applies, separate from an ordinary dirty-lockfile state (FR-11). |
-| Migration failure (Assisted resolution) | An instance of the glossary's Assisted resolution mechanic (detect → auto-fix-known-safe-or-guided-menu → re-verify): per-service failure detail (service, migration, error output) with a re-trigger action that re-verifies success before the service is marked caught up; doesn't block other services' already-succeeded updates in the same run (FR-12). |
+| Migration failure (Assisted resolution) | An instance of the glossary's Assisted resolution mechanic (detect → auto-fix-known-safe-or-guided-menu → re-verify): per-service failure detail (service, migration, error output), marked unresolved until re-verified (FR-27), with a re-trigger action that re-verifies success before the service is marked caught up; doesn't block other services' already-succeeded updates in the same run (FR-12). |
+| Per-service quick actions | From any service's row, independent of any run: a clean-restart trigger (FR-26), or an update-this-service trigger that opens the same configuration screen pre-scoped to that one service (FR-25). Rejected if that service already has an action running (FR-10's second-run rule, applied per-service). |
 | Quit mid-run | Pressing `q` while a group update is in progress requires explicit confirmation before quitting, consistent with FR-6's EDT-switch-blocked-during-update precedent; if confirmed, the next launch surfaces that run as interrupted and offers to resume it, mirroring the EDTs zone's "Interrupted update" state above. Applies equally to shared-types publish/propagation (see shared-types below). |
 
 **Logs**

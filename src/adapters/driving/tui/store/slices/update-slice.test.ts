@@ -11,11 +11,13 @@ import type { GitPort } from '../../../../../core/ports/git.js';
 import type { LockPort } from '../../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../../../core/ports/migration.js';
+import type { RestartPort } from '../../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { UPDATE_HEALTH_POLL_INTERVAL_MS } from './update-slice.js';
 
 const MEMBERS = [
   { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' },
@@ -105,6 +107,9 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const migration: MigrationPort = {
     run: vi.fn(async () => ok({ output: '' })),
   };
+  const restart: RestartPort = {
+    run: vi.fn(async () => ok({ output: '' })),
+  };
   const settings: SettingsPort = {
     load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
     save: vi.fn(async () => ok(undefined)),
@@ -121,6 +126,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     git,
     container,
     migration,
+    restart,
     docker,
     edtRegistry,
     state,
@@ -158,6 +164,65 @@ describe('update slice', () => {
       { service: 'svc-b', outcome: 'updated' },
     ]);
     expect(store.getState().runInProgress).toBe(false);
+  });
+
+  // Review fix (story 3.6): exercises the real `set((state) => ({ ..., lastServiceOutcomes:
+  // mergeLastServiceOutcomes(...) }))` wiring through the actual runGroupUpdate flow —
+  // pure mergeLastServiceOutcomes unit tests and hand-seeded store.setState calls in zone
+  // render tests don't catch a bug in that wiring itself (e.g. the merge call dropped, or
+  // given the wrong arguments).
+  it('runGroupUpdate populates lastServiceOutcomes with the run\'s own per-service outcomes', async () => {
+    const store = createAppStore(fakeDeps());
+    expect(store.getState().lastServiceOutcomes).toEqual({});
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().lastServiceOutcomes).toEqual({
+      'svc-a': { service: 'svc-a', outcome: 'updated' },
+      'svc-b': { service: 'svc-b', outcome: 'updated' },
+    });
+  });
+
+  it('runGroupUpdate merges lastServiceOutcomes across runs — a service outside a later scoped run\'s scope keeps its earlier outcome', async () => {
+    // The active EDT has only svc-a as a member — the second (default-scoped, 'edt') run
+    // below targets svc-a alone, never svc-b.
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () =>
+        ok([
+          {
+            ulid: 'edt-1',
+            topic: 'demo',
+            createdAt: '2026-09-17T00:00:00.000Z',
+            status: 'active' as const,
+            members: [MEMBERS[0]!],
+          },
+        ]),
+      ),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ edtRegistry }));
+
+    // First run: scope 'all' targets every registered repo (svc-a and svc-b both succeed) —
+    // 'all' never reads edtRegistry, so this run is unaffected by the EDT override above.
+    await store.getState().runGroupUpdate('all');
+    expect(store.getState().lastServiceOutcomes).toEqual({
+      'svc-a': { service: 'svc-a', outcome: 'updated' },
+      'svc-b': { service: 'svc-b', outcome: 'updated' },
+    });
+
+    // Second run: the default EDT-scoped run, targeting only svc-a (the sole member above).
+    await store.getState().runGroupUpdate();
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+
+    // svc-b sat outside this second run's scope entirely — its earlier outcome must survive
+    // the merge, never be dropped by a wholesale replace.
+    expect(store.getState().lastServiceOutcomes).toEqual({
+      'svc-a': { service: 'svc-a', outcome: 'updated' },
+      'svc-b': { service: 'svc-b', outcome: 'updated' },
+    });
   });
 
   it('runGroupUpdate threads the scope: runGroupUpdate(all) lands done on the all-repos outcome', async () => {
@@ -219,6 +284,17 @@ describe('update slice', () => {
     const deps = fakeDeps();
     const { migration: _dropped, ...withoutMigration } = deps;
     const store = createAppStore(withoutMigration);
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('runGroupUpdate degrades to an explicit error when the restart port is missing', async () => {
+    const deps = fakeDeps();
+    const { restart: _dropped, ...withoutRestart } = deps;
+    const store = createAppStore(withoutRestart);
 
     await store.getState().runGroupUpdate();
 
@@ -453,5 +529,1135 @@ describe('update slice', () => {
     expect(store.getState().updateError).toContain('stash exploded');
     expect(store.getState().updateBlocker).toBeNull();
     expect(store.getState().runInProgress).toBe(false);
+  });
+});
+
+// Story 3.6: the Update zone's own service-list health poll — mirrors app-store.test.ts's
+// "logs slice: inline service health & restart (story 5.3)" describe block (that story's own
+// precedent for testing a slice's fire-and-forget poll-timer behavior against fake ports),
+// but against startUpdateHealthPolling/stopUpdateHealthPolling/updateServiceHealth instead of
+// subscribeLogsPane/logsPanes — this poll is Update-zone-owned and independent (Never: "no
+// shared subscription" with Logs zone's own poll).
+describe('update slice: service health polling (story 3.6)', () => {
+  // A real setTimeout macrotask flush, not fake timers — lets every pending microtask from
+  // startUpdateHealthPolling's fire-and-forget pollServiceHealth chain (manifest.load then
+  // getContainerHealth, each a resolved-async mock) settle before assertions run.
+  async function flushPolls(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  function fakeDocker(getContainerHealth: DockerPort['getContainerHealth']): DockerPort {
+    return {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth,
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+  }
+
+  it('startUpdateHealthPolling polls every given repoPath\'s container health and reflects it on updateServiceHealth', async () => {
+    const getContainerHealth = vi.fn(async () => ok('up' as const));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a']);
+    await flushPolls();
+
+    expect(getContainerHealth).toHaveBeenCalledWith('ctr-a');
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+  });
+
+  it('polls every given repoPath independently, keyed by its own repoPath', async () => {
+    const getContainerHealth = vi.fn(async (container: string) => ok(container === 'ctr-a' ? ('up' as const) : ('down' as const)));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a', '/repo/b']);
+    await flushPolls();
+
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+    expect(store.getState().updateServiceHealth['/repo/b']).toBe('down');
+  });
+
+  it('I/O matrix "Manifest load fails during health poll for a service": manifest.load failing leaves updateServiceHealth untouched (silent no-op)', async () => {
+    vi.useFakeTimers();
+    try {
+      const manifestLoad = vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      );
+      const manifest: ManifestPort = { load: manifestLoad };
+      const getContainerHealth = vi.fn(async () => ok('up' as const));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth), manifest }));
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      // First drive the badge to a known non-default state — asserting the default `'down'`
+      // below would also pass vacuously if the failing poll simply never ran.
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+
+      manifestLoad.mockImplementation(async () => err('manifest-not-found', 'gone'));
+      const callsBefore = getContainerHealth.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The poll bailed before ever reaching the docker adapter — no inspect, no crash, and
+      // the last-known value is kept (never cleared/reset).
+      expect(getContainerHealth.mock.calls.length).toBe(callsBefore);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a getServiceHealth/getContainerHealth failure leaves updateServiceHealth untouched (silent no-op, same as manifest-load failure)', async () => {
+    vi.useFakeTimers();
+    try {
+      const getContainerHealth = vi.fn(async () => ok('up' as const));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+
+      getContainerHealth.mockImplementation(async () => err('docker-unavailable', 'daemon down'));
+      const callsBefore = getContainerHealth.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The failing poll really ran (guards a vacuous pass where the assertion below would
+      // hold simply because no second poll happened yet) and the value kept last-known.
+      expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('polls repeat on the configured interval and stop entirely once stopUpdateHealthPolling is called', async () => {
+    vi.useFakeTimers();
+    try {
+      const getContainerHealth = vi.fn(async () => ok('up' as const));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth) }));
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      const afterStart = getContainerHealth.mock.calls.length;
+      expect(afterStart).toBeGreaterThanOrEqual(1);
+
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      expect(getContainerHealth.mock.calls.length).toBeGreaterThan(afterStart);
+
+      const afterInterval = getContainerHealth.mock.calls.length;
+      store.getState().stopUpdateHealthPolling();
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS * 4);
+
+      // No further polls fire once stopped — the timer never outlives the zone.
+      expect(getContainerHealth.mock.calls.length).toBe(afterInterval);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('startUpdateHealthPolling on an unwired store is a no-op, never a throw', () => {
+    const store = createAppStore();
+
+    expect(() => store.getState().startUpdateHealthPolling(['/repo/a'])).not.toThrow();
+    expect(store.getState().updateServiceHealth).toEqual({});
+  });
+});
+
+// Story 3.7: the pre-run configuration screen's store state — opening pre-scoped to the
+// trigger, confirming with exactly the confirmed configuration, and rejecting while a run
+// is in flight.
+describe('update slice: pre-run configuration screen (story 3.7)', () => {
+  it('openUpdateConfig(edt) pre-selects every member with the manifest sharedBranch default', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toEqual({
+      scope: 'edt',
+      rows: [
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+      ],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    });
+    // Opening the screen runs no git/docker action and starts no run.
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateConfig(all) lists every managed repo pre-selected', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig('all');
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'all',
+      rows: [
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+      ],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    });
+  });
+
+  it('openUpdateConfig({service}) pre-scopes to that single service', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-a' });
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'edt',
+      rows: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true }],
+    });
+  });
+
+  it('openUpdateConfig({service, repoPath}) opens a one-row draft for the pinned repo (story 3.9)', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-b', repoPath: '/repo/b' });
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'edt',
+      rows: [{ service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true }],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    });
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateConfig({service, repoPath}) fails with the underlying error when scope resolution cannot read state', async () => {
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => err('state-invalid-format', 'corrupt')),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+
+    // Never silently downgraded to `all` (which would drop the edt unexpected-branch
+    // gate) — the open fails with the read failure instead.
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('state-invalid-format');
+  });
+
+  it('openUpdateConfig({service}) for an unknown service fails service-not-found with no screen', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-nope' });
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('service-not-found');
+  });
+
+  it('openUpdateConfig(edt) with no active EDT fails no-active-edt with no screen', async () => {
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok(null)),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-active-edt');
+  });
+
+  it('openUpdateConfig while running is rejected update-already-running with no screen', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'running' });
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+  });
+
+  it('openUpdateConfig(edt) on a zero-member EDT fails no-services-selected with no screen', async () => {
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () =>
+        ok([
+          {
+            ulid: 'edt-empty',
+            topic: 'empty',
+            createdAt: '2026-09-17T00:00:00.000Z',
+            status: 'active' as const,
+            members: [],
+          },
+        ]),
+      ),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok('edt-empty')),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ edtRegistry, state }));
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-services-selected');
+    expect(store.getState().updateError).toContain('empty');
+  });
+
+  it('openUpdateConfig(all) on an empty registry fails no-services-selected with no screen', async () => {
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([])),
+      add: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ registry }));
+
+    await store.getState().openUpdateConfig('all');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-services-selected');
+    expect(store.getState().updateError).toContain('No managed repos');
+  });
+
+  it('openUpdateConfig on an unwired store degrades to store-not-wired', async () => {
+    const store = createAppStore();
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('openUpdateConfig degrades to store-not-wired when only the restart port is missing', async () => {
+    const deps = fakeDeps();
+    const { restart: _dropped, ...withoutRestart } = deps;
+    const store = createAppStore(withoutRestart);
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('confirmUpdateConfig with zero selected is rejected inline: the screen stays open and nothing ran', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => ({ ...row, selected: false })),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('No services selected');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig with a blank branch on a selected row is rejected inline and nothing runs', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => (row.service === 'svc-a' ? { ...row, sourceBranch: '   ' } : row)),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('empty source branch');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig runs exactly the selected subset: the deselected service is absent from results', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => ({ ...row, selected: row.service === 'svc-a' })),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    // The screen closed and the run landed with only the selected service reported.
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(deps.container!.restart).toHaveBeenCalledTimes(1);
+    expect(deps.container!.restart).toHaveBeenCalledWith('ctr-a');
+  });
+
+  it('confirmUpdateConfig threads the toggles: runMigrations off never runs migrations', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({ ...draft!, runMigrations: false });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).toHaveBeenCalledTimes(2);
+  });
+
+  it('confirmUpdateConfig threads the clean-restart toggle: cleanRestart on runs the recipe, never the plain restart', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const deps = fakeDeps({ manifest });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({ ...draft!, cleanRestart: true });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(deps.restart!.run).toHaveBeenCalledTimes(2);
+    expect(deps.restart!.run).toHaveBeenCalledWith('/repo/a', 'npm ci');
+    expect(deps.restart!.run).toHaveBeenCalledWith('/repo/b', 'npm ci');
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig threads a per-service branch override as its merge source', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => (row.service === 'svc-a' ? { ...row, sourceBranch: 'release/1' } : row)),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(deps.git.fetch).toHaveBeenCalledWith('/repo/a', 'release/1');
+    expect(deps.git.mergeBranch).toHaveBeenCalledWith('/repo/a', 'release/1');
+  });
+
+  it('confirmUpdateConfig restores the screen inline on a core unknown-branch rejection: nothing ran', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      branchExistsLocally: vi.fn(async () => ok(false)),
+    };
+    const deps = fakeDeps({ git });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig;
+    expect(draft).not.toBeNull();
+    store.getState().setUpdateConfig({
+      ...draft!,
+      rows: draft!.rows.map((row) => (row.service === 'svc-a' ? { ...row, sourceBranch: 'nope/not-here' } : row)),
+    });
+
+    await store.getState().confirmUpdateConfig();
+
+    // The screen stays open with the rejection inline; the run banner is back to idle.
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('nope/not-here');
+    expect(store.getState().updateConfig?.rows).toHaveLength(2);
+    expect(store.getState().updateConfig?.runMigrations).toBe(true);
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateError).toBeNull();
+    expect(store.getState().updateErrorCode).toBeNull();
+    // Pre-lock rejection means zero git writes, migrations, or restarts anywhere.
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('confirmUpdateConfig restores the screen inline on a core no-services-selected rejection', async () => {
+    const listMock = vi.fn(async () =>
+      ok([
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [
+            { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' },
+            { service: 'svc-b', repoPath: '/repo/b', branch: 'feat/b' },
+          ],
+        },
+      ]),
+    );
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: listMock,
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const deps = fakeDeps({ edtRegistry });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+    // Membership changed out from under the open screen: the confirmed selection matches
+    // nothing, so core rejects pre-lock and nothing runs.
+    listMock.mockResolvedValue(
+      ok([
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-z', repoPath: '/repo/z', branch: 'feat/z' }],
+        },
+      ]),
+    );
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('None of the selected services');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateErrorCode).toBeNull();
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('openUpdateConfig clears a stale done banner but keeps per-run history', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({
+      updateStatus: 'done',
+      updateTopic: 'demo',
+      updateResults: [{ service: 'svc-a', outcome: 'updated' }],
+      updateNote: 'stale note',
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+    });
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateError).toBeNull();
+    expect(store.getState().updateErrorCode).toBeNull();
+    expect(store.getState().updateNote).toBeNull();
+    // History survives: the results list and the per-service outcome map are untouched.
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(store.getState().lastServiceOutcomes).toEqual({ 'svc-a': { service: 'svc-a', outcome: 'updated' } });
+  });
+
+  it('openUpdateConfig clears a stale error banner', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'error', updateError: 'stale boom', updateErrorCode: 'internal-error' });
+
+    await store.getState().openUpdateConfig('all');
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateError).toBeNull();
+    expect(store.getState().updateErrorCode).toBeNull();
+  });
+
+  it('confirmUpdateConfig with no open screen is a no-op', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('closeUpdateConfig closes the screen without starting anything', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+
+    store.getState().closeUpdateConfig();
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+
+  it('setUpdateConfig is a no-op without an open screen', () => {
+    const store = createAppStore(fakeDeps());
+
+    expect(() => store.getState().setUpdateConfig({
+      scope: 'edt',
+      rows: [],
+      runMigrations: true,
+      cleanRestart: false,
+      error: null,
+    })).not.toThrow();
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('clearUpdate also closes an open configuration screen', async () => {
+    const store = createAppStore(fakeDeps());
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+
+    store.getState().clearUpdate();
+
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('starts with no standalone restart in flight', () => {
+    const store = createAppStore(fakeDeps());
+
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('runServiceRestart restarts only that service and merges its row into lastServiceOutcomes', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toEqual({ service: 'svc-a', outcome: 'updated' });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+    // Only that service's repo was touched — the plain fallback ran for its container.
+    expect(deps.container!.restart).toHaveBeenCalledTimes(1);
+    expect(deps.container!.restart).toHaveBeenCalledWith('ctr-a');
+    // A standalone restart never fabricates a group run summary.
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(store.getState().updateResults).toEqual([]);
+  });
+
+  it('runServiceRestart merges a failed row without blocking the next service', async () => {
+    const restart: RestartPort = { run: vi.fn(async () => err('restart-failed', 'boom')) };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({
+      service: 'svc-a',
+      outcome: 'failed',
+      detail: { code: 'restart-failed' },
+    });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+
+    await store.getState().runServiceRestart('/repo/b');
+
+    expect(store.getState().lastServiceOutcomes['svc-b']).toMatchObject({ service: 'svc-b', outcome: 'failed' });
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ service: 'svc-a', outcome: 'failed' });
+  });
+
+  it('a second trigger on the same service while its restart runs is rejected update-already-running', async () => {
+    let resolveRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      resolveRestart = resolve;
+    });
+    const restart: RestartPort = {
+      run: vi.fn(async () => {
+        await gate;
+        return ok({ output: '' });
+      }),
+    };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    const first = store.getState().runServiceRestart('/repo/a');
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    await store.getState().runServiceRestart('/repo/a');
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    // The first restart still holds its own slot — the rejected second trigger never stole it.
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    resolveRestart?.();
+    await first;
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ outcome: 'updated' });
+    expect(restart.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('a different idle service stays triggerable while one restart runs — per-service, not global', async () => {
+    let resolveRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      resolveRestart = resolve;
+    });
+    const restart: RestartPort = {
+      run: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a') {
+          await gate;
+        }
+        return ok({ output: '' });
+      }),
+    };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    const first = store.getState().runServiceRestart('/repo/a');
+    await store.getState().runServiceRestart('/repo/b');
+
+    expect(store.getState().lastServiceOutcomes['svc-b']).toMatchObject({ outcome: 'updated' });
+
+    resolveRestart?.();
+    await first;
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ outcome: 'updated' });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('runServiceRestart while a group run is in flight is rejected update-already-running, nothing started', async () => {
+    let resolveFetch: (() => void) | undefined;
+    const fetchGate = new Promise<void>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      fetch: vi.fn(async () => {
+        await fetchGate;
+        return ok(undefined);
+      }),
+    };
+    const deps = fakeDeps({ git });
+    const store = createAppStore(deps);
+
+    const group = store.getState().runGroupUpdate();
+    expect(store.getState().updateStatus).toBe('running');
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+
+    resolveFetch?.();
+    await group;
+  });
+
+  it('runGroupUpdate while a standalone restart is in flight is rejected update-already-running', async () => {
+    let resolveRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      resolveRestart = resolve;
+    });
+    const restart: RestartPort = {
+      run: vi.fn(async () => {
+        await gate;
+        return ok({ output: '' });
+      }),
+    };
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          container: `ctr-${repoPath.split('/').pop()}`,
+          migrationCommand: 'npm run migration:run',
+          restartCommands: ['npm ci'],
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ restart, manifest }));
+
+    const standalone = store.getState().runServiceRestart('/repo/a');
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    await store.getState().runGroupUpdate();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+
+    resolveRestart?.();
+    await standalone;
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('openUpdateConfig while a standalone restart is in flight is rejected update-already-running', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    await store.getState().openUpdateConfig('edt');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateConfig).toBeNull();
+  });
+
+  it('runServiceRestart surfaces a core lock-contention backstop as update-already-running', async () => {
+    const lock: LockPort = {
+      acquire: vi.fn(async () => err('action-in-progress', 'held')),
+      peek: vi.fn(async () => ok({ locked: true })),
+    };
+    const store = createAppStore(fakeDeps({ lock }));
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('runServiceRestart degrades to store-not-wired when the restart port is missing', async () => {
+    const deps = fakeDeps();
+    const { restart: _dropped, ...withoutRestart } = deps;
+    const store = createAppStore(withoutRestart);
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('clearUpdate drops the in-flight map alongside the run state', () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    store.getState().clearUpdate();
+
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('confirmUpdateConfig while a standalone restart is in flight stays open with the inline error (story 3.9)', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig).not.toBeNull();
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateConfig).not.toBeNull();
+    expect(store.getState().updateConfig?.error).toContain('already in progress');
+    expect(store.getState().updateStatus).toBe('idle');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+    expect(deps.git.mergeBranch).not.toHaveBeenCalled();
+    expect(deps.migration!.run).not.toHaveBeenCalled();
+    expect(deps.container!.restart).not.toHaveBeenCalled();
+  });
+});
+
+describe('live per-service run tracking (story 3.10)', () => {
+  async function waitForCondition(condition: () => boolean): Promise<void> {
+    for (let i = 0; i < 200 && !condition(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  it('starts with empty live phase and issue maps', () => {
+    const store = createAppStore(fakeDeps());
+
+    expect(store.getState().liveServicePhase).toEqual({});
+    expect(store.getState().liveServiceIssues).toEqual({});
+  });
+
+  it('tracks the live phase mid-run and clears it when the run lands done', async () => {
+    let releaseMigration: (() => void) | undefined;
+    const migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve;
+    });
+    const migration: MigrationPort = {
+      run: vi.fn(async () => {
+        await migrationGate;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    const run = store.getState().runGroupUpdate();
+    // svc-a advances merge → migrate, then blocks inside migration.run: its live step is
+    // observable while the run is still in flight (default fakes take the merge path).
+    await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating' });
+
+    releaseMigration?.();
+    await run;
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().liveServicePhase).toEqual({});
+  });
+
+  it('a blocker appends an unresolved issue, resolved once the run re-verifies and moves on', async () => {
+    const base = fakeDeps();
+    let dirtyReads = 0;
+    const git: GitPort = {
+      ...(base.git as GitPort),
+      listDirtyPaths: vi.fn(async (repoPath: string) => {
+        dirtyReads += 1;
+        // Only the first read sees the dirt — every re-verification reads clean.
+        return ok(dirtyReads === 1 && repoPath === '/repo/a' ? ['src/app.ts'] : []);
+      }),
+    };
+    const store = createAppStore({ ...base, git });
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().updateBlocker !== null);
+
+    // Raising the menu appends the unresolved entry before any phase is emitted.
+    expect(store.getState().updateBlocker).toMatchObject({ service: 'svc-a', kind: 'dirty-worktree' });
+    expect(store.getState().liveServiceIssues).toEqual({
+      'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
+    });
+    expect(store.getState().liveServicePhase).toEqual({});
+
+    store.getState().resolveUpdateBlocker('edited');
+    await run;
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    // Core resumed past the blocker (the next phase fired), so the entry flipped.
+    expect(store.getState().liveServiceIssues).toEqual({
+      'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: true }],
+    });
+    expect(store.getState().liveServicePhase).toEqual({});
+  });
+
+  it('a re-presented menu for the same kind stacks no duplicate entry and stays unresolved on cancel', async () => {
+    const base = fakeDeps();
+    let dirtyReads = 0;
+    const git: GitPort = {
+      ...(base.git as GitPort),
+      listDirtyPaths: vi.fn(async (repoPath: string) => {
+        dirtyReads += 1;
+        // Still dirty after the stash, clean only once the repo is cancelled.
+        return ok(dirtyReads <= 2 && repoPath === '/repo/a' ? ['src/app.ts'] : []);
+      }),
+    };
+    const store = createAppStore({ ...base, git });
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().updateBlocker !== null);
+    store.getState().resolveUpdateBlocker('stash');
+
+    // Core re-presents the same menu — the second raise must not duplicate the row.
+    await waitForCondition(() => store.getState().updateBlocker !== null && dirtyReads >= 2);
+    expect(store.getState().liveServiceIssues).toEqual({
+      'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
+    });
+
+    store.getState().resolveUpdateBlocker('cancel-repo');
+    await run;
+
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree', message: expect.any(String) } },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    // No further phase ever fired for the cancelled repo — the entry stays unresolved.
+    expect(store.getState().liveServiceIssues).toEqual({
+      'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
+    });
+  });
+
+  it('a migration failure lands an unresolved migration-failed entry while the live phase clears', async () => {
+    const migration: MigrationPort = {
+      run: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? err('sh-spawn-error', 'relation missing') : ok({ output: '' }),
+      ),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'failed', detail: { code: 'migration-failed', message: expect.any(String) } },
+      { service: 'svc-b', outcome: 'updated' },
+    ]);
+    expect(store.getState().liveServicePhase).toEqual({});
+    expect(store.getState().liveServiceIssues['svc-a']).toHaveLength(1);
+    expect(store.getState().liveServiceIssues['svc-a']?.[0]).toMatchObject({ kind: 'migration-failed', resolved: false });
+    expect(store.getState().liveServiceIssues['svc-a']?.[0]?.detail).toContain('relation missing');
+  });
+
+  it('a fresh run clears the previous run’s issue log at start', async () => {
+    let migrationCalls = 0;
+    const migration: MigrationPort = {
+      run: vi.fn(async () => {
+        migrationCalls += 1;
+        return migrationCalls === 1 ? err('sh-spawn-error', 'boom') : ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    await store.getState().runGroupUpdate();
+    expect(store.getState().liveServiceIssues['svc-a']).toMatchObject([{ kind: 'migration-failed', resolved: false }]);
+
+    await store.getState().runGroupUpdate();
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().liveServiceIssues).toEqual({});
+    expect(store.getState().liveServicePhase).toEqual({});
+  });
+
+  it('a top-level rejection clears the live maps — nothing ran', async () => {
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok(null)),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+    store.setState({ liveServicePhase: { 'svc-a': 'pulling' }, liveServiceIssues: { 'svc-a': [] } });
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-active-edt');
+    expect(store.getState().liveServicePhase).toEqual({});
+    expect(store.getState().liveServiceIssues).toEqual({});
+  });
+
+  it('clearUpdate drops the live maps alongside the run state', () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({
+      liveServicePhase: { 'svc-a': 'migrating' },
+      liveServiceIssues: { 'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: true }] },
+    });
+
+    store.getState().clearUpdate();
+
+    expect(store.getState().liveServicePhase).toEqual({});
+    expect(store.getState().liveServiceIssues).toEqual({});
+  });
+
+  it('a standalone restart reports restarting live and clears it when done', async () => {
+    let releaseRestart: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseRestart = resolve;
+    });
+    const container: ContainerPort = {
+      restart: vi.fn(async () => {
+        await gate;
+        return ok(undefined);
+      }),
+    };
+    const store = createAppStore(fakeDeps({ container }));
+
+    const run = store.getState().runServiceRestart('/repo/a');
+    await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'restarting');
+    expect(store.getState().serviceRestartInFlight).toEqual({ '/repo/a': 'restart' });
+
+    releaseRestart?.();
+    await run;
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ outcome: 'updated' });
+    expect(store.getState().liveServicePhase).toEqual({});
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('a standalone restart opens with a fresh issue log for its service, keeping other services', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({
+      liveServiceIssues: {
+        'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
+        'svc-b': [{ kind: 'migration-failed', detail: 'boom', resolved: false }],
+      },
+    });
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().liveServiceIssues['svc-a']).toBeUndefined();
+    expect(store.getState().liveServiceIssues['svc-b']).toEqual([
+      { kind: 'migration-failed', detail: 'boom', resolved: false },
+    ]);
   });
 });

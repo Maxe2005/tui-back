@@ -14,6 +14,7 @@ import { EdtsZone } from './edts-zone.js';
 import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
 import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
 import { matchEdtsByPrefix as quickMatch, resolveQuickPickCandidates as quickCandidates } from './dialogs/quick-pick-dialog.js';
+import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import {
   advanceCreateFormFocus,
   initialCreateDialog,
@@ -37,7 +38,6 @@ import {
   isSwitchBlockedError,
   jumpSelection,
   moveSelection,
-  nextTextInputValue,
   partitionServicesByEdtMembership,
   prefillBranchNames,
   prefillBaseBranches,
@@ -1868,7 +1868,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       settings: {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       },
     });
@@ -1915,7 +1915,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       settings: {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       },
     });

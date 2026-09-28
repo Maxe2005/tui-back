@@ -1520,7 +1520,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
       expect(stdout.output).toContain('[Pick existing]');
 
-      await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm "develop"
+      // Shared autocomplete two-step: first Enter inserts the highlighted "develop", second confirms.
+      await press(instance, stdin, KEYS.enter); // insert "develop" into the filter
+      await press(instance, stdin, KEYS.enter); // confirm "develop"
       await press(instance, stdin, KEYS.enter); // Step 3 -> Step 4 (grouped naming, "demo" pre-filled)
       await press(instance, stdin, KEYS.enter); // submit
 
@@ -2433,7 +2435,10 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       expect(stdout.output).toContain('feature-y'); // pre-filled with the row's current branch
 
       await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
-      await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm
+      // Shared autocomplete: empty filter matches everything — first Enter inserts the
+      // highlighted branch into the filter, second Enter confirms it (no branch created).
+      await press(instance, stdin, KEYS.enter); // insert 'feature-y' into the filter
+      await press(instance, stdin, KEYS.enter); // confirm the filled value
 
       expect(modifyParams).toEqual({
         topic: 'active-edt',
@@ -2448,8 +2453,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('matrix: Add-to-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
-    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+  it('matrix: Add-to-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     let loggedOutcome: string | undefined;
     const store = createAppStore();
     store.setState({
@@ -2486,11 +2490,57 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await press(instance, stdin, KEYS.enter); // open Add to EDT
       await instance.waitUntilRenderFlush(); // let listBranches resolve
       await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
-      await press(instance, stdin, KEYS.enter); // empty filter matches everything -> select + confirm
+      // Shared autocomplete two-step: first Enter inserts, second Enter confirms.
+      await press(instance, stdin, KEYS.enter); // insert 'feature-y' into the filter
+      await press(instance, stdin, KEYS.enter); // confirm -> submit -> partial failure surfaces
       await instance.waitUntilRenderFlush();
 
       expect(stdout.output).toContain('shared/protected');
       expect(loggedOutcome).toBe('failed');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // Branch autocomplete adoption: the live `settings.edts.branchDropdownMaxRows` value caps
+  // the pick-existing dropdown end to end (store -> EdtsZone -> dialog -> BranchPicker).
+  // Hardcoding maxRows in the zone (or never threading the setting) fails this: with 3
+  // branches and maxRows 2, only the first two rows plus the overflow line may render.
+  it('pick-existing dropdown is capped live by settings.edts.branchDropdownMaxRows', async () => {
+    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+    const store = createAppStore();
+    store.setState({
+      settings: {
+        ...store.getState().settings,
+        edts: { ...store.getState().settings.edts, branchDropdownMaxRows: 2 },
+      },
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'svc-branch', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      listBranches: async () => ({ ok: true, data: ['b-one', 'b-two', 'b-three'] }),
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edts -> edt-services
+      await press(instance, stdin, KEYS.tab); // edt-services -> other-services
+      await press(instance, stdin, KEYS.enter); // open Add to EDT on the one row
+      await instance.waitUntilRenderFlush(); // let listBranches resolve
+      await press(instance, stdin, KEYS.tab); // Create new -> Pick existing
+      await instance.waitUntilRenderFlush();
+
+      expect(stdout.output).toContain('b-one');
+      expect(stdout.output).toContain('b-two');
+      expect(stdout.output).toContain('… 1 more');
+      expect(stdout.output).not.toContain('b-three');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

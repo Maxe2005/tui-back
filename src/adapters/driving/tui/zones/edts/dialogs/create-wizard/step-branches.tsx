@@ -10,6 +10,7 @@
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
+import { nextTextInputValue } from '../../../../shared/components/text-edit.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../../shared/components/branch-picker.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import {
@@ -18,7 +19,6 @@ import {
   type CreateDialogState,
   type EdtDialogState,
   type NamingMode,
-  nextTextInputValue,
   prefillBaseBranches,
   prefillBranchNames,
   resolveBaseBranchMode,
@@ -255,7 +255,15 @@ export function createBranchStepHandlers(deps: BranchStepDeps) {
   return { enterBranchStep, handleBaseBranchInput, cycleBranchFocus, handleBranchFieldInput };
 }
 
-export function BranchStepView({ dialog, candidates }: { dialog: CreateDialogState; candidates: readonly ServiceBranchDivergence[] }) {
+export function BranchStepView({
+  dialog,
+  candidates,
+  maxRows,
+}: {
+  dialog: CreateDialogState;
+  candidates: readonly ServiceBranchDivergence[];
+  maxRows: number;
+}) {
   const baseBranchMode = resolveBaseBranchMode(dialog.selectedMembers, candidates);
   const branchPicker = dialog.branchPicker;
   const serviceName = (path: string) => candidates.find((candidate) => candidate.path === path)?.service ?? path;
@@ -272,6 +280,7 @@ export function BranchStepView({ dialog, candidates }: { dialog: CreateDialogSta
             branches={branchPicker.branches}
             branchesStatus={branchPicker.branchesStatus}
             otherMemberBranches={[]}
+            maxRows={maxRows}
             hideNestedBaseField
           />
         </Box>

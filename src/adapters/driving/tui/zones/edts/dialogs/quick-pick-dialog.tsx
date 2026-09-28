@@ -15,13 +15,13 @@ import type { AppState } from '../../../store/app-store.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/text-input-line.js';
+import { nextTextInputValue } from '../../../shared/components/text-edit.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   initialDeleteDialog,
   initialModifyDialog,
   initialSwitchDialog,
   moveSelection,
-  nextTextInputValue,
   resolveSelectionDirection,
   type EdtDialogState,
   type QuickPickDialogState,

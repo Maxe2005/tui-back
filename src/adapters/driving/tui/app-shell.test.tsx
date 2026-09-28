@@ -356,7 +356,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -426,8 +426,25 @@ it('shouldQuit returns true for q', () => {
         updateBlocker: null,
         resolveUpdateBlocker: () => {},
         runGroupUpdate: async () => {},
+        // Story 3.7: pre-run configuration screen state
+        updateConfig: null,
+        openUpdateConfig: async () => {},
+        setUpdateConfig: () => {},
+        closeUpdateConfig: () => {},
+        confirmUpdateConfig: async () => {},
+        // Story 3.9: per-service standalone restart in-flight map + runner
+        serviceRestartInFlight: {},
+        runServiceRestart: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
+        // Story 3.6: Update zone service-list health poll + last-outcome map
+        updateServiceHealth: {},
+        lastServiceOutcomes: {},
+        startUpdateHealthPolling: () => {},
+        stopUpdateHealthPolling: () => {},
+        // Story 3.10: live per-service run tracking + issue log
+        liveServicePhase: {},
+        liveServiceIssues: {},
         // Story 5.1: Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],

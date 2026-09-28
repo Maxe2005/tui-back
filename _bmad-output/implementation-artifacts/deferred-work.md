@@ -24,6 +24,38 @@
   summary: `QuickPickDialogView` renders the identical "No matching EDT" wording whether the pool is genuinely empty (nothing to select, ever, for this mode) or just the current filter text matches nothing — unlike the base EDT list's own distinct "No EDTs yet." message for its own true-empty state.
   evidence: Flagged by blind-hunter. Not incorrect, just imprecise in the genuinely-empty-pool case (most reachable for switch mode with exactly one, active, EDT — see the entry above). Cosmetic wording polish, not a behavior bug.
 
+## Deferred from: review of 3-8-manifest-defined-clean-restart-recipe (2026-09-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-8-manifest-defined-clean-restart-recipe.md`
+  summary: `runRestart` (like the migration and container adapters it mirrors) runs `spawnSync` with no timeout — a hanging recipe command blocks the group update forever.
+  evidence: `src/adapters/driven/restart/index.ts`'s `spawnSync` call has no `timeout` option, matching `src/adapters/driven/migration/index.ts:42` and `src/adapters/driven/container/index.ts:29` exactly — a codebase-wide spawn-timeout decision, not a single-adapter fix. Surfaced by blind-hunter + edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-8-manifest-defined-clean-restart-recipe.md`
+  summary: `spawnFailureDetail` reports a signal-killed child as a bare `unknown error` instead of naming the signal.
+  evidence: `src/adapters/driven/restart/index.ts`'s null-status branch reads only `result.error.message/code`, which are undefined on signal kills (only `result.signal` is set) — the migration/container adapters share the identical shape, so fixing one adapter alone would diverge the trio. Surfaced by edge-case-hunter review layer.
+
+## Deferred from: review of 3-6-update-zone-shell-service-list-live-status (2026-09-22)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `pollServiceHealth` (update-slice.ts) has no try/catch around `deps.manifest.load`/`getServiceHealth` — an unexpected throw (vs. a returned `err(...)` Result) would produce an unhandled promise rejection instead of the intended silent per-poll no-op.
+  evidence: this mirrors `logs-slice.ts`'s own `pollPaneHealth`, which has the identical gap — the Code Map explicitly directed 3.6 to mirror that existing pattern, so the root cause (no defensive try/catch around a poll cycle) predates this story. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: The health-poll timer has no cancellation/generation guard — a poll cycle already in flight when `stopUpdateHealthPolling` runs (or `startUpdateHealthPolling` restarts with a new service list) can still resolve afterward and write a now-stale value into `updateServiceHealth`.
+  evidence: same shape as `logs-slice.ts`'s own health-poll timer, which has no such guard either — pre-existing pattern this story's Code Map directed it to mirror. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `UpdateZone`'s `runningMembers` (and now, via this story, the new per-service `isTargeted` status derivation) is computed from the currently *active* EDT, not from the EDT the in-flight run actually targets (`updateUlid`) — switching the active EDT while a scoped run is in progress can misattribute the `updating` status to the wrong EDT's services.
+  evidence: `runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? []` already existed before 3.6 (it fed the pre-existing running-spinner rows in stories 3.1-3.4) — this story only reused it to also drive the new status glyphs, so it did not introduce the root cause, just widened where it's visible. No guard anywhere in the TUI blocks switching the active EDT while `runInProgress` is true (confirmed: only the `q`/`:quit` gate reads `runInProgress`). Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `updateServiceHealth`/`lastServiceOutcomes` entries are never pruned when a service leaves the currently-tracked list (e.g. active EDT membership changes), so stale entries can persist and, on a very unlikely repoPath/service reuse, render an out-of-date glyph.
+  evidence: low real-world impact (the tracked set is bounded by the manifest registry's own service count, not unbounded growth), but confirmed no pruning logic exists in either `startUpdateHealthPolling` or the `lastServiceOutcomes` merge. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `lastServiceOutcomes` is keyed by bare `service` name; two repos sharing the same service name within one EDT (an already-acknowledged possibility elsewhere in this codebase) collide, and one's outcome silently overwrites the other's in the Update zone's new detail pane/status glyph.
+  evidence: `update-zone.tsx`'s own pre-existing `updateResults.map` already carries the comment "Duplicate service names occur within one EDT — key by service + index" — this is a known, pre-3.6 possibility. The root cause is that `GroupUpdateRepoResult` (from `group-update.ts`, story 3.1/3.2) never carries a repoPath to disambiguate by, and this spec explicitly put `group-update.ts` out of bounds ("Never: do not touch group-update.ts"), so a real fix is out of this story's scope. Surfaced incidentally by edge-case-hunter review layer.
+
 ## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
@@ -476,3 +508,23 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-35-edt-creation-core-per-service-branch-plans-remote-branches.md`
   summary: Picking `origin/x` in an `existing` plan when a local `x` already exists fails with `branch-exists` instead of offering the local branch — Story 2.37's wizard should steer the choice (or core should fall back to the gated local branch).
   evidence: `createTrackingBranch` rejects a colliding local name by design; the re-attach case (local `x` already tracking `origin/x`) is common and currently a dead end.
+
+## Deferred from: code review of 3-7-pre-run-configuration-interface (2026-09-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
+  summary: The manifest schema accepts a whitespace-only `sharedBranch` (`z.string().min(1)` with no `.trim()`), which passes validation and later reaches git as a blank merge source on paths that bypass the TUI's inline blank-branch reject (e.g. a direct core call or the bare CLI with such a manifest).
+  evidence: `src/adapters/driven/manifest/schema.ts` declares `sharedBranch` without `.trim()`; the root cause (schema laxity) predates this story — the bare-CLI 3.1 path already merges `loaded.sharedBranch` verbatim. Surfaced incidentally by review (edge-case-hunter). **Track:** trim/normalize `sharedBranch` (and audit sibling string fields) as part of backlog story 2-28 (registry-manifest-semantic-validation).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
+  summary: `UpdateConfigDialog` renders every targeted-service row unconditionally with no `BoundedList` windowing or scroll, so a large fleet (dozens of managed repos) would clip rows inside the `ModalDialog` without any way to reach them.
+  evidence: `src/adapters/driving/tui/zones/update/update-config-dialog.tsx` maps all `draft.rows` directly, unlike the 3.6 shell which bounds the service list via `BoundedList` + terminal-height chrome budget. Surfaced by review (blind-hunter); v1 fleets are small so impact is theoretical today. **Track:** reuse the `BoundedList` + cursor-windowing pattern if a large-fleet case is ever observed.
+
+## Deferred from: review of 3-9-per-service-actions-clean-restart-single-service-update (2026-09-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
+  summary: A CLI group update and a TUI standalone restart can overlap on the same repo — core locks don't intersect (`service:<repoPath>` vs global/`edt:<ulid>`), only the TUI store guards separate them.
+  evidence: `src/core/scripts/service-restart.ts` takes only the per-service lock while `group-update.ts` takes global (+edt) locks; no CLI entry for the standalone action exists yet, so the race needs concurrent CLI+TUI use. Surfaced by blind-hunter review layer. **Track:** resolve when Story 3.11 adds CLI commands (taking the global lock in serviceRestart is NOT the fix — it would serialize standalone restarts across different services, violating the per-service matrix row).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
+  summary: A clean restart (recipe commands like `npm ci` / compose rebuild) runs on a single menu Enter with no confirmation step, unlike the update path's config-screen gate.
+  evidence: `src/adapters/driving/tui/zones/update/update-zone.tsx`'s menu-choice branch runs `runServiceRestart` immediately after `setServiceMenu(null)`; the approved spec mandates no confirm step. Surfaced by blind-hunter review layer. **Track:** human UX-safety decision — confirm dialog, dry-run hint, or keep as-is — for Story 3.10/3.11 or a later pass.

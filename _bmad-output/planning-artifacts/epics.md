@@ -154,7 +154,7 @@ A developer can create, modify, and safely switch between EDTs (no uncommitted w
 **Implementation notes:** Per-EDT SQLite storage (AD-7), centralized git branch-scope safety gate (AD-8), EDTs zone (UX-DR20), blast-radius isolation (NFR-2).
 
 ### Epic 3: Group Update & Migrations
-A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
+A developer can run a group update (pull, migrate, restart) scoped to the active EDT, to all managed repos, or to a single service — configured beforehand (service selection, per-service branch, migrate/clean-restart toggles) and followed live per-service — with assisted resolution of conflicts and migration failures.
 **FRs covered:** FR-10, FR-11, FR-12
 **Implementation notes:** Update zone (UX-DR21), reuses Epic 2's git safety gate (AD-8), detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic.
 
@@ -1961,7 +1961,7 @@ As a developer switching EDT with uncommitted work in services that don't belong
 
 ## Epic 3: Group Update & Migrations
 
-A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
+A developer can run a group update (pull, migrate, restart) scoped to the active EDT, to all managed repos, or to a single service — configured beforehand (service selection, per-service branch, migrate/clean-restart toggles) and followed live per-service — with assisted resolution of conflicts and migration failures.
 
 ### Story 3.1: Group Update — Pull & Restart (EDT-scoped)
 
@@ -1973,7 +1973,15 @@ So that I can catch up my session's services in one action instead of doing it b
 
 **Given** the active EDT has at least one member service
 **When** a developer triggers a group update
-**Then** for a non-member repo already on `development`, the tool does a plain pull; for a member service on its own feature branch, the tool merges the latest `development` into that branch (`git merge development`, never a rebase — chosen for safety-by-default: no rewriting of already-pushed commits, and a merge already applied is a no-op on a second run, satisfying FR-1's idempotency) and restarts the container, without touching migrations yet (added in Story 3.2)
+**Then** the tool first opens the configuration interface (Story 3.7): every member service is pre-selected, its source branch pre-filled with the manifest's `sharedBranch`; the developer may deselect services and override any selected service's source branch before confirming
+
+**Given** the developer confirms the run from the configuration interface
+**When** the run starts
+**Then** for a non-member repo already on `development`, the tool does a plain pull; for a selected member service, the tool merges the configured source branch into the service's own branch (`git merge <source branch>`, never a rebase — chosen for safety-by-default: no rewriting of already-pushed commits, and a merge already applied is a no-op on a second run, satisfying FR-1's idempotency) and restarts the container (plain restart, or the manifest's clean-restart recipe if the restart toggle from Story 3.7 was on), without touching migrations yet unless the migrate toggle was on (Story 3.2)
+
+**Given** a service was deselected in the configuration interface
+**When** the run executes
+**Then** that service is never targeted — it does not appear in the run's summary as skipped, because it was never part of the run
 
 **Given** the merge of `development` into a member service's branch produces a real conflict (not just a dirty lockfile)
 **When** it occurs
@@ -2003,9 +2011,13 @@ So that my session's services are fully caught up, not just on the latest code.
 
 **Acceptance Criteria:**
 
-**Given** a targeted service's manifest declares a `migrationCommand`
+**Given** the migrate toggle was on in the configuration interface (Story 3.7) and a targeted service's manifest declares a `migrationCommand`
 **When** the group update reaches that service
-**Then** the migration command runs after the pull step and before the restart step (per manifest, FR-10)
+**Then** the migration command runs after the pull step and before the restart step (per manifest, FR-10/FR-25)
+
+**Given** the migrate toggle was off in the configuration interface
+**When** the group update reaches a targeted service
+**Then** its migration step is skipped regardless of whether a `migrationCommand` is declared — the toggle overrides per-service declaration, it does not merely default it
 
 **Given** the migration step succeeds
 **When** the run's summary is shown
@@ -2028,8 +2040,8 @@ So that I can do the periodic maintenance sweep the current `update-services.sh`
 **Then** it is always an explicit, separate action from the default EDT-scoped update — never the default
 
 **Given** the all-repos mode is triggered
-**When** the developer confirms
-**Then** it requires an explicit confirmation step before running, since its blast radius extends beyond the active EDT
+**When** it opens
+**Then** the same configuration interface as Story 3.7 opens first, pre-selecting every managed repo — followed by the mode's own explicit blast-radius confirmation step before anything runs; the confirmation never replaces or skips the configuration step
 
 **Given** the all-repos mode runs
 **When** it completes
@@ -2069,29 +2081,135 @@ So that a conflict never stalls the whole run or forces me to a separate termina
 **When** the group update reaches it
 **Then** this is detected and surfaced as its own distinct state, before the guided menu applies
 
-### Story 3.5: Per-Service Migration Failure Handling & Re-Trigger
+**Compatibility note (added 2026-09-22 correct-course):** the guided menu keeps blocking input exactly as today; it now renders in front of that service's live detail pane (Story 3.10) instead of a blank backdrop — no change to the detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic itself.
+
+### Story 3.5: Per-Service Migration Failure Handling & Re-Trigger — Superseded
+
+Superseded by the 2026-09-22 correct-course (see `sprint-change-proposal-2026-09-22-2.md`): its "surface which service/migration/error" guarantee is now Story 3.10's live per-service issue log, and its "re-trigger just that service's migration" guarantee is now Story 3.9's single-service update action (migrate toggle on). No requirement from the original story is dropped — it is split across the two new stories instead of implemented standalone.
+
+### Story 3.6: Update Zone Shell — Service List & Live Status
 
 As a developer,
-I want a migration failure during a group update to be clearly reported and independently re-triggerable,
-So that one broken migration never stalls the services that already succeeded.
+I want the Update zone to show, like the EDT and Logs zones, a left-hand list of services (active EDT members and non-members) each carrying a live status,
+So that I always know each service's state without guessing or switching zones.
 
 **Acceptance Criteria:**
 
-**Given** a migration fails during a group update
-**When** it happens
-**Then** the tool surfaces which service, which migration, and the error output
+**Given** the developer opens the Update zone
+**When** it renders
+**Then** the left pane lists every service — active EDT members first, other managed services after — the same list/detail split pattern as the EDT and Logs zones
 
-**Given** one service's migration fails
-**When** the run continues
-**Then** updates that already succeeded on other services in the same run are not blocked or rolled back
+**Given** any service in that list
+**When** it is rendered, at any time, run or no run in progress
+**Then** it carries a status glyph from the closed set: up / down / restarting / updating / migrating / error — never blank, never an ambiguous generic state
 
-**Given** a developer fixes the underlying issue
-**When** they re-trigger just that service's migration
-**Then** the tool re-verifies success before marking the service caught up
+**Given** a service is selected in the list
+**When** the detail pane renders
+**Then** it shows that service's last known outcome (or "idle" if none yet), ready to be replaced by live run detail (Story 3.10) once a run targets it
 
-**Given** the same migration fails repeatedly
-**When** it is retried
-**Then** each failure is surfaced the same way — no retry limit or escalation path is enforced in v1
+### Story 3.7: Pre-Run Configuration Interface
+
+As a developer,
+I want a configuration screen before any group update starts,
+So that I control exactly which services are touched, which branch each pulls from, and whether migrations and clean restarts run — instead of a fixed, all-or-nothing update.
+
+**Acceptance Criteria:**
+
+**Given** a group update is triggered (EDT-scoped, all-repos, or single-service)
+**When** the trigger fires
+**Then** the configuration interface opens before any git/docker action runs, listing every targeted service with a checkbox (pre-selected per the trigger's default scope)
+
+**Given** a selected service in the configuration interface
+**When** it is shown
+**Then** its source branch field is pre-filled with the manifest's `sharedBranch` and can be changed to any branch the tool can resolve for that repo
+
+**Given** the configuration interface is open
+**When** the developer toggles "run migrations" or "clean restart"
+**Then** the toggle applies to every currently selected service uniformly — there is no per-service override of these two toggles in v1
+
+**Given** the developer deselects every service
+**When** they attempt to confirm
+**Then** confirming is rejected with an explicit message — the same no-op guarantee FR-10 already gives a zero-member EDT, extended to a zero-selection run
+
+**Given** the developer confirms with at least one service selected
+**When** confirmed
+**Then** the run starts immediately with exactly that configuration — no further prompt
+
+### Story 3.8: Manifest-Defined Clean-Restart Recipe
+
+As a developer,
+I want to declare, per repo, an ordered list of commands that fully restart it cleanly (e.g. `npm i` then `npm run d:up`),
+So that a group update — or a one-off trigger — can restart a service properly instead of just restarting its container.
+
+**Acceptance Criteria:**
+
+**Given** a repo's `.tui-back.yaml`
+**When** it declares a clean-restart recipe
+**Then** the manifest loader accepts an ordered list of commands for it (`restartCommands`), validated the same way `migrationCommand` is today (non-blocking when absent)
+
+**Given** a service with no clean-restart recipe declared
+**When** a clean restart is requested for it (via the toggle in Story 3.7, or the standalone action in Story 3.9)
+**Then** the tool falls back to today's plain container restart, without error
+
+**Given** a service with a clean-restart recipe declared
+**When** a clean restart runs for it
+**Then** each command runs in the repo's working directory, in declared order; a failing command stops the recipe and is reported as that service's failure detail (service, which command, error output) — the same per-service failure reporting FR-12 already guarantees for migrations
+
+### Story 3.9: Per-Service Actions — Clean Restart & Single-Service Update
+
+As a developer,
+I want to trigger, directly from a service's row in the Update zone, either a clean restart or a full update for just that service,
+So that I can fix or catch up one service without running (or reconfiguring) the whole group update.
+
+**Acceptance Criteria:**
+
+**Given** a service row in the Update zone's list
+**When** the developer triggers "clean restart" on it
+**Then** Story 3.8's recipe (or the plain container-restart fallback) runs for that service alone, with its status reflecting `restarting` for the duration
+
+**Given** a service row in the Update zone's list
+**When** the developer triggers "update this service"
+**Then** the same configuration interface as Story 3.7 opens, pre-scoped to that one service — same fields (branch, migrate toggle, restart toggle), same confirmation gate
+
+**Given** a single-service update or clean restart is already running for a service
+**When** the developer triggers another action on that same service
+**Then** it is rejected the same way a second group update is rejected today (FR-10) — serialized per service, not just globally
+
+### Story 3.10: Live Per-Service Run Tracking — Current Step & Issue Log
+
+As a developer,
+I want to see, per service, which step is currently running and any problem encountered, clearly marked as resolved or not,
+So that I can follow a group update the same way I follow anything else in this tool — never guessing what's happening or what still needs my attention.
+
+**Acceptance Criteria:**
+
+**Given** a run (any scope) in progress
+**When** a targeted service is selected in the Update zone's list
+**Then** its detail pane shows the current step (pulling / merging / migrating / restarting) live, replacing the last-outcome view from Story 3.6
+
+**Given** a service hits a problem during a run (dirty state, conflict, migration failure — Stories 3.4/3.5's existing mechanics)
+**When** it is shown in that service's detail pane
+**Then** it is marked clearly as unresolved until the developer acts, and as resolved once the tool re-verifies success — reusing FR-11/FR-12's existing detect → act → re-verify guarantee, now surfaced per-service instead of only in the end-of-run summary
+
+**Given** a run completes
+**When** the developer revisits a service already covered by that run
+**Then** its detail pane shows the final per-service outcome, matching Story 3.6's idle-state view
+
+### Story 3.11: Update Commands — Main, All-Repos, Single-Service
+
+As a developer,
+I want a distinct command for each way to trigger a group update,
+So that I can start the right one without hunting through menus.
+
+**Acceptance Criteria:**
+
+**Given** the Update zone
+**When** the developer looks for how to start a run
+**Then** three distinct commands exist: the main update (EDT-scoped default), the all-repos update (Story 3.3's maintenance mode), and the single-service update (Story 3.9) — each reachable both as a command-bar entry and its own keybinding
+
+**Given** any of the three commands is triggered
+**When** it fires
+**Then** it opens the same configuration interface (Story 3.7), pre-scoped to that command's targets — no command skips the configuration step
 
 ## Epic 4: `shared-types` Propagation
 

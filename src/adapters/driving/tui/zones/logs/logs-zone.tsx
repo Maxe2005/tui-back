@@ -14,6 +14,7 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
+import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import { FullscreenPane } from './fullscreen-pane.js';
 import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
@@ -21,7 +22,6 @@ import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
   jumpSelection,
   moveSelection,
-  nextTextInputValue,
   partitionServicesByEdtMembership,
   resolveSelectionDirection,
   resolveSelectionJump,

@@ -6,8 +6,21 @@
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
+import { render } from 'ink';
+import { ok } from '../../../../../core/result.js';
+import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { DockerPort } from '../../../../../core/ports/docker.js';
+import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../../core/ports/registry.js';
+import type { SettingsPort } from '../../../../../core/ports/settings.js';
+import type { StatePort } from '../../../../../core/ports/state.js';
+import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { createAppStore } from '../../store/app-store.js';
+import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
+import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
 import {
   UPDATE_ALL_CONFIRM_BODY,
   UPDATE_ALL_CONFIRM_TITLE,
@@ -28,12 +41,14 @@ import {
   resolveAllConfirm,
   resolveBlockerMenuKey,
   resolveQuitConfirm,
+  resolveUpdateTrigger,
   resolveUpdateTone,
   shouldConfirmQuit,
   shouldOfferRerun,
   shouldOpenAllConfirm,
   UpdateZone,
 } from './update-zone.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
@@ -49,6 +64,37 @@ const INTERRUPTED_EDTS = [
     members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
   },
 ];
+
+// Story 3.6: the Update zone's own always-visible service-list fixtures.
+const ACTIVE_EDT = {
+  ulid: 'edt-1',
+  topic: 'demo',
+  createdAt: '2026-09-17T00:00:00.000Z',
+  status: 'active' as const,
+  members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+};
+
+const SERVICE_A: ServiceBranchDivergence = {
+  service: 'svc-a',
+  path: '/repo/a',
+  isMember: true,
+  sharedBranch: 'development',
+  branch: 'feat/a',
+  ahead: 0,
+  behind: 0,
+  status: 'current',
+};
+
+const SERVICE_B: ServiceBranchDivergence = {
+  service: 'svc-b',
+  path: '/repo/b',
+  isMember: false,
+  sharedBranch: 'development',
+  branch: 'development',
+  ahead: 0,
+  behind: 0,
+  status: 'current',
+};
 
 describe('formatUpdateRow', () => {
   it('renders each outcome with a glyph paired to the outcome word, code, and message', () => {
@@ -172,6 +218,50 @@ describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
   });
 });
 
+describe('resolveUpdateTrigger (story 3.7, menu in 3.9)', () => {
+  it('opens the all-repos config on a/A while idle/done/error', () => {
+    expect(resolveUpdateTrigger('a', {}, 'idle')).toBe('open-all-config');
+    expect(resolveUpdateTrigger('A', {}, 'done')).toBe('open-all-config');
+    expect(resolveUpdateTrigger('a', {}, 'error')).toBe('open-all-config');
+  });
+
+  it('opens the row-local service menu on Enter while idle/done/error', () => {
+    expect(resolveUpdateTrigger('', { return: true }, 'idle')).toBe('open-service-menu');
+    expect(resolveUpdateTrigger('', { return: true }, 'done')).toBe('open-service-menu');
+    expect(resolveUpdateTrigger('', { return: true }, 'error')).toBe('open-service-menu');
+  });
+
+  it('yields none mid-run — a second trigger never starts a direct unconfigured run', () => {
+    expect(resolveUpdateTrigger('a', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('A', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('', { return: true }, 'running')).toBe('none');
+  });
+
+  it('yields none for every other key while idle', () => {
+    expect(resolveUpdateTrigger('q', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('y', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('', { return: false }, 'idle')).toBe('none');
+  });
+
+  it('every mapping resolves to a config-screen/menu action or none — no path starts a run directly', () => {
+    const actions = [
+      resolveUpdateTrigger('a', {}, 'idle'),
+      resolveUpdateTrigger('A', {}, 'done'),
+      resolveUpdateTrigger('', { return: true }, 'idle'),
+      resolveUpdateTrigger('', { return: true }, 'error'),
+      resolveUpdateTrigger('a', {}, 'running'),
+      resolveUpdateTrigger('', { return: true }, 'running'),
+      resolveUpdateTrigger('q', {}, 'idle'),
+    ];
+    for (const action of actions) {
+      expect(['open-all-config', 'open-service-menu', 'none']).toContain(action);
+    }
+    expect(actions).toContain('open-all-config');
+    expect(actions).toContain('open-service-menu');
+  });
+});
+
 describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey (story 3.4)', () => {
   it('offers exactly the four bounded choices in menu order', () => {
     expect(UPDATE_BLOCKER_MENU_ITEMS.map((item) => item.value)).toEqual(['stash', 'edited', 'cancel-repo', 'cancel-run']);
@@ -277,6 +367,11 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain(UPDATE_INTERRUPTED_OFFER);
   });
 
+  it('the interrupted offer routes through the service-actions menu, never a direct re-run', () => {
+    expect(UPDATE_INTERRUPTED_OFFER).toContain('for service actions');
+    expect(UPDATE_INTERRUPTED_OFFER).not.toContain('to re-run');
+  });
+
   it('running shows the spinner label plus one row per active-EDT member', async () => {
     const store = createAppStore();
     store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1', updateStatus: 'running' });
@@ -349,6 +444,10 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('✔ svc-a — updated');
     expect(output).toContain('✖ svc-b — failed (merge-conflict): conflict');
     expect(output).toContain('1 updated, 0 skipped, 1 failed');
+    // Story 3.9: Enter opens the row-local service menu — the follow-up hint promises
+    // the menu, never a direct re-run.
+    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).not.toContain('to run again');
   });
 
   it('done renders duplicate service names as separate rows (keyed by service + index)', async () => {
@@ -381,6 +480,7 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('has no member services');
     expect(output).not.toContain('0 updated, 0 skipped, 0 failed');
+    expect(output).toContain('Press [Enter] for service actions.');
   });
 
   it('error shows the message, the kebab-case code, and the retry hint', async () => {
@@ -391,6 +491,9 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('No active EDT');
     expect(output).toContain('no-active-edt');
+    // Story 3.9: the retry hint promises the service-actions menu, never a direct retry.
+    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).not.toContain('to try again');
   });
 
   it('a raised blocker renders the modal title, body, and all four choices', async () => {
@@ -416,5 +519,540 @@ describe('UpdateZone rendering', () => {
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).not.toContain(UPDATE_BLOCKER_TITLE);
+  });
+});
+
+describe('deriveUpdateServiceStatus (story 3.6, restarting in 3.9)', () => {
+  it('a run currently targeting the service always wins, regardless of health or a stale failed outcome', () => {
+    expect(deriveUpdateServiceStatus('down', 'failed', true)).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true)).toBe('updating');
+  });
+
+  it('a standalone restart in flight derives restarting, outranked only by a group-run target', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, false, true)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('down', 'failed', false, true)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('down', 'failed', true, true)).toBe('updating');
+  });
+
+  it('a failed last outcome outranks raw health when no run currently targets the service', () => {
+    expect(deriveUpdateServiceStatus('up', 'failed', false)).toBe('error');
+    expect(deriveUpdateServiceStatus('down', 'failed', false)).toBe('error');
+  });
+
+  it('raw health passes through unchanged with no run targeting the service and no failed outcome', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, false)).toBe('up');
+    expect(deriveUpdateServiceStatus('down', undefined, false)).toBe('down');
+    expect(deriveUpdateServiceStatus('restarting', undefined, false)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('up', 'updated', false)).toBe('up');
+    expect(deriveUpdateServiceStatus('up', 'skipped', false)).toBe('up');
+  });
+
+  it('a targeted service in its migrate phase derives migrating — the first producer of the reserved glyph (story 3.10)', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'migrating')).toBe('migrating');
+    expect(deriveUpdateServiceStatus('down', 'failed', true, false, 'migrating')).toBe('migrating');
+  });
+
+  it('a targeted service in any other live phase still derives updating (story 3.10)', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'pulling')).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging')).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'restarting')).toBe('updating');
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, undefined)).toBe('updating');
+  });
+
+  it('a live phase never leaks into the status when no run targets the service (story 3.10)', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, false, false, 'migrating')).toBe('up');
+    expect(deriveUpdateServiceStatus('up', 'failed', false, false, 'migrating')).toBe('error');
+  });
+});
+
+describe('partitionUpdateServiceRows (story 3.6)', () => {
+  it('orders active-EDT members first, then the rest, tagging isMember on each row', () => {
+    const rows = partitionUpdateServiceRows([SERVICE_B, SERVICE_A], ACTIVE_EDT);
+
+    expect(rows.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+    expect(rows[0]).toMatchObject({ service: 'svc-a', isMember: true });
+    expect(rows[1]).toMatchObject({ service: 'svc-b', isMember: false });
+  });
+
+  it('marks every row isMember: false when no EDT is focused (mirrors logs-zone.tsx)', () => {
+    const rows = partitionUpdateServiceRows([SERVICE_A, SERVICE_B], undefined);
+
+    expect(rows.every((row) => row.isMember === false)).toBe(true);
+    expect(rows.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+  });
+});
+
+describe('formatServiceOutcomeDetail (story 3.6)', () => {
+  it('renders "idle" when no outcome has ever targeted this service', () => {
+    expect(formatServiceOutcomeDetail(undefined)).toBe('idle');
+  });
+
+  it('renders the outcome word plus code/message detail for a non-updated outcome', () => {
+    expect(formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'updated' })).toBe('updated');
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'failed',
+        detail: { code: 'merge-conflict', message: 'Automatic merge failed' },
+      }),
+    ).toBe('failed (merge-conflict): Automatic merge failed');
+    expect(formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'skipped' })).toBe('skipped (skipped)');
+  });
+});
+
+describe('formatLiveServiceDetail (story 3.10)', () => {
+  it('renders the current step with no issues', () => {
+    expect(formatLiveServiceDetail('pulling', [])).toBe('step: pulling');
+    expect(formatLiveServiceDetail('migrating', [])).toBe('step: migrating');
+  });
+
+  it('renders starting when the targeted service has emitted no phase yet', () => {
+    expect(formatLiveServiceDetail(undefined, [])).toBe('step: starting');
+  });
+
+  it('marks each issue resolved/unresolved beside its kind and detail', () => {
+    expect(
+      formatLiveServiceDetail('merging', [
+        { kind: 'dirty-worktree', detail: '/repo/a', resolved: false },
+        { kind: 'merge-conflict', detail: '/repo/a', resolved: true },
+      ]),
+    ).toBe('step: merging\n○ dirty-worktree — /repo/a (unresolved)\n✔ merge-conflict — /repo/a (resolved)');
+  });
+
+  it('renders a migration failure as an unresolved entry', () => {
+    expect(
+      formatLiveServiceDetail('migrating', [
+        { kind: 'migration-failed', detail: 'Repo /repo/a migration "npm run migration:run" failed: boom', resolved: false },
+      ]),
+    ).toContain('○ migration-failed — Repo /repo/a migration "npm run migration:run" failed: boom (unresolved)');
+  });
+
+  it('collapses embedded newlines in issue detail so one issue stays one row', () => {
+    expect(
+      formatLiveServiceDetail('migrating', [
+        { kind: 'migration-failed', detail: 'line one\nline two\nline three', resolved: false },
+      ]),
+    ).toBe('step: migrating\n○ migration-failed — line one line two line three (unresolved)');
+  });
+});
+
+describe('mergeLastServiceOutcomes (story 3.6)', () => {
+  it('merges new results in without dropping an existing service outside this run\'s scope', () => {
+    const current = { 'svc-b': { service: 'svc-b', outcome: 'updated' as const } };
+
+    const next = mergeLastServiceOutcomes(current, [{ service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict', message: 'm' } }]);
+
+    expect(next['svc-b']).toEqual({ service: 'svc-b', outcome: 'updated' });
+    expect(next['svc-a']).toEqual({ service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict', message: 'm' } });
+  });
+
+  it('overwrites a service\'s previous outcome with its newest result', () => {
+    const current = { 'svc-a': { service: 'svc-a', outcome: 'failed' as const, detail: { code: 'merge-conflict', message: 'm' } } };
+
+    const next = mergeLastServiceOutcomes(current, [{ service: 'svc-a', outcome: 'updated' }]);
+
+    expect(next['svc-a']).toEqual({ service: 'svc-a', outcome: 'updated' });
+  });
+});
+
+// A no-op stub for every render test below: `createAppStore()` (no deps, the same default
+// every other zone test uses) still owns *real* loadEdtsBranches/loadEdts actions that
+// early-return an 'error'/no-op status when unwired — and UpdateZone calls both on mount.
+// Left un-stubbed, those real calls would race the state each test deliberately seeds and
+// clobber it out from under it (mirrors edts-zone.test.tsx's own noopLoad precedent).
+const noopLoad = async () => {};
+
+describe('UpdateZone service-list shell rendering (story 3.6)', () => {
+  it('idle: every service carries a glyph (health fallback down until the first poll resolves), selected detail shows idle', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('svc-a');
+    expect(output).toContain('svc-b');
+    // No health poll has resolved yet — the I/O matrix's "glyph falls back to down" —
+    // rendered as StatusBadge's down glyph.
+    expect(output).toContain('○');
+    // The first row (svc-a, the EDT member) is selected by default; no run has ever
+    // targeted it, so the detail pane reads "idle".
+    expect(output).toContain('idle');
+  });
+
+  it('updating: only the service targeted by the in-flight EDT-scoped run shows the updating glyph — the non-targeted service keeps its raw-health glyph', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const lines = output.split('\n');
+
+    // Review fix: isolate each service's own *list row* line (identified by its unique
+    // meta text "+0/-0", which only the list row — not the running-members spinner line
+    // that also mentions the service name — carries) so a bug that marks every row
+    // 'updating' regardless of scope (e.g. isTargeted collapsed to bare `updateStatus ===
+    // 'running'`) would actually fail this test.
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+    const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+    expect(svcARow).toBeDefined();
+    expect(svcBRow).toBeDefined();
+
+    // svc-a is the active EDT's sole member — targeted by this EDT-scoped run.
+    expect(svcARow).toContain('⇄');
+    expect(svcARow).not.toContain('○');
+
+    // svc-b is not an EDT member and no run has ever targeted it — no health poll has
+    // resolved yet either, so it still shows the raw-health `down` fallback, never
+    // 'updating'.
+    expect(svcBRow).toContain('○');
+    expect(svcBRow).not.toContain('⇄');
+  });
+
+  it('error: a service whose last completed run failed shows the error glyph and the failure detail', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      lastServiceOutcomes: {
+        'svc-a': { service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict', message: 'Automatic merge failed' } },
+      },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('✖');
+    expect(output).toContain('failed (merge-conflict): Automatic merge failed');
+  });
+});
+
+// Review fix (story 3.6): every render test above uses `createAppStore()` with no deps, under
+// which `pollServiceHealth` early-returns (`if (!deps) return;`) regardless of which
+// path/service values the mount effect passed it — so a bug that polled by `row.service`
+// instead of `row.path` (a plausible slip, since `updateServiceHealth[row.path]` reads by
+// path) would silently render every row stuck on the `down` fallback with zero test
+// failures. This block wires real (fake-port) deps into the store — mirroring
+// update-slice.test.ts's own story-3.6 health-polling fakeDeps — and mounts UpdateZone with
+// a real Ink render loop so the mount effect's fire-and-forget poll chain actually runs.
+function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
+  const registry: RegistryPort = {
+    list: vi.fn(async () => ok([])),
+    add: vi.fn(async () => ok(undefined)),
+    exists: vi.fn(async () => ok(true)),
+    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+    reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
+  };
+  const manifest: ManifestPort = {
+    load: vi.fn(async (repoPath: string) =>
+      ok({
+        service: `svc-${repoPath.split('/').pop()}`,
+        container: `ctr-${repoPath.split('/').pop()}`,
+        migrationCommand: 'npm run migration:run',
+        sharedBranch: 'development',
+        modules: {},
+      }),
+    ),
+  };
+  const git: GitPort = {
+    assertAllowedBranch: vi.fn(async () => ok(undefined)),
+    createBranch: vi.fn(async () => ok(undefined)),
+    deleteBranch: vi.fn(async () => ok(undefined)),
+    currentBranch: vi.fn(async () => ok('feat/a')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
+    checkout: vi.fn(async () => ok(undefined)),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    stashSave: vi.fn(async () => ok(undefined)),
+    restoreStash: vi.fn(async () => ok(undefined)),
+    branchExistsLocally: vi.fn(async () => ok(true)),
+    fetch: vi.fn(async () => ok(undefined)),
+    pull: vi.fn(async () => ok(undefined)),
+    mergeBranch: vi.fn(async () => ok(undefined)),
+    abortMerge: vi.fn(async () => ok(undefined)),
+    isMergeInProgress: vi.fn(async () => ok(false)),
+    listDirtyPaths: vi.fn(async () => ok([])),
+    discardPaths: vi.fn(async () => ok(undefined)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    hasUnmergedPaths: vi.fn(async () => ok(false)),
+    finalizeMerge: vi.fn(async () => ok(undefined)),
+    listBranches: vi.fn(async () => ok([])),
+    renameBranch: vi.fn(async () => ok(undefined)),
+    isBranchMerged: vi.fn(async () => ok(true)),
+    hasStash: vi.fn(async () => ok(false)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
+  };
+  const edtRegistry: EdtRegistryPort = {
+    add: vi.fn(async () => ok(undefined)),
+    list: vi.fn(async () => ok([])),
+    setStatus: vi.fn(async () => ok(undefined)),
+    update: vi.fn(async () => ok(undefined)),
+    remove: vi.fn(async () => ok(undefined)),
+  };
+  const state: StatePort = {
+    readActiveEdt: vi.fn(async () => ok(null)),
+    writeActiveEdt: vi.fn(async () => ok(undefined)),
+    readSplitterRatios: vi.fn(async () => ok(null)),
+    writeSplitterRatios: vi.fn(async () => ok(undefined)),
+    readFilterHistory: vi.fn(async () => ok(null)),
+    writeFilterHistory: vi.fn(async () => ok(undefined)),
+  };
+  const lock: LockPort = {
+    acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
+    peek: vi.fn(async () => ok({ locked: false })),
+  };
+  const settings: SettingsPort = {
+    load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
+    save: vi.fn(async () => ok(undefined)),
+  };
+  const docker: DockerPort = {
+    streamLogs: vi.fn(() => () => {}),
+    fetchLogsBefore: vi.fn(async () => ok([])),
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    restartContainer: vi.fn(async () => ok(undefined)),
+  };
+  return {
+    registry,
+    manifest,
+    git,
+    edtRegistry,
+    state,
+    lock,
+    edtRegistryResourceKey: '/tmp/edts.yaml',
+    edtsBaseDir: '/tmp/edts',
+    registryResourceKey: '/config/registry.yaml',
+    settings,
+    docker,
+    ...overrides,
+  };
+}
+
+describe('UpdateZone health-poll wiring against real (fake-port) deps (story 3.6)', () => {
+  it('polls each row by its own repoPath (never by service name) and the rendered row reflects the resolved health glyph', async () => {
+    // manifest.load resolves repoPath -> container ('ctr-a' for /repo/a, 'ctr-b' for
+    // /repo/b); getContainerHealth reports 'up' only for 'ctr-a'. If the poll effect were
+    // ever keyed by `row.service` instead of `row.path` (updateServiceHealth reads by
+    // path — see update-zone.tsx), the lookup would simply never resolve and every row
+    // would stay on the `down` fallback forever — both assertions below would fail
+    // together in that case.
+    const getContainerHealth = vi.fn(async (container: string) => ok(container === 'ctr-a' ? ('up' as const) : ('down' as const)));
+    const docker: DockerPort = {
+      streamLogs: vi.fn(() => () => {}),
+      fetchLogsBefore: vi.fn(async () => ok([])),
+      getContainerHealth,
+      restartContainer: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeUpdateZoneDeps({ docker }));
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const stdout = new FakeTtyStdout();
+    const instance = render(createElement(UpdateZone, { useStore: store }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin: fakeTtyStdin(),
+      interactive: false,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      // Flushes the mount effect's fire-and-forget poll chain (manifest.load then
+      // getContainerHealth, each a resolved-async mock) — a real macrotask tick, mirrors
+      // update-slice.test.ts's own flushPolls helper — then waits for the state update's
+      // own React commit to actually paint.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await instance.waitUntilRenderFlush();
+
+      // Non-interactive Ink only actually flushes its buffered frame to the stream on
+      // unmount (mirrors render-to-string.ts's own waitUntilExit-after-unmount sequencing)
+      // — the poll above must resolve *before* this, not after, so the frame it unmounts
+      // with already reflects the resolved health.
+      const exit = instance.waitUntilExit();
+      instance.unmount();
+      await exit;
+
+      const lines = stdout.output.split('\n');
+      const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+      const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+      expect(svcARow).toBeDefined();
+      expect(svcBRow).toBeDefined();
+      expect(svcARow).toContain('●');
+      expect(svcBRow).toContain('○');
+    } catch (error) {
+      instance.unmount();
+      throw error;
+    }
+  });
+});
+
+describe('UpdateZone live per-service detail (story 3.10)', () => {
+  it('running with the selected service targeted shows its live step plus the issue log instead of the last outcome', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServicePhase: { 'svc-a': 'pulling' },
+      liveServiceIssues: {
+        'svc-a': [
+          { kind: 'dirty-worktree', detail: '/repo/a', resolved: false },
+          { kind: 'merge-conflict', detail: '/repo/a', resolved: true },
+        ],
+      },
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    // The first row (svc-a, the EDT member) is selected and targeted — the live view
+    // replaces the last-outcome view that would otherwise read "updated".
+    expect(output).toContain('step: pulling');
+    expect(output).toContain('○ dirty-worktree — /repo/a (unresolved)');
+    expect(output).toContain('✔ merge-conflict — /repo/a (resolved)');
+  });
+
+  it('running with the selected service targeted but no phase yet shows the starting step', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('step: starting');
+  });
+
+  it('running with the migrate phase targeted shows the migrating glyph on that service’s own row', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServicePhase: { 'svc-a': 'migrating' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const lines = output.split('\n');
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+
+    expect(svcARow).toBeDefined();
+    expect(svcARow).toContain('⇒');
+    expect(output).toContain('step: migrating');
+  });
+
+  it('running with a non-targeted service selected keeps the last-outcome view, never the live step', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServicePhase: { 'svc-a': 'pulling' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    // svc-b is selected but no EDT-scoped run targets it — the idle last-outcome view.
+    expect(output).not.toContain('step:');
+    expect(output).toContain('idle');
+  });
+
+  it('done reverts to the final per-service outcome even with a stale live phase in the map', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'done',
+      updateTopic: 'demo',
+      updateResults: [{ service: 'svc-a', outcome: 'updated' }],
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      liveServicePhase: { 'svc-a': 'pulling' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).not.toContain('step:');
+  });
+
+  it('idle with a standalone restart in flight on the selected service shows its live restarting step', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'idle',
+      serviceRestartInFlight: { '/repo/a': 'restart' },
+      liveServicePhase: { 'svc-a': 'restarting' },
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('step: restarting');
+  });
+
+  it('idle with a standalone restart in flight but no emission yet shows starting, never a stale outcome', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'idle',
+      serviceRestartInFlight: { '/repo/a': 'restart' },
+      lastServiceOutcomes: { 'svc-a': { service: 'svc-a', outcome: 'updated' } },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('step: starting');
   });
 });

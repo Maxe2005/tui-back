@@ -4,7 +4,8 @@
 import { Box, Text, type Key } from 'ink';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { nextTextInputValue, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import { nextTextInputValue } from '../../../../shared/components/text-edit.js';
+import type { CreateDialogState, EdtDialogState } from '../../edts-zone.logic.js';
 import type { NameAvailability } from './wizard.logic.js';
 
 export function handleNameStepInput(

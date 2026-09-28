@@ -257,11 +257,13 @@ export function CreateWizardView({
   candidates,
   candidateState,
   edtsRows,
+  maxRows,
 }: {
   dialog: CreateDialogState;
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
   edtsRows: readonly EdtRegistryEntry[];
+  maxRows: number;
 }) {
   const breadcrumb = buildBreadcrumb(dialog, edtsRows);
   const cancelHint = edtsRows.length > 0 ? '[Esc] Annuler' : '[Esc] Quitter';
@@ -279,7 +281,7 @@ export function CreateWizardView({
         <Text color={colors['text-dim']}>{STEP_INTROS[dialog.step]}</Text>
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
-        {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} /> : null}
+        {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} maxRows={maxRows} /> : null}
         {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} showConfirm={!createdWithFailures} /> : null}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
         {dialog.submitting ? <DimAnnotation text="Création…" /> : null}

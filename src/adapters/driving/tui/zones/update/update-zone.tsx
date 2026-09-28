@@ -17,17 +17,46 @@
 // the shared renderToString harness's fake stdin never emits data, so a useInput callback
 // itself is never invoked by any test in the repo).
 import { spawnSync } from 'node:child_process';
+import { resolve as resolvePath } from 'node:path';
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { DetailPane, ListRow, ModalDialog, Spinner, type SummaryTone } from '../../shared/components/index.js';
+import {
+  BoundedList,
+  DetailPane,
+  ListDetailSplit,
+  ListRow,
+  ModalDialog,
+  Spinner,
+  StatusBadge,
+  type SummaryTone,
+} from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
+import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { UpdateConfigDialog } from './update-config-dialog.js';
+import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
+import {
+  beginUpdateConfigBranchEdit,
+  clampUpdateConfigCursor,
+  commitUpdateConfigBranchEdit,
+  resolveUpdateConfigKey,
+  toggleUpdateConfigRow,
+  type BranchAutocompleteState,
+} from './update-config-dialog.logic.js';
 
-export const UPDATE_IDLE_PROMPT = 'Press [Enter] to bring every member service up to date.';
+// Story 3.6: rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title
+// row, the list column's own section header/loading/error lines) subtracted from the raw
+// window size before the service list's own BoundedList ever sees it — mirrors
+// edts-zone.tsx's own EDTS_SERVICE_LISTS_CHROME_ROWS precedent ("an approximation is fine
+// here").
+const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
+
+export const UPDATE_IDLE_PROMPT = 'Press [Enter] for service actions.';
 export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
-export const UPDATE_INTERRUPTED_OFFER = 'The last update was interrupted — press [Enter] to re-run it.';
+export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
@@ -107,6 +136,32 @@ export function shouldConfirmQuit(input: string, updateStatus: string): boolean 
 // while a run is in flight — a second trigger is rejected by the core lock instead).
 export function shouldOpenAllConfirm(input: string, updateStatus: string): boolean {
   return (input === 'a' || input === 'A') && updateStatus !== 'running';
+}
+
+// Story 3.9: the row-local trigger mapping — `a` still opens the shared pre-run
+// configuration screen pre-scoped to every managed repo; `Enter` opens the per-service
+// action menu for the selected row (Update this service / Clean restart / Cancel, the
+// EDTs zone's own service-menu pattern). No trigger ever starts an unconfigured run.
+// Pure (the same unit style as `shouldOpenAllConfirm`) because the zone's `useInput` is
+// never driven in tests, so an inline mapping would let a wiring regression back to a
+// direct `runGroupUpdate` go undetected.
+export type UpdateTriggerAction = 'open-all-config' | 'open-service-menu' | 'none';
+
+export function resolveUpdateTrigger(
+  input: string,
+  key: { return?: boolean },
+  updateStatus: string,
+): UpdateTriggerAction {
+  if (updateStatus === 'running') {
+    return 'none';
+  }
+  if (shouldOpenAllConfirm(input, updateStatus)) {
+    return 'open-all-config';
+  }
+  if (key.return === true) {
+    return 'open-service-menu';
+  }
+  return 'none';
 }
 
 export type AllConfirmDecision = 'confirm' | 'cancel';
@@ -229,7 +284,13 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateScope = useStore((state) => state.updateScope);
   const updateBlocker = useStore((state) => state.updateBlocker);
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
-  const runGroupUpdate = useStore((state) => state.runGroupUpdate);
+  const updateConfig = useStore((state) => state.updateConfig);
+  const openUpdateConfig = useStore((state) => state.openUpdateConfig);
+  const setUpdateConfig = useStore((state) => state.setUpdateConfig);
+  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
+  const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
+  const serviceRestartInFlight = useStore((state) => state.serviceRestartInFlight);
+  const runServiceRestart = useStore((state) => state.runServiceRestart);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
   const activeEdt = useStore((state) => state.activeEdt);
   const edts = useStore((state) => state.edts);
@@ -240,17 +301,99 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const resizeMode = useStore((state) => state.resizeMode);
 
+  // Story 3.6: the always-visible service-list shell — the same active-EDT-scoped
+  // `edtsBranches` rows Logs/EDTs zones already load, plus this zone's own live health poll
+  // and last-run-outcome map (Code Map).
+  const services = useStore((state) => state.edtsBranches);
+  const servicesStatus = useStore((state) => state.edtsBranchesStatus);
+  const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
+  const loadEdts = useStore((state) => state.loadEdts);
+  const updateServiceHealth = useStore((state) => state.updateServiceHealth);
+  const lastServiceOutcomes = useStore((state) => state.lastServiceOutcomes);
+  const liveServicePhase = useStore((state) => state.liveServicePhase);
+  const liveServiceIssues = useStore((state) => state.liveServiceIssues);
+  const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
+  const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
+  const ratio = useStore((state) => state.splitterRatios.update);
+  // The shared branch autocomplete's visible row cap + the edited row's own branch source —
+  // the same store actions the EDT zone's own picker sessions use (never `deps.git`
+  // directly).
+  const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
+  const listBranchesAction = useStore((state) => state.listBranches);
+
   const [quitConfirm, setQuitConfirm] = useState(false);
-  const [allConfirm, setAllConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
+  // Story 3.9: the row-local action menu's own target + cursor — zone-local UI state (the
+  // same convention as the service-list cursor above; only cross-visit/cross-run state
+  // belongs in update-slice.ts). Null when no menu is open.
+  const [serviceMenu, setServiceMenu] = useState<{ service: string; repoPath: string } | null>(null);
+  const [serviceMenuCursor, setServiceMenuCursor] = useState(0);
+  // Story 3.6: the service list's own selection cursor — zone-local UI state (repo
+  // convention: only cross-visit/cross-run state belongs in update-slice.ts).
+  const [serviceCursor, setServiceCursor] = useState(0);
+  // Story 3.7: the config screen's own keyboard cursor + in-progress branch edit — also
+  // zone-local UI state. The draft itself (rows, toggles, error) is live run state in the
+  // store; these two only say where the cursor is and what is being typed. The edit hosts
+  // the shared autocomplete state; its branch source lives in the two states below,
+  // fetched once per edit (mirroring the EDT zone's own fetch-once-per-session effect).
+  const [configCursor, setConfigCursor] = useState(0);
+  const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
+  const [configBranches, setConfigBranches] = useState<string[]>([]);
+  const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    void loadEdtsBranches();
+    void loadEdts();
+    // Fires once on mount only, mirrors logs-zone.tsx's own mount effect (Code Map:
+    // "pattern: logs-zone.tsx:225-230").
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const rows = servicesStatus === 'error' ? [] : (services ?? []);
+  const focusedEdt = (edts ?? []).find((entry) => entry.ulid === activeEdt);
+  const serviceRows = partitionUpdateServiceRows(rows, focusedEdt);
+  const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
+  const selectedServiceRow = serviceRows[clampedServiceCursor];
+
+  // Story 3.6: this run's currently-targeted services — an all-repos run targets every
+  // listed service; an EDT-scoped run targets only the active EDT's own members (the same
+  // `runningMembers` the running-state spinner below already reads).
+  const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
+  const isAllRun = updateScope === 'all';
+  const runningMemberPaths = new Set(runningMembers.map((member) => member.repoPath));
+
+  // Story 3.6: starts (or restarts, on a changed service list) this zone's own health poll
+  // whenever the loaded service list changes — independent of Logs zone's own pane
+  // subscriptions (Never: "no shared subscription"). Torn down on unmount so no poll timer
+  // outlives the zone.
+  const servicePaths = rows.map((row) => row.path).join('\u0000');
+  useEffect(() => {
+    if (servicePaths === '') {
+      // Review fix: a service list that goes from non-empty to empty (edtsBranches becomes
+      // `[]`, or servicesStatus flips to 'error') must stop the previous poll cycle too —
+      // left un-stopped, a stale interval keeps polling repoPaths no longer displayed.
+      stopUpdateHealthPolling();
+      return;
+    }
+    startUpdateHealthPolling(servicePaths.split('\u0000'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicePaths]);
+  useEffect(() => () => stopUpdateHealthPolling(), [stopUpdateHealthPolling]);
 
   // While any dialog owns the keystroke, every global shortcut (including `?`
   // help and the zone mnemonics) must not fire — the same zoneInputCaptured gate the EDTs
   // zone's own dialogs use. The blocker menu captures hardest: while a repo waits, no
   // other zone key may fire at all.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm || allConfirm || updateBlocker !== null);
-  }, [quitConfirm, allConfirm, updateBlocker, setZoneInputCaptured]);
+    setZoneInputCaptured(quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null);
+  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, setZoneInputCaptured]);
+
+  // A newly opened service menu always starts browsing on its first row.
+  useEffect(() => {
+    if (serviceMenu !== null) {
+      setServiceMenuCursor(0);
+    }
+  }, [serviceMenu]);
 
   // A newly raised blocker always opens the menu on its first row.
   useEffect(() => {
@@ -258,6 +401,50 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       setBlockerCursor(0);
     }
   }, [updateBlocker]);
+
+  // A newly opened config screen always starts browsing on its first row with no branch
+  // edit in flight. Keyed on the open boolean — never the draft object — so a toggle or
+  // branch commit (which replaces the draft) doesn't snap the cursor back to 0 or wipe an
+  // edit session.
+  const isUpdateConfigOpen = updateConfig !== null;
+  useEffect(() => {
+    if (isUpdateConfigOpen) {
+      setConfigCursor(0);
+      setConfigEditing(null);
+      setConfigBranches([]);
+      setConfigBranchesStatus('loading');
+    }
+  }, [isUpdateConfigOpen]);
+
+  // Fetches the edited row's own listBranches(repoPath) once per branch-edit session —
+  // the same shape as the EDT zone's own branch-picker effect (keyed on primitives, stale
+  // responses dropped). Opening an edit resets the source to loading (see the begin-edit
+  // dispatch below); closing it leaves the last source in place, unused until the next
+  // edit re-arms it.
+  const editingRepoPath =
+    updateConfig !== null && configEditing !== null
+      ? (updateConfig.rows[clampUpdateConfigCursor(updateConfig, configCursor)]?.repoPath ?? null)
+      : null;
+  const isConfigEditing = configEditing !== null;
+  useEffect(() => {
+    if (editingRepoPath === null || !isConfigEditing || configBranchesStatus !== 'loading') {
+      return;
+    }
+    let cancelled = false;
+    const repoPath = editingRepoPath;
+    void (async () => {
+      const result = await listBranchesAction(repoPath);
+      if (cancelled) {
+        return;
+      }
+      setConfigBranches(result.ok ? result.data : []);
+      setConfigBranchesStatus(result.ok ? 'ready' : 'error');
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingRepoPath, isConfigEditing, configBranchesStatus, listBranchesAction]);
 
   useInput(
     (input, key) => {
@@ -278,13 +465,46 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      if (allConfirm) {
-        const decision = resolveAllConfirm(input, key);
-        if (decision === 'confirm') {
-          setAllConfirm(false);
-          void runGroupUpdate('all');
-        } else if (decision === 'cancel') {
-          setAllConfirm(false);
+      // Story 3.7: while the pre-run configuration screen is open it owns every
+      // keystroke — the run starts only through its confirm path, with exactly the
+      // confirmed configuration.
+      if (updateConfig !== null) {
+        const step = resolveUpdateConfigKey(
+          input,
+          key,
+          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing },
+          updateConfig,
+          configBranches,
+        );
+        if (step.type === 'move') {
+          setConfigCursor(step.cursor);
+        } else if (step.type === 'toggle') {
+          setUpdateConfig(toggleUpdateConfigRow(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor)));
+        } else if (step.type === 'begin-edit') {
+          const editing = beginUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor));
+          if (editing !== null) {
+            setConfigEditing(editing);
+            // Re-arm the per-row branch source: a fresh edit always starts loading, and the
+            // effect above fetches this row's own listBranches once.
+            setConfigBranches([]);
+            setConfigBranchesStatus('loading');
+          }
+        } else if (step.type === 'edit') {
+          setConfigEditing(step.editing);
+        } else if (step.type === 'commit-edit') {
+          if (configEditing !== null) {
+            setUpdateConfig(
+              commitUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor), configEditing.value),
+            );
+            setConfigEditing(null);
+          }
+        } else if (step.type === 'cancel-edit') {
+          setConfigEditing(null);
+        } else if (step.type === 'confirm') {
+          void confirmUpdateConfig();
+        } else if (step.type === 'cancel') {
+          setConfigEditing(null);
+          closeUpdateConfig();
         }
         return;
       }
@@ -298,18 +518,60 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      // Story 3.9: while the row-local action menu is open it owns every keystroke —
+      // arrows/Home/End move, Enter chooses, Esc cancels (the EDTs service-menu pattern).
+      // Update routes to the 3.7 config screen pre-scoped to that single service; clean
+      // restart runs the standalone single-service use-case for that repo alone.
+      if (serviceMenu !== null) {
+        const step = resolveServiceMenuKey(input, key, serviceMenuCursor);
+        if (step.type === 'move') {
+          setServiceMenuCursor(step.cursor);
+        } else if (step.type === 'choose') {
+          const action = resolveServiceMenuChoice(step.choice, serviceMenu);
+          if (action.type === 'open-config') {
+            setServiceMenu(null);
+            void openUpdateConfig({ service: action.service, repoPath: action.repoPath });
+          } else if (action.type === 'restart') {
+            setServiceMenu(null);
+            void runServiceRestart(action.repoPath);
+          } else {
+            setServiceMenu(null);
+          }
+        }
+        return;
+      }
+      // Story 3.6: the service list's own cursor — moves regardless of run state (browsing
+      // the always-visible list is harmless mid-run) and never conflicts with the existing
+      // 3.1–3.4 triggers below, none of which use arrow/Home/End.
+      const jump = resolveSelectionJump(key);
+      if (jump !== null) {
+        setServiceCursor(jumpSelection(jump, serviceRows.length));
+        return;
+      }
+      const direction = resolveSelectionDirection(key);
+      if (direction !== null) {
+        setServiceCursor((current) => moveSelection(current, direction, serviceRows.length));
+        return;
+      }
       if (updateStatus === 'running') {
         if (shouldConfirmQuit(input, updateStatus)) {
           setQuitConfirm(true);
         }
         return;
       }
-      if (shouldOpenAllConfirm(input, updateStatus)) {
-        setAllConfirm(true);
+      // Story 3.9: `a` pre-scopes the shared pre-run configuration screen to every
+      // managed repo; `Enter` opens the row-local action menu for the selected service
+      // (update this service / clean restart / cancel) — no git/docker action runs before
+      // the menu choice is confirmed through its own path.
+      const trigger = resolveUpdateTrigger(input, key, updateStatus);
+      if (trigger === 'open-all-config') {
+        void openUpdateConfig('all');
         return;
       }
-      if (key.return) {
-        void runGroupUpdate();
+      if (trigger === 'open-service-menu') {
+        if (selectedServiceRow !== undefined) {
+          setServiceMenu({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+        }
       }
     },
     { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
@@ -318,80 +580,165 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // The active EDT's own membership — the per-service spinner rows during a run, before the
   // core use-case resolves with its per-service outcome rows. An all-repos run targets no
   // single EDT, so it shows the generic loading line instead of EDT member rows.
-  const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
   const offerRerun = shouldOfferRerun(edts, activeEdt);
-  const isAllRun = updateScope === 'all';
   const runningLabel = isAllRun ? UPDATE_ALL_RUNNING_LABEL : UPDATE_RUNNING_LABEL;
 
+  // Story 3.6: this zone's own service-list chrome budget (Code Map: "an approximation is
+  // fine here", mirrors edts-zone.tsx/logs-zone.tsx's own precedent).
+  const windowSize = useWindowSize();
+  const serviceListMaxVisibleRows = Math.max(windowSize.rows - UPDATE_SERVICE_LIST_CHROME_ROWS, 3);
+
+  const selectedLastOutcome = selectedServiceRow !== undefined ? lastServiceOutcomes[selectedServiceRow.service] : undefined;
+
+  // Story 3.10: the live per-service view — while a run targets the selected service the
+  // detail pane shows its current step plus the issue log (resolved/unresolved) instead
+  // of the last-outcome view; afterwards it reverts to the final outcome. A standalone
+  // restart reports through the same channel, so its in-flight step renders live too —
+  // before its first emission the formatter reports `starting`, never a stale outcome.
+  const selectedLivePhase = selectedServiceRow !== undefined ? liveServicePhase[selectedServiceRow.service] : undefined;
+  const selectedLiveIssues = selectedServiceRow !== undefined ? (liveServiceIssues[selectedServiceRow.service] ?? []) : [];
+  const isSelectedTargeted =
+    selectedServiceRow !== undefined && updateStatus === 'running' && (isAllRun || runningMemberPaths.has(selectedServiceRow.path));
+  const isSelectedRestarting =
+    selectedServiceRow !== undefined && serviceRestartInFlight[resolvePath(selectedServiceRow.path)] !== undefined;
+  const showLiveDetail = isSelectedTargeted || isSelectedRestarting;
+  const detailBody =
+    selectedServiceRow === undefined
+      ? 'No service selected.'
+      : showLiveDetail
+        ? formatLiveServiceDetail(selectedLivePhase, selectedLiveIssues)
+        : formatServiceOutcomeDetail(selectedLastOutcome);
+
   return (
-    <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']}>
-      <Text color={colors['text-dim']}>UPDATE</Text>
-      {updateStatus === 'running' ? (
-        <Box flexDirection="column">
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> {runningLabel}</Text>
+    <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
+      {/* Review fix: only the title line carries the pre-3.6 left padding back — the outer
+          Box itself stays unpadded so it doesn't double up the list/detail panes' own
+          paddingX (each pane below already pads itself, matching edts-zone.tsx/
+          logs-zone.tsx's convention). */}
+      <Box paddingX={spacing['pane-padding-x']}>
+        <Text color={colors['text-dim']}>UPDATE</Text>
+      </Box>
+      <ListDetailSplit
+        ratio={ratio[0]}
+        listSplitterTargeted={resizeMode?.zone === 'update' && resizeMode.targetBoundary === 0}
+        list={
+          <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+            <Text color={colors['text-dim']}>SERVICES</Text>
+            {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
+            {servicesStatus === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+            {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
+              <Text color={colors['text-dim']}>No managed services found.</Text>
+            ) : null}
+            {/* AC2/I-O matrix: every row always carries exactly one glyph from the closed
+                up/down/restarting/updating/migrating/error set — never blank, never bridged
+                through a generic state. */}
+            <BoundedList
+              items={serviceRows}
+              maxVisibleRows={serviceListMaxVisibleRows}
+              cursorIndex={clampedServiceCursor}
+              renderItem={(row, index) => {
+                const health = updateServiceHealth[row.path] ?? 'down';
+                const lastOutcome = lastServiceOutcomes[row.service];
+                const isTargeted = updateStatus === 'running' && (isAllRun || runningMemberPaths.has(row.path));
+                // Story 3.9: the coarse standalone-restart flag — the in-flight map holds
+                // this service's resolved repoPath for the duration, no step detail.
+                // Story 3.10: the live phase for this service refines the glyph — the
+                // migrate step finally produces `migrating`.
+                const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
+                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
+                return (
+                  <Box key={row.path} flexDirection="row">
+                    <StatusBadge state={status} />
+                    <Box marginLeft={1} flexGrow={1} minWidth={0}>
+                      <ListRow label={row.service} meta={formatServiceMeta(row)} selected={index === clampedServiceCursor} />
+                    </Box>
+                  </Box>
+                );
+              }}
+            />
           </Box>
-          {isAllRun || runningMembers.length === 0 ? (
-            <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
-          ) : (
-            runningMembers.map((member) => (
-              <Box key={member.repoPath}>
-                <Spinner />
-                <Text color={colors.text}> {member.service} ({member.branch})</Text>
-              </Box>
-            ))
-          )}
-        </Box>
-      ) : null}
-      {updateStatus === 'done' && updateTopic !== null ? (
-        // The zero-member no-op carries its note as the primary outcome line — rendering
-        // the success-toned `0 updated, 0 skipped, 0 failed` counts DetailPane for it
-        // would overstate a no-op as a result.
-        updateNote !== null && updateResults.length === 0 ? (
-          <Box flexDirection="column">
-            <Text color={colors.text}>{updateNote}</Text>
-            <Text color={colors['text-dim']}>Press [Enter] to run again.</Text>
-          </Box>
-        ) : (
-          <Box flexDirection="column">
-            {updateResults.map((row, index) => (
-              // Duplicate service names occur within one EDT — key by service + index so
-              // React never drops a same-named row.
-              <Text key={`${row.service}-${index}`} color={colors.text}>
-                {formatUpdateRow(row)}
-              </Text>
-            ))}
-            <DetailPane
-              title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
-              summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
-            >
-              {updateNote ?? `Press [Enter] to run again.`}
+        }
+        detail={
+          <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+            <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>
+              {detailBody}
             </DetailPane>
+            {updateStatus === 'running' ? (
+              <Box flexDirection="column">
+                <Box>
+                  <Spinner />
+                  <Text color={colors.text}> {runningLabel}</Text>
+                </Box>
+                {isAllRun || runningMembers.length === 0 ? (
+                  <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
+                ) : (
+                  runningMembers.map((member) => (
+                    <Box key={member.repoPath}>
+                      <Spinner />
+                      <Text color={colors.text}> {member.service} ({member.branch})</Text>
+                    </Box>
+                  ))
+                )}
+              </Box>
+            ) : null}
+            {updateStatus === 'done' && updateTopic !== null ? (
+              // The zero-member no-op carries its note as the primary outcome line — rendering
+              // the success-toned `0 updated, 0 skipped, 0 failed` counts DetailPane for it
+              // would overstate a no-op as a result.
+              updateNote !== null && updateResults.length === 0 ? (
+                <Box flexDirection="column">
+                  <Text color={colors.text}>{updateNote}</Text>
+                  <Text color={colors['text-dim']}>Press [Enter] for service actions.</Text>
+                </Box>
+              ) : (
+                <Box flexDirection="column">
+                  {updateResults.map((row, index) => (
+                    // Duplicate service names occur within one EDT — key by service + index so
+                    // React never drops a same-named row.
+                    <Text key={`${row.service}-${index}`} color={colors.text}>
+                      {formatUpdateRow(row)}
+                    </Text>
+                  ))}
+                  <DetailPane
+                    title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
+                    summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
+                  >
+                    {updateNote ?? `Press [Enter] for service actions.`}
+                  </DetailPane>
+                </Box>
+              )
+            ) : null}
+            {updateStatus === 'error' ? (
+              <Box flexDirection="column">
+                <Text color={colors.error}>
+                  {updateError ?? 'Group update failed.'}
+                  {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
+                </Text>
+                <Text color={colors['text-dim']}>Press [Enter] for service actions.</Text>
+              </Box>
+            ) : null}
+            {updateStatus === 'idle' ? (
+              <Box flexDirection="column">
+                <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
+                <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
+              </Box>
+            ) : null}
           </Box>
-        )
-      ) : null}
-      {updateStatus === 'error' ? (
-        <Box flexDirection="column">
-          <Text color={colors.error}>
-            {updateError ?? 'Group update failed.'}
-            {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
-          </Text>
-          <Text color={colors['text-dim']}>Press [Enter] to try again.</Text>
-        </Box>
-      ) : null}
-      {updateStatus === 'idle' ? (
-        <Box flexDirection="column">
-          <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
-          <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
-        </Box>
-      ) : null}
+        }
+      />
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
-      <ModalDialog title={UPDATE_ALL_CONFIRM_TITLE} open={allConfirm} onConfirm={() => {}} onCancel={() => setAllConfirm(false)}>
-        <Text color={colors.text}>{UPDATE_ALL_CONFIRM_BODY}</Text>
-      </ModalDialog>
+      {updateConfig !== null ? (
+        <UpdateConfigDialog
+          draft={updateConfig}
+          view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
+          branches={configBranches}
+          branchesStatus={configBranchesStatus}
+          maxRows={branchDropdownMaxRows}
+        />
+      ) : null}
+      {serviceMenu !== null ? <UpdateServiceMenuDialog service={serviceMenu.service} cursor={serviceMenuCursor} /> : null}
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">

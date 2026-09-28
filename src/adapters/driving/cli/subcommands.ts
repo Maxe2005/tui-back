@@ -19,6 +19,7 @@ import type { ContainerPort } from '../../../core/ports/container.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
+import type { RestartPort } from '../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
@@ -56,6 +57,7 @@ export function buildSubcommands(deps: {
   git: GitPort;
   container: ContainerPort;
   migration: MigrationPort;
+  restart: RestartPort;
   state: StatePort;
   // Story 2.33: gates `registry clean`'s bare-invocation interactive list-then-confirm
   // prompt. Defaults to false (never prompts) so every existing deps-construction call site
@@ -168,10 +170,18 @@ export function buildSubcommands(deps: {
             git: deps.git,
             container: deps.container,
             migration: deps.migration,
+            restart: deps.restart,
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
+            // Story 3.7: the CLI takes no configuration — full default selection (no
+            // `selection` filter), migrate ON, clean restart OFF (no new flags).
+            runMigrations: true,
+            cleanRestart: false,
             onUpdateBlocker: undefined,
+            // Story 3.10: the CLI takes no live observer either — no new flags, and the
+            // single-line JSON output is unchanged.
+            onPhase: undefined,
           });
         }
         const sorted = [...args].sort();
@@ -183,10 +193,16 @@ export function buildSubcommands(deps: {
             git: deps.git,
             container: deps.container,
             migration: deps.migration,
+            restart: deps.restart,
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',
+            // Story 3.7: same full-default configuration as the bare invocation above.
+            runMigrations: true,
+            cleanRestart: false,
             onUpdateBlocker: undefined,
+            // Story 3.10: same no-observer wiring as above.
+            onPhase: undefined,
           });
         }
         if (args.length === 1 && args[0] === '--all') {

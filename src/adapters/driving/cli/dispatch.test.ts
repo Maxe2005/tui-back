@@ -3,6 +3,7 @@ import { ok, err } from '../../../core/result.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
+import type { RestartPort } from '../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -188,6 +189,7 @@ describe('subcommand registry guards', () => {
     const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
     const container: ContainerPort = { restart: async () => ok(undefined) };
     const migration: MigrationPort = { run: async () => ok({ output: '' }) };
+    const restart: RestartPort = { run: async () => ok({ output: '' }) };
     const git: GitPort = {
       assertAllowedBranch: async () => ok(undefined),
       createBranch: async () => ok(undefined),
@@ -228,6 +230,7 @@ describe('subcommand registry guards', () => {
       git,
       container,
       migration,
+      restart,
       state: fakeState(),
       ...overrides,
     });
