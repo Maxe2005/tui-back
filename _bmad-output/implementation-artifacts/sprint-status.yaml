@@ -1,5 +1,5 @@
 # generated: 2026-08-11
-# last_updated: 2026-09-21
+# last_updated: 2026-09-28
 # project: tui-back
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-09-21
+last_updated: 2026-09-28
 # 2026-09-16: Story 2-27 set to in-progress (bmad-build).
 # 2026-09-17: Story 2-32 set to in-progress (bmad-build).
 # 2026-09-17: Story 3-1 set to in-progress, epic-3 lifted to in-progress (bmad-build, worktree tui-back-epic-3).
@@ -57,6 +57,9 @@ last_updated: 2026-09-21
 # below; story 5-4 confirmed unchanged, its own hint-panel-hidden-while-editing fix retained.
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) started (bmad-build).
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-28: Sprint Change Proposal (sprint-change-proposal-2026-09-28.md) appended story 5-6
+# (command history recall + shared input-history primitive) to epic-5 — new backlog entry below;
+# stories 5-4/5-5 not reopened (5-6 refactors 5-4's history code behavior-preservingly).
 project: tui-back
 # 2026-09-16: Sprint Change Proposal (sprint-change-proposal-2026-09-16.md) appended stories
 # 2-27..2-32 to epic-2 and amended story 2-26 in place (still `review`) — see that proposal for
@@ -138,6 +141,7 @@ development_status:
   5-3-inline-service-health-restart-control: review
   5-4-filter-history-recall: done
   5-5-bound-list-filter-editor-height-to-the-terminal-window: review
+  5-6-command-history-recall-shared-input-history-primitive: backlog
   epic-5-retrospective: optional
 
   epic-6: backlog
