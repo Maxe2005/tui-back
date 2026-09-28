@@ -150,11 +150,13 @@ export type EdtSlice = {
   // throwing (every pre-2.9 `createAppStore()` call, including tests, stays usable).
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
-  // Bug fix: the switch dirty-repo confirm seam — mirrors UpdateSlice's updateBlocker/
-  // resolveUpdateBlocker (story 3.4). Non-null while switchActiveEdt is paused inside
-  // switchEdt, waiting for the developer's proceed/cancel choice on the batch of dirty repos
-  // it's about to auto-stash. The switch dialog renders the per-service preview while this is
-  // set and calls resolveSwitchDirtyRepos to resume the paused core call.
+  // The switch dirty-repo seam — mirrors UpdateSlice's updateBlocker/resolveUpdateBlocker
+  // (story 3.4). Non-null while switchActiveEdt is paused inside switchEdt: story 2.39 raises
+  // it only when a state-2/3 repo (outside the outgoing EDT) is dirty, and waits for a
+  // SwitchDirtyReposChoice (`cancel`, or `proceed` with per-repo adopt/discard resolutions).
+  // The switch dialog renders the preview while this is set and calls
+  // resolveSwitchDirtyRepos to resume the paused core call. Interim (until story 2.41's
+  // resolution dialog): the dialog only ever resolves `{ kind: 'cancel' }`.
   switchDirtyRepos: SwitchDirtyRepo[] | null;
   resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
@@ -198,7 +200,7 @@ export type EdtSlice = {
 
 export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], EdtSlice> {
   // Bug fix: the pending seam promise's resolver — installed when switchActiveEdt raises a
-  // dirty-repo preview, consumed when the dialog dispatches proceed/cancel. Held in closure,
+  // dirty-repo preview, consumed when the dialog dispatches its choice. Held in closure,
   // never in Zustand state (mirrors UpdateSlice's own pendingBlockerResolve).
   let pendingSwitchDirtyResolve: ((choice: SwitchDirtyReposChoice) => void) | null = null;
   return (set, get) => ({
@@ -331,9 +333,10 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           state: deps.state,
           topic: params.topic,
           force: params.force,
-          // Bug fix: the TUI backs the dirty-repo confirm seam — core pauses the switch on
-          // the batch of dirty repos it's about to auto-stash and waits here while the
-          // switch dialog's preview collects the developer's proceed/cancel choice.
+          // The TUI backs the dirty-repo seam — core pauses the switch (before any git
+          // write) on the batch of dirty repos and waits here while the switch dialog's
+          // preview collects the developer's choice. No explicit dirtyResolutions: the seam
+          // is the TUI's only resolution source.
           onDirtyReposBeforeSwitch: async (dirty) => {
             set({ switchDirtyRepos: dirty });
             return new Promise<SwitchDirtyReposChoice>((resolve) => {

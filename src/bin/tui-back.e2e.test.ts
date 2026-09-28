@@ -1123,8 +1123,8 @@ describe('tui-back edt switch (black-box)', () => {
   });
 
   it(
-    'round-trips uncommitted work across a switch: outgoing member is stashed onto the shared branch, ' +
-      'target member checks into its own branch, state.json + edts.yaml both reflect the new active EDT (manual-check scenario, AC)',
+    'round-trips uncommitted work across a switch: an outgoing member (state 1) is stashed under the outgoing tag, ' +
+      'lands clean on its shared branch, and pops back onto its own branch when switching back (story 2.39, manual-check scenario, AC)',
     async () => {
       const xdg = await makeTempDir();
       const env = createEnv(xdg);
@@ -1166,8 +1166,9 @@ describe('tui-back edt switch (black-box)', () => {
       // Dirty r1's working tree while "a" is active and r1 sits on feat/r1.
       await writeFile(join(r1, 'wip.txt'), 'uncommitted work');
 
-      // Switch a -> b: r1 is not a member of b, so it must be preserved (stashed) then reset
-      // onto the shared branch; r2 (b's member) checks into its own branch.
+      // Switch a -> b: r1 is a's member (state 1) and not b's, so its work is stashed under
+      // `tui-back:<a>` for a's return and r1 lands clean on the shared branch; r2 (b's
+      // member) checks into its own branch.
       const switchToB = runCli(['edt', 'switch', '--to', 'b'], env);
 
       expect(switchToB.status).toBe(0);
@@ -1181,14 +1182,10 @@ describe('tui-back edt switch (black-box)', () => {
         wasInterrupted: false,
       });
 
-      // r1: reset to the shared branch, uncommitted work carried straight through (stashed
-      // then immediately restored in the same switch call — bug fix: it used to be left
-      // behind in a `tui-back:<ulid>`-tagged stash that no code path ever popped, an
-      // invisible, permanently orphaned stash even though `git status` read clean).
+      // r1: on the shared branch, clean — the work never leaks out of its EDT (D1 gone).
       expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
-      expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toContain('wip.txt');
-      expect(await readFile(join(r1, 'wip.txt'), 'utf8')).toBe('uncommitted work');
-      expect(runGit(r1, ['stash', 'list']).stdout.trim()).toBe('');
+      expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toBe('');
+      expect(runGit(r1, ['stash', 'list']).stdout.trim()).toContain(`tui-back:${ulidA}`);
 
       // r2: checked into its own branch (b's).
       expect(runGit(r2, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r2');
@@ -1208,8 +1205,50 @@ describe('tui-back edt switch (black-box)', () => {
         results: [],
         wasInterrupted: false,
       });
+
+      // Switch back b -> a: r1 is a's member again and its a-tagged stash pops onto feat/r1.
+      const switchBackToA = runCli(['edt', 'switch', '--to', 'a'], env);
+      expect(switchBackToA.status).toBe(0);
+      expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r1');
+      expect(await readFile(join(r1, 'wip.txt'), 'utf8')).toBe('uncommitted work');
+      expect(runGit(r1, ['stash', 'list']).stdout.trim()).toBe('');
     },
   );
+
+  it('fails safe on a dirty non-member: exits non-zero with switch-dirty-services-unresolved, touching nothing (story 2.39, AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const r1 = await makeCleanGitRepo();
+    const r2 = await makeCleanGitRepo();
+    await registerRepos([r1, r2], env);
+
+    const createA = runCli(
+      ['edt', 'create', '--topic', 'a', '--member', r1, '--create-branches', '--branch-name', 'feat/r1'],
+      env,
+    );
+    expect(createA.status).toBe(0);
+    const edtsBefore = await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8');
+
+    // r2 belongs to no EDT: its uncommitted work may only move under an explicit resolution.
+    await writeFile(join(r2, 'orphan.txt'), 'nobody owns this');
+
+    const switched = runCli(['edt', 'switch', '--to', 'a'], env);
+
+    expect(switched.status).not.toBe(0);
+    const parsed = JSON.parse(switched.stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('switch-dirty-services-unresolved');
+    expect(parsed.error.details).toEqual([
+      { service: 'route-explorer', repoPath: expect.stringContaining(r2.split('/').pop() as string), scope: 'non-member', currentBranch: 'development' },
+    ]);
+
+    // Zero repos touched, state.json/edts.yaml untouched.
+    expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+    expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
+    expect(runGit(r2, ['stash', 'list']).stdout.trim()).toBe('');
+    await expect(access(join(xdg, 'tui-back', 'state.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(edtsBefore);
+  });
 
   it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error (AC)', async () => {
     const xdg = await makeTempDir();
@@ -1359,6 +1398,9 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeGitRepo();
+    // Story 2.39: a first-ever switch refuses a dirty target member without a resolution, so
+    // the untracked manifest makeGitRepo() leaves behind is committed first.
+    commitManifest(repo);
     await registerRepos([repo], env);
     const created = runCli(
       ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
@@ -1600,9 +1642,11 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const env = createEnv(xdg);
     const a = await makeBehindMember();
     const b = await makeBehindMember();
-    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch: a first-ever switch refuses a dirty member without an
+    // explicit resolution (story 2.39).
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1627,9 +1671,10 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer"}\n');
     runGit(a.repo, ['add', 'package.json']);
     expect(runGit(a.repo, ['commit', '-m', 'add package.json']).status).toBe(0);
-    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch (story 2.39: a first-ever switch refuses unresolved dirt).
+    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1721,9 +1766,11 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch should-not-run.txt');
     const b = await makeBehindMember();
-    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch: a first-ever switch refuses a dirty member without an
+    // explicit resolution (story 2.39).
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);

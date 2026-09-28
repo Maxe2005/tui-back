@@ -52,8 +52,9 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
     mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
     abortMerge: (repoPath) => abortMerge(repoPath),
-    listDirtyPaths: (repoPath) => listDirtyPaths(repoPath),
+    listDirtyPaths: (repoPath, opts) => listDirtyPaths(repoPath, opts),
     discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
+    discardAll: (repoPath) => discardAll(repoPath),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
@@ -518,8 +519,15 @@ export async function isMergeInProgress(repoPath: string): Promise<Result<boolea
 // dirty path parsed from `git status --porcelain` (each line is `XY<space>path`; renames
 // surface as `old -> new` and contribute both sides so the classifier stays conservative).
 // Empty output means a clean tree. A non-zero exit is a controlled git-status-error.
-export async function listDirtyPaths(repoPath: string): Promise<Result<string[]>> {
-  const result = spawnSync('git', ['status', '--porcelain'], { cwd: repoPath, encoding: 'utf8' });
+// Story 2.39: `expandUntracked` adds `--untracked-files=all`, so an untracked directory is
+// listed file by file (the discard resolution's captured `discardedPaths`); the default stays
+// git's collapsed `dir/` form for story 3.4's classifier.
+export async function listDirtyPaths(
+  repoPath: string,
+  opts?: { expandUntracked?: boolean },
+): Promise<Result<string[]>> {
+  const args = opts?.expandUntracked === true ? ['status', '--porcelain', '--untracked-files=all'] : ['status', '--porcelain'];
+  const result = spawnSync('git', args, { cwd: repoPath, encoding: 'utf8' });
   if (result.status !== 0) {
     return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -559,6 +567,29 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
   const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
   if (result.status !== 0) {
     return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.39 — the one consent-gated destructive primitive (see the GitPort doc comment):
+// `git reset --hard` drops every tracked modification (staged or not), then `git clean -fd`
+// removes untracked files and directories. Never `-x` (ignored files — .env, node_modules,
+// build output — always survive) and never `-ff` (a nested repository is never removed).
+// Only switch.ts calls this, under an explicit per-repo `discard` resolution.
+export async function discardAll(repoPath: string): Promise<Result<void>> {
+  const reset = spawnSync('git', ['reset', '--hard'], { cwd: repoPath, encoding: 'utf8' });
+  if (reset.status !== 0) {
+    return err(
+      'git-discard-error',
+      `discardAll step 1/2 (git reset --hard) failed in ${repoPath}; untracked files were not cleaned: ${spawnFailureDetail(reset)}`,
+    );
+  }
+  const clean = spawnSync('git', ['clean', '-fd'], { cwd: repoPath, encoding: 'utf8' });
+  if (clean.status !== 0) {
+    return err(
+      'git-discard-error',
+      `discardAll step 2/2 (git clean -fd) failed in ${repoPath} after tracked changes were already reset: ${spawnFailureDetail(clean)}`,
+    );
   }
   return ok(undefined);
 }

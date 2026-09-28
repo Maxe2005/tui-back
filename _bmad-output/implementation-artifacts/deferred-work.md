@@ -528,3 +528,21 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
   summary: A clean restart (recipe commands like `npm ci` / compose rebuild) runs on a single menu Enter with no confirmation step, unlike the update path's config-screen gate.
   evidence: `src/adapters/driving/tui/zones/update/update-zone.tsx`'s menu-choice branch runs `runServiceRestart` immediately after `setServiceMenu(null)`; the approved spec mandates no confirm step. Surfaced by blind-hunter review layer. **Track:** human UX-safety decision — confirm dialog, dry-run hint, or keep as-is — for Story 3.10/3.11 or a later pass.
+
+## Deferred from: review of 2-39-edt-switch-core-three-state-partition-dirty-service-resolutions (2026-09-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: The switch classifies repos once before the `onDirtyReposBeforeSwitch` seam and never re-reads edts.yaml/state.json after the (unbounded) TUI pause, so resolutions can be applied to a stale classification if another process switches or edits EDTs meanwhile.
+  evidence: `src/core/edt/switch.ts` computes `classifySwitchRepos` before `resolveDirtyRepos` awaits the seam; no lock is held across the pause (pre-existing seam shape from the pre-2.39 preview). Surfaced by edge-case-hunter and blind-hunter. **Track:** Story 2.41 (the real resolution dialog) should re-list and re-classify after the seam resolves, or refuse when the snapshot changed.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: A `discard` resolution on a repo with a rebase in progress runs `git reset --hard` + `clean -fd`, which does not end the rebase; the repo can be left mid-rebase after the switch.
+  evidence: `discardAll` in `src/adapters/driven/git/index.ts` has no mid-merge/mid-rebase guard (`isRebaseInProgress` exists from story 3.4). Surfaced by edge-case-hunter. **Track:** decide in 2.41 whether a mid-rebase/merge repo is refused for discard or shown as its own state in the resolution dialog.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: `detail.discardedPaths` can list an untracked nested git repository as discarded although `git clean -fd` (no `-ff`) keeps it.
+  evidence: `listDirtyPaths(repo, { expandUntracked: true })` reports a nested repo as `nested/`; `discardAll` intentionally never uses `-ff`. Surfaced by edge-case-hunter and blind-hunter. **Track:** re-list after discardAll and report only paths actually removed, when the 2.41 confirmation screen lists files.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: Stashes left under the removed fixed `tui-back:shared` tag (by a pre-2.39 switch whose restore failed) are no longer popped or surfaced by any code path.
+  evidence: story 2.39 removed `NON_MEMBER_STASH_TAG` and its unconditional post-checkout pop from `src/core/edt/switch.ts` (required by the AC); the old pop also healed leftovers. Surfaced by edge-case-hunter and blind-hunter. **Track:** a one-off detection (dirty preview note or a doctor/status check) if any user reports such a stash.

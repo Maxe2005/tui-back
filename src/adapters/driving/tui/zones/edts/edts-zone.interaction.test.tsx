@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { Result } from '../../../../../core/result.js';
 import type { CreateCandidateBranches, CreateEdtData } from '../../../../../core/edt/create.js';
-import type { SwitchActiveEdtData } from '../../../../../core/edt/switch.js';
+import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../core/edt/switch.js';
 import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
 import { createAppStore, type CreateEdtParams, type ModifyEdtParams } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
@@ -182,16 +182,17 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Bug fix: a dirty repo (member or non-member) about to be auto-stashed is previewed,
-  // by service, before the switch actually touches anything — the developer confirms or
-  // cancels. This fakes switchEdt driving the exact same store fields (switchDirtyRepos /
+  // Story 2.39 (interim until 2.41): when a service outside the outgoing EDT is dirty, the
+  // preview explains why the switch is blocked and lists it; Enter and Esc both cancel —
+  // the preview never proceeds. This fakes switchEdt driving the exact same store fields (switchDirtyRepos /
   // resolveSwitchDirtyRepos) edt-slice.ts's real onDirtyReposBeforeSwitch seam does — the
   // real end-to-end wiring through core/edt/switch.ts is covered by edt-slice.test.ts; this
   // test is about the dialog's own rendering and keystroke routing.
-  it('a dirty-repo preview raised mid-switch renders per-service rows and resumes on Enter (bug fix)', async () => {
+  it('a dirty-repo preview explains the block, lists the services, and Enter cancels — never proceeds (story 2.39)', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });
     let switchCalls = 0;
+    let resolvedWith: SwitchDirtyReposChoice | null = null;
     store.setState({
       edts: [target],
       edtsStatus: 'idle',
@@ -202,16 +203,17 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       loadEdtsBranches: async () => {},
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
         switchCalls += 1;
-        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member' }] });
-        const choice = await new Promise<'proceed' | 'cancel'>((resolve) => {
+        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, owningEdtTopics: [], resolution: 'auto-stash' }] });
+        const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
           store.setState({
             resolveSwitchDirtyRepos: (c) => {
+              resolvedWith = c;
               store.setState({ switchDirtyRepos: null });
               resolve(c);
             },
           });
         });
-        if (choice === 'cancel') {
+        if (choice.kind === 'cancel') {
           return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch cancelled' } };
         }
         return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [], wasInterrupted: false } };
@@ -225,16 +227,21 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter); // confirm switch -> raises the preview
       await instance.waitUntilRenderFlush();
 
+      expect(stdout.output).toContain('Bascule bloquée');
       expect(stdout.output).toContain('svc-payments');
-      expect(stdout.output).toContain('outside this EDT');
-      expect(stdout.output).toContain('[Enter] continue anyway');
+      expect(stdout.output).toContain('hors de tout EDT');
+      expect(stdout.output).toContain('wip/pay');
+      expect(stdout.output).toContain('à la main');
+      expect(stdout.output).toContain('svc-orders');
+      expect(stdout.output).toContain('mis de côté automatiquement');
 
-      await press(instance, stdin, KEYS.enter); // proceed past the preview
+      await press(instance, stdin, KEYS.enter); // Enter cancels too (interim)
       await instance.waitUntilRenderFlush();
 
       expect(switchCalls).toBe(1);
-      // Success closes the dialog entirely (and clears the preview along the way).
+      expect(resolvedWith).toEqual({ kind: 'cancel' });
       expect(store.getState().switchDirtyRepos).toBeNull();
+      expect(stdout.output).toContain('Switch cancelled');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -255,8 +262,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       loadEdtsBranches: async () => {},
       switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => {
         switchCalls += 1;
-        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member' }] });
-        const choice = await new Promise<'proceed' | 'cancel'>((resolve) => {
+        store.setState({ switchDirtyRepos: [{ service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'wip/pay', currentBranchShared: false, owningEdtTopics: [] }, { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, owningEdtTopics: [], resolution: 'auto-stash' }] });
+        const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
           store.setState({
             resolveSwitchDirtyRepos: (c) => {
               store.setState({ switchDirtyRepos: null });
@@ -264,7 +271,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
             },
           });
         });
-        if (choice === 'cancel') {
+        if (choice.kind === 'cancel') {
           return { ok: false, error: { code: 'switch-cancelled-by-user', message: 'Switch cancelled: uncommitted changes were present' } };
         }
         return { ok: true, data: { ulid: target.ulid, topic: target.topic, results: [], wasInterrupted: false } };
@@ -277,7 +284,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter); // open switch-confirm
       await press(instance, stdin, KEYS.enter); // confirm switch -> raises the preview
       await instance.waitUntilRenderFlush();
-      expect(stdout.output).toContain('[Enter] continue anyway');
+      expect(stdout.output).toContain('annuler la bascule');
 
       await pressEscape(instance, stdin); // cancel the preview, not the whole dialog
       await instance.waitUntilRenderFlush();

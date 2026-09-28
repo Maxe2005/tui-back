@@ -19,9 +19,8 @@ export type SwitchDialogDeps = {
   logEdtAction: AppState['logEdtAction'];
   setCurrentEdtAction: AppState['setCurrentEdtAction'];
   focusedEdt: EdtRegistryEntry | undefined;
-  // Bug fix: the dirty-repo confirm seam (edt-slice.ts) — non-null while switchEdtAction is
-  // paused waiting for a proceed/cancel choice on the batch of dirty repos it's about to
-  // auto-stash. Owned by the store (not local dialog state) for the same reason
+  // The dirty-repo seam (edt-slice.ts) — non-null while switchEdtAction is paused waiting for
+  // a SwitchDirtyReposChoice on the batch of dirty repos (story 2.39). Owned by the store (not local dialog state) for the same reason
   // UpdateSlice's updateBlocker is: the seam callback that sets it lives inside the store
   // action, not this component.
   switchDirtyRepos: AppState['switchDirtyRepos'];
@@ -77,14 +76,13 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   }
 
   function handleSwitchDialogInput(current: SwitchDialogState, _input: string, key: Key) {
-    // Bug fix: while the dirty-repo preview is raised, it owns every keystroke — Enter
-    // proceeds (the switch resumes and auto-stashes/restores as previewed), Esc cancels the
-    // whole switch with nothing touched (switch.ts's onDirtyReposBeforeSwitch contract).
+    // While the dirty-repo preview is raised, it owns every keystroke. Story 2.39 (interim,
+    // until story 2.41's per-service resolution dialog): the preview never proceeds — Enter
+    // and Esc both cancel the whole switch with nothing touched, since uncommitted work
+    // outside the outgoing EDT may only move under an explicit adopt/discard resolution.
     if (deps.switchDirtyRepos !== null) {
-      if (key.return) {
-        deps.resolveSwitchDirtyRepos('proceed');
-      } else if (key.escape) {
-        deps.resolveSwitchDirtyRepos('cancel');
+      if (key.return || key.escape) {
+        deps.resolveSwitchDirtyRepos({ kind: 'cancel' });
       }
       return;
     }
@@ -103,22 +101,37 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   return { handleSwitchDialogInput };
 }
 
-// Bug fix: the per-service dirty preview shown while switchDirtyRepos is raised. Each row
-// names the service and, for a non-member, notes it sits outside the target EDT — the exact
-// distinction switch.ts's SwitchDirtyRepo.scope carries (see that file's header on why a
-// non-member's round-trip is still safe: stashed then restored on the shared branch in the
-// very same switch call).
+// Story 2.39 (interim): the dirty preview shown while switchDirtyRepos is raised. The seam is
+// only raised when a service outside the outgoing EDT (state 2/3) holds uncommitted work —
+// work the switch refuses to move without an explicit adopt/discard resolution, which this
+// interim preview cannot collect yet (story 2.41). It explains the block and lists the
+// blocking services (scope, current branch); state-1 rows (the outgoing EDT's own work) are
+// marked as auto-stashed for information.
+function scopeLabel(repo: SwitchDirtyRepo): string {
+  if (repo.scope === 'member-of-other-edt') {
+    return repo.owningEdtTopics.length > 0 ? `membre de l'EDT ${repo.owningEdtTopics.join(', ')}` : 'membre d\'un autre EDT';
+  }
+  return 'hors de tout EDT';
+}
+
 function DirtyReposPreview({ dirty }: { dirty: readonly SwitchDirtyRepo[] }) {
+  const blocking = dirty.filter((repo) => repo.scope !== 'outgoing-member');
+  const autoStashed = dirty.filter((repo) => repo.scope === 'outgoing-member');
   return (
     <Box flexDirection="column">
-      <Text color={colors.warning}>These services have uncommitted changes that will be set aside and restored automatically:</Text>
-      {dirty.map((repo) => (
+      <Text color={colors.warning}>Bascule bloquée : ces services ont des modifications non commitées alors qu'ils ne sont pas membres de l'EDT sortant.</Text>
+      {blocking.map((repo) => (
         <Text key={repo.repoPath} color={colors.text}>
-          {'  '}• {repo.service}
-          {repo.scope === 'non-member' ? ' (outside this EDT — moves to its shared branch)' : ''}
+          {'  '}• {repo.service} — {scopeLabel(repo)}, branche {repo.currentBranch}
         </Text>
       ))}
-      <Text color={colors.text}>[Enter] continue anyway  [Esc] cancel the switch</Text>
+      <Text color={colors.text}>Pour l'instant, commitez-les ou mettez-les de côté (git stash) à la main, puis relancez la bascule.</Text>
+      {autoStashed.map((repo) => (
+        <Text key={repo.repoPath} color={colors['text-dim']}>
+          {'  '}• {repo.service} — mis de côté automatiquement
+        </Text>
+      ))}
+      <Text color={colors.text}>[Enter] / [Esc] annuler la bascule (rien n'est modifié)</Text>
     </Box>
   );
 }

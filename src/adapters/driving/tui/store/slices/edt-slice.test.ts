@@ -1,4 +1,4 @@
-// tui/store/slices/edt-slice: unit tests for the switch dirty-repo confirm seam (bug fix) —
+// tui/store/slices/edt-slice: unit tests for the switch dirty-repo seam (story 2.39 shape) —
 // the slice calls the real core/edt/switch.ts use-case against fake ports (AD-2 in-process),
 // so these verify the wiring (switchDirtyRepos raised/cleared, resolveSwitchDirtyRepos
 // resuming the paused core call) rather than re-testing switchActiveEdt's own matrix, already
@@ -61,6 +61,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     isMergeInProgress: vi.fn(async () => ok(false)),
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
+    discardAll: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
@@ -133,34 +134,45 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   };
 }
 
-describe('edt slice — switch dirty-repo confirm seam (bug fix)', () => {
+describe('edt slice — switch dirty-repo seam (story 2.39)', () => {
   it('starts with no raised dirty preview', () => {
     const store = createAppStore(fakeDeps());
 
     expect(store.getState().switchDirtyRepos).toBeNull();
   });
 
-  it('raises switchDirtyRepos on a dirty non-member and resumes the switch on resolveSwitchDirtyRepos("proceed")', async () => {
+  it('raises switchDirtyRepos on a dirty non-member and resumes the switch on a proceed choice carrying resolutions', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      listDirtyPaths: vi.fn(async () => ok(['junk.txt'])),
     };
     const store = createAppStore(fakeDeps({ git }));
 
     const run = store.getState().switchEdt({ topic: 'target-topic' });
     await vi.waitFor(() => {
-      expect(store.getState().switchDirtyRepos).toEqual([{ service: 'svc-b', repoPath: '/repo/b', scope: 'non-member' }]);
+      expect(store.getState().switchDirtyRepos).toEqual([
+        {
+          service: 'svc-b',
+          repoPath: '/repo/b',
+          scope: 'non-member',
+          currentBranch: 'development',
+          currentBranchShared: true,
+          owningEdtTopics: [],
+        },
+      ]);
     });
 
-    store.getState().resolveSwitchDirtyRepos('proceed');
+    store.getState().resolveSwitchDirtyRepos({ kind: 'proceed', resolutions: { '/repo/b': { kind: 'discard' } } });
     const result = await run;
 
     expect(result.ok).toBe(true);
+    expect(calls(git.discardAll)).toEqual([['/repo/b']]);
     expect(store.getState().switchDirtyRepos).toBeNull();
     expect(store.getState().activeEdt).toBe('target-ulid');
   });
 
-  it('a "cancel" choice settles as switch-cancelled-by-user, clears the preview, and never touches activeEdt', async () => {
+  it('a cancel choice settles as switch-cancelled-by-user, clears the preview, and never touches activeEdt', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
@@ -176,7 +188,7 @@ describe('edt slice — switch dirty-repo confirm seam (bug fix)', () => {
       expect(store.getState().switchDirtyRepos).not.toBeNull();
     });
 
-    store.getState().resolveSwitchDirtyRepos('cancel');
+    store.getState().resolveSwitchDirtyRepos({ kind: 'cancel' });
     const result = await run;
 
     expect(result).toMatchObject({ ok: false, error: { code: 'switch-cancelled-by-user' } });
@@ -190,7 +202,7 @@ describe('edt slice — switch dirty-repo confirm seam (bug fix)', () => {
   it('resolveSwitchDirtyRepos with no raised preview is a no-op, never a throw', () => {
     const store = createAppStore(fakeDeps());
 
-    store.getState().resolveSwitchDirtyRepos('proceed');
+    store.getState().resolveSwitchDirtyRepos({ kind: 'cancel' });
 
     expect(store.getState().switchDirtyRepos).toBeNull();
   });
