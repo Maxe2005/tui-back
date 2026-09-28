@@ -1398,6 +1398,9 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeGitRepo();
+    // Story 2.39: a first-ever switch refuses a dirty target member without a resolution, so
+    // the untracked manifest makeGitRepo() leaves behind is committed first.
+    commitManifest(repo);
     await registerRepos([repo], env);
     const created = runCli(
       ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
@@ -1639,9 +1642,11 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const env = createEnv(xdg);
     const a = await makeBehindMember();
     const b = await makeBehindMember();
-    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch: a first-ever switch refuses a dirty member without an
+    // explicit resolution (story 2.39).
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1666,9 +1671,10 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer"}\n');
     runGit(a.repo, ['add', 'package.json']);
     expect(runGit(a.repo, ['commit', '-m', 'add package.json']).status).toBe(0);
-    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch (story 2.39: a first-ever switch refuses unresolved dirt).
+    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1760,9 +1766,11 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch should-not-run.txt');
     const b = await makeBehindMember();
-    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch: a first-ever switch refuses a dirty member without an
+    // explicit resolution (story 2.39).
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
