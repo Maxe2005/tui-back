@@ -461,7 +461,7 @@ export function resolveBaseBranchMode(selectedMembers: readonly string[], candid
 // untouched field keeps tracking its manifest suggestion on every call; a touched field (the
 // developer's own edit, including clearing it to '') is never resurrected. Fired at the same
 // trigger points prefillBranchNames already is (a member is newly selected, or the
-// branch-setup step is (re-)entered) — see create-dialog.tsx.
+// branch-setup step is (re-)entered) — see create-wizard/step-branches.tsx.
 export function prefillBaseBranches(
   selectedMembers: readonly string[],
   candidates: readonly ServiceBranchDivergence[],
@@ -842,8 +842,15 @@ export function resolveModifyOps(
 
 // ---- Dialog state -----------------------------------------------------------------------
 
+// Story 2.36: the create-EDT wizard's 4 steps (Nom -> Services -> Branches -> Activation).
+export type WizardStep = 1 | 2 | 3 | 4;
+
 export type CreateDialogState = {
   kind: 'create';
+  // Story 2.36: the wizard's current step — every other field below is the same single flat
+  // state the pre-wizard dialog used, kept as-is so Step 3 (still today's branch fields) and
+  // submitCreate stay untouched until Story 2.37 replaces them.
+  step: WizardStep;
   topic: string;
   // Story 2.32: topic's own caret position — see TextInputState/nextTextInputValue above.
   topicCursor: number;
@@ -862,7 +869,7 @@ export type CreateDialogState = {
   // resolveBaseBranchMode is 'shared'; baseBranches (per-member, mirrors branchNames' own
   // shape/touched-tracking convention exactly) is the authoritative source `submitCreate`
   // always reads from, kept in sync with `baseBranch` for every selected member whenever the
-  // shared field is confirmed (see create-dialog.tsx's applyBaseBranchOutcome).
+  // shared field is confirmed (see create-wizard/step-branches.tsx's applyBaseBranchOutcome).
   baseBranch: string;
   baseBranches: Readonly<Record<string, string>>;
   baseBranchIndex: number; // which per-member base-branch field is live, when forced per-member
@@ -877,7 +884,7 @@ export type CreateDialogState = {
   branchName: string; // grouped mode's single shared field
   // Story 2.32: branchName's own caret position, reset to branchName.length by every
   // programmatic overwrite (prefillBranchNames on an untouched field) — see
-  // create-dialog.tsx's withPrefillCursors.
+  // create-wizard/wizard.logic.ts's withPrefillCursors.
   branchNameCursor: number;
   branchNames: Readonly<Record<string, string>>; // individual mode: repoPath -> name
   branchNameIndex: number; // individual mode's currently-focused per-member field
@@ -1133,6 +1140,7 @@ export function initialQuickPickDialog(mode: QuickPickMode): QuickPickDialogStat
 export function initialCreateDialog(): CreateDialogState {
   return {
     kind: 'create',
+    step: 1,
     topic: '',
     topicCursor: 0,
     formFocus: 'topic',
