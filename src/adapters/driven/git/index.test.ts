@@ -1654,6 +1654,20 @@ describe('diffNameOnly', () => {
     expect(await createGitPort(manifest).diffNameOnly(repo, 'feat/x', 'feat/x')).toEqual({ ok: true, data: [] });
   });
 
+  it('lists both sides of a rename, so a dirty old-side path is visible', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'old.ts'), 'content that stays the same across the rename\n'.repeat(5));
+    runGit(repo, ['add', 'old.ts']);
+    expect(runGit(repo, ['commit', '-m', 'old']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-q', '-b', 'feat/rename']).status).toBe(0);
+    expect(runGit(repo, ['mv', 'old.ts', 'new.ts']).status).toBe(0);
+    expect(runGit(repo, ['commit', '-m', 'rename']).status).toBe(0);
+
+    const result = await diffNameOnly(repo, 'development', 'feat/rename');
+
+    expect(result.ok && [...result.data].sort()).toEqual(['new.ts', 'old.ts']);
+  });
+
   it('reports git-diff-error for an unknown revision', async () => {
     const repo = await makeCleanGitRepo();
 
@@ -1703,6 +1717,38 @@ describe('discardPathsToHead', () => {
     expect(await readFile(join(repo, '.env'), 'utf8')).toBe('SECRET=1');
     const dirty = await listDirtyPaths(repo, { expandUntracked: true });
     expect(dirty.ok && [...dirty.data].sort()).toEqual(['keep.txt', 'other-untracked.txt']);
+  });
+
+  it('treats paths literally — a glob-character name never matches its siblings', async () => {
+    const repo = await makeCleanGitRepo();
+    await mkdir(join(repo, 'src'));
+    await writeFile(join(repo, 'src', 'i.tsx'), 'v1');
+    runGit(repo, ['add', 'src']);
+    expect(runGit(repo, ['commit', '-m', 'pages']).status).toBe(0);
+    // Confirmed: an untracked `[id].tsx`. Unconfirmed siblings its glob reading would match:
+    // an untracked `d.tsx` and a staged modification of `i.tsx`.
+    await writeFile(join(repo, 'src', '[id].tsx'), 'new page');
+    await writeFile(join(repo, 'src', 'd.tsx'), 'untracked sibling');
+    await writeFile(join(repo, 'src', 'i.tsx'), 'staged sibling');
+    runGit(repo, ['add', 'src/i.tsx']);
+
+    expect(await discardPathsToHead(repo, ['src/[id].tsx'])).toEqual({ ok: true, data: undefined });
+
+    expect(existsSync(join(repo, 'src', '[id].tsx'))).toBe(false);
+    expect(await readFile(join(repo, 'src', 'd.tsx'), 'utf8')).toBe('untracked sibling');
+    expect(await readFile(join(repo, 'src', 'i.tsx'), 'utf8')).toBe('staged sibling');
+    expect(runGit(repo, ['diff', '--cached', '--name-only']).stdout.trim()).toBe('src/i.tsx');
+  });
+
+  it('handles a path list larger than one chunk', async () => {
+    const repo = await makeCleanGitRepo();
+    const paths = Array.from({ length: 1203 }, (_, index) => `u${index}.txt`);
+    await Promise.all(paths.map((path) => writeFile(join(repo, path), 'x')));
+    await writeFile(join(repo, 'keep.txt'), 'x');
+
+    expect(await discardPathsToHead(repo, paths)).toEqual({ ok: true, data: undefined });
+
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: ['keep.txt'] });
   });
 
   it('restores a tracked file deleted from the working tree', async () => {
