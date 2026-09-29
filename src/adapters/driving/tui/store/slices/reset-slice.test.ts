@@ -16,7 +16,7 @@ import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
-import { resolveResetBusyReason } from './reset-slice.js';
+import { RESET_NOTICE_TIMEOUT_MS, resolveResetBusyReason } from './reset-slice.js';
 
 type Disk = {
   edts: EdtRegistryEntry[];
@@ -160,6 +160,22 @@ describe('reset slice', () => {
 
     store.getState().dismissResetNotice();
     expect(store.getState().resetNotice).toBeNull();
+  });
+
+  it('BUSY: the refusal notice auto-dismisses', () => {
+    vi.useFakeTimers();
+    try {
+      const store = createAppStore(fakeDeps(populatedDisk()));
+      store.getState().setRunInProgress(true);
+      store.getState().openResetScreen();
+      expect(store.getState().resetNotice).not.toBeNull();
+
+      vi.advanceTimersByTime(RESET_NOTICE_TIMEOUT_MS);
+
+      expect(store.getState().resetNotice).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('BUSY: refuses to open while an EDT action is in progress', () => {

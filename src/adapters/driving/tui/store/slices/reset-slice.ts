@@ -10,6 +10,8 @@ import type { AppState, AppStoreDeps } from '../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 
+export const RESET_NOTICE_TIMEOUT_MS = 5000;
+
 export type ResetPreview = {
   status: 'loading' | 'ready' | 'error';
   edtTopics: string[];
@@ -92,6 +94,15 @@ export function createResetSlice(deps?: AppStoreDeps): StateCreator<AppState, []
         const reason = resolveResetBusyReason(get());
         if (reason !== null) {
           set({ resetNotice: reason });
+          // Auto-dismissed rather than keypress-dismissed: the Enter that ran `:reset` reaches
+          // every mounted useInput, so a "next key clears it" rule could erase the notice
+          // before it was ever seen. Only clears its own notice, never a newer one.
+          const timer = setTimeout(() => {
+            if (get().resetNotice === reason) {
+              set({ resetNotice: null });
+            }
+          }, RESET_NOTICE_TIMEOUT_MS);
+          timer.unref?.();
           return false;
         }
         previewSession += 1;
