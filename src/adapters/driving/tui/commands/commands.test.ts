@@ -82,8 +82,8 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     }
   });
 
-  it('leaves zoneId unset on zone-independent commands (registry/settings/quit)', () => {
-    for (const name of ['registry', 'settings', 'quit']) {
+  it('leaves zoneId unset on zone-independent commands (registry/settings/reset/quit)', () => {
+    for (const name of ['registry', 'settings', 'reset', 'quit']) {
       expect(COMMANDS.find((c) => c.name === name)!.zoneId).toBeUndefined();
     }
   });
@@ -177,6 +177,23 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     settingsCmd.run(fakeStore, '');
 
     expect(calls).toEqual(['openSettingsScreen']);
+  });
+
+  it('the reset command calls the store\'s openResetScreen action (which owns the busy guard)', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openResetScreen: () => {
+          calls.push('openResetScreen');
+          return true;
+        },
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const resetCmd = COMMANDS.find((c) => c.name === 'reset')!;
+    resetCmd.run(fakeStore, '');
+
+    expect(calls).toEqual(['openResetScreen']);
   });
 
   it('the quit command calls requestQuit', () => {

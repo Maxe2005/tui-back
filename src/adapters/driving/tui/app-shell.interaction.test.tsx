@@ -2307,3 +2307,138 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
     }
   });
 });
+
+describe('AppShell reset screen (:reset)', () => {
+  function statefulDeps() {
+    const disk = {
+      edts: [
+        {
+          ulid: 'ULID1',
+          topic: 'feature-a',
+          createdAt: '2026-09-29T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+        },
+      ] as EdtRegistryEntry[],
+      activeEdt: 'ULID1' as string | null,
+    };
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () => ok([...disk.edts])),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async (ulid: string) => {
+        disk.edts = disk.edts.filter((e) => e.ulid !== ulid);
+        return ok(undefined);
+      }),
+    };
+    const base = fakeDeps();
+    const state: StatePort = {
+      ...base.state,
+      readActiveEdt: vi.fn(async () => ok(disk.activeEdt)),
+      writeActiveEdt: vi.fn(async (ulid: string | null) => {
+        disk.activeEdt = ulid;
+        return ok(undefined);
+      }),
+    };
+    // A path that can never exist, so the edtsBaseDir wipe is an ENOENT no-op.
+    return { deps: fakeDeps({ edtRegistry, state, edtsBaseDir: '/nonexistent/tui-back-reset-test/edts' }), disk };
+  }
+
+  it('opens only through the `reset` command, and Esc closes it with zero writes', async () => {
+    const { deps } = statefulDeps();
+    const store = createAppStore(deps);
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'reset');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().resetScreenOpen).toBe(true);
+      expect(stdout.output).toContain('RESET TOOL DATA');
+
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter);
+      await pressEscape(instance, stdin);
+
+      expect(store.getState().resetScreenOpen).toBe(false);
+      expect(deps.edtRegistry.remove).not.toHaveBeenCalled();
+      expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+      expect(deps.state.writeFilterHistory).not.toHaveBeenCalled();
+      expect(deps.registry.remove).not.toHaveBeenCalled();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('BUSY: is refused while a run is in progress, with the reason shown', async () => {
+    const store = createAppStore();
+    store.getState().setRunInProgress(true);
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'reset');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().resetScreenOpen).toBe(false);
+      expect(stdout.output).toContain('Reset unavailable');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a wrong confirmation word writes nothing; the exact word resets and rehydrates the store', async () => {
+    const { deps, disk } = statefulDeps();
+    const store = createAppStore(deps);
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      expect(store.getState().activeEdt).toBe('ULID1');
+
+      store.getState().openResetScreen();
+      await flushAsyncLoad(instance);
+
+      await press(instance, stdin, KEYS.space); // EDTs
+      await press(instance, stdin, KEYS.enter); // -> summary
+      expect(stdout.output).toContain('feature-a');
+      await press(instance, stdin, KEYS.enter); // -> confirm
+
+      // `?` must type into the confirm field, never open global help on top of it.
+      await press(instance, stdin, '?');
+      expect(store.getState().helpOpen).toBe(false);
+      await press(instance, stdin, KEYS.backspace);
+
+      await press(instance, stdin, 'Reset');
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+      expect(deps.edtRegistry.remove).not.toHaveBeenCalled();
+      expect(store.getState().resetStatus).toBe('idle');
+
+      for (let i = 0; i < 5; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await press(instance, stdin, 'reset');
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+
+      expect(disk.edts).toEqual([]);
+      expect(disk.activeEdt).toBeNull();
+      expect(store.getState().resetStatus).toBe('done');
+      expect(store.getState().edts).toEqual([]);
+      expect(store.getState().activeEdt).toBeNull();
+      expect(stdout.output).toContain('svc-a / /repo/a / feat/a');
+
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().resetScreenOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

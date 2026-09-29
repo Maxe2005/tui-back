@@ -8,7 +8,9 @@ import { ModalDialog } from './shared/components/modal-dialog.js';
 import { TopBar } from './shared/components/top-bar.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
+import { ResetScreen } from './shared/reset-screen.js';
 import { SettingsScreen } from './shared/settings-screen.js';
+import { colors } from './shared/theme/theme.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
 import { ALL_ZONE_IDS, ZONES, nextZoneId, resolveReachableZones, zoneGatedStatus, type ZoneId } from './zones/zones.js';
@@ -191,6 +193,12 @@ export function AppShell({
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const closeSettingsScreen = useStore((state) => state.closeSettingsScreen);
   const loadSettings = useStore((state) => state.loadSettings);
+  // `:reset` overlay: same store-level open flag + self-contained Esc/onClose pattern as the
+  // settings screen above. `resetNotice` is the one-line reason shown when `:reset` was
+  // refused (a run or EDT action in progress) — no overlay opens in that case.
+  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
+  const closeResetScreen = useStore((state) => state.closeResetScreen);
+  const resetNotice = useStore((state) => state.resetNotice);
   // Story 2.13: manifest-gated Routes/shared-types tab visibility — loaded once on mount and
   // reloaded on registry-screen close / active-EDT membership change (see the effect below
   // and app-store.ts's createEdt/switchEdt/modifyEdt).
@@ -288,7 +296,7 @@ export function AppShell({
     // same overlay exclusion as the zone-switch block below (Boundaries: "Ctrl+W under any
     // overlay ... no-op"); entering additionally requires the EDTs zone to be active
     // (shouldEnterResizeMode).
-    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen) {
+    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
       if (state.resizeMode !== null) {
         if (key.tab) {
           state.cycleResizeTargetBoundary();
@@ -322,7 +330,7 @@ export function AppShell({
     // must land as a literal character (or, for settings, simply not open help on top of it),
     // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
     // screen's own Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen) {
+    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
@@ -338,6 +346,7 @@ export function AppShell({
       !registryScreenOpen &&
       !commandBarOpen &&
       !settingsScreenOpen &&
+      !resetScreenOpen &&
       state.resizeMode === null
     ) {
       // Story 2.13: the reachable-zone set (every zone minus whichever gated tab is
@@ -417,6 +426,8 @@ export function AppShell({
       )}
       {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
       {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
+      {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
+      {resetNotice !== null && <Text color={colors.warning}>{resetNotice}</Text>}
       {commandBarOpen && (
         <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}
