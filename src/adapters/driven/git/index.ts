@@ -55,6 +55,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     listDirtyPaths: (repoPath, opts) => listDirtyPaths(repoPath, opts),
     discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
     discardAll: (repoPath) => discardAll(repoPath),
+    diffNameOnly: (repoPath, from, to) => diffNameOnly(repoPath, from, to),
+    discardPathsToHead: (repoPath, paths) => discardPathsToHead(repoPath, paths),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
@@ -567,6 +569,61 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
   const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
   if (result.status !== 0) {
     return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.38 — read-only list of the paths differing between two revisions, used by the
+// activation pre-flight. `-z` keeps paths with spaces/quotes/non-ASCII bytes raw (no C-style
+// quoting); the trailing `--` forces both arguments to be read as revisions.
+export async function diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['diff', '--name-only', '-z', from, to, '--'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-diff-error', `git diff --name-only ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).split('\0').filter((path) => path !== ''));
+}
+
+// Story 2.38 — consent-gated, path-scoped discard back to HEAD (see the GitPort doc comment).
+// Three steps, each scoped by `--` to exactly the given paths:
+//   1. `git reset -q -- paths` drops any staged content (a no-op for a purely untracked path);
+//   2. `git checkout HEAD -- <paths HEAD has>` (found with `ls-tree -r`) restores them;
+//   3. `git clean -f -- <the rest>` removes the untracked leftovers (never `-x`, never `-d`).
+export async function discardPathsToHead(repoPath: string, paths: string[]): Promise<Result<void>> {
+  if (paths.length === 0) {
+    return ok(undefined);
+  }
+  const reset = spawnSync('git', ['reset', '-q', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
+  if (reset.status !== 0) {
+    return err('git-discard-error', `git reset -- failed in ${repoPath}; nothing was discarded: ${spawnFailureDetail(reset)}`);
+  }
+  const listed = spawnSync('git', ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...paths], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (listed.status !== 0) {
+    return err(
+      'git-discard-error',
+      `git ls-tree HEAD failed in ${repoPath}; the paths were unstaged but nothing was discarded: ${spawnFailureDetail(listed)}`,
+    );
+  }
+  const inHead = new Set(String(listed.stdout).split('\0').filter((path) => path !== ''));
+  const tracked = paths.filter((path) => inHead.has(path));
+  const untracked = paths.filter((path) => !inHead.has(path));
+  if (tracked.length > 0) {
+    const restored = spawnSync('git', ['checkout', 'HEAD', '--', ...tracked], { cwd: repoPath, encoding: 'utf8' });
+    if (restored.status !== 0) {
+      return err('git-discard-error', `git checkout HEAD -- failed in ${repoPath}: ${spawnFailureDetail(restored)}`);
+    }
+  }
+  if (untracked.length > 0) {
+    const cleaned = spawnSync('git', ['clean', '-f', '-q', '--', ...untracked], { cwd: repoPath, encoding: 'utf8' });
+    if (cleaned.status !== 0) {
+      return err(
+        'git-discard-error',
+        `git clean -f -- failed in ${repoPath} after tracked paths were already restored: ${spawnFailureDetail(cleaned)}`,
+      );
+    }
   }
   return ok(undefined);
 }

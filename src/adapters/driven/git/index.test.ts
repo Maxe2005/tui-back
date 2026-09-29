@@ -26,8 +26,10 @@ import {
   createTrackingBranch,
   currentBranch,
   deleteBranch,
+  diffNameOnly,
   discardAll,
   discardPaths,
+  discardPathsToHead,
   fetchBranch,
   finalizeMerge,
   hasStash,
@@ -1627,6 +1629,103 @@ describe('discardPaths', () => {
     const result = await discardPaths(repo, ['no-such-file.txt']);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
+  });
+});
+
+// Story 2.38 — the activation pre-flight's read-only diff.
+describe('diffNameOnly', () => {
+  it('lists every path that differs between two branches, including spaces and nested dirs', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'same.txt'), 'same');
+    await writeFile(join(repo, 'a.ts'), 'v1');
+    runGit(repo, ['add', 'same.txt', 'a.ts']);
+    expect(runGit(repo, ['commit', '-m', 'base']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-q', '-b', 'feat/x']).status).toBe(0);
+    await writeFile(join(repo, 'a.ts'), 'v2');
+    await mkdir(join(repo, 'dir'));
+    await writeFile(join(repo, 'dir', 'with space.txt'), 'n');
+    runGit(repo, ['add', '.']);
+    expect(runGit(repo, ['commit', '-m', 'change']).status).toBe(0);
+
+    const result = await diffNameOnly(repo, 'development', 'feat/x');
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && [...result.data].sort()).toEqual(['a.ts', 'dir/with space.txt']);
+    expect(await createGitPort(manifest).diffNameOnly(repo, 'feat/x', 'feat/x')).toEqual({ ok: true, data: [] });
+  });
+
+  it('reports git-diff-error for an unknown revision', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await diffNameOnly(repo, 'development', 'no-such-branch')).toMatchObject({
+      ok: false,
+      error: { code: 'git-diff-error' },
+    });
+  });
+});
+
+// Story 2.38 — path-scoped discard back to HEAD (the activation overwrite).
+describe('discardPathsToHead', () => {
+  it('discards exactly the given tracked, staged and untracked paths and nothing else', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, '.gitignore'), '.env\n');
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    await writeFile(join(repo, 'staged-mod.txt'), 'v1');
+    await writeFile(join(repo, 'keep.txt'), 'v1');
+    runGit(repo, ['add', '.gitignore', 'tracked.txt', 'staged-mod.txt', 'keep.txt']);
+    expect(runGit(repo, ['commit', '-m', 'files']).status).toBe(0);
+
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await writeFile(join(repo, 'staged-mod.txt'), 'v2');
+    runGit(repo, ['add', 'staged-mod.txt']);
+    await writeFile(join(repo, 'staged-new.txt'), 'new');
+    runGit(repo, ['add', 'staged-new.txt']);
+    await mkdir(join(repo, 'dir'));
+    await writeFile(join(repo, 'dir', 'untracked.txt'), 'u');
+    await writeFile(join(repo, 'keep.txt'), 'mine');
+    await writeFile(join(repo, 'other-untracked.txt'), 'mine');
+    await writeFile(join(repo, '.env'), 'SECRET=1');
+
+    const result = await createGitPort(manifest).discardPathsToHead(repo, [
+      'tracked.txt',
+      'staged-mod.txt',
+      'staged-new.txt',
+      'dir/untracked.txt',
+    ]);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'tracked.txt'), 'utf8')).toBe('v1');
+    expect(await readFile(join(repo, 'staged-mod.txt'), 'utf8')).toBe('v1');
+    expect(existsSync(join(repo, 'staged-new.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'dir', 'untracked.txt'))).toBe(false);
+    expect(await readFile(join(repo, 'keep.txt'), 'utf8')).toBe('mine');
+    expect(await readFile(join(repo, 'other-untracked.txt'), 'utf8')).toBe('mine');
+    expect(await readFile(join(repo, '.env'), 'utf8')).toBe('SECRET=1');
+    const dirty = await listDirtyPaths(repo, { expandUntracked: true });
+    expect(dirty.ok && [...dirty.data].sort()).toEqual(['keep.txt', 'other-untracked.txt']);
+  });
+
+  it('restores a tracked file deleted from the working tree', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'gone.txt'), 'v1');
+    runGit(repo, ['add', 'gone.txt']);
+    expect(runGit(repo, ['commit', '-m', 'gone']).status).toBe(0);
+    await rm(join(repo, 'gone.txt'));
+
+    expect(await discardPathsToHead(repo, ['gone.txt'])).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'gone.txt'), 'utf8')).toBe('v1');
+  });
+
+  it('is a no-op success for an empty path list', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await discardPathsToHead(repo, [])).toEqual({ ok: true, data: undefined });
+  });
+
+  it('reports git-discard-error on a non-git directory', async () => {
+    const dir = await makePlainDir();
+
+    expect(await discardPathsToHead(dir, ['a.txt'])).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
   });
 });
 
