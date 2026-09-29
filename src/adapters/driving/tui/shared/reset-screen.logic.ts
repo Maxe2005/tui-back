@@ -172,13 +172,15 @@ export type ResetResultInput = {
 };
 
 export function buildResetResultLines(result: ResetResultInput | null, error: string | null): ResetLine[] {
-  if (error !== null) {
-    return [{ text: `✗ Reset failed: ${error}`, tone: 'error' }];
-  }
   if (result === null) {
-    return [];
+    return error !== null ? [{ text: `✗ Reset failed: ${error}`, tone: 'error' }] : [];
   }
   const lines: ResetLine[] = [];
+  // A result plus an error: the reset ran, but something after it (the UI reload) failed —
+  // show both, never hide the per-category outcomes or the left-behind branches.
+  if (error !== null) {
+    lines.push({ text: `✗ ${error}`, tone: 'error' });
+  }
   for (const category of RESET_SCREEN_ROWS) {
     const outcome = result.outcomes[category];
     if (!outcome) {

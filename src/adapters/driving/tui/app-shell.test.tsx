@@ -472,6 +472,7 @@ it('shouldQuit returns true for q', () => {
         commitFilterHistoryEntry: () => {},
         clearGlobalFilterHistory: () => {},
         clearServiceFilterHistory: () => {},
+        clearFilterHistoryAndDrainSaves: async () => {},
         resetScreenOpen: false,
         resetNotice: null,
         resetPreview: null,

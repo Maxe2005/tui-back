@@ -68,6 +68,12 @@ describe('buildResetResultLines', () => {
   it('reports a whole-run error', () => {
     expect(buildResetResultLines(null, 'boom')[0]?.text).toContain('boom');
   });
+
+  it('shows a post-reset error alongside the outcomes, never instead of them', () => {
+    const lines = buildResetResultLines({ outcomes: { histories: { outcome: 'ok' } }, leftBranches: [] }, 'reload failed').map((l) => l.text);
+    expect(lines).toContain('✗ reload failed');
+    expect(lines).toContain('✓ Histories reset');
+  });
 });
 
 describe('ResetScreen render', () => {

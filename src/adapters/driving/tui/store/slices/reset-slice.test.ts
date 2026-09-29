@@ -178,6 +178,26 @@ describe('reset slice', () => {
     }
   });
 
+  it('BUSY: an older notice timer never clears a newer notice', () => {
+    vi.useFakeTimers();
+    try {
+      const store = createAppStore(fakeDeps(populatedDisk()));
+      store.getState().setRunInProgress(true);
+      store.getState().openResetScreen();
+      vi.advanceTimersByTime(RESET_NOTICE_TIMEOUT_MS - 1000);
+      // Same text again: a string comparison could not tell the two notices apart.
+      store.getState().openResetScreen();
+
+      vi.advanceTimersByTime(1000);
+      expect(store.getState().resetNotice).not.toBeNull();
+
+      vi.advanceTimersByTime(RESET_NOTICE_TIMEOUT_MS);
+      expect(store.getState().resetNotice).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('BUSY: refuses to open while an EDT action is in progress', () => {
     const store = createAppStore(fakeDeps(populatedDisk()));
     store.getState().setCurrentEdtAction({ type: 'create', target: 'new EDT', startedAt: '2026-09-29T00:00:00.000Z' });
@@ -246,6 +266,128 @@ describe('reset slice', () => {
       histories: { outcome: 'ok' },
     });
     expect(store.getState().edts).toHaveLength(1);
+  });
+
+  it('runReset re-resolves tab visibility', async () => {
+    const deps = fakeDeps(populatedDisk());
+    const store = createAppStore(deps);
+    // A sentinel no real resolution can produce (a 'disabled' tab carried by a fake service).
+    const sentinel = {
+      routes: { status: 'disabled' as const, carryingServices: ['sentinel'] },
+      sharedTypes: { status: 'disabled' as const, carryingServices: ['sentinel'] },
+    };
+    store.setState({ tabVisibility: sentinel });
+
+    store.getState().openResetScreen();
+    await store.getState().runReset(['services']);
+
+    expect(store.getState().tabVisibilityStatus).toBe('idle');
+    expect(store.getState().tabVisibility).not.toEqual(sentinel);
+    // No registered service carries a gated module any more.
+    expect(store.getState().tabVisibility).toEqual({
+      routes: { status: 'omitted', carryingServices: [] },
+      sharedTypes: { status: 'omitted', carryingServices: [] },
+    });
+  });
+
+  it('runReset surfaces an err result from the use-case and leaves running', async () => {
+    const store = createAppStore(fakeDeps(populatedDisk()));
+    store.getState().openResetScreen();
+    await store.getState().runReset([]);
+
+    expect(store.getState().resetStatus).toBe('done');
+    expect(store.getState().resetResult).toBeNull();
+    expect(store.getState().resetError).toMatch(/at least one category/);
+  });
+
+  it('runReset never stays running when the use-case throws, and still rehydrates', async () => {
+    const deps = fakeDeps(populatedDisk());
+    deps.edtRegistry.list = vi.fn(async () => {
+      throw new Error('kaboom');
+    });
+    const store = createAppStore(deps);
+    store.getState().openResetScreen();
+    await store.getState().runReset(['edts']);
+
+    expect(store.getState().resetStatus).toBe('done');
+    // withActionLock turns a throw inside the locked work into an internal-error outcome.
+    expect(store.getState().resetResult?.outcomes.edts?.outcome).toBe('failed');
+  });
+
+  it('runReset never stays running when something outside the use-case throws', async () => {
+    const deps = fakeDeps(populatedDisk());
+    deps.state.readFilterHistory = vi.fn(async () => {
+      throw new Error('state exploded');
+    });
+    const store = createAppStore(deps);
+    store.getState().openResetScreen();
+    await store.getState().runReset(['histories']);
+
+    expect(store.getState().resetStatus).toBe('done');
+    expect(store.getState().resetError).toBe('state exploded');
+  });
+
+  it('runReset reports a failing rehydration loader without hiding the result', async () => {
+    const store = createAppStore(fakeDeps(populatedDisk()));
+    store.setState({
+      checkRegistryEmpty: async () => {
+        throw new Error('reload failed');
+      },
+    });
+    store.getState().openResetScreen();
+    await store.getState().runReset(['histories']);
+
+    expect(store.getState().resetStatus).toBe('done');
+    expect(store.getState().resetResult?.outcomes.histories).toEqual({ outcome: 'ok' });
+    expect(store.getState().resetError).toMatch(/reload failed/);
+  });
+
+  it('a pending filter-history save cannot overwrite the histories reset', async () => {
+    const disk = populatedDisk();
+    const deps = fakeDeps(disk);
+    let releaseSave: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const writes: Array<Record<string, string[]>> = [];
+    deps.state.writeFilterHistory = vi.fn(async (history: Record<string, string[]>) => {
+      if (writes.length === 0) {
+        // The first write is the logs slice's commit: held until after runReset has started.
+        writes.push(history);
+        await gate;
+      } else {
+        writes.push(history);
+      }
+      disk.filterHistory = history;
+      return ok(undefined);
+    });
+    const store = createAppStore(deps);
+    await store.getState().loadFilterHistory();
+    store.getState().commitFilterHistoryEntry({ scope: 'global', repoPath: null, mode: 'text' }, 'pending');
+    await flush();
+
+    store.getState().openResetScreen();
+    const running = store.getState().runReset(['histories']);
+    await flush();
+    releaseSave();
+    await running;
+
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual({});
+    expect(disk.filterHistory).toEqual({});
+    expect(store.getState().filterHistory).toEqual({});
+  });
+
+  it('preview: a rejecting port sets an error preview instead of loading forever', async () => {
+    const deps = fakeDeps(populatedDisk());
+    deps.registry.list = vi.fn(async () => {
+      throw new Error('registry exploded');
+    });
+    const store = createAppStore(deps);
+    store.getState().openResetScreen();
+    await flush();
+
+    expect(store.getState().resetPreview).toMatchObject({ status: 'error', error: 'registry exploded' });
   });
 
   it('closeResetScreen clears the result so a reopen starts fresh', async () => {
