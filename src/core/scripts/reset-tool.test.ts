@@ -3,7 +3,7 @@
 // services ⇒ edts rule.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { err, ok, type Result } from '../result.js';
@@ -238,7 +238,7 @@ describe('resetTool', () => {
     expect(existsSync(missingDir)).toBe(false);
   });
 
-  it('LOCK_HELD: a held EDT lock fails only that category', async () => {
+  it('LOCK_HELD: a held EDT lock fails EDTs (and the dependent services) but histories still run', async () => {
     const { edtRegistry, registry, state } = fullSetup();
 
     const result = await resetTool({
@@ -258,13 +258,82 @@ describe('resetTool', () => {
       error: { code: 'action-in-progress', message: `Another action is in progress on ${KEYS.edtRegistry}` },
     });
     expect(result.data.outcomes.histories).toEqual({ outcome: 'ok' });
-    expect(result.data.outcomes.services).toEqual({ outcome: 'ok' });
     expect(result.data.leftBranches).toEqual([]);
     expect(edtRegistry.entries).toHaveLength(2);
     expect(state.data.activeEdt).toBe('ULID1');
     expect((await readdir(edtsBaseDir)).length).toBe(3);
-    expect(registry.paths).toEqual([]);
+    // services ⇒ edts at execution time: the EDT failure skips services, registry untouched.
+    expect(result.data.outcomes.services).toEqual({
+      outcome: 'failed',
+      error: { code: 'reset-skipped-edts-failed', message: 'Skipped because the EDT reset failed' },
+    });
+    expect(registry.paths).toHaveLength(4);
+    expect(registry.remove).not.toHaveBeenCalled();
     expect(state.data.filterHistory).toEqual({});
+  });
+
+  it('clears activeEdt even when an EDT removal fails partway', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    const originalRemove = edtRegistry.remove;
+    edtRegistry.remove = vi.fn(async (ulid: string) =>
+      ulid === 'ULID2' ? err('edt-registry-write-error', 'disk full') : originalRemove(ulid));
+
+    const result = await resetTool({ categories: ['edts'], edtRegistry, registry, state, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+
+    expect(result.ok && result.data.outcomes.edts).toEqual({
+      outcome: 'failed',
+      error: { code: 'edt-registry-write-error', message: 'disk full' },
+    });
+    expect(state.data.activeEdt).toBeNull();
+    expect(result.ok && result.data.leftBranches.map((b) => b.topic)).toEqual(['feature-a', 'feature-a']);
+  });
+
+  it.skipIf(process.getuid?.() === 0)('clears activeEdt even when the directory wipe fails partway', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    // A read-only base dir: readdir works, deleting its children fails with EACCES.
+    await chmod(edtsBaseDir, 0o500);
+    try {
+      const result = await resetTool({ categories: ['edts'], edtRegistry, registry, state, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+
+      expect(result.ok && result.data.outcomes.edts?.outcome).toBe('failed');
+      expect(result.ok && result.data.outcomes.edts?.outcome === 'failed' && result.data.outcomes.edts.error.code).toBe('reset-fs-error');
+      expect(edtRegistry.entries).toEqual([]);
+      expect(state.data.activeEdt).toBeNull();
+    } finally {
+      await chmod(edtsBaseDir, 0o700);
+    }
+  });
+
+  it('a failed readActiveEdt fails the EDT category before anything is removed', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    state.readActiveEdt = vi.fn(async () => err('state-read-error', 'EIO'));
+
+    const result = await resetTool({ categories: ['edts'], edtRegistry, registry, state, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+
+    expect(result.ok && result.data.outcomes.edts).toEqual({ outcome: 'failed', error: { code: 'state-read-error', message: 'EIO' } });
+    expect(state.writeActiveEdt).not.toHaveBeenCalled();
+    expect(edtRegistry.entries).toHaveLength(2);
+    expect((await readdir(edtsBaseDir)).length).toBe(3);
+  });
+
+  it('a failed readFilterHistory fails the histories category without writing', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    state.readFilterHistory = vi.fn(async () => err('state-read-error', 'EIO'));
+
+    const result = await resetTool({ categories: ['histories'], edtRegistry, registry, state, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+
+    expect(result.ok && result.data.outcomes.histories).toEqual({ outcome: 'failed', error: { code: 'state-read-error', message: 'EIO' } });
+    expect(state.writeFilterHistory).not.toHaveBeenCalled();
+  });
+
+  it.each(['', 'relative/edts'])('refuses to wipe a non-absolute edtsBaseDir (%j)', async (dir) => {
+    const { edtRegistry, registry, state } = fullSetup();
+
+    const result = await resetTool({ categories: ['edts'], edtRegistry, registry, state, lock: fakeLock(), keys: KEYS, edtsBaseDir: dir });
+
+    expect(result.ok && result.data.outcomes.edts?.outcome).toBe('failed');
+    expect(edtRegistry.remove).not.toHaveBeenCalled();
+    expect(state.writeActiveEdt).not.toHaveBeenCalled();
   });
 
   it('LOCK_HELD: a held registry lock fails only services', async () => {

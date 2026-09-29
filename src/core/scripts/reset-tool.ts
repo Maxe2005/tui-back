@@ -15,12 +15,13 @@
 // left behind by every removed EDT are returned so the caller can list them.
 //
 // Mutations run under the existing action locks (edt registry key, registry key). A category
-// failing (lock held, I/O error) never stops the others — each reports its own outcome, and
-// nothing is rolled back. Missing files (ENOENT) are never an error: an empty category is a
+// failing (lock held, I/O error) never stops the independent ones — each reports its own
+// outcome, and nothing is rolled back. The one dependency: services is skipped (reported
+// failed) when edts failed, so services ⇒ edts also holds at execution time. Missing files (ENOENT) are never an error: an empty category is a
 // successful no-op. Direct node:fs for the edtsBaseDir wipe mirrors delete.ts's
 // deleteEdtFiles precedent (AD-1: no port method for per-EDT file cleanup).
 import { readdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { LockPort } from '../ports/lock.js';
@@ -83,6 +84,10 @@ export async function resetTool(params: ResetToolParams): Promise<Result<ResetTo
       result = await resetEdts(params, leftBranches);
     } else if (category === 'histories') {
       result = await resetHistories(params.state);
+    } else if (outcomes.edts?.outcome === 'failed') {
+      // services ⇒ edts holds at execution time too: never leave EDTs whose member services
+      // were just unregistered. Histories are independent and still ran above.
+      result = err('reset-skipped-edts-failed', 'Skipped because the EDT reset failed');
     } else {
       result = await resetServices(params);
     }
@@ -94,11 +99,31 @@ export async function resetTool(params: ResetToolParams): Promise<Result<ResetTo
 
 async function resetEdts(params: ResetToolParams, leftBranches: LeftBehindBranch[]): Promise<Result<void>> {
   const { edtRegistry, state, lock, keys, edtsBaseDir } = params;
+  // Defensive guard before any recursive delete: an empty or relative base dir would resolve
+  // against the process cwd — never wipe anything but an explicit absolute EDT data dir.
+  if (edtsBaseDir.trim() === '' || !isAbsolute(edtsBaseDir)) {
+    return err('invalid-argument', `Refusing to wipe EDT data: edtsBaseDir must be an absolute path (got "${edtsBaseDir}")`);
+  }
   return withActionLock(lock, keys.edtRegistry, async () => {
     const listed = await edtRegistry.list();
     if (!listed.ok) {
       return listed;
     }
+
+    // The pointer is cleared *before* anything is removed, so a failure partway through the
+    // removals or the directory wipe below can never leave state.json naming a removed EDT.
+    // A failed read is this category's failure — never assumed empty and written over.
+    const active = await state.readActiveEdt();
+    if (!active.ok) {
+      return active;
+    }
+    if (active.data !== null) {
+      const cleared = await state.writeActiveEdt(null);
+      if (!cleared.ok) {
+        return cleared;
+      }
+    }
+
     for (const entry of listed.data) {
       const removed = await edtRegistry.remove(entry.ulid);
       // edt-not-found: already gone (e.g. a concurrent CLI delete) — the goal is met.
@@ -112,17 +137,7 @@ async function resetEdts(params: ResetToolParams, leftBranches: LeftBehindBranch
       }
     }
 
-    const wiped = await wipeDirectoryContents(edtsBaseDir);
-    if (!wiped.ok) {
-      return wiped;
-    }
-
-    const active = await state.readActiveEdt();
-    if (active.ok && active.data === null) {
-      // Nothing to clear — leave state.json (possibly absent) untouched.
-      return ok(undefined);
-    }
-    return state.writeActiveEdt(null);
+    return wipeDirectoryContents(edtsBaseDir);
   });
 }
 
@@ -155,7 +170,11 @@ async function wipeDirectoryContents(dir: string): Promise<Result<void>> {
 
 async function resetHistories(state: StatePort): Promise<Result<void>> {
   const current = await state.readFilterHistory();
-  if (current.ok && current.data === null) {
+  if (!current.ok) {
+    // A failed read is this category's failure — never assumed empty and written over.
+    return current;
+  }
+  if (current.data === null) {
     // Nothing persisted (no state.json, or no filterHistory key) — nothing to clear.
     return ok(undefined);
   }
