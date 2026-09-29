@@ -555,3 +555,12 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation.md`
   summary: Branch names typed in the switch resolution dialog (and the create wizard) are not checked against git ref-name rules, so an invalid name passes inline validation and only fails the row at `createBranch`.
   evidence: no `check-ref-format`-style validator exists in the TUI layer; the git gate stays authoritative. Surfaced by edge-case-hunter.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
+  summary: `listDirtyPaths` parses non-`-z` porcelain, so git C-quoted paths (non-ASCII/special characters) never match the raw `-z` paths from `diffNameOnly` — such an at-risk file is not flagged and the first-EDT pre-flight does not pause on it.
+  evidence: Story 2.38 review (edge-case + blind hunters). Safe today (git's own checkout refuses to overwrite it, reported as a failed row), but the pause/overwrite UX is skipped; the fix (`status --porcelain -z` parsing) touches shared callers (switch.ts confirmedPaths, group-update's lockfile classifier).
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
+  summary: The first-EDT pause panel lists only repos with at-risk files; repos whose pre-flight already failed (missing member branch, manifest or diff error) are not shown before the developer confirms an overwrite.
+  evidence: Story 2.38 review (blind hunter). Those repos surface as failed rows only after activation; the overwrite itself stays scoped to confirmed paths, so no data-loss impact.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
+  summary: Zero EDTs but a stale `state.json` active pointer (to a removed EDT) makes the first-EDT activation refuse with `activate-has-outgoing`, leaving the new EDT inactive.
+  evidence: Story 2.38 review (blind hunter). The wizard decides "first EDT" from the EDT count while `activateEdt` checks the pointer; delete refuses the active EDT, so the stale pointer needs an out-of-band edit, but nothing clears it.

@@ -2,7 +2,7 @@
 title: 'EDT Creation Wizard — Step 4: Activation & Switch Choice'
 type: 'feature'
 created: '2026-09-29'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 context: []
 baseline_commit: 'dc1e4d352cb7a5f6354ffcd8dbd901d87e65cdef'
@@ -86,13 +86,13 @@ baseline_commit: 'dc1e4d352cb7a5f6354ffcd8dbd901d87e65cdef'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `git.ts`, `git/index.ts` (+ real-repo tests), test fakes -- `diffNameOnly`, `discardPathsToHead` -- the pre-flight and a correct path-scoped discard.
-- [ ] `core/edt/switch.ts`, `core/edt/activate.ts` (+ test) -- shared target helper; blocked/activated use-case covering every matrix row at core level.
-- [ ] `edt-slice.ts` (+ test) -- remove the active write, add `activateEdt`.
-- [ ] `edts-zone.logic.ts`, `wizard.logic.ts`, `activation.logic.ts` (+ tests) -- state, pure helpers, reducer.
-- [ ] `create-wizard.tsx`, `step-activation.tsx`, `switch-dialog.tsx`, `edts-zone.tsx` -- flows, view, handoff.
-- [ ] Interaction tests -- first EDT clean/blocked/retry/overwrite/stop; later switch (handoff), stay, partial create; log target.
-- [ ] `keybindings.ts` (+ test), `EXPERIENCE.md`, `deferred-work.md` -- docs.
+- [x] `git.ts`, `git/index.ts` (+ real-repo tests), test fakes -- `diffNameOnly`, `discardPathsToHead` -- the pre-flight and a correct path-scoped discard.
+- [x] `core/edt/switch.ts`, `core/edt/activate.ts` (+ test) -- shared target helper; blocked/activated use-case covering every matrix row at core level.
+- [x] `edt-slice.ts` (+ test) -- remove the active write, add `activateEdt`.
+- [x] `edts-zone.logic.ts`, `wizard.logic.ts`, `activation.logic.ts` (+ tests) -- state, pure helpers, reducer.
+- [x] `create-wizard.tsx`, `step-activation.tsx`, `switch-dialog.tsx`, `edts-zone.tsx` -- flows, view, handoff.
+- [x] Interaction tests -- first EDT clean/blocked/retry/overwrite/stop; later switch (handoff), stay, partial create; log target.
+- [x] `keybindings.ts` (+ test), `EXPERIENCE.md`, `deferred-work.md` -- docs.
 
 **Acceptance Criteria:**
 - Given any TUI create, when it completes, then `state.json` changes only through `activateEdt` or `switchActiveEdt`.
@@ -115,3 +115,68 @@ baseline_commit: 'dc1e4d352cb7a5f6354ffcd8dbd901d87e65cdef'
 
 **Manual checks:**
 - In a real terminal: first EDT with an at-risk file (Retry, Overwrite, Esc), and a later EDT with switch/stay.
+
+## Suggested Review Order
+
+**First-EDT activation core**
+
+- Entry point: pre-flight → blocked/activated; nothing checked out while any at-risk path is unconfirmed.
+  [`activate.ts:74`](../../../src/core/edt/activate.ts#L74)
+
+- At-risk set and the confirmed-overwrite gate (a fresh unconfirmed path re-blocks).
+  [`activate.ts:120`](../../../src/core/edt/activate.ts#L120)
+
+- Pointer re-read under the edts.yaml lock closes the activate/switch race.
+  [`activate.ts:153`](../../../src/core/edt/activate.ts#L153)
+
+- Destination rule extracted from switch.ts so both use-cases share FR-8.
+  [`switch.ts:464`](../../../src/core/edt/switch.ts#L464)
+
+**Git primitives**
+
+- Consent-gated discard: literal pathspecs, chunked, restores tracked/staged, cleans untracked.
+  [`index.ts:615`](../../../src/adapters/driven/git/index.ts#L615)
+
+- Read-only branch diff with `--no-renames` so both rename sides count as at risk.
+  [`index.ts:582`](../../../src/adapters/driven/git/index.ts#L582)
+
+**Store: no more silent activation**
+
+- `createEdt` no longer writes `state.json`.
+  [`edt-slice.ts:288`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L288)
+
+- New `activateEdt` action updates the cached pointer and tab visibility.
+  [`edt-slice.ts:316`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L316)
+
+**Wizard Step 4 flows**
+
+- Submit: create once, then first-EDT activation, switch handoff or stay; logs to the new ulid.
+  [`create-wizard.tsx:93`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L93)
+
+- Retry/Overwrite re-run only activation; error details surface as failed rows.
+  [`create-wizard.tsx:154`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L154)
+
+- Pure key reducer: radio, R/E/Esc pause panel, Ctrl+E overwrite confirm.
+  [`activation.logic.ts:50`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/activation.logic.ts#L50)
+
+- Step 4 state shape.
+  [`edts-zone.logic.ts:674`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L674)
+
+- Views: locked "Oui", radio + info block, pause panel, confirm, terminal messages.
+  [`step-activation.tsx:147`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-activation.tsx#L147)
+
+**Switch handoff**
+
+- Opens the switch dialog on the new EDT and runs it at once (2.41 resolution reused).
+  [`switch-dialog.tsx:145`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L145)
+
+- Looks the new EDT up in the reloaded store; not-found keeps it inactive and logs.
+  [`edts-zone.tsx:591`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L591)
+
+**Peripherals**
+
+- Step 4 interaction suite (first EDT, switch/stay, partial/total failures, log target).
+  [`edts-zone.interaction.test.tsx:3688`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3688)
+
+- Keybinding contract for Step 4.
+  [`keybindings.ts:108`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L108)
