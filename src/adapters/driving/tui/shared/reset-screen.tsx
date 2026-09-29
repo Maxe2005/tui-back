@@ -6,7 +6,7 @@
 // Self-contained useInput + pure key handling (mirrors settings-screen.tsx): every decision
 // lives in reset-screen.logic.ts; this component only feeds it raw Ink keys and applies the
 // returned state/action. Danger styling: error-colored border and title, never the accent.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
@@ -63,19 +63,25 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
   const runReset = useStore((state) => state.runReset);
 
   const [screen, setScreen] = useState<ResetScreenState>(() => initialState ?? createResetScreenState());
+  // Several keypresses can arrive before React re-renders (fast typing of `reset`, a paste):
+  // each one must build on the previous one's result, never on this render's stale `screen`.
+  // The ref is the source of truth for key handling; `screen` only drives rendering.
+  const screenRef = useRef(screen);
 
   useInput((input, key) => {
-    if (status === 'running') {
+    const store = useStore.getState();
+    if (store.resetStatus === 'running') {
       // Nothing can interrupt a reset once it has started.
       return;
     }
-    if (status === 'done') {
+    if (store.resetStatus === 'done') {
       if (key.escape || key.return) {
         onClose();
       }
       return;
     }
-    const next = handleResetScreenKey(screen, input, key);
+    const next = handleResetScreenKey(screenRef.current, input, key, store.resetPreview?.status === 'ready');
+    screenRef.current = next.state;
     setScreen(next.state);
     if (next.action.kind === 'close') {
       onClose();
@@ -122,7 +128,12 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
         <Lines lines={buildResetSummaryLines(selectedCategories(screen), preview)} />
       </Box>
     );
-    hint = 'Enter to continue, Esc to cancel.';
+    hint =
+      preview?.status === 'ready'
+        ? 'Enter to continue, Esc to cancel.'
+        : preview?.status === 'error'
+          ? 'The summary could not be loaded, so the reset cannot continue. Esc to cancel.'
+          : 'Loading the summary… Esc to cancel.';
   } else {
     body = (
       <Box flexDirection="column">

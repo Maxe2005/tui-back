@@ -84,6 +84,18 @@ describe('reset screen state machine', () => {
     expect(state.confirm).toEqual({ value: '', cursor: 0 });
   });
 
+  it('Enter on the summary advances only once the preview is ready', () => {
+    const summary = press(toggleRow(createResetScreenState(), 0), '', { return: true }).state;
+    expect(summary.step).toBe('summary');
+
+    const notReady = handleResetScreenKey(summary, '', { return: true }, false);
+    expect(notReady.state.step).toBe('summary');
+    expect(notReady.action).toEqual({ kind: 'none' });
+    expect(handleResetScreenKey(summary, '', { escape: true }, false).action).toEqual({ kind: 'close' });
+
+    expect(handleResetScreenKey(summary, '', { return: true }, true).state.step).toBe('confirm');
+  });
+
   it('executes on the exact word with the selected categories', () => {
     let state = toggleRow(createResetScreenState(), 2);
     state = toggleRow(state, 1);

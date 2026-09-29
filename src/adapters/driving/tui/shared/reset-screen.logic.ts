@@ -78,7 +78,16 @@ export function toggleResetCategory(state: ResetScreenState, category: ResetCate
 
 const NONE: ResetScreenAction = { kind: 'none' };
 
-export function handleResetScreenKey(state: ResetScreenState, input: string, key: ResetScreenKey): ResetScreenKeyResult {
+// `summaryReady`: whether the summary step's preview has loaded successfully. Enter on the
+// summary only advances once it has — the developer must never confirm a deletion whose
+// contents they could not review (a still-loading or failed preview leaves Esc as the only
+// way out).
+export function handleResetScreenKey(
+  state: ResetScreenState,
+  input: string,
+  key: ResetScreenKey,
+  summaryReady = true,
+): ResetScreenKeyResult {
   if (key.escape) {
     return { state, action: { kind: 'close' } };
   }
@@ -101,7 +110,7 @@ export function handleResetScreenKey(state: ResetScreenState, input: string, key
   }
 
   if (state.step === 'summary') {
-    if (key.return) {
+    if (key.return && summaryReady) {
       return { state: { ...state, step: 'confirm', confirm: { value: '', cursor: 0 } }, action: NONE };
     }
     return { state, action: NONE };

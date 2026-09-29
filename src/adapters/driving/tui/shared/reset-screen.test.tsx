@@ -101,6 +101,26 @@ describe('ResetScreen render', () => {
     expect(output).toContain('feature-a, feature-b');
   });
 
+  it('step 2: a failed preview shows the error and only offers Esc', async () => {
+    const store = createAppStore();
+    store.setState({ resetPreview: { ...PREVIEW, status: 'error', edtTopics: [], serviceCount: 0, error: 'registry exploded' } });
+    const state = { ...toggleResetCategory(createResetScreenState(), 'edts'), step: 'summary' as const };
+    const output = await renderToString(<ResetScreen useStore={store} initialState={state} />);
+    expect(output).toContain('registry exploded');
+    expect(output).toContain('cannot continue');
+    expect(output).not.toContain('Enter to continue');
+  });
+
+  it('running: shows progress and no key hints but waiting', async () => {
+    const store = createAppStore();
+    store.setState({ resetStatus: 'running' });
+    const state = { ...toggleResetCategory(createResetScreenState(), 'edts'), step: 'confirm' as const };
+    const output = await renderToString(<ResetScreen useStore={store} initialState={state} />);
+    expect(output).toContain('Resetting…');
+    expect(output).toContain('Please wait.');
+    expect(output).not.toContain('Esc');
+  });
+
   it('step 3: confirmation input', async () => {
     const state = { ...toggleResetCategory(createResetScreenState(), 'edts'), step: 'confirm' as const };
     const output = await renderToString(<ResetScreen useStore={createAppStore()} initialState={state} />);
