@@ -39,6 +39,11 @@ const EXPECTED = [
     'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   ],
   ['Ctrl+R', 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy'],
+  ['Space / ↑ ↓ (wizard Step 4)', 'Create-EDT wizard, Step 4: choose between switching to the new EDT now and creating it without switching'],
+  ['R (wizard Step 4 pause)', 'Create-EDT wizard, Step 4 paused on files at risk: re-run the pre-flight after fixing them by hand'],
+  ['E (wizard Step 4 pause)', 'Create-EDT wizard, Step 4 paused on files at risk: open the overwrite confirmation listing every file'],
+  ['Esc (wizard Step 4 pause)', 'Create-EDT wizard, Step 4 paused on files at risk: stop — the EDT stays created but not active'],
+  ['Ctrl+E (wizard Step 4 overwrite)', 'Create-EDT wizard, overwrite confirmation: discard exactly the listed files and activate (↑/↓ scroll, Enter/Esc go back)'],
   ['Tab (switch resolution)', 'Switch EDT, dirty services: switch between the global strategy and the per-service table'],
   ['Enter (switch resolution)', 'Switch EDT, dirty services: edit the global branch name / configure the focused service row'],
   [
@@ -56,7 +61,7 @@ const EXPECTED = [
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 27 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37; switch resolution keys, story 2.41)', () => {
+  it('lists exactly the 32 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37/2.38; switch resolution keys, story 2.41)', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),

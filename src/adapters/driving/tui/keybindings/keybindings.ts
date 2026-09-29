@@ -105,6 +105,28 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+R',
     description: 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy',
   },
+  // Story 2.38: scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause
+  // panel and its overwrite confirmation).
+  {
+    keys: 'Space / ↑ ↓ (wizard Step 4)',
+    description: 'Create-EDT wizard, Step 4: choose between switching to the new EDT now and creating it without switching',
+  },
+  {
+    keys: 'R (wizard Step 4 pause)',
+    description: 'Create-EDT wizard, Step 4 paused on files at risk: re-run the pre-flight after fixing them by hand',
+  },
+  {
+    keys: 'E (wizard Step 4 pause)',
+    description: 'Create-EDT wizard, Step 4 paused on files at risk: open the overwrite confirmation listing every file',
+  },
+  {
+    keys: 'Esc (wizard Step 4 pause)',
+    description: 'Create-EDT wizard, Step 4 paused on files at risk: stop — the EDT stays created but not active',
+  },
+  {
+    keys: 'Ctrl+E (wizard Step 4 overwrite)',
+    description: 'Create-EDT wizard, overwrite confirmation: discard exactly the listed files and activate (↑/↓ scroll, Enter/Esc go back)',
+  },
   // Story 2.41: scoped to the SWITCH EDT resolution view (dirty services outside the EDT being
   // left) — same Tab/Enter/Ctrl+R meanings as the wizard's Step 3 it mirrors.
   {
