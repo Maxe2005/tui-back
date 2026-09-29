@@ -10,8 +10,12 @@
 //     Panel A's edit mode), else cancels with nothing written — or requests quit when no EDT
 //     exists yet (nothing to cancel back to)
 //
-// Step 4 is interim until Story 2.38 (a plain confirm). Story 2.37: Step 3's rows become
-// Story 2.35's `memberPlans` on submit. The pure logic lives in wizard.logic.ts.
+// Story 2.37: Step 3's rows become Story 2.35's `memberPlans` on submit. Story 2.38: Step 4
+// makes activation explicit — a first EDT is created then activated through activateEdt (with
+// the pause panel on files at risk: Retry / Overwrite / Esc); a later EDT is created then either
+// handed to the protected switch dialog ("switch now") or left inactive ("create without
+// switching"). Every action-log entry goes to the NEW EDT's ulid. The pure logic lives in
+// wizard.logic.ts and activation.logic.ts.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
@@ -24,10 +28,12 @@ import {
   type CandidateListState,
   type CreateDialogState,
   type EdtDialogState,
+  initialActivationState,
   stripAssistedActionCodes,
   summarizeFailedResults,
   type WizardStep,
 } from '../../edts-zone.logic.js';
+import { overwriteFrom, reduceActivationKey } from './activation.logic.js';
 import { ActivationStepView } from './step-activation.js';
 import { BranchStepView, createBranchStepHandlers } from './step-branches.js';
 import { handleNameStepInput, NameStepView } from './step-name.js';
@@ -36,12 +42,16 @@ import {
   buildBreadcrumb,
   buildMemberPlans,
   buildStep3Rows,
+  activationErrorResults,
   canAdvance,
   checkNameAvailability,
+  describeCreateForLog,
   enterBranchStep,
+  isActivationAcknowledge,
   isStep3Busy,
   resolveWizardNavKey,
   STEP_INTROS,
+  summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
 
@@ -60,22 +70,34 @@ export type CreateWizardDeps = {
   candidates: readonly ServiceBranchDivergence[];
   // Story 2.37: Step 3's per-service branch lists (local + remote-tracking, never fetched).
   listCreateBranches: AppState['listCreateBranches'];
+  // Story 2.38: the first EDT's explicit activation (core/edt/activate.ts, via the store).
+  activateEdtAction: AppState['activateEdt'];
+  // Story 2.38: "switch now" — replaces the wizard with the switch dialog on the new EDT and
+  // runs the protected switch at once (the zone resolves the entry from the reloaded store).
+  startSwitch: (created: { ulid: string; topic: string }) => void;
 };
 
 export function createCreateWizardHandlers(deps: CreateWizardDeps) {
   const branchStep = createBranchStepHandlers({ setDialog: deps.setDialog, candidates: deps.candidates });
 
-  // Moved unchanged from the retired create-dialog.tsx (Story 2.36 Always boundary: same
-  // createEdt params, logging and FailedResultList as before — Story 2.38 fixes the activation
-  // and action-log target).
+  function patchCreate(patch: (prev: CreateDialogState) => Partial<CreateDialogState>) {
+    deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, ...patch(prev) } : prev));
+  }
+
+  function patchActivation(patch: Partial<CreateDialogState['activation']>, extra: Partial<CreateDialogState> = {}) {
+    patchCreate((prev) => ({ ...extra, activation: { ...prev.activation, ...patch } }));
+  }
+
+  // Story 2.38: create, then branch on Step 4's choice. A total create failure has no new EDT,
+  // so nothing is logged; every other outcome is logged to the new EDT's ulid.
   async function submitCreate(current: CreateDialogState) {
-    if (current.submitting) {
+    if (current.submitting || current.activation.created !== null) {
       return;
     }
     // Review patch (story 2.9): reject an empty topic inline rather than letting it reach
     // createEdt, whose `missing-argument` error is a raw CLI usage string.
     if (current.topic.trim() === '') {
-      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error: 'Topic must not be empty' } : prev));
+      patchCreate(() => ({ error: 'Topic must not be empty' }));
       return;
     }
     // Story 2.37: Step 3's rows become Story 2.35's memberPlans, one per member. confirmStep4
@@ -84,40 +106,112 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     if (memberPlans === null) {
       const check = canAdvance(3, current, deps.edtsRows, deps.candidates);
       const error = check.ok ? 'Étape 3 invalide' : check.error;
-      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, error } : prev));
+      patchCreate(() => ({ error }));
       return;
     }
-    deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: true, error: null, failedRows: [] } : prev));
+    patchCreate(() => ({ submitting: true, error: null, failedRows: [] }));
     const result = await deps.createEdtAction({ topic: current.topic, members: [...current.selectedMembers], memberPlans });
-    if (result.ok) {
-      // Awaited (not fire-and-forget) so `edtsRows` reflects the newly-created EDT before this
-      // function returns — Escape's cancel-vs-quit choice depends on it.
-      await deps.loadEdts();
-      void deps.loadEdtsBranches();
-      // Story 2.25: structured per-repo rows (FailedResultList); create never wires a retry.
-      const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
-      if (failedRows.length > 0) {
-        deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: false, failedRows } : prev));
-        if (deps.focusedEdt) {
-          await deps.logEdtAction(deps.focusedEdt.ulid, 'create', 'failed', failedRows.map((row) => row.message).join('; '));
-        }
-        return;
-      }
-      deps.setDialog({ kind: 'none' });
-      if (deps.focusedEdt) {
-        await deps.logEdtAction(
-          deps.focusedEdt.ulid,
-          'create',
-          'success',
-          `Created EDT "${current.topic}" with ${current.selectedMembers.length} member(s)`,
-        );
-      }
-    } else {
-      deps.setDialog((prev) => (prev.kind === 'create' ? { ...prev, submitting: false, error: result.error.message } : prev));
-      if (deps.focusedEdt) {
-        await deps.logEdtAction(deps.focusedEdt.ulid, 'create', 'failed', result.error.message);
-      }
+    if (!result.ok) {
+      patchCreate(() => ({ submitting: false, error: result.error.message }));
+      return;
     }
+    const created = { ulid: result.data.ulid, topic: result.data.topic };
+    const memberCount = current.selectedMembers.length;
+    // Awaited (not fire-and-forget) so the store's `edts` holds the new EDT before the switch
+    // handoff resolves it, and `edtsRows` reflects it for Escape's cancel-vs-quit choice.
+    await deps.loadEdts();
+    void deps.loadEdtsBranches();
+    // Story 2.25: structured per-repo rows (FailedResultList); create never wires a retry.
+    const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
+    if (failedRows.length > 0) {
+      // Never activate after a partial-failure create: the EDT stays inactive.
+      patchActivation({ created, outcome: 'not-activated' }, { submitting: false, failedRows });
+      await deps.logEdtAction(
+        created.ulid,
+        'create',
+        'failed',
+        `${describeCreateForLog(current.topic.trim(), memberCount, 'not-activated')}: ${failedRows.map((row) => row.message).join('; ')}`,
+      );
+      return;
+    }
+    if (current.activation.firstEdt) {
+      patchActivation({ created });
+      await runActivation(created, memberCount);
+      return;
+    }
+    if (current.activation.choice === 'switch') {
+      await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'switch'));
+      deps.startSwitch(created);
+      return;
+    }
+    deps.setDialog({ kind: 'none' });
+    deps.setCurrentEdtAction(null);
+    await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'stay'));
+  }
+
+  // Story 2.38: the first EDT's activation (and every Retry/Overwrite after a pause) — only ever
+  // activateEdt, never createEdt again.
+  async function runActivation(created: { ulid: string; topic: string }, memberCount: number, overwrite?: Record<string, string[]>) {
+    patchActivation({ decision: null }, { submitting: true, error: null, failedRows: [] });
+    const result = await deps.activateEdtAction(overwrite !== undefined ? { topic: created.topic, overwrite } : { topic: created.topic });
+    if (!result.ok) {
+      // The per-repo checkouts may already have run (e.g. the state write failed after them):
+      // their rows are kept on screen, next to the error.
+      const results = activationErrorResults(result.error.details);
+      const failedRows = results !== null ? summarizeActivationResults(results) : [];
+      patchActivation({ blocked: null, confirm: null, outcome: 'not-activated' }, { submitting: false, error: result.error.message, failedRows });
+      const rows = failedRows.length > 0 ? ` — ${failedRows.map((row) => `${row.service}: ${row.message}`).join('; ')}` : '';
+      await deps.logEdtAction(
+        created.ulid,
+        'create',
+        'failed',
+        `${describeCreateForLog(created.topic, memberCount, 'not-activated')}: ${result.error.message}${rows}`,
+      );
+      return;
+    }
+    if (result.data.status === 'blocked') {
+      // The pause panel (refreshed on every blocked retry); nothing logged yet.
+      patchActivation({ blocked: result.data.blocked, confirm: null }, { submitting: false });
+      return;
+    }
+    void deps.loadEdts();
+    void deps.loadEdtsBranches();
+    const { results } = result.data;
+    const failedRows = stripAssistedActionCodes(summarizeFailedResults(results));
+    const discarded = results
+      .filter((row) => row.outcome === 'discarded')
+      .map((row) => `${row.service} (${(row.detail?.discardedPaths ?? []).join(', ')})`);
+    const parts = [describeCreateForLog(created.topic, memberCount, 'activated')];
+    if (discarded.length > 0) {
+      parts.push(`discarded: ${discarded.join('; ')}`);
+    }
+    if (failedRows.length > 0) {
+      parts.push(`failed: ${failedRows.map((row) => `${row.service}: ${row.message}`).join('; ')}`);
+    }
+    if (failedRows.length > 0) {
+      // Per-repo failures stay on screen until acknowledged.
+      patchActivation({ blocked: null, confirm: null }, { submitting: false, failedRows });
+    } else {
+      deps.setDialog({ kind: 'none' });
+      deps.setCurrentEdtAction(null);
+    }
+    await deps.logEdtAction(created.ulid, 'create', failedRows.length > 0 ? 'failed' : 'success', parts.join(' — '));
+  }
+
+  // Story 2.38: runs the decision Step 4's reducer raised (the zone's effect calls this once per
+  // decision, outside any state updater).
+  function dispatchActivationDecision(current: CreateDialogState) {
+    const { decision, created, blocked } = current.activation;
+    if (decision === null || created === null) {
+      return;
+    }
+    const memberCount = current.selectedMembers.length;
+    if (decision.kind === 'stop') {
+      patchActivation({ decision: null, blocked: null, confirm: null, outcome: 'stopped' });
+      void deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(created.topic, memberCount, 'stopped'));
+      return;
+    }
+    void runActivation(created, memberCount, decision.kind === 'overwrite' ? overwriteFrom(blocked ?? []) : undefined);
   }
 
   // Moving to any step clears the previous step's error/failure rows and closes Step 3's box;
@@ -140,7 +234,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     if (target === 3) {
       return { ...base, branches: enterBranchStep(base.branches, base.topic, base.selectedMembers) };
     }
-    return base;
+    // Story 2.38: a first EDT is one created while no EDT exists — captured on entering Step 4.
+    return { ...base, activation: initialActivationState(deps.edtsRows.length === 0) };
   }
 
   // Story 2.37: loads each queued (`pending`) service's lists once. Flipped to `loading` first
@@ -250,12 +345,20 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     if (current.submitting) {
       return;
     }
-    // A partial-failure create already wrote the EDT: the per-repo failure rows stay on screen
-    // until acknowledged (Enter or Esc closes), and nothing can re-submit or navigate away.
-    if (isCreatedWithFailures(current)) {
+    // The EDT already exists and only an acknowledgment is left (partial-failure create,
+    // stopped or failed activation, per-repo activation failures): Enter or Esc closes.
+    if (isActivationAcknowledge(current)) {
       if (key.return || key.escape) {
         close();
       }
+      return;
+    }
+    // Story 2.38: once created, Step 4 owns every key (pause panel, overwrite confirmation) —
+    // reduced against the latest state; a decision it raises runs from the zone's effect.
+    if (current.activation.created !== null) {
+      deps.setDialog((prev) =>
+        prev.kind === 'create' ? { ...prev, activation: reduceActivationKey(prev.activation, input, key) } : prev,
+      );
       return;
     }
     const nav = resolveWizardNavKey(input, key);
@@ -296,15 +399,17 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     }
     if (current.step === 2) {
       handleServicesStepInput(deps.setDialog, deps.candidates, current, input, key);
+      return;
+    }
+    // Story 2.38: Step 4's radio (Space/↑↓).
+    if (current.step === 4) {
+      deps.setDialog((prev) =>
+        prev.kind === 'create' ? { ...prev, activation: reduceActivationKey(prev.activation, input, key) } : prev,
+      );
     }
   }
 
-  return { handleCreateInput, loadPendingBranchLists, handleCancelRequest };
-}
-
-// failedRows are only ever set by submitCreate after an ok:true (partial-failure) create.
-export function isCreatedWithFailures(dialog: CreateDialogState): boolean {
-  return dialog.step === 4 && dialog.failedRows.length > 0;
+  return { handleCreateInput, loadPendingBranchLists, handleCancelRequest, dispatchActivationDecision };
 }
 
 const BREADCRUMB_COLORS: Readonly<Record<BreadcrumbTone, string>> = {
@@ -332,7 +437,9 @@ export function CreateWizardView({
 }) {
   const breadcrumb = buildBreadcrumb(dialog, edtsRows, candidates);
   const cancelHint = edtsRows.length > 0 ? '[Esc] Annuler' : '[Esc] Quitter';
-  const createdWithFailures = isCreatedWithFailures(dialog);
+  const acknowledge = isActivationAcknowledge(dialog);
+  // Step navigation only exists before the create; afterwards Step 4's own footers apply.
+  const created = dialog.activation.created !== null;
   return (
     <ModalDialog title={CREATE_WIZARD_TITLE} onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
@@ -347,12 +454,15 @@ export function CreateWizardView({
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
         {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} maxRows={maxRows} maxVisibleRows={maxVisibleRows} /> : null}
-        {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} showConfirm={!createdWithFailures} /> : null}
-        {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-        {dialog.submitting ? <DimAnnotation text="Création…" /> : null}
-        {createdWithFailures ? (
-          <Text color={colors['text-dim']}>EDT créé, avec des échecs par service ci-dessus • [Entrée/Esc] Fermer</Text>
-        ) : (
+        {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={maxVisibleRows} /> : null}
+        {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
+        {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+        {dialog.submitting ? <DimAnnotation text={created ? 'Activation…' : 'Création…'} /> : null}
+        {acknowledge ? (
+          <Text color={colors['text-dim']}>
+            {dialog.activation.outcome === null ? 'EDT créé et activé, avec des échecs par service ci-dessus • ' : ''}[Entrée/Esc] Fermer
+          </Text>
+        ) : created ? null : (
           <Text color={colors['text-dim']}>
             [Ctrl+→/Ctrl+N] Étape suivante • [Ctrl+←/Ctrl+P] Étape précédente • {cancelHint}
           </Text>

@@ -6,16 +6,22 @@ import {
   buildRowView,
   buildStep3Rows,
   canAdvance,
+  activateLaterHint,
+  activationErrorResults,
   checkNameAvailability,
+  describeCreateForLog,
   EMPTY_NAME_ERROR,
   enterBranchStep,
+  isActivationAcknowledge,
   isProtectedTarget,
   localNameOf,
+  nonMemberReturns,
   NO_SERVICE_ERROR,
   reachableSteps,
   resolveGlobalBase,
   resolveWizardNavKey,
   stepSummary,
+  summarizeActivationResults,
   TAKEN_NAME_ERROR,
 } from './wizard.logic.js';
 
@@ -305,5 +311,55 @@ describe('enterBranchStep (story 2.37)', () => {
     expect(entered.lists['/repos/b']?.status).toBe('pending');
     expect(entered.lists['/repos/c']?.status).toBe('pending');
     expect(entered).toMatchObject({ panel: 'global', globalLine: 'base', editing: false, rowCursor: 2, box: null });
+  });
+});
+
+describe('Step 4 helpers (story 2.38)', () => {
+  it('nonMemberReturns lists every non-member service with its own shared branch', () => {
+    expect(nonMemberReturns(CANDIDATES, ['/repos/b'])).toEqual([
+      { service: 'svc-a', sharedBranch: 'main' },
+      { service: 'svc-c', sharedBranch: 'development' },
+    ]);
+    expect(nonMemberReturns(CANDIDATES, ['/repos/a', '/repos/b', '/repos/c'])).toEqual([]);
+  });
+
+  it('isActivationAcknowledge: a terminal outcome or failure rows on Step 4', () => {
+    const base: CreateDialogState = { ...initialCreateDialog(), step: 4 };
+    expect(isActivationAcknowledge(base)).toBe(false);
+    expect(isActivationAcknowledge({ ...base, activation: { ...base.activation, outcome: 'stopped' } })).toBe(true);
+    expect(isActivationAcknowledge({ ...base, failedRows: [{ service: 's', message: 'm' }] })).toBe(true);
+    expect(isActivationAcknowledge({ ...base, step: 3, failedRows: [{ service: 's', message: 'm' }] })).toBe(false);
+  });
+
+  it('describeCreateForLog says how the activation ended', () => {
+    expect(describeCreateForLog('feat', 2, 'activated')).toBe('Created EDT "feat" with 2 member(s) and activated it');
+    expect(describeCreateForLog('feat', 1, 'stopped')).toContain('not activated (stopped');
+    expect(describeCreateForLog('feat', 1, 'stay')).toContain('active EDT unchanged');
+    expect(describeCreateForLog('feat', 1, 'switch')).toBe('Created EDT "feat" with 1 member(s) (switch requested)');
+  });
+
+  it('activateLaterHint names the :edt-switch command with the topic', () => {
+    expect(activateLaterHint(' feat ')).toBe('Activez-le plus tard via :edt-switch feat');
+  });
+
+  it('activationErrorResults reads the per-repo rows from an error details, else null', () => {
+    const results = [{ service: 's', outcome: 'switched' as const }];
+    expect(activationErrorResults({ results })).toEqual(results);
+    expect(activationErrorResults(undefined)).toBeNull();
+    expect(activationErrorResults({ results: 'nope' })).toBeNull();
+  });
+
+  it('summarizeActivationResults keeps failures, discarded files and checkouts', () => {
+    expect(
+      summarizeActivationResults([
+        { service: 'a', outcome: 'failed', detail: { code: 'x', message: 'boom' } },
+        { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: '', discardedPaths: ['f.ts'] } },
+        { service: 'c', outcome: 'switched' },
+      ]),
+    ).toEqual([
+      { service: 'a', message: 'boom' },
+      { service: 'b', message: 'fichiers écrasés (1) : f.ts — puis basculé sur sa branche cible' },
+      { service: 'c', message: 'basculé sur sa branche cible' },
+    ]);
   });
 });

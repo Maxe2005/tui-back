@@ -129,6 +129,19 @@ export interface GitPort {
   // are never removed). Its only permitted caller is core/edt/switch.ts, and only under an
   // explicit per-repo `discard` resolution supplied by the developer. Fails `git-discard-error`.
   discardAll(repoPath: string): Promise<Result<void>>;
+  // Story 2.38: the paths that differ between two revisions (`git diff --name-only -z from to
+  // --`), repo-root relative — read-only, gated nowhere. Backs activate.ts's pre-flight: the
+  // uncommitted paths a checkout from `from` to `to` would overwrite are the dirty paths that
+  // also appear here. Fails `git-diff-error`.
+  diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>>;
+  // Story 2.38: consent-gated, path-scoped discard back to HEAD — only core/edt/activate.ts
+  // calls it, and only for at-risk paths the developer explicitly confirmed overwriting. Per
+  // path, whatever its state: unstaged (`reset -q -- paths`), then restored from HEAD when HEAD
+  // has it (`checkout HEAD -- …`), else removed as untracked (`clean -f -- …`). Never touches a
+  // path outside the list, never ignored files (no `-x`). Unlike `discardPaths` (index
+  // checkout), it handles untracked and staged paths. An empty list is a no-op success.
+  // Fails `git-discard-error`.
+  discardPathsToHead(repoPath: string, paths: string[]): Promise<Result<void>>;
   // Story 3.4: true while a `git rebase` is still in progress (rebase-merge/rebase-apply
   // state dirs exist under the repo's git dir). The tool never touches a rebase — this is
   // only a detector so a pre-existing mid-rebase surfaces as its own distinct state.

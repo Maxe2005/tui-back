@@ -3,12 +3,15 @@
 // views/handlers the same way edts-zone.logic.ts is kept apart from edts-zone.tsx.
 //
 // Story 2.37: Step 3 is the global branch strategy + per-service exceptions table — its pure
-// resolution, row-view, validation and plan helpers live here too. Step 4 is still a plain
-// confirm until Story 2.38.
+// resolution, row-view, validation and plan helpers live here too. Story 2.38: Step 4's pure
+// helpers (labels, the non-member return list, the log detail); its key reducer lives in
+// activation.logic.ts.
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
+import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { isSharedBranch } from '../../../../../../../core/edt/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
+import type { FailedResultRow } from '../../../../shared/components/failed-result-list.js';
 import {
   suggestBranchNameFromTopic,
   type BranchListState,
@@ -31,7 +34,7 @@ export const STEP_INTROS: Readonly<Record<WizardStep, string>> = {
   1: 'Choisissez un nom unique pour ce nouvel espace de travail (EDT).',
   2: 'Sélectionnez les services qui feront partie de cet EDT — au moins un.',
   3: 'Choisissez une règle de branche commune, puis ajustez les services qui font exception.',
-  4: "Vérifiez le récapitulatif, puis confirmez la création de l'EDT.",
+  4: "Vérifiez le récapitulatif, puis choisissez si ce nouvel EDT devient l'espace actif.",
 };
 
 export const EMPTY_NAME_ERROR = 'Le nom ne doit pas être vide';
@@ -452,4 +455,90 @@ export function enterBranchStep(branches: BranchStepState, topic: string, select
     rowCursor: Math.min(branches.rowCursor, Math.max(selectedMembers.length - 1, 0)),
     box: null,
   };
+}
+
+// ---- Step 4: Activation (Story 2.38) --------------------------------------------------------
+
+export const ACTIVATION_LABELS = {
+  firstEdt: 'Définir cet EDT comme espace actif immédiatement',
+  firstEdtExplanation: "Aucun EDT n'existe encore : il n'y a pas d'EDT sortant dont le travail serait à préserver.",
+  switchNow: 'Basculer immédiatement sur ce nouvel EDT',
+  stay: "Créer sans basculer (rester sur l'EDT courant)",
+  stashInfo: "Le travail non commité des services de l'EDT sortant est préservé automatiquement (stash).",
+  otherDirtyInfo:
+    "Le travail non commité de tout autre service vous est listé : vous choisirez de l'adopter dans l'EDT sortant ou de l'écraser.",
+  membersInfo: 'Les services membres passent sur leurs branches configurées.',
+  nonMembersInfo: 'Les services non membres reviennent sur leur propre branche partagée :',
+  stopped: "EDT créé mais non actif : l'activation a été interrompue.",
+  notActivated: "EDT créé mais non activé.",
+} as const;
+
+// The next step shown under the "created but not active" terminal messages.
+export function activateLaterHint(topic: string): string {
+  return `Activez-le plus tard via :edt-switch ${topic.trim()}`;
+}
+
+export type NonMemberReturn = { service: string; sharedBranch: string };
+
+// The services that are NOT members of the new EDT, each with the shared branch a switch sends
+// it back to (FR-8) — the info block lists them by name.
+export function nonMemberReturns(candidates: readonly BranchCandidate[], members: readonly string[]): NonMemberReturn[] {
+  const selected = new Set(members);
+  return candidates
+    .filter((candidate) => !selected.has(candidate.path))
+    .map((candidate) => ({ service: candidate.service, sharedBranch: candidate.sharedBranch }));
+}
+
+// The Step 4 terminal state: the EDT exists and only an acknowledgment (Enter/Esc closes) is
+// left — a partial-failure create, a stopped or failed activation, or an activation that
+// reported per-repo failures.
+export function isActivationAcknowledge(state: Pick<CreateDialogState, 'step' | 'failedRows' | 'activation'>): boolean {
+  return state.step === 4 && (state.activation.outcome !== null || state.failedRows.length > 0);
+}
+
+// The action-log detail of a create, with how its activation ended.
+export function describeCreateForLog(
+  topic: string,
+  memberCount: number,
+  activation: 'activated' | 'stopped' | 'not-activated' | 'switch' | 'stay',
+): string {
+  const created = `Created EDT "${topic}" with ${memberCount} member(s)`;
+  switch (activation) {
+    case 'activated':
+      return `${created} and activated it`;
+    case 'stopped':
+      return `${created} — not activated (stopped on uncommitted changes)`;
+    case 'not-activated':
+      return `${created} — not activated`;
+    case 'switch':
+      // Logged before the switch runs: the switch dialog logs its own outcome.
+      return `${created} (switch requested)`;
+    case 'stay':
+      return `${created} — active EDT unchanged`;
+  }
+}
+
+// The per-repo `results` an activateEdt error carries in its details (a state-write failure, or
+// a pointer set by someone else meanwhile) — the checkouts already ran, so they must be shown.
+export function activationErrorResults(details: unknown): SwitchEdtRepoResult[] | null {
+  if (typeof details !== 'object' || details === null || !('results' in details)) {
+    return null;
+  }
+  const results = (details as { results: unknown }).results;
+  return Array.isArray(results) ? (results as SwitchEdtRepoResult[]) : null;
+}
+
+// Every per-repo row of an activation that did not complete, for FailedResultList: failures as
+// they are, and what already happened to the other repos (discarded files, checkouts).
+export function summarizeActivationResults(results: readonly SwitchEdtRepoResult[]): FailedResultRow[] {
+  return results.map((row) => {
+    if (row.outcome === 'failed') {
+      return { service: row.service, message: row.detail?.message ?? 'Failed' };
+    }
+    if (row.outcome === 'discarded') {
+      const paths = row.detail?.discardedPaths ?? [];
+      return { service: row.service, message: `fichiers écrasés (${paths.length}) : ${paths.join(', ')} — puis basculé sur sa branche cible` };
+    }
+    return { service: row.service, message: 'basculé sur sa branche cible' };
+  });
 }

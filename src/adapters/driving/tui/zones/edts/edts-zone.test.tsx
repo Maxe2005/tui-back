@@ -1089,7 +1089,7 @@ describe('EdtsZone (story 2.9 zone states)', () => {
         },
       },
     };
-    const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} />);
+    const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={10} />);
     expect(output).toContain('Nom : auth-flow');
     expect(output).toContain('Services : api-gateway, billing, crm, docs');
     expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
@@ -1100,8 +1100,15 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('docs : [Existante] origin/feat/docs → feat/docs');
     expect(output).toContain("[Entrée] Créer l'EDT");
 
-    const acknowledged = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} showConfirm={false} />);
+    const acknowledged = await renderToString(
+      <ActivationStepView
+        dialog={{ ...dialog, activation: { ...dialog.activation, created: { ulid: 'u', topic: 'auth-flow' }, outcome: 'not-activated' } }}
+        candidates={candidates}
+        maxVisibleRows={10}
+      />,
+    );
     expect(acknowledged).not.toContain("[Entrée] Créer l'EDT");
+    expect(acknowledged).toContain('EDT créé mais non activé');
   });
 
   it('story 2.36: Step 2 lists every registered managed repo as a checkbox row', async () => {

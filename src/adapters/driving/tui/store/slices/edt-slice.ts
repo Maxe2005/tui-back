@@ -13,6 +13,7 @@ import {
   type CreateEdtData,
   type MemberBranchPlan,
 } from '../../../../../core/edt/create.js';
+import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../core/edt/activate.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,
   type SwitchActiveEdtData,
@@ -64,6 +65,12 @@ export type CreateEdtParams = {
   //     member repoPath, built from the wizard's Step 3 rows.
   branchOptions?: CreateBranchOptions;
   memberPlans?: Record<string, MemberBranchPlan>;
+};
+
+// Story 2.38: `overwrite` holds the at-risk paths the developer confirmed discarding, per repoPath.
+export type ActivateEdtRequest = {
+  topic: string;
+  overwrite?: Record<string, string[]>;
 };
 
 export type SwitchEdtParams = {
@@ -149,6 +156,9 @@ export type EdtSlice = {
   // loadEdtsBranches' are; an unwired store degrades to an explicit error Result rather than
   // throwing (every pre-2.9 `createAppStore()` call, including tests, stays usable).
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
+  // Story 2.38: the first EDT's explicit activation (wizard Step 4) — core/edt/activate.ts.
+  // `blocked` changes nothing; `activated` updates the cached active pointer like switchEdt.
+  activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
   // The switch dirty-repo seam — mirrors UpdateSlice's updateBlocker/resolveUpdateBlocker
   // (story 3.4). Non-null while switchActiveEdt is paused inside switchEdt: story 2.39 raises
@@ -293,21 +303,33 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         memberPlans: params.memberPlans,
       });
       if (result.ok) {
-        // Review patch (story 2.9): unlike switchEdt, createEdt itself never writes
-        // state.json's active-EDT pointer (create.ts only sets the registry entry's own
-        // `status: 'active'`, not an exclusive flag — see the `edts` field comment above).
-        // The TUI's create dialog is only ever reachable via AC1's zero-EDT prompt today
-        // (a second EDT is CLI-only, see deferred-work.md), so every TUI-driven create is
-        // the first EDT and should become the active one — exactly as if the user had
-        // immediately switched to it. Best-effort: if the state.json write fails, the EDT
-        // is still created successfully; the active pointer just stays whatever it was.
-        const wroteActive = await deps.state.writeActiveEdt(result.data.ulid);
-        if (wroteActive.ok) {
-          set({ activeEdt: result.data.ulid });
-        }
+        // Story 2.38: a create never touches state.json's active pointer any more — the old
+        // unconditional write made every TUI create silently active. Activation only happens
+        // through the wizard's Step 4: activateEdt (first EDT) or switchEdt.
         // Story 2.13: a newly-created EDT is a fresh set of active-EDT members — reload
         // gated-tab visibility so a carrying member just added flips its tab enabled
         // immediately. Fire-and-forget: never blocks the create flow's own result.
+        void get().loadTabVisibility();
+      }
+      return result;
+    },
+    activateEdt: async (params) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      const result = await activateEdtUseCase({
+        edtRegistry: deps.edtRegistry,
+        edtRegistryResourceKey: deps.edtRegistryResourceKey,
+        registry: deps.registry,
+        manifest: deps.manifest,
+        git: deps.git,
+        lock: deps.lock,
+        state: deps.state,
+        topic: params.topic,
+        overwrite: params.overwrite,
+      });
+      if (result.ok && result.data.status === 'activated') {
+        set({ activeEdt: result.data.ulid });
         void get().loadTabVisibility();
       }
       return result;

@@ -10,7 +10,14 @@ import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
-import { isSwitchBlockedError, stripAssistedActionCodes, summarizeFailedResults, type EdtDialogState, type SwitchDialogState } from '../edts-zone.logic.js';
+import {
+  initialSwitchDialog,
+  isSwitchBlockedError,
+  stripAssistedActionCodes,
+  summarizeFailedResults,
+  type EdtDialogState,
+  type SwitchDialogState,
+} from '../edts-zone.logic.js';
 import { SwitchResolutionView } from './switch-resolution/switch-resolution-view.js';
 import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from './switch-resolution/switch-resolution.logic.js';
 
@@ -131,7 +138,17 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
     deps.resolveSwitchDirtyRepos(decision);
   }
 
-  return { handleSwitchDialogInput, dispatchResolutionDecision };
+  // Story 2.38: the create wizard's "switch now" handoff — replaces whatever dialog is open with
+  // the switch dialog on `target` and runs the protected switch at once (no extra confirm: the
+  // wizard's Enter was it). Its blocked prompt, resolution view, results and logging (2.41)
+  // then apply unchanged.
+  function startSwitch(target: EdtRegistryEntry) {
+    const dialog = initialSwitchDialog(target);
+    deps.setDialog(dialog);
+    void handleSwitchConfirm(dialog, false);
+  }
+
+  return { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch };
 }
 
 // Story 2.41: the per-repo outcome summary of a switch that adopted, discarded or failed

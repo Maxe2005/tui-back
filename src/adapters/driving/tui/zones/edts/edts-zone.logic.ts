@@ -4,6 +4,7 @@
 // without scrolling past the Ink component; every export here stays unit-tested directly, no
 // React import, per the file's original Design Notes ("every keystroke behavior ... a
 // standalone pure function, unit-tested directly").
+import type { ActivationBlockedRepo } from '../../../../../core/edt/activate.js';
 import type { MemberBranchPlan } from '../../../../../core/edt/create.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
@@ -652,7 +653,37 @@ export type CreateDialogState = {
   // quit) cannot run. It raises this flag instead; the zone's effect then runs the wizard's
   // cancel (see create-wizard.tsx's handleCancelRequest).
   cancelRequested: boolean;
+  // Story 2.38: Step 4's activation state (see ActivationState).
+  activation: ActivationState;
 };
+
+// Story 2.38: what Step 4 asks the effectful handler to do once its key reducer decided
+// (activation.logic.ts) — the same "reducer raises, zone effect dispatches" pattern as the
+// switch resolution view.
+export type ActivationDecision = { kind: 'retry' } | { kind: 'overwrite' } | { kind: 'stop' };
+
+// Story 2.38: the wizard's Step 4.
+//   - `firstEdt` (captured on entering Step 4: no EDT existed) locks the choice on activating
+//     through activateEdt; otherwise `choice` is the radio: switch now, or create without it.
+//   - `created`: the EDT this wizard already created — once set, Retry/Overwrite only ever call
+//     activateEdt again, never createEdt.
+//   - `blocked`: the first-EDT pre-flight's at-risk files (the pause panel); `confirm` the
+//     second, explicit overwrite confirmation over it (its file-list scroll).
+//   - `outcome`: a terminal, acknowledge-only state — `stopped` (Esc on the pause panel) or
+//     `not-activated` (a partial-failure create, or a failed activation).
+export type ActivationState = {
+  firstEdt: boolean;
+  choice: 'switch' | 'stay';
+  created: { ulid: string; topic: string } | null;
+  blocked: ActivationBlockedRepo[] | null;
+  confirm: { scroll: number } | null;
+  outcome: 'stopped' | 'not-activated' | null;
+  decision: ActivationDecision | null;
+};
+
+export function initialActivationState(firstEdt = false): ActivationState {
+  return { firstEdt, choice: 'switch', created: null, blocked: null, confirm: null, outcome: null, decision: null };
+}
 
 export type SwitchDialogState = {
   kind: 'switch-confirm';
@@ -914,6 +945,8 @@ export function initialCreateDialog(): CreateDialogState {
     // Story 2.37: seeded (name slug, list loads) when Step 3 is entered — see create-wizard.tsx.
     branches: initialBranchStepState(),
     cancelRequested: false,
+    // Story 2.38: re-seeded (firstEdt captured) when Step 4 is entered — see create-wizard.tsx.
+    activation: initialActivationState(),
   };
 }
 

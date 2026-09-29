@@ -62,6 +62,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
+    diffNameOnly: vi.fn(async () => ok([])),
+    discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
@@ -291,5 +293,88 @@ describe('edt slice — create wizard Step 3 wiring (story 2.37)', () => {
     } finally {
       await rm(edtsBaseDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('edt slice — create never activates, activateEdt does (story 2.38)', () => {
+  it('createEdt never writes state.json nor flips the cached active pointer', async () => {
+    const edtsBaseDir = await mkdtemp(join(tmpdir(), 'tui-back-edt-slice-'));
+    try {
+      const deps = fakeDeps({ edtsBaseDir });
+      (deps.edtRegistry.list as ReturnType<typeof vi.fn>).mockImplementation(async () => ok([]));
+      const store = createAppStore(deps);
+      const result = await store.getState().createEdt({
+        topic: 'auth-flow',
+        members: ['/repo/a'],
+        memberPlans: { '/repo/a': { kind: 'create', base: 'development', name: 'auth-flow' } },
+      });
+      expect(result.ok).toBe(true);
+      expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+      expect(store.getState().activeEdt).toBeNull();
+    } finally {
+      await rm(edtsBaseDir, { recursive: true, force: true });
+    }
+  });
+
+  it('activateEdt on the first EDT sets the cached active pointer on success', async () => {
+    const deps = fakeDeps();
+    (deps.state.readActiveEdt as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(null));
+    const store = createAppStore(deps);
+
+    const result = await store.getState().activateEdt({ topic: 'target-topic' });
+
+    expect(result).toMatchObject({ ok: true, data: { status: 'activated', ulid: 'target-ulid' } });
+    expect(deps.state.writeActiveEdt).toHaveBeenCalledWith('target-ulid');
+    expect(store.getState().activeEdt).toBe('target-ulid');
+  });
+
+  it('a blocked activation changes nothing and forwards the overwrite map', async () => {
+    const deps = fakeDeps();
+    (deps.state.readActiveEdt as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(null));
+    (deps.git.currentBranch as ReturnType<typeof vi.fn>).mockImplementation(async () => ok('main'));
+    (deps.git.listDirtyPaths as ReturnType<typeof vi.fn>).mockImplementation(async (repoPath: string) =>
+      ok(repoPath === '/repo/a' ? ['a.ts', 'b.ts'] : []),
+    );
+    (deps.git.diffNameOnly as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(['a.ts', 'b.ts']));
+    const store = createAppStore(deps);
+
+    const result = await store.getState().activateEdt({ topic: 'target-topic', overwrite: { '/repo/a': ['a.ts'] } });
+
+    expect(result).toMatchObject({ ok: true, data: { status: 'blocked' } });
+    expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+    expect(deps.git.checkout).not.toHaveBeenCalled();
+    expect(store.getState().activeEdt).toBeNull();
+
+    // The same call with every at-risk path confirmed proceeds and discards exactly the map's
+    // paths — proof the overwrite map reached the use-case.
+    const confirmed = await store.getState().activateEdt({ topic: 'target-topic', overwrite: { '/repo/a': ['a.ts', 'b.ts'] } });
+    expect(confirmed).toMatchObject({ ok: true, data: { status: 'activated' } });
+    expect(deps.git.discardPathsToHead).toHaveBeenCalledWith('/repo/a', ['a.ts', 'b.ts']);
+  });
+
+  it('an activated result reloads tab visibility; a blocked one does not', async () => {
+    const deps = fakeDeps();
+    (deps.state.readActiveEdt as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(null));
+    (deps.git.currentBranch as ReturnType<typeof vi.fn>).mockImplementation(async () => ok('main'));
+    (deps.git.listDirtyPaths as ReturnType<typeof vi.fn>).mockImplementation(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['a.ts'] : []));
+    (deps.git.diffNameOnly as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(['a.ts']));
+    const store = createAppStore(deps);
+    const loadTabVisibility = vi.fn(async () => {});
+    store.setState({ loadTabVisibility });
+
+    const blocked = await store.getState().activateEdt({ topic: 'target-topic' });
+    expect(blocked).toMatchObject({ ok: true, data: { status: 'blocked' } });
+    expect(loadTabVisibility).not.toHaveBeenCalled();
+
+    const activated = await store.getState().activateEdt({ topic: 'target-topic', overwrite: { '/repo/a': ['a.ts'] } });
+    expect(activated).toMatchObject({ ok: true, data: { status: 'activated' } });
+    expect(loadTabVisibility).toHaveBeenCalledTimes(1);
+  });
+
+  it('activateEdt on an unwired store is a store-not-wired error', async () => {
+    expect(await createAppStore().getState().activateEdt({ topic: 'x' })).toMatchObject({
+      ok: false,
+      error: { code: 'store-not-wired' },
+    });
   });
 });

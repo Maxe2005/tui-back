@@ -55,6 +55,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     listDirtyPaths: (repoPath, opts) => listDirtyPaths(repoPath, opts),
     discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
     discardAll: (repoPath) => discardAll(repoPath),
+    diffNameOnly: (repoPath, from, to) => diffNameOnly(repoPath, from, to),
+    discardPathsToHead: (repoPath, paths) => discardPathsToHead(repoPath, paths),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
@@ -567,6 +569,94 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
   const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
   if (result.status !== 0) {
     return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.38 — read-only list of the paths differing between two revisions, used by the
+// activation pre-flight. `-z` keeps paths with spaces/quotes/non-ASCII bytes raw (no C-style
+// quoting); `--no-renames` lists BOTH sides of a rename (with rename detection only the new
+// side shows, so a dirty old-side path would never be flagged at risk); the trailing `--`
+// forces both arguments to be read as revisions. A large maxBuffer keeps a big diff from
+// failing with ENOBUFS.
+export async function diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', '-z', from, to, '--'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+    maxBuffer: LARGE_OUTPUT_BUFFER,
+  });
+  if (result.status !== 0) {
+    return err('git-diff-error', `git diff --name-only ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).split('\0').filter((path) => path !== ''));
+}
+
+// 64 MiB: the stdout budget of the path-listing calls above/below (spawnSync's default is 1 MiB).
+const LARGE_OUTPUT_BUFFER = 64 * 1024 * 1024;
+
+// How many paths one git invocation receives, so a huge confirmed list never hits E2BIG.
+const PATHS_PER_CALL = 500;
+
+function chunked(paths: readonly string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let index = 0; index < paths.length; index += PATHS_PER_CALL) {
+    chunks.push(paths.slice(index, index + PATHS_PER_CALL));
+  }
+  return chunks;
+}
+
+// Story 2.38 — consent-gated, path-scoped discard back to HEAD (see the GitPort doc comment).
+// Every call runs with the global `--literal-pathspecs`, so a confirmed path such as
+// `src/[id].tsx` is never read as a glob that would also match unconfirmed siblings; paths are
+// passed in chunks of PATHS_PER_CALL. Three steps, each scoped by `--` to exactly the paths:
+//   1. `git reset -q -- paths` drops any staged content (a no-op for a purely untracked path);
+//   2. `git checkout HEAD -- <paths HEAD has>` (found with `ls-tree -r`) restores them;
+//   3. `git clean -f -- <the rest>` removes the untracked leftovers (never `-x`, never `-d`).
+export async function discardPathsToHead(repoPath: string, paths: string[]): Promise<Result<void>> {
+  if (paths.length === 0) {
+    return ok(undefined);
+  }
+  const git = (args: string[], maxBuffer?: number) =>
+    spawnSync('git', ['--literal-pathspecs', ...args], { cwd: repoPath, encoding: 'utf8', ...(maxBuffer ? { maxBuffer } : {}) });
+  const chunks = chunked(paths);
+
+  for (const chunk of chunks) {
+    const reset = git(['reset', '-q', '--', ...chunk]);
+    if (reset.status !== 0) {
+      return err('git-discard-error', `git reset -- failed in ${repoPath}; nothing was discarded: ${spawnFailureDetail(reset)}`);
+    }
+  }
+
+  const inHead = new Set<string>();
+  for (const chunk of chunks) {
+    const listed = git(['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...chunk], LARGE_OUTPUT_BUFFER);
+    if (listed.status !== 0) {
+      return err(
+        'git-discard-error',
+        `git ls-tree HEAD failed in ${repoPath}; the paths were unstaged but nothing was discarded: ${spawnFailureDetail(listed)}`,
+      );
+    }
+    for (const path of String(listed.stdout).split('\0')) {
+      if (path !== '') {
+        inHead.add(path);
+      }
+    }
+  }
+
+  for (const chunk of chunked(paths.filter((path) => inHead.has(path)))) {
+    const restored = git(['checkout', 'HEAD', '--', ...chunk]);
+    if (restored.status !== 0) {
+      return err('git-discard-error', `git checkout HEAD -- failed in ${repoPath}: ${spawnFailureDetail(restored)}`);
+    }
+  }
+  for (const chunk of chunked(paths.filter((path) => !inHead.has(path)))) {
+    const cleaned = git(['clean', '-f', '-q', '--', ...chunk]);
+    if (cleaned.status !== 0) {
+      return err(
+        'git-discard-error',
+        `git clean -f -- failed in ${repoPath} after tracked paths were already restored: ${spawnFailureDetail(cleaned)}`,
+      );
+    }
   }
   return ok(undefined);
 }
