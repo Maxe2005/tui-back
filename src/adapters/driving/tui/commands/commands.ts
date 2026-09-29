@@ -11,10 +11,15 @@
 // Story 2.15: adds `edt-create`, `edt-switch`, `edt-modify` commands that open the same
 // dialogs Story 2.9 already implements (coexisting with Enter-key shortcuts).
 import type { AppStore } from '../store/app-store.js';
+import type { ZoneId } from '../zones/zones.js';
 
 export type Command = {
   name: string;
   run: (useStore: AppStore, fullQuery: string) => void;
+  // Story 3.11: commands that belong to a zone carry it here so the command bar's
+  // runCommand() activates that zone before running (the epic-2 command zone-switch
+  // pattern) — the developer lands where the opened screen lives.
+  zoneId?: ZoneId;
 };
 
 export const COMMANDS: readonly Command[] = [
@@ -55,6 +60,31 @@ export const COMMANDS: readonly Command[] = [
       if (!useStore.getState().runInProgress) {
         useStore.getState().requestQuit();
       }
+    },
+  },
+  // Story 3.11: the three update commands — each opens the story 3.7 config screen
+  // pre-scoped to its own targets, never starting an unconfigured run. The bar's
+  // runCommand() activates the Update zone first (zoneId above); the run itself only
+  // dispatches through the store (this file's DI convention).
+  {
+    name: 'update-edt',
+    zoneId: 'update',
+    run: (useStore) => {
+      void useStore.getState().openUpdateConfig('edt');
+    },
+  },
+  {
+    name: 'update-all',
+    zoneId: 'update',
+    run: (useStore) => {
+      void useStore.getState().openUpdateConfig('all');
+    },
+  },
+  {
+    name: 'update-service',
+    zoneId: 'update',
+    run: (useStore, fullQuery) => {
+      void useStore.getState().openUpdateServiceDialog(fullQuery);
     },
   },
 ];

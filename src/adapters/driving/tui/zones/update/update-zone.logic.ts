@@ -116,6 +116,21 @@ export function formatLiveServiceDetail(phase: UpdatePhase | undefined, issues: 
   return lines.join('\n');
 }
 
+// Story 3.11: the service quick-pick's filter — case-insensitive substring match over
+// the trimmed query against the service name or the repo path (the same convention as
+// the shared branch picker's own matchBranchesBySubstring, extended to the path so
+// path-distinguished duplicate service names stay narrowable). An empty query matches
+// every service, so a freshly opened pick proposes the whole managed list.
+export function matchServicesBySubstring(
+  query: string,
+  candidates: readonly { service: string; repoPath: string }[],
+): { service: string; repoPath: string }[] {
+  const needle = query.trim().toLowerCase();
+  return candidates.filter(
+    (candidate) => candidate.service.toLowerCase().includes(needle) || candidate.repoPath.toLowerCase().includes(needle),
+  );
+}
+
 // update-slice.ts's own merge (Code Map): "merged — never wholesale-replaced — ... so
 // outcomes for services outside a partial-scope run survive." Keyed by `service` (the only
 // stable identifier a GroupUpdateRepoResult row itself carries — results never carry a

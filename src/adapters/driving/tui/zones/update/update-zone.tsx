@@ -23,6 +23,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
+import { backspaceCommandQuery, typeCommandQueryChar } from '../../shared/command-bar.js';
 import {
   BoundedList,
   DetailPane,
@@ -35,7 +36,7 @@ import {
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, matchServicesBySubstring, partitionUpdateServiceRows } from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import {
@@ -54,7 +55,7 @@ import {
 // here").
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
-export const UPDATE_IDLE_PROMPT = 'Press [Enter] for service actions.';
+export const UPDATE_IDLE_PROMPT = '[G] EDT update, [P] this service, [Enter] for service actions.';
 export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
 export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
@@ -138,14 +139,30 @@ export function shouldOpenAllConfirm(input: string, updateStatus: string): boole
   return (input === 'a' || input === 'A') && updateStatus !== 'running';
 }
 
+// Story 3.11: the EDT-scoped main trigger — `g` while idle/done/error opens the config
+// pre-scoped to every EDT member (never while a run is in flight — a second trigger is
+// rejected by the same guard as every other scope).
+export function shouldOpenEdtConfig(input: string, updateStatus: string): boolean {
+  return (input === 'g' || input === 'G') && updateStatus !== 'running';
+}
+
+// Story 3.11: the single-service trigger — `p` while idle/done/error opens the config
+// pre-scoped to the highlighted row (the dispatcher ignores it when no row is selected).
+export function shouldOpenSingleConfig(input: string, updateStatus: string): boolean {
+  return (input === 'p' || input === 'P') && updateStatus !== 'running';
+}
+
 // Story 3.9: the row-local trigger mapping — `a` still opens the shared pre-run
 // configuration screen pre-scoped to every managed repo; `Enter` opens the per-service
 // action menu for the selected row (Update this service / Clean restart / Cancel, the
 // EDTs zone's own service-menu pattern). No trigger ever starts an unconfigured run.
-// Pure (the same unit style as `shouldOpenAllConfirm`) because the zone's `useInput` is
-// never driven in tests, so an inline mapping would let a wiring regression back to a
+//
+// Story 3.11 extends the same mapping: `g` opens the config pre-scoped to the EDT
+// (the main update, previously unreachable by key), `p` pre-scopes it to the highlighted
+// row. Pure (the same unit style as `shouldOpenAllConfirm`) because the zone's `useInput`
+// is never driven in tests, so an inline mapping would let a wiring regression back to a
 // direct `runGroupUpdate` go undetected.
-export type UpdateTriggerAction = 'open-all-config' | 'open-service-menu' | 'none';
+export type UpdateTriggerAction = 'open-edt-config' | 'open-all-config' | 'open-service-menu' | 'open-single-config' | 'none';
 
 export function resolveUpdateTrigger(
   input: string,
@@ -155,8 +172,14 @@ export function resolveUpdateTrigger(
   if (updateStatus === 'running') {
     return 'none';
   }
+  if (shouldOpenEdtConfig(input, updateStatus)) {
+    return 'open-edt-config';
+  }
   if (shouldOpenAllConfirm(input, updateStatus)) {
     return 'open-all-config';
+  }
+  if (shouldOpenSingleConfig(input, updateStatus)) {
+    return 'open-single-config';
   }
   if (key.return === true) {
     return 'open-service-menu';
@@ -286,9 +309,15 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
   const updateConfig = useStore((state) => state.updateConfig);
   const openUpdateConfig = useStore((state) => state.openUpdateConfig);
-  const setUpdateConfig = useStore((state) => state.setUpdateConfig);
-  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
+  const setUpdateConfig = useStore((state) => state.setUpdateConfig);  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
   const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
+  // Story 3.11: the no-arg `:update-service` handoff (zone selection → pinned config,
+  // else the filterable quick-pick) plus the pick's own open candidates.
+  const updateServiceSelectRequest = useStore((state) => state.updateServiceSelectRequest);
+  const clearUpdateServiceSelectionRequest = useStore((state) => state.clearUpdateServiceSelectionRequest);
+  const updateServicePick = useStore((state) => state.updateServicePick);
+  const openUpdateServicePick = useStore((state) => state.openUpdateServicePick);
+  const closeUpdateServicePick = useStore((state) => state.closeUpdateServicePick);
   const serviceRestartInFlight = useStore((state) => state.serviceRestartInFlight);
   const runServiceRestart = useStore((state) => state.runServiceRestart);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
@@ -340,6 +369,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
   const [configBranches, setConfigBranches] = useState<string[]>([]);
   const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // Story 3.11: the service quick-pick's own filter text + cursor — zone-local UI state
+  // (the same convention as the service-list cursor above; the candidate list itself is
+  // store state so the `:update-service` command can open it from any zone).
+  const [pickFilter, setPickFilter] = useState('');
+  const [pickCursor, setPickCursor] = useState(0);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -383,10 +417,13 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // While any dialog owns the keystroke, every global shortcut (including `?`
   // help and the zone mnemonics) must not fire — the same zoneInputCaptured gate the EDTs
   // zone's own dialogs use. The blocker menu captures hardest: while a repo waits, no
-  // other zone key may fire at all.
+  // other zone key may fire at all. A pending no-arg service request captures too, so a
+  // second trigger can't race the pick opening underneath it.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null);
-  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, setZoneInputCaptured]);
+    setZoneInputCaptured(
+      quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null || updateServicePick !== null || updateServiceSelectRequest,
+    );
+  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, updateServicePick, updateServiceSelectRequest, setZoneInputCaptured]);
 
   // A newly opened service menu always starts browsing on its first row.
   useEffect(() => {
@@ -415,6 +452,37 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       setConfigBranchesStatus('loading');
     }
   }, [isUpdateConfigOpen]);
+
+  // Story 3.11: a newly opened service pick always starts unfiltered on its first row.
+  // Keyed on the open boolean — never the candidate list — so a store refresh underneath
+  // doesn't snap the cursor back or wipe typed filter text.
+  const isUpdateServicePickOpen = updateServicePick !== null;
+  useEffect(() => {
+    if (isUpdateServicePickOpen) {
+      setPickFilter('');
+      setPickCursor(0);
+    }
+  }, [isUpdateServicePickOpen]);
+
+  // Story 3.11: consumes the no-arg `:update-service` request the command raised through
+  // the store. A highlighted row pre-scopes the config to that one service (the `p`
+  // behavior without the keypress); with no row selected the filterable quick-pick opens
+  // instead. Runs through the same guarded openers, so a request racing a run start is
+  // rejected rather than opening a screen mid-run.
+  useEffect(() => {
+    if (!updateServiceSelectRequest) {
+      return;
+    }
+    clearUpdateServiceSelectionRequest();
+    if (selectedServiceRow !== undefined) {
+      void openUpdateConfig({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+    } else {
+      void openUpdateServicePick();
+    }
+    // Keyed on primitives — selectedServiceRow is re-derived every render, so depend on
+    // its identity fields rather than the object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateServiceSelectRequest]);
 
   // Fetches the edited row's own listBranches(repoPath) once per branch-edit session —
   // the same shape as the EDT zone's own branch-picker effect (keyed on primitives, stale
@@ -508,6 +576,55 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      // Story 3.11: while the service quick-pick is open it owns every keystroke —
+      // typing/backspace filters, arrows/Home/End move, Enter confirms the highlighted
+      // service into the 3.7 config pre-scoped to it, Esc closes without opening anything.
+      if (updateServicePick !== null) {
+        if (key.escape === true) {
+          setPickFilter('');
+          setPickCursor(0);
+          closeUpdateServicePick();
+          return;
+        }
+        const candidates = matchServicesBySubstring(pickFilter, updateServicePick);
+        if (key.return === true) {
+          const chosen = candidates[Math.min(pickCursor, Math.max(candidates.length - 1, 0))];
+          if (chosen !== undefined) {
+            setPickFilter('');
+            setPickCursor(0);
+            closeUpdateServicePick();
+            void openUpdateConfig({ service: chosen.service, repoPath: chosen.repoPath });
+          }
+          return;
+        }
+        if (key.home === true) {
+          setPickCursor(0);
+          return;
+        }
+        if (key.end === true) {
+          setPickCursor(Math.max(candidates.length - 1, 0));
+          return;
+        }
+        if (key.upArrow === true) {
+          setPickCursor((current) => Math.max(0, current - 1));
+          return;
+        }
+        if (key.downArrow === true) {
+          setPickCursor((current) => Math.min(Math.max(candidates.length - 1, 0), current + 1));
+          return;
+        }
+        if (key.backspace === true || key.delete === true) {
+          setPickFilter((current) => backspaceCommandQuery(current));
+          setPickCursor(0);
+          return;
+        }
+        const nextFilter = typeCommandQueryChar(pickFilter, input, key);
+        if (nextFilter !== pickFilter) {
+          setPickFilter(nextFilter);
+          setPickCursor(0);
+        }
+        return;
+      }
       if (quitConfirm) {
         const decision = resolveQuitConfirm(input, key);
         if (decision === 'confirm') {
@@ -563,9 +680,22 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // managed repo; `Enter` opens the row-local action menu for the selected service
       // (update this service / clean restart / cancel) — no git/docker action runs before
       // the menu choice is confirmed through its own path.
+      //
+      // Story 3.11: `g` pre-scopes the same screen to the EDT (the main update);
+      // `p` pre-scopes it to the highlighted row alone.
       const trigger = resolveUpdateTrigger(input, key, updateStatus);
+      if (trigger === 'open-edt-config') {
+        void openUpdateConfig('edt');
+        return;
+      }
       if (trigger === 'open-all-config') {
         void openUpdateConfig('all');
+        return;
+      }
+      if (trigger === 'open-single-config') {
+        if (selectedServiceRow !== undefined) {
+          void openUpdateConfig({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+        }
         return;
       }
       if (trigger === 'open-service-menu') {
@@ -608,6 +738,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       : showLiveDetail
         ? formatLiveServiceDetail(selectedLivePhase, selectedLiveIssues)
         : formatServiceOutcomeDetail(selectedLastOutcome);
+
+  // Story 3.11: the quick-pick's live-filtered rows + clamped cursor — derived per render
+  // (the same clamped-cursor convention as the service list above).
+  const pickCandidates = updateServicePick !== null ? matchServicesBySubstring(pickFilter, updateServicePick) : [];
+  const clampedPickCursor = pickCandidates.length === 0 ? 0 : Math.min(pickCursor, pickCandidates.length - 1);
 
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
@@ -688,7 +823,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               updateNote !== null && updateResults.length === 0 ? (
                 <Box flexDirection="column">
                   <Text color={colors.text}>{updateNote}</Text>
-                  <Text color={colors['text-dim']}>Press [Enter] for service actions.</Text>
+                  <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text>
                 </Box>
               ) : (
                 <Box flexDirection="column">
@@ -703,7 +838,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                     title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
                     summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
                   >
-                    {updateNote ?? `Press [Enter] for service actions.`}
+                    {updateNote ?? UPDATE_IDLE_PROMPT}
                   </DetailPane>
                 </Box>
               )
@@ -714,7 +849,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                   {updateError ?? 'Group update failed.'}
                   {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
                 </Text>
-                <Text color={colors['text-dim']}>Press [Enter] for service actions.</Text>
+                <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text>
               </Box>
             ) : null}
             {updateStatus === 'idle' ? (
@@ -739,6 +874,31 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         />
       ) : null}
       {serviceMenu !== null ? <UpdateServiceMenuDialog service={serviceMenu.service} cursor={serviceMenuCursor} /> : null}
+      {/* Story 3.11: the no-arg `:update-service` fallback — a filterable service
+          quick-pick (the story 2.30 no-arg `edt-switch` mirror). Confirming a row opens
+          the 3.7 config pre-scoped to that one service; Esc closes with nothing opened. */}
+      <ModalDialog title="UPDATE SERVICE" open={updateServicePick !== null} onConfirm={() => {}} onCancel={closeUpdateServicePick}>
+        {updateServicePick !== null ? (
+          <Box flexDirection="column">
+            <Text color={colors.text}>
+              Service: <Text color={colors.accent}>{pickFilter}</Text>
+              <Text color={colors['text-dim']}>█</Text>
+            </Text>
+            {pickCandidates.length === 0 ? <Text color={colors['text-dim']}>No matching services — [Esc] to close.</Text> : null}
+            <BoundedList
+              items={pickCandidates}
+              maxVisibleRows={8}
+              cursorIndex={clampedPickCursor}
+              renderItem={(row, index) => (
+                <Box key={row.repoPath} flexDirection="row">
+                  <ListRow label={row.service} meta={row.repoPath} selected={index === clampedPickCursor} />
+                </Box>
+              )}
+            />
+            <Text color={colors['text-dim']}>Enter selects, Esc cancels.</Text>
+          </Box>
+        ) : null}
+      </ModalDialog>
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">

@@ -42,6 +42,8 @@
 
 generated: 2026-08-11
 last_updated: 2026-09-28
+# 2026-09-29: Story 3-11 (update commands — main, all-repos, single-service) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-28: Story 3-11 (update commands — main, all-repos, single-service) set to in-progress (bmad-build).
 # 2026-09-28: Story 3-10 (live per-service run tracking) moved to review after code-review + patch loop (bmad-build).
 # 2026-09-28: Story 3-10 (live per-service run tracking) set to in-progress (bmad-build).
 # 2026-09-24: Story 3-9 (per-service actions — clean restart & single-service update) moved to review after code-review + patch loop (bmad-build).
@@ -144,7 +146,7 @@ development_status:
   3-8-manifest-defined-clean-restart-recipe: review
   3-9-per-service-actions-clean-restart-single-service-update: review
   3-10-live-per-service-run-tracking-current-step-issue-log: review
-  3-11-update-commands-main-all-repos-single-service: backlog
+  3-11-update-commands-main-all-repos-single-service: review
   epic-3-retrospective: optional
 
   epic-4: backlog
