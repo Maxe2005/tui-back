@@ -140,6 +140,8 @@ export function EdtsZone({
   const activeEdtUlid = useStore((state) => state.activeEdt);
   const loadEdts = useStore((state) => state.loadEdts);
   const createEdtAction = useStore((state) => state.createEdt);
+  // Story 2.38: the create wizard's Step 4 first-EDT activation.
+  const activateEdtAction = useStore((state) => state.activateEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
   // Bug fix: the switch dirty-repo confirm seam (edt-slice.ts).
   const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
@@ -503,7 +505,7 @@ export function EdtsZone({
   // under dialogs/ (see edts-zone.tsx's header) — these factories close over this render's own
   // values (deps object recreated every render, same as the handlers it replaces were), so
   // behavior is unchanged; only the code's location moved.
-  const { handleSwitchDialogInput, dispatchResolutionDecision } = createSwitchDialogHandlers({
+  const { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch } = createSwitchDialogHandlers({
     setDialog,
     switchEdtAction,
     loadEdts,
@@ -571,7 +573,7 @@ export function EdtsZone({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switchResolutionDecision]);
 
-  const { handleCreateInput, loadPendingBranchLists, handleCancelRequest } = createCreateWizardHandlers({
+  const { handleCreateInput, loadPendingBranchLists, handleCancelRequest, dispatchActivationDecision } = createCreateWizardHandlers({
     setDialog,
     createEdtAction,
     loadEdts,
@@ -583,7 +585,38 @@ export function EdtsZone({
     edtsRows,
     candidates,
     listCreateBranches: listCreateBranchesAction,
+    activateEdtAction,
+    // Story 2.38: "switch now" hands off to the switch dialog on the new EDT, resolved from the
+    // store's `edts` the wizard just reloaded (this render's `edtsRows` predates the create).
+    startSwitch: (created) => {
+      const target = useStore.getState().edts?.find((entry) => entry.ulid === created.ulid);
+      if (target === undefined) {
+        // The reload failed: the EDT exists but cannot be switched to from here.
+        setDialog((prev) =>
+          prev.kind === 'create'
+            ? {
+                ...prev,
+                submitting: false,
+                error: `EDT « ${created.topic} » créé, mais introuvable après rechargement — basculez-y depuis la liste des EDT.`,
+                activation: { ...prev.activation, created, outcome: 'not-activated' },
+              }
+            : prev,
+        );
+        return;
+      }
+      startSwitch(target);
+    },
   });
+
+  // Story 2.38: a decision Step 4's key reducer raised (retry / overwrite / stop) runs here,
+  // outside any state updater — the same pattern as the switch resolution view's decision.
+  const activationDecision = dialog.kind === 'create' ? dialog.activation.decision : null;
+  useEffect(() => {
+    if (activationDecision !== null && dialog.kind === 'create') {
+      dispatchActivationDecision(dialog);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activationDecision]);
 
   // Story 2.37: entering the create wizard's Step 3 queues every service whose lists are not
   // loaded yet (or failed last time) as `pending`; this effect hands them to the wizard, which
