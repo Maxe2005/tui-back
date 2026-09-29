@@ -7,10 +7,13 @@ import {
   buildStep3Rows,
   canAdvance,
   checkNameAvailability,
+  describeCreateForLog,
   EMPTY_NAME_ERROR,
   enterBranchStep,
+  isActivationAcknowledge,
   isProtectedTarget,
   localNameOf,
+  nonMemberReturns,
   NO_SERVICE_ERROR,
   reachableSteps,
   resolveGlobalBase,
@@ -305,5 +308,29 @@ describe('enterBranchStep (story 2.37)', () => {
     expect(entered.lists['/repos/b']?.status).toBe('pending');
     expect(entered.lists['/repos/c']?.status).toBe('pending');
     expect(entered).toMatchObject({ panel: 'global', globalLine: 'base', editing: false, rowCursor: 2, box: null });
+  });
+});
+
+describe('Step 4 helpers (story 2.38)', () => {
+  it('nonMemberReturns lists every non-member service with its own shared branch', () => {
+    expect(nonMemberReturns(CANDIDATES, ['/repos/b'])).toEqual([
+      { service: 'svc-a', sharedBranch: 'main' },
+      { service: 'svc-c', sharedBranch: 'development' },
+    ]);
+    expect(nonMemberReturns(CANDIDATES, ['/repos/a', '/repos/b', '/repos/c'])).toEqual([]);
+  });
+
+  it('isActivationAcknowledge: a terminal outcome or failure rows on Step 4', () => {
+    const base: CreateDialogState = { ...initialCreateDialog(), step: 4 };
+    expect(isActivationAcknowledge(base)).toBe(false);
+    expect(isActivationAcknowledge({ ...base, activation: { ...base.activation, outcome: 'stopped' } })).toBe(true);
+    expect(isActivationAcknowledge({ ...base, failedRows: [{ service: 's', message: 'm' }] })).toBe(true);
+    expect(isActivationAcknowledge({ ...base, step: 3, failedRows: [{ service: 's', message: 'm' }] })).toBe(false);
+  });
+
+  it('describeCreateForLog says how the activation ended', () => {
+    expect(describeCreateForLog('feat', 2, 'activated')).toBe('Created EDT "feat" with 2 member(s) and activated it');
+    expect(describeCreateForLog('feat', 1, 'stopped')).toContain('not activated (stopped');
+    expect(describeCreateForLog('feat', 1, 'stay')).toContain('active EDT unchanged');
   });
 });

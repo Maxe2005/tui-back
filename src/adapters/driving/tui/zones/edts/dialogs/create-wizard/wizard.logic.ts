@@ -3,8 +3,9 @@
 // views/handlers the same way edts-zone.logic.ts is kept apart from edts-zone.tsx.
 //
 // Story 2.37: Step 3 is the global branch strategy + per-service exceptions table — its pure
-// resolution, row-view, validation and plan helpers live here too. Step 4 is still a plain
-// confirm until Story 2.38.
+// resolution, row-view, validation and plan helpers live here too. Story 2.38: Step 4's pure
+// helpers (labels, the non-member return list, the log detail); its key reducer lives in
+// activation.logic.ts.
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { isSharedBranch } from '../../../../../../../core/edt/shared-branches.js';
@@ -31,7 +32,7 @@ export const STEP_INTROS: Readonly<Record<WizardStep, string>> = {
   1: 'Choisissez un nom unique pour ce nouvel espace de travail (EDT).',
   2: 'Sélectionnez les services qui feront partie de cet EDT — au moins un.',
   3: 'Choisissez une règle de branche commune, puis ajustez les services qui font exception.',
-  4: "Vérifiez le récapitulatif, puis confirmez la création de l'EDT.",
+  4: "Vérifiez le récapitulatif, puis choisissez si ce nouvel EDT devient l'espace actif.",
 };
 
 export const EMPTY_NAME_ERROR = 'Le nom ne doit pas être vide';
@@ -452,4 +453,59 @@ export function enterBranchStep(branches: BranchStepState, topic: string, select
     rowCursor: Math.min(branches.rowCursor, Math.max(selectedMembers.length - 1, 0)),
     box: null,
   };
+}
+
+// ---- Step 4: Activation (Story 2.38) --------------------------------------------------------
+
+export const ACTIVATION_LABELS = {
+  firstEdt: 'Définir cet EDT comme espace actif immédiatement',
+  firstEdtExplanation: "Aucun EDT n'existe encore : il n'y a pas d'EDT sortant dont le travail serait à préserver.",
+  switchNow: 'Basculer immédiatement sur ce nouvel EDT',
+  stay: "Créer sans basculer (rester sur l'EDT courant)",
+  stashInfo: "Le travail non commité des services de l'EDT sortant est préservé automatiquement (stash).",
+  otherDirtyInfo:
+    "Le travail non commité de tout autre service vous est listé : vous choisirez de l'adopter dans l'EDT sortant ou de l'écraser.",
+  membersInfo: 'Les services membres passent sur leurs branches configurées.',
+  nonMembersInfo: 'Les services non membres reviennent sur leur propre branche partagée :',
+  stopped: "EDT créé mais non actif : l'activation a été interrompue.",
+  notActivated: "EDT créé mais non activé.",
+} as const;
+
+export type NonMemberReturn = { service: string; sharedBranch: string };
+
+// The services that are NOT members of the new EDT, each with the shared branch a switch sends
+// it back to (FR-8) — the info block lists them by name.
+export function nonMemberReturns(candidates: readonly BranchCandidate[], members: readonly string[]): NonMemberReturn[] {
+  const selected = new Set(members);
+  return candidates
+    .filter((candidate) => !selected.has(candidate.path))
+    .map((candidate) => ({ service: candidate.service, sharedBranch: candidate.sharedBranch }));
+}
+
+// The Step 4 terminal state: the EDT exists and only an acknowledgment (Enter/Esc closes) is
+// left — a partial-failure create, a stopped or failed activation, or an activation that
+// reported per-repo failures.
+export function isActivationAcknowledge(state: Pick<CreateDialogState, 'step' | 'failedRows' | 'activation'>): boolean {
+  return state.step === 4 && (state.activation.outcome !== null || state.failedRows.length > 0);
+}
+
+// The action-log detail of a create, with how its activation ended.
+export function describeCreateForLog(
+  topic: string,
+  memberCount: number,
+  activation: 'activated' | 'stopped' | 'not-activated' | 'switch' | 'stay',
+): string {
+  const created = `Created EDT "${topic}" with ${memberCount} member(s)`;
+  switch (activation) {
+    case 'activated':
+      return `${created} and activated it`;
+    case 'stopped':
+      return `${created} — not activated (stopped on uncommitted changes)`;
+    case 'not-activated':
+      return `${created} — not activated`;
+    case 'switch':
+      return `${created} — switching to it`;
+    case 'stay':
+      return `${created} — active EDT unchanged`;
+  }
 }
