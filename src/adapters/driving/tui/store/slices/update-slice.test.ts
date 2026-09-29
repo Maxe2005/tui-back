@@ -3,7 +3,7 @@
 // in-process), so these verify the wiring (status transitions, runInProgress guard,
 // interrupted marking + edts refresh) rather than re-testing the use-case matrix.
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../../../../../core/result.js';
+import { ok, err, type Result } from '../../../../../core/result.js';
 import type { ContainerPort } from '../../../../../core/ports/container.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
@@ -17,7 +17,7 @@ import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
-import { UPDATE_HEALTH_POLL_INTERVAL_MS } from './update-slice.js';
+import { UPDATE_HEALTH_POLL_INTERVAL_MS, parseUpdateServiceArg } from './update-slice.js';
 
 const MEMBERS = [
   { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' },
@@ -1655,5 +1655,229 @@ describe('live per-service run tracking (story 3.10)', () => {
     expect(store.getState().liveServiceIssues['svc-b']).toEqual([
       { kind: 'migration-failed', detail: 'boom', resolved: false },
     ]);
+  });
+});
+
+// Story 3.11: the `:update-service [name]` entry point — arg resolves to a pre-scoped
+// single-service config, no arg raises the zone-consumed selection request, and every
+// trigger honors the running/restart guards with no screen opened.
+describe('update slice: single-service command dialog (story 3.11)', () => {
+  describe('parseUpdateServiceArg', () => {
+    it('returns null for a bare command with no argument', () => {
+      expect(parseUpdateServiceArg('update-service')).toBeNull();
+      expect(parseUpdateServiceArg('  update-service  ')).toBeNull();
+    });
+
+    it('returns the service name after the command', () => {
+      expect(parseUpdateServiceArg('update-service svc-a')).toBe('svc-a');
+    });
+
+    it('joins a multi-word tail and trims it', () => {
+      expect(parseUpdateServiceArg('update-service   my service  ')).toBe('my service');
+    });
+  });
+
+  it('openUpdateServiceDialog with a known name pre-scopes a one-row config and runs nothing', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateServiceDialog('update-service svc-a');
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'edt',
+      rows: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true }],
+    });
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateServiceDialog matches the service name case-insensitively', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateServiceDialog('update-service SVC-A');
+
+    expect(store.getState().updateConfig).toMatchObject({
+      scope: 'edt',
+      rows: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true }],
+    });
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateServiceDialog with an unknown name fails service-not-found with no screen and nothing running', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().openUpdateServiceDialog('update-service svc-nope');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('service-not-found');
+    expect(store.getState().updateError).toContain('svc-nope');
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+    expect(deps.git.pull).not.toHaveBeenCalled();
+  });
+
+  it('openUpdateServiceDialog with no arg raises the selection request with no screen', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateServiceDialog('update-service');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateServiceSelectRequest).toBe(true);
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('clearUpdateServiceSelectionRequest consumes the pending request', async () => {
+    const store = createAppStore(fakeDeps());
+    await store.getState().openUpdateServiceDialog('update-service');
+    expect(store.getState().updateServiceSelectRequest).toBe(true);
+
+    store.getState().clearUpdateServiceSelectionRequest();
+
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+  });
+
+  it('openUpdateServiceDialog with an arg clears a previously raised selection request', async () => {
+    const store = createAppStore(fakeDeps());
+    await store.getState().openUpdateServiceDialog('update-service');
+    expect(store.getState().updateServiceSelectRequest).toBe(true);
+
+    await store.getState().openUpdateServiceDialog('update-service svc-a');
+
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+    expect(store.getState().updateConfig).toMatchObject({
+      rows: [{ service: 'svc-a', repoPath: '/repo/a', selected: true }],
+    });
+  });
+
+  it('openUpdateServiceDialog while running is rejected update-already-running with no screen and no request', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'running' });
+
+    await store.getState().openUpdateServiceDialog('update-service svc-a');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+  });
+
+  it('openUpdateServiceDialog on an unwired store degrades to store-not-wired', async () => {
+    const store = createAppStore();
+
+    await store.getState().openUpdateServiceDialog('update-service svc-a');
+
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('store-not-wired');
+  });
+
+  it('openUpdateServicePick lists every managed repo and starts no run', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateServicePick();
+
+    expect(store.getState().updateServicePick).toEqual([
+      { service: 'svc-a', repoPath: '/repo/a' },
+      { service: 'svc-b', repoPath: '/repo/b' },
+    ]);
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateServiceDialog while a standalone restart is in flight is rejected update-already-running', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    await store.getState().openUpdateServiceDialog('update-service svc-a');
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateConfig).toBeNull();
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+  });
+
+  it('openUpdateServicePick while a standalone restart is in flight is rejected update-already-running', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ serviceRestartInFlight: { '/repo/a': 'restart' } });
+
+    await store.getState().openUpdateServicePick();
+
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateServicePick).toBeNull();
+  });
+
+  it('openUpdateServicePick with an empty registry fails no-services-selected with no pick', async () => {
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([])),
+      add: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = createAppStore(fakeDeps({ registry }));
+
+    await store.getState().openUpdateServicePick();
+
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('no-services-selected');
+  });
+
+  it('openUpdateServicePick while running is rejected update-already-running with no pick', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'running' });
+
+    await store.getState().openUpdateServicePick();
+
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(store.getState().updateStatus).toBe('error');
+    expect(store.getState().updateErrorCode).toBe('update-already-running');
+  });
+
+  it('closeUpdateServicePick closes an open pick and is a no-op when closed', async () => {
+    const store = createAppStore(fakeDeps());
+    await store.getState().openUpdateServicePick();
+    expect(store.getState().updateServicePick).not.toBeNull();
+
+    store.getState().closeUpdateServicePick();
+
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(() => store.getState().closeUpdateServicePick()).not.toThrow();
+  });
+
+  it('a pick open cancelled before its enumeration resolves never pops open', async () => {
+    const deps = fakeDeps();
+    let releaseList: ((value: Result<string[]>) => void) | undefined;
+    const gate = new Promise<Result<string[]>>((resolve) => {
+      releaseList = resolve;
+    });
+    deps.registry.list = vi.fn(async () => gate);
+    const store = createAppStore(deps);
+
+    const opening = store.getState().openUpdateServicePick();
+    store.getState().closeUpdateServicePick();
+    expect(store.getState().updateServicePick).toBeNull();
+    releaseList!(ok(['/repo/a']));
+    await opening;
+
+    expect(store.getState().updateServicePick).toBeNull();
+    expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('clearUpdate drops the selection request and the open pick alongside the run state', async () => {
+    const store = createAppStore(fakeDeps());
+    await store.getState().openUpdateServiceDialog('update-service');
+    await store.getState().openUpdateServicePick();
+
+    store.getState().clearUpdate();
+
+    expect(store.getState().updateServiceSelectRequest).toBe(false);
+    expect(store.getState().updateServicePick).toBeNull();
   });
 });

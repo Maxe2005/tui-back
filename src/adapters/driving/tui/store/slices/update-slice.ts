@@ -28,6 +28,19 @@ import {
 } from '../../zones/update/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
+// Story 3.11: parses the optional service argument off `:update-service <name>` (mirrors
+// openEdtSwitchDialog's own query-arg parsing in edt-slice.ts): the command name is the
+// first whitespace-separated token, everything after it is the service name. Returns null
+// when no argument was given (the zone-selection / quick-pick path).
+export function parseUpdateServiceArg(fullQuery: string): string | null {
+  const parts = fullQuery.trim().split(/\s+/);
+  if (parts.length <= 1) {
+    return null;
+  }
+  const arg = parts.slice(1).join(' ').trim();
+  return arg === '' ? null : arg;
+}
+
 export type UpdateRunStatus = 'idle' | 'running' | 'done' | 'error';
 
 // Story 3.6: the Update zone's own health-poll cadence — independent of Logs zone's
@@ -101,6 +114,32 @@ export type UpdateSlice = {
   // (no-active-edt, edt-not-found, service-not-found) — the screen never opens in those
   // cases, so no git/docker action ever runs unconfigured.
   openUpdateConfig: (target: OpenUpdateConfigTarget) => Promise<void>;
+  // Story 3.11: the `:update-service [name]` entry point (mirrors openEdtSwitchDialog's
+  // query-arg contract in edt-slice.ts). With a name, it resolves straight to that
+  // service's pre-scoped single-service config (`service-not-found` when unknown, no
+  // screen). Without one, it raises `updateServiceSelectRequest` for the Update zone to
+  // consume — the zone pre-scopes to its highlighted row when one is selected, else opens
+  // the filterable service quick-pick below. The running/restart guards match
+  // openUpdateConfig's, so no trigger ever opens a screen mid-run.
+  openUpdateServiceDialog: (fullQuery: string) => Promise<void>;
+  // Story 3.11: set by openUpdateServiceDialog's no-arg path; consumed once by the Update
+  // zone's effect (selection → pinned config, else the quick-pick), which clears it via
+  // clearUpdateServiceSelectionRequest. A plain boolean (not a counter): a second no-arg
+  // command while one request is still unconsumed is the same intent, never a queue.
+  updateServiceSelectRequest: boolean;
+  clearUpdateServiceSelectionRequest: () => void;
+  // Story 3.11: the filterable service quick-pick's candidates (the no-arg
+  // `:update-service` fallback when the Update zone has no row selected, mirroring story
+  // 2.30's no-arg `edt-switch` pick). Null when the pick is closed. Filter text and cursor
+  // stay zone-local useState (only cross-visit state belongs in the slice); confirming a
+  // row calls the existing openUpdateConfig({service, repoPath}) directly.
+  updateServicePick: { service: string; repoPath: string }[] | null;
+  // Builds the pick candidates from every managed repo (the openAllReposConfig posture:
+  // unmanaged paths silently skipped; any other load failure still lists a row under its
+  // path-basename service so the run reports it instead of dropping it silently). Empty
+  // registry (or nothing listable) fails `no-services-selected` with no pick opened.
+  openUpdateServicePick: () => Promise<void>;
+  closeUpdateServicePick: () => void;
   // Replaces the open draft wholesale (the zone computes the next draft through the
   // dialog logic's pure functions); a no-op without an open screen.
   setUpdateConfig: (draft: UpdateConfigDraft) => void;
@@ -188,6 +227,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   // stale timer. Held in closure, mirrors logs-slice.ts's own healthPollTimers convention.
   let healthPollTimer: ReturnType<typeof setInterval> | null = null;
   let pollingRepoPaths: readonly string[] = [];
+  // Story 3.11: the service quick-pick's generation — bumped on every open and every
+  // close so a slow enumeration from an earlier open can never pop the pick open after
+  // the user already cancelled (or re-opened). Held in closure, never in Zustand state.
+  let servicePickGeneration = 0;
   return (set, get) => {
     // Story 3.6: one poll cycle for a single service — resolves its manifest-declared
     // container and inspects it, updating the badge only on success. Mirrors
@@ -299,17 +342,21 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       openConfigDraft('edt', rows);
     }
 
-    // Story 3.7: pre-scopes the screen to every managed repo (the list-repos posture:
-    // unmanaged paths silently skipped; any other load failure still renders a row under
-    // its path-basename service so the run reports it instead of dropping it silently).
-    async function openAllReposConfig(): Promise<void> {
+    // Story 3.11: the managed-repo enumeration shared by openAllReposConfig and
+    // openUpdateServicePick (one definition so the all-repos config and the service
+    // quick-pick can never list different services): the list-repos posture — unmanaged
+    // paths silently skipped; any other load failure still yields a row under its
+    // path-basename service so the run reports it instead of dropping it silently;
+    // deduped by resolved repoPath, first wins.
+    async function listManagedServiceRows(): Promise<
+      { ok: true; rows: { service: string; repoPath: string; sourceBranch: string }[] } | { ok: false; code: string; message: string }
+    > {
       if (!deps) {
-        return;
+        return { ok: false, code: 'store-not-wired', message: 'No ports wired into the TUI store' };
       }
       const listed = await deps.registry.list();
       if (!listed.ok) {
-        failConfigOpen(listed.error.code, listed.error.message);
-        return;
+        return { ok: false, code: listed.error.code, message: listed.error.message };
       }
       const seen = new Set<string>();
       const paths = listed.data
@@ -335,11 +382,25 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         }
         rows.push({ service: loaded.data.service, repoPath, sourceBranch: loaded.data.sharedBranch });
       }
-      if (rows.length === 0) {
+      return { ok: true, rows };
+    }
+
+    // Story 3.7: pre-scopes the screen to every managed repo (the list-repos posture:
+    // unmanaged paths silently skipped; any other load failure still renders a row under
+    // its path-basename service so the run reports it instead of dropping it silently).
+    async function openAllReposConfig(): Promise<void> {
+      const enumerated = await listManagedServiceRows();
+      if (!enumerated.ok) {
+        // An unwired store degrades to the same explicit error state openUpdateConfig's
+        // own guard reports — never a throw, never a screen.
+        failConfigOpen(enumerated.code, enumerated.message);
+        return;
+      }
+      if (enumerated.rows.length === 0) {
         failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
         return;
       }
-      openConfigDraft('all', rows);
+      openConfigDraft('all', enumerated.rows);
     }
 
     // Story 3.7: the reusable pre-scoped entry point (story 3.9's single-service update
@@ -374,7 +435,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         const active = listed.data.find((candidate) => candidate.ulid === currentActive.data);
-        const member = active?.members.find((candidate) => candidate.service === service);
+        const wanted = service.toLowerCase();
+        const member = active?.members.find((candidate) => candidate.service.toLowerCase() === wanted);
         if (member !== undefined) {
           openConfigDraft('edt', [
             { service: member.service, repoPath: member.repoPath, sourceBranch: await resolveBranchDefault(member.repoPath) },
@@ -392,7 +454,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           continue;
         }
         const loaded = await deps.manifest.load(candidate);
-        if (loaded.ok && loaded.data.service === service) {
+        if (loaded.ok && loaded.data.service.toLowerCase() === service.toLowerCase()) {
           openConfigDraft('all', [
             { service: loaded.data.service, repoPath: candidate, sourceBranch: loaded.data.sharedBranch },
           ]);
@@ -600,6 +662,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         }
       },
       updateConfig: null,
+      updateServiceSelectRequest: false,
+      updateServicePick: null,
       serviceRestartInFlight: {},
       openUpdateConfig: async (target: OpenUpdateConfigTarget) => {
         if (!deps || !deps.container || !deps.migration || !deps.restart) {
@@ -635,6 +699,104 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         await openSingleServiceConfig(target.service, target.repoPath);
+      },
+      openUpdateServiceDialog: async (fullQuery: string) => {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        const service = parseUpdateServiceArg(fullQuery);
+        if (service !== null) {
+          // A previously raised no-arg request must not survive: the zone would consume it
+          // into a second screen on top of this one.
+          set({ updateServiceSelectRequest: false });
+          await openSingleServiceConfig(service);
+          return;
+        }
+        // No argument: the Update zone consumes this — its highlighted row pre-scopes the
+        // config when one is selected, else the filterable service quick-pick opens.
+        set({ updateServiceSelectRequest: true });
+      },
+      clearUpdateServiceSelectionRequest: () => {
+        if (get().updateServiceSelectRequest) {
+          set({ updateServiceSelectRequest: false });
+        }
+      },
+      openUpdateServicePick: async () => {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        const generation = ++servicePickGeneration;
+        const enumerated = await listManagedServiceRows();
+        if (generation !== servicePickGeneration) {
+          // Cancelled (or superseded by a newer open) while enumerating — never pop a
+          // stale pick open over whatever the developer sees now.
+          return;
+        }
+        if (!enumerated.ok) {
+          failConfigOpen(enumerated.code, enumerated.message);
+          return;
+        }
+        if (enumerated.rows.length === 0) {
+          failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
+          return;
+        }
+        // Opening the pick runs no git/docker action and starts no run — like the config
+        // screen, over a clean banner.
+        set({
+          updateServicePick: enumerated.rows.map((row) => ({ service: row.service, repoPath: row.repoPath })),
+          updateStatus: 'idle',
+          updateError: null,
+          updateErrorCode: null,
+          updateNote: null,
+        });
+      },
+      closeUpdateServicePick: () => {
+        servicePickGeneration += 1;
+        if (get().updateServicePick !== null) {
+          set({ updateServicePick: null });
+        }
       },
       setUpdateConfig: (draft: UpdateConfigDraft) => {
         if (get().updateConfig === null) {
@@ -840,6 +1002,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateScope: null,
           updateBlocker: null,
           updateConfig: null,
+          updateServiceSelectRequest: false,
+          updateServicePick: null,
           serviceRestartInFlight: {},
           liveServicePhase: {},
           liveServiceIssues: {},
