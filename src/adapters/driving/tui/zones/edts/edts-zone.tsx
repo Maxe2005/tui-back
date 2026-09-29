@@ -602,6 +602,12 @@ export function EdtsZone({
               }
             : prev,
         );
+        void logEdtAction(
+          created.ulid,
+          'create',
+          'failed',
+          `Created EDT "${created.topic}" — not activated: not found after reloading the EDT list, the switch was not run`,
+        );
         return;
       }
       startSwitch(target);

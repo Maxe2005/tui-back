@@ -19,7 +19,7 @@ import {
   OVERWRITE_CONFIRM_FOOTER,
   overwriteConfirmLines,
 } from './activation.logic.js';
-import { ACTIVATION_LABELS, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from './wizard.logic.js';
+import { ACTIVATION_LABELS, activateLaterHint, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from './wizard.logic.js';
 // The branch part of a recap line: `base → target`, except a rename (its target already reads
 // `-> new`) and an [Existante] row attached under its own name, printed once.
 export function recapBranches(row: RowView): string {
@@ -156,10 +156,13 @@ export function ActivationStepView({
 }) {
   const { activation } = dialog;
   let body = null;
-  if (activation.outcome === 'stopped') {
-    body = <Text color={colors.warning}>{ACTIVATION_LABELS.stopped}</Text>;
-  } else if (activation.outcome === 'not-activated') {
-    body = <Text color={colors.warning}>{ACTIVATION_LABELS.notActivated}</Text>;
+  if (activation.outcome !== null) {
+    body = (
+      <>
+        <Text color={colors.warning}>{activation.outcome === 'stopped' ? ACTIVATION_LABELS.stopped : ACTIVATION_LABELS.notActivated}</Text>
+        <Text color={colors['text-dim']}>{activateLaterHint(activation.created?.topic ?? dialog.topic)}</Text>
+      </>
+    );
   } else if (activation.confirm !== null) {
     body = <OverwriteConfirm dialog={dialog} maxVisibleRows={maxVisibleRows} />;
   } else if (activation.blocked !== null) {

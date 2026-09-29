@@ -3881,9 +3881,16 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice (story 2.
       expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', outcome: 'success' })]);
       expect(logged[0]?.detail).toContain('not activated');
 
+      expect(frame).toContain('Activez-le plus tard via :edt-switch feat');
+
+      const beforeClose = stdout.output.length;
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
-      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('EDT créé mais non actif');
+      await vi.waitFor(() => {
+        const afterClose = stdout.output.slice(beforeClose);
+        expect(afterClose).not.toBe('');
+        expect(afterClose).not.toContain(WIZARD_TITLE);
+      });
       expect(store.getState().activeEdt).toBeNull();
     } finally {
       instance.unmount();
@@ -4036,6 +4043,130 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice (story 2.
       expect(lastWizardFrame(stdout)).toContain('disk full');
       expect(logged).toHaveLength(0);
       expect(switchCalls).toHaveLength(0);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  async function expectClosedAfter(instance: ReturnType<typeof render>, stdout: FakeTtyStdout, act: () => Promise<void>): Promise<void> {
+    const before = stdout.output.length;
+    await act();
+    await settle(instance);
+    await vi.waitFor(() => {
+      const after = stdout.output.slice(before);
+      expect(after).not.toBe('');
+      expect(after).not.toContain(WIZARD_TITLE);
+    });
+  }
+
+  it('activation error: "non activé" with the message and the per-repo rows, logged failed once to the new EDT; Enter closes', async () => {
+    const { store, logged } = step4Store({
+      existing: false,
+      activations: [
+        {
+          ok: false,
+          error: {
+            code: 'state-write-error',
+            message: 'disk full',
+            details: { results: [{ service: 'svc-a', outcome: 'switched' }, { service: 'svc-b', outcome: 'failed', detail: { code: 'x', message: 'checkout boom' } }] },
+          },
+        },
+      ],
+    });
+    const { instance, stdout, stdin } = await mountWizard(store, false);
+    try {
+      await reachStep4(instance, stdin);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+
+      const frame = lastWizardFrame(stdout);
+      expect(frame).toContain('EDT créé mais non activé');
+      expect(frame).toContain('disk full');
+      expect(frame).toContain('checkout boom');
+      expect(frame).toContain('basculé sur sa branche cible');
+      expect(frame).toContain('Activez-le plus tard via :edt-switch feat');
+      expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', actionType: 'create', outcome: 'failed' })]);
+
+      await expectClosedAfter(instance, stdout, () => press(instance, stdin, KEYS.enter));
+      expect(logged).toHaveLength(1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('activation error: Esc closes the "non activé" state too', async () => {
+    const { store } = step4Store({ existing: false, activations: [{ ok: false, error: { code: 'state-write-error', message: 'disk full' } }] });
+    const { instance, stdout, stdin } = await mountWizard(store, false);
+    try {
+      await reachStep4(instance, stdin);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastWizardFrame(stdout)).toContain('EDT créé mais non activé');
+
+      await expectClosedAfter(instance, stdout, () => pressEscape(instance, stdin));
+      expect(store.getState().quitRequested).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('activation with a failed row: stays open on the row and the "créé et activé, avec des échecs" footer; Enter closes; logged failed', async () => {
+    const { store, logged } = step4Store({
+      existing: false,
+      activations: [
+        {
+          ok: true,
+          data: {
+            ...ACTIVATED,
+            results: [
+              { service: 'svc-a', outcome: 'switched' },
+              { service: 'svc-b', outcome: 'failed', detail: { code: 'git-checkout-error', message: 'checkout boom' } },
+            ],
+          },
+        },
+      ],
+    });
+    const { instance, stdout, stdin } = await mountWizard(store, false);
+    try {
+      await reachStep4(instance, stdin);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+
+      const frame = lastWizardFrame(stdout);
+      expect(frame).toContain('checkout boom');
+      expect(frame).toContain('EDT créé et activé, avec des échecs');
+      expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', outcome: 'failed' })]);
+
+      await expectClosedAfter(instance, stdout, () => press(instance, stdin, KEYS.enter));
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('switch now, new EDT not found after reload: introuvable + non activé, no switch, logged failed to the new EDT; Enter closes', async () => {
+    const { store, switchCalls, logged } = step4Store({ existing: true });
+    store.setState({ loadEdts: async () => {} }); // the reload never brings the new entry
+    const { instance, stdout, stdin } = await mountWizard(store, true);
+    try {
+      await reachStep4(instance, stdin);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+
+      const frame = lastWizardFrame(stdout);
+      expect(frame).toContain('introuvable');
+      expect(frame).toContain('EDT créé mais non activé');
+      expect(switchCalls).toHaveLength(0);
+      expect(logged.map((entry) => [entry.ulid, entry.outcome])).toEqual([
+        ['new-ulid', 'success'],
+        ['new-ulid', 'failed'],
+      ]);
+      expect(logged[0]?.detail).toContain('(switch requested)');
+
+      await expectClosedAfter(instance, stdout, () => press(instance, stdin, KEYS.enter));
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

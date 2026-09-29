@@ -7,9 +7,11 @@
 // helpers (labels, the non-member return list, the log detail); its key reducer lives in
 // activation.logic.ts.
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
+import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { isSharedBranch } from '../../../../../../../core/edt/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
+import type { FailedResultRow } from '../../../../shared/components/failed-result-list.js';
 import {
   suggestBranchNameFromTopic,
   type BranchListState,
@@ -471,6 +473,11 @@ export const ACTIVATION_LABELS = {
   notActivated: "EDT créé mais non activé.",
 } as const;
 
+// The next step shown under the "created but not active" terminal messages.
+export function activateLaterHint(topic: string): string {
+  return `Activez-le plus tard via :edt-switch ${topic.trim()}`;
+}
+
 export type NonMemberReturn = { service: string; sharedBranch: string };
 
 // The services that are NOT members of the new EDT, each with the shared branch a switch sends
@@ -504,8 +511,34 @@ export function describeCreateForLog(
     case 'not-activated':
       return `${created} — not activated`;
     case 'switch':
-      return `${created} — switching to it`;
+      // Logged before the switch runs: the switch dialog logs its own outcome.
+      return `${created} (switch requested)`;
     case 'stay':
       return `${created} — active EDT unchanged`;
   }
+}
+
+// The per-repo `results` an activateEdt error carries in its details (a state-write failure, or
+// a pointer set by someone else meanwhile) — the checkouts already ran, so they must be shown.
+export function activationErrorResults(details: unknown): SwitchEdtRepoResult[] | null {
+  if (typeof details !== 'object' || details === null || !('results' in details)) {
+    return null;
+  }
+  const results = (details as { results: unknown }).results;
+  return Array.isArray(results) ? (results as SwitchEdtRepoResult[]) : null;
+}
+
+// Every per-repo row of an activation that did not complete, for FailedResultList: failures as
+// they are, and what already happened to the other repos (discarded files, checkouts).
+export function summarizeActivationResults(results: readonly SwitchEdtRepoResult[]): FailedResultRow[] {
+  return results.map((row) => {
+    if (row.outcome === 'failed') {
+      return { service: row.service, message: row.detail?.message ?? 'Failed' };
+    }
+    if (row.outcome === 'discarded') {
+      const paths = row.detail?.discardedPaths ?? [];
+      return { service: row.service, message: `fichiers écrasés (${paths.length}) : ${paths.join(', ')} — puis basculé sur sa branche cible` };
+    }
+    return { service: row.service, message: 'basculé sur sa branche cible' };
+  });
 }

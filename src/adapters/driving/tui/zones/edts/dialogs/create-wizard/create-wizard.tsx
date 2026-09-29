@@ -42,6 +42,7 @@ import {
   buildBreadcrumb,
   buildMemberPlans,
   buildStep3Rows,
+  activationErrorResults,
   canAdvance,
   checkNameAvailability,
   describeCreateForLog,
@@ -50,6 +51,7 @@ import {
   isStep3Busy,
   resolveWizardNavKey,
   STEP_INTROS,
+  summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
 
@@ -153,12 +155,17 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     patchActivation({ decision: null }, { submitting: true, error: null, failedRows: [] });
     const result = await deps.activateEdtAction(overwrite !== undefined ? { topic: created.topic, overwrite } : { topic: created.topic });
     if (!result.ok) {
-      patchActivation({ blocked: null, confirm: null, outcome: 'not-activated' }, { submitting: false, error: result.error.message });
+      // The per-repo checkouts may already have run (e.g. the state write failed after them):
+      // their rows are kept on screen, next to the error.
+      const results = activationErrorResults(result.error.details);
+      const failedRows = results !== null ? summarizeActivationResults(results) : [];
+      patchActivation({ blocked: null, confirm: null, outcome: 'not-activated' }, { submitting: false, error: result.error.message, failedRows });
+      const rows = failedRows.length > 0 ? ` — ${failedRows.map((row) => `${row.service}: ${row.message}`).join('; ')}` : '';
       await deps.logEdtAction(
         created.ulid,
         'create',
         'failed',
-        `${describeCreateForLog(created.topic, memberCount, 'not-activated')}: ${result.error.message}`,
+        `${describeCreateForLog(created.topic, memberCount, 'not-activated')}: ${result.error.message}${rows}`,
       );
       return;
     }
@@ -448,7 +455,8 @@ export function CreateWizardView({
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
         {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} maxRows={maxRows} maxVisibleRows={maxVisibleRows} /> : null}
         {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={maxVisibleRows} /> : null}
-        {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
+        {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
+        {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
         {dialog.submitting ? <DimAnnotation text={created ? 'Activation…' : 'Création…'} /> : null}
         {acknowledge ? (
           <Text color={colors['text-dim']}>

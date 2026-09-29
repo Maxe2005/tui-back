@@ -6,6 +6,8 @@ import {
   buildRowView,
   buildStep3Rows,
   canAdvance,
+  activateLaterHint,
+  activationErrorResults,
   checkNameAvailability,
   describeCreateForLog,
   EMPTY_NAME_ERROR,
@@ -19,6 +21,7 @@ import {
   resolveGlobalBase,
   resolveWizardNavKey,
   stepSummary,
+  summarizeActivationResults,
   TAKEN_NAME_ERROR,
 } from './wizard.logic.js';
 
@@ -332,5 +335,31 @@ describe('Step 4 helpers (story 2.38)', () => {
     expect(describeCreateForLog('feat', 2, 'activated')).toBe('Created EDT "feat" with 2 member(s) and activated it');
     expect(describeCreateForLog('feat', 1, 'stopped')).toContain('not activated (stopped');
     expect(describeCreateForLog('feat', 1, 'stay')).toContain('active EDT unchanged');
+    expect(describeCreateForLog('feat', 1, 'switch')).toBe('Created EDT "feat" with 1 member(s) (switch requested)');
+  });
+
+  it('activateLaterHint names the :edt-switch command with the topic', () => {
+    expect(activateLaterHint(' feat ')).toBe('Activez-le plus tard via :edt-switch feat');
+  });
+
+  it('activationErrorResults reads the per-repo rows from an error details, else null', () => {
+    const results = [{ service: 's', outcome: 'switched' as const }];
+    expect(activationErrorResults({ results })).toEqual(results);
+    expect(activationErrorResults(undefined)).toBeNull();
+    expect(activationErrorResults({ results: 'nope' })).toBeNull();
+  });
+
+  it('summarizeActivationResults keeps failures, discarded files and checkouts', () => {
+    expect(
+      summarizeActivationResults([
+        { service: 'a', outcome: 'failed', detail: { code: 'x', message: 'boom' } },
+        { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: '', discardedPaths: ['f.ts'] } },
+        { service: 'c', outcome: 'switched' },
+      ]),
+    ).toEqual([
+      { service: 'a', message: 'boom' },
+      { service: 'b', message: 'fichiers écrasés (1) : f.ts — puis basculé sur sa branche cible' },
+      { service: 'c', message: 'basculé sur sa branche cible' },
+    ]);
   });
 });
