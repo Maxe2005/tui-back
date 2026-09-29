@@ -339,4 +339,34 @@ describe('activateEdt — per-repo isolation', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'state-write-error', details: { results: expect.any(Array) } } });
   });
+
+  it('reports a setStatus failure as an edt-registry:activate-target row, the pointer still written', async () => {
+    const edtRegistry = fakeEdtRegistry([NEW_EDT], { setStatus: vi.fn(async () => err('edt-registry-write-error', 'readonly')) });
+    const state = fakeState();
+
+    const result = await activateEdt(makeParams({ edtRegistry, state }));
+
+    expect(result.ok && result.data.status === 'activated' && result.data.results).toContainEqual({
+      service: 'edt-registry:activate-target',
+      outcome: 'failed',
+      detail: { code: 'edt-registry-write-error', message: 'readonly' },
+    });
+    expect(calls(state.writeActiveEdt)).toEqual([['new-ulid']]);
+  });
+
+  it('refuses, keeping the other pointer, when another EDT became active during the checkouts', async () => {
+    const readActiveEdt = vi.fn(async () => ok<string | null>(null));
+    readActiveEdt.mockImplementationOnce(async () => ok(null)).mockImplementationOnce(async () => ok('winner-ulid'));
+    const state = fakeState(null, { readActiveEdt });
+    const edtRegistry = fakeEdtRegistry([NEW_EDT]);
+
+    const result = await activateEdt(makeParams({ state, edtRegistry }));
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'activate-has-outgoing', details: { results: [expect.objectContaining({ service: 'svc-a', outcome: 'switched' }), expect.anything()] } },
+    });
+    expect(calls(state.writeActiveEdt)).toHaveLength(0);
+    expect(calls(edtRegistry.setStatus)).toHaveLength(0);
+  });
 });

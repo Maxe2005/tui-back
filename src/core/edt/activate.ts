@@ -21,7 +21,10 @@
 // the path-scoped `discardPathsToHead`, never `discardAll`, then it is checked out. A repo whose
 // pre-flight read or checkout failed is a `failed` row; it never blocks the others. Finally
 // state.json's active pointer and the registry status `active` are written under the
-// edts.yaml lock (AD-9), whatever the per-repo outcomes (switch.ts's philosophy).
+// edts.yaml lock (AD-9), whatever the per-repo outcomes (switch.ts's philosophy) — after
+// re-reading the pointer under that lock: if another activation or switch set it meanwhile,
+// the pointer is kept and the call fails `activate-has-outgoing` with the per-repo `results`
+// in its details.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
@@ -148,6 +151,19 @@ export async function activateEdt(params: ActivateEdtParams): Promise<Result<Act
   }
 
   const written = await withActionLock(lock, edtRegistryResourceKey, async () => {
+    // Re-read under the lock: another activation or switch may have set an active EDT while
+    // this one ran its per-repo checkouts — never overwrite the pointer it won.
+    const activeNow = await state.readActiveEdt();
+    if (!activeNow.ok) {
+      return err(activeNow.error.code, activeNow.error.message, { results });
+    }
+    if (activeNow.data !== null) {
+      return err(
+        'activate-has-outgoing',
+        `Cannot activate "${topic}": another EDT became active meanwhile — its pointer was kept. Switch to "${topic}" instead.`,
+        { results },
+      );
+    }
     const wroteState = await state.writeActiveEdt(target.ulid);
     if (!wroteState.ok) {
       return err(wroteState.error.code, wroteState.error.message, { results });
