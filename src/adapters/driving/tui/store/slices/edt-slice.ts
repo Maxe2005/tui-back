@@ -68,7 +68,7 @@ export type CreateEdtParams = {
 };
 
 // Story 2.38: `overwrite` holds the at-risk paths the developer confirmed discarding, per repoPath.
-export type ActivateEdtParams = {
+export type ActivateEdtRequest = {
   topic: string;
   overwrite?: Record<string, string[]>;
 };
@@ -158,7 +158,7 @@ export type EdtSlice = {
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
   // Story 2.38: the first EDT's explicit activation (wizard Step 4) — core/edt/activate.ts.
   // `blocked` changes nothing; `activated` updates the cached active pointer like switchEdt.
-  activateEdt: (params: ActivateEdtParams) => Promise<Result<ActivateEdtData>>;
+  activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
   // The switch dirty-repo seam — mirrors UpdateSlice's updateBlocker/resolveUpdateBlocker
   // (story 3.4). Non-null while switchActiveEdt is paused inside switchEdt: story 2.39 raises

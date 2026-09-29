@@ -344,6 +344,31 @@ describe('edt slice — create never activates, activateEdt does (story 2.38)', 
     expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
     expect(deps.git.checkout).not.toHaveBeenCalled();
     expect(store.getState().activeEdt).toBeNull();
+
+    // The same call with every at-risk path confirmed proceeds and discards exactly the map's
+    // paths — proof the overwrite map reached the use-case.
+    const confirmed = await store.getState().activateEdt({ topic: 'target-topic', overwrite: { '/repo/a': ['a.ts', 'b.ts'] } });
+    expect(confirmed).toMatchObject({ ok: true, data: { status: 'activated' } });
+    expect(deps.git.discardPathsToHead).toHaveBeenCalledWith('/repo/a', ['a.ts', 'b.ts']);
+  });
+
+  it('an activated result reloads tab visibility; a blocked one does not', async () => {
+    const deps = fakeDeps();
+    (deps.state.readActiveEdt as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(null));
+    (deps.git.currentBranch as ReturnType<typeof vi.fn>).mockImplementation(async () => ok('main'));
+    (deps.git.listDirtyPaths as ReturnType<typeof vi.fn>).mockImplementation(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['a.ts'] : []));
+    (deps.git.diffNameOnly as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(['a.ts']));
+    const store = createAppStore(deps);
+    const loadTabVisibility = vi.fn(async () => {});
+    store.setState({ loadTabVisibility });
+
+    const blocked = await store.getState().activateEdt({ topic: 'target-topic' });
+    expect(blocked).toMatchObject({ ok: true, data: { status: 'blocked' } });
+    expect(loadTabVisibility).not.toHaveBeenCalled();
+
+    const activated = await store.getState().activateEdt({ topic: 'target-topic', overwrite: { '/repo/a': ['a.ts'] } });
+    expect(activated).toMatchObject({ ok: true, data: { status: 'activated' } });
+    expect(loadTabVisibility).toHaveBeenCalledTimes(1);
   });
 
   it('activateEdt on an unwired store is a store-not-wired error', async () => {
