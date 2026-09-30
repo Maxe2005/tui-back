@@ -46,9 +46,11 @@ import {
   shouldConfirmQuit,
   shouldOfferRerun,
   shouldOpenAllConfirm,
+  shouldOpenEdtConfig,
+  shouldOpenSingleConfig,
   UpdateZone,
 } from './update-zone.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, matchServicesBySubstring, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
@@ -255,10 +257,91 @@ describe('resolveUpdateTrigger (story 3.7, menu in 3.9)', () => {
       resolveUpdateTrigger('q', {}, 'idle'),
     ];
     for (const action of actions) {
-      expect(['open-all-config', 'open-service-menu', 'none']).toContain(action);
+      expect(['open-edt-config', 'open-all-config', 'open-service-menu', 'open-single-config', 'none']).toContain(action);
     }
     expect(actions).toContain('open-all-config');
     expect(actions).toContain('open-service-menu');
+  });
+});
+
+describe('shouldOpenEdtConfig / shouldOpenSingleConfig (story 3.11)', () => {
+  it('opens the edt-scoped config on g/G while idle/done/error, never mid-run', () => {
+    expect(shouldOpenEdtConfig('g', 'idle')).toBe(true);
+    expect(shouldOpenEdtConfig('G', 'done')).toBe(true);
+    expect(shouldOpenEdtConfig('g', 'error')).toBe(true);
+    expect(shouldOpenEdtConfig('g', 'running')).toBe(false);
+    expect(shouldOpenEdtConfig('G', 'running')).toBe(false);
+    expect(shouldOpenEdtConfig('x', 'idle')).toBe(false);
+    expect(shouldOpenEdtConfig('a', 'idle')).toBe(false);
+  });
+
+  it('opens the single-service config on p/P while idle/done/error, never mid-run', () => {
+    expect(shouldOpenSingleConfig('p', 'idle')).toBe(true);
+    expect(shouldOpenSingleConfig('P', 'done')).toBe(true);
+    expect(shouldOpenSingleConfig('p', 'error')).toBe(true);
+    expect(shouldOpenSingleConfig('p', 'running')).toBe(false);
+    expect(shouldOpenSingleConfig('P', 'running')).toBe(false);
+    expect(shouldOpenSingleConfig('x', 'idle')).toBe(false);
+    expect(shouldOpenSingleConfig('a', 'idle')).toBe(false);
+  });
+});
+
+describe('resolveUpdateTrigger (story 3.11: g/p)', () => {
+  it('opens the edt-scoped config on g/G while idle/done/error', () => {
+    expect(resolveUpdateTrigger('g', {}, 'idle')).toBe('open-edt-config');
+    expect(resolveUpdateTrigger('G', {}, 'done')).toBe('open-edt-config');
+    expect(resolveUpdateTrigger('g', {}, 'error')).toBe('open-edt-config');
+  });
+
+  it('opens the single-service config on p/P while idle/done/error', () => {
+    expect(resolveUpdateTrigger('p', {}, 'idle')).toBe('open-single-config');
+    expect(resolveUpdateTrigger('P', {}, 'done')).toBe('open-single-config');
+    expect(resolveUpdateTrigger('p', {}, 'error')).toBe('open-single-config');
+  });
+
+  it('yields none for g/p mid-run — a second trigger never starts a direct unconfigured run', () => {
+    expect(resolveUpdateTrigger('g', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('G', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('p', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('P', {}, 'running')).toBe('none');
+  });
+
+  it('still yields none for every other key while idle', () => {
+    expect(resolveUpdateTrigger('q', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('y', {}, 'idle')).toBe('none');
+    expect(resolveUpdateTrigger('x', {}, 'idle')).toBe('none');
+  });
+});
+
+describe('matchServicesBySubstring (story 3.11)', () => {
+  const CANDIDATES = [
+    { service: 'svc-a', repoPath: '/repo/a' },
+    { service: 'svc-b', repoPath: '/repo/b' },
+    { service: 'other', repoPath: '/repo/other' },
+  ];
+
+  it('matches every service on an empty query', () => {
+    expect(matchServicesBySubstring('', CANDIDATES)).toEqual(CANDIDATES);
+  });
+
+  it('filters by case-insensitive substring on the service name', () => {
+    expect(matchServicesBySubstring('svc', CANDIDATES)).toEqual([CANDIDATES[0], CANDIDATES[1]]);
+    expect(matchServicesBySubstring('SVC-A', CANDIDATES)).toEqual([CANDIDATES[0]]);
+    expect(matchServicesBySubstring('the', CANDIDATES)).toEqual([CANDIDATES[2]]);
+  });
+
+  it('trims the query and returns an explicit empty list on no match', () => {
+    expect(matchServicesBySubstring('  svc-a ', CANDIDATES)).toEqual([CANDIDATES[0]]);
+    expect(matchServicesBySubstring('zzz', CANDIDATES)).toEqual([]);
+  });
+
+  it('also matches a path substring so duplicate service names stay narrowable', () => {
+    const dupes = [
+      { service: 'svc', repoPath: '/repo/a' },
+      { service: 'svc', repoPath: '/repo/b' },
+    ];
+    expect(matchServicesBySubstring('repo/b', dupes)).toEqual([dupes[1]]);
+    expect(matchServicesBySubstring('/REPO/A', dupes)).toEqual([dupes[0]]);
   });
 });
 
@@ -358,6 +441,49 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain(UPDATE_ALL_REPOS_PROMPT);
   });
 
+  it('the idle prompt names all three triggers (main g, all-repos a, single-service p) plus the Enter menu', async () => {
+    expect(UPDATE_IDLE_PROMPT).toContain('[G]');
+    expect(UPDATE_IDLE_PROMPT).toContain('[P]');
+    expect(UPDATE_IDLE_PROMPT).toContain('[Enter]');
+    expect(UPDATE_ALL_REPOS_PROMPT).toContain('[A]');
+  });
+
+  it('an open service pick lists every candidate with the select/cancel hint', async () => {
+    const store = createAppStore();
+    store.setState({
+      updateServicePick: [
+        { service: 'svc-a', repoPath: '/repo/a' },
+        { service: 'svc-b', repoPath: '/repo/b' },
+      ],
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('UPDATE SERVICE');
+    expect(output).toContain('svc-a');
+    expect(output).toContain('/repo/a');
+    expect(output).toContain('svc-b');
+    expect(output).toContain('Enter selects, Esc cancels.');
+  });
+
+  it('a closed service pick renders no pick modal', async () => {
+    const store = createAppStore();
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).not.toContain('UPDATE SERVICE');
+  });
+
+  it('an empty pick (nothing matching) names the Esc recovery key', async () => {
+    const store = createAppStore();
+    store.setState({ updateServicePick: [] });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('UPDATE SERVICE');
+    expect(output).toContain('No matching services — [Esc] to close.');
+  });
+
   it('idle with an interrupted active EDT shows the re-run offer', async () => {
     const store = createAppStore();
     store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1' });
@@ -446,7 +572,7 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('1 updated, 0 skipped, 1 failed');
     // Story 3.9: Enter opens the row-local service menu — the follow-up hint promises
     // the menu, never a direct re-run.
-    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).toContain(UPDATE_IDLE_PROMPT);
     expect(output).not.toContain('to run again');
   });
 
@@ -480,7 +606,7 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('has no member services');
     expect(output).not.toContain('0 updated, 0 skipped, 0 failed');
-    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).toContain(UPDATE_IDLE_PROMPT);
   });
 
   it('error shows the message, the kebab-case code, and the retry hint', async () => {
@@ -492,7 +618,7 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('No active EDT');
     expect(output).toContain('no-active-edt');
     // Story 3.9: the retry hint promises the service-actions menu, never a direct retry.
-    expect(output).toContain('Press [Enter] for service actions.');
+    expect(output).toContain(UPDATE_IDLE_PROMPT);
     expect(output).not.toContain('to try again');
   });
 

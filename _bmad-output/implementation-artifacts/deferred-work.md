@@ -1,5 +1,14 @@
 # Deferred Work
 
+## Deferred from: review of 3-11-update-commands-main-all-repos-single-service (2026-09-29)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
+  summary: A future epic-2 → epic-3 merge must reconcile two parallel implementations of the command zone-switch (`runCommand()` + `zoneId`) and the filterable quick-pick (update-service pick vs 2.30 EDT pick).
+  evidence: the 3.11 spec required syncing epic-2 first, but epic-2 has diverged (wizard stories 2.35-2.38), so 3.11 built the assumed contracts locally in `src/adapters/driving/tui/shared/command-bar.tsx` (`runCommand`) and `src/adapters/driving/tui/zones/update/` (service pick) instead of reusing epic-2's `670bfcb`/`7fcf592` — a side-effect fix to `edt-switch <topic>` arg dispatch is also bundled in. Surfaced by design (documented in the spec's own task 1 DONE AS), not by review layers.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
+  summary: Duplicate service names across managed repos have no disambiguation in the `:update-service <name>` path — it resolves to the first match with no ambiguous-name handling.
+  evidence: `src/adapters/driving/tui/store/slices/update-slice.ts`'s `openSingleServiceConfig` returns the first case-insensitive match in both the EDT-member and registry loops; the same duplicate-name collision is already tracked for the Update zone's outcome map (see 3-6 deferred entries). Surfaced by blind-hunter review layer.
+
 ## Deferred from: sprint-change-proposal-2026-09-24-2 (edt switch three-state model) (2026-09-24)
 
 - source_spec: `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-24-2.md`

@@ -29,7 +29,13 @@ import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
-import { COMMANDS, matchCommands, findExactCommand, runCommand, type Command } from '../commands/commands.js';
+import {
+  COMMANDS,
+  matchCommands,
+  findExactCommand,
+  runCommand as runCommandInZone,
+  type Command,
+} from '../commands/commands.js';
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same
 // query, with no intervening key, to reveal the grid (Boundaries: "TAB_DOUBLE_PRESS_WINDOW_MS
@@ -396,6 +402,38 @@ export function commandAtGridCursor<T>(columns: readonly (readonly T[])[], curso
   return columns[cursor.column]?.[cursor.row];
 }
 
+// Story 3.11: the single Enter-dispatch entry point. The command name is the query's
+// first whitespace-separated token (case-insensitive) so commands that take an argument
+// (`edt-switch <topic>`, `update-service <name>`) dispatch on their name while the run
+// itself still receives the full query to parse. The zone switch itself is delegated to
+// commands.ts's own runCommand (a command carrying `zoneId` activates that zone first,
+// unless it is already active) so the opened screen lives where the developer lands.
+// Returns true when a command ran, false when nothing matched (the caller shows the
+// unknown-command message). Pure dispatch over the registry — directly unit-testable
+// without mounting Ink.
+export function runCommand(
+  useStore: AppStore,
+  fullQuery: string,
+  commands: readonly Command[] = COMMANDS,
+): boolean {
+  const name = fullQuery.trim().split(/\s+/)[0] ?? '';
+  if (name === '') {
+    return false;
+  }
+  const exact = findExactCommand(name, commands);
+  if (!exact) {
+    return false;
+  }
+  // A synchronously throwing command must never escape the Enter handler into Ink —
+  // the command was recognized, so the bar still closes as today.
+  try {
+    runCommandInZone(exact, useStore, fullQuery);
+  } catch {
+    // Recognized but failed: swallow the throw, the bar still closes.
+  }
+  return true;
+}
+
 export type CommandBarProps = {
   useStore?: AppStore;
   onClose: () => void;
@@ -513,9 +551,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     }
 
     if (key.return) {
-      const exact = findExactCommand(query, COMMANDS);
-      if (exact) {
-        runCommand(exact, useStore, query);
+      if (runCommand(useStore, query)) {
         onClose();
       } else {
         setUnknownCommand(true);

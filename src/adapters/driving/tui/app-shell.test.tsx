@@ -431,6 +431,13 @@ it('shouldQuit returns true for q', () => {
         // Story 3.7: pre-run configuration screen state
         updateConfig: null,
         openUpdateConfig: async () => {},
+        // Story 3.11: single-service command entry point + service quick-pick state
+        openUpdateServiceDialog: async () => {},
+        updateServiceSelectRequest: false,
+        clearUpdateServiceSelectionRequest: () => {},
+        updateServicePick: null,
+        openUpdateServicePick: async () => {},
+        closeUpdateServicePick: () => {},
         setUpdateConfig: () => {},
         closeUpdateConfig: () => {},
         confirmUpdateConfig: async () => {},

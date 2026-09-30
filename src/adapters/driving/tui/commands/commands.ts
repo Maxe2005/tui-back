@@ -77,6 +77,31 @@ export const COMMANDS: readonly Command[] = [
       }
     },
   },
+  // Story 3.11: the three update commands — each opens the story 3.7 config screen
+  // pre-scoped to its own targets, never starting an unconfigured run. The bar's
+  // runCommand() activates the Update zone first (zoneId above); the run itself only
+  // dispatches through the store (this file's DI convention).
+  {
+    name: 'update-edt',
+    zoneId: 'update',
+    run: (useStore) => {
+      void useStore.getState().openUpdateConfig('edt');
+    },
+  },
+  {
+    name: 'update-all',
+    zoneId: 'update',
+    run: (useStore) => {
+      void useStore.getState().openUpdateConfig('all');
+    },
+  },
+  {
+    name: 'update-service',
+    zoneId: 'update',
+    run: (useStore, fullQuery) => {
+      void useStore.getState().openUpdateServiceDialog(fullQuery);
+    },
+  },
 ];
 
 // Pure prefix filter, case-insensitive — mirrors zones.ts's pure-function convention
