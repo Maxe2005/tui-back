@@ -62,9 +62,9 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/ports/route-scanner.ts` -- add `RouteParameter{name,in,required,example?}` and `Route.parameters?/bodyContentType?/bodyExample?` -- neutral port data.
-- [ ] `src/adapters/driven/modules/route-explorer/schema-example.ts` + `.test.ts` -- `resolveLocalRef`, `generateExample`, depth/cycle guards -- pure, all generation rules covered.
-- [ ] `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts` + test -- parameter merge, requestBody content-type choice, example priority, degradation per operation -- I/O matrix rows.
+- [x] `src/core/ports/route-scanner.ts` -- add `RouteParameter{name,in,required,example?}` and `Route.parameters?/bodyContentType?/bodyExample?` -- neutral port data.
+- [x] `src/adapters/driven/modules/route-explorer/schema-example.ts` + `.test.ts` -- `resolveLocalRef`, `generateExample`, depth/cycle guards -- pure, all generation rules covered.
+- [x] `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts` + test -- parameter merge, requestBody content-type choice, example priority, degradation per operation -- I/O matrix rows.
 - [ ] Extend existing `nestjs-openapi` tests so the plain-route rows still equal their pre-6.6 shape.
 
 **Acceptance Criteria:**
