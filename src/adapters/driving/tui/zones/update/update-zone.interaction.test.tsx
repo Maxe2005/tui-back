@@ -429,14 +429,14 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     return store;
   }
 
-  it('typing narrows the list to the empty state with its Esc hint', async () => {
+  it('typing a filter that matches nothing shows the explicit no-match line', async () => {
     const store = storeWithPick();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'zzz');
-      await waitForOutput(instance, stdout, 'No matching services — [Esc] to close.');
+      await waitForOutput(instance, stdout, 'No matching service');
 
       expect(store.getState().updateServicePick).not.toBeNull();
       expect(store.getState().updateConfig).toBeNull();
@@ -485,6 +485,68 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     }
   });
 
+  it('the filter also matches the repo path, so Enter confirms the path-matched service', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '/repo/b');
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Home/End move the caret in the filter text and leave the highlighted row alone', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down); // highlight svc-b
+      await press(instance, stdin, KEYS.home);
+      // Decisive proof: a Home that jumped the list back to its first row would make this
+      // Enter confirm svc-a instead.
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the filter is caret-editable: text typed after a Left is inserted at the caret, not appended', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'b');
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, 'svc-');
+      // The filter now reads "svc-b". An append-only field would read "bsvc-", match
+      // nothing, and make this Enter a no-op.
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateServicePick).toBeNull();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('Esc closes the pick with no config opened', async () => {
     const store = storeWithPick();
 
@@ -509,7 +571,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'zzz');
-      await waitForOutput(instance, stdout, 'No matching services — [Esc] to close.');
+      await waitForOutput(instance, stdout, 'No matching service');
       await press(instance, stdin, KEYS.enter);
       await instance.waitUntilRenderFlush();
 
