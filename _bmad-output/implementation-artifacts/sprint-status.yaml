@@ -109,6 +109,9 @@ last_updated: 2026-09-30
 # 2026-09-28: Sprint Change Proposal (sprint-change-proposal-2026-09-28-2.md) appended story 5-6
 # (command history recall + shared input-history primitive) to epic-5 — new backlog entry below;
 # stories 5-4/5-5 not reopened (5-6 refactors 5-4's history code behavior-preservingly).
+# 2026-09-30: Sprint Change Proposal (sprint-change-proposal-2026-09-30.md) appended stories 6-6..6-9
+# (scanner extension, JsonTree read-only/edit, Routes right pane request step + sub-tabs) to epic-6,
+# to run BEFORE 6-3; 6-3 re-scoped, 6-4 lands its logs in the Logs sub-tab. Stories 6-1/6-2 not reopened.
 # 2026-09-30: epics 3, 5 and 6 synced into epic-2. Epic-5's own 2026-09-28 proposal renamed to
 # sprint-change-proposal-2026-09-28-2.md (filename collided with epic-2's stories 2-42/2-43 proposal).
 project: tui-back
@@ -220,5 +223,10 @@ development_status:
   6-3-save-customize-and-re-fire-a-request: backlog
   6-4-see-response-and-relevant-logs-together: backlog
   6-5-manage-the-saved-request-library-across-edts: backlog
+  # 6-6..6-9 appended 2026-09-30 (sprint-change-proposal-2026-09-30.md); execution order: 6-6 -> 6-9, then 6-3, 6-4, 6-5.
+  6-6-scanner-extension-parameters-request-body-skeletons: backlog
+  6-7-jsontree-component-read-only-navigation-collapse-session-filters: backlog
+  6-8-jsontree-edit-mode-request-body-editing: backlog
+  6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs: backlog
   epic-6-retrospective: optional
 
