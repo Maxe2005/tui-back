@@ -339,13 +339,13 @@ describe('SettingsScreen (story 2.19)', () => {
 
   it('renders the quitShortcutEnabled checkbox on the General tab, checked/unchecked to match the live setting', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true, editorCommand: '' } } });
     const checked = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
     const checkedLine = checked.split('\n').find((line) => line.includes("Enable 'q' to quit"));
     expect(checkedLine).toContain('[x]');
     expect(checked).toContain('Space to toggle');
 
-    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: false } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: false, editorCommand: '' } } });
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
     const uncheckedLine = unchecked.split('\n').find((line) => line.includes("Enable 'q' to quit"));
     expect(uncheckedLine).toContain('[ ]');

@@ -16,6 +16,12 @@ export interface Settings {
   // of this flag (Boundaries: only the raw `q` keypress is gated, never the command).
   general: {
     quitShortcutEnabled: boolean;
+    // The command line the Update zone's "Open in editor" choice runs on a blocked repo
+    // (dirty worktree, merge conflict). `<repo>` is replaced by the repo's path — e.g.
+    // `code <repo>` opens a VS Code window on the repo with its merge in progress; a
+    // command without the placeholder gets the path appended as its last argument. Empty
+    // (the default) keeps the pre-existing behavior: `$EDITOR`, falling back to `vi`.
+    editorCommand: string;
   };
   commandPalette: {
     gridMaxRows: number;
@@ -67,7 +73,7 @@ export interface Settings {
 // pre-2.19 `createAppStore()` call left unwired in a test).
 export const DEFAULT_SETTINGS: Settings = {
   // Default true preserves the pre-existing behavior for anyone who never opens :settings.
-  general: { quitShortcutEnabled: true },
+  general: { quitShortcutEnabled: true, editorCommand: '' },
   commandPalette: { gridMaxRows: 8 },
   edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
   // Story 5.1's Boundaries: "a per-service in-memory ring buffer sized by
