@@ -11,10 +11,24 @@
 // list). Both are kebab-case per AD-3.
 import type { Result } from '../result.js';
 
+// Story 6.6: a route may also carry the request details its scanner could discover —
+// parameters, the body content type and a body example. All optional and plain data: a
+// scanner that discovers none of them (or a spec without them) simply omits the keys, and
+// no scanner-specific vocabulary (schema, $ref, …) ever crosses this port.
+export interface RouteParameter {
+  name: string;
+  in: 'path' | 'query' | 'header';
+  required: boolean;
+  example?: unknown;
+}
+
 export interface Route {
   method: string;
   path: string;
   summary?: string;
+  parameters?: RouteParameter[];
+  bodyContentType?: string;
+  bodyExample?: unknown;
 }
 
 export interface RouteScannerPort {
