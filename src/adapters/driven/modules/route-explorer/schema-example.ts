@@ -1,0 +1,131 @@
+// adapters/driven/modules/route-explorer/schema-example: pure helpers of the
+// `nestjs-openapi` scanner (story 6.6) — resolve local `#/components/...` `$ref`s and
+// generate a JSON example value from an OpenAPI schema. Never throws: an unresolvable
+// reference, an unknown shape or a cyclic/too-deep branch degrades to `null`/`{}`, so a
+// malformed schema can at worst yield a poorer skeleton, never a failed scan. Only local
+// references are followed (no file/http `$ref` fetching).
+const MAX_DEPTH = 8;
+const LOCAL_REF_PREFIX = '#/';
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Follows `#/a/b/c` inside `document`; returns undefined for external refs, missing
+// targets or non-object targets.
+export function resolveLocalRef(document: unknown, ref: unknown): Record<string, unknown> | undefined {
+  if (typeof ref !== 'string' || !ref.startsWith(LOCAL_REF_PREFIX)) {
+    return undefined;
+  }
+  let current: unknown = document;
+  for (const rawSegment of ref.slice(LOCAL_REF_PREFIX.length).split('/')) {
+    const segment = rawSegment.replace(/~1/g, '/').replace(/~0/g, '~');
+    if (!isRecord(current) || !(segment in current)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return isRecord(current) ? current : undefined;
+}
+
+// Dereferences a possibly-`$ref` node (chains bounded so a ref loop cannot spin).
+export function dereference(document: unknown, node: unknown): Record<string, unknown> | undefined {
+  let current: unknown = node;
+  for (let hops = 0; hops <= MAX_DEPTH; hops += 1) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+    if (current['$ref'] === undefined) {
+      return current;
+    }
+    current = resolveLocalRef(document, current['$ref']);
+  }
+  return undefined;
+}
+
+function mergedProperties(
+  document: unknown,
+  schema: Record<string, unknown>,
+  seen: readonly unknown[],
+  depth: number,
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  const allOf = schema['allOf'];
+  if (Array.isArray(allOf)) {
+    for (const part of allOf) {
+      const resolved = dereference(document, part);
+      if (resolved !== undefined && !seen.includes(resolved)) {
+        Object.assign(properties, mergedProperties(document, resolved, [...seen, resolved], depth + 1));
+      }
+    }
+  }
+  const own = schema['properties'];
+  if (isRecord(own)) {
+    Object.assign(properties, own);
+  }
+  return properties;
+}
+
+function generate(document: unknown, node: unknown, seen: readonly unknown[], depth: number): unknown {
+  const schema = dereference(document, node);
+  if (schema === undefined || depth > MAX_DEPTH || seen.includes(schema)) {
+    return null;
+  }
+  const path = [...seen, schema];
+  if (schema['example'] !== undefined) {
+    return schema['example'];
+  }
+  if (schema['default'] !== undefined) {
+    return schema['default'];
+  }
+  const enumValues = schema['enum'];
+  if (Array.isArray(enumValues) && enumValues.length > 0) {
+    return enumValues[0];
+  }
+  for (const key of ['oneOf', 'anyOf'] as const) {
+    const branches = schema[key];
+    if (Array.isArray(branches) && branches.length > 0) {
+      return generate(document, branches[0], path, depth + 1);
+    }
+  }
+
+  const properties = mergedProperties(document, schema, path, depth);
+  const declared = schema['type'];
+  const type =
+    typeof declared === 'string'
+      ? declared
+      : Object.keys(properties).length > 0 || Array.isArray(schema['allOf'])
+        ? 'object'
+        : schema['items'] !== undefined
+          ? 'array'
+          : undefined;
+
+  switch (type) {
+    case 'object': {
+      const result: Record<string, unknown> = {};
+      for (const [name, property] of Object.entries(properties)) {
+        result[name] = generate(document, property, path, depth + 1);
+      }
+      return result;
+    }
+    case 'array':
+      return [generate(document, schema['items'], path, depth + 1)];
+    case 'string':
+      return '';
+    case 'number':
+    case 'integer':
+      return 0;
+    case 'boolean':
+      return false;
+    default:
+      return null;
+  }
+}
+
+export function generateExample(document: unknown, schema: unknown): unknown {
+  try {
+    return generate(document, schema, [], 0);
+  } catch {
+    return null;
+  }
+}
