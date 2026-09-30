@@ -2,27 +2,26 @@
 // topics, opened in place of `edt-switch`/`edt-modify`/`edt-delete`'s old no-argument
 // fallbacks (edts-zone.tsx's `currentEdtAction` effect). Extracted following the
 // switch-dialog.tsx precedent (thin `createXDialogHandlers` object + `XDialogView` function,
-// Esc/Enter-only dispatch, no submit network call here — just navigation to another dialog).
+// no submit network call here — just navigation to another dialog).
 //
 // story 2.30 (Boundaries: "one shared quick-pick dialog ... mode: 'switch' | 'modify' |
-// 'delete'"). Never a second filterable-list *component* duplicating branch-picker.tsx's
-// `FilterableBranchList` (it's branch-name-shaped, this is EDT-topic-shaped) — `matchEdtsByPrefix`
-// and the inline row rendering below mirror its convention (case-insensitive prefix match,
-// `colors.accent` + `'› '` prefix on the highlighted row) without importing from it.
-import { Box, Text, type Key } from 'ink';
+// 'delete'"). The pick interaction itself (substring filter, highlight movement, filter-text
+// editing, bounded rows) is shared/components/filterable-pick-list.tsx — the same component
+// the Update zone's service pick renders through. This file only owns what is EDT-specific:
+// the per-mode candidate pool and which pre-targeted dialog a selection opens.
+import type { Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
+import {
+  FilterablePickList,
+  handleFilterablePickListKey,
+  type FilterablePickItem,
+} from '../../../shared/components/filterable-pick-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
-import { TextInputLine } from '../../../shared/components/text-input-line.js';
-import { nextTextInputValue } from '../../../shared/components/text-edit.js';
-import { colors } from '../../../shared/theme/theme.js';
 import {
   initialDeleteDialog,
   initialModifyDialog,
   initialSwitchDialog,
-  moveSelection,
-  resolveSelectionDirection,
   type EdtDialogState,
   type QuickPickDialogState,
   type QuickPickMode,
@@ -42,11 +41,10 @@ export function resolveQuickPickCandidates(
   return [...edtsRows];
 }
 
-// Case-insensitive prefix match on topic — same convention as matchCommands/
-// matchBranchesByPrefix (Boundaries).
-export function matchEdtsByPrefix(query: string, edts: readonly EdtRegistryEntry[]): EdtRegistryEntry[] {
-  const needle = query.toLowerCase();
-  return edts.filter((entry) => entry.topic.toLowerCase().startsWith(needle));
+// The pool as shared pick items: filtered and labelled by topic only (no secondary text),
+// keyed by ulid.
+export function toQuickPickItems(pool: readonly EdtRegistryEntry[]): FilterablePickItem<EdtRegistryEntry>[] {
+  return pool.map((entry) => ({ key: entry.ulid, label: entry.topic, value: entry }));
 }
 
 const QUICK_PICK_TITLE: Record<QuickPickMode, string> = {
@@ -64,21 +62,13 @@ export type QuickPickDialogDeps = {
 
 export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
   function handleQuickPickDialogInput(current: QuickPickDialogState, input: string, key: Key) {
+    const items = toQuickPickItems(resolveQuickPickCandidates(current.mode, deps.edtsRows, deps.activeEdtUlid));
+    const result = handleFilterablePickListKey(current, items, input, key);
+
     // Boundary: "Esc closes the quick-pick from any mode with no dialog opened."
-    if (key.escape) {
+    if (result.type === 'cancel') {
       deps.setDialog({ kind: 'none' });
       deps.setCurrentEdtAction(null);
-      return;
-    }
-
-    const pool = resolveQuickPickCandidates(current.mode, deps.edtsRows, deps.activeEdtUlid);
-    const matches = matchEdtsByPrefix(current.query, pool);
-
-    const direction = resolveSelectionDirection(key);
-    if (direction !== null) {
-      deps.setDialog((prev) =>
-        prev.kind === 'quick-pick' ? { ...prev, cursor: moveSelection(prev.cursor, direction, matches.length) } : prev,
-      );
       return;
     }
 
@@ -87,11 +77,8 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
     // unchanged." Selecting the active EDT under delete mode opens the existing rejection
     // dialog (initialDeleteDialog's own isActive check) — unchanged, just reached via the
     // picker instead of the focused-row fallback.
-    if (key.return) {
-      const target = matches[current.cursor];
-      if (target === undefined) {
-        return;
-      }
+    if (result.type === 'select') {
+      const target = result.item.value;
       if (current.mode === 'switch') {
         deps.setDialog(initialSwitchDialog(target));
       } else if (current.mode === 'modify') {
@@ -103,42 +90,23 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
       return;
     }
 
-    // Left/Right/Home/End/Backspace/typed-char edit the filter via nextTextInputValue (Code
-    // Map) — every other key (arrows/Return/Escape already handled above, plus Tab) is a
-    // defensive no-op inside nextTextInputValue itself.
-    const edited = nextTextInputValue({ value: current.query, cursor: current.queryCursor }, input, key);
-    // A pure caret move leaves `query`'s value unchanged — the highlighted row must survive
-    // it. Only an actual filter-text change re-derives the match list and resets the row
-    // cursor to the top (mirrors branch-picker.tsx's handlePickExistingKey).
-    const nextCursor = edited.value === current.query ? current.cursor : 0;
-    deps.setDialog((prev) =>
-      prev.kind === 'quick-pick' ? { ...prev, query: edited.value, queryCursor: edited.cursor, cursor: nextCursor } : prev,
-    );
+    const next = result.state;
+    deps.setDialog((prev) => (prev.kind === 'quick-pick' ? { ...prev, ...next } : prev));
   }
 
   return { handleQuickPickDialogInput };
 }
 
 export function QuickPickDialogView({ dialog, pool }: { dialog: QuickPickDialogState; pool: readonly EdtRegistryEntry[] }) {
-  const matches = matchEdtsByPrefix(dialog.query, pool);
   return (
     <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} onConfirm={() => {}} onCancel={() => {}} open={true}>
-      <Box flexDirection="column">
-        <TextInputLine label="Filter" value={dialog.query} cursor={dialog.queryCursor} focused />
-        {matches.length === 0 ? (
-          <DimAnnotation text="No matching EDT" />
-        ) : (
-          <Box flexDirection="column" paddingLeft={2}>
-            {matches.map((entry, index) => (
-              <Text key={entry.ulid} color={index === dialog.cursor ? colors.accent : colors.text}>
-                {index === dialog.cursor ? '› ' : '  '}
-                {entry.topic}
-              </Text>
-            ))}
-          </Box>
-        )}
-        <Text color={colors.text}>[Enter] select  [Esc] cancel</Text>
-      </Box>
+      <FilterablePickList
+        label="Filter"
+        state={dialog}
+        items={toQuickPickItems(pool)}
+        emptyText="No EDT to select"
+        noMatchText="No matching EDT"
+      />
     </ModalDialog>
   );
 }

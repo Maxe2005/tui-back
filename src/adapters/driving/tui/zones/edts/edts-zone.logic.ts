@@ -13,6 +13,7 @@ import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
+import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
 import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';
@@ -895,21 +896,13 @@ export type IssuesDialogState = { kind: 'issues' };
 // active EDT, modify/delete include it) and which pre-targeted dialog Enter opens.
 export type QuickPickMode = 'switch' | 'modify' | 'delete';
 
+// The pick's own filter text, caret and highlighted row are the shared component's state
+// (shared/components/filterable-pick-list.tsx), embedded here so the dialog stays one member
+// of this zone's dialog union.
 export type QuickPickDialogState = {
   kind: 'quick-pick';
   mode: QuickPickMode;
-  // The filter field's own value/caret — same TextInputState-shaped pair every other field in
-  // this file uses, fed through nextTextInputValue directly (Code Map: "reuse directly for the
-  // filter field's caret handling").
-  query: string;
-  queryCursor: number;
-  // The highlighted row within the *current* filtered match list — reset to 0 whenever the
-  // filter text itself changes (mirrors branch-picker.tsx's handlePickExistingKey: "a pure
-  // caret move leaves pickQuery's value unchanged ... only an actual filter-text change
-  // re-derives the match list and resets pickCursor to the top"), clamped to
-  // [0, matches.length - 1] by moveSelection on Up/Down.
-  cursor: number;
-};
+} & FilterablePickListState;
 
 export type EdtDialogState =
   | { kind: 'none' }
@@ -927,7 +920,7 @@ export function initialIssuesDialog(): IssuesDialogState {
 }
 
 export function initialQuickPickDialog(mode: QuickPickMode): QuickPickDialogState {
-  return { kind: 'quick-pick', mode, query: '', queryCursor: 0, cursor: 0 };
+  return { kind: 'quick-pick', mode, ...createFilterablePickListState() };
 }
 
 export function initialCreateDialog(): CreateDialogState {
