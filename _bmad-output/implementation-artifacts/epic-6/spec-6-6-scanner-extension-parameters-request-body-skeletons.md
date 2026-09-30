@@ -2,7 +2,7 @@
 title: 'Scanner Extension — Parameters & Request-Body Skeletons'
 type: 'feature'
 created: '2026-09-30'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 baseline_commit: 'e55ef39a72eae6f037cffe9ef29fcd9c31aff822'
 context:
