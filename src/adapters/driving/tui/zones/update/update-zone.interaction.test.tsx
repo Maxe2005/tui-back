@@ -504,7 +504,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     }
   });
 
-  it('Home/End move the caret in the filter text and leave the highlighted row alone', async () => {
+  it('Home no longer jumps the list to its first row: the highlighted row survives it', async () => {
     const store = storeWithPick();
 
     const { instance, stdout, stdin } = mount(store);
@@ -519,6 +519,65 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Home and End move the caret to both ends of the filter text', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'vc');
+      await press(instance, stdin, KEYS.home);
+      await press(instance, stdin, 's'); // "svc" only if Home moved the caret to the start
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, '-b'); // "svc-b" only if End moved it back to the end
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a reopened pick starts unfiltered on its first row, whether Esc or the store closed it', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      // First session: narrow to svc-b, then Esc.
+      await press(instance, stdin, 'svc-b');
+      await pressEscape(instance, stdin);
+      expect(store.getState().updateServicePick).toBeNull();
+
+      // Second session: move the highlight off the first row, then the store itself closes
+      // the pick (the path no key handler sees).
+      store.setState({ updateServicePick: PICK });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      store.setState({ updateServicePick: null });
+      await instance.waitUntilRenderFlush();
+
+      // Third session: Enter must confirm the first candidate — a leftover "svc-b" filter
+      // or a leftover highlight on the second row would both confirm svc-b instead.
+      store.setState({ updateServicePick: PICK });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-a');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-a', repoPath: '/repo/a', selected: true }],
       });
     } finally {
       instance.unmount();

@@ -90,8 +90,16 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
       return;
     }
 
-    const next = result.state;
-    deps.setDialog((prev) => (prev.kind === 'quick-pick' ? { ...prev, ...next } : prev));
+    // Re-run the reducer against the latest dialog state rather than applying the result
+    // computed from `current` (this render's snapshot): two keypresses delivered before a
+    // re-render (key-repeat) must each build on the previous one, never overwrite it.
+    deps.setDialog((prev) => {
+      if (prev.kind !== 'quick-pick') {
+        return prev;
+      }
+      const latest = handleFilterablePickListKey(prev, items, input, key);
+      return latest.type === 'update' ? { ...prev, ...latest.state } : prev;
+    });
   }
 
   return { handleQuickPickDialogInput };

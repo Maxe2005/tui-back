@@ -457,12 +457,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     }
   }, [isUpdateConfigOpen]);
 
-  // Story 3.11: a newly opened service pick always starts unfiltered on its first row.
-  // Keyed on the open boolean — never the candidate list — so a store refresh underneath
-  // doesn't snap the cursor back or wipe typed filter text.
+  // Story 3.11: a newly opened service pick always starts unfiltered on its first row. The
+  // single reset point is the pick *closing* — whoever closed it (Enter, Esc, or the store
+  // itself on a run start/reset) — so the next open never paints a frame of the previous
+  // session's filter. Keyed on the open boolean — never the candidate list — so a store
+  // refresh underneath doesn't snap the cursor back or wipe typed filter text.
   const isUpdateServicePickOpen = updateServicePick !== null;
   useEffect(() => {
-    if (isUpdateServicePickOpen) {
+    if (!isUpdateServicePickOpen) {
       setPickState(createFilterablePickListState());
     }
   }, [isUpdateServicePickOpen]);
@@ -584,12 +586,18 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // only acts on its outcome: Enter confirms the highlighted service into the 3.7
       // config pre-scoped to it, Esc closes without opening anything.
       if (updateServicePick !== null) {
-        const result = handleFilterablePickListKey(pickState, toServicePickItems(updateServicePick), input, key);
+        const pickItems = toServicePickItems(updateServicePick);
+        const result = handleFilterablePickListKey(pickState, pickItems, input, key);
         if (result.type === 'update') {
-          setPickState(result.state);
+          // Re-run the reducer against the latest state rather than applying the result
+          // computed from `pickState` (this render's snapshot): two keypresses delivered
+          // before a re-render (key-repeat) must each build on the previous one.
+          setPickState((previous) => {
+            const latest = handleFilterablePickListKey(previous, pickItems, input, key);
+            return latest.type === 'update' ? latest.state : previous;
+          });
           return;
         }
-        setPickState(createFilterablePickListState());
         closeUpdateServicePick();
         if (result.type === 'select') {
           void openUpdateConfig({ service: result.item.value.service, repoPath: result.item.value.repoPath });

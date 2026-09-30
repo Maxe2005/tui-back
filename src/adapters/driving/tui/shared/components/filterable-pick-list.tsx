@@ -27,9 +27,9 @@ import { ListRow } from './list-row.js';
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';
 import { TextInputLine } from './text-input-line.js';
 
-// The row budget every pick dialog passes to the view — one shared constant so the dialogs
-// can never disagree on how tall the list gets. A *total* budget in BoundedList's own sense
-// (the "more above"/"more below" indicator lines count against it).
+// The row budget of every pick dialog — one shared constant, deliberately not a prop, so the
+// dialogs can never disagree on how tall the list gets. A *total* budget in BoundedList's
+// own sense (the "more above"/"more below" indicator lines count against it).
 export const FILTERABLE_PICK_LIST_MAX_ROWS = 8;
 
 export type FilterablePickItem<T> = {
@@ -56,6 +56,12 @@ export function createFilterablePickListState(): FilterablePickListState {
   return { query: '', queryCursor: 0, cursor: 0 };
 }
 
+// What the filter actually matches on: the trimmed, lower-cased query. Two queries with the
+// same needle produce the same match list.
+function resolvePickNeedle(query: string): string {
+  return query.trim().toLowerCase();
+}
+
 // Case-insensitive substring match over the trimmed query, against the label or the
 // secondary text — the same convention as the shared branch autocomplete's
 // matchBranchesBySubstring. An empty query matches every item (String.includes('') is true
@@ -64,7 +70,7 @@ export function matchPickItemsBySubstring<T>(
   query: string,
   items: readonly FilterablePickItem<T>[],
 ): FilterablePickItem<T>[] {
-  const needle = query.trim().toLowerCase();
+  const needle = resolvePickNeedle(query);
   return items.filter(
     (item) => item.label.toLowerCase().includes(needle) || (item.meta ?? '').toLowerCase().includes(needle),
   );
@@ -85,11 +91,15 @@ export type FilterablePickListKeyResult<T> =
   | { type: 'cancel' };
 
 export function handleFilterablePickListKey<T>(
-  state: FilterablePickListState,
+  current: FilterablePickListState,
   items: readonly FilterablePickItem<T>[],
   input: string,
   key: FilterablePickListKey,
 ): FilterablePickListKeyResult<T> {
+  // Hosts may hand in a wider object embedding this state (the EDT zone's dialog union
+  // member) — every returned state is rebuilt from these three fields only, so no host
+  // field ever leaks through an `update`.
+  const state: FilterablePickListState = { query: current.query, queryCursor: current.queryCursor, cursor: current.cursor };
   // Esc always closes — checked before the Ctrl/Meta guard so no modifier can trap the
   // developer inside the dialog.
   if (key.escape) {
@@ -103,7 +113,10 @@ export function handleFilterablePickListKey<T>(
   const matches = matchPickItemsBySubstring(state.query, items);
   if (key.downArrow || key.upArrow) {
     const direction = key.downArrow ? 1 : -1;
-    return { type: 'update', state: { ...state, cursor: clampPickListCursor(state.cursor + direction, matches.length) } };
+    // Clamp before moving: a highlight left beyond the list by a pool that shrank underneath
+    // must step from the last row, not swallow several presses getting back in range.
+    const from = clampPickListCursor(state.cursor, matches.length);
+    return { type: 'update', state: { ...state, cursor: clampPickListCursor(from + direction, matches.length) } };
   }
   if (key.return) {
     // Zero matches (a filter matching nothing, or a genuinely empty pool): Enter is a safe
@@ -115,9 +128,12 @@ export function handleFilterablePickListKey<T>(
     return { type: 'select', item: chosen };
   }
   const edited = nextTextInputValue({ value: state.query, cursor: state.queryCursor }, input, key);
-  // A pure caret move leaves the filter value unchanged — the highlight survives it. Only an
-  // actual filter-text change re-derives the match list and resets the highlight to the top.
-  const nextCursor = edited.value === state.query ? clampPickListCursor(state.cursor, matches.length) : 0;
+  // A pure caret move leaves the filter value unchanged — the highlight survives it, and so
+  // does it through an edit that doesn't change what is matched (a stray leading/trailing
+  // space). Only a change of the needle re-derives the match list and resets the highlight
+  // to the top.
+  const sameNeedle = resolvePickNeedle(edited.value) === resolvePickNeedle(state.query);
+  const nextCursor = sameNeedle ? clampPickListCursor(state.cursor, matches.length) : 0;
   return { type: 'update', state: { query: edited.value, queryCursor: edited.cursor, cursor: nextCursor } };
 }
 
@@ -130,11 +146,10 @@ export type FilterablePickListProps<T> = {
   emptyText: string;
   // Shown when the pool has items but the current filter text matches none of them.
   noMatchText: string;
-  maxVisibleRows?: number;
 };
 
 export function FilterablePickList<T>(props: FilterablePickListProps<T>) {
-  const { label, state, items, emptyText, noMatchText, maxVisibleRows = FILTERABLE_PICK_LIST_MAX_ROWS } = props;
+  const { label, state, items, emptyText, noMatchText } = props;
   const matches = matchPickItemsBySubstring(state.query, items);
   const highlight = clampPickListCursor(state.cursor, matches.length);
   return (
@@ -147,7 +162,7 @@ export function FilterablePickList<T>(props: FilterablePickListProps<T>) {
       ) : (
         <BoundedList
           items={matches}
-          maxVisibleRows={maxVisibleRows}
+          maxVisibleRows={FILTERABLE_PICK_LIST_MAX_ROWS}
           cursorIndex={highlight}
           renderItem={(item, index) => (
             <Box key={item.key} flexDirection="row">

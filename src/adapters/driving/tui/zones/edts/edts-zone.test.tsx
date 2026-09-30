@@ -1449,7 +1449,11 @@ describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
     expect(output).toContain('Filter');
     expect(output).toContain('feature-work');
     expect(output).toContain('other-work');
-    expect(output).toContain('›');
+    // The shared pick's row style: the highlighted row carries the selection glyphs.
+    const dialogFrame = output.slice(output.lastIndexOf('╔'));
+    const highlighted = dialogFrame.split('\n').filter((line) => line.includes('▌›'));
+    expect(highlighted).toHaveLength(1);
+    expect(highlighted[0]).toContain('feature-work');
   });
 
   it('a genuinely empty pool shows its own "No EDT to select" line, distinct from the filtered-to-zero wording', async () => {

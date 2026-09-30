@@ -103,6 +103,11 @@ describe('handleFilterablePickListKey — navigate (matrix: "Navigate")', () => 
     expect(result).toEqual({ type: 'update', state: stateWith({ cursor: 0 }) });
   });
 
+  it('steps from the last row when the highlight was left beyond a shrunken list', () => {
+    const result = handleFilterablePickListKey(stateWith({ cursor: 9 }), ITEMS, '', { upArrow: true });
+    expect(result).toEqual({ type: 'update', state: stateWith({ cursor: 1 }) });
+  });
+
   it('Up/Down never move the caret', () => {
     const state = stateWith({ query: 'api', queryCursor: 1 });
     const result = handleFilterablePickListKey(state, ITEMS, '', { downArrow: true });
@@ -151,6 +156,27 @@ describe('handleFilterablePickListKey — caret editing (matrix: "Caret editing"
       type: 'update',
       state: { query: 'ai', queryCursor: 1, cursor: 0 },
     });
+  });
+
+  it('an edit that leaves the matched text unchanged (a stray space) keeps the highlight', () => {
+    const atEnd = { ...state, queryCursor: 3 };
+    expect(handleFilterablePickListKey(atEnd, ITEMS, ' ', {})).toEqual({
+      type: 'update',
+      state: { query: 'api ', queryCursor: 4, cursor: 1 },
+    });
+  });
+
+  it('returns only its own three fields, even when the host hands in a wider state object', () => {
+    const wider = { kind: 'quick-pick', mode: 'switch', ...state };
+    for (const key of [{ downArrow: true }, { leftArrow: true }, { ctrl: true }, {}]) {
+      const result = handleFilterablePickListKey(wider, ITEMS, key.ctrl ? 'w' : '', key);
+      expect(result.type).toBe('update');
+      if (result.type === 'update') {
+        expect(Object.keys(result.state).sort()).toEqual(['cursor', 'query', 'queryCursor']);
+      }
+    }
+    const noMatch = handleFilterablePickListKey({ ...wider, query: 'zzz' }, ITEMS, '', { return: true });
+    expect(noMatch).toEqual({ type: 'update', state: { query: 'zzz', queryCursor: 3, cursor: 1 } });
   });
 
   it('Ctrl/Meta combos stay inert', () => {
@@ -236,8 +262,9 @@ describe('FilterablePickList render', () => {
     expect(middle).toContain('▲ more above');
     expect(middle).toContain('▼ more below');
     expect(middle.split('\n').find((line) => line.includes('▌›'))).toContain('svc-10');
+    // The whole budget is used, indicators included — never more, never a collapsed window.
     const rows = middle.split('\n').filter((line) => line.includes('svc-') || line.includes('more above') || line.includes('more below'));
-    expect(rows.length).toBeLessThanOrEqual(FILTERABLE_PICK_LIST_MAX_ROWS);
+    expect(rows).toHaveLength(FILTERABLE_PICK_LIST_MAX_ROWS);
 
     const bottom = await renderToString(<FilterablePickList {...copy} state={stateWith({ cursor: 19 })} items={many} />);
     expect(bottom).toContain('svc-19');
