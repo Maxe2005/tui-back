@@ -1,10 +1,17 @@
 # Deferred Work
 
+## Deferred from: spec-filterable-pick-list-shared-component (2026-09-30)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md`
+  summary: `branch-picker.tsx`'s `FilterableBranchList` (pick-existing mode) is a third hand-written filter-and-select list that does not yet render through the shared `FilterablePickList`.
+  evidence: kept out of scope by the spec's own Never tier (same two-step split as the branch-autocomplete component: shared component first, adoption as a follow-up spec). `FilterableBranchList` still draws its own `› ` rows and the picker still owns its own `pickCursor` handling (`handlePickExistingKey`). **Track:** a follow-up adoption spec, which also has to decide whether the picker's prefix/substring conventions converge with the shared filter.
+
 ## Deferred from: review of 3-11-update-commands-main-all-repos-single-service (2026-09-29)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
   summary: A future epic-2 → epic-3 merge must reconcile two parallel implementations of the command zone-switch (`runCommand()` + `zoneId`) and the filterable quick-pick (update-service pick vs 2.30 EDT pick).
   evidence: the 3.11 spec required syncing epic-2 first, but epic-2 has diverged (wizard stories 2.35-2.38), so 3.11 built the assumed contracts locally in `src/adapters/driving/tui/shared/command-bar.tsx` (`runCommand`) and `src/adapters/driving/tui/zones/update/` (service pick) instead of reusing epic-2's `670bfcb`/`7fcf592` — a side-effect fix to `edt-switch <topic>` arg dispatch is also bundled in. Surfaced by design (documented in the spec's own task 1 DONE AS), not by review layers.
+  resolved_by: the 2026-09-30 epic sync merge (command zone-switch — `command-bar.tsx`'s `runCommand` now delegates to `commands.ts`'s) and `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30, quick-pick — both dialogs now render through the shared `FilterablePickList`).
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
   summary: Duplicate service names across managed repos have no disambiguation in the `:update-service <name>` path — it resolves to the first match with no ambiguous-name handling.
   evidence: `src/adapters/driving/tui/store/slices/update-slice.ts`'s `openSingleServiceConfig` returns the first case-insensitive match in both the EDT-member and registry loops; the same duplicate-name collision is already tracked for the Update zone's outcome map (see 3-6 deferred entries). Surfaced by blind-hunter review layer.
@@ -28,10 +35,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
   summary: No test opens quick-pick when the candidate pool is genuinely empty (not just filtered-to-zero) — reachable in switch mode whenever exactly one EDT exists total (it's active, so the non-active candidate pool is `[]`).
   evidence: Flagged by blind-hunter. In the zero-*total*-EDTs case the zone's pre-existing "auto-open the create dialog" guard (`edts.length === 0 && dialog.kind === 'none'`, edts-zone.tsx:321) fires first and quick-pick can never open at all, so that sub-case is unreachable — but the "exactly 1 EDT, it's active" sub-case for switch mode specifically *is* reachable and untested.
+  resolved_by: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30). `edts-zone.test.tsx` now opens the switch-mode pick with a single, active EDT and asserts the empty-pool line; the shared reducer's own tests cover Enter/Esc on an empty pool.
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
   summary: `QuickPickDialogView` renders the identical "No matching EDT" wording whether the pool is genuinely empty (nothing to select, ever, for this mode) or just the current filter text matches nothing — unlike the base EDT list's own distinct "No EDTs yet." message for its own true-empty state.
   evidence: Flagged by blind-hunter. Not incorrect, just imprecise in the genuinely-empty-pool case (most reachable for switch mode with exactly one, active, EDT — see the entry above). Cosmetic wording polish, not a behavior bug.
+  resolved_by: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30). The shared `FilterablePickList` takes two distinct lines — the EDT pick shows "No EDT to select" for an empty pool and keeps "No matching EDT" for a filter matching nothing.
 
 ## Deferred from: review of 3-8-manifest-defined-clean-restart-recipe (2026-09-24)
 

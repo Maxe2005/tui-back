@@ -2,7 +2,8 @@
 title: 'Shared filterable pick list — unify the EDT quick-pick and the update-service pick'
 type: 'refactor'
 created: '2026-09-30'
-status: 'ready-for-dev'
+status: 'in-review'
+baseline_commit: 'f4f3984921285b84c2d51507f8ffebbe969560fe'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-2/epic-2-context.md, _bmad-output/implementation-artifacts/epic-3-context.md]
 ---
@@ -52,11 +53,11 @@ context: [_bmad-output/implementation-artifacts/epic-2/epic-2-context.md, _bmad-
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/shared/components/filterable-pick-list.tsx` (+ `.test.tsx`, barrel export) -- new shared generic state, substring matcher, pure key reducer emitting `update | select | cancel`, and render-only view; unit tests cover every matrix row -- the single implementation both dialogs reuse.
-- [ ] `src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx` + `edts-zone.logic.ts` + `edts-zone.tsx` -- rebuild the EDT pick on the shared component; drop `matchEdtsByPrefix` and the hand-drawn rows -- removes duplicate #1.
-- [ ] `src/adapters/driving/tui/zones/update/update-zone.tsx` + `update-zone.logic.ts` -- rebuild the service pick on the shared component; pull its key handling out of the zone's `useInput`; drop `matchServicesBySubstring` and the command-bar text helpers import -- removes duplicate #2.
-- [ ] `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx`, `update-zone.test.tsx`, `update-zone.interaction.test.tsx` -- re-point tests at the shared behavior; rewrite the ones pinning the retired behaviors (prefix-only EDT filter, Home/End jumping the service list, append-only service filter) -- the suite must assert the unified contract.
-- [ ] `_bmad-output/implementation-artifacts/deferred-work.md` -- close the 3.11 "two parallel implementations" entry and the 2.30 "identical empty wording" entry; add the `FilterableBranchList` adoption as a new deferred item -- ledger matches reality.
+- [x] `src/adapters/driving/tui/shared/components/filterable-pick-list.tsx` (+ `.test.tsx`, barrel export) -- new shared generic state, substring matcher, pure key reducer emitting `update | select | cancel`, and render-only view; unit tests cover every matrix row -- the single implementation both dialogs reuse.
+- [x] `src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx` + `edts-zone.logic.ts` + `edts-zone.tsx` -- rebuild the EDT pick on the shared component; drop `matchEdtsByPrefix` and the hand-drawn rows -- removes duplicate #1.
+- [x] `src/adapters/driving/tui/zones/update/update-service-pick-dialog.tsx` (new) + `update-zone.tsx` + `update-zone.logic.ts` -- rebuild the service pick on the shared component; pull its key handling out of the zone's `useInput`; drop `matchServicesBySubstring` and the command-bar text helpers import -- removes duplicate #2.
+- [x] `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx`, `update-zone.test.tsx`, `update-zone.interaction.test.tsx` -- re-point tests at the shared behavior; rewrite the ones pinning the retired behaviors (prefix-only EDT filter, Home/End jumping the service list, append-only service filter) -- the suite must assert the unified contract.
+- [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- close the 3.11 "two parallel implementations" entry and the 2.30 "identical empty wording" entry; add the `FilterableBranchList` adoption as a new deferred item -- ledger matches reality.
 
 **Acceptance Criteria:**
 - Given `:edt-switch`, `:edt-modify`, `:edt-delete` or `:update-service` run with no argument, when the pick opens, then all four show the same filter field, row style, scrolling indicators and hint line.
