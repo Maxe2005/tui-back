@@ -36,7 +36,14 @@ import {
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, matchServicesBySubstring, partitionUpdateServiceRows } from './update-zone.logic.js';
+import {
+  deriveUpdateServiceStatus,
+  formatLiveServiceDetail,
+  formatServiceOutcomeDetail,
+  isServiceTargetedByRun,
+  matchServicesBySubstring,
+  partitionUpdateServiceRows,
+} from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import {
@@ -60,6 +67,7 @@ export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode
 export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
+export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
 export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? ([y]/[n])';
@@ -305,6 +313,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateError = useStore((state) => state.updateError);
   const updateErrorCode = useStore((state) => state.updateErrorCode);
   const updateScope = useStore((state) => state.updateScope);
+  const updateSelection = useStore((state) => state.updateSelection);
   const updateBlocker = useStore((state) => state.updateBlocker);
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
   const updateConfig = useStore((state) => state.updateConfig);
@@ -392,10 +401,19 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   // Story 3.6: this run's currently-targeted services — an all-repos run targets every
   // listed service; an EDT-scoped run targets only the active EDT's own members (the same
-  // `runningMembers` the running-state spinner below already reads).
-  const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
+  // `runningMembers` the running-state spinner below already reads). A run confirmed with
+  // a narrowed selection (a single-service update above all) targets only the selected
+  // rows inside that scope — see isServiceTargetedByRun.
+  const edtMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
   const isAllRun = updateScope === 'all';
-  const runningMemberPaths = new Set(runningMembers.map((member) => member.repoPath));
+  const runningMemberPaths = new Set(edtMembers.map((member) => member.repoPath));
+  const runTarget = { scope: isAllRun ? ('all' as const) : ('edt' as const), memberPaths: runningMemberPaths, selection: updateSelection };
+  const isRowTargeted = (row: { service: string; path: string }): boolean =>
+    updateStatus === 'running' && isServiceTargetedByRun(row, runTarget);
+  const runningMembers = edtMembers.filter((member) => isRowTargeted({ service: member.service, path: member.repoPath }));
+  // A narrowed all-scope run (a single service outside the active EDT) names its selected
+  // rows — the generic "loading members" line is only for the unfiltered all-repos run.
+  const runningSelectedRows = isAllRun && updateSelection !== null ? serviceRows.filter(isRowTargeted) : [];
 
   // Story 3.6: starts (or restarts, on a changed service list) this zone's own health poll
   // whenever the loaded service list changes — independent of Logs zone's own pane
@@ -712,7 +730,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // core use-case resolves with its per-service outcome rows. An all-repos run targets no
   // single EDT, so it shows the generic loading line instead of EDT member rows.
   const offerRerun = shouldOfferRerun(edts, activeEdt);
-  const runningLabel = isAllRun ? UPDATE_ALL_RUNNING_LABEL : UPDATE_RUNNING_LABEL;
+  const runningLabel = !isAllRun ? UPDATE_RUNNING_LABEL : updateSelection !== null ? UPDATE_SELECTION_RUNNING_LABEL : UPDATE_ALL_RUNNING_LABEL;
 
   // Story 3.6: this zone's own service-list chrome budget (Code Map: "an approximation is
   // fine here", mirrors edts-zone.tsx/logs-zone.tsx's own precedent).
@@ -728,8 +746,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // before its first emission the formatter reports `starting`, never a stale outcome.
   const selectedLivePhase = selectedServiceRow !== undefined ? liveServicePhase[selectedServiceRow.service] : undefined;
   const selectedLiveIssues = selectedServiceRow !== undefined ? (liveServiceIssues[selectedServiceRow.service] ?? []) : [];
-  const isSelectedTargeted =
-    selectedServiceRow !== undefined && updateStatus === 'running' && (isAllRun || runningMemberPaths.has(selectedServiceRow.path));
+  const isSelectedTargeted = selectedServiceRow !== undefined && isRowTargeted(selectedServiceRow);
   const isSelectedRestarting =
     selectedServiceRow !== undefined && serviceRestartInFlight[resolvePath(selectedServiceRow.path)] !== undefined;
   const showLiveDetail = isSelectedTargeted || isSelectedRestarting;
@@ -775,7 +792,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               renderItem={(row, index) => {
                 const health = updateServiceHealth[row.path] ?? 'down';
                 const lastOutcome = lastServiceOutcomes[row.service];
-                const isTargeted = updateStatus === 'running' && (isAllRun || runningMemberPaths.has(row.path));
+                const isTargeted = isRowTargeted(row);
                 // Story 3.9: the coarse standalone-restart flag — the in-flight map holds
                 // this service's resolved repoPath for the duration, no step detail.
                 // Story 3.10: the live phase for this service refines the glyph — the
@@ -805,7 +822,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                   <Spinner />
                   <Text color={colors.text}> {runningLabel}</Text>
                 </Box>
-                {isAllRun || runningMembers.length === 0 ? (
+                {runningSelectedRows.length > 0 ? (
+                  runningSelectedRows.map((row) => (
+                    <Box key={row.path}>
+                      <Spinner />
+                      <Text color={colors.text}> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
+                    </Box>
+                  ))
+                ) : isAllRun || runningMembers.length === 0 ? (
                   <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
                 ) : (
                   runningMembers.map((member) => (

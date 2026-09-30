@@ -426,6 +426,7 @@ it('shouldQuit returns true for q', () => {
         updateErrorCode: null,
         updateUlid: null,
         updateScope: null,
+        updateSelection: null,
         updateBlocker: null,
         resolveUpdateBlocker: () => {},
         runGroupUpdate: async () => {},

@@ -4,9 +4,16 @@
 // edts-zone.logic.ts is (that file's own header): the useInput callback stays a thin
 // dispatcher, everything it — or a render — needs to decide is a standalone, independently
 // unit-testable function.
+import { resolve } from 'node:path';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import type { GroupUpdateRepoResult, UpdateBlockerKind, UpdatePhase } from '../../../../../core/scripts/group-update.js';
+import type {
+  GroupUpdateRepoResult,
+  GroupUpdateScope,
+  GroupUpdateSelectionItem,
+  UpdateBlockerKind,
+  UpdatePhase,
+} from '../../../../../core/scripts/group-update.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 
@@ -48,6 +55,34 @@ export function deriveUpdateServiceStatus(
     return 'error';
   }
   return health;
+}
+
+// Whether the in-flight run actually targets this list row. The scope alone is not enough:
+// a run confirmed through the pre-run configuration screen (story 3.7) carries a
+// `selection` that narrows the scope down to exactly the confirmed services — a
+// single-service run (`p`, the row-local menu, `:update-service`) is scoped `edt` or `all`
+// but selects one row only, so every other row in that scope must keep its own glyph.
+// The selection match mirrors core's own `matchSelectionItem` (resolved repoPath when the
+// item carries one, service name otherwise). A null selection is the unfiltered default:
+// every row in scope is targeted.
+export function isServiceTargetedByRun(
+  row: { service: string; path: string },
+  run: {
+    scope: GroupUpdateScope | null;
+    memberPaths: ReadonlySet<string>;
+    selection: readonly GroupUpdateSelectionItem[] | null;
+  },
+): boolean {
+  const inScope = run.scope === 'all' || run.memberPaths.has(row.path);
+  if (!inScope) {
+    return false;
+  }
+  if (run.selection === null) {
+    return true;
+  }
+  return run.selection.some((item) =>
+    item.repoPath !== undefined ? resolve(item.repoPath) === resolve(row.path) : item.service === row.service,
+  );
 }
 
 // One row of the Update zone's always-visible service list — a ServiceBranchDivergence row

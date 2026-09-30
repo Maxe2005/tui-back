@@ -677,6 +677,22 @@ describe('update slice: service health polling (story 3.6)', () => {
 // trigger, confirming with exactly the confirmed configuration, and rejecting while a run
 // is in flight.
 describe('update slice: pre-run configuration screen (story 3.7)', () => {
+  it('a confirmed single-service config records its selection on the run; an unconfigured run records none', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+    await store.getState().confirmUpdateConfig();
+
+    // The zone reads this to mark only the selected row `updating` — the scope alone
+    // (`edt`) would mark every member.
+    expect(store.getState().updateScope).toBe('edt');
+    expect(store.getState().updateSelection).toEqual([{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development' }]);
+
+    await store.getState().runGroupUpdate('edt');
+
+    expect(store.getState().updateSelection).toBeNull();
+  });
+
   it('openUpdateConfig(edt) pre-selects every member with the manifest sharedBranch default', async () => {
     const store = createAppStore(fakeDeps());
 

@@ -34,6 +34,7 @@ import {
   UPDATE_QUIT_CONFIRM_BODY,
   UPDATE_QUIT_CONFIRM_BODY_ALL,
   UPDATE_RUNNING_LABEL,
+  UPDATE_SELECTION_RUNNING_LABEL,
   formatBlockerBody,
   formatUpdateRow,
   formatUpdateSummary,
@@ -50,7 +51,15 @@ import {
   shouldOpenSingleConfig,
   UpdateZone,
 } from './update-zone.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, matchServicesBySubstring, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
+import {
+  deriveUpdateServiceStatus,
+  formatLiveServiceDetail,
+  formatServiceOutcomeDetail,
+  isServiceTargetedByRun,
+  matchServicesBySubstring,
+  mergeLastServiceOutcomes,
+  partitionUpdateServiceRows,
+} from './update-zone.logic.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
@@ -781,6 +790,44 @@ describe('mergeLastServiceOutcomes (story 3.6)', () => {
   });
 });
 
+describe('isServiceTargetedByRun', () => {
+  const members = new Set(['/repo/a', '/repo/b']);
+
+  it('an unfiltered run targets every row in scope: EDT members for edt, every row for all', () => {
+    expect(isServiceTargetedByRun({ service: 'svc-a', path: '/repo/a' }, { scope: 'edt', memberPaths: members, selection: null })).toBe(true);
+    expect(isServiceTargetedByRun({ service: 'svc-c', path: '/repo/c' }, { scope: 'edt', memberPaths: members, selection: null })).toBe(false);
+    expect(isServiceTargetedByRun({ service: 'svc-c', path: '/repo/c' }, { scope: 'all', memberPaths: members, selection: null })).toBe(true);
+  });
+
+  it('a narrowed selection targets only the selected rows inside the scope', () => {
+    const selection = [{ service: 'svc-a', repoPath: '/repo/a' }];
+    expect(isServiceTargetedByRun({ service: 'svc-a', path: '/repo/a' }, { scope: 'edt', memberPaths: members, selection })).toBe(true);
+    expect(isServiceTargetedByRun({ service: 'svc-b', path: '/repo/b' }, { scope: 'edt', memberPaths: members, selection })).toBe(false);
+    expect(isServiceTargetedByRun({ service: 'svc-b', path: '/repo/b' }, { scope: 'all', memberPaths: members, selection })).toBe(false);
+  });
+
+  it('matches a selected repoPath by resolved path, and by service name when the item carries no path', () => {
+    expect(
+      isServiceTargetedByRun(
+        { service: 'svc-a', path: '/repo/a' },
+        { scope: 'all', memberPaths: members, selection: [{ service: 'renamed', repoPath: '/repo/x/../a' }] },
+      ),
+    ).toBe(true);
+    expect(
+      isServiceTargetedByRun({ service: 'svc-a', path: '/repo/a' }, { scope: 'all', memberPaths: members, selection: [{ service: 'svc-a' }] }),
+    ).toBe(true);
+  });
+
+  it('a selected row outside an edt-scoped run is never targeted', () => {
+    expect(
+      isServiceTargetedByRun(
+        { service: 'svc-c', path: '/repo/c' },
+        { scope: 'edt', memberPaths: members, selection: [{ service: 'svc-c', repoPath: '/repo/c' }] },
+      ),
+    ).toBe(false);
+  });
+});
+
 // A no-op stub for every render test below: `createAppStore()` (no deps, the same default
 // every other zone test uses) still owns *real* loadEdtsBranches/loadEdts actions that
 // early-return an 'error'/no-op status when unwired — and UpdateZone calls both on mount.
@@ -846,6 +893,60 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
     // 'updating'.
     expect(svcBRow).toContain('○');
     expect(svcBRow).not.toContain('⇄');
+  });
+
+  it('updating: a single-service run inside the EDT marks only the selected member — the other member keeps its own glyph', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, { ...SERVICE_B, isMember: true }],
+      edtsBranchesStatus: 'idle',
+      edts: [{ ...ACTIVE_EDT, members: [...ACTIVE_EDT.members, { service: 'svc-b', repoPath: '/repo/b', branch: 'development' }] }],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      updateScope: 'edt',
+      // The `p` trigger's confirmed config: scope `edt`, one selected row.
+      updateSelection: [{ service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development' }],
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const lines = output.split('\n');
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+    const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+
+    expect(svcBRow).toContain('⇄');
+    expect(svcARow).toContain('○');
+    expect(svcARow).not.toContain('⇄');
+    // The running-members spinner list names the selected member only.
+    expect(output).toContain('svc-b (development)');
+    expect(output).not.toContain('svc-a (feat/a)');
+  });
+
+  it('updating: a single-service run outside the EDT (all scope) marks only that service and names it', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      updateScope: 'all',
+      updateSelection: [{ service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development' }],
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const lines = output.split('\n');
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+    const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+
+    expect(svcBRow).toContain('⇄');
+    expect(svcARow).not.toContain('⇄');
+    expect(output).toContain(UPDATE_SELECTION_RUNNING_LABEL);
+    expect(output).not.toContain(UPDATE_ALL_RUNNING_LABEL);
+    expect(output).not.toContain(UPDATE_LOADING_MEMBERS);
   });
 
   it('error: a service whose last completed run failed shows the error glyph and the failure detail', async () => {
