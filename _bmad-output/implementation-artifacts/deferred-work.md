@@ -580,3 +580,6 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
   summary: After a `:reset` of EDTs, per-zone UI state tied to deleted EDTs (EDT action log/detail pane, zone cursors, Update zone service list) is not cleared until the next natural reload.
   evidence: runReset only calls four loaders; other slices cache EDT/service-derived state with no reset hook.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-6-scanner-extension-parameters-request-body-skeletons.md`
+  summary: The `nestjs-openapi` scanner ignores Swagger/OpenAPI 2.0 specs' request details (`in: body` parameters, `consumes`, `#/definitions/...` refs) and path-item-level `$ref`s.
+  evidence: extractRequestDetails only reads OpenAPI 3.x `requestBody`/`components`; 2.0 operations yield plain routes (still listed, no body skeleton) — acceptable for the gateway today, revisit if a 2.0 repo activates route-explorer.
