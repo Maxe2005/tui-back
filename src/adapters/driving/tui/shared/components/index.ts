@@ -82,4 +82,18 @@ export type {
   BranchAutocompleteKeyResult,
   BranchAutocompleteInputProps,
 } from './branch-autocomplete-input.js';
-
+export {
+  FilterablePickList,
+  FILTERABLE_PICK_LIST_MAX_ROWS,
+  createFilterablePickListState,
+  matchPickItemsBySubstring,
+  clampPickListCursor,
+  handleFilterablePickListKey,
+} from './filterable-pick-list.js';
+export type {
+  FilterablePickItem,
+  FilterablePickListState,
+  FilterablePickListKey,
+  FilterablePickListKeyResult,
+  FilterablePickListProps,
+} from './filterable-pick-list.js';
