@@ -18,6 +18,7 @@ import {
   resolveGridVerticalDirection,
   resolveTabAutocomplete,
   resolveTabPress,
+  runCommand,
   TAB_DOUBLE_PRESS_WINDOW_MS,
   typeCommandQueryChar,
 } from './command-bar.js';
@@ -362,5 +363,76 @@ describe('commandAtGridCursor', () => {
     const columns = [[registry]];
     expect(commandAtGridCursor(columns, { column: 0, row: 5 })).toBeUndefined();
     expect(commandAtGridCursor(columns, { column: 5, row: 0 })).toBeUndefined();
+  });
+});
+
+describe('runCommand (story 3.11)', () => {
+  function fakeStore(calls: string[]) {
+    return {
+      getState: () => ({
+        setActiveZone: (zone: string) => calls.push(`setActiveZone:${zone}`),
+        openRegistryScreen: () => calls.push('openRegistryScreen'),
+        openUpdateConfig: (target: string) => calls.push(`openUpdateConfig:${target}`),
+        openUpdateServiceDialog: (query: string) => calls.push(`openUpdateServiceDialog:${query}`),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+  }
+
+  it('runs an exact single-token match and closes through a true return', () => {
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'registry')).toBe(true);
+    expect(calls).toEqual(['openRegistryScreen']);
+  });
+
+  it('dispatches on the first token so commands with args still run, forwarding the full query', () => {
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'update-service svc-a')).toBe(true);
+    expect(calls).toEqual(['setActiveZone:update', 'openUpdateServiceDialog:update-service svc-a']);
+  });
+
+  it('activates the command zone before running a zone-carrying command', () => {
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'update-edt')).toBe(true);
+    expect(calls).toEqual(['setActiveZone:update', 'openUpdateConfig:edt']);
+  });
+
+  it('matches the command name case-insensitively', () => {
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'REGISTRY')).toBe(true);
+    expect(calls).toEqual(['openRegistryScreen']);
+  });
+
+  it('returns false on a partial, unknown, or empty query — never executes', () => {
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'reg')).toBe(false);
+    expect(runCommand(fakeStore(calls), 'zzz')).toBe(false);
+    expect(runCommand(fakeStore(calls), '')).toBe(false);
+    expect(runCommand(fakeStore(calls), '   ')).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('returns false when the first token is unknown even with trailing args', () => {
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'zzz foo')).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('a synchronously throwing command returns true without propagating', () => {
+    const throwing: Command = {
+      name: 'boom',
+      run: () => {
+        throw new Error('sync failure');
+      },
+    };
+    const calls: string[] = [];
+
+    expect(runCommand(fakeStore(calls), 'boom', [throwing])).toBe(true);
+    expect(calls).toEqual([]);
   });
 });

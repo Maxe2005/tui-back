@@ -33,6 +33,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { MigrationPort } from '../ports/migration.js';
 import type { RegistryPort } from '../ports/registry.js';
+import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
 
@@ -42,6 +43,55 @@ export const GROUP_UPDATE_LOCK_KEY = 'group-update';
 
 export function edtUpdateLockKey(ulid: string): string {
   return `edt:${ulid}`;
+}
+
+// Story 3.7: matches one enumerated target against the confirmed selection. A selection
+// item carrying `repoPath` matches by resolved path (duplicate service names in one EDT);
+// otherwise it matches by service name. First match wins.
+function matchSelectionItem(
+  selection: readonly GroupUpdateSelectionItem[],
+  candidate: { service: string; repoPath: string },
+): GroupUpdateSelectionItem | undefined {
+  return selection.find((item) =>
+    item.repoPath !== undefined ? resolve(item.repoPath) === resolve(candidate.repoPath) : item.service === candidate.service,
+  );
+}
+
+// Story 3.7: the configured merge source for one service — a non-blank per-service
+// `sourceBranch` override wins, otherwise the manifest `sharedBranch`. The override is
+// trimmed once here so `" release/1 "` resolves exactly like `release/1` everywhere
+// (validation, fetch, merge) instead of failing the branch check on padding.
+function effectiveSourceBranch(sharedBranch: string, override: string | undefined): string {
+  const trimmed = override?.trim() ?? '';
+  return trimmed !== '' ? trimmed : sharedBranch;
+}
+
+// Story 3.7: validates every custom `sourceBranch` against the local branch listing
+// (`branchExistsLocally`, the `git rev-parse --verify`-backed adapter — no new git
+// machinery) before any lock is taken, so an unresolvable branch rejects the run before
+// any git/docker action. A failing check itself is an unexpected git failure and rejects
+// the run the same way.
+async function validateSelectionBranches(
+  git: GitPort,
+  targets: readonly { service: string; repoPath: string; sourceBranch: string | undefined }[],
+): Promise<Result<void>> {
+  for (const target of targets) {
+    const branch = target.sourceBranch?.trim() ?? '';
+    if (branch === '') {
+      continue;
+    }
+    const exists = await git.branchExistsLocally(target.repoPath, branch);
+    if (!exists.ok) {
+      return exists;
+    }
+    if (!exists.data) {
+      return err(
+        'unknown-branch',
+        `Service "${target.service}" source branch "${branch}" does not exist in ${target.repoPath} — pick a resolvable branch`,
+      );
+    }
+  }
+  return ok(undefined);
 }
 
 export interface GroupUpdateRepoResult {
@@ -61,6 +111,15 @@ export interface GroupUpdateData {
 
 export type GroupUpdateScope = 'edt' | 'all';
 
+// Story 3.7: one pre-run configuration row. `repoPath` disambiguates duplicate service
+// names (the EDT dedupe precedent); `sourceBranch` overrides the manifest `sharedBranch`
+// as this service's merge source (blank/undefined falls back to `sharedBranch`).
+export interface GroupUpdateSelectionItem {
+  service: string;
+  repoPath?: string;
+  sourceBranch?: string;
+}
+
 export interface GroupUpdateParams {
   edtRegistry: EdtRegistryPort;
   state: StatePort;
@@ -68,15 +127,31 @@ export interface GroupUpdateParams {
   git: GitPort;
   container: ContainerPort;
   migration: MigrationPort;
+  restart: RestartPort;
   lock: LockPort;
   registry?: RegistryPort;
   scope?: GroupUpdateScope;
+  // Story 3.7: the pre-run configuration. `selection` filters the enumerated targets down
+  // to exactly the confirmed set — a deselected service is excluded entirely (never
+  // touched, never reported). Undefined means the full default selection (every enumerated
+  // target); an empty array is an explicit `no-services-selected` rejection before any
+  // lock is taken. `runMigrations` defaults to true (the migrate toggle ON); `cleanRestart`
+  // defaults to false — on it runs the manifest's `restartCommands` recipe in order when
+  // declared (story 3.8), falling back to today's plain container restart when absent.
+  selection?: GroupUpdateSelectionItem[];
+  runMigrations?: boolean;
+  cleanRestart?: boolean;
   // Story 3.4: the assisted-resolution seam. Absent by default (the CLI path passes no
   // seam, keeping today's skip/abort rows); the TUI backs it with a bounded modal menu.
   // Core owns classification, auto-fix, stash, re-verification, and merge finalization —
   // the driving side owns only menu rendering and the editor process (core only ever sees
   // the `edited` choice, never an editor).
   onUpdateBlocker?: OnUpdateBlocker;
+  // Story 3.10: the live per-service step observer. Absent by default (the CLI path
+  // passes no observer); the TUI store backs it with its live phase map. Emitted at
+  // phase boundaries (pulling/merging → migrating → restarting), never allowed to throw
+  // into the pipeline — a throwing observer is swallowed per emission.
+  onPhase?: OnUpdatePhase;
 }
 
 // Story 3.4: the resolution seam shape (Design Notes). `kind` distinguishes a dirty
@@ -93,6 +168,39 @@ export interface UpdateBlocker {
 export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
 
 export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerChoice>;
+
+// Story 3.10: the live per-service step vocabulary (the I/O matrix's current-step set).
+// Mirrors the `onUpdateBlocker` seam shape rather than inventing an event bus: one
+// optional callback, set by the store, no-op by default.
+export type UpdatePhase = 'pulling' | 'merging' | 'migrating' | 'restarting';
+
+export type OnUpdatePhase = (service: string, phase: UpdatePhase) => void;
+
+// Story 3.10: a driving-side phase observer must never break the pipeline — a throwing
+// observer (a driving-side bug) is swallowed per emission so one repo's live view never
+// strands the others' rows (the story 3.4 `askSeam` precedent, sync variant). A
+// misbehaving observer that returns a rejected promise past the `void` contract is
+// sunk the same way, so it never surfaces as an unhandled rejection.
+function emitPhase(onPhase: OnUpdatePhase | undefined, service: string, phase: UpdatePhase): void {
+  if (onPhase === undefined) {
+    return;
+  }
+  try {
+    const result = onPhase(service, phase) as unknown;
+    if (result instanceof Promise) {
+      result.catch(() => {
+        // Observer-only — the run continues with the phase untracked.
+      });
+    }
+  } catch {
+    // Observer-only — the run continues with the phase untracked.
+  }
+}
+
+// Story 3.2, shared with the driving layer (review hardening, story 3.10): the
+// normalized row-detail code for a failed migration — a named export instead of a
+// magic string, so the TUI's live issue log cannot drift from core's contract.
+export const MIGRATION_FAILED_CODE = 'migration-failed';
 
 // Story 3.4: lockfile-only dirt (the `update_repo.sh` convention) is silently discarded,
 // everything else pauses on the seam. Basename-matched at any depth ("any scope").
@@ -126,7 +234,9 @@ export async function groupUpdate(params: GroupUpdateParams): Promise<Result<Gro
 }
 
 async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
-  const { manifest, git, container, migration, lock, registry } = params;
+  const { manifest, git, container, migration, restart, lock, registry, selection } = params;
+  const runMigrations = params.runMigrations ?? true;
+  const cleanRestart = params.cleanRestart ?? false;
   if (registry === undefined) {
     return err('internal-error', 'Registry port is required for an all-repos group update');
   }
@@ -162,9 +272,37 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
     });
   }
 
+  // Story 3.7: narrow the enumerated paths down to the confirmed selection before any
+  // lock is taken — deselected services are excluded entirely (never touched, never
+  // reported). Reads only (manifest loads for service-name matching, local branch
+  // checks); no git write, no migration, no restart below this point runs for an
+  // excluded service — or at all when the selection rejects the run outright.
+  let targets: { repoPath: string; sourceBranch: string | undefined }[] = paths.map((repoPath) => ({
+    repoPath,
+    sourceBranch: undefined,
+  }));
+  if (selection !== undefined) {
+    if (selection.length === 0) {
+      return err('no-services-selected', 'No services selected — select at least one service before confirming.');
+    }
+    const narrowed = await narrowAllTargets(manifest, paths, selection);
+    if (narrowed.length === 0) {
+      return err('no-services-selected', 'None of the selected services match a managed repo — nothing to update.');
+    }
+    const branchCheck = await validateSelectionBranches(
+      git,
+      narrowed.map((target) => ({ service: target.service, repoPath: target.repoPath, sourceBranch: target.sourceBranch })),
+    );
+    if (!branchCheck.ok) {
+      return branchCheck;
+    }
+    targets = narrowed;
+  }
+
   const run = await withActionLock(lock, GROUP_UPDATE_LOCK_KEY, async () => {
     const results: GroupUpdateRepoResult[] = [];
-    for (const repoPath of paths) {
+    for (const target of targets) {
+      const { repoPath } = target;
       const loaded = await manifest.load(repoPath);
       if (!loaded.ok) {
         // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
@@ -181,11 +319,16 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         git,
         container,
         migration,
+        restart,
         undefined,
         repoPath,
         loaded.data.service,
         undefined,
         params.onUpdateBlocker,
+        effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
+        runMigrations,
+        cleanRestart,
+        params.onPhase,
       );
       results.push(outcome.row);
       if (outcome.cancelRun) {
@@ -218,8 +361,42 @@ function serviceFallback(repoPath: string): string {
   return base !== '' ? base : repoPath;
 }
 
+// Story 3.7: narrows all-repos enumeration to the confirmed selection. Items carrying
+// `repoPath` match by resolved path; the rest match by loaded manifest service (an
+// unloadable manifest falls back to the path-basename service, the same label the run
+// loop would report its failure under, so a genuine load error still surfaces as a
+// `failed` row rather than going silent). First match wins; unmatched items are dropped.
+async function narrowAllTargets(
+  manifest: ManifestPort,
+  paths: readonly string[],
+  selection: readonly GroupUpdateSelectionItem[],
+): Promise<{ service: string; repoPath: string; sourceBranch: string | undefined }[]> {
+  const services = new Map<string, string>();
+  for (const repoPath of paths) {
+    const loaded = await manifest.load(repoPath);
+    services.set(repoPath, loaded.ok ? loaded.data.service : serviceFallback(repoPath));
+  }
+  const seen = new Set<string>();
+  const targets: { service: string; repoPath: string; sourceBranch: string | undefined }[] = [];
+  for (const repoPath of paths) {
+    const item = matchSelectionItem(selection, { service: services.get(repoPath) ?? serviceFallback(repoPath), repoPath });
+    if (item === undefined) {
+      continue;
+    }
+    const key = resolve(repoPath);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    targets.push({ service: services.get(repoPath) ?? serviceFallback(repoPath), repoPath, sourceBranch: item.sourceBranch });
+  }
+  return targets;
+}
+
 async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
-  const { edtRegistry, state, manifest, git, container, migration, lock } = params;
+  const { edtRegistry, state, manifest, git, container, migration, restart, lock, selection } = params;
+  const runMigrations = params.runMigrations ?? true;
+  const cleanRestart = params.cleanRestart ?? false;
 
   const currentActive = await state.readActiveEdt();
   if (!currentActive.ok) {
@@ -250,6 +427,42 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
     });
   }
 
+  // Story 3.7: narrow the EDT members down to the confirmed selection before any lock
+  // is taken — deselected services are excluded entirely (never touched, never
+  // reported). Reads only (a local branch check per custom sourceBranch); the
+  // unexpected-branch gate and assertAllowedBranch gating below are unchanged.
+  let configured: { member: (typeof active.members)[number]; sourceBranch: string | undefined }[] | null = null;
+  if (selection !== undefined) {
+    if (selection.length === 0) {
+      return err('no-services-selected', 'No services selected — select at least one service before confirming.');
+    }
+    const seenSelection = new Set<string>();
+    const kept: { member: (typeof active.members)[number]; sourceBranch: string | undefined }[] = [];
+    for (const member of active.members) {
+      const key = resolve(member.repoPath);
+      if (seenSelection.has(key)) {
+        continue;
+      }
+      seenSelection.add(key);
+      const item = matchSelectionItem(selection, member);
+      if (item === undefined) {
+        continue;
+      }
+      kept.push({ member, sourceBranch: item.sourceBranch });
+    }
+    if (kept.length === 0) {
+      return err('no-services-selected', `None of the selected services are members of EDT "${active.topic}" — nothing to update.`);
+    }
+    const branchCheck = await validateSelectionBranches(
+      git,
+      kept.map(({ member, sourceBranch }) => ({ service: member.service, repoPath: member.repoPath, sourceBranch })),
+    );
+    if (!branchCheck.ok) {
+      return branchCheck;
+    }
+    configured = kept;
+  }
+
   const run = await withActionLock(lock, GROUP_UPDATE_LOCK_KEY, () =>
     withActionLock(lock, edtUpdateLockKey(active.ulid), async () => {
       // Duplicate repoPath entries in one EDT would be merged/restarted twice — dedupe by
@@ -257,7 +470,11 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
       // once. Paths are resolved before comparing, the same normalization switch.ts uses,
       // so trailing-slash/relative-segment variants of one repo still collapse.
       const seen = new Set<string>();
-      const members = active.members.filter((member) => {
+      const shortlist =
+        configured !== null
+          ? configured
+          : active.members.map((member) => ({ member, sourceBranch: undefined as string | undefined }));
+      const enlisted = shortlist.filter(({ member }) => {
         const key = resolve(member.repoPath);
         if (seen.has(key)) {
           return false;
@@ -266,9 +483,22 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
         return true;
       });
       const results: GroupUpdateRepoResult[] = [];
-      for (const member of members) {
+      for (const { member, sourceBranch } of enlisted) {
         // Story 3.4: `cancel-run` stops the loop but still returns `ok` with rows so far.
-        const outcome = await updateMember(manifest, git, container, migration, active.ulid, member, params.onUpdateBlocker);
+        const outcome = await updateMember(
+          manifest,
+          git,
+          container,
+          migration,
+          restart,
+          active.ulid,
+          member,
+          params.onUpdateBlocker,
+          sourceBranch,
+          runMigrations,
+          cleanRestart,
+          params.onPhase,
+        );
         results.push(outcome.row);
         if (outcome.cancelRun) {
           break;
@@ -308,6 +538,55 @@ export async function markGroupUpdateInterrupted(
   return edtRegistry.setStatus(ulid, 'interrupted');
 }
 
+// Story 3.9: the shared restart step — the story 3.8 recipe-vs-plain branch extracted so
+// `updateWithLoadedManifest` and the standalone single-service use-case both call it.
+// Recipe (cleanRestart on + non-empty `restartCommands`): each command runs in the repo's
+// working directory in declared order via the restart port, stopping on the first failure
+// (normalized to a `restart-failed` detail naming the repo, the command, and the error
+// output). Otherwise today's plain container restart runs untouched — never both ports
+// for the same service in the same action.
+export interface RestartStepInput {
+  container: ContainerPort;
+  restart: RestartPort;
+  containerName: string;
+  restartCommands: string[] | undefined;
+  repoPath: string;
+  cleanRestart: boolean;
+  // Story 3.10: the service label the phase observer reports under, plus the observer
+  // itself — emitted once at the restart boundary so both the group and the standalone
+  // paths share the same `restarting` signal (mid-recipe stop still reports the failure
+  // below, never a second phase).
+  service: string;
+  onPhase?: OnUpdatePhase;
+}
+
+export async function runRestartStep(input: RestartStepInput): Promise<Result<void>> {
+  const { container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase } = input;
+  emitPhase(onPhase, service, 'restarting');
+  if (cleanRestart && restartCommands !== undefined && restartCommands.length > 0) {
+    for (const command of restartCommands) {
+      const restarted = await restart.run(repoPath, command);
+      if (!restarted.ok) {
+        return err(
+          'restart-failed',
+          `Repo ${repoPath} restart "${command}" failed: ${restarted.error.message}`,
+        );
+      }
+    }
+    return ok(undefined);
+  }
+  const restarted = await container.restart(containerName);
+  if (!restarted.ok) {
+    // Every row's detail names its repoPath — with duplicate service names in one EDT,
+    // the code alone can't tell two rows apart.
+    return err(
+      restarted.error.code,
+      `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
+    );
+  }
+  return ok(undefined);
+}
+
 function failed(service: string, error: ResultError): GroupUpdateRepoResult {
   return { service, outcome: 'failed', detail: { code: error.code, message: error.message } };
 }
@@ -317,9 +596,14 @@ async function updateMember(
   git: GitPort,
   container: ContainerPort,
   migration: MigrationPort,
+  restart: RestartPort,
   edtUlid: string,
   member: { service: string; repoPath: string; branch: string },
   onUpdateBlocker?: OnUpdateBlocker,
+  sourceBranch?: string,
+  runMigrations = true,
+  cleanRestart = false,
+  onPhase?: OnUpdatePhase,
 ): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
@@ -328,7 +612,22 @@ async function updateMember(
     return { row: failed(service, loaded.error), cancelRun: false };
   }
 
-  return updateWithLoadedManifest(loaded.data, git, container, migration, edtUlid, repoPath, service, branch, onUpdateBlocker);
+  return updateWithLoadedManifest(
+    loaded.data,
+    git,
+    container,
+    migration,
+    restart,
+    edtUlid,
+    repoPath,
+    service,
+    branch,
+    onUpdateBlocker,
+    effectiveSourceBranch(loaded.data.sharedBranch, sourceBranch),
+    runMigrations,
+    cleanRestart,
+    onPhase,
+  );
 }
 
 // Story 3.4: the per-repo outcome plus the `cancel-run` loop-stop signal. The cancelled
@@ -350,8 +649,12 @@ function failedOutcome(service: string, error: ResultError): RepoOutcome {
 // Shared per-service flow for both scopes (story 3.3 reuses the EDT mechanic unchanged):
 // pull/merge → migrate → restart. The EDT scope passes its recorded `branch` plus its ulid
 // (unexpected-branch gate + gated write); the all-repos scope passes neither, operating on
-// `currentBranch` as-is (`==sharedBranch` → `pull`, else `fetch` + ungated
-// `assertAllowedBranch` + `mergeBranch`).
+// `currentBranch` as-is (`==sourceBranch` → `pull`, else `fetch` + ungated
+// `assertAllowedBranch` + `mergeBranch`). Story 3.7: `sourceBranch` is the configured merge
+// source (manifest `sharedBranch` unless a per-service override was confirmed); the migrate
+// phase runs only when `runMigrations` is on; story 3.8: `cleanRestart` runs the
+// manifest's `restartCommands` recipe in order when declared, else today's plain
+// container restart.
 //
 // Story 3.4 layers assisted resolution onto this flow: lockfile-only dirt is silently
 // discarded (the `update_repo.sh` convention, seam or not); a pre-existing
@@ -365,13 +668,23 @@ async function updateWithLoadedManifest(
   git: GitPort,
   container: ContainerPort,
   migration: MigrationPort,
+  restart: RestartPort,
   edtUlid: string | undefined,
   repoPath: string,
   service: string,
   expectedBranch: string | undefined,
   onUpdateBlocker?: OnUpdateBlocker,
+  sourceBranch?: string,
+  runMigrations = true,
+  cleanRestart = false,
+  onPhase?: OnUpdatePhase,
 ): Promise<RepoOutcome> {
-  const { container: containerName, sharedBranch, migrationCommand } = loaded;
+  const { container: containerName, migrationCommand, restartCommands } = loaded;
+  // Story 3.7: the configured merge source — the manifest `sharedBranch` unless the
+  // pre-run screen confirmed a per-service override (trimmed once inside
+  // `effectiveSourceBranch`, so padding never reaches fetch/merge). Merge stays
+  // `git merge`, never rebase.
+  const mergeSource = effectiveSourceBranch(loaded.sharedBranch, sourceBranch);
 
   const current = await git.currentBranch(repoPath);
   if (!current.ok) {
@@ -439,7 +752,9 @@ async function updateWithLoadedManifest(
     }
   }
 
-  if (current.data === sharedBranch) {
+  if (current.data === mergeSource) {
+    // Story 3.10: the live current-step signal for the pull path.
+    emitPhase(onPhase, service, 'pulling');
     const pulled = await git.pull(repoPath);
     if (!pulled.ok) {
       // A conflicting pull leaves the repo mid-merge exactly like a conflicting merge
@@ -455,7 +770,7 @@ async function updateWithLoadedManifest(
           { code: 'merge-conflict', message: pulled.error.message },
           onUpdateBlocker,
           'pull',
-          sharedBranch,
+          mergeSource,
         );
         // A resumed conflict rejoins the pipeline below (migrate → restart); a settled
         // one already carries its row.
@@ -467,7 +782,9 @@ async function updateWithLoadedManifest(
       }
     }
   } else {
-    const fetched = await git.fetch(repoPath, sharedBranch);
+    // Story 3.10: the live current-step signal for the fetch+merge path.
+    emitPhase(onPhase, service, 'merging');
+    const fetched = await git.fetch(repoPath, mergeSource);
     if (!fetched.ok) {
       return failedOutcome(service, fetched.error);
     }
@@ -478,7 +795,7 @@ async function updateWithLoadedManifest(
     if (!allowed.ok) {
       return failedOutcome(service, allowed.error);
     }
-    const merged = await git.mergeBranch(repoPath, sharedBranch);
+    const merged = await git.mergeBranch(repoPath, mergeSource);
     if (!merged.ok) {
       if (merged.error.code === 'merge-conflict') {
         const settlement = await resolveMidRunConflict(
@@ -488,7 +805,7 @@ async function updateWithLoadedManifest(
           merged.error,
           onUpdateBlocker,
           'merge',
-          sharedBranch,
+          mergeSource,
         );
         if (settlement.done) {
           return settlement.outcome;
@@ -505,24 +822,28 @@ async function updateWithLoadedManifest(
   // merged code but skips the restart — a `failed` row with `migration-failed` detail
   // naming the service (via the row), the command, and the error output — and never blocks
   // or rolls back the other services (each failure short-circuits only its own service).
-  if (migrationCommand !== undefined && migrationCommand.trim() !== '') {
+  // Story 3.7: the run-wide migrate toggle gates the whole phase — off means no
+  // `migration.run` executes for this service even when a command is declared.
+  if (runMigrations && migrationCommand !== undefined && migrationCommand.trim() !== '') {
+    // Story 3.10: the live current-step signal for the migrate phase — the first (and
+    // only) producer of the `migrating` glyph's underlying phase.
+    emitPhase(onPhase, service, 'migrating');
     const migrated = await migration.run(repoPath, migrationCommand);
     if (!migrated.ok) {
       return failedOutcome(service, {
-        code: 'migration-failed',
+        code: MIGRATION_FAILED_CODE,
         message: `Repo ${repoPath} migration "${migrationCommand}" failed: ${migrated.error.message}`,
       });
     }
   }
 
-  const restarted = await container.restart(containerName);
+  // Story 3.8 — the restart phase (story 3.9: shared via runRestartStep so the
+  // standalone single-service use-case runs the identical recipe-or-fallback). Story
+  // 3.10: the `restarting` phase itself is emitted inside runRestartStep so both paths
+  // share it.
+  const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });
   if (!restarted.ok) {
-    // Every row's detail names its repoPath — with duplicate service names in one EDT,
-    // the code alone can't tell two rows apart.
-    return failedOutcome(service, {
-      code: restarted.error.code,
-      message: `Repo ${repoPath} container "${containerName}" failed to restart: ${restarted.error.message}`,
-    });
+    return failedOutcome(service, restarted.error);
   }
 
   return { row: { service, outcome: 'updated' }, cancelRun: false };

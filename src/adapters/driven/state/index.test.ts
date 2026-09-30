@@ -143,6 +143,26 @@ describe('state writeActiveEdt()', () => {
       splitterRatios: { edts: [0.4, 0.5, 0.6] },
     });
   });
+
+  // :reset command: writeActiveEdt(null) clears the pointer while keeping sibling fields.
+  it('clears the pointer with null, preserving splitterRatios and filterHistory', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    await port.writeActiveEdt('01JXXXXX1AAAAAAAAAAAAAAAAA');
+    await port.writeSplitterRatios({ edts: [0.4, 0.5, 0.6] });
+    await port.writeFilterHistory({ k: ['q'] });
+
+    const result = await port.writeActiveEdt(null);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await port.readActiveEdt()).toEqual({ ok: true, data: null });
+    const content = JSON.parse(await readFile(file, 'utf8'));
+    expect(content).toEqual({
+      activeEdt: null,
+      splitterRatios: { edts: [0.4, 0.5, 0.6] },
+      filterHistory: { k: ['q'] },
+    });
+  });
 });
 
 describe('state readSplitterRatios()', () => {

@@ -23,7 +23,7 @@ FR-3: A developer can create a new EDT by giving it a topic and manually selecti
 FR-4: At EDT creation, a developer can have the tool create a working branch in each selected member service, based on `development` by default or another chosen base branch, named either as one shared name across all selected services or individually per service.
 FR-5: A developer can add or remove member services from an existing EDT, and change a member service's working branch, after the EDT has been created.
 FR-6: A developer can switch the active EDT at any time; the tool auto-preserves any uncommitted work in every affected repo of the outgoing EDT before switching.
-FR-7: Assigning a shared/protected branch (`development`, preprod, prod) as an EDT's "own" branch for a service is rejected.
+FR-7: Assigning a shared/protected branch (the service manifest's `protectedBranches` ∪ its `sharedBranch` — amended 2026-09-28) as an EDT's "own" branch for a service is rejected.
 FR-8: While an EDT is active, every managed repo that is not one of its member services is kept on `development` (or its configured shared branch).
 FR-9: Every managed service is displayed with its current branch and how far that branch has diverged from its own origin/upstream, in both directions — ahead and behind.
 FR-10: A developer can run a group update — pull `development`, run migrations, restart containers — against either the active EDT's member services (default) or explicitly against all managed repos regardless of EDT (maintenance mode).
@@ -102,15 +102,15 @@ UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected 
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
 UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11; command mechanism corrected 2026-08-25, Story 2.14): Implement the repo registry screen — static manifest-creation guidance always shown, scan-a-root-path via `checkbox-list-item` multi-select, per-path register outcome (registered/already-registered/failed), distinct empty-scan state, reachable as a registered command inside the `:` command-entry bar (UX-DR29) and auto-offered from Dashboard's "no repos registered yet" state.
 UX-DR28 (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism corrected 2026-08-25 after a review loopback): Implement zone arrow navigation — `Left`/`Right` directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends, always available with no form/overlay capturing input. No focus mode; `Tab` is untouched.
-UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14; reveal mechanism corrected 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `:` command-entry bar — a `modal-dialog` instance with a text input; no command list shows on open. `Tab` on an empty input shows the full command grid (UX-DR30); `Tab` on a non-empty input autocompletes on a single match, completes to the longest common prefix when several matches share one, or (when already at that prefix) requires a second `Tab` within a short window to reveal the matching-commands grid. `Enter` runs an exact match and closes the bar, `Esc` cancels without executing, and an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently.
+UX-DR29 (added 2026-08-25, Sprint Change Proposal, Story 2.14; reveal mechanism corrected 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `:` command-entry bar — a `modal-dialog` instance with a text input; no command list shows on open. `Tab` on an empty input shows the full command grid (UX-DR30); `Tab` on a non-empty input autocompletes on a single match, completes to the longest common prefix when several matches share one, or (when already at that prefix) requires a second `Tab` within a short window to reveal the matching-commands grid. `Enter` runs an exact match and closes the bar, `Esc` cancels without executing, and an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): adds command-history recall — `↑` from the input browses previously run (recognized) commands with draft preservation, per the shared input-history recall pattern (UX-DR32); `↓` from an untouched draft keeps its existing grid-entry meaning (no history grid for commands).
 
 UX-DR30 (added 2026-08-26, Sprint Change Proposal, Story 2.17): Implement the `command-grid` component — a multi-column, arrow-navigable browser for the command bar's matching commands (UX-DR29), column-major left-to-right layout with a configurable max rows per column, trailing `…` truncation when the full grid exceeds the display width, and horizontal scrolling at either extremity to reveal columns hidden by that truncation. `Down` from the input enters the grid (landing top-of-first-column); `Up` from a column's top row returns to the input; `Enter` or any typed character exits back to the input (completing or resuming edit, respectively). Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the component is generalized and reused for the filter-history grid browser (UX-DR32) — a second, independent instance with its own rows-per-column setting.
 
 UX-DR29 amended 2026-09-16 (Sprint Change Proposal): the registered command set grows to include `edt-delete` (Story 2.29), `edt-create-from` (Story 2.31), and a `registry validate` action inside the existing `registry` screen rather than a new top-level command (Story 2.28) — same command-bar mechanism, no new UI pattern.
 
-UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the Logs tab, which previously had no row cursor (`Up`/`Down` claimed exclusively by `bufferSize`), grows to 4+ fields plus history-clear actions and gains its own row-cursor navigation model, mirroring the EDTs tab's group-list precedent.
+UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the Logs tab, which previously had no row cursor (`Up`/`Down` claimed exclusively by `bufferSize`), grows to 4+ fields plus history-clear actions and gains its own row-cursor navigation model, mirroring the EDTs tab's group-list precedent. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): the Command Palette tab grows from its single flat field (`gridMaxRows`, which owned `Up`/`Down`) to three fields — grid max rows, command history size, deduplicate command history — plus a "clear command history" action, and gains the same row-cursor navigation model the Logs tab adopted in Story 5.4.
 
-UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history.
+UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): generalized into a shared input-history recall pattern with two consumers — the Logs filter editor (above, scope+mode-keyed lists, with the `↓`-from-draft grid browser) and the `:` command bar (UX-DR29, a single command list, no grid browser). The push/dedup/trim rules, arrow-browse with draft preservation and skip-equal-to-draft, and snap-back-on-keypress behavior are one implementation shared by both; each consumer only supplies its own history list(s) and its own size/dedup settings.
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
@@ -154,7 +154,7 @@ A developer can create, modify, and safely switch between EDTs (no uncommitted w
 **Implementation notes:** Per-EDT SQLite storage (AD-7), centralized git branch-scope safety gate (AD-8), EDTs zone (UX-DR20), blast-radius isolation (NFR-2).
 
 ### Epic 3: Group Update & Migrations
-A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
+A developer can run a group update (pull, migrate, restart) scoped to the active EDT, to all managed repos, or to a single service — configured beforehand (service selection, per-service branch, migrate/clean-restart toggles) and followed live per-service — with assisted resolution of conflicts and migration failures.
 **FRs covered:** FR-10, FR-11, FR-12
 **Implementation notes:** Update zone (UX-DR21), reuses Epic 2's git safety gate (AD-8), detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic.
 
@@ -643,7 +643,9 @@ So that I don't create each branch by hand before starting.
 
 As a developer,
 I want the tool to categorically refuse to register a shared branch as an EDT's own branch,
-So that an EDT can never gain write authority over `development`/preprod/prod.
+So that an EDT can never gain write authority over a protected branch of that service (Story 2.42: manifest `protectedBranches` ∪ `sharedBranch`).
+
+> Amended 2026-09-28 (Sprint Change Proposal): protected set now manifest-defined, see Story 2.42.
 
 **Acceptance Criteria:**
 
@@ -651,7 +653,7 @@ So that an EDT can never gain write authority over `development`/preprod/prod.
 **When** about to execute
 **Then** it passes through the centralized git-adapter, which resolves the allowed-branch context itself from EDT/manifest state — never trusting a caller-supplied branch name (AD-8)
 
-**Given** a developer attempts to register `development`/preprod/prod as an EDT's own branch (at creation via Story 2.2 or later via Story 2.5)
+**Given** a developer attempts to register a protected branch of that service (Story 2.42: manifest `protectedBranches` ∪ `sharedBranch`) as an EDT's own branch (at creation via Story 2.2 or later via Story 2.5)
 **When** attempted
 **Then** it is rejected with a clear explanation before any git write happens (FR-7)
 
@@ -1678,6 +1680,8 @@ As a developer, I want `edt-switch` and `edt-modify` (typed with no argument) to
 ### Story 2.31: `edt-create-from` — Clone an EDT's Membership as a Creation Starting Point
 
 > Added 2026-09-16 (Sprint Change Proposal): new command, built on Story 2.30's quick-pick (root-EDT selection) and Story 2.27's `BranchPicker`-based branch-setup step (per-member base branch). Treated as a consequence of existing FR-3 (member selection, still manual/editable), not a new FR.
+>
+> Amended 2026-09-24 (Sprint Change Proposal): re-targeted from the flat create dialog to the 4-step creation wizard (Stories 2.36/2.37), which replaces it.
 
 As a developer, I want to create a new EDT starting from an existing one's member services (with the ability to add or remove some), where every inherited service's new branch is based on that service's *current* branch in the root EDT, so that I can spin off a continuation of in-progress work without losing the branch context it was building on.
 
@@ -1687,17 +1691,17 @@ As a developer, I want to create a new EDT starting from an existing one's membe
 
 **Given** `edt-create-from <topic>` **When** `<topic>` matches an existing EDT **Then** it's pre-targeted directly, skipping the quick-pick; no match shows an inline "EDT not found" error.
 
-**Given** a root EDT is resolved **When** the create dialog opens **Then** the member checklist is pre-checked with exactly the root EDT's current members — still a normal, fully-editable `checkbox-list-item` list (add/remove any service).
+**Given** a root EDT is resolved **When** the creation wizard opens (Story 2.36) **Then** Step 2's checklist is pre-checked with exactly the root EDT's current members — still a normal, fully-editable `checkbox-list-item` list (add/remove any service).
 
-**Given** the branch-setup step (Story 2.27) **When** a selected member *was* a member of the root EDT and naming mode reaches "Create new" for it **Then** the suggested base branch is that member's own *current* branch in the root EDT (not `sharedBranch`, not `development`) — Story 2.27's `sharedBranch`-aware default applies only to members that were *not* in the root EDT.
+**Given** Step 3 (Story 2.37) **When** a selected member *was* a member of the root EDT **Then** its row starts in `[Créer (Perso)]` with that member's own branch in the root EDT as base (not `sharedBranch`, not `development`).
 
-**Given** a selected member that was *not* part of the root EDT **When** the branch-setup step renders **Then** it falls back to Story 2.27's normal `sharedBranch`-aware default — unchanged.
+**Given** a selected member that was *not* part of the root EDT **When** Step 3 renders **Then** its row starts in `[Créer (Global)]`, following Panel A's global strategy — unchanged.
 
 **Given** the pre-filled base-branch suggestion **When** shown **Then** it stays fully editable, same convention as every other suggestion in this zone.
 
 **Given** the new EDT's topic **When** entered **Then** it follows the normal uniqueness rule (FR-3) — never auto-derived from the root EDT's topic, always typed fresh.
 
-**Implementation notes:** `initialCreateDialog` gains an optional `seedFromEdt: EdtRegistryEntry` parameter that pre-populates `selectedMembers` and a per-member `rootBranch` record consulted by the branch-setup step's base-branch suggestion logic (extends Story 2.27's per-member base-branch path). New `commands.ts` entry `edt-create-from`. Depends on Story 2.27 and Story 2.30 — sequence after both.
+**Implementation notes:** the wizard's initial state gains an optional `seedFromEdt: EdtRegistryEntry` that pre-populates Step 2's selection and Step 3's per-row plans. New `commands.ts` entry `edt-create-from`. Depends on Stories 2.30 and 2.37 — sequence after both.
 
 ### Story 2.32: `TextInputLine` — Cursor Navigation & App-Wide Adoption
 
@@ -1721,9 +1725,312 @@ As a developer, I want every text field built on `TextInputLine` — including t
 
 **Implementation notes:** every `CreateDialogState`/`ModifyDialogState`/`ServiceActionsDialogState`/`AddToEdtDialogState`/`BranchPickerState` field that today is a bare `string` and drives a `TextInputLine` gains a sibling `cursor` (exact shape decided at implementation time, consistently across all of them). `branch-picker.tsx`'s own local `applyTextInput`/`TextEditKey` re-implementation gets the same cursor extension in parallel, not via import (avoids the import-cycle it was written to avoid). Sequence command-bar/registry-screen migrations after the EDT-zone fields are done, so the extended `nextTextInputValue` contract is proven first where it has the most callers.
 
+### Story 2.33: Registry — Deregister Stale, Unreachable, or Unmanaged Repos
+
+> Added 2026-09-22 (Sprint Change Proposal): closes a gap flagged since Story 1.5's own code review (`deferred-work.md`: "`RegistryPort` has no unregister/remove: dead/replaced paths accumulate in `registry.yaml` forever; nothing prunes them ... the story where registry editing (unregister) is in scope") and named again by Story 2.25's acceptance criteria, which explicitly listed "stale-registry re-registration" as a future assisted-resolution action out of that story's scope. Confirmed in real usage: `switchActiveEdt` (`core/edt/switch.ts`) walks every path in `registry.list()`, not just the target EDT's members — a registered path whose repo no longer exists, or whose `.tui-back.yaml` was removed, surfaces a `failed` row on every single `edt switch`, regardless of which EDT is being switched to.
+
+As a developer, I want to review and remove stale entries from the managed-repo registry — a path that no longer exists on disk, or one whose `.tui-back.yaml` is gone — so that a repo I deleted or deliberately un-managed stops generating a `failed` row on every EDT switch, without me hand-editing `registry.yaml`.
+
+**Acceptance Criteria:**
+
+**Given** `RegistryPort` **When** extended **Then** it gains `remove(path): Promise<Result<void>>` (adapter: `removeRegistry` in `adapters/driven/registry/index.ts`, same read-modify-write shape as `addRegistry`) — a targeted single-path removal, distinct from `reset` (whole-file replacement for corrupt-registry recovery only); removing a path not currently registered is a no-op success, not an error.
+
+**Given** a new core use-case (`core/scripts/clean-registry.ts`, mirroring `list-repos.ts`'s shape) **When** run **Then** it classifies every registered path into exactly the two "stale" categories `list-repos`/`listEdtBranchesDivergence` already compute today: `unreachable` (`registry.exists()` returns `false`) and `manifest-not-found` (`manifest.load()` fails with that exact code) — never any other manifest-load error (invalid YAML, schema failure, `unknown-module`), which stay a manifest-content problem (Story 2.28's territory), not a registry-hygiene one.
+
+**Given** the candidate list **When** presented, via CLI or TUI **Then** removal is never automatic or silent — every candidate is shown with its path and reason (unreachable / no manifest) before anything is removed, and an explicit confirmation (or explicit per-path selection) is required; a run that finds zero candidates reports that explicitly, never silently exiting.
+
+**Given** the CLI **When** a `registry clean` invocation lists candidates and confirms **Then** each confirmed path is removed via `RegistryPort.remove`, one outcome row per path (`removed`/`failed`), per-path failure isolation (one `remove` failure never blocks the others) — same AD-2 script/CLI parity every other action provides.
+
+**Given** the TUI's REPO REGISTRY screen (Story 2.11) **When** open **Then** it gains a "Clean stale entries" action alongside scan/register(/validate, Story 2.28): running it lists candidates as a `checkbox-list-item` list (pre-checked, same "detect → guided choice → act" convention Story 2.29's per-service disposition list already uses), and confirming removes the checked ones, reported via the same structured per-repo outcome list Story 2.25/2.28 already use.
+
+**Given** a stale path also recorded as a member of some EDT in `edts.yaml` **When** it is removed from `registry.yaml` **Then** the EDT record itself is left untouched — `switch.ts`'s existing `repo-not-registered` failed-row handling (review patch, Story 2.4) already covers a target member no longer in the registry, so this story never writes to `edts.yaml`; the candidate list surfaces this case with an extra note ("still a member of EDT <topic>") so the developer isn't surprised later, but it doesn't block removal.
+
+**Implementation notes:** `core/scripts/clean-registry.ts` takes `{registry, manifest, edtRegistry}` and returns `{candidates: StaleRegistryEntry[]}` where `StaleRegistryEntry = {path, reason: 'unreachable' | 'manifest-not-found', memberOfEdts: string[]}` — `memberOfEdts` is populated purely for the AC6 display note, never used to gate removal. A second exported function (or a `paths: string[]` parameter on the same use-case) performs the confirmed removal, calling `registry.remove(path)` per confirmed path with per-path isolation, mirroring `create.ts`'s/`switch.ts`'s own per-repo isolation convention. CLI: `tui-back registry clean` (list-then-confirm interactive on a TTY; `--yes` with repeated `--path <path>` flags for scripted use, consistent with `update`'s `--all --yes` precedent). TUI: new `RegistryScreenPhase` states (`cleaning` → `clean-results`), reusing `repo-registry-screen.tsx`'s existing candidate-list/checkbox/results pattern (Story 1.9/2.11) rather than inventing a new component. Closes the `deferred-work.md` "`RegistryPort` has no unregister/remove" entry (Story 1.5 review) once shipped.
+
+### Story 2.34: EDT Zone — Colored, Explained Service-Listing Issues
+
+> Added 2026-09-23 (direct request, not a full Sprint Change Proposal cycle): the `unreachable`/`errors` counts `listEdtBranchesDivergence` already computes (Story 2.6, first surfaced by the "review patch" in Story 2.18) render today as a single dim, easy-to-miss line ("1 error" / "2 unreachable, 3 errors") with no way to see *which* repo is affected, *why*, or what to do about it. Real-usage feedback: the line blends into the rest of the dim UI chrome and gives no path to a fix.
+
+As a developer, I want the unreachable/error summary in the EDT zone to stand out and to explain each affected repo, so that I notice a listing problem immediately and know what to do about it instead of squinting at a vague count.
+
+**Acceptance Criteria:**
+
+**Given** `unreachable.length > 0` or `errors.length > 0` **When** the SERVICES list renders **Then** the summary line is colored by severity — `colors.error` (with a `✖` glyph) when `errors.length > 0`, else `colors.warning` (with a `▲` glyph) when only `unreachable` is non-empty — instead of the current uniform dim gray; the `status === 'error'` gating that already hides a stale summary during a load failure (Story 2.18 review fix) is unchanged.
+
+**Given** the colored summary line **When** no dialog is open **Then** it carries a `[i] details` hint, and pressing `i` from any of the three list panes opens a new read-only "SERVICE LISTING ISSUES" dialog — the zone's first dialog with no submit action, closed by `Esc` or `Enter`.
+
+**Given** the issues dialog **When** open **Then** it lists every `unreachable` path and every `errors` entry as its own row: the path, a plain-language reason, the original error message (errors only), and a suggested next step — `unreachable` rows point at the Repo Registry screen's "Clean stale entries" action (Story 2.33); `errors` rows resolve their `code` against a small extensible explanation registry (mirrors `resolveAssistedAction`'s precedent in `failed-result-list.tsx`), falling back to a generic "check the message above" note for an unrecognized code rather than rendering nothing.
+
+**Implementation notes:** `edts-zone.logic.ts` gains `resolveIssuesSeverity(unreachableCount, errorCount)` and an `ISSUE_EXPLANATIONS` registry (+ `explainIssueErrorCode`/`explainUnreachable`), pure and unit-tested directly, same convention as `formatIssuesSummary`. New `dialogs/issues-dialog.tsx` (`IssuesDialogView`) takes `unreachable`/`errors` as props (not dialog state — the dialog carries no payload of its own, just `{ kind: 'issues' }`, since the data already lives in the zone). No new store fields, no new port methods.
+
+### Story 2.35: EDT Creation Core — Per-Service Branch Plans & Remote Branches
+
+> Added 2026-09-24 (Sprint Change Proposal): core groundwork for the `edt-create` wizard (Stories 2.36–2.38). Amends FR-4's "one base / one naming mode for the whole action" into "a global strategy with per-service overrides". CLI (`tui-back edt create`) is deliberately unchanged.
+
+As a developer, I want EDT creation to accept an individual branch plan per member service — create from the global base, create from its own base, or attach an existing (local or remote) branch, optionally renamed — so that one EDT can mix services starting from different points without me fixing branches by hand afterwards.
+
+**Acceptance Criteria:**
+
+**Given** `CreateEdtParams` **When** extended **Then** it accepts an optional `memberPlans: Record<repoPath, MemberBranchPlan>` where `MemberBranchPlan = { kind: 'create'; base: string; name: string } | { kind: 'existing'; branch: string; renameTo?: string }`; when `memberPlans` is present it is authoritative for every member (a member missing from it is rejected before any write, `invalid-argument`); when absent, `branchOptions` behaves exactly as today (CLI path untouched).
+
+**Given** a `create` plan **When** executed **Then** `git.createBranch(member, name, base)` runs, where `base` may be a local branch or a remote-tracking ref (`origin/<x>`); the branch is never checked out (Story 2.2 invariant); outcome `created`.
+
+**Given** an `existing` plan on a **local** branch without `renameTo` **When** executed **Then** the branch must pass `git.assertAllowedBranch` (FR-7) and is recorded as the member's branch; outcome `existing-branch`.
+
+**Given** an `existing` plan with `renameTo` **When** executed **Then** `git.renameBranch(member, branch, renameTo)` runs and the member's branch is recorded as `renameTo`; outcome `renamed` (the closed outcome set widens to `created | existing-branch | renamed | failed`).
+
+**Given** an `existing` plan whose `branch` is a **remote-only** ref (`origin/<x>`) **When** executed **Then** a local branch tracking it is created via the new `git.createTrackingBranch(member, localName, remoteRef)` — `localName` is `renameTo` when set, else `<x>` — gated like `createBranch`; outcome `created`.
+
+**Given** `renameBranch` **When** called **Then** it rejects (before any git write) when *either* the old or the new name is a shared/protected branch — renaming `development` away is refused exactly like renaming onto it (closes the old-name gap).
+
+**Given** the new `GitPort.listRemoteBranches(repoPath)` **When** called **Then** it returns the repo's remote-tracking refs (`origin/<x>`, excluding `origin/HEAD`) read from the local clone only — never fetching; `listBranches` stays local-only, unchanged for every existing caller.
+
+**Given** the EDT-registry write fails after some plans succeeded **When** rolling back **Then** created and tracking branches are force-deleted (existing behavior) **and** renamed branches are renamed back to their original name; a rollback failure is logged per branch, never thrown.
+
+**Given** per-member failure isolation (Story 2.2/2.3) **When** any plan fails **Then** that member gets a `failed` row, is not registered, and the others proceed — unchanged.
+
+**Implementation notes:** `resolveMemberBranch` in `core/edt/create.ts` gains a `plan` branch alongside today's `options.create` branches; keep the two paths side by side rather than converting `branchOptions` into plans, so the CLI's behavior is provably unchanged (its existing tests stay untouched). Adapter: `listRemoteBranches` = `git for-each-ref --format=%(refname:short) refs/remotes`, filter `*/HEAD`; `createTrackingBranch` = `git branch --track <local> <remoteRef>`. The TUI-side "does this base exist in this service" check (Story 2.37) is a pure function over `listBranches ∪ listRemoteBranches`, not a new port method.
+
+### Story 2.36: EDT Creation Wizard — Shell, Step Navigation, Name & Services Steps
+
+> Added 2026-09-24 (Sprint Change Proposal): replaces the flat create-EDT dialog (Stories 2.9/2.22/2.27) with a 4-step wizard. This story builds the shell and Steps 1–2; Steps 3–4 land in Stories 2.37/2.38.
+
+As a developer, I want EDT creation to walk me through explicit, labelled steps with a breadcrumb showing where I am and what I've decided so far, so that I never lose track of which choices are made and which are still pending.
+
+**Acceptance Criteria:**
+
+**Given** the `edt-create` command or the zero-EDT auto-open **When** triggered **Then** a modal titled "EDT Wizard: Création d'un espace de travail" opens on Step 1 with a breadcrumb `[1. Nom] ── [2. Services] ── [3. Branches] ── [4. Activation]`; the current step is marked (`▶ … ◀` + accent color), completed steps show their summary (`1. Nom: auth-flow`, `2. Services (3)`), unreachable steps are dim.
+
+**Given** any step **When** rendered **Then** it opens with a short intro explaining what the step does and what is decided in it.
+
+**Given** navigation keys **When** pressed **Then**: `Ctrl+→` / `Ctrl+N` go to the next step only if the current step is valid (else its inline error shows); `Ctrl+←` goes back one step (always allowed, state preserved); `Tab` moves between fields/zones *within* the current step; `Enter` advances on Steps 1–2 (Step 3 uses Enter for editing — Story 2.37; Step 4 uses it for final confirmation — Story 2.38); `Esc` closes the innermost open sub-field/box first, otherwise cancels the whole creation with nothing written — except with zero existing EDTs, where it requests quit (current behavior kept).
+
+**Given** Step 1 **When** shown **Then** a single autofocused `TextInputLine` holds the EDT name; availability is checked live on every keystroke (trimmed, case-sensitive, against the loaded EDT list) and shown with glyph + color — `✔ disponible` (`success`) / `✖ déjà pris` (`error`); an empty or taken name blocks advancing.
+
+**Given** Step 2 **When** shown **Then** every registered managed repo is listed as a `checkbox-list-item` (`Space` toggles, `↑/↓/Home/End` move), with the existing loading/error/empty states; zero checked services blocks advancing with an inline message.
+
+**Given** Steps 3–4 before Stories 2.37/2.38 land **When** reached **Then** Step 3 hosts today's branch-setup fields unchanged and Step 4 is a plain confirm with today's behavior, so the epic branch stays shippable between stories.
+
+**Given** the keybinding contract (Story 1.13, `EXPERIENCE.md`) **When** this story lands **Then** it documents `Ctrl+←/→` and `Ctrl+N` as wizard-scoped additions; if the terminal does not deliver `ctrl` on arrow keys (verify in Ink), `Ctrl+N` and `Ctrl+←`'s fallback (documented) keep every step reachable.
+
+**Implementation notes:** new `dialogs/create-wizard/` folder (one file per step + a pure `wizard.logic.ts`: `canAdvance(step, state)`, `reachableSteps(state)`, `stepSummary(step, state)`), unit-tested directly like `edts-zone.logic.ts`. `CreateDialogState`/`CreateFormFocus`/`advanceCreateFormFocus` are retired at the end of Story 2.37 once Step 3 no longer needs them.
+
+### Story 2.37: EDT Creation Wizard — Step 3: Global Branch Strategy & Per-Service Overrides
+
+> Added 2026-09-24 (Sprint Change Proposal): Step 3 of the wizard. Requires the epic-3 → epic-2 merge (`BranchAutocompleteInput`) and Story 2.35's `memberPlans`/remote-branch support.
+
+As a developer, I want to set one branch rule for all selected services and then adjust individual services in a table, so that the common case takes seconds and the exceptions stay visible instead of being buried in a per-service form.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** first run `git merge-base --is-ancestor epic-3-group-update-migrations epic-2-edt-workspace-management` (exit 0 = merge done) and confirm `src/adapters/driving/tui/shared/components/branch-autocomplete-input.tsx` exists on the epic branch; if either check fails, **HALT** — the epic-3 → epic-2 merge must be done first (4 expected conflicts: `deferred-work.md`, `sprint-status.yaml`, `sprint-change-proposal-2026-09-22.md`, `edts-zone.test.tsx`), and `BranchAutocompleteInput` must never be reimplemented or copied into this story.
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm `2-35-edt-creation-core-per-service-branch-plans-remote-branches` is `done` in `sprint-status.yaml` and merged into the epic branch (`memberPlans` on `CreateEdtParams`, `GitPort.listRemoteBranches` present); otherwise **HALT** — never stub or re-implement Story 2.35's core in this story.
+
+**Given** Step 3 **When** shown **Then** it has two vertically stacked panels — **A "STRATÉGIE GLOBALE"** (focused by default) and **B "RÉSUMÉ ET EXCEPTIONS PAR SERVICE"** — and `Tab` switches between them; a footer shows `[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Étape suivante`.
+
+**Given** Panel A **When** navigated **Then** `↑/↓` move between its two lines ("Branche source par défaut", "Nom global de la branche"); `Enter` enters edit mode on the focused line, `Esc` leaves it, and for the base line any printable key also enters edit mode with that character typed.
+
+**Given** "Branche source par défaut" **When** empty **Then** it shows a dim, non-editable `<shared-branch>` placeholder meaning "each service uses its own manifest `sharedBranch`"; the first keystroke clears the placeholder and the field becomes a `TextInputLine` (`h|`); clearing it back to empty restores the placeholder.
+
+**Given** a non-empty global base **When** typed **Then** every row in mode "Créer (Global)" re-resolves it live against *that service's* local and remote branches (exact match, local preferred over `origin/<x>`); a service with no match shows a red `✖ branche introuvable` message in its row (glyph + color); Step 3 cannot be left while any "Créer (Global)" row carries it.
+
+**Given** "Nom global de la branche" **When** Step 3 is first entered **Then** it is pre-filled with the slug of the Step 1 name (`suggestBranchNameFromTopic`, no prefix) and keeps tracking the name until edited (touched-flag convention, Story 2.22); every edit live-updates every "Créer (Global)" row's target.
+
+**Given** Panel B **When** rendered **Then** it is a table `Service | Mode | Base / Source | Branche cible` with one row per selected service; modes are `[Créer (Global)]`, `[Créer (Perso)]`, `[Existante]`, `[Renommer]`; for `[Renommer]` the target column reads `-> <new name>`; the list is height-bounded (NFR-7); `↑/↓` move the row cursor and `Enter` opens the override box for that service.
+
+**Given** the override box ("Configurer <service>") **When** open **Then** it shows `Mode : (•) Créer nouvelle ( ) Choisir existante` (toggled with `Space` or `Tab` while the Mode line is focused), then mode-specific lines and an `[ Appliquer ]` action. `↑/↓` move between lines; `Enter` enters the focused field; inside a field, `Enter` commits and focuses the next line; `Esc` leaves the field; `Esc` with no field active closes the box without applying; `Enter` on `[ Appliquer ]` (or on the last field's committed value, second `Enter`) applies and closes.
+
+**Given** mode "Créer nouvelle" in the box **When** edited **Then** "Branche de base (source)" is a `BranchAutocompleteInput` over that service's local + remote branches (pre-filled with the current row's base), and "Nom de la branche" is a `TextInputLine` pre-filled with the global name; a protected/shared target name is rejected inline (FR-7); applying sets the row to `[Créer (Perso)]` — it no longer follows Panel A changes.
+
+**Given** mode "Choisir existante" in the box **When** edited **Then** "Branche existante" is a `BranchAutocompleteInput` over local + remote branches; a `[ ] Renommer la branche locale` checkbox (`Space`) reveals "Nouveau nom"; choosing a protected branch without a rename, or a protected new name, is rejected inline (FR-7); applying sets the row to `[Existante]` or `[Renommer]`.
+
+**Given** a row in `[Créer (Perso)]`, `[Existante]` or `[Renommer]` **When** the developer wants the global rule back **Then** a documented key in the box (proposed: `Ctrl+R` "Revenir à la stratégie globale") resets it to `[Créer (Global)]`.
+
+**Given** `Ctrl+N` / `Ctrl+→` **When** Step 3 is valid (no red row, every name non-empty, every base resolved) **Then** the wizard moves to Step 4 and Step 3's rows are turned into Story 2.35's `memberPlans`.
+
+**Implementation notes:** per-service branch lists (`listBranches` + `listRemoteBranches`) are loaded once when Step 3 is first entered (and on retry), exposed through the store like `listMemberBranches` today. Pure helpers in `wizard.logic.ts`: `resolveGlobalBase(input, branchesByService)`, `buildRowView(plan, global)`, `buildMemberPlans(rows)`. Retires `CreateDialogState`'s branch-step fields, `advanceCreateFormFocus`, `prefillBaseBranches`, `resolveBaseBranchMode` if no other caller remains (Story 2.31 is re-pointed to the wizard below).
+
+### Story 2.38: EDT Creation Wizard — Step 4: Activation & Switch Choice
+
+> Added 2026-09-24 (Sprint Change Proposal): Step 4 of the wizard. Fixes two defects: TUI creates silently became the active EDT without a protected switch (`edt-slice.ts:280-291`), and the create action-log entry went to the previously focused EDT (`create-dialog.tsx:491-510`). Relies on the switch resolution dialog of Story 2.41 (which supersedes the confirm seam of branch `fix-edt-switch-dirty-service-confirmation`); Stories 2.39 and 2.41 must be merged into epic-2 first (amended 2026-09-24, Sprint Change Proposal 2026-09-24 (2)).
+
+As a developer, I want the last step of EDT creation to make explicit whether the new EDT becomes active now — and, for my very first EDT, to put every repo on the right branch while showing me exactly which uncommitted files are in the way — so that creation never silently changes my working state.
+
+**Acceptance Criteria:**
+
+**Given** zero EDTs existed before this creation **When** Step 4 renders **Then** the activation option is visually locked on "Oui" with the label "Définir cet EDT comme espace actif immédiatement", plus an explanation that no outgoing EDT exists to preserve.
+
+**Given** that first-EDT case **When** the developer confirms (`Enter`) **Then** `createEdt` runs, then a new core use-case `activateEdt` (`core/edt/activate.ts`) pre-flights every managed repo: members target their EDT branch, non-members target their manifest `sharedBranch` (fetched first if absent locally, FR-8); a repo whose uncommitted changes would be overwritten by that checkout is reported with the exact file list (uncommitted paths ∩ paths differing between current and target branch) and **no checkout runs anywhere yet**.
+
+**Given** that pre-flight reported blocked repos **When** shown **Then** the wizard pauses on a panel listing each blocked service and its files, with: `[R] Réessayer` (re-runs the pre-flight after the developer fixed things by hand — repeatable indefinitely), `[E] Écraser` (a second explicit confirmation listing every file that will be discarded, then discards exactly those paths and proceeds), `[Esc]` (stop: the EDT stays created but **not** active, and the wizard says so).
+
+**Given** a clean pre-flight (or after Retry/Overwrite) **When** activation proceeds **Then** every repo is checked out on its target branch, `state.json`'s active pointer is set to the new EDT, per-repo failures are shown via `FailedResultList`, and one failure never blocks the others.
+
+**Given** one or more EDTs already existed **When** Step 4 renders **Then** a radio toggle (`Space`/`↑↓`) offers `(•) Basculer immédiatement sur ce nouvel EDT` (default) and `( ) Créer sans basculer (rester sur l'EDT courant)`; under the switch option an info block states that uncommitted work in the outgoing EDT's services is auto-preserved (stash) and that uncommitted work in any other service is listed so you choose to adopt it into the outgoing EDT or discard it, that non-member services return to **their own shared branch (listed by name per service)**, and that member services move to their configured branches.
+
+**Given** "Basculer immédiatement" **When** confirmed **Then** `createEdt` runs, then the existing protected switch (`switchActiveEdt`, including the Story 2.41 dirty-service resolution dialog) runs to the new EDT — never a direct `writeActiveEdt`.
+
+**Given** "Créer sans basculer" **When** confirmed **Then** only `createEdt` runs; the active EDT is unchanged.
+
+**Given** the store's `createEdt` action **When** this story lands **Then** its unconditional `writeActiveEdt` is removed — activation only ever happens through Step 4's explicit paths above.
+
+**Given** any creation outcome **When** logged **Then** the action-log entry is written to the **new** EDT's database (success, partial failure, or activation stopped), never to the previously focused EDT.
+
+**Implementation notes:** `activateEdt` reuses `switch.ts`'s per-repo target computation (member → registered branch, non-member → `sharedBranch` + fetch-if-missing) but has no outgoing EDT, so no stash tagging; it takes an explicit `overwrite: string[]` per repo (paths the developer confirmed) and calls the existing `git.discardPaths` for exactly those. The overwrite path is the consent-gated exception recorded in the PRD amendment below. The pre-flight "would be overwritten" set needs one new read-only `GitPort` helper (`diffNameOnly(repoPath, from, to)`), gated nowhere (read-only).
+
+### Story 2.39: EDT Switch Core — Three-State Partition & Dirty-Service Resolutions
+
+> Added 2026-09-24 (Sprint Change Proposal): fixes `switch.ts` D1/D2 and replaces the informational dirty-repo seam with an authoritative per-service resolution. CLI wiring lands in 2.40, TUI dialog in 2.41.
+
+As a developer, I want a switch to know exactly whose uncommitted work each repo holds, so that the outgoing EDT's work is preserved for its return, and work that belongs to no outgoing member is never silently moved — I decide what happens to it.
+
+**Acceptance Criteria:**
+
+**Given** a switch **When** repos are classified **Then** membership is evaluated against the **outgoing** EDT: *state 1* = member of the outgoing EDT; *state 2* = member of another EDT (including the target) but not the outgoing one; *state 3* = member of no EDT. The target's membership still decides the destination branch (its own registered branch if a target member, else the repo's manifest `sharedBranch`, fetched first if absent locally — FR-8).
+
+**Given** a **state-1** repo that is dirty **When** switched **Then** it is stashed with `tui-back:<outgoing ulid>` **before** checkout, no resolution is needed, and it is popped only by a later switch **into** the outgoing EDT (that switch's `switchMemberRepo` pops the target-ulid-tagged stash, unchanged). A state-1 repo that is also a target member additionally pops its target-tagged stash after checkout (unchanged).
+
+**Given** a **state-2 or state-3** repo that is dirty **When** switched **Then** it requires an entry in the caller-supplied `dirtyResolutions: Record<repoPath, DirtyResolution>` where `DirtyResolution = { kind: 'adopt'; branch: string } | { kind: 'discard' }`. The fixed `NON_MEMBER_STASH_TAG` and its unconditional post-checkout pop are **removed**; D1 and D2 no longer exist (a target-only dirty member is state 2 and goes through resolution, never through an outgoing-tagged stash).
+
+**Given** the pre-flight **When** the switch starts **Then**, before any git write, dirtiness of every registered repo is re-read (`hasUncommittedChanges`); if any dirty state-2/3 repo has no resolution, the switch returns `switch-dirty-services-unresolved` whose `details` lists `{service, repoPath, scope: 'member-of-other-edt' | 'non-member', currentBranch}` per repo, with **zero repos touched** and `state.json`/`edts.yaml` untouched.
+
+**Given** the `onDirtyReposBeforeSwitch` seam **When** at least one state-2/3 repo is dirty **Then** it is invoked once with every dirty repo (state-1 rows flagged `resolution: 'auto-stash'` as read-only information; state-2/3 rows carrying their scope, current branch, whether that branch is shared, and the owning EDT topic(s) when state 2) and returns `{ kind: 'cancel' }` (→ `switch-cancelled-by-user`, zero writes) or `{ kind: 'proceed', resolutions }`. When only state-1 repos are dirty the seam is **not** invoked. Explicit `dirtyResolutions` in params take precedence and skip the seam (CLI path).
+
+**Given** an `adopt` resolution **When** executed **Then**, in order: (1) `git.assertAllowedBranch(repo, branch, outgoing.ulid)` — a shared/protected name or a branch claimed by another EDT for this repo is rejected before any write (FR-7, AD-8); (2) `stashSave` with `tui-back:<outgoing ulid>`; (3) if `branch` differs from the repo's current branch, `createBranch(repo, branch, <current HEAD branch>)` — never checked out; if it equals the current branch it must itself pass step 1 (i.e. not shared); (4) the repo is added to the outgoing EDT with `branch` as its registered branch (existing `modifyEdt` add-member path, under the edts.yaml lock); (5) checkout to the destination branch. A failure at any step after the stash restores the stash and reports `failed` — never an orphaned stash. Outcome `adopted`.
+
+**Given** a `discard` resolution **When** executed **Then** the repo must still be dirty at that instant, its dirty paths are captured via `git.listDirtyPaths` (untracked expanded to files), `git.discardAll(repo)` runs, then checkout to the destination branch. Outcome `discarded`, with `detail.discardedPaths` carrying the captured list. Ignored files are never touched.
+
+**Given** no outgoing EDT (first switch) **When** a state-2/3 repo is dirty **Then** an `adopt` resolution is rejected (`switch-adopt-without-outgoing`); only `discard` or cancel apply.
+
+**Given** the new `GitPort.discardAll(repoPath)` **When** implemented **Then** it runs `git reset --hard` then `git clean -fd` (never `-x`, never `-ff`), returns `git-discard-error` on failure, and its port doc comment records that it is the one consent-gated destructive primitive whose only permitted caller is `switch.ts` under an explicit `discard` resolution.
+
+**Given** a discard/adopt failure on one repo **When** reported **Then** it is a `failed` row for that repo; the others proceed (per-repo isolation unchanged). Idempotency, lock-peek/`--force`, AD-8 member re-verification and the final `state.json`/`edts.yaml` writes are unchanged.
+
+**Given** the TUI slice **When** this story lands **Then** its seam implementation compiles against the new signature and, for a dirty state-2/3 repo, returns `cancel` with an explanatory message (interim, safe; replaced by 2.41).
+
+**Implementation notes:** classification is a pure helper `classifySwitchRepos(registered, outgoing, target, allEdts)` unit-tested directly; `switchMemberRepo`/`switchNonMemberRepo` keep their names but take the resolved state + resolution. Unit tests use fake ports (AD-13); `discardAll` gets a real-git integration test (tracked-modified, untracked file, untracked dir, ignored file survives). Existing `switch.test.ts` cases that assert the `tui-back:shared` round-trip are rewritten, not patched.
+
+### Story 2.40: `edt switch` CLI — Fail-Safe Dirty Handling & Explicit Flags
+
+> Added 2026-09-24 (Sprint Change Proposal): CLI side of the 2.39 model. No dialog exists on this path.
+
+As a developer scripting or hand-running `tui-back edt switch`, I want a dirty service that belongs to no outgoing member to stop the switch unless I said what to do with it, so that no script ever silently moves or destroys work.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back edt switch --to <topic>` **When** a state-2/3 repo is dirty and no dirty flag is passed **Then** the command fails with `switch-dirty-services-unresolved` (exit 1, AD-3 envelope; `details` lists each service, scope and current branch) and touches nothing.
+
+**Given** `--discard-dirty` **When** passed **Then** every dirty state-2/3 repo is resolved as `discard` (2.39), and the JSON result lists each discarded path under that service's `detail.discardedPaths` (audit trail); the flag is the explicit consent — no interactive prompt on this path.
+
+**Given** `--adopt-dirty --adopt-branch <name>` **When** passed **Then** every dirty state-2/3 repo currently on a **shared** branch is adopted onto a new branch `<name>`, and every one on a **non-shared** branch is adopted keeping its current branch; a name rejected by the AD-8 gate or already existing in that repo fails that repo's row (`failed`), others proceed. `--adopt-dirty` without `--adopt-branch` while any such repo sits on a shared branch fails up front with `missing-argument` (zero writes).
+
+**Given** `--adopt-dirty` and `--discard-dirty` **When** both passed **Then** `invalid-argument`, zero writes. With no outgoing EDT, `--adopt-dirty` fails with `switch-adopt-without-outgoing`.
+
+**Given** the help text and `docs` for `edt switch` **When** updated **Then** both flags and the fail-safe default are documented, including that the previous silent stash-and-restore for these repos no longer happens.
+
+**Given** `tui-back.e2e.test.ts` **When** run **Then** its `edt switch` expectations are updated (dirty non-member → `switch-dirty-services-unresolved`; both flags exercised black-box in the non-TTY JSON branch).
+
+**Implementation notes:** `subcommands.ts:436` stops passing `onDirtyReposBeforeSwitch: undefined` and instead builds `dirtyResolutions` lazily: the flags produce a *policy* (`adopt(name)` | `discard`) that is turned into per-repo resolutions **after** the core's pre-flight classification (the CLI does not classify repos itself). Simplest shape: core accepts `dirtyPolicy?: { kind: 'adopt'; branch: string } | { kind: 'discard' }` as sugar that expands to resolutions per dirty state-2/3 repo (adopt: current branch kept when non-shared).
+
+### Story 2.41: EDT Switch Resolution Dialog — Global Strategy, Per-Service Overrides & Discard Confirmation
+
+> Added 2026-09-24 (Sprint Change Proposal): TUI side of the 2.39 model; mirrors the edt-create Step 3 pattern (Stories 2.35-2.37). Replaces the informative-only confirm added by `43d4087`.
+
+As a developer switching EDT with uncommitted work in services that don't belong to the EDT I'm leaving, I want to see exactly which services are affected and decide once for all of them — or service by service — whether to keep that work with my current EDT or throw it away, so that nothing is lost by accident and nothing pollutes the shared branches.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm Story 2.39 is `done` in `sprint-status.yaml` and merged into the epic branch (`dirtyResolutions`, `discardAll`, resolver-shaped seam present), and that Story 2.37's reusable table/override-box components exist on the epic branch (`branch-plan-table`); otherwise **HALT** — never re-implement either here.
+
+**Given** a switch with ≥1 dirty state-2/3 repo **When** the seam fires **Then** the SWITCH EDT dialog shows a two-panel resolution view — **A "STRATÉGIE GLOBALE"** (focused by default) and **B "SERVICES CONCERNÉS"** — with a footer `[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch`; an intro states which EDT is being left and that state-1 services are handled automatically.
+
+**Given** Panel A **When** navigated **Then** it has a line "Action par défaut" toggling `(•) Adopter dans <outgoing topic>  ( ) Écraser` (`Space`/`←→`) and, when *Adopter*, a line "Nom global de la branche" (a `TextInputLine`, pre-filled with the slug of the outgoing EDT's topic via `suggestBranchNameFromTopic`, touched-flag convention of Story 2.22) applied to every row on a **shared** branch. With no outgoing EDT only *Écraser* is offered, with an explanation.
+
+**Given** Panel B **When** rendered **Then** it is a height-bounded table (NFR-7) `Service | Portée | Branche actuelle | Action | Branche cible`, one row per dirty state-2/3 service (`Portée` = "membre de <topic>" or "hors EDT"); state-1 dirty services appear below as read-only dim rows "sera mis de côté pour <outgoing> (restauré au retour)"; modes per row: `[Adopter (Global)]`, `[Adopter (Perso)]`, `[Écraser]`; `↑/↓` move, `Enter` opens the override box.
+
+**Given** the override box "Configurer <service>" **When** open **Then** it offers `Action : (•) Adopter ( ) Écraser`; for *Adopter*, "Branche" is a `TextInputLine` — **always editable and pre-filled** (global name when the repo is on a shared branch, its current branch name otherwise) — validated live inline: a shared/protected name is rejected (FR-7), a name that already exists locally in that repo is rejected, an empty name is rejected; `Enter` on `[ Appliquer ]` sets the row to `[Adopter (Perso)]` or `[Écraser]`; `Ctrl+R` returns the row to the global strategy.
+
+**Given** `Ctrl+N` **When** every row is valid **Then**: if no row is `[Écraser]` the switch proceeds with the resolutions; if any row is `[Écraser]` a **second confirmation** first lists, per service, every file that will be destroyed (tracked modifications and untracked files, from `listDirtyPaths`), states that the action is irreversible and that ignored files are kept, and requires an explicit confirmation key (default action is *Retour*); `Esc` there returns to the table. Invalid rows block `Ctrl+N` with the inline error.
+
+**Given** `Esc` on the main view **When** pressed **Then** the switch is cancelled (`switch-cancelled-by-user`), nothing touched, and a message says so.
+
+**Given** the switch completes **When** results return **Then** `adopted` / `discarded` / `switched` / `failed` rows are shown via the existing structured result display (`FailedResultList` for failures), and the action-log entry (written to the **new active** EDT's database) records adopted branches and discarded paths.
+
+**Given** the `edt-*` auto-switch-tab command path (Story 670bfcb) and the quick-pick (Story 2.30) **When** they trigger a switch **Then** they go through the same seam, unchanged.
+
+**Implementation notes:** `edt-slice.ts` already parks the core call on a pending promise (`switchDirtyRepos` + `resolveSwitchDirtyRepos`); widen the resolver payload to the `{kind, resolutions}` shape and hold the dialog's draft state in the slice or dialog, not in core. Pure helpers in a new `switch-resolution.logic.ts`: `buildRows(dirty, global)`, `validateRow(row, branchesByService)`, `buildResolutions(rows)`. Per-service branch lists come from `listMemberBranches`.
+
+### Story 2.42: Manifest-Defined Protected Branches per Service
+
+> Added 2026-09-28 (Sprint Change Proposal): replaces FR-7's hardcoded `development`/preprod/prod set with a per-service manifest list. Sequenced after Story 2.37, which moved the rule into `src/core/edt/shared-branches.ts`.
+
+As a developer onboarding services that follow different branching models, I want each service's `.tui-back.yaml` to declare which branches are protected, so that the tool guards exactly that service's release branches instead of a fixed list that fits no one exactly.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm Story 2.37 is `done` and merged into the epic branch (`src/core/edt/shared-branches.ts` present); otherwise **HALT**.
+
+**Given** a manifest **When** loaded **Then** it accepts an optional `protectedBranches: string[]` (each entry trimmed, non-empty; duplicates tolerated). A malformed value (not a list, an empty string) is a manifest validation error, reported like any other schema error (Story 1.4). The `Manifest` type gains `protectedBranches?: string[]`.
+
+**Given** a service **When** its protected set is computed **Then** it is exactly `protectedBranches ∪ {sharedBranch}`. `development`/`preprod`/`prod` are no longer protected implicitly. Without `protectedBranches`, only `sharedBranch` is protected (and `sharedBranch` itself still defaults to `development`).
+
+**Given** any git write, rename or registration **When** the gate runs (`assertAllowedBranch`, `createBranch`, `renameBranch` old and new names, `createTrackingBranch`) **Then** it uses that service's manifest-defined set, resolved from the manifest at write time (AD-8), through the single core helper `isProtectedBranch(name, manifest)` that replaces `SHARED_BRANCHES`/`isSharedBranch`. No hardcoded branch list remains in `src/`.
+
+**Given** the create wizard (Step 3 rows and the "Configurer" box) and every other inline FR-7 check **When** they judge a name **Then** they use the same helper with that service's own manifest data. `ServiceBranchDivergence` (`core/edt/list.ts`) carries `protectedBranches` next to `sharedBranch`.
+
+**Given** a rejection **When** shown **Then** the message names the branch and says it is protected by that service's manifest (e.g. `Branch "preprod" is protected by svc-a's manifest`).
+
+**Given** the `manifest-generator` skill **When** it writes a manifest **Then** it emits `protectedBranches: [development, preprod, prod]` by default (documented in its field table) so new manifests keep today's protection.
+
+**Rollout note (not code):** existing managed repos keep working, but without the new line only their `sharedBranch` stays protected. Add `protectedBranches: [development, preprod, prod]` to each existing `.tui-back.yaml` to keep today's behavior.
+
+**Implementation notes:**
+- Schema change in `adapters/driven/manifest/schema.ts`.
+- The gate in `adapters/driven/git/index.ts` reads `loaded.data`.
+- Hardcoded `['development', 'preprod', 'prod']` fixtures in the git adapter and `create.test.ts` become manifest fixtures.
+
+### Story 2.43: Cross-EDT Branch Usage — Alerts in Branch Choosers & Rename Gate
+
+> Added 2026-09-28 (Sprint Change Proposal): makes another EDT's ownership of a branch visible before it is chosen, and closes the ungated rename of such a branch. Sequenced after Story 2.37 (Step 3 table and box). Independent of 2.42.
+
+As a developer choosing or renaming a branch, I want to see which branches another EDT already relies on, and be stopped before I take or rename one, so that working in one EDT can never silently break another.
+
+**Acceptance Criteria:**
+
+**Prerequisite (blocking) — Given** the story starts **When** the developer begins **Then** confirm Story 2.37 is `done` and merged into the epic branch; otherwise **HALT**.
+
+**Given** a rename of branch `old` → `new` in repo R **When** the git adapter's `renameBranch` runs **Then**, besides the FR-7 checks, it rejects with `branch-owned-by-other-edt` when `old` or `new` is registered as the own branch of an EDT other than the caller's. `GitPort.renameBranch` gains an optional `edtId`; with no `edtId`, any registered owner blocks. Callers pass their EDT:
+- `modify.ts` rename → the target's ulid;
+- `renameMemberBranch` (Add-to-EDT) → the target EDT's ulid;
+- `create.ts` existing + rename → the new EDT's ulid;
+- `create.ts` rollback → the new EDT's ulid.
+
+This happens before any `git` invocation (AD-8).
+
+**Given** a pure helper `branchOwners(edts, repoPath, branch, excludeUlid)` → the owning EDT topics (paths compared after `resolve()`, like the gate) **When** any branch chooser lists candidates **Then** every candidate owned by another EDT is annotated `⚠ EDT « <topic> »` (glyph + warning color). The candidates owned by the EDT being edited, or none when creating, are excluded. The choosers covered:
+- the wizard Step 3 "Configurer" box (existing-branch and base fields);
+- the `BranchPicker` pick-existing list (Modify, Add-to-EDT, service actions).
+
+`BranchAutocompleteInput` gains an optional generic `annotations?: Record<branch, string>` prop and stays EDT-agnostic.
+
+**Given** the wizard box, or `BranchPicker`, **When** the developer applies an owned branch as an existing branch, with or without rename, or renames a member's current branch that another EDT also owns **Then** it is refused inline with `utilisée par l'EDT « <topic> » — la reprendre ou la renommer casserait cet EDT`. A Step 3 row carrying such a plan shows the same error and blocks `Ctrl+N`.
+
+**Given** a branch used only as a **base** (create a new branch from it) **When** it is owned by another EDT **Then** it is annotated but allowed, since creating from it never modifies it.
+
+**Given** core **When** reached with an owned branch anyway (CLI, stale UI) **Then** the existing `branch-owned-by-other-edt` failure (Story 2.25 assisted resolution) is unchanged.
+
+**Implementation notes:**
+- The owners come from the store's loaded `edts` list: members carry `{repoPath, branch}`. No new port.
+- Tests:
+  - adapter `renameBranch` owner checks (old and new name, with and without `edtId`);
+  - `branchOwners`;
+  - the annotation rendering;
+  - inline refusals in the wizard box and in `BranchPicker`.
+
 ## Epic 3: Group Update & Migrations
 
-A developer can run a group update (pull, migrate, restart) scoped to the active EDT or to all managed repos, with assisted resolution of conflicts and migration failures.
+A developer can run a group update (pull, migrate, restart) scoped to the active EDT, to all managed repos, or to a single service — configured beforehand (service selection, per-service branch, migrate/clean-restart toggles) and followed live per-service — with assisted resolution of conflicts and migration failures.
 
 ### Story 3.1: Group Update — Pull & Restart (EDT-scoped)
 
@@ -1735,7 +2042,15 @@ So that I can catch up my session's services in one action instead of doing it b
 
 **Given** the active EDT has at least one member service
 **When** a developer triggers a group update
-**Then** for a non-member repo already on `development`, the tool does a plain pull; for a member service on its own feature branch, the tool merges the latest `development` into that branch (`git merge development`, never a rebase — chosen for safety-by-default: no rewriting of already-pushed commits, and a merge already applied is a no-op on a second run, satisfying FR-1's idempotency) and restarts the container, without touching migrations yet (added in Story 3.2)
+**Then** the tool first opens the configuration interface (Story 3.7): every member service is pre-selected, its source branch pre-filled with the manifest's `sharedBranch`; the developer may deselect services and override any selected service's source branch before confirming
+
+**Given** the developer confirms the run from the configuration interface
+**When** the run starts
+**Then** for a non-member repo already on `development`, the tool does a plain pull; for a selected member service, the tool merges the configured source branch into the service's own branch (`git merge <source branch>`, never a rebase — chosen for safety-by-default: no rewriting of already-pushed commits, and a merge already applied is a no-op on a second run, satisfying FR-1's idempotency) and restarts the container (plain restart, or the manifest's clean-restart recipe if the restart toggle from Story 3.7 was on), without touching migrations yet unless the migrate toggle was on (Story 3.2)
+
+**Given** a service was deselected in the configuration interface
+**When** the run executes
+**Then** that service is never targeted — it does not appear in the run's summary as skipped, because it was never part of the run
 
 **Given** the merge of `development` into a member service's branch produces a real conflict (not just a dirty lockfile)
 **When** it occurs
@@ -1765,9 +2080,13 @@ So that my session's services are fully caught up, not just on the latest code.
 
 **Acceptance Criteria:**
 
-**Given** a targeted service's manifest declares a `migrationCommand`
+**Given** the migrate toggle was on in the configuration interface (Story 3.7) and a targeted service's manifest declares a `migrationCommand`
 **When** the group update reaches that service
-**Then** the migration command runs after the pull step and before the restart step (per manifest, FR-10)
+**Then** the migration command runs after the pull step and before the restart step (per manifest, FR-10/FR-25)
+
+**Given** the migrate toggle was off in the configuration interface
+**When** the group update reaches a targeted service
+**Then** its migration step is skipped regardless of whether a `migrationCommand` is declared — the toggle overrides per-service declaration, it does not merely default it
 
 **Given** the migration step succeeds
 **When** the run's summary is shown
@@ -1790,8 +2109,8 @@ So that I can do the periodic maintenance sweep the current `update-services.sh`
 **Then** it is always an explicit, separate action from the default EDT-scoped update — never the default
 
 **Given** the all-repos mode is triggered
-**When** the developer confirms
-**Then** it requires an explicit confirmation step before running, since its blast radius extends beyond the active EDT
+**When** it opens
+**Then** the same configuration interface as Story 3.7 opens first, pre-selecting every managed repo — followed by the mode's own explicit blast-radius confirmation step before anything runs; the confirmation never replaces or skips the configuration step
 
 **Given** the all-repos mode runs
 **When** it completes
@@ -1831,29 +2150,135 @@ So that a conflict never stalls the whole run or forces me to a separate termina
 **When** the group update reaches it
 **Then** this is detected and surfaced as its own distinct state, before the guided menu applies
 
-### Story 3.5: Per-Service Migration Failure Handling & Re-Trigger
+**Compatibility note (added 2026-09-22 correct-course):** the guided menu keeps blocking input exactly as today; it now renders in front of that service's live detail pane (Story 3.10) instead of a blank backdrop — no change to the detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic itself.
+
+### Story 3.5: Per-Service Migration Failure Handling & Re-Trigger — Superseded
+
+Superseded by the 2026-09-22 correct-course (see `sprint-change-proposal-2026-09-22-2.md`): its "surface which service/migration/error" guarantee is now Story 3.10's live per-service issue log, and its "re-trigger just that service's migration" guarantee is now Story 3.9's single-service update action (migrate toggle on). No requirement from the original story is dropped — it is split across the two new stories instead of implemented standalone.
+
+### Story 3.6: Update Zone Shell — Service List & Live Status
 
 As a developer,
-I want a migration failure during a group update to be clearly reported and independently re-triggerable,
-So that one broken migration never stalls the services that already succeeded.
+I want the Update zone to show, like the EDT and Logs zones, a left-hand list of services (active EDT members and non-members) each carrying a live status,
+So that I always know each service's state without guessing or switching zones.
 
 **Acceptance Criteria:**
 
-**Given** a migration fails during a group update
-**When** it happens
-**Then** the tool surfaces which service, which migration, and the error output
+**Given** the developer opens the Update zone
+**When** it renders
+**Then** the left pane lists every service — active EDT members first, other managed services after — the same list/detail split pattern as the EDT and Logs zones
 
-**Given** one service's migration fails
-**When** the run continues
-**Then** updates that already succeeded on other services in the same run are not blocked or rolled back
+**Given** any service in that list
+**When** it is rendered, at any time, run or no run in progress
+**Then** it carries a status glyph from the closed set: up / down / restarting / updating / migrating / error — never blank, never an ambiguous generic state
 
-**Given** a developer fixes the underlying issue
-**When** they re-trigger just that service's migration
-**Then** the tool re-verifies success before marking the service caught up
+**Given** a service is selected in the list
+**When** the detail pane renders
+**Then** it shows that service's last known outcome (or "idle" if none yet), ready to be replaced by live run detail (Story 3.10) once a run targets it
 
-**Given** the same migration fails repeatedly
-**When** it is retried
-**Then** each failure is surfaced the same way — no retry limit or escalation path is enforced in v1
+### Story 3.7: Pre-Run Configuration Interface
+
+As a developer,
+I want a configuration screen before any group update starts,
+So that I control exactly which services are touched, which branch each pulls from, and whether migrations and clean restarts run — instead of a fixed, all-or-nothing update.
+
+**Acceptance Criteria:**
+
+**Given** a group update is triggered (EDT-scoped, all-repos, or single-service)
+**When** the trigger fires
+**Then** the configuration interface opens before any git/docker action runs, listing every targeted service with a checkbox (pre-selected per the trigger's default scope)
+
+**Given** a selected service in the configuration interface
+**When** it is shown
+**Then** its source branch field is pre-filled with the manifest's `sharedBranch` and can be changed to any branch the tool can resolve for that repo
+
+**Given** the configuration interface is open
+**When** the developer toggles "run migrations" or "clean restart"
+**Then** the toggle applies to every currently selected service uniformly — there is no per-service override of these two toggles in v1
+
+**Given** the developer deselects every service
+**When** they attempt to confirm
+**Then** confirming is rejected with an explicit message — the same no-op guarantee FR-10 already gives a zero-member EDT, extended to a zero-selection run
+
+**Given** the developer confirms with at least one service selected
+**When** confirmed
+**Then** the run starts immediately with exactly that configuration — no further prompt
+
+### Story 3.8: Manifest-Defined Clean-Restart Recipe
+
+As a developer,
+I want to declare, per repo, an ordered list of commands that fully restart it cleanly (e.g. `npm i` then `npm run d:up`),
+So that a group update — or a one-off trigger — can restart a service properly instead of just restarting its container.
+
+**Acceptance Criteria:**
+
+**Given** a repo's `.tui-back.yaml`
+**When** it declares a clean-restart recipe
+**Then** the manifest loader accepts an ordered list of commands for it (`restartCommands`), validated the same way `migrationCommand` is today (non-blocking when absent)
+
+**Given** a service with no clean-restart recipe declared
+**When** a clean restart is requested for it (via the toggle in Story 3.7, or the standalone action in Story 3.9)
+**Then** the tool falls back to today's plain container restart, without error
+
+**Given** a service with a clean-restart recipe declared
+**When** a clean restart runs for it
+**Then** each command runs in the repo's working directory, in declared order; a failing command stops the recipe and is reported as that service's failure detail (service, which command, error output) — the same per-service failure reporting FR-12 already guarantees for migrations
+
+### Story 3.9: Per-Service Actions — Clean Restart & Single-Service Update
+
+As a developer,
+I want to trigger, directly from a service's row in the Update zone, either a clean restart or a full update for just that service,
+So that I can fix or catch up one service without running (or reconfiguring) the whole group update.
+
+**Acceptance Criteria:**
+
+**Given** a service row in the Update zone's list
+**When** the developer triggers "clean restart" on it
+**Then** Story 3.8's recipe (or the plain container-restart fallback) runs for that service alone, with its status reflecting `restarting` for the duration
+
+**Given** a service row in the Update zone's list
+**When** the developer triggers "update this service"
+**Then** the same configuration interface as Story 3.7 opens, pre-scoped to that one service — same fields (branch, migrate toggle, restart toggle), same confirmation gate
+
+**Given** a single-service update or clean restart is already running for a service
+**When** the developer triggers another action on that same service
+**Then** it is rejected the same way a second group update is rejected today (FR-10) — serialized per service, not just globally
+
+### Story 3.10: Live Per-Service Run Tracking — Current Step & Issue Log
+
+As a developer,
+I want to see, per service, which step is currently running and any problem encountered, clearly marked as resolved or not,
+So that I can follow a group update the same way I follow anything else in this tool — never guessing what's happening or what still needs my attention.
+
+**Acceptance Criteria:**
+
+**Given** a run (any scope) in progress
+**When** a targeted service is selected in the Update zone's list
+**Then** its detail pane shows the current step (pulling / merging / migrating / restarting) live, replacing the last-outcome view from Story 3.6
+
+**Given** a service hits a problem during a run (dirty state, conflict, migration failure — Stories 3.4/3.5's existing mechanics)
+**When** it is shown in that service's detail pane
+**Then** it is marked clearly as unresolved until the developer acts, and as resolved once the tool re-verifies success — reusing FR-11/FR-12's existing detect → act → re-verify guarantee, now surfaced per-service instead of only in the end-of-run summary
+
+**Given** a run completes
+**When** the developer revisits a service already covered by that run
+**Then** its detail pane shows the final per-service outcome, matching Story 3.6's idle-state view
+
+### Story 3.11: Update Commands — Main, All-Repos, Single-Service
+
+As a developer,
+I want a distinct command for each way to trigger a group update,
+So that I can start the right one without hunting through menus.
+
+**Acceptance Criteria:**
+
+**Given** the Update zone
+**When** the developer looks for how to start a run
+**Then** three distinct commands exist: the main update (EDT-scoped default), the all-repos update (Story 3.3's maintenance mode), and the single-service update (Story 3.9) — each reachable both as a command-bar entry and its own keybinding
+
+**Given** any of the three commands is triggered
+**When** it fires
+**Then** it opens the same configuration interface (Story 3.7), pre-scoped to that command's targets — no command skips the configuration step
 
 ## Epic 4: `shared-types` Propagation
 
@@ -2127,6 +2552,46 @@ So that the tool never corrupts its own display regardless of how many services 
 **Then** visible behavior is unchanged from before this story — this is a defect fix and a reusable primitive, not a redesign
 
 **Implementation notes:** extract a `bounded-list`/scrollable-window primitive out of `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset` (already correct, already tested) into `tui/shared/`; apply it to `logs-zone.tsx`'s two service lists, its hints panel, and `LogFilterEditor`'s body (including the history grid); apply the same primitive to `edts-zone.tsx`'s EDT SERVICES/OTHER SERVICES lists. New shared component per Atelier convention (UX-DR33). No change to `ModalDialog` itself required — the fix is bounding what's rendered *inside* each panel, not the panel chrome.
+
+### Story 5.6: Command History Recall & Shared Input-History Primitive
+
+> Added 2026-09-28 (Sprint Change Proposal): brings Story 5.4's arrow-recall history to the `:` command bar (UX-DR29), and — as a first-class goal, not a side effect — extracts the recall logic both features share into one reusable primitive so neither re-implements it.
+
+As a developer,
+I want the `:` command bar to remember the commands I've run and let me recall them with ↑/↓,
+So that I don't retype frequent commands — and I want this and the filter history to share one implementation, so future history improvements land in both at once.
+
+**Acceptance Criteria:**
+
+**Given** the `:` bar with focus on the input
+**When** a command is run (Enter on an exact, recognized match)
+**Then** the submitted query is pushed to the front of the command history, deduplicated per `settings.commandPalette.historyDedup` (same semantics as `logs.filterHistoryDedup`: move-to-front everywhere when on, top-only when off), trimmed to `settings.commandPalette.historySize` — an unknown command is never recorded
+
+**Given** the developer is typing a draft
+**When** ↑ is pressed
+**Then** the input shows the most recent entry and the draft is preserved; further ↑ walks older entries (no-op at the oldest); ↓ walks back, and one ↓ past the most recent entry restores the draft exactly — entries equal to the draft are skipped, exactly as in Story 5.4
+
+**Given** the developer is on their own draft (not browsing)
+**When** ↓ is pressed
+**Then** the existing behavior is unchanged (enters the autocomplete grid if visible, otherwise no-op) — no history grid browser for commands
+
+**Given** the developer is browsing
+**When** a printable character or Backspace is pressed
+**Then** browsing ends, the draft is restored, and the keypress is applied on top of it (Story 5.4's snap-back); Enter runs the displayed (recalled) command; Tab adopts the recalled text as the new draft (browsing ends) and behaves as usual on it
+
+**Given** the app is restarted
+**When** `:` is opened
+**Then** previous command history is still available (persisted in `state.json`, `commandHistory`, alongside `filterHistory`)
+
+**Given** the `:settings` Command Palette tab
+**When** the developer adjusts "command history size" or toggles "deduplicate command history"
+**Then** it applies and persists immediately; a "clear command history" action empties it — the tab gains a row cursor (Up/Down moves between rows, mirroring the Logs tab's Story 5.4 rework) since Up/Down no longer belongs exclusively to gridMaxRows
+
+**Given** the refactor
+**When** this story lands
+**Then** the history push/dedup/trim, the arrow-browse state machine (up/down/skip-equal-to-draft), the snap-back-to-draft rule, and the persisted history store mechanics (hydrate-once, version guard against stale reads, serialized save chain, await-in-flight-load before mutate) each exist exactly once in the codebase and are consumed by both the Logs filter editor and the command bar — Story 5.4's existing tests pass unchanged (behavior-preserving extraction); the shared primitive gets its own tests
+
+**Implementation notes:** new pure module `tui/shared/input-history/` (generic `pushHistoryEntry`, `HistoryBrowseState`, `resolveHistoryBrowseUp/Down`, a snap-back helper) — `logs-zone.logic.ts` keeps only its Logs-specific key encoding (`FilterHistoryKey`/`filterHistoryKeyString`); a generic persisted-history store factory extracted from `logs-slice.ts`'s filterHistory machinery, instantiated for filter history (keyed map) and command history (single list); `StatePort` gains `readCommandHistory`/`writeCommandHistory` sharing the state adapter's existing read-merge-write helper; new settings `commandPalette.historySize` (default 20) and `commandPalette.historyDedup` (default true) — the size range constants are generalized to shared `MIN/MAX_INPUT_HISTORY_SIZE` (1..200) used by both history settings. Coordinate with Story 2.32 (TextInputLine adoption in the command bar): whichever lands second places the cursor at end-of-value on recall.
 
 ## Epic 6: Route Explorer
 

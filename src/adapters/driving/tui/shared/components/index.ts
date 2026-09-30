@@ -64,4 +64,22 @@ export type {
   BranchPickerProps,
   BranchPickerKeyResult,
 } from './branch-picker.js';
+export {
+  BranchAutocompleteInput,
+  createBranchAutocompleteState,
+  clampAutocompletePickCursor,
+  matchBranchesBySubstring,
+  isBranchAutocompleteExactMatch,
+  resolveBranchAutocompleteValidity,
+  resolveBranchAutocompleteDropdown,
+  handleBranchAutocompleteKey,
+} from './branch-autocomplete-input.js';
+export type {
+  BranchAutocompleteStatus,
+  BranchAutocompleteState,
+  BranchAutocompleteValidity,
+  BranchAutocompleteKey,
+  BranchAutocompleteKeyResult,
+  BranchAutocompleteInputProps,
+} from './branch-autocomplete-input.js';
 

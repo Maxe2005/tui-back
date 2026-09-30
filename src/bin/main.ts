@@ -13,6 +13,7 @@ import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
+import { createRestartPort } from '../adapters/driven/restart/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
@@ -36,6 +37,7 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
+const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 
@@ -48,6 +50,14 @@ const state = createStatePort(stateFile);
 // `edt create` locks on the EDT registry file the same way.
 const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
+// AD-3's own isTTY (stdout-only) governs output rendering (human text vs. one JSON line).
+// Review fix (story 2.33): the *interactive-prompt* gate `registry clean` uses is a
+// different, stricter question — can we actually read a y/N answer back? — so it also
+// requires stdin to be a TTY. Piped/redirected stdin with a TTY stdout (e.g. a wrapper
+// script) must never let the CLI block on (or silently misread) an `rl.question()` prompt
+// with nothing live on the other end.
+const isTTY = process.stdout.isTTY === true;
+const interactiveIsTTY = isTTY && process.stdin.isTTY === true;
 // Story 6.1: the route-explorer module's scanner, resolved out of the statically compiled
 // module registry by manifest module id (AD-5) — manifests only ever select this key,
 // never supply code. The lookup cannot fail in practice (registry and key are compiled
@@ -73,11 +83,13 @@ const subcommands = buildSubcommands({
   git,
   container,
   migration,
+  restart,
   state,
+  isTTY: interactiveIsTTY,
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
 });
 
-const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);
+const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);
 process.stdout.write(output);
 process.exitCode = exitCode;

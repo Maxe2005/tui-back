@@ -5,6 +5,10 @@
 // driving root-text entry and candidate navigation/selection (the shared renderToString
 // harness's fake stdin never emits data, so useInput itself is never exercised by a test —
 // see render-to-string.ts and edts-zone.test.tsx for the established convention).
+// Story 2.33 extends coverage with the "Clean stale entries" action's own I/O-matrix rows:
+// stale-candidate listing (pre-checked, with the EDT-member note), the distinct
+// zero-candidates and scan-error states folded into the same 'clean-candidates' phase, the
+// 'cleaning' in-flight state, and per-path removed/failed outcomes.
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
@@ -15,6 +19,7 @@ import {
   moveCandidateCursor,
   resolveRegistryScreenPhase,
   toggleCandidateSelection,
+  toggleCleanCandidateExclusion,
   typeRootInputChar,
 } from './repo-registry-screen.js';
 
@@ -24,6 +29,10 @@ describe('resolveRegistryScreenPhase', () => {
     registryScanResult: null,
     registryRegisterStatus: 'idle' as const,
     registryRegisterResults: null,
+    registryCleanScanStatus: 'idle' as const,
+    registryCleanCandidates: null,
+    registryCleanStatus: 'idle' as const,
+    registryCleanResults: null,
   };
 
   it('starts at root-input before any scan', () => {
@@ -68,6 +77,44 @@ describe('resolveRegistryScreenPhase', () => {
         registryRegisterResults: [{ path: '/repos/a', outcome: 'registered' }],
       }),
     ).toBe('results');
+  });
+
+  it('is clean-candidates while the stale-entry classification is in flight (story 2.33)', () => {
+    expect(resolveRegistryScreenPhase({ ...base, registryCleanScanStatus: 'loading' })).toBe('clean-candidates');
+  });
+
+  it('is clean-candidates on a classification failure too — folded into the same phase, told apart by its own render block', () => {
+    expect(resolveRegistryScreenPhase({ ...base, registryCleanScanStatus: 'error' })).toBe('clean-candidates');
+  });
+
+  it('is clean-candidates once classification returns, including the zero-candidates case', () => {
+    expect(resolveRegistryScreenPhase({ ...base, registryCleanCandidates: [] })).toBe('clean-candidates');
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryCleanCandidates: [{ path: '/repos/a', reason: 'unreachable', memberOfEdts: [] }],
+      }),
+    ).toBe('clean-candidates');
+  });
+
+  it('is cleaning while the removal use-case is in flight, taking precedence over clean-candidates', () => {
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryCleanCandidates: [{ path: '/repos/a', reason: 'unreachable', memberOfEdts: [] }],
+        registryCleanStatus: 'loading',
+      }),
+    ).toBe('cleaning');
+  });
+
+  it('is clean-results once removal outcomes exist, taking precedence over every other field including register results', () => {
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryRegisterResults: [{ path: '/repos/a', outcome: 'registered' }],
+        registryCleanResults: [{ path: '/repos/a', outcome: 'removed' }],
+      }),
+    ).toBe('clean-results');
   });
 });
 
@@ -121,6 +168,18 @@ describe('toggleCandidateSelection', () => {
 
     const removed = toggleCandidateSelection(added, '/repos/a');
     expect(removed).toEqual(new Set(['/repos/b']));
+  });
+});
+
+describe('toggleCleanCandidateExclusion (story 2.33)', () => {
+  it('excludes a not-yet-excluded path and re-includes an already-excluded one, without mutating the input set', () => {
+    const original = new Set<string>();
+    const excluded = toggleCleanCandidateExclusion(original, '/repos/a');
+    expect(excluded).toEqual(new Set(['/repos/a']));
+    expect(original).toEqual(new Set());
+
+    const reincluded = toggleCleanCandidateExclusion(excluded, '/repos/a');
+    expect(reincluded).toEqual(new Set());
   });
 });
 
@@ -216,6 +275,117 @@ describe('RepoRegistryScreen (story 2.11)', () => {
     expect(output).toContain('/repos/bad');
     expect(output).toContain('failed');
     expect(output).toContain('Action already in progress');
+    expect(output).toContain('Esc to close.');
+  });
+
+  it('shows the Ctrl+L hint for "Clean stale entries" on the root-input screen', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Ctrl+L to clean stale registry entries');
+  });
+});
+
+// Story 2.33: "Clean stale entries" — classify (never write) then remove only the confirmed
+// paths. Covers the matrix's stale-candidate rows (unreachable/manifest-not-found, the
+// EDT-member note), the distinct zero-candidates and scan-error states folded into
+// 'clean-candidates', 'cleaning', and clean-results' per-path removed/failed outcomes.
+describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
+  it('shows a scanning indicator while classification is in flight', async () => {
+    const store = createAppStore();
+    store.setState({ registryCleanScanStatus: 'loading' });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Scanning the registry for stale entries');
+  });
+
+  it('shows a distinct scan-failure state with its error detail', async () => {
+    const store = createAppStore();
+    store.setState({ registryCleanScanStatus: 'error', registryCleanScanError: 'bad yaml' });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Scan failed');
+    expect(output).toContain('bad yaml');
+    expect(output).not.toContain('No stale registry entries found');
+  });
+
+  it('shows a distinct "no stale entries" state when classification finds zero candidates — never silent (matrix)', async () => {
+    const store = createAppStore();
+    store.setState({ registryCleanScanStatus: 'idle', registryCleanCandidates: [] });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('No stale registry entries found');
+    expect(output).not.toContain('Scan failed');
+  });
+
+  it('lists every stale candidate pre-checked, with its reason, and an EDT-member note when applicable (AC3, AC6)', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanScanStatus: 'idle',
+      registryCleanCandidates: [
+        { path: '/repos/gone', reason: 'unreachable', memberOfEdts: [] },
+        { path: '/repos/unmanaged', reason: 'manifest-not-found', memberOfEdts: ['my-topic'] },
+      ],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('/repos/gone');
+    expect(output).toContain('unreachable');
+    expect(output).toContain('/repos/unmanaged');
+    expect(output).toContain('manifest-not-found');
+    expect(output).toContain('[member of EDT: my-topic]');
+    // Pre-checked by default — unlike scan/register's own candidates (Design Notes).
+    expect(output).toContain('[x]');
+    expect(output).not.toContain('[ ]');
+    expect(output).toContain('Space to toggle, Enter to remove the selection.');
+  });
+
+  it('reports a path that could not even be checked, alongside the candidate list — never silently dropped (review fix)', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanScanStatus: 'idle',
+      registryCleanCandidates: [{ path: '/repos/gone', reason: 'unreachable', memberOfEdts: [] }],
+      registryCleanErrors: [{ path: '/repos/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('/repos/gone');
+    expect(output).toContain('could not be checked');
+    expect(output).toContain('/repos/unknown');
+    expect(output).toContain('registry-stat-error');
+  });
+
+  it('reports a could-not-be-checked path even when there are zero removable candidates', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanScanStatus: 'idle',
+      registryCleanCandidates: [],
+      registryCleanErrors: [{ path: '/repos/unknown', code: 'registry-stat-error', message: 'permission denied' }],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('No stale registry entries found');
+    expect(output).toContain('could not be checked');
+    expect(output).toContain('/repos/unknown');
+  });
+
+  it('shows a removing indicator while the removal run is in flight', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanCandidates: [{ path: '/repos/a', reason: 'unreachable', memberOfEdts: [] }],
+      registryCleanStatus: 'loading',
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Removing stale entries');
+  });
+
+  it('reports every confirmed path\'s outcome — removed / failed (AC4/AC5)', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryCleanResults: [
+        { path: '/repos/gone', outcome: 'removed' },
+        { path: '/repos/bad', outcome: 'failed', detail: { code: 'registry-write-error', message: 'disk full' } },
+      ],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('/repos/gone');
+    expect(output).toContain('removed');
+    expect(output).toContain('/repos/bad');
+    expect(output).toContain('failed');
+    expect(output).toContain('disk full');
     expect(output).toContain('Esc to close.');
   });
 });
