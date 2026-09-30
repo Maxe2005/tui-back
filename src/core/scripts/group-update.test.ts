@@ -67,11 +67,16 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     isMergeInProgress: vi.fn(async () => ok(false)),
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
+    discardAll: vi.fn(async () => ok(undefined)),
+    diffNameOnly: vi.fn(async () => ok([])),
+    discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
     ...overrides,
@@ -137,6 +142,7 @@ function fakeRegistry(paths: string[] = []): RegistryPort {
     exists: vi.fn(async () => ok(true)),
     scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
     reset: vi.fn(async () => ok({ path: '/p', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
   };
 }
 

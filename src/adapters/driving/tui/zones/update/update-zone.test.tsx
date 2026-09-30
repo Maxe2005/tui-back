@@ -884,6 +884,7 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     exists: vi.fn(async () => ok(true)),
     scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
     reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
   };
   const manifest: ManifestPort = {
     load: vi.fn(async (repoPath: string) =>
@@ -914,6 +915,9 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     isMergeInProgress: vi.fn(async () => ok(false)),
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
+    discardAll: vi.fn(async () => ok(undefined)),
+    diffNameOnly: vi.fn(async () => ok([])),
+    discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
@@ -921,6 +925,8 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     renameBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),

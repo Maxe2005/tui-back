@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COMMANDS, matchCommands, findExactCommand, type Command } from './commands.js';
+import { COMMANDS, matchCommands, findExactCommand, runCommand, type Command } from './commands.js';
 
 const commands: Command[] = [
   { name: 'registry', run: () => {} },
@@ -74,6 +74,18 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
 
   it('registers the edt-delete command', () => {
     expect(COMMANDS.find((c) => c.name === 'edt-delete')).toBeDefined();
+  });
+
+  it('tags every edt-* command with the edts zoneId, so runCommand auto-switches to it', () => {
+    for (const name of ['edt-create', 'edt-switch', 'edt-modify', 'edt-delete']) {
+      expect(COMMANDS.find((c) => c.name === name)!.zoneId).toBe('edts');
+    }
+  });
+
+  it('leaves zoneId unset on zone-independent commands (registry/settings/reset/quit)', () => {
+    for (const name of ['registry', 'settings', 'reset', 'quit']) {
+      expect(COMMANDS.find((c) => c.name === name)!.zoneId).toBeUndefined();
+    }
   });
 
   it('registers the settings command', () => {
@@ -179,6 +191,23 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(calls).toEqual(['openSettingsScreen']);
   });
 
+  it('the reset command calls the store\'s openResetScreen action (which owns the busy guard)', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openResetScreen: () => {
+          calls.push('openResetScreen');
+          return true;
+        },
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const resetCmd = COMMANDS.find((c) => c.name === 'reset')!;
+    resetCmd.run(fakeStore, '');
+
+    expect(calls).toEqual(['openResetScreen']);
+  });
+
   it('the quit command calls requestQuit', () => {
     const calls: string[] = [];
     const fakeStore = {
@@ -258,5 +287,51 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
   it('the update commands narrow by scope prefix without guessing across scopes', () => {
     expect(matchCommands('update-e').map((c) => c.name)).toEqual(['update-edt']);
     expect(matchCommands('update-s').map((c) => c.name)).toEqual(['update-service']);
+  });
+});
+
+describe('runCommand', () => {
+  function fakeStoreWithZone(activeZone: string) {
+    const calls: string[] = [];
+    let zone = activeZone;
+    const useStore = {
+      getState: () => ({
+        activeZone: zone,
+        setActiveZone: (nextZone: string) => {
+          zone = nextZone;
+          calls.push(`setActiveZone:${nextZone}`);
+        },
+        openEdtSwitchDialog: (query: string) => calls.push(`openEdtSwitchDialog:${query}`),
+        openRegistryScreen: () => calls.push('openRegistryScreen'),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+    return { useStore, calls };
+  }
+
+  it('switches to the command\'s zone before running it, when launched from a different zone', () => {
+    const { useStore, calls } = fakeStoreWithZone('dashboard');
+    const switchCmd = COMMANDS.find((c) => c.name === 'edt-switch')!;
+
+    runCommand(switchCmd, useStore, 'edt-switch my-topic');
+
+    expect(calls).toEqual(['setActiveZone:edts', 'openEdtSwitchDialog:edt-switch my-topic']);
+  });
+
+  it('never switches zone when the command\'s zone is already active', () => {
+    const { useStore, calls } = fakeStoreWithZone('edts');
+    const switchCmd = COMMANDS.find((c) => c.name === 'edt-switch')!;
+
+    runCommand(switchCmd, useStore, 'edt-switch my-topic');
+
+    expect(calls).toEqual(['openEdtSwitchDialog:edt-switch my-topic']);
+  });
+
+  it('never switches zone for a zone-independent command (e.g. registry), regardless of the active zone', () => {
+    const { useStore, calls } = fakeStoreWithZone('dashboard');
+    const registryCmd = COMMANDS.find((c) => c.name === 'registry')!;
+
+    runCommand(registryCmd, useStore, '');
+
+    expect(calls).toEqual(['openRegistryScreen']);
   });
 });

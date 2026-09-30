@@ -1,132 +1,227 @@
-# Sprint Change Proposal — 2026-09-22
-
-**Project:** tui-back
-**Trigger:** Design revision of the Update zone's TUI surface, raised by Max while mentally walking through using it.
-**Mode:** Incremental (each edit proposal below was reviewed and approved individually with Max)
-
 ---
+date: 2026-09-22
+trigger: 'Real-usage report from Max: switching EDT produced a wall of per-repo failures ("No .tui-back.yaml found", "Unknown module id") for repos unrelated to the switch, traced to `registry.yaml` accumulating stale entries with no way to remove them.'
+mode: batch
+epic_impact: 'Epic 2 (in-progress) — one new story appended (2.33). No epic redefinition, no PRD/FR change, no architecture rework.'
+scope_classification: minor
+---
+
+# Sprint Change Proposal — 2026-09-22
 
 ## 1. Issue Summary
 
-The Update zone (Epic 3: Group Update & Migrations) already has a working implementation — Stories 3.1 and 3.2 are `done`, 3.3 and 3.4 are in `review`, 3.5 is in `backlog`. The underlying core use-case (`src/core/scripts/group-update.ts`) is a mature, heavily-tested ~860-line state machine covering pull/merge, migration, container restart, and assisted conflict resolution.
+Max reported a wall of per-repo error lines while switching EDT (`edt switch`), including
+`No .tui-back.yaml found in <path>` for several registered paths and `Unknown module id
+"route-explorer"` for another — none of them related to the EDT actually being switched to.
 
-However, when Max projected himself into actually using this zone day-to-day, several gaps became apparent against what the tool's other zones (EDT, Logs) already establish as the baseline UX:
+Traced against the code (not just the symptom):
 
-- No permanent left-hand list of services with a live status indicator — unlike the EDT and Logs zones.
-- The main update always targets a fixed, non-adjustable scope: every EDT member, merging in the manifest's `sharedBranch`, always migrating, always doing a plain container restart. There is no interface to review or adjust this before a run starts.
-- No way to run an update, or a clean restart, scoped to exactly one service.
-- No manifest-level concept of a "clean restart" recipe (e.g. `npm i` then `npm run d:up`) — only a plain `docker restart` exists today.
-- No live, per-service view of the current step and of problems encountered (resolved vs. unresolved) during a run — only an end-of-run summary.
+- `switchActiveEdt` (`src/core/edt/switch.ts:137-145`) iterates **every** path in
+  `registry.list()`, not just the target EDT's members — every non-member managed repo is put
+  back on its `sharedBranch` (FR-8), which requires loading its manifest. A registered path whose
+  repo no longer exists, or whose `.tui-back.yaml` was deleted, fails that load and surfaces as a
+  `failed` row on *every single switch*, forever, until the entry is somehow removed.
+- `RegistryPort` (`src/core/ports/registry.ts`) exposes `list/add/exists/scan/reset` — no method
+  to remove a single entry. `reset` only replaces the whole `registry.yaml` wholesale, for
+  corrupt-file recovery (`adapters/driven/registry/index.ts:103-151`); it explicitly refuses to
+  run against a *valid* file (`registry-not-corrupt`), so it cannot be used to prune one bad path
+  out of an otherwise-healthy registry.
+- The TUI's REPO REGISTRY screen (Story 2.11, `repo-registry-screen.tsx`) only supports
+  scan+register — no deregister action exists anywhere in the app, CLI or TUI.
 
-This is not a bug found while implementing a story — it is a new requirement, uncovered by product-level review of the zone's UX, that expands the scope of Epic 3 beyond its original FR-10/FR-11/FR-12 design.
+This is not a newly-discovered defect: it was named at Story 1.5's own code review
+(`deferred-work.md`, "Deferred from: code review of 1-5-explicit-repo-registry.md") —
+"`RegistryPort` has no unregister/remove: dead/replaced paths accumulate in `registry.yaml`
+forever; nothing prunes them. **Track:** the story where registry editing (unregister) is in
+scope" — and again by Story 2.25's own acceptance criteria (`epics.md`), which built an
+extensible per-error-code assisted-resolution registry for the EDT zone's failure list and
+explicitly called out "stale-registry re-registration" as a future entry, naming the exact two
+stale-registry lines from Max's debug log as "environmental/registry-hygiene issues, explicitly
+out of scope for this story." Both deferrals point at the same unbuilt capability; this proposal
+is the story that closes it.
 
 ## 2. Impact Analysis
 
 ### Epic Impact
 
-- **Epic 3 (Group Update & Migrations)** cannot be completed as originally scoped. Stories 3.1 and 3.2 — already `done` — encode a fixed-behavior update (no service/branch selection, no toggles) that must be amended in place. Story 3.3 (all-repos, in `review`) needs a small amendment to reuse the new configuration screen. Story 3.4 (assisted resolution, in `review`) needs no functional change, only a compatibility note (it now renders in front of the new live per-service detail pane instead of a blank backdrop). Story 3.5 (per-service migration re-trigger, `backlog`, never started) is superseded and folded into two new stories rather than implemented standalone.
-- Six new stories (3.6–3.11) are added to Epic 3 to cover: the service-list/live-status shell, the shared pre-run configuration screen, the manifest-defined clean-restart recipe (schema + new port), per-service quick actions, live per-service run tracking, and the three dedicated update commands.
-- No other epic is invalidated or needs resequencing. Epic 5's Story 5.3 (`inline-service-health-restart-control`, in `review`) already introduced the `up`/`down`/`restarting` `HealthState` in the Logs zone — the new Update-zone states (`updating`/`migrating`/`error`) extend this same closed-set pattern rather than inventing a parallel one. This is a coordination point, not a conflict.
+Epic 2 (`in-progress`) absorbs one new story, **2.33**, appended after 2.32 — same "branch still
+open" precedent as 2.10/2.11/2.12/2.16/2.20/2.21/2.27-2.32. No other epic affected; no epic
+redefinition.
 
 ### Story Impact
 
-See Section 4 for the full before/after text of every amended and new story (3.1, 3.2, 3.3, 3.4, 3.5, and new 3.6–3.11).
+| Story | Change |
+|---|---|
+| 2.33 (new) | `RegistryPort` gains `remove(path)`; new core use-case `core/scripts/clean-registry.ts` classifies unreachable / manifest-not-found registry entries as stale candidates (explicitly excluding other manifest-load errors, e.g. `unknown-module`, which stay Story 2.28's territory); CLI `registry clean` and a new TUI action on the REPO REGISTRY screen list candidates and require explicit confirmation before removing any of them; a candidate still recorded as an EDT member is flagged but not blocked, and `edts.yaml` is never written by this story. |
+
+No existing story is amended — `switchActiveEdt`'s per-repo failure surfacing (Story 2.4's review
+patch) and its structured display (Story 2.25) are both correct as shipped; this story gives the
+developer a way to make the underlying cause (a stale registry entry) go away, rather than
+changing how the failure is reported.
 
 ### Artifact Conflicts
 
-- **PRD:** FR-10 amended (service/branch selection, migrate/restart toggles, single-service scope); FR-12 amended (cross-reference to the new single-service re-trigger action); three new FRs added — FR-25 (pre-run configuration), FR-26 (manifest-defined clean restart), FR-27 (live per-service status and detail). FR numbering follows the existing project convention of appending new FRs at the next free number (the PRD already does this for FR-24) rather than renumbering the sequential block.
-- **Architecture:** AD-4 (manifest schema) amended to add an optional `restartCommands` field. A new AD-16 introduces a dedicated `RestartPort`, mirroring `MigrationPort`'s shape, rather than overloading `ContainerPort` or reusing `MigrationPort` under a mismatched name. The ports list and driven-adapter directory listing in the source-tree diagram are updated accordingly. `group-update.ts` will need a substantial refactor to accept per-service selection, per-service branch override, and the two run-wide toggles — flagged for the developer agent, not designed line-by-line here.
-- **UX:** `EXPERIENCE.md`'s Information Architecture row and the full "Update" state table are rewritten to reflect the service list, configuration screen, clean-restart step, and per-service quick actions. The `key-update-run.html` mockup is now stale (no config screen, no service list) — flagged as a follow-up task for the UX designer agent rather than redrawn here without visual iteration.
+- **PRD:** no conflict, no new FR. The managed-repo registry (`register`/`scan`/`list-repos`) was
+  never mapped to a numbered FR in the first place — Story 2.28 (registry validation, `backlog`)
+  sets the precedent that registry-hygiene stories extend Epic 2's foundation without needing one;
+  this story follows the same precedent. MVP scope (§6) unchanged.
+- **Architecture:** additive only, no `core → adapters` boundary risk (AD-1):
+  - `core/ports/registry.ts` gains `remove(path): Promise<Result<void>>`; `adapters/driven/
+    registry/index.ts` gains `removeRegistry`, same read-modify-write shape as `addRegistry`.
+  - `core/scripts/clean-registry.ts` — new read-then-act use-case, same two ports (`registry`,
+    `manifest`) as `list-repos.ts`, plus a read of `edtRegistry` purely for the AC6 display note.
+  - No new SQLite schema, no new XDG path, no new driving adapter.
+- **UX (`epics.md`/`EXPERIENCE.md`):** the EDTs zone's State Patterns table (`EXPERIENCE.md`) gains
+  one descriptive row once this story is implemented — "Stale registry entry" — naming a
+  `manifest-not-found`/unreachable failure during switch/create/modify as a distinct, expected
+  state (Story 2.25's structured display already renders it; this row just names it, mirroring the
+  "Branch already claimed by another EDT" row Story 2.25 itself added), pointing at `:registry` →
+  "Clean stale entries" as the resolution. Left for the implementing story to apply, same as Story
+  2.27-2.32's UX-DR20/UX-DR27 impact was described but not literally edited by their own proposal.
+- **Tests:** new unit tests for `clean-registry.ts`'s classification (unreachable vs.
+  manifest-not-found vs. "neither, leave alone" for other manifest errors); adapter test for
+  `removeRegistry` (present/absent path, concurrent-write shape mirroring `addRegistry`'s existing
+  TOCTOU caveat — already tracked, not newly introduced); CLI black-box test for `registry clean`
+  (AD-3 envelope); TUI interaction test for the new registry-screen phase.
+- **`deferred-work.md`:** the Story 1.5 review entry ("`RegistryPort` has no unregister/remove")
+  gets a `tracked_by: Story 2.33` annotation (applied below), not yet `resolved_by` — that lands
+  once 2.33 actually ships.
 
 ### Technical Impact
 
-- Core: new `RestartPort` + driven `restart/` adapter; `Manifest`/`ManifestPort` gains `restartCommands`; `group-update.ts` gains parameters for service selection, per-service branch override, migrate toggle, and restart-kind toggle; a new lightweight use-case (or an extension of the existing one) for a standalone single-service clean restart / update.
-- TUI: `update-zone.tsx` is largely rebuilt — a list/detail shell (mirroring `edts-zone.tsx`/`logs-zone.tsx`), a new configuration screen component (reusable across the three trigger commands), and an extended store slice for live per-service run tracking.
-- CLI: the `tui-back update` wrapper's call site must follow the core use-case's new signature even though no new CLI flags were requested — it cannot silently keep calling the old shape.
-- Secondary: the `manifest-generator` skill should learn about `restartCommands` so it keeps proposing complete manifests; test coverage grows across core (manifest loader, new port, refactored use-case) and TUI (new screens) per the project's existing AD-13 testing conventions.
+One new `RegistryPort` method, one new core use-case, one new CLI subcommand, one new TUI screen
+action. No Docker/process-control adapter touched, no lock/SQLite change. Same risk profile as
+Story 2.28 (its sibling registry-hygiene story) — smaller, since removal has no external-service
+check to perform (no `GitPort` call needed, unlike 2.28's `sharedBranch`-existence check).
 
 ## 3. Recommended Approach
 
-**Direct Adjustment (Option 1)**, approved by Max.
+**Direct Adjustment (Option 1) — viable, effort Low-Medium, risk Low.**
 
-- Stories 3.1/3.2, though `done`, are cheap to amend: their branch has not yet been merged into `devlopment` (only into the epic branch, per the project's git workflow), and the core merge/conflict-resolution logic they built is retained and extended, not discarded.
-- Rollback (Option 2) was rejected: the ~860-line merge/conflict state machine is well-tested and directly reusable — the new requirement layers configuration on top of it, it does not replace it.
-- An MVP/scope review (Option 3) was rejected: no PRD core goal or MVP boundary changes — this is a scope expansion within Epic 3's existing FR family (FR-10–FR-12, extended by FR-25–FR-27), not a strategic pivot.
+- Add Story 2.33 next in Epic 2's backlog — self-contained, depends on nothing else in-flight
+  (2.27-2.32 are all independent of it), and nothing in 2.1-2.32's shipped work needs to change.
+- No rollback considered — this closes a gap that predates every currently-open story.
+- No PRD/MVP review needed — no FR, no scope change, a straightforward capability addition to the
+  registry foundation Story 1.5/2.11/2.28 already established.
 
-Effort: **High** (core refactor + new port/manifest field + multiple new TUI screens + new tests). Risk: **Medium** — the main risk is regressing Story 3.4's assisted-resolution state machine (still in `review`) while threading the new per-service selection/branch/toggle parameters through `group-update.ts`; sequencing the new stories so the shell/config work (3.6–3.7) lands before the `group-update.ts` refactor is touched again reduces that risk.
+**Why Minor, not Moderate:** one new story, no new FR, no architecture rework, no cross-story
+amendment — a standard next-in-sequence backlog append, unlike the 2026-09-16 proposal's six-story/
+one-FR batch that genuinely needed backlog reorganization.
 
 ## 4. Detailed Change Proposals
 
-All of the following were presented and approved individually with Max during this session.
+### `epics.md` — new Story 2.33 (inserted after Story 2.32, before "## Epic 3")
 
-### 4.1 PRD (`_bmad-output/planning-artifacts/prds/prd-tui-back-2026-08-10/prd.md`)
+### Story 2.33: Registry — Deregister Stale, Unreachable, or Unmanaged Repos
 
-**FR-10 — amended:**
+> Added 2026-09-22 (Sprint Change Proposal): closes a gap flagged since Story 1.5's own code
+> review (`deferred-work.md`: "`RegistryPort` has no unregister/remove: dead/replaced paths
+> accumulate in `registry.yaml` forever; nothing prunes them ... the story where registry editing
+> (unregister) is in scope") and named again by Story 2.25's acceptance criteria, which explicitly
+> listed "stale-registry re-registration" as a future assisted-resolution action out of that
+> story's scope. Confirmed in real usage: `switchActiveEdt` (`core/edt/switch.ts`) walks every
+> path in `registry.list()`, not just the target EDT's members — a registered path whose repo no
+> longer exists, or whose `.tui-back.yaml` was removed, surfaces a `failed` row on every single
+> `edt switch`, regardless of which EDT is being switched to.
 
-OLD:
-> A developer can run a group update — pull `development`, run migrations, restart containers — against either the active EDT's member services (default) or explicitly against all managed repos regardless of EDT (maintenance mode, preserving today's `update-services.sh` usage pattern, roughly every 2–3 days).
->
-> Consequences: all-repos always explicit + confirmed; end-of-run summary accounts for every targeted service; zero-member EDT is a no-op; second run rejected in either scope.
+As a developer, I want to review and remove stale entries from the managed-repo registry — a path
+that no longer exists on disk, or one whose `.tui-back.yaml` is gone — so that a repo I deleted or
+deliberately un-managed stops generating a `failed` row on every EDT switch, without me
+hand-editing `registry.yaml`.
 
-NEW:
-> A developer can run a group update — pull/merge the update, run migrations, restart containers — against the active EDT's member services (default), explicitly against all managed repos regardless of EDT (maintenance mode), or against exactly one service.
->
-> Consequences: all-repos always explicit + confirmed; **before any of the three run kinds starts, the developer reviews and can adjust its scope and settings through one shared configuration interface (FR-25)** — which services are included, which branch each brings in, whether migrations run, and whether a clean restart (FR-26) replaces the plain container restart; end-of-run summary accounts for every targeted service; zero-member EDT is a no-op; second run rejected in any scope.
+**Acceptance Criteria:**
 
-**FR-12 — amended (added consequence):**
-> The re-trigger action is available directly from the affected service's own row/detail view in the Update zone, using the same single-service configuration interface as a full single-service update (FR-25) — no separate flow to remember.
+**Given** `RegistryPort` **When** extended **Then** it gains `remove(path): Promise<Result<void>>`
+(adapter: `removeRegistry` in `adapters/driven/registry/index.ts`, same read-modify-write shape as
+`addRegistry`) — a targeted single-path removal, distinct from `reset` (whole-file replacement for
+corrupt-registry recovery only); removing a path not currently registered is a no-op success, not
+an error.
 
-**FR-25 — new: Configure a group update before it runs** (service selection, per-service source branch defaulting to `sharedBranch`, migrate toggle, clean-restart toggle — shared by the EDT-scoped, all-repos, and single-service triggers).
+**Given** a new core use-case (`core/scripts/clean-registry.ts`, mirroring `list-repos.ts`'s
+shape) **When** run **Then** it classifies every registered path into exactly the two "stale"
+categories `list-repos`/`listEdtBranchesDivergence` already compute today: `unreachable`
+(`registry.exists()` returns `false`) and `manifest-not-found` (`manifest.load()` fails with that
+exact code) — never any other manifest-load error (invalid YAML, schema failure,
+`unknown-module`), which stay a manifest-content problem (Story 2.28's territory), not a
+registry-hygiene one.
 
-**FR-26 — new: Manifest-defined clean restart** (an ordered command recipe per repo, falls back to a plain container restart when absent, failing command reported as that service's failure detail, independently triggerable standalone).
+**Given** the candidate list **When** presented, via CLI or TUI **Then** removal is never automatic
+or silent — every candidate is shown with its path and reason (unreachable / no manifest) before
+anything is removed, and an explicit confirmation (or explicit per-path selection) is required; a
+run that finds zero candidates reports that explicitly, never silently exiting.
 
-**FR-27 — new: Live per-service status and detail in the Update zone** (always-visible status list — up/down/restarting/updating/migrating/error — current step and resolved/unresolved problems shown per service).
+**Given** the CLI **When** a `registry clean` invocation lists candidates and confirms **Then**
+each confirmed path is removed via `RegistryPort.remove`, one outcome row per path
+(`removed`/`failed`), per-path failure isolation (one `remove` failure never blocks the others) —
+same AD-2 script/CLI parity every other action provides.
 
-*(Full text of each amended/new FR as drafted and approved appears in the session transcript; reproduced in full in the PRD file itself once applied.)*
+**Given** the TUI's REPO REGISTRY screen (Story 2.11) **When** open **Then** it gains a "Clean
+stale entries" action alongside scan/register(/validate, Story 2.28): running it lists candidates
+as a `checkbox-list-item` list (pre-checked, same "detect → guided choice → act" convention Story
+2.29's per-service disposition list already uses), and confirming removes the checked ones,
+reported via the same structured per-repo outcome list Story 2.25/2.28 already use.
 
-### 4.2 Epics (`_bmad-output/planning-artifacts/epics.md`, Epic 3)
+**Given** a stale path also recorded as a member of some EDT in `edts.yaml` **When** it is removed
+from `registry.yaml` **Then** the EDT record itself is left untouched — `switch.ts`'s existing
+`repo-not-registered` failed-row handling (review patch, Story 2.4) already covers a target member
+no longer in the registry, so this story never writes to `edts.yaml`; the candidate list surfaces
+this case with an extra note ("still a member of EDT <topic>") so the developer isn't surprised
+later, but it doesn't block removal.
 
-- **Story 3.1** amended: the configuration interface (3.7) opens before the run; the merge source is the configured per-service branch, not a fixed `sharedBranch`; restart honors the clean-restart toggle; a deselected service is never targeted.
-- **Story 3.2** amended: migration only runs when the run's migrate toggle is on, overriding manifest declaration rather than just defaulting it.
-- **Story 3.3** amended: the configuration screen (3.7) opens first, pre-selecting every managed repo, followed by all-repos' own blast-radius confirmation.
-- **Story 3.4**: no AC change — a compatibility note added (renders in front of the new live per-service detail pane).
-- **Story 3.5**: marked **Superseded** — its guarantees are split into Story 3.10 (issue surfacing) and Story 3.9 (re-trigger action).
-- **Story 3.6 (new):** Update Zone Shell — Service List & Live Status.
-- **Story 3.7 (new):** Pre-Run Configuration Interface.
-- **Story 3.8 (new):** Manifest-Defined Clean-Restart Recipe.
-- **Story 3.9 (new):** Per-Service Actions — Clean Restart & Single-Service Update.
-- **Story 3.10 (new):** Live Per-Service Run Tracking — Current Step & Issue Log.
-- **Story 3.11 (new):** Update Commands — Main, All-Repos, Single-Service.
+**Implementation notes:** `core/scripts/clean-registry.ts` takes `{registry, manifest, edtRegistry}`
+and returns `{candidates: StaleRegistryEntry[]}` where `StaleRegistryEntry = {path, reason:
+'unreachable' | 'manifest-not-found', memberOfEdts: string[]}` — `memberOfEdts` is populated purely
+for the AC6 display note, never used to gate removal. A second exported function (or a `paths:
+string[]` parameter on the same use-case) performs the confirmed removal, calling
+`registry.remove(path)` per confirmed path with per-path isolation, mirroring `create.ts`'s/
+`switch.ts`'s own per-repo isolation convention. CLI: `tui-back registry clean` (list-then-confirm
+interactive on a TTY; `--yes` with repeated `--path <path>` flags for scripted use, consistent with
+`update`'s `--all --yes` precedent). TUI: new `RegistryScreenPhase` states (`cleaning` →
+`clean-results`), reusing `repo-registry-screen.tsx`'s existing candidate-list/checkbox/results
+pattern (Story 1.9/2.11) rather than inventing a new component. Closes the `deferred-work.md`
+"`RegistryPort` has no unregister/remove" entry (Story 1.5 review) once shipped.
 
-*(Full Given/When/Then text for every amended and new story as drafted and approved appears in the session transcript; reproduced in full in `epics.md` once applied.)*
+### `deferred-work.md` — Story 1.5 review entry
 
-### 4.3 Architecture (`_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md`)
+**OLD:** `- **\`RegistryPort\` has no unregister/remove**: dead/replaced paths accumulate in
+\`registry.yaml\` forever; nothing prunes them. **Track:** the story where registry editing
+(unregister) is in scope.`
 
-- Source-tree diagram: `ports/` gains `RestartPort`; `adapters/driven/` gains a `restart/` directory.
-- **AD-4** amended: manifest gains optional `restartCommands` (ordered shell-command list), falling back to plain container restart when absent.
-- **AD-16 (new):** clean restart is a dedicated `RestartPort` (shaped like `MigrationPort`, run once per declared command, stop on first failure), never overloading `ContainerPort` or reusing `MigrationPort` under a mismatched name.
-
-### 4.4 UX Design (`_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md`)
-
-- Information Architecture row for "Update" rewritten to describe the service list, configuration screen, and per-service quick actions.
-- The full "Update" state table rewritten: new rows for the always-visible service list, the configuration screen, the clean-restart step, and per-service quick actions; existing rows (no-op, all-repos gate, second-run-blocked, assisted-resolution menu, mid-merge/mid-rebase, migration failure) amended in place to reference the new mechanics without losing any existing guarantee.
-- `DESIGN.md`'s `key-update-run.html` mockup flagged as stale — a follow-up task for the UX designer agent, not redrawn in this proposal.
+**NEW:** appends ` **tracked_by:** Story 2.33 (Sprint Change Proposal, 2026-09-22) — Registry:
+Deregister Stale, Unreachable, or Unmanaged Repos. Item stays open until 2.33 actually lands.`
 
 ## 5. Implementation Handoff
 
-**Scope classification: Moderate** — this stays within Epic 3's existing structure (no new epic, no PRD MVP change) but requires backlog reorganization (new stories, amended acceptance criteria on stories already `done`/in `review`) before implementation resumes.
+**Scope classification: Minor.** One new story, no FR, no architecture rework — fits directly into
+Epic 2's existing backlog sequencing.
 
-**Routed to:**
+**Routed to: Developer agent (`bmad-build`/`bmad-agent-dev`), direct implementation** — one branch
+off `epic-2-edt-workspace-management`, per `CLAUDE.md`'s git workflow
+(`story-2-33-registry-deregister-stale-unreachable-or-unmanaged-repos`).
 
-- **Product Owner / Developer (bmad-agent-dev, via `bmad-build`):** implement Stories 3.6→3.11 in that dependency order (shell → configuration screen → manifest/port → per-service actions → live tracking → commands), then re-verify Stories 3.1/3.2/3.3 against their amended acceptance criteria, then confirm Story 3.4 still passes unchanged behind the new shell.
-- **UX Designer (bmad-agent-ux-designer / Sally):** produce a new mockup for the configuration screen and the service-list shell, replacing the stale `key-update-run.html`, before or alongside Story 3.6/3.7 implementation.
+**Suggested sequencing:** independent of every other open/backlog Epic 2 story (2.27-2.32); can be
+picked up any time. Natural to sequence alongside or shortly after Story 2.28 (registry validation)
+since both extend the same REPO REGISTRY screen, but neither blocks the other.
 
-**Success criteria:**
-- Every amended/new FR (FR-10, FR-12, FR-25, FR-26, FR-27) and story (3.1–3.11) acceptance criteria pass.
-- No regression in the existing merge/conflict-resolution test suite for `group-update.ts`.
-- The manifest loader accepts `restartCommands` and falls back correctly when absent.
-- `sprint-status.yaml` updated to reflect the new/amended story set (Section 6.4 of the correct-course checklist).
+**Artifacts updated by this proposal** (checklist item 6.4):
+- `sprint-status.yaml`: adds `2-33-registry-deregister-stale-unreachable-or-unmanaged-repos:
+  backlog` under `epic-2`.
+- `epics.md`: inserts Story 2.33 (text above) after Story 2.32, before "## Epic 3".
+- `deferred-work.md`: Story 1.5 review entry annotated `tracked_by: Story 2.33` (above).
 
----
+**Not updated by this proposal, left for implementation time** (same precedent as the 2026-09-16
+proposal's own UX-doc handling):
+- `EXPERIENCE.md`'s EDTs-zone State Patterns table — new "Stale registry entry" row, described in
+  §2 above.
 
-*Generated via the `bmad-correct-course` workflow, incremental mode — every change above was reviewed and individually approved with Max before being compiled into this proposal.*
+**Success criteria:** Story 2.33's ACs above all pass; `npm test`/`npm run typecheck`/`npm run
+depcheck` stay green; no `core → adapters` boundary violation (AD-1); a repo with a genuinely
+invalid (not missing) manifest is never offered for removal by this story's classification.
+
+**Explicitly out of scope (by Max's decision during this session):**
+- Wiring "deregister this repo" as an inline assisted-resolution action on a failed switch/create/
+  modify row (Story 2.25's `resolveAssistedAction` registry) — a natural follow-up once 2.33 ships
+  the underlying `remove` capability, but not required for 2.33 to stand on its own.
+- Removing entries whose manifest fails to *load* for reasons other than `manifest-not-found`
+  (invalid YAML, `unknown-module`, other schema errors) — that is manifest-content validation,
+  Story 2.28's territory, not registry hygiene.

@@ -5,7 +5,8 @@
 // Wrappers also validate argument cardinality so a typo'd or excess argument is an explicit
 // invalid-argument error instead of a silently ignored one.
 import { resolve } from 'node:path';
-import { err, type Result } from '../../../core/result.js';
+import { createInterface } from 'node:readline/promises';
+import { err, ok, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
 import { switchActiveEdt } from '../../../core/edt/switch.js';
@@ -13,7 +14,9 @@ import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
+import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
+import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
@@ -21,11 +24,14 @@ import type { RestartPort } from '../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
+import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
 import { scanRepos } from '../../../core/scripts/scan.js';
+import { listRoutes } from '../../../core/routes/list-routes.js';
+import { fireRequest } from '../../../core/routes/fire-request.js';
 import type { Subcommand } from './dispatch.js';
 
 const EDT_CREATE_USAGE =
@@ -40,6 +46,9 @@ const EDT_DELETE_USAGE =
   '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
 const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
+const REGISTRY_CLEAN_USAGE =
+  'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
+const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -54,6 +63,14 @@ export function buildSubcommands(deps: {
   migration: MigrationPort;
   restart: RestartPort;
   state: StatePort;
+  // Story 2.33: gates `registry clean`'s bare-invocation interactive list-then-confirm
+  // prompt. Defaults to false (never prompts) so every existing deps-construction call site
+  // (tests, in particular) is unaffected — only bin/main.ts's composition root wires this,
+  // and (review fix) only when BOTH stdout and stdin are real TTYs — a piped/redirected
+  // stdin must never let `rl.question()` block on or misread a nonexistent live answer.
+  isTTY?: boolean;
+  scanner: RouteScannerPort;
+  auth: DevAuthPort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -201,6 +218,59 @@ export function buildSubcommands(deps: {
           );
         }
         return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
+      },
+    },
+    {
+      name: 'registry',
+      usage: REGISTRY_USAGE,
+      // Story 2.33: verb-dispatch subcommand, same shape as `edt` above — today's only
+      // action is `clean`, but the dispatch shape leaves room for a future registry verb
+      // without renaming the subcommand.
+      run: async (args) => {
+        if (args[0] === 'clean') {
+          return runRegistryClean(deps, args.slice(1));
+        }
+        const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
+        return err('invalid-argument', `Unknown registry action: ${label}. Usage:\n${REGISTRY_USAGE}`);
+      },
+    },
+    {
+      name: 'list-routes',
+      usage: 'tui-back list-routes <repoPath>',
+      // Story 6.1: thin wrapper around core/routes/list-routes.ts (AD-2) — the wrapper owns
+      // argument cardinality (missing → missing-argument like scan/register, excess or blank
+      // → invalid-argument, never silently ignored); the use-case owns the manifest gate
+      // and the scanner delegation.
+      run: async (args) => {
+        if (args.length === 0) {
+          return err('missing-argument', 'Usage: tui-back list-routes <repoPath>');
+        }
+        if (args.length > 1 || args[0].trim() === '') {
+          return err('invalid-argument', 'Usage: tui-back list-routes <repoPath>');
+        }
+        return listRoutes({ manifest: deps.manifest, scanner: deps.scanner }, resolve(args[0]));
+      },
+    },
+    {
+      name: 'fire-request',
+      usage: 'tui-back fire-request <repoPath> <METHOD> <path>',
+      // Story 6.2: thin wrapper around core/routes/fire-request.ts (AD-2) — the wrapper owns
+      // argument cardinality (missing → missing-argument like scan/register, any other arity
+      // or a blank argument → invalid-argument, never silently ignored); the use-case owns
+      // the manifest gate, the route-exists check, the session, and the fire itself.
+      run: async (args) => {
+        if (args.length === 0) {
+          return err('missing-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+        }
+        if (args.length !== 3 || args.some((arg) => arg.trim() === '')) {
+          return err('invalid-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+        }
+        return fireRequest(
+          { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
+          resolve(args[0]),
+          args[1],
+          args[2],
+        );
       },
     },
   ];
@@ -421,6 +491,11 @@ async function runEdtSwitch(
     state: deps.state,
     topic,
     force,
+    // Story 2.39: the CLI passes neither a seam nor dirtyResolutions yet (its explicit
+    // --adopt-dirty/--discard-dirty flags land in story 2.40), so it fails safe: a dirty
+    // outgoing-EDT member is still auto-stashed, but any other dirty service makes the switch
+    // exit non-zero with switch-dirty-services-unresolved before any git write.
+    onDirtyReposBeforeSwitch: undefined,
   });
 }
 
@@ -623,6 +698,144 @@ async function runEdtDelete(
     topic,
     dispositions,
   });
+}
+
+// `registry clean` flag parsing + the interactive/scripted split (Boundaries: "list-then-
+// confirm interactive on a TTY; --yes + repeated --path <path> for scripted use, consistent
+// with update's --all --yes"). Scripted mode (--yes together with at least one --path) never
+// classifies — it removes exactly the given paths via removeStaleRegistryEntries, mirroring
+// AC4's `registry clean --yes --path <p1> --path <p2>` example. Bare invocation always
+// classifies first (so a zero-candidates registry is reported the same way regardless of
+// TTY-ness, matrix row "No candidates ... explicit result, never silent"); once candidates
+// exist, a non-TTY run is rejected with confirmation-required (same shape as update's `--all`
+// alone) rather than silently doing nothing, and a TTY run lists every candidate (path +
+// reason + memberOfEdts note) and prompts for one whole-list confirmation before removing.
+async function runRegistryClean(
+  deps: {
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    edtRegistry: EdtRegistryPort;
+    lock: LockPort;
+    registryResourceKey: string;
+    isTTY?: boolean;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let yes = false;
+  const paths: string[] = [];
+  // Review fix: the same resolved path given via multiple --path flags used to call
+  // registry.remove twice and produce a duplicate outcome row — deduped here so
+  // removeStaleRegistryEntries only ever sees each path once.
+  const seenPaths = new Set<string>();
+
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    if (flag === '--yes') {
+      yes = true;
+      continue;
+    }
+    if (flag === '--path') {
+      const value = args[i + 1];
+      if (value === undefined) {
+        return err('invalid-argument', `Missing value for --path. Usage: ${REGISTRY_CLEAN_USAGE}`);
+      }
+      // Review fix: a value that looks like another flag (e.g. `--path --yes`) is a missing
+      // value in disguise, not a literal path — reject it instead of silently consuming it.
+      if (value.startsWith('--')) {
+        return err(
+          'invalid-argument',
+          `--path value must not look like a flag: "${value}". Usage: ${REGISTRY_CLEAN_USAGE}`,
+        );
+      }
+      // Review fix: `--path ""` used to resolve() to process.cwd() and could remove an
+      // unintended entry — reject an empty/whitespace-only value instead of guessing.
+      if (value.trim() === '') {
+        return err('invalid-argument', `--path value must not be empty. Usage: ${REGISTRY_CLEAN_USAGE}`);
+      }
+      const resolved = resolve(value);
+      if (!seenPaths.has(resolved)) {
+        seenPaths.add(resolved);
+        paths.push(resolved);
+      }
+      i += 1;
+      continue;
+    }
+    return err('invalid-argument', `Unknown registry clean option: "${flag}". Usage: ${REGISTRY_CLEAN_USAGE}`);
+  }
+
+  if (yes || paths.length > 0) {
+    if (!yes || paths.length === 0) {
+      return err(
+        'invalid-argument',
+        `Scripted use requires --yes together with at least one --path <path>. Usage: ${REGISTRY_CLEAN_USAGE}`,
+      );
+    }
+    return removeStaleRegistryEntries(
+      { registry: deps.registry, lock: deps.lock, registryResourceKey: deps.registryResourceKey },
+      paths,
+    );
+  }
+
+  const classified = await classifyStaleRegistry({
+    registry: deps.registry,
+    manifest: deps.manifest,
+    edtRegistry: deps.edtRegistry,
+  });
+  if (!classified.ok) {
+    return classified;
+  }
+  if (classified.data.candidates.length === 0) {
+    // Matrix: "No candidates ... explicit 'no stale entries' result, never silent" — reported
+    // the same way whether or not the run is interactive. `errors` still surfaces any path
+    // that couldn't even be checked (review fix) — a healthy-looking zero-candidates run
+    // never silently hides that.
+    return ok({ candidates: [], errors: classified.data.errors, results: [] });
+  }
+
+  if (deps.isTTY !== true) {
+    return err(
+      'confirmation-required',
+      `registry clean found ${classified.data.candidates.length} stale ` +
+        `${classified.data.candidates.length === 1 ? 'entry' : 'entries'} — rerun with --yes --path <path>... to ` +
+        `confirm removal. Usage: ${REGISTRY_CLEAN_USAGE}`,
+      { candidates: classified.data.candidates, errors: classified.data.errors },
+    );
+  }
+
+  process.stdout.write(`Stale registry entries (${classified.data.candidates.length}):\n`);
+  for (const candidate of classified.data.candidates) {
+    const note = candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
+    process.stdout.write(`  ${candidate.path} — ${candidate.reason}${note}\n`);
+  }
+  // Review fix: a path that couldn't be checked at all used to be invisible — reported here
+  // too, distinct from the removable candidate list above.
+  if (classified.data.errors.length > 0) {
+    process.stdout.write(`Could not be checked (${classified.data.errors.length}, left alone):\n`);
+    for (const error of classified.data.errors) {
+      process.stdout.write(`  ${error.path} — ${error.code}: ${error.message}\n`);
+    }
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let answer: string;
+  try {
+    answer = await rl.question(`Remove ${classified.data.candidates.length === 1 ? 'this entry' : 'these entries'}? [y/N] `);
+  } finally {
+    rl.close();
+  }
+
+  if (!/^y(es)?$/i.test(answer.trim())) {
+    return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: [] });
+  }
+
+  const removed = await removeStaleRegistryEntries(
+    { registry: deps.registry, lock: deps.lock, registryResourceKey: deps.registryResourceKey },
+    classified.data.candidates.map((candidate) => candidate.path),
+  );
+  if (!removed.ok) {
+    return removed;
+  }
+  return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: removed.data.results });
 }
 
 export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {

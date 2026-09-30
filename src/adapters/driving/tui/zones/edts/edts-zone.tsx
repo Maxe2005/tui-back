@@ -19,7 +19,7 @@
 // This file holds the Ink component only — the pure formatting/selection/form-focus logic
 // and the 5 dialogs' state shapes/initializers live in edts-zone.logic.ts (kept in one place
 // so the component here stays scannable; see that file's own header for why).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -43,12 +43,15 @@ import {
   initialAddToEdtDialog,
   initialCreateDialog,
   initialDeleteDialog,
+  initialIssuesDialog,
   initialModifyDialog,
+  initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
   jumpSelection,
   moveSelection,
   partitionServicesByEdtMembership,
+  resolveIssuesSeverity,
   type PaneFocus,
   resolveActionHint,
   resolveCandidateListState,
@@ -58,17 +61,36 @@ import {
   type EdtDialogState,
 } from './edts-zone.logic.js';
 import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
-import { createCreateDialogHandlers, CreateDialogView } from './dialogs/create-dialog.js';
+import { createCreateWizardHandlers, CreateWizardView } from './dialogs/create-wizard/create-wizard.js';
 import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
+import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
+import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers, SwitchDialogView } from './dialogs/switch-dialog.js';
+import {
+  autoStashedRepos,
+  initialSwitchResolution,
+  otherEdtBranches,
+  resolutionRepos,
+  type LocalBranchList,
+} from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // Story 5.5: rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above
 // the splitter, both section headers, and the loading/error/issues lines) subtracted from the
 // raw window size before either service list's own BoundedList ever sees it — mirrors
 // logs-zone.tsx's own CHROME_ROWS ("an approximation is fine here").
 const EDTS_SERVICE_LISTS_CHROME_ROWS = 12;
+// Story 2.37: rows the create wizard spends around Step 3's Panel B table — modal border and
+// title, breadcrumb, intro, Panel A (title + 2 lines + a field's edit hint), Panel B title and
+// column header, the blocked-row detail line, Step 3 footer, error line and the wizard footer.
+// An approximation, as above.
+const CREATE_WIZARD_CHROME_ROWS = 17;
+// Story 2.41: rows the switch resolution view spends around its Panel B table — modal border
+// and title, the (wrapping) intro, Panel A (title + 2 lines + the no-outgoing note), Panel B
+// title and column header, the blocked-row detail, the Ctrl+N error, the list-loading note and
+// the footer. The read-only state-1 rows below the table are added on top. An approximation.
+const SWITCH_RESOLUTION_CHROME_ROWS = 17;
 
 export function EdtsZone({
   useStore = useAppStore,
@@ -97,7 +119,9 @@ export function EdtsZone({
     | 'add-to-edt'
     | 'delete-confirm'
     | 'delete-confirm-rejected'
-    | 'delete-confirm-status-error';
+    | 'delete-confirm-status-error'
+    | 'issues'
+    | 'quick-pick';
 }) {
   // Story 2.21: splitterRatios.edts is now a 3-entry array — boundary 0 (index 0) drives the
   // existing list<->detail split below; boundaries 1/2 drive the list column's own two
@@ -116,7 +140,12 @@ export function EdtsZone({
   const activeEdtUlid = useStore((state) => state.activeEdt);
   const loadEdts = useStore((state) => state.loadEdts);
   const createEdtAction = useStore((state) => state.createEdt);
+  // Story 2.38: the create wizard's Step 4 first-EDT activation.
+  const activateEdtAction = useStore((state) => state.activateEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
+  // Bug fix: the switch dirty-repo confirm seam (edt-slice.ts).
+  const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
+  const resolveSwitchDirtyRepos = useStore((state) => state.resolveSwitchDirtyRepos);
   const modifyEdtAction = useStore((state) => state.modifyEdt);
   const deleteEdtAction = useStore((state) => state.deleteEdt);
   const resolveMemberDeleteStatusesAction = useStore((state) => state.resolveMemberDeleteStatuses);
@@ -124,6 +153,8 @@ export function EdtsZone({
   // still never touched directly from this zone — these wrap core/edt/modify.ts's
   // listMemberBranches/createMemberBranch/renameMemberBranch exports).
   const listBranchesAction = useStore((state) => state.listBranches);
+  // Story 2.37: the create wizard's Step 3 per-service lists (local + remote-tracking refs).
+  const listCreateBranchesAction = useStore((state) => state.listCreateBranches);
   const createMemberBranchAction = useStore((state) => state.createMemberBranch);
   const renameBranchAction = useStore((state) => state.renameBranch);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
@@ -139,6 +170,7 @@ export function EdtsZone({
   // also silently drove this zone's own pane focus/list-cursor/dialogs at the same time.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
+  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   // Story 2.15: EDT action state for detail pane — tracks in-progress action and action log
   const currentEdtAction = useStore((state) => state.currentEdtAction);
   const setCurrentEdtAction = useStore((state) => state.setCurrentEdtAction);
@@ -172,6 +204,9 @@ export function EdtsZone({
   const rows = status === 'error' ? [] : (services ?? []);
   // Same "never a stale value on error" gating as `rows` above.
   const issuesSummary = status === 'error' ? null : formatIssuesSummary(unreachable.length, errors.length);
+  // Story 2.34: same gating as issuesSummary above — never a stale severity color on a load
+  // error either.
+  const issuesSeverity = status === 'error' ? null : resolveIssuesSeverity(unreachable.length, errors.length);
 
   // Story 2.9 -----------------------------------------------------------------------------
   const [paneFocus, setPaneFocus] = useState<PaneFocus>(initialPaneFocus);
@@ -187,6 +222,17 @@ export function EdtsZone({
     }
     if (initialDialogKind === 'create') {
       return initialCreateDialog();
+    }
+    if (initialDialogKind === 'issues') {
+      return initialIssuesDialog();
+    }
+    if (initialDialogKind === 'quick-pick') {
+      // Test-only seed (mirrors 'create'/'issues' above): defaults to switch mode — a
+      // renderToString smoke test only needs one representative mode's chrome to render;
+      // real per-mode coverage (filter/arrow-nav/select/no-match/Esc across all 3 modes) goes
+      // through the real-keypress interaction tests, driving the actual currentEdtAction ->
+      // quick-pick effect below instead of this seed.
+      return initialQuickPickDialog('switch');
     }
     const target = useStore.getState().edts?.[0];
     if (target === undefined) {
@@ -285,6 +331,13 @@ export function EdtsZone({
   // a short EDT SERVICES list leaves more room for OTHER SERVICES.
   const windowSize = useWindowSize();
   const servicesListsAvailableHeight = Math.max(windowSize.rows - EDTS_SERVICE_LISTS_CHROME_ROWS, 4);
+  // Story 2.37 (NFR-7): the create wizard's Step 3 table budget, same live pattern as above.
+  const createWizardTableMaxRows = Math.max(windowSize.rows - CREATE_WIZARD_CHROME_ROWS, 3);
+  // Story 2.41 (NFR-7): the switch resolution table / discard file-list budget, same pattern.
+  const switchResolutionMaxRows = Math.max(
+    windowSize.rows - SWITCH_RESOLUTION_CHROME_ROWS - (switchDirtyRepos !== null ? autoStashedRepos(switchDirtyRepos).length : 0),
+    3,
+  );
   const edtServicesMaxVisibleRows = servicesListsAvailableHeight;
   // Review fix: an empty EDT SERVICES list still renders a 1-row placeholder ("No services in
   // this EDT.") instead of the BoundedList's own 0 rows — `Math.min(edtServices.length, …)` was
@@ -330,13 +383,10 @@ export function EdtsZone({
   // "fetched on the relevant change, not continuously re-synced" convention. A stale response
   // (the picker closed, or a different repoPath's session opened, before this resolved) is
   // dropped rather than applied.
-  // Story 2.27: extended to also key off dialog.kind === 'create' — the create-EDT dialog's
-  // own base-branch step now opens the same kind of session and needs its own listBranches
-  // fetch through this exact effect, not a second parallel one.
+  // Story 2.37: the create wizard no longer opens a picker session — its Step 3 lists load
+  // through the wizard's own loadPendingBranchLists (effect below).
   const activeBranchPicker =
-    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' || dialog.kind === 'create'
-      ? dialog.branchPicker
-      : null;
+    dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' ? dialog.branchPicker : null;
   // Keyed on repoPath/branchesStatus (primitives) rather than the activeBranchPicker object
   // itself — that object is freshly spread on every keystroke inside the picker (session.state
   // updates), which would otherwise re-fire this effect (and spawn a new listBranches() git
@@ -355,7 +405,7 @@ export function EdtsZone({
         return;
       }
       setDialog((prev) => {
-        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt' && prev.kind !== 'create') {
+        if (prev.kind !== 'modify' && prev.kind !== 'service-actions' && prev.kind !== 'add-to-edt') {
           return prev;
         }
         if (prev.branchPicker === null || prev.branchPicker.repoPath !== repoPath || prev.branchPicker.branchesStatus !== 'loading') {
@@ -392,16 +442,11 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         } else {
-          // No topic specified - the dialog will show quick-pick (handled by switch dialog logic)
-          // For now, open switch-confirm for the first non-active EDT
-          const nonActiveEdt = edtsRows.find((e) => e.ulid !== activeEdtUlid);
-          if (nonActiveEdt) {
-            setDialog(initialSwitchDialog(nonActiveEdt));
-            setCurrentEdtAction(null);
-          } else {
-            setDialog({ kind: 'none' });
-            setCurrentEdtAction(null);
-          }
+          // Story 2.30: no topic specified — open the quick-pick (switch mode) instead of
+          // guessing "the first non-active EDT". The picker's own Enter handler opens this
+          // exact initialSwitchDialog(target) once a topic is actually chosen.
+          setDialog(initialQuickPickDialog('switch'));
+          setCurrentEdtAction(null);
         }
       } else if (currentEdtAction.type === 'modify') {
         // If a topic was specified, find the EDT and open modify dialog pre-targeted
@@ -415,14 +460,10 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         } else {
-          // No topic specified - open modify for the focused EDT
-          if (focusedEdt) {
-            setDialog(initialModifyDialog(focusedEdt));
-            setCurrentEdtAction(null);
-          } else {
-            setDialog({ kind: 'none' });
-            setCurrentEdtAction(null);
-          }
+          // Story 2.30: no topic specified — open the quick-pick (modify mode), filtering
+          // every EDT (active included), instead of guessing "the focused row".
+          setDialog(initialQuickPickDialog('modify'));
+          setCurrentEdtAction(null);
         }
       } else if (currentEdtAction.type === 'delete') {
         // Boundary: "The active EDT can never be deleted ... reject before any git/file
@@ -439,20 +480,16 @@ export function EdtsZone({
             setCurrentEdtAction(null);
           }
         } else {
-          // No topic specified - open delete for the focused EDT (mirrors modify's own
-          // no-topic fallback, unlike switch's "first non-active" — a delete on the focused
-          // active EDT is exactly the case that should surface the rejection message).
-          if (focusedEdt) {
-            setDialog(initialDeleteDialog(focusedEdt, focusedEdt.ulid === activeEdtUlid));
-            setCurrentEdtAction(null);
-          } else {
-            setDialog({ kind: 'none' });
-            setCurrentEdtAction(null);
-          }
+          // Story 2.30: no topic specified — open the quick-pick (delete mode), filtering
+          // every EDT (active included). Selecting the active EDT there still opens the
+          // existing rejection dialog (initialDeleteDialog's own isActive check, unchanged) —
+          // just reached via the picker instead of the focused-row fallback.
+          setDialog(initialQuickPickDialog('delete'));
+          setCurrentEdtAction(null);
         }
       }
     }
-  }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, focusedEdt, setDialog, setCurrentEdtAction]);
+  }, [currentEdtAction, dialog.kind, edtsRows, activeEdtUlid, setDialog, setCurrentEdtAction]);
 
   // Story 2.15: load action log when an EDT row is focused
   // Track which EDT we've loaded to avoid infinite reload loops
@@ -469,7 +506,7 @@ export function EdtsZone({
   // under dialogs/ (see edts-zone.tsx's header) — these factories close over this render's own
   // values (deps object recreated every render, same as the handlers it replaces were), so
   // behavior is unchanged; only the code's location moved.
-  const { handleSwitchDialogInput } = createSwitchDialogHandlers({
+  const { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch } = createSwitchDialogHandlers({
     setDialog,
     switchEdtAction,
     loadEdts,
@@ -477,8 +514,67 @@ export function EdtsZone({
     logEdtAction,
     setCurrentEdtAction,
     focusedEdt,
+    switchDirtyRepos,
+    resolveSwitchDirtyRepos,
   });
-  const { handleCreateInput } = createCreateDialogHandlers({
+  // Story 2.41: once the core switch parks on the dirty-repo seam, open the resolution view on
+  // a fresh draft — the outgoing EDT is the store's active one (null on a first switch) — and
+  // load each state-2/3 repo's local branch list once (listMemberBranches, via the store), for
+  // the advisory "already exists" check. Keyed on primitives, never on the dialog object.
+  const switchResolutionDraftCounter = useRef(0);
+  const switchResolutionNeeded = dialog.kind === 'switch-confirm' && switchDirtyRepos !== null && dialog.resolution === null;
+  useEffect(() => {
+    if (!switchResolutionNeeded || switchDirtyRepos === null) {
+      return;
+    }
+    const dirty = switchDirtyRepos;
+    const outgoingTopic = activeEdtUlid !== null ? (edtsRows.find((entry) => entry.ulid === activeEdtUlid)?.topic ?? null) : null;
+    // Story 2.41 review: branches other EDTs register per repo, so a row sitting on one is
+    // retargeted to the global name and such a name is rejected inline.
+    const claims = otherEdtBranches(edtsRows, activeEdtUlid);
+    // Story 2.41 review: each draft is tagged, so a late list load from an earlier attempt
+    // never lands in a newer draft; a rejected load settles as 'error', never stuck 'loading'.
+    switchResolutionDraftCounter.current += 1;
+    const draftId = switchResolutionDraftCounter.current;
+    setDialog((prev) =>
+      prev.kind === 'switch-confirm' && prev.resolution === null
+        ? { ...prev, resolution: initialSwitchResolution(outgoingTopic, dirty, claims, draftId) }
+        : prev,
+    );
+    for (const repo of resolutionRepos(dirty)) {
+      const repoPath = repo.repoPath;
+      const apply = (list: LocalBranchList) => {
+        setDialog((prev) => {
+          if (
+            prev.kind !== 'switch-confirm' ||
+            prev.resolution === null ||
+            prev.resolution.draftId !== draftId ||
+            prev.resolution.lists[repoPath]?.status !== 'loading'
+          ) {
+            return prev;
+          }
+          return { ...prev, resolution: { ...prev.resolution, lists: { ...prev.resolution.lists, [repoPath]: list } } };
+        });
+      };
+      listBranchesAction(repoPath).then(
+        (result) => apply(result.ok ? { status: 'ready', branches: result.data } : { status: 'error', branches: [] }),
+        () => apply({ status: 'error', branches: [] }),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switchResolutionNeeded]);
+
+  // Story 2.41: the resolution view's decision (raised inside its key reducer) resumes the
+  // parked core switch here, outside any state updater.
+  const switchResolutionDecision = dialog.kind === 'switch-confirm' ? (dialog.resolution?.decision ?? null) : null;
+  useEffect(() => {
+    if (switchResolutionDecision !== null && dialog.kind === 'switch-confirm') {
+      dispatchResolutionDecision(dialog);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switchResolutionDecision]);
+
+  const { handleCreateInput, loadPendingBranchLists, handleCancelRequest, dispatchActivationDecision } = createCreateWizardHandlers({
     setDialog,
     createEdtAction,
     loadEdts,
@@ -489,7 +585,74 @@ export function EdtsZone({
     focusedEdt,
     edtsRows,
     candidates,
+    listCreateBranches: listCreateBranchesAction,
+    activateEdtAction,
+    // Story 2.38: "switch now" hands off to the switch dialog on the new EDT, resolved from the
+    // store's `edts` the wizard just reloaded (this render's `edtsRows` predates the create).
+    startSwitch: (created) => {
+      const target = useStore.getState().edts?.find((entry) => entry.ulid === created.ulid);
+      if (target === undefined) {
+        // The reload failed: the EDT exists but cannot be switched to from here.
+        setDialog((prev) =>
+          prev.kind === 'create'
+            ? {
+                ...prev,
+                submitting: false,
+                error: `EDT « ${created.topic} » créé, mais introuvable après rechargement — basculez-y depuis la liste des EDT.`,
+                activation: { ...prev.activation, created, outcome: 'not-activated' },
+              }
+            : prev,
+        );
+        void logEdtAction(
+          created.ulid,
+          'create',
+          'failed',
+          `Created EDT "${created.topic}" — not activated: not found after reloading the EDT list, the switch was not run`,
+        );
+        return;
+      }
+      startSwitch(target);
+    },
   });
+
+  // Story 2.38: a decision Step 4's key reducer raised (retry / overwrite / stop) runs here,
+  // outside any state updater — the same pattern as the switch resolution view's decision.
+  const activationDecision = dialog.kind === 'create' ? dialog.activation.decision : null;
+  useEffect(() => {
+    if (activationDecision !== null && dialog.kind === 'create') {
+      dispatchActivationDecision(dialog);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activationDecision]);
+
+  // Story 2.37: entering the create wizard's Step 3 queues every service whose lists are not
+  // loaded yet (or failed last time) as `pending`; this effect hands them to the wizard, which
+  // flips them to `loading` at once — so each service is loaded once per entry. Keyed on the
+  // joined pending paths (a primitive), never on the dialog object itself.
+  const pendingCreateListPaths =
+    dialog.kind === 'create'
+      ? Object.entries(dialog.branches.lists)
+          .filter(([, lists]) => lists.status === 'pending')
+          .map(([path]) => path)
+          .sort()
+          .join('\n')
+      : '';
+  useEffect(() => {
+    if (pendingCreateListPaths !== '') {
+      loadPendingBranchLists(pendingCreateListPaths.split('\n'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCreateListPaths]);
+
+  // Story 2.37 (review): Step 3 decides an Esc-cancel against the latest state inside its
+  // updater and raises `cancelRequested`; the cancel's side effects (close / quit) run here.
+  const createCancelRequested = dialog.kind === 'create' && dialog.cancelRequested;
+  useEffect(() => {
+    if (createCancelRequested) {
+      handleCancelRequest();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createCancelRequested]);
 
   function openEdtAction() {
     const target = edtsRows[clampedEdtsSelected];
@@ -541,6 +704,12 @@ export function EdtsZone({
     loadEdtsBranches,
     setCurrentEdtAction,
   });
+  const { handleQuickPickDialogInput } = createQuickPickDialogHandlers({
+    setDialog,
+    setCurrentEdtAction,
+    edtsRows,
+    activeEdtUlid,
+  });
 
   // Story 2.29: fetches the delete-confirm dialog's own per-member merge/clean statuses once,
   // when it opens with memberRows === null (mirrors the branch-picker fetch effect above) —
@@ -584,12 +753,30 @@ export function EdtsZone({
       handleDeleteDialogInput(dialog, input, key);
       return;
     }
+    if (dialog.kind === 'quick-pick') {
+      handleQuickPickDialogInput(dialog, input, key);
+      return;
+    }
+    if (dialog.kind === 'issues') {
+      // Read-only dialog, no submit path — Esc or Enter both just close it.
+      if (key.escape || key.return) {
+        setDialog({ kind: 'none' });
+      }
+      return;
+    }
 
     // Base edt-list view (no dialog open): Tab cycles which of the three lists is focused;
     // arrows/Home/End move only the currently-focused list — all three stay independently
     // navigable.
     if (key.tab) {
       setPaneFocus((current) => cyclePaneFocus(current));
+      return;
+    }
+
+    // Story 2.34: opens the issues detail dialog from any pane, mirroring the summary line's
+    // own "[i] details" hint — only reachable when there's actually something to show.
+    if (input === 'i' && issuesSummary !== null) {
+      setDialog(initialIssuesDialog());
       return;
     }
 
@@ -651,7 +838,7 @@ export function EdtsZone({
   // Tab/arrows/Enter/Esc to the store directly — see app-shell.tsx), this zone's own Tab/
   // arrow/Enter handling must go inert too, the same way it already does under the other
   // three overlays.
-  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode });
+  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode });
 
   const loading = status === 'loading' && rows.length === 0;
   const edtsLoading = edtsStatus === 'loading' && edts === null;
@@ -724,7 +911,17 @@ export function EdtsZone({
                   unreported. */}
               {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
               {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
-              {issuesSummary ? <DimAnnotation text={issuesSummary} /> : null}
+              {/* Story 2.34: colored by severity (never the uniform dim gray every other
+                  DimAnnotation line uses) so a listing problem is noticed, not skimmed past —
+                  plus an `[i] details` hint into the read-only issues dialog. */}
+              {issuesSummary ? (
+                <Box paddingLeft={2}>
+                  <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold>
+                    {issuesSeverity === 'error' ? '✖' : '▲'} {issuesSummary}
+                    {!dialogOpen ? '  [i] details' : ''}
+                  </Text>
+                </Box>
+              ) : null}
 
               <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).list} flexBasis={0} minHeight={0} overflow="hidden">
                 {focusedEdt !== undefined ? (
@@ -822,9 +1019,18 @@ export function EdtsZone({
         }
       />
 
-      {dialog.kind === 'create' ? <CreateDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
+      {dialog.kind === 'create' ? (
+        <CreateWizardView
+          dialog={dialog}
+          candidates={candidates}
+          candidateState={candidateState}
+          edtsRows={edtsRows}
+          maxRows={branchDropdownMaxRows}
+          maxVisibleRows={createWizardTableMaxRows}
+        />
+      ) : null}
 
-      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} /> : null}
+      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} maxVisibleRows={switchResolutionMaxRows} /> : null}
 
       {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
 
@@ -833,6 +1039,12 @@ export function EdtsZone({
       {dialog.kind === 'add-to-edt' ? <AddToEdtDialogView dialog={dialog} maxRows={branchDropdownMaxRows} /> : null}
 
       {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
+
+      {dialog.kind === 'quick-pick' ? (
+        <QuickPickDialogView dialog={dialog} pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)} />
+      ) : null}
+
+      {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}
     </Box>
   );
 }

@@ -4,13 +4,18 @@
 // without scrolling past the Ink component; every export here stays unit-tested directly, no
 // React import, per the file's original Design Notes ("every keystroke behavior ... a
 // standalone pure function, unit-tested directly").
-import type { CreateBranchOptions } from '../../../../../core/edt/create.js';
+import type { ActivationBlockedRepo } from '../../../../../core/edt/activate.js';
+import type { MemberBranchPlan } from '../../../../../core/edt/create.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
+import type { TextInputState } from '../../shared/components/text-edit.js';
+import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
+import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // A fixed max width (the spec's "ellipsizes past a fixed max width") — generous enough for
 // most feature-branch naming conventions while keeping the list column narrow. The full,
@@ -84,6 +89,69 @@ export function formatIssuesSummary(unreachableCount: number, errorCount: number
     parts.push(`${errorCount} error${errorCount === 1 ? '' : 's'}`);
   }
   return parts.join(', ');
+}
+
+// Story 2.34: the summary above rendered uniformly dim, giving no visual cue that it's worth
+// stopping for — this picks which of the theme's two "something's wrong" colors it should
+// render with. `errors` (a genuine read failure) always outranks `unreachable` (a path just
+// not found) when both are present, same ranking `formatIssuesSummary`'s part order implies.
+export type IssuesSeverity = 'error' | 'warning';
+
+export function resolveIssuesSeverity(unreachableCount: number, errorCount: number): IssuesSeverity | null {
+  if (errorCount > 0) {
+    return 'error';
+  }
+  if (unreachableCount > 0) {
+    return 'warning';
+  }
+  return null;
+}
+
+export type IssueExplanation = {
+  reason: string;
+  suggestion: string;
+};
+
+// Story 2.34: a small extensible registry mapping a BranchDivergenceEntryError.code to a
+// plain-language reason + suggested next step — mirrors failed-result-list.tsx's
+// resolveAssistedAction precedent (a future code gets a new entry here, never a renderer
+// change). Codes come from registry.exists()/manifest.load() failures surfaced by
+// listEdtBranchesDivergence (core/edt/list.ts); manifest-not-found never reaches here — it's
+// silently skipped upstream as a genuinely unmanaged repo.
+const ISSUE_EXPLANATIONS: Record<string, IssueExplanation> = {
+  'manifest-invalid-yaml': {
+    reason: '.tui-back.yaml is not valid YAML',
+    suggestion: 'fix the file’s syntax, then reload this zone',
+  },
+  'manifest-validation-failed': {
+    reason: '.tui-back.yaml fails schema validation',
+    suggestion: 'check its fields against the manifest schema, then reload',
+  },
+  'unknown-module': {
+    reason: '.tui-back.yaml declares a module this tool does not recognize',
+    suggestion: 'fix the module name in the manifest, then reload',
+  },
+  'registry-stat-error': {
+    reason: 'this path could not be checked on disk',
+    suggestion: 'check filesystem permissions for this path',
+  },
+};
+
+export function explainIssueErrorCode(code: string): IssueExplanation {
+  // hasOwnProperty guard (mirrors resolveAssistedAction): a plain lookup would resolve an
+  // inherited Object.prototype key (e.g. a hypothetical code literally named "constructor")
+  // to a truthy non-IssueExplanation value.
+  if (!Object.prototype.hasOwnProperty.call(ISSUE_EXPLANATIONS, code)) {
+    return { reason: 'an unexpected error occurred', suggestion: 'check the message above, then reload this zone' };
+  }
+  return ISSUE_EXPLANATIONS[code] ?? { reason: 'an unexpected error occurred', suggestion: 'check the message above, then reload this zone' };
+}
+
+export function explainUnreachable(): IssueExplanation {
+  return {
+    reason: 'no longer found at this path (moved or deleted)',
+    suggestion: 'open Repo Registry → Clean stale entries to deregister it',
+  };
 }
 
 // Review patch: extracted so the arrow-key row-focus transition is unit-testable directly —
@@ -215,211 +283,58 @@ export function suggestBranchNameFromTopic(topic: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-// The branch-setup step's naming-mode choice (Code Map/Design Notes): grouped shares one name
-// across every selected member; individual gives each its own field.
-export type NamingMode = 'grouped' | 'individual';
+// Story 2.37: the create dialog's focus is back to FormFocus alone — Step 3's own focus lives
+// in BranchStepState below (panel / globalLine / editing / rowCursor / box), no longer in the
+// flat pre-wizard `branch-base`/`branch-mode`/`branch-name` cycle.
+export type CreateFormFocus = FormFocus;
 
-// Widens FormFocus (topic/members, shared with Modify) with the branch-setup step's own three
-// fields, for the create dialog only — Modify never grows this step, so its formFocus stays
-// exactly FormFocus. Kept as one flat cycle (Tab-only, no per-mode field count baked into the
-// type itself) rather than a nested per-field state shape, the same flat-enum idiom
-// `cycleFormFocus`/`cyclePaneFocus` already use elsewhere in this file.
-export type CreateFormFocus = FormFocus | 'branch-base' | 'branch-mode' | 'branch-name';
-
-export function isBranchStepFocus(focus: CreateFormFocus): boolean {
-  return focus === 'branch-base' || focus === 'branch-mode' || focus === 'branch-name';
-}
-
-// Tab's advance rule for the create dialog specifically (cycleFormFocus stays the 2-way
-// topic<->members toggle Modify still uses unchanged). `members` only advances into the
-// branch-setup step when >=1 member is selected (Boundaries: "no branch step" otherwise,
-// so it loops straight back to `topic` exactly like cycleFormFocus already does). Within the
-// step: base -> mode -> name field(s) -> topic. Individual mode's name field is a variable
-// number of per-member fields (Ask First's concern) — resolved the same "current index,
-// length" idiom `moveSelection` already established, not a new focus-model mechanism: Tab
-// advances `nameIndex` through them before finally cycling back out to `topic`.
-export function advanceCreateFormFocus(
-  current: CreateFormFocus,
-  hasMembers: boolean,
-  namingMode: NamingMode,
-  nameIndex: number,
-  nameFieldCount: number,
-): { focus: CreateFormFocus; nameIndex: number } {
-  if (current === 'topic') {
-    return { focus: 'members', nameIndex: 0 };
-  }
-  if (current === 'members') {
-    return hasMembers ? { focus: 'branch-base', nameIndex: 0 } : { focus: 'topic', nameIndex: 0 };
-  }
-  if (current === 'branch-base') {
-    return { focus: 'branch-mode', nameIndex: 0 };
-  }
-  if (current === 'branch-mode') {
-    return { focus: 'branch-name', nameIndex: 0 };
-  }
-  // current === 'branch-name'
-  if (namingMode === 'individual' && nameIndex + 1 < nameFieldCount) {
-    return { focus: 'branch-name', nameIndex: nameIndex + 1 };
-  }
-  return { focus: 'topic', nameIndex: 0 };
-}
-
-// Boundary: "Branch-name field(s) pre-fill via suggestBranchNameFromTopic(topic), always
-// editable, never forced." Fired at two trigger points only (a member is newly selected, or
-// the naming mode is toggled) — never on every keystroke/submit.
+// Story 2.37 -----------------------------------------------------------------------------
+// The create wizard's Step 3 "global strategy + per-service exceptions" state.
 //
-// Review fix (story 2.22): the original version gated the fill on "is the field currently
-// empty", conflating "never touched yet" with "touched, then deliberately cleared back to
-// ''" — a developer who cleared a field to exercise the empty-value rejection would see it
-// silently resurrected by the very next member-checkbox toggle or naming-mode switch,
-// directly contradicting "never forced"/"never silently overwritten". Gated on an explicit
-// touched flag instead: `branchNameTouched`/`branchNamesTouched` (set true the moment the
-// developer's own edit actually changes a field's value — see handleCreateBranchStepInput)
-// is the only thing that permanently opts a field out of auto-fill, regardless of its
-// current value. An untouched field keeps tracking the topic slug on every call (e.g. across
-// further member selections) since nothing the developer did should freeze it yet.
-export function prefillBranchNames(
-  namingMode: NamingMode,
-  topic: string,
-  selectedMembers: readonly string[],
-  branchName: string,
-  branchNames: Readonly<Record<string, string>>,
-  branchNameTouched: boolean,
-  branchNamesTouched: Readonly<Record<string, boolean>>,
-): { branchName: string; branchNames: Record<string, string> } {
-  const suggestion = suggestBranchNameFromTopic(topic);
-  if (namingMode === 'grouped') {
-    return { branchName: branchNameTouched ? branchName : suggestion, branchNames: { ...branchNames } };
-  }
-  const nextNames = { ...branchNames };
-  for (const path of selectedMembers) {
-    if (!branchNamesTouched[path]) {
-      nextNames[path] = suggestion;
-    }
-  }
-  return { branchName, branchNames: nextNames };
-}
+// A row override is exactly core's MemberBranchPlan (Design Notes): `create` renders as
+// [Créer (Perso)], `existing` as [Existante] — or [Renommer] once `renameTo` is set. A path
+// with no override follows Panel A's global rule ([Créer (Global)]).
+export type RowOverride = MemberBranchPlan;
 
-// Story 2.27 -----------------------------------------------------------------------------
-// Base-branch suggestions are manifest-driven, never the hardcoded DEFAULT_BASE_BRANCH
-// literal (Boundaries: "DEFAULT_BASE_BRANCH stops being read as a suggestion source anywhere
-// in the EDT zone"). `candidates` is the same flat ServiceBranchDivergence[] pool the create
-// dialog already receives — each row now carries its own repo's manifest-declared
-// `sharedBranch` (core/edt/list.ts).
-export function suggestBaseBranchFor(path: string, candidates: readonly ServiceBranchDivergence[]): string {
-  return candidates.find((candidate) => candidate.path === path)?.sharedBranch ?? '';
-}
+// One service's branch lists, loaded once per Step 3 entry (a failed load is retried on the
+// next entry). `pending` = requested by the entry, not yet in flight (the zone's effect picks
+// it up and flips it to `loading`, see edts-zone.tsx) — keeps enterStep itself pure.
+export type BranchListStatus = 'pending' | 'loading' | 'ready' | 'error';
 
-// I/O matrix: "single repo" and "grouped, unanimous" both suggest one shared value and keep a
-// single base-branch field; "grouped, diverging" and "individual naming, diverging" force a
-// per-member field instead — decoupled from `NamingMode` (grouped naming can still coexist
-// with a per-member *base*, matrix row 3). <=1 member never diverges by definition.
-export type BaseBranchMode = 'shared' | 'per-member';
+export type BranchListState = {
+  status: BranchListStatus;
+  local: readonly string[];
+  remote: readonly string[];
+  error?: string;
+};
 
-export function resolveBaseBranchMode(selectedMembers: readonly string[], candidates: readonly ServiceBranchDivergence[]): BaseBranchMode {
-  const sharedBranches = selectedMembers.map((path) => suggestBaseBranchFor(path, candidates));
-  if (sharedBranches.length <= 1) {
-    return 'shared';
-  }
-  const first = sharedBranches[0];
-  return sharedBranches.every((value) => value === first) ? 'shared' : 'per-member';
-}
+export type BranchStepState = {
+  globalBase: TextInputState; // '' = each service uses its own manifest sharedBranch
+  globalName: TextInputState;
+  // Touched-flag convention (Story 2.22): an untouched name keeps tracking Step 1's slug.
+  globalNameTouched: boolean;
+  panel: 'global' | 'rows';
+  globalLine: 'base' | 'name';
+  editing: boolean; // Panel A's focused line is in edit mode
+  rowCursor: number;
+  overrides: Readonly<Record<string, RowOverride>>;
+  lists: Readonly<Record<string, BranchListState>>;
+  box: OverrideBoxState | null;
+};
 
-// Mirrors prefillBranchNames' own touched-tracking convention exactly (Design Notes): an
-// untouched field keeps tracking its manifest suggestion on every call; a touched field (the
-// developer's own edit, including clearing it to '') is never resurrected. Fired at the same
-// trigger points prefillBranchNames already is (a member is newly selected, or the
-// branch-setup step is (re-)entered) — see create-dialog.tsx.
-export function prefillBaseBranches(
-  selectedMembers: readonly string[],
-  candidates: readonly ServiceBranchDivergence[],
-  baseBranch: string,
-  baseBranches: Readonly<Record<string, string>>,
-  baseBranchTouched: boolean,
-  baseBranchesTouched: Readonly<Record<string, boolean>>,
-): { baseBranch: string; baseBranches: Record<string, string> } {
-  const nextBaseBranches = { ...baseBranches };
-  for (const path of selectedMembers) {
-    if (!baseBranchesTouched[path]) {
-      nextBaseBranches[path] = suggestBaseBranchFor(path, candidates);
-    }
-  }
-  const first = selectedMembers[0];
-  const suggestion = first !== undefined ? suggestBaseBranchFor(first, candidates) : '';
-  return { baseBranch: baseBranchTouched ? baseBranch : suggestion, baseBranches: nextBaseBranches };
-}
-
-// Boundary: "submitCreate always builds a real CreateBranchOptions when >=1 member selected
-// ... zero members still pass NO_BRANCH_CREATION (core's param is mandatory)." Returns the
-// app-store's own NO_BRANCH_CREATION constant verbatim for the zero-member case so there is
-// exactly one canonical "no branch creation" value in the codebase, never a second literal
-// copy drifting out of sync with it.
-//
-// Story 2.27: `baseBranches` (per-member, always fully populated for every selected member —
-// see prefillBaseBranches) replaces the old single `baseBranch: string` parameter as the
-// authoritative base-branch source, feeding core's new optional `bases` map (core/edt/create.ts)
-// so a diverging per-member base-branch choice actually reaches `git.createBranch` per member,
-// never collapsed into one shared value. `base` (top-level, required by core) falls back to
-// the first selected member's own base for backward-compatible callers that only read it.
-export function buildCreateBranchOptions(
-  selectedMembers: readonly string[],
-  namingMode: NamingMode,
-  branchName: string,
-  branchNames: Readonly<Record<string, string>>,
-  baseBranches: Readonly<Record<string, string>>,
-  noBranchCreation: CreateBranchOptions,
-): CreateBranchOptions {
-  if (selectedMembers.length === 0) {
-    return noBranchCreation;
-  }
-  const names: Record<string, string> = {};
-  for (const path of selectedMembers) {
-    names[path] = namingMode === 'grouped' ? branchName : (branchNames[path] ?? '');
-  }
-  const bases: Record<string, string> = {};
-  for (const path of selectedMembers) {
-    bases[path] = baseBranches[path] ?? '';
-  }
-  const firstPath = selectedMembers[0];
-  const base = firstPath !== undefined ? (bases[firstPath] ?? '') : '';
-  return { create: true, base, bases, mode: namingMode, names };
-}
-
-// Boundary: "Empty required branch-name field blocks confirm via validateBranchEditValue
-// (reused as-is), dialog stays open." Zero members has nothing to validate (no branch step
-// applies at all). Grouped validates the one shared field; individual validates every
-// selected member's own field, first failure wins (mirrors resolveMemberBranch's
-// deterministic caller-order iteration elsewhere in this file's Design Notes).
-//
-// Story 2.27: also validates every selected member's own base-branch field — reuses
-// validateBranchEditValue as-is (Boundaries), same "first failure wins" convention, checked
-// before the name field(s) so a blank base branch is never silently passed through as ''.
-export function validateCreateBranchFields(
-  namingMode: NamingMode,
-  selectedMembers: readonly string[],
-  branchName: string,
-  branchNames: Readonly<Record<string, string>>,
-  baseBranches: Readonly<Record<string, string>> = {},
-): string | null {
-  if (selectedMembers.length === 0) {
-    return null;
-  }
-  for (const path of selectedMembers) {
-    const baseFieldError = validateBranchEditValue(baseBranches[path] ?? '');
-    if (baseFieldError !== null) {
-      return `Base branch: ${baseFieldError}`;
-    }
-  }
-  if (namingMode === 'grouped') {
-    return validateBranchEditValue(branchName);
-  }
-  for (const path of selectedMembers) {
-    const fieldError = validateBranchEditValue(branchNames[path] ?? '');
-    if (fieldError !== null) {
-      return fieldError;
-    }
-  }
-  return null;
+export function initialBranchStepState(): BranchStepState {
+  return {
+    globalBase: { value: '', cursor: 0 },
+    globalName: { value: '', cursor: 0 },
+    globalNameTouched: false,
+    panel: 'global',
+    globalLine: 'base',
+    editing: false,
+    rowCursor: 0,
+    overrides: {},
+    lists: {},
+    box: null,
+  };
 }
 
 export function isSwitchBlockedError(code: string): boolean {
@@ -710,8 +625,13 @@ export function resolveModifyOps(
 
 // ---- Dialog state -----------------------------------------------------------------------
 
+// Story 2.36: the create-EDT wizard's 4 steps (Nom -> Services -> Branches -> Activation).
+export type WizardStep = 1 | 2 | 3 | 4;
+
 export type CreateDialogState = {
   kind: 'create';
+  // Story 2.36: the wizard's current step.
+  step: WizardStep;
   topic: string;
   // Story 2.32: topic's own caret position — see TextInputState/nextTextInputValue in
   // shared/components/text-edit.ts.
@@ -725,41 +645,45 @@ export type CreateDialogState = {
   // ok:true result (summarizeFailedResults) — rendered via FailedResultList instead of
   // folding into `error` above, which keeps its own validation/full-failure use unchanged.
   failedRows: FailedResultRow[];
-  // Story 2.22: the mandatory branch-setup step's own fields — see CreateFormFocus above.
-  // Story 2.27: baseBranch/baseBranches are manifest-driven suggestions (never
-  // DEFAULT_BASE_BRANCH) — baseBranch is the single shared value shown/edited when
-  // resolveBaseBranchMode is 'shared'; baseBranches (per-member, mirrors branchNames' own
-  // shape/touched-tracking convention exactly) is the authoritative source `submitCreate`
-  // always reads from, kept in sync with `baseBranch` for every selected member whenever the
-  // shared field is confirmed (see create-dialog.tsx's applyBaseBranchOutcome).
-  baseBranch: string;
-  baseBranches: Readonly<Record<string, string>>;
-  baseBranchIndex: number; // which per-member base-branch field is live, when forced per-member
-  baseBranchTouched: boolean;
-  baseBranchesTouched: Readonly<Record<string, boolean>>;
-  // Story 2.27: the base-branch field's own live BranchPicker sub-session (Pick existing /
-  // Create new only — createPickerSession is always called with hasCurrentBranch: false here,
-  // Boundaries: "no Rename current, since nothing exists yet"). null only transiently, between
-  // formFocus becoming 'branch-base' and the opening handler seeding a fresh session.
-  branchPicker: BranchPickerSession | null;
-  namingMode: NamingMode;
-  branchName: string; // grouped mode's single shared field
-  // Story 2.32: branchName's own caret position, reset to branchName.length by every
-  // programmatic overwrite (prefillBranchNames on an untouched field) — see
-  // create-dialog.tsx's withPrefillCursors.
-  branchNameCursor: number;
-  branchNames: Readonly<Record<string, string>>; // individual mode: repoPath -> name
-  branchNameIndex: number; // individual mode's currently-focused per-member field
-  // Story 2.32: branchNames' own paired-map of per-path caret positions — mirrors
-  // branchNamesTouched's own paired-map convention exactly.
-  branchNameCursors: Readonly<Record<string, number>>;
-  // Review fix (story 2.22): tracks whether the developer's own edit has ever actually
-  // changed a field's value — the only thing that permanently opts a field out of
-  // prefillBranchNames' auto-fill (see that function's own doc comment). Never reset once
-  // set, including back to '' — a field the developer cleared stays cleared.
-  branchNameTouched: boolean;
-  branchNamesTouched: Readonly<Record<string, boolean>>;
+  // Story 2.37: Step 3's whole state (global strategy, per-service overrides, branch lists,
+  // override box) — replaces the pre-wizard branch-setup fields (Stories 2.22/2.27/2.32).
+  branches: BranchStepState;
+  // Story 2.37 (review): Step 3 decides "Esc cancels the wizard" against the latest state,
+  // inside the setDialog updater, where the side effects of a cancel (closing, requesting a
+  // quit) cannot run. It raises this flag instead; the zone's effect then runs the wizard's
+  // cancel (see create-wizard.tsx's handleCancelRequest).
+  cancelRequested: boolean;
+  // Story 2.38: Step 4's activation state (see ActivationState).
+  activation: ActivationState;
 };
+
+// Story 2.38: what Step 4 asks the effectful handler to do once its key reducer decided
+// (activation.logic.ts) — the same "reducer raises, zone effect dispatches" pattern as the
+// switch resolution view.
+export type ActivationDecision = { kind: 'retry' } | { kind: 'overwrite' } | { kind: 'stop' };
+
+// Story 2.38: the wizard's Step 4.
+//   - `firstEdt` (captured on entering Step 4: no EDT existed) locks the choice on activating
+//     through activateEdt; otherwise `choice` is the radio: switch now, or create without it.
+//   - `created`: the EDT this wizard already created — once set, Retry/Overwrite only ever call
+//     activateEdt again, never createEdt.
+//   - `blocked`: the first-EDT pre-flight's at-risk files (the pause panel); `confirm` the
+//     second, explicit overwrite confirmation over it (its file-list scroll).
+//   - `outcome`: a terminal, acknowledge-only state — `stopped` (Esc on the pause panel) or
+//     `not-activated` (a partial-failure create, or a failed activation).
+export type ActivationState = {
+  firstEdt: boolean;
+  choice: 'switch' | 'stay';
+  created: { ulid: string; topic: string } | null;
+  blocked: ActivationBlockedRepo[] | null;
+  confirm: { scroll: number } | null;
+  outcome: 'stopped' | 'not-activated' | null;
+  decision: ActivationDecision | null;
+};
+
+export function initialActivationState(firstEdt = false): ActivationState {
+  return { firstEdt, choice: 'switch', created: null, blocked: null, confirm: null, outcome: null, decision: null };
+}
 
 export type SwitchDialogState = {
   kind: 'switch-confirm';
@@ -768,6 +692,12 @@ export type SwitchDialogState = {
   error: string | null;
   failedRows: FailedResultRow[];
   blocked: boolean;
+  // Story 2.41: the dirty-service resolution draft, non-null while the core switch is parked on
+  // the edt-slice seam (initialized by the zone when `switchDirtyRepos` turns non-null).
+  resolution: SwitchResolutionState | null;
+  // Story 2.41: an ok switch that adopted/discarded/failed anything keeps the dialog open on
+  // this per-repo summary (Enter/Esc close it); an all-`switched` run closes as before.
+  results?: SwitchEdtRepoResult[];
 };
 
 // Story 2.26: a live branch-picker session, opened over any of the 3 non-creation branch-entry
@@ -951,6 +881,36 @@ export function formatDeleteMemberMeta(row: DeleteMemberRow): string {
   return row.statusError !== undefined ? `${base} (status unknown — defaulted to leave)` : base;
 }
 
+// Story 2.34: the issues dialog is read-only and carries no payload of its own — the
+// unreachable/errors data it renders already lives in the zone's own store selectors, so
+// unlike every other dialog here there's nothing to seed on open.
+export type IssuesDialogState = { kind: 'issues' };
+
+// Story 2.30 -----------------------------------------------------------------------------
+// The shared EDT quick-pick — a filterable, arrow-navigable list of EDT topics — opened in
+// place of `edt-switch`/`edt-modify`/`edt-delete`'s old ad hoc no-argument fallbacks (guessing
+// "the first non-active EDT" / the currently-focused row). One dialog, one component, three
+// modes (Intent/Design Notes), never three near-duplicate dialogs. `mode` decides both the
+// candidate pool (quick-pick-dialog.tsx's resolveQuickPickCandidates: switch excludes the
+// active EDT, modify/delete include it) and which pre-targeted dialog Enter opens.
+export type QuickPickMode = 'switch' | 'modify' | 'delete';
+
+export type QuickPickDialogState = {
+  kind: 'quick-pick';
+  mode: QuickPickMode;
+  // The filter field's own value/caret — same TextInputState-shaped pair every other field in
+  // this file uses, fed through nextTextInputValue directly (Code Map: "reuse directly for the
+  // filter field's caret handling").
+  query: string;
+  queryCursor: number;
+  // The highlighted row within the *current* filtered match list — reset to 0 whenever the
+  // filter text itself changes (mirrors branch-picker.tsx's handlePickExistingKey: "a pure
+  // caret move leaves pickQuery's value unchanged ... only an actual filter-text change
+  // re-derives the match list and resets pickCursor to the top"), clamped to
+  // [0, matches.length - 1] by moveSelection on Up/Down.
+  cursor: number;
+};
+
 export type EdtDialogState =
   | { kind: 'none' }
   | CreateDialogState
@@ -958,11 +918,22 @@ export type EdtDialogState =
   | ModifyDialogState
   | ServiceActionsDialogState
   | AddToEdtDialogState
-  | DeleteDialogState;
+  | DeleteDialogState
+  | IssuesDialogState
+  | QuickPickDialogState;
+
+export function initialIssuesDialog(): IssuesDialogState {
+  return { kind: 'issues' };
+}
+
+export function initialQuickPickDialog(mode: QuickPickMode): QuickPickDialogState {
+  return { kind: 'quick-pick', mode, query: '', queryCursor: 0, cursor: 0 };
+}
 
 export function initialCreateDialog(): CreateDialogState {
   return {
     kind: 'create',
+    step: 1,
     topic: '',
     topicCursor: 0,
     formFocus: 'topic',
@@ -971,28 +942,16 @@ export function initialCreateDialog(): CreateDialogState {
     submitting: false,
     error: null,
     failedRows: [],
-    // Story 2.27: no member is selected yet, so there is nothing to suggest a base branch
-    // from — prefillBaseBranches (fired on the first member selection / step entry) is what
-    // actually seeds a manifest-driven value, never a hardcoded literal here.
-    baseBranch: '',
-    baseBranches: {},
-    baseBranchIndex: 0,
-    baseBranchTouched: false,
-    baseBranchesTouched: {},
-    branchPicker: null,
-    namingMode: 'grouped',
-    branchName: '',
-    branchNameCursor: 0,
-    branchNames: {},
-    branchNameIndex: 0,
-    branchNameCursors: {},
-    branchNameTouched: false,
-    branchNamesTouched: {},
+    // Story 2.37: seeded (name slug, list loads) when Step 3 is entered — see create-wizard.tsx.
+    branches: initialBranchStepState(),
+    cancelRequested: false,
+    // Story 2.38: re-seeded (firstEdt captured) when Step 4 is entered — see create-wizard.tsx.
+    activation: initialActivationState(),
   };
 }
 
 export function initialSwitchDialog(target: EdtRegistryEntry): SwitchDialogState {
-  return { kind: 'switch-confirm', target, submitting: false, error: null, failedRows: [], blocked: false };
+  return { kind: 'switch-confirm', target, submitting: false, error: null, failedRows: [], blocked: false, resolution: null };
 }
 
 export function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {

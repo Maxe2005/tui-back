@@ -1,21 +1,30 @@
 // adapters/driven/modules: the compiled-in static module registry (AD-5). Module
 // implementations are statically registered here and selected by a manifest's `modules`
-// key — never dynamically loaded from externally supplied paths. This story ships the
-// mechanism only: the registry is empty because the real modules (route-explorer,
-// shared-types-consumer) belong to Epics 6 and 4. Later epics add entries to
-// `moduleRegistry`; the manifest adapter's membership check (and list-repos `moduleIds`)
-// pick them up automatically via the derived `knownModuleIds` set.
+// key — never dynamically loaded from externally supplied paths. Story 6.1 registers the
+// first real module: `route-explorer` (the nestjs-openapi RouteScannerPort implementation
+// from Epic 6's backend, plus story 6.2's cookie-session DevAuthPort — the service owns
+// issuance, the module only acquires and carries its cookie). The manifest adapter's membership check (and list-repos
+// `moduleIds`) pick it up automatically via the derived `knownModuleIds` set.
+import { createNestjsOpenApiScanner } from './route-explorer/nestjs-openapi.js';
+import { createCookieSessionAuth } from './route-explorer/cookie-session-auth.js';
+import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
+import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 
 export type ModuleId = string;
 
 export interface ModuleImplementation {
-  // Statically registered implementations fill in from Epics 4/6. The type staying a
-  // placeholder lets an empty registry still type as the map later epics populate.
+  kind: string;
+  scanner: RouteScannerPort;
+  auth?: DevAuthPort;
 }
 
-const EMPTY: Readonly<Record<ModuleId, ModuleImplementation>> = {};
-
-export const moduleRegistry: Readonly<Record<ModuleId, ModuleImplementation>> = EMPTY;
+export const moduleRegistry: Readonly<Record<ModuleId, ModuleImplementation>> = {
+  'route-explorer': {
+    kind: 'route-explorer',
+    scanner: createNestjsOpenApiScanner(),
+    auth: createCookieSessionAuth(),
+  },
+};
 
 export const knownModuleIds: ReadonlySet<ModuleId> = new Set(Object.keys(moduleRegistry));
 
@@ -23,16 +32,16 @@ export function isKnownModuleId(id: string): boolean {
   return knownModuleIds.has(id);
 }
 
-export function resolveModule(
-  registry: Readonly<Record<ModuleId, ModuleImplementation>>,
-  id: string,
-): ModuleImplementation | undefined {
+// Generic over the value type so tests can exercise populated maps without importing a
+// production module implementation (Design Notes decision D1) — callers pass their own
+// registry; the default is the production one above.
+export function resolveModule<T>(registry: Readonly<Record<string, T>>, id: string): T | undefined {
   return Object.prototype.hasOwnProperty.call(registry, id) ? registry[id] : undefined;
 }
 
-export function validateModules(
+export function validateModules<T>(
   modules: Record<string, unknown>,
-  registry: Readonly<Record<ModuleId, ModuleImplementation>> = moduleRegistry,
+  registry: Readonly<Record<string, T>> = moduleRegistry as Readonly<Record<string, T>>,
 ): string[] {
   return Object.keys(modules)
     .sort()

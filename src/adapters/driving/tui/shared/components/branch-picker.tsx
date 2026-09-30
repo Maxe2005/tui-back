@@ -450,7 +450,7 @@ export type BranchPickerProps = {
   maxRows: number;
   // Code review (story 2.27): Create-EDT's base-branch step repurposes "Create new" mode's Name
   // field to mean "the base branch itself" — that session never creates a new branch (see
-  // create-dialog.tsx's applyBaseBranchOutcome), so the mode's own nested "base to create the
+  // create-wizard/step-branches.tsx's applyBaseBranchOutcome), so the mode's own nested "base to create the
   // new branch from" sub-field is dead chrome there. When true, hides that nested field and
   // relabels the remaining one "Base branch" instead of "Name" — but only while it isn't
   // focused, so the already-accepted Tab-cycle rough edge (baseFocused resets to true) still

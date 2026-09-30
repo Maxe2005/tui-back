@@ -16,9 +16,11 @@ import type { ZoneId } from '../zones/zones.js';
 export type Command = {
   name: string;
   run: (useStore: AppStore, fullQuery: string) => void;
-  // Story 3.11: commands that belong to a zone carry it here so the command bar's
-  // runCommand() activates that zone before running (the epic-2 command zone-switch
-  // pattern) — the developer lands where the opened screen lives.
+  // The zone this command operates on, if any — runCommand below switches the active zone to
+  // this one before running the command, so e.g. `:edt-switch` typed from the Dashboard zone
+  // still lands its dialog on the EDTs zone rather than opening it invisibly behind whichever
+  // zone happened to be active. Commands with no natural zone (registry/settings/quit, all
+  // full-screen overlays or zone-independent) leave this unset.
   zoneId?: ZoneId;
 };
 
@@ -30,24 +32,37 @@ export const COMMANDS: readonly Command[] = [
   {
     name: 'edt-create',
     run: (useStore) => useStore.getState().openEdtCreateDialog(),
+    zoneId: 'edts',
   },
   {
     name: 'edt-switch',
     run: (useStore, fullQuery) => useStore.getState().openEdtSwitchDialog(fullQuery),
+    zoneId: 'edts',
   },
   {
     name: 'edt-modify',
     run: (useStore, fullQuery) => useStore.getState().openEdtModifyDialog(fullQuery),
+    zoneId: 'edts',
   },
   {
     name: 'edt-delete',
     run: (useStore, fullQuery) => useStore.getState().openEdtDeleteDialog(fullQuery),
+    zoneId: 'edts',
   },
   // Story 2.19: the settings screen is reachable exclusively through this registered
   // command (mirrors `registry`'s own precedent) — never bound to a raw keypress.
   {
     name: 'settings',
     run: (useStore) => useStore.getState().openSettingsScreen(),
+  },
+  // `:reset` — the selective tool-data reset overlay, reachable only through this command
+  // (never a raw keybinding). Guarded like `quit`: openResetScreen itself refuses (and
+  // surfaces why) while a group update or an EDT action is in progress.
+  {
+    name: 'reset',
+    run: (useStore) => {
+      useStore.getState().openResetScreen();
+    },
   },
   // Mirrors shouldQuit's own runInProgress guard (app-shell.tsx) so `:quit` can't bypass it —
   // unlike the raw `q` keypress, this command stays reachable regardless of
@@ -109,4 +124,17 @@ export function findExactCommand(
 ): Command | null {
   const needle = query.toLowerCase();
   return commands.find((command) => command.name.toLowerCase() === needle) ?? null;
+}
+
+// The single entry point the command bar's Enter-to-run should call (rather than
+// `command.run` directly): switches to the command's own zone first, if it has one and it
+// isn't already active, so a command typed from another tab (e.g. `:edt-switch` from
+// Dashboard) still lands its effect on that zone instead of running invisibly behind whichever
+// zone the user happened to be on. A no-op zone-switch (already on that zone, or the command
+// has none) leaves `setActiveZone` uncalled.
+export function runCommand(command: Command, useStore: AppStore, fullQuery: string): void {
+  if (command.zoneId && useStore.getState().activeZone !== command.zoneId) {
+    useStore.getState().setActiveZone(command.zoneId);
+  }
+  command.run(useStore, fullQuery);
 }

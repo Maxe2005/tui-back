@@ -328,6 +328,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
+  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   const resizeMode = useStore((state) => state.resizeMode);
 
   // Story 3.6: the always-visible service-list shell — the same active-EDT-scoped
@@ -704,7 +705,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
+    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode },
   );
 
   // The active EDT's own membership — the per-service spinner rows during a run, before the

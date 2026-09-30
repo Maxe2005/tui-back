@@ -105,6 +105,7 @@ function wiredDeps(): AppStoreDeps {
   const registry: RegistryPort = {
     list: async () => ok(['/repo/a']),
     add: async () => ok(undefined),
+    remove: async () => ok(undefined),
     exists: async () => ok(true),
     scan: async () => ok({ candidates: [], skipped: [] }),
     reset: async () => ok({ path: '/x', backupPath: null }),

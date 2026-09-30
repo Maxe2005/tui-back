@@ -142,6 +142,12 @@ At EDT creation, a developer can have the tool create a working branch in each s
 > TUI's mandatory flow — branch creation is no longer a developer choice in the TUI (always
 > happens when ≥1 member is selected), only the base branch and naming mode remain choices.
 > `core` still exposes the no-branch-creation shape for non-TUI driving adapters.
+>
+> Amended 2026-09-24 (Sprint Change Proposal, Stories 2.35/2.37): "One base-branch choice and one
+> naming mode apply to the whole creation action" becomes "one *global* branch strategy (base +
+> name) applies by default, and any member service may override it individually — create from its
+> own base, or attach an existing local/remote branch, optionally renamed". The TUI flow still
+> always gives every member a branch; the CLI keeps the original whole-action shape.
 
 #### FR-5: Modify an EDT after creation
 
@@ -162,13 +168,20 @@ A developer can switch the active EDT at any time; the tool auto-preserves any u
 - Exactly one EDT is active at a time; all EDT-scoped actions (default group update, propagation status) operate against it.
 - On switch, every managed service is evaluated against the newly active EDT's membership: a member service is checked out to that EDT's own registered branch for it; a non-member service is switched to `development` (or its configured shared branch) per FR-8 — regardless of whether that service also belongs to a different, currently inactive EDT.
 - If a group update (FR-10) is running on the outgoing EDT, the switch is blocked by default; a prompt offers to stop the running update immediately so the switch can proceed. Returning later to the EDT whose update was stopped shows that it was interrupted and offers to re-run it.
+- On switch, every managed repo is also classified against the *outgoing* EDT: (1) a member of the outgoing EDT has its uncommitted work auto-preserved (tagged to that EDT, restored when it is re-entered); (2) a member of another EDT, or (3) a non-member, that holds uncommitted work is never silently moved — the developer is told which services are affected and chooses, per service, to adopt the work into the outgoing EDT (on a branch of their choosing) or to discard it, or cancels the switch with nothing touched.
+
+> Amended 2026-09-24 (Sprint Change Proposal, Stories 2.39-2.41): three-state evaluation added; previously only membership of the target EDT was considered.
 
 #### FR-7: An EDT never claims a shared branch
 
-Assigning a shared/protected branch (`development`, preprod, prod) as an EDT's "own" branch for a service is rejected.
+Assigning a protected branch as an EDT's "own" branch for a service is rejected. A service's protected branches are the ones its manifest lists in `protectedBranches`, plus its `sharedBranch`, which is always protected. Without `protectedBranches`, only `sharedBranch` is protected.
 
 **Consequences (testable):**
 - Attempting to register a protected branch to an EDT fails with a clear explanation, before any git write happens.
+- Renaming a protected branch, in either direction, is refused.
+- A branch registered as another EDT's own branch for that service can be neither attached nor renamed. Every branch chooser shows which EDT uses it before the developer picks it.
+
+> Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): the fixed `development`/preprod/prod set is replaced by the per-service manifest list, and the cross-EDT consequence is added.
 
 #### FR-8: Non-member managed repos stay on `development`
 
@@ -176,7 +189,9 @@ While an EDT is active, every managed repo that is not one of its member service
 
 **Consequences (testable):**
 - Activating or switching to an EDT checks every non-member managed repo's current branch and switches it back to `development` if it isn't already there.
-- This switch follows the same no-data-loss guarantee as FR-6 — uncommitted work in a non-member repo is preserved, not discarded.
+- This switch follows the same no-data-loss rule as FR-6: uncommitted work in a non-member repo is either adopted into the outgoing EDT (preserved) or discarded **only on explicit per-service consent** — never silently moved onto `development`.
+
+> Amended 2026-09-24 (Sprint Change Proposal, Stories 2.39-2.41).
 - The tool fetches a non-member repo's `development` (or configured shared branch) before switching to it, if it isn't already present locally.
 
 #### FR-9: Branch and divergence visibility
@@ -447,6 +462,21 @@ These are trust bars every Must-scope capability already has to satisfy, not fea
 ### Safety — Data Loss
 
 - Uncommitted work is always auto-preserved on any tool-triggered branch switch — an EDT switch (FR-6) or a non-member repo being kept on `development` (FR-8) — checked, not assumed, before either proceeds.
+
+> Amended 2026-09-24 (Sprint Change Proposal, Story 2.38): single, consent-gated exception — when
+> activating the *first* EDT (no outgoing EDT exists to stash against), if a checkout would
+> overwrite uncommitted files, the tool pauses and lists them; the developer may retry after
+> fixing by hand, or explicitly choose to overwrite after a second confirmation naming every file
+> that will be discarded. Nothing is ever discarded without that explicit, file-listed consent;
+> every other tool-triggered switch keeps the auto-preserve guarantee unchanged.
+>
+> Amended 2026-09-24 (Sprint Change Proposal, Stories 2.39-2.41): second consent-gated exception —
+> on an EDT switch, a dirty service that is not a member of the outgoing EDT may be **discarded**
+> (tracked changes and untracked files; ignored files kept) if the developer explicitly chooses so
+> for that service, after a confirmation naming every affected file (TUI), or by passing
+> `--discard-dirty` (CLI, which otherwise refuses to proceed). The alternative — adopting the work
+> into the outgoing EDT — preserves it. Members of the outgoing EDT keep the unconditional
+> auto-preserve guarantee. Nothing is ever discarded without that explicit, per-service consent.
 
 ## 5. Non-Goals (Explicit)
 

@@ -15,6 +15,7 @@ function fakeRegistry(overrides: Partial<RegistryPort> = {}): RegistryPort {
     exists: async () => ok(false),
     scan: vi.fn(async () => ok(EMPTY_SCAN)),
     reset: async () => ok({ path: '/x', backupPath: null }),
+    remove: async () => ok(undefined),
     ...overrides,
   };
 }

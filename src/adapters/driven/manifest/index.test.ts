@@ -389,14 +389,14 @@ describe('loadManifest', () => {
 
   it('fails with unknown-module naming the id and repo path for an unknown id (AC3)', async () => {
     const repo = await tempRepo(
-      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  route-explorer: {}'].join('\n'),
+      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  bogus-module: {}'].join('\n'),
     );
 
     const result = await loadManifest(repo);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
     if (!result.ok) {
-      expect(result.error.message).toContain('route-explorer');
+      expect(result.error.message).toContain('bogus-module');
       expect(result.error.message).toContain(repo);
     }
   });
