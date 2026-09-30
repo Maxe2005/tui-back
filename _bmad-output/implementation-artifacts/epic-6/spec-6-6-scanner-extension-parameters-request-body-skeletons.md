@@ -2,7 +2,7 @@
 title: 'Scanner Extension — Parameters & Request-Body Skeletons'
 type: 'feature'
 created: '2026-09-30'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'e55ef39a72eae6f037cffe9ef29fcd9c31aff822'
 context:
@@ -81,3 +81,40 @@ context:
 - `npm test` -- expected: Vitest green, incl. new schema-example and scanner tests.
 - `npm run typecheck` -- expected: `tsc --noEmit` clean.
 - `npm run depcheck` -- expected: no `core → adapters` violation.
+
+## Suggested Review Order
+
+**Port contract**
+
+- Neutral optional request details added to `Route`; nothing scanner-specific crosses.
+  [`route-scanner.ts:25`](../../../src/core/ports/route-scanner.ts#L25)
+
+**Scanner extraction**
+
+- Entry point: each route now spreads its request details, degrading to a plain route.
+  [`nestjs-openapi.ts:234`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L234)
+
+- Parameters and body degrade independently, so one bad detail never drops the other.
+  [`nestjs-openapi.ts:177`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L177)
+
+- Path-item + operation merge, header case-folding, transport headers ignored.
+  [`nestjs-openapi.ts:91`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L91)
+
+- Content-type choice and example priority; empty schema fabricates nothing.
+  [`nestjs-openapi.ts:143`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L143)
+
+**Example generation**
+
+- Bounded (depth + node budget), cycle-safe skeleton generator, never throws.
+  [`schema-example.ts:156`](../../../src/adapters/driven/modules/route-explorer/schema-example.ts#L156)
+
+- Own-key, percent-decoded local `$ref` resolution only.
+  [`schema-example.ts:18`](../../../src/adapters/driven/modules/route-explorer/schema-example.ts#L18)
+
+**Tests**
+
+- Scanner request-details scenarios against real temp-dir specs.
+  [`nestjs-openapi.test.ts`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.test.ts)
+
+- Pure generator: truncation, budget, cycles, 3.1 types, no aliasing.
+  [`schema-example.test.ts`](../../../src/adapters/driven/modules/route-explorer/schema-example.test.ts)
