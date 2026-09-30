@@ -62,16 +62,27 @@ function parseSpecDocument(text: string): unknown {
 
 const PARAMETER_LOCATIONS = ['path', 'query', 'header'] as const;
 
-function firstExampleValue(examples: unknown): unknown {
+// Headers the OpenAPI spec says a `parameters` entry must not define (they are transport
+// concerns — Cookie auth is owned by the DevAuthPort).
+const IGNORED_HEADER_PARAMETERS = ['accept', 'content-type', 'authorization'];
+
+// First `examples[*].value` (each entry may itself be a `$ref` into components/examples),
+// cloned so route data never aliases the parsed spec.
+function firstExampleValue(document: unknown, examples: unknown): unknown {
   if (!isRecord(examples)) {
     return undefined;
   }
-  for (const entry of Object.values(examples)) {
-    if (isRecord(entry) && entry['value'] !== undefined) {
-      return entry['value'];
+  for (const raw of Object.values(examples)) {
+    const entry = dereference(document, raw);
+    if (entry !== undefined && entry['value'] !== undefined) {
+      return structuredClone(entry['value']);
     }
   }
   return undefined;
+}
+
+function isJsonContentType(type: string): boolean {
+  return /^[^/;\s]+\/([^;\s]*\+)?json\s*(;|$)/i.test(type.trim());
 }
 
 // Story 6.6: path-item + operation `parameters` merged by `name`+`in` (the operation wins),
@@ -90,12 +101,19 @@ function extractParameters(document: unknown, pathItem: Record<string, unknown>,
       if (
         parameter === undefined ||
         name === undefined ||
-        !PARAMETER_LOCATIONS.includes(location as (typeof PARAMETER_LOCATIONS)[number])
+        !PARAMETER_LOCATIONS.includes(location as (typeof PARAMETER_LOCATIONS)[number]) ||
+        (location === 'header' && IGNORED_HEADER_PARAMETERS.includes(name.toLowerCase()))
       ) {
         continue;
       }
       const schema = dereference(document, parameter['schema']);
-      const example = parameter['example'] ?? firstExampleValue(parameter['examples']) ?? schema?.['example'];
+      const schemaEnum = schema?.['enum'];
+      const example =
+        parameter['example'] ??
+        firstExampleValue(document, parameter['examples']) ??
+        schema?.['example'] ??
+        schema?.['default'] ??
+        (Array.isArray(schemaEnum) ? schemaEnum[0] : undefined);
       const result: RouteParameter = {
         name,
         in: location as RouteParameter['in'],
@@ -104,7 +122,8 @@ function extractParameters(document: unknown, pathItem: Record<string, unknown>,
       if (example !== undefined) {
         result.example = example;
       }
-      merged.set(`${location}:${name}`, result);
+      // Header names are case-insensitive, so `X-Trace` and `x-trace` are the same entry.
+      merged.set(`${location}:${location === 'header' ? name.toLowerCase() : name}`, result);
     }
   }
   return [...merged.values()];
@@ -113,14 +132,10 @@ function extractParameters(document: unknown, pathItem: Record<string, unknown>,
 function pickBodyContentType(content: Record<string, unknown>): string | undefined {
   const types = Object.keys(content);
   return (
-    types.find((type) => type.toLowerCase() === 'application/json') ??
-    types.find((type) => /\/(.+\+)?json(;|$)/i.test(type)) ??
+    types.find((type) => /^application\/json\s*(;|$)/i.test(type.trim())) ??
+    types.find(isJsonContentType) ??
     types[0]
   );
-}
-
-function isJsonContentType(type: string): boolean {
-  return /\/(.+\+)?json(;|$)/i.test(type);
 }
 
 // Story 6.6: the request body's content type plus, for a JSON type only, an example —
@@ -143,28 +158,37 @@ function extractBody(
   if (!isJsonContentType(contentType) || !isRecord(media)) {
     return result;
   }
-  const explicit = media['example'] ?? firstExampleValue(media['examples']);
+  const explicit = media['example'] ?? firstExampleValue(document, media['examples']);
   if (explicit !== undefined) {
-    result.bodyExample = explicit;
+    result.bodyExample = structuredClone(explicit);
   } else if (media['schema'] !== undefined) {
-    result.bodyExample = generateExample(document, media['schema']);
+    // A skeleton that came out as `null` means nothing usable was derivable (empty or
+    // unresolvable schema) — nothing is fabricated, the editor starts empty.
+    const generated = generateExample(document, media['schema']);
+    if (generated !== null) {
+      result.bodyExample = generated;
+    }
   }
   return result;
 }
 
-// The request details never fail a scan: any unexpected shape degrades the operation to a
-// plain route (method, path, summary only), exactly the pre-6.6 behavior.
+// The request details never fail a scan: parameters and body degrade independently, and
+// an operation with neither is a plain route (method, path, summary), the pre-6.6 shape.
 function extractRequestDetails(
   document: unknown,
   pathItem: Record<string, unknown>,
   operation: Record<string, unknown>,
 ): Pick<Route, 'parameters' | 'bodyContentType' | 'bodyExample'> {
+  const details: Pick<Route, 'parameters' | 'bodyContentType' | 'bodyExample'> = {};
   try {
-    const details: Pick<Route, 'parameters' | 'bodyContentType' | 'bodyExample'> = {};
     const parameters = extractParameters(document, pathItem, operation);
     if (parameters.length > 0) {
       details.parameters = parameters;
     }
+  } catch {
+    // Parameters degrade on their own; the body below is still attempted.
+  }
+  try {
     const body = extractBody(document, operation);
     if (body.bodyContentType !== undefined) {
       details.bodyContentType = body.bodyContentType;
@@ -172,10 +196,10 @@ function extractRequestDetails(
     if ('bodyExample' in body) {
       details.bodyExample = body.bodyExample;
     }
-    return details;
   } catch {
-    return {};
+    // Body degrades on its own; parameters already gathered are kept.
   }
+  return details;
 }
 
 function extractRoutes(document: unknown): Route[] {

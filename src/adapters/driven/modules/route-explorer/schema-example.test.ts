@@ -46,6 +46,13 @@ describe('resolveLocalRef / dereference', () => {
     expect(resolveLocalRef(DOC, 42)).toBeUndefined();
   });
 
+  it('never resolves prototype members and decodes percent-encoded segments', () => {
+    expect(resolveLocalRef(DOC, '#/constructor')).toBeUndefined();
+    expect(resolveLocalRef(DOC, '#/__proto__')).toBeUndefined();
+    const doc = { components: { schemas: { 'Order {id}': { type: 'string' } } } };
+    expect(resolveLocalRef(doc, '#/components/schemas/Order%20%7Bid%7D')).toEqual({ type: 'string' });
+  });
+
   it('terminates on a pure ref loop', () => {
     expect(dereference(DOC, { $ref: '#/components/schemas/A' })).toBeUndefined();
   });
@@ -80,11 +87,53 @@ describe('generateExample', () => {
     expect(generateExample(DOC, {})).toBeNull();
   });
 
-  it('bounds depth on very deep inline schemas', () => {
+  it('truncates very deep inline schemas to null at the depth bound', () => {
     let schema: Record<string, unknown> = { type: 'string' };
     for (let i = 0; i < 30; i += 1) {
       schema = { type: 'object', properties: { child: schema } };
     }
-    expect(() => generateExample(DOC, schema)).not.toThrow();
+    let value = generateExample(DOC, schema) as Record<string, unknown> | null;
+    let levels = 0;
+    while (value !== null && typeof value === 'object') {
+      value = value['child'] as Record<string, unknown> | null;
+      levels += 1;
+    }
+    expect(value).toBeNull();
+    expect(levels).toBe(9);
+  });
+
+  it('bounds the total node count of a wide, fanning-out schema', () => {
+    const wide = { type: 'object', properties: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`p${i}`, { $ref: '#/components/schemas/Wide' }])) };
+    const doc = { components: { schemas: { Wide: wide } } };
+    const started = Date.now();
+    expect(() => generateExample(doc, { $ref: '#/components/schemas/Wide' })).not.toThrow();
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('skips an unresolvable first oneOf branch in favor of a valid later one', () => {
+    expect(generateExample(DOC, { oneOf: [{ $ref: '#/components/schemas/Missing' }, { type: 'boolean' }] })).toBe(false);
+  });
+
+  it('uses the first non-null entry of an OpenAPI 3.1 type array', () => {
+    expect(generateExample(DOC, { type: ['null', 'integer'] })).toBe(0);
+    expect(generateExample(DOC, { type: ['string', 'null'] })).toBe('');
+  });
+
+  it('returns a copy of spec-provided example values (no aliasing of the spec)', () => {
+    const doc = { s: { type: 'object', example: { a: [1] } } };
+    const first = generateExample(doc, doc.s) as { a: number[] };
+    first.a.push(2);
+    expect(doc.s.example).toEqual({ a: [1] });
+  });
+
+  it('skips allOf parts that are ancestors of themselves without dropping own properties', () => {
+    const doc = {
+      components: {
+        schemas: {
+          Self: { allOf: [{ $ref: '#/components/schemas/Self' }], type: 'object', properties: { id: { type: 'integer' } } },
+        },
+      },
+    };
+    expect(generateExample(doc, { $ref: '#/components/schemas/Self' })).toEqual({ id: 0 });
   });
 });

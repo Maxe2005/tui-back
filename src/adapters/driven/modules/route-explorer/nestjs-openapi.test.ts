@@ -405,5 +405,139 @@ describe('nestjs-openapi scanner', () => {
 
       expect(routes).toEqual([{ method: 'POST', path: '/broken', summary: 'Broken' }]);
     });
+
+    it('uses the first `examples` entry (also via $ref) for parameters and bodies, ahead of the schema', async () => {
+      const routes = await scanSpec({
+        ...base,
+        components: { examples: { Sample: { value: { qty: 7 } } } },
+        paths: {
+          '/orders': {
+            post: {
+              parameters: [{ name: 'q', in: 'query', examples: { a: { value: 'x' } }, schema: { type: 'string', example: 'y' } }],
+              requestBody: {
+                content: {
+                  'application/json': {
+                    examples: { first: { $ref: '#/components/examples/Sample' } },
+                    schema: { type: 'object', properties: { qty: { type: 'integer' } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      expect(routes[0]).toMatchObject({
+        parameters: [{ name: 'q', in: 'query', required: false, example: 'x' }],
+        bodyExample: { qty: 7 },
+      });
+    });
+
+    it('falls back to a parameter schema default, then its first enum value, as the example', async () => {
+      const routes = await scanSpec({
+        ...base,
+        paths: {
+          '/a': {
+            get: {
+              parameters: [
+                { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+                { name: 'sort', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
+              ],
+            },
+          },
+        },
+      });
+
+      expect(routes[0]?.parameters).toEqual([
+        { name: 'page', in: 'query', required: false, example: 1 },
+        { name: 'sort', in: 'query', required: false, example: 'asc' },
+      ]);
+    });
+
+    it('keeps falsy explicit examples (0, false, "") and ignores cookie and transport headers', async () => {
+      const routes = await scanSpec({
+        ...base,
+        paths: {
+          '/a': {
+            get: {
+              parameters: [
+                { name: 'n', in: 'query', example: 0 },
+                { name: 'f', in: 'query', example: false },
+                { name: 's', in: 'query', example: '' },
+                { name: 'session', in: 'cookie' },
+                { name: 'Accept', in: 'header' },
+                { name: 'Content-Type', in: 'header' },
+                { name: 'authorization', in: 'header' },
+              ],
+            },
+          },
+        },
+      });
+
+      expect(routes[0]?.parameters).toEqual([
+        { name: 'n', in: 'query', required: false, example: 0 },
+        { name: 'f', in: 'query', required: false, example: false },
+        { name: 's', in: 'query', required: false, example: '' },
+      ]);
+    });
+
+    it('treats header parameter names case-insensitively when merging', async () => {
+      const routes = await scanSpec({
+        ...base,
+        paths: {
+          '/a': {
+            parameters: [{ name: 'X-Trace', in: 'header', required: false }],
+            get: { parameters: [{ name: 'x-trace', in: 'header', required: true }] },
+          },
+        },
+      });
+
+      expect(routes[0]?.parameters).toEqual([{ name: 'x-trace', in: 'header', required: true }]);
+    });
+
+    it('recognizes a JSON content type carrying parameters or uppercase letters', async () => {
+      const routes = await scanSpec({
+        ...base,
+        paths: {
+          '/a': {
+            post: {
+              requestBody: { content: { 'text/plain': {}, 'Application/JSON; charset=utf-8': { example: { ok: true } } } },
+            },
+          },
+        },
+      });
+
+      expect(routes[0]).toMatchObject({ bodyContentType: 'Application/JSON; charset=utf-8', bodyExample: { ok: true } });
+    });
+
+    it('does not fabricate a body example without a schema or an example, or from an empty schema', async () => {
+      const routes = await scanSpec({
+        ...base,
+        paths: {
+          '/a': { post: { requestBody: { content: { 'application/json': {} } } } },
+          '/b': { post: { requestBody: { content: { 'application/json': { schema: {} } } } } },
+          '/c': { post: { requestBody: {} } },
+          '/d': { post: { requestBody: { content: {} } } },
+        },
+      });
+
+      expect(routes).toEqual([
+        { method: 'POST', path: '/a', bodyContentType: 'application/json' },
+        { method: 'POST', path: '/b', bodyContentType: 'application/json' },
+        { method: 'POST', path: '/c' },
+        { method: 'POST', path: '/d' },
+      ]);
+    });
+
+    it('keeps parameters when only the body extraction is malformed', async () => {
+      const routes = await scanSpec({
+        ...base,
+        paths: {
+          '/a': { post: { parameters: [{ name: 'id', in: 'query' }], requestBody: { content: { 'application/json': 'oops' } } } },
+        },
+      });
+
+      expect(routes[0]).toMatchObject({ parameters: [{ name: 'id', in: 'query', required: false }] });
+    });
   });
 });

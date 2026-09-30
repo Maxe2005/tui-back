@@ -1,10 +1,12 @@
 // adapters/driven/modules/route-explorer/schema-example: pure helpers of the
 // `nestjs-openapi` scanner (story 6.6) — resolve local `#/components/...` `$ref`s and
 // generate a JSON example value from an OpenAPI schema. Never throws: an unresolvable
-// reference, an unknown shape or a cyclic/too-deep branch degrades to `null`/`{}`, so a
+// reference, an unknown shape or a cyclic/too-deep branch degrades to `null`, so a
 // malformed schema can at worst yield a poorer skeleton, never a failed scan. Only local
-// references are followed (no file/http `$ref` fetching).
+// references are followed (no file/http `$ref` fetching). Output is bounded twice: by depth
+// and by a total node budget, so a wide schema fanning out at every level cannot blow up.
 const MAX_DEPTH = 8;
+const MAX_NODES = 2000;
 const LOCAL_REF_PREFIX = '#/';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -19,8 +21,15 @@ export function resolveLocalRef(document: unknown, ref: unknown): Record<string,
   }
   let current: unknown = document;
   for (const rawSegment of ref.slice(LOCAL_REF_PREFIX.length).split('/')) {
-    const segment = rawSegment.replace(/~1/g, '/').replace(/~0/g, '~');
-    if (!isRecord(current) || !(segment in current)) {
+    let decoded = rawSegment;
+    try {
+      decoded = decodeURIComponent(rawSegment);
+    } catch {
+      // A malformed percent-escape is kept literally.
+    }
+    const segment = decoded.replace(/~1/g, '/').replace(/~0/g, '~');
+    // Own keys only: `#/constructor` or `#/__proto__` must never resolve via the prototype.
+    if (!isRecord(current) || !Object.hasOwn(current, segment)) {
       return undefined;
     }
     current = current[segment];
@@ -47,7 +56,6 @@ function mergedProperties(
   document: unknown,
   schema: Record<string, unknown>,
   seen: readonly unknown[],
-  depth: number,
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
   const allOf = schema['allOf'];
@@ -55,7 +63,7 @@ function mergedProperties(
     for (const part of allOf) {
       const resolved = dereference(document, part);
       if (resolved !== undefined && !seen.includes(resolved)) {
-        Object.assign(properties, mergedProperties(document, resolved, [...seen, resolved], depth + 1));
+        Object.assign(properties, mergedProperties(document, resolved, [...seen, resolved]));
       }
     }
   }
@@ -66,17 +74,30 @@ function mergedProperties(
   return properties;
 }
 
-function generate(document: unknown, node: unknown, seen: readonly unknown[], depth: number): unknown {
+interface Budget {
+  nodes: number;
+}
+
+function generate(
+  document: unknown,
+  node: unknown,
+  seen: readonly unknown[],
+  depth: number,
+  budget: Budget,
+): unknown {
   const schema = dereference(document, node);
-  if (schema === undefined || depth > MAX_DEPTH || seen.includes(schema)) {
+  budget.nodes -= 1;
+  if (schema === undefined || depth > MAX_DEPTH || budget.nodes < 0 || seen.includes(schema)) {
     return null;
   }
   const path = [...seen, schema];
+  // Spec-provided values are cloned so a consumer mutating the route never aliases the
+  // parsed spec document.
   if (schema['example'] !== undefined) {
-    return schema['example'];
+    return structuredClone(schema['example']);
   }
   if (schema['default'] !== undefined) {
-    return schema['default'];
+    return structuredClone(schema['default']);
   }
   const enumValues = schema['enum'];
   if (Array.isArray(enumValues) && enumValues.length > 0) {
@@ -85,12 +106,22 @@ function generate(document: unknown, node: unknown, seen: readonly unknown[], de
   for (const key of ['oneOf', 'anyOf'] as const) {
     const branches = schema[key];
     if (Array.isArray(branches) && branches.length > 0) {
-      return generate(document, branches[0], path, depth + 1);
+      // The first branch that yields a real value (an unresolvable or cyclic first branch
+      // must not hide a valid alternative).
+      for (const branch of branches) {
+        const value = generate(document, branch, path, depth + 1, budget);
+        if (value !== null) {
+          return value;
+        }
+      }
+      return null;
     }
   }
 
-  const properties = mergedProperties(document, schema, path, depth);
-  const declared = schema['type'];
+  const properties = mergedProperties(document, schema, path);
+  // OpenAPI 3.1 allows `type: ['string', 'null']`: the first non-null entry drives the shape.
+  const rawType = schema['type'];
+  const declared = Array.isArray(rawType) ? rawType.find((entry) => entry !== 'null') : rawType;
   const type =
     typeof declared === 'string'
       ? declared
@@ -104,12 +135,12 @@ function generate(document: unknown, node: unknown, seen: readonly unknown[], de
     case 'object': {
       const result: Record<string, unknown> = {};
       for (const [name, property] of Object.entries(properties)) {
-        result[name] = generate(document, property, path, depth + 1);
+        result[name] = generate(document, property, path, depth + 1, budget);
       }
       return result;
     }
     case 'array':
-      return [generate(document, schema['items'], path, depth + 1)];
+      return [generate(document, schema['items'], path, depth + 1, budget)];
     case 'string':
       return '';
     case 'number':
@@ -124,7 +155,7 @@ function generate(document: unknown, node: unknown, seen: readonly unknown[], de
 
 export function generateExample(document: unknown, schema: unknown): unknown {
   try {
-    return generate(document, schema, [], 0);
+    return generate(document, schema, [], 0, { nodes: MAX_NODES });
   } catch {
     return null;
   }
