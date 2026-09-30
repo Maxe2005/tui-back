@@ -12,7 +12,7 @@ import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
 import { EdtsZone } from './edts-zone.js';
 import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
 import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
-import { matchEdtsByPrefix as quickMatch, resolveQuickPickCandidates as quickCandidates } from './dialogs/quick-pick-dialog.js';
+import { resolveQuickPickCandidates as quickCandidates, toQuickPickItems } from './dialogs/quick-pick-dialog.js';
 import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import {
   initialCreateDialog,
@@ -1403,15 +1403,19 @@ describe('EdtsZone (story 2.9 zone states)', () => {
 // ==========================================================================================
 // Story 2.30 — EDT quick-pick: shared filterable-list dialog for edt-switch/modify/delete's
 // no-argument path (edts-zone.tsx's currentEdtAction effect), plus the pure
-// matchEdtsByPrefix/resolveQuickPickCandidates helpers from quick-pick-dialog.tsx.
+// resolveQuickPickCandidates/toQuickPickItems helpers from quick-pick-dialog.tsx. Filtering,
+// highlight movement and filter-text editing are shared/components/filterable-pick-list.tsx's
+// own (covered by its test file) — only the EDT-specific wiring is asserted here.
 // ==========================================================================================
 
 describe('quick-pick-dialog pure helpers (story 2.30)', () => {
-  it('matchEdtsByPrefix: case-insensitive prefix match on topic (Boundaries: same convention as matchCommands)', () => {
-    const edts = [edtEntry({ topic: 'Feature-Work' }), edtEntry({ topic: 'feature-bugfix' }), edtEntry({ topic: 'other' })];
-    expect(quickMatch('feat', edts).map((e) => e.topic)).toEqual(['Feature-Work', 'feature-bugfix']);
-    expect(quickMatch('', edts).map((e) => e.topic)).toEqual(['Feature-Work', 'feature-bugfix', 'other']);
-    expect(quickMatch('zzz', edts)).toEqual([]);
+  it('toQuickPickItems: one item per EDT, labelled by topic, keyed by ulid, with no secondary text', () => {
+    const first = edtEntry({ ulid: 'first-ulid', topic: 'Feature-Work' });
+    const second = edtEntry({ ulid: 'second-ulid', topic: 'other' });
+    expect(toQuickPickItems([first, second])).toEqual([
+      { key: 'first-ulid', label: 'Feature-Work', value: first },
+      { key: 'second-ulid', label: 'other', value: second },
+    ]);
   });
 
   it('resolveQuickPickCandidates: switch mode excludes the active EDT (today\'s "first non-active EDT" invariant, preserved as the candidate pool)', () => {
@@ -1445,17 +1449,40 @@ describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
     expect(output).toContain('Filter');
     expect(output).toContain('feature-work');
     expect(output).toContain('other-work');
-    expect(output).toContain('›');
+    // The shared pick's row style: the highlighted row carries the selection glyphs.
+    const dialogFrame = output.slice(output.lastIndexOf('╔'));
+    const highlighted = dialogFrame.split('\n').filter((line) => line.includes('▌›'));
+    expect(highlighted).toHaveLength(1);
+    expect(highlighted[0]).toContain('feature-work');
   });
 
-  it('AC: zero matching EDTs shows an explicit "No matching EDT" state, never a silently-empty list', async () => {
+  it('a genuinely empty pool shows its own "No EDT to select" line, distinct from the filtered-to-zero wording', async () => {
     const store = createAppStore();
-    // quick-pick's renderToString test-only seed always starts with an empty query
-    // (initialQuickPickDialog), so an empty pool — no EDT exists to match against — is the
-    // reachable way to exercise the same "zero matches" render this file's static snapshot
-    // can produce (real-keypress filtering is covered by edts-zone.interaction.test.tsx).
+    // Switch mode with exactly one EDT, and it's active: the non-active candidate pool is
+    // empty before any filtering. (Zero EDTs in total never reaches the pick — the zone's
+    // auto-open-create guard fires first.) A filter matching nothing in a non-empty pool —
+    // the "No matching EDT" wording — needs real keypresses: edts-zone.interaction.test.tsx.
     store.setState({
-      edts: [],
+      edts: [edtEntry({ ulid: 'only-ulid', topic: 'only-work' })],
+      edtsStatus: 'idle',
+      activeEdt: 'only-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
+    expect(output).toContain('SWITCH EDT — SELECT');
+    expect(output).toContain('No EDT to select');
+    expect(output).not.toContain('No matching EDT');
+  });
+
+  it('a long EDT list scrolls inside a bounded window instead of growing the dialog', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: Array.from({ length: 20 }, (_, index) =>
+        edtEntry({ ulid: `ulid-${index}`, topic: `topic-${String(index).padStart(2, '0')}` }),
+      ),
       edtsStatus: 'idle',
       activeEdt: null,
       edtsBranches: [],
@@ -1464,7 +1491,10 @@ describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
-    expect(output).toContain('No matching EDT');
+    const dialogFrame = output.slice(output.lastIndexOf('╔'));
+    expect(dialogFrame).toContain('topic-00');
+    expect(dialogFrame).toContain('▼ more below');
+    expect(dialogFrame).not.toContain('topic-19');
   });
 });
 

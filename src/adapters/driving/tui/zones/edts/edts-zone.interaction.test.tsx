@@ -3554,6 +3554,42 @@ describe('EdtsZone quick-pick dialog (story 2.30)', () => {
     }
   });
 
+  it('the filter matches by substring, not prefix: typing the end of a topic still finds it', async () => {
+    const billing = edt({ ulid: 'billing-ulid', topic: 'billing-api' });
+    const front = edt({ ulid: 'front-ulid', topic: 'storefront' });
+    const store = createAppStore();
+    store.setState({
+      edts: [front, billing],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      currentEdtAction: { type: 'modify', target: 'select EDT', startedAt: new Date().toISOString() },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await type(instance, stdin, 'api');
+      const dialogFrame = stdout.output.slice(stdout.output.lastIndexOf('╔'));
+      expect(dialogFrame).toContain('billing-api');
+      expect(dialogFrame).not.toContain('storefront');
+
+      // Decisive proof: 'storefront' sorts first in the pool, so Enter landing on
+      // 'billing-api' means the substring filter narrowed the navigable list.
+      await press(instance, stdin, KEYS.enter);
+
+      expect(stdout.output).toContain('MODIFY EDT');
+      expect(stdout.output).toContain('Topic: billing-api');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('AC: a filter matching zero EDTs shows an explicit "No matching EDT" state, never a silently-empty list', async () => {
     const other = edt({ ulid: 'other-ulid', topic: 'other-work' });
     const store = createAppStore();

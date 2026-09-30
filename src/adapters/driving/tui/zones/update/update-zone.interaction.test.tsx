@@ -429,14 +429,14 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     return store;
   }
 
-  it('typing narrows the list to the empty state with its Esc hint', async () => {
+  it('typing a filter that matches nothing shows the explicit no-match line', async () => {
     const store = storeWithPick();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'zzz');
-      await waitForOutput(instance, stdout, 'No matching services — [Esc] to close.');
+      await waitForOutput(instance, stdout, 'No matching service');
 
       expect(store.getState().updateServicePick).not.toBeNull();
       expect(store.getState().updateConfig).toBeNull();
@@ -485,6 +485,127 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     }
   });
 
+  it('the filter also matches the repo path, so Enter confirms the path-matched service', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '/repo/b');
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Home no longer jumps the list to its first row: the highlighted row survives it', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down); // highlight svc-b
+      await press(instance, stdin, KEYS.home);
+      // Decisive proof: a Home that jumped the list back to its first row would make this
+      // Enter confirm svc-a instead.
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Home and End move the caret to both ends of the filter text', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'vc');
+      await press(instance, stdin, KEYS.home);
+      await press(instance, stdin, 's'); // "svc" only if Home moved the caret to the start
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, '-b'); // "svc-b" only if End moved it back to the end
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a reopened pick starts unfiltered on its first row, whether Esc or the store closed it', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      // First session: narrow to svc-b, then Esc.
+      await press(instance, stdin, 'svc-b');
+      await pressEscape(instance, stdin);
+      expect(store.getState().updateServicePick).toBeNull();
+
+      // Second session: move the highlight off the first row, then the store itself closes
+      // the pick (the path no key handler sees).
+      store.setState({ updateServicePick: PICK });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      store.setState({ updateServicePick: null });
+      await instance.waitUntilRenderFlush();
+
+      // Third session: Enter must confirm the first candidate — a leftover "svc-b" filter
+      // or a leftover highlight on the second row would both confirm svc-b instead.
+      store.setState({ updateServicePick: PICK });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-a');
+
+      expect(store.getState().updateConfig).toMatchObject({
+        rows: [{ service: 'svc-a', repoPath: '/repo/a', selected: true }],
+      });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the filter is caret-editable: text typed after a Left is inserted at the caret, not appended', async () => {
+    const store = storeWithPick();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'b');
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, 'svc-');
+      // The filter now reads "svc-b". An append-only field would read "bsvc-", match
+      // nothing, and make this Enter a no-op.
+      await press(instance, stdin, KEYS.enter);
+      await waitForOutput(instance, stdout, 'Single service: svc-b');
+
+      expect(store.getState().updateServicePick).toBeNull();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('Esc closes the pick with no config opened', async () => {
     const store = storeWithPick();
 
@@ -509,7 +630,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'zzz');
-      await waitForOutput(instance, stdout, 'No matching services — [Esc] to close.');
+      await waitForOutput(instance, stdout, 'No matching service');
       await press(instance, stdin, KEYS.enter);
       await instance.waitUntilRenderFlush();
 

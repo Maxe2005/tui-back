@@ -23,7 +23,6 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { backspaceCommandQuery, typeCommandQueryChar } from '../../shared/command-bar.js';
 import {
   BoundedList,
   DetailPane,
@@ -32,13 +31,17 @@ import {
   ModalDialog,
   Spinner,
   StatusBadge,
+  createFilterablePickListState,
+  handleFilterablePickListKey,
+  type FilterablePickListState,
   type SummaryTone,
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, matchServicesBySubstring, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
+import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import {
   beginUpdateConfigBranchEdit,
   clampUpdateConfigCursor,
@@ -370,11 +373,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
   const [configBranches, setConfigBranches] = useState<string[]>([]);
   const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  // Story 3.11: the service quick-pick's own filter text + cursor — zone-local UI state
-  // (the same convention as the service-list cursor above; the candidate list itself is
-  // store state so the `:update-service` command can open it from any zone).
-  const [pickFilter, setPickFilter] = useState('');
-  const [pickCursor, setPickCursor] = useState(0);
+  // Story 3.11: the service quick-pick's own filter text, caret and highlighted row —
+  // zone-local UI state (the same convention as the service-list cursor above; the
+  // candidate list itself is store state so the `:update-service` command can open it from
+  // any zone). The shape and every transition are the shared FilterablePickList's.
+  const [pickState, setPickState] = useState<FilterablePickListState>(createFilterablePickListState);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -454,14 +457,15 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     }
   }, [isUpdateConfigOpen]);
 
-  // Story 3.11: a newly opened service pick always starts unfiltered on its first row.
-  // Keyed on the open boolean — never the candidate list — so a store refresh underneath
-  // doesn't snap the cursor back or wipe typed filter text.
+  // Story 3.11: a newly opened service pick always starts unfiltered on its first row. The
+  // single reset point is the pick *closing* — whoever closed it (Enter, Esc, or the store
+  // itself on a run start/reset) — so the next open never paints a frame of the previous
+  // session's filter. Keyed on the open boolean — never the candidate list — so a store
+  // refresh underneath doesn't snap the cursor back or wipe typed filter text.
   const isUpdateServicePickOpen = updateServicePick !== null;
   useEffect(() => {
-    if (isUpdateServicePickOpen) {
-      setPickFilter('');
-      setPickCursor(0);
+    if (!isUpdateServicePickOpen) {
+      setPickState(createFilterablePickListState());
     }
   }, [isUpdateServicePickOpen]);
 
@@ -577,52 +581,26 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      // Story 3.11: while the service quick-pick is open it owns every keystroke —
-      // typing/backspace filters, arrows/Home/End move, Enter confirms the highlighted
-      // service into the 3.7 config pre-scoped to it, Esc closes without opening anything.
+      // Story 3.11: while the service quick-pick is open it owns every keystroke — the
+      // shared pick reducer interprets it (filter editing, highlight movement); the zone
+      // only acts on its outcome: Enter confirms the highlighted service into the 3.7
+      // config pre-scoped to it, Esc closes without opening anything.
       if (updateServicePick !== null) {
-        if (key.escape === true) {
-          setPickFilter('');
-          setPickCursor(0);
-          closeUpdateServicePick();
+        const pickItems = toServicePickItems(updateServicePick);
+        const result = handleFilterablePickListKey(pickState, pickItems, input, key);
+        if (result.type === 'update') {
+          // Re-run the reducer against the latest state rather than applying the result
+          // computed from `pickState` (this render's snapshot): two keypresses delivered
+          // before a re-render (key-repeat) must each build on the previous one.
+          setPickState((previous) => {
+            const latest = handleFilterablePickListKey(previous, pickItems, input, key);
+            return latest.type === 'update' ? latest.state : previous;
+          });
           return;
         }
-        const candidates = matchServicesBySubstring(pickFilter, updateServicePick);
-        if (key.return === true) {
-          const chosen = candidates[Math.min(pickCursor, Math.max(candidates.length - 1, 0))];
-          if (chosen !== undefined) {
-            setPickFilter('');
-            setPickCursor(0);
-            closeUpdateServicePick();
-            void openUpdateConfig({ service: chosen.service, repoPath: chosen.repoPath });
-          }
-          return;
-        }
-        if (key.home === true) {
-          setPickCursor(0);
-          return;
-        }
-        if (key.end === true) {
-          setPickCursor(Math.max(candidates.length - 1, 0));
-          return;
-        }
-        if (key.upArrow === true) {
-          setPickCursor((current) => Math.max(0, current - 1));
-          return;
-        }
-        if (key.downArrow === true) {
-          setPickCursor((current) => Math.min(Math.max(candidates.length - 1, 0), current + 1));
-          return;
-        }
-        if (key.backspace === true || key.delete === true) {
-          setPickFilter((current) => backspaceCommandQuery(current));
-          setPickCursor(0);
-          return;
-        }
-        const nextFilter = typeCommandQueryChar(pickFilter, input, key);
-        if (nextFilter !== pickFilter) {
-          setPickFilter(nextFilter);
-          setPickCursor(0);
+        closeUpdateServicePick();
+        if (result.type === 'select') {
+          void openUpdateConfig({ service: result.item.value.service, repoPath: result.item.value.repoPath });
         }
         return;
       }
@@ -739,11 +717,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       : showLiveDetail
         ? formatLiveServiceDetail(selectedLivePhase, selectedLiveIssues)
         : formatServiceOutcomeDetail(selectedLastOutcome);
-
-  // Story 3.11: the quick-pick's live-filtered rows + clamped cursor — derived per render
-  // (the same clamped-cursor convention as the service list above).
-  const pickCandidates = updateServicePick !== null ? matchServicesBySubstring(pickFilter, updateServicePick) : [];
-  const clampedPickCursor = pickCandidates.length === 0 ? 0 : Math.min(pickCursor, pickCandidates.length - 1);
 
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
@@ -878,28 +851,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {/* Story 3.11: the no-arg `:update-service` fallback — a filterable service
           quick-pick (the story 2.30 no-arg `edt-switch` mirror). Confirming a row opens
           the 3.7 config pre-scoped to that one service; Esc closes with nothing opened. */}
-      <ModalDialog title="UPDATE SERVICE" open={updateServicePick !== null} onConfirm={() => {}} onCancel={closeUpdateServicePick}>
-        {updateServicePick !== null ? (
-          <Box flexDirection="column">
-            <Text color={colors.text}>
-              Service: <Text color={colors.accent}>{pickFilter}</Text>
-              <Text color={colors['text-dim']}>█</Text>
-            </Text>
-            {pickCandidates.length === 0 ? <Text color={colors['text-dim']}>No matching services — [Esc] to close.</Text> : null}
-            <BoundedList
-              items={pickCandidates}
-              maxVisibleRows={8}
-              cursorIndex={clampedPickCursor}
-              renderItem={(row, index) => (
-                <Box key={row.repoPath} flexDirection="row">
-                  <ListRow label={row.service} meta={row.repoPath} selected={index === clampedPickCursor} />
-                </Box>
-              )}
-            />
-            <Text color={colors['text-dim']}>Enter selects, Esc cancels.</Text>
-          </Box>
-        ) : null}
-      </ModalDialog>
+      {updateServicePick !== null ? <UpdateServicePickDialog state={pickState} candidates={updateServicePick} /> : null}
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">

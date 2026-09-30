@@ -50,7 +50,9 @@ import {
   shouldOpenSingleConfig,
   UpdateZone,
 } from './update-zone.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, matchServicesBySubstring, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
+import { toServicePickItems } from './update-service-pick-dialog.js';
+import { matchPickItemsBySubstring } from '../../shared/components/filterable-pick-list.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
@@ -313,35 +315,27 @@ describe('resolveUpdateTrigger (story 3.11: g/p)', () => {
   });
 });
 
-describe('matchServicesBySubstring (story 3.11)', () => {
-  const CANDIDATES = [
-    { service: 'svc-a', repoPath: '/repo/a' },
-    { service: 'svc-b', repoPath: '/repo/b' },
-    { service: 'other', repoPath: '/repo/other' },
-  ];
-
-  it('matches every service on an empty query', () => {
-    expect(matchServicesBySubstring('', CANDIDATES)).toEqual(CANDIDATES);
-  });
-
-  it('filters by case-insensitive substring on the service name', () => {
-    expect(matchServicesBySubstring('svc', CANDIDATES)).toEqual([CANDIDATES[0], CANDIDATES[1]]);
-    expect(matchServicesBySubstring('SVC-A', CANDIDATES)).toEqual([CANDIDATES[0]]);
-    expect(matchServicesBySubstring('the', CANDIDATES)).toEqual([CANDIDATES[2]]);
-  });
-
-  it('trims the query and returns an explicit empty list on no match', () => {
-    expect(matchServicesBySubstring('  svc-a ', CANDIDATES)).toEqual([CANDIDATES[0]]);
-    expect(matchServicesBySubstring('zzz', CANDIDATES)).toEqual([]);
-  });
-
-  it('also matches a path substring so duplicate service names stay narrowable', () => {
+// Filtering itself is shared/components/filterable-pick-list.tsx's (covered by its own test
+// file) — what stays service-specific is how a candidate becomes a pick item.
+describe('toServicePickItems (story 3.11)', () => {
+  it('labels each item by service name, with the repo path as searchable secondary text and key', () => {
     const dupes = [
       { service: 'svc', repoPath: '/repo/a' },
       { service: 'svc', repoPath: '/repo/b' },
     ];
-    expect(matchServicesBySubstring('repo/b', dupes)).toEqual([dupes[1]]);
-    expect(matchServicesBySubstring('/REPO/A', dupes)).toEqual([dupes[0]]);
+    expect(toServicePickItems(dupes)).toEqual([
+      { key: '/repo/a', label: 'svc', meta: '/repo/a', value: dupes[0] },
+      { key: '/repo/b', label: 'svc', meta: '/repo/b', value: dupes[1] },
+    ]);
+  });
+
+  it('keeps path-distinguished duplicate service names narrowable through the shared filter', () => {
+    const items = toServicePickItems([
+      { service: 'svc', repoPath: '/repo/a' },
+      { service: 'svc', repoPath: '/repo/b' },
+    ]);
+    expect(matchPickItemsBySubstring('repo/b', items).map((item) => item.value.repoPath)).toEqual(['/repo/b']);
+    expect(matchPickItemsBySubstring('/REPO/A', items).map((item) => item.value.repoPath)).toEqual(['/repo/a']);
   });
 });
 
@@ -448,7 +442,7 @@ describe('UpdateZone rendering', () => {
     expect(UPDATE_ALL_REPOS_PROMPT).toContain('[A]');
   });
 
-  it('an open service pick lists every candidate with the select/cancel hint', async () => {
+  it('an open service pick lists every candidate under the filter field and its hint', async () => {
     const store = createAppStore();
     store.setState({
       updateServicePick: [
@@ -463,7 +457,8 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('svc-a');
     expect(output).toContain('/repo/a');
     expect(output).toContain('svc-b');
-    expect(output).toContain('Enter selects, Esc cancels.');
+    expect(output).toContain('Filter:');
+    expect(output).toContain('[Enter] confirm  [Esc] cancel');
   });
 
   it('a closed service pick renders no pick modal', async () => {
@@ -474,14 +469,15 @@ describe('UpdateZone rendering', () => {
     expect(output).not.toContain('UPDATE SERVICE');
   });
 
-  it('an empty pick (nothing matching) names the Esc recovery key', async () => {
+  it('a pick with no candidate at all shows its own empty line, distinct from the no-match wording', async () => {
     const store = createAppStore();
     store.setState({ updateServicePick: [] });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('UPDATE SERVICE');
-    expect(output).toContain('No matching services — [Esc] to close.');
+    expect(output).toContain('No service to select');
+    expect(output).not.toContain('No matching service');
   });
 
   it('idle with an interrupted active EDT shows the re-run offer', async () => {
