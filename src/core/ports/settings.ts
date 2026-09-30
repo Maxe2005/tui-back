@@ -26,6 +26,10 @@ export interface Settings {
     // entry types (create/switch/modify, story 2.15) the developer has chosen to hide — a
     // second, independent settings group on the EDTs tab alongside hiddenActionHints above.
     hiddenActionTypes: string[];
+    // Branch autocomplete dropdown's visible row count (shared BranchAutocompleteInput) — how
+    // many substring-matched branches render below the field before a `… N more` overflow
+    // line. Applies live on every render (no restart); no per-service override (Boundaries).
+    branchDropdownMaxRows: number;
   };
   // Story 5.1: the Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) —
   // how many lines each active pane's LogsManager entry keeps from the live tail before
@@ -65,7 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Default true preserves the pre-existing behavior for anyone who never opens :settings.
   general: { quitShortcutEnabled: true },
   commandPalette: { gridMaxRows: 8 },
-  edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+  edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
   // Story 5.1's Boundaries: "a per-service in-memory ring buffer sized by
   // settings.logs.bufferSize (default 500 lines)".
   // Story 5.4: filterHistorySize=20 comfortably covers a session's worth of committed filters
@@ -102,6 +106,14 @@ export const MAX_FILTER_HISTORY_SIZE = 200;
 // commandPalette.gridMaxRows") since the two settings can drift apart on purpose.
 export const MIN_FILTER_HISTORY_GRID_MAX_ROWS = 1;
 export const MAX_FILTER_HISTORY_GRID_MAX_ROWS = 99;
+
+// edts.branchDropdownMaxRows' valid range (branch autocomplete shared component) — same
+// single-source-of-truth convention as MIN/MAX_GRID_MAX_ROWS above, shared by the zod schema
+// (adapters/driven/settings/schema.ts) and the settings screen's own clamp
+// (adapters/driving/tui/shared/settings-screen.tsx). 1 keeps the dropdown meaningful (0 rows
+// would hide every proposal); 20 keeps the dropdown bounded inside a modal dialog.
+export const MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS = 1;
+export const MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS = 20;
 
 export interface SettingsLoadResult {
   settings: Settings;

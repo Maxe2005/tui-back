@@ -356,11 +356,16 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       isMergeInProgress: async () => ok(false),
       listDirtyPaths: async () => ok([]),
       discardPaths: async () => ok(undefined),
+      discardAll: async () => ok(undefined),
+      diffNameOnly: async () => ok([]),
+      discardPathsToHead: async () => ok(undefined),
       isRebaseInProgress: async () => ok(false),
       hasUnmergedPaths: async () => ok(false),
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
+      listRemoteBranches: async () => ok([]),
+      createTrackingBranch: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
       ...overrides,
@@ -387,6 +392,7 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       exists: async () => ok(true),
       scan: async () => ok({ candidates: [], skipped: [] }),
       reset: async () => ok({ path: paths[0] ?? '', backupPath: null }),
+      remove: async () => ok(undefined),
     };
   }
 

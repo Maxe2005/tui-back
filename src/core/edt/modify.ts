@@ -440,6 +440,36 @@ async function resolveBranchRenames(params: {
 }
 
 // ---- Lock-held assembly and write --------------------------------------------------------
+// Story 2.39: the switch use-case's `adopt` resolution registers a dirty non-member repo as a
+// new member of the OUTGOING EDT — a membership write only (its git side — gate, stash,
+// createBranch — is already done by switch.ts, and it must never check out or pop, which is
+// why it can't call the full modifyEdt). It goes through this exact same lock-held
+// re-read/assemble/write as every modifyEdt add, so there is one single persistence path for
+// adding a member. Re-checks membership under the lock (a racing add is a no-op, never a
+// duplicate).
+export interface AddMemberUnderLockParams {
+  edtRegistry: EdtRegistryPort;
+  lock: LockPort;
+  edtRegistryResourceKey: string;
+  edt: EdtRegistryEntry;
+  member: EdtMember;
+}
+
+export async function addMemberUnderLock(params: AddMemberUnderLockParams): Promise<Result<void>> {
+  const { edtRegistry, lock, edtRegistryResourceKey, edt, member } = params;
+  return persistModifiedEntry({
+    edtRegistry,
+    edtRegistryResourceKey,
+    lock,
+    target: edt,
+    preLockEntries: [],
+    renameTo: undefined,
+    removeMembers: [],
+    addedMembers: [{ ...member, repoPath: resolve(member.repoPath) }],
+    branchChanges: [],
+  });
+}
+
 async function persistModifiedEntry(params: {
   edtRegistry: EdtRegistryPort;
   edtRegistryResourceKey: string;

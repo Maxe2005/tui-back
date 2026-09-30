@@ -21,7 +21,9 @@ import type { Result } from '../result.js';
 export interface StatePort {
   // null means no EDT has ever been made active (ENOENT / a freshly bootstrapped machine).
   readActiveEdt(): Promise<Result<string | null>>;
-  writeActiveEdt(ulid: string): Promise<Result<void>>;
+  // `null` clears the pointer (the `:reset` command's EDT category) — the schema has always
+  // allowed a null activeEdt, so no new method is needed just to unset it.
+  writeActiveEdt(ulid: string | null): Promise<Result<void>>;
   readSplitterRatios(): Promise<Result<Record<string, number[]> | null>>;
   writeSplitterRatios(ratios: Record<string, number[]>): Promise<Result<void>>;
   readFilterHistory(): Promise<Result<Record<string, string[]> | null>>;

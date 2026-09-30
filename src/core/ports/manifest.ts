@@ -7,6 +7,7 @@ export interface Manifest {
   service: string;
   container: string;
   migrationCommand?: string;
+  restartCommands?: string[];
   sharedBranch: string;
   modules: Record<string, Record<string, unknown>>;
 }

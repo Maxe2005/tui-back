@@ -13,6 +13,7 @@ import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/text-input-line.js';
+import { nextTextInputValue } from '../../../shared/components/text-edit.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   createPickerSession,
@@ -20,7 +21,6 @@ import {
   findRetryableFailedRow,
   jumpSelection,
   moveSelection,
-  nextTextInputValue,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
@@ -371,10 +371,12 @@ export function ModifyDialogView({
   dialog,
   candidates,
   candidateState,
+  maxRows,
 }: {
   dialog: ModifyDialogState;
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
+  maxRows: number;
 }) {
   const title = resolveModifyDialogTitle(dialog, candidates);
   return (
@@ -386,6 +388,7 @@ export function ModifyDialogView({
             branches={dialog.branchPicker.branches}
             branchesStatus={dialog.branchPicker.branchesStatus}
             otherMemberBranches={Array.from(new Set(dialog.target.members.map((member) => member.branch)))}
+            maxRows={maxRows}
           />
         ) : (
           <>

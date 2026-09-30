@@ -4,6 +4,10 @@
 // ModalDialog overlays, opened/closed via app-store's registryScreenOpen flag so both the
 // `registry` command inside Story 2.14's `:` command bar and Dashboard's empty-registry
 // prompt can trigger it (`:` itself never opens this screen directly, story 2.14).
+// Story 2.33 adds "Clean stale entries" (Ctrl+L from the root-input screen): classify
+// unreachable/manifest-not-found registry entries and, list-then-confirm, remove the
+// confirmed ones — reusing this same screen's checkbox-list/results rendering pattern
+// rather than a new component (Boundaries).
 //
 // Testability convention (render-to-string.tsx): the shared renderToString harness's fake
 // stdin never emits data, so a useInput callback itself is never invoked by any test in this
@@ -22,6 +26,9 @@ import {
   type AppStore,
   type RegistryOutcome,
   type RegistryRegisterResult,
+  type StaleRegistryEntry,
+  type RemoveStaleRegistryEntryResult,
+  type RemoveStaleRegistryOutcome,
 } from '../store/app-store.js';
 import type { ScanResult } from '../../../../core/ports/registry.js';
 
@@ -44,22 +51,48 @@ export type RegistryScreenPhase =
   | 'empty'
   | 'candidates'
   | 'registering'
-  | 'results';
+  | 'results'
+  // Story 2.33: mirrors scanning/candidates/results above, but for the "Clean stale
+  // entries" action — deliberately three states, not the scan flow's five, since
+  // classifyStaleRegistry never walks a filesystem tree (a quick registry/manifest read, not
+  // a scan) so loading/error/empty all fold into the single 'clean-candidates' phase and are
+  // told apart inside its own render block instead.
+  | 'clean-candidates'
+  | 'cleaning'
+  | 'clean-results';
 
 // Pure phase derivation from the store's registry-screen fields — the I/O matrix's states
-// (scanning, distinct empty-vs-error, candidates, registering, results) read off store data
-// alone, never off transient local component state.
+// (scanning, distinct empty-vs-error, candidates, registering, results, and story 2.33's
+// clean-candidates/cleaning/clean-results) read off store data alone, never off transient
+// local component state.
 export function resolveRegistryScreenPhase(store: {
   registryScanStatus: 'idle' | 'loading' | 'error';
   registryScanResult: ScanResult | null;
   registryRegisterStatus: 'idle' | 'loading';
   registryRegisterResults: RegistryRegisterResult[] | null;
+  registryCleanScanStatus: 'idle' | 'loading' | 'error';
+  registryCleanCandidates: StaleRegistryEntry[] | null;
+  registryCleanStatus: 'idle' | 'loading';
+  registryCleanResults: RemoveStaleRegistryEntryResult[] | null;
 }): RegistryScreenPhase {
+  if (store.registryCleanResults !== null) {
+    return 'clean-results';
+  }
+  if (store.registryCleanStatus === 'loading') {
+    return 'cleaning';
+  }
   if (store.registryRegisterResults !== null) {
     return 'results';
   }
   if (store.registryRegisterStatus === 'loading') {
     return 'registering';
+  }
+  if (
+    store.registryCleanScanStatus === 'loading' ||
+    store.registryCleanScanStatus === 'error' ||
+    store.registryCleanCandidates !== null
+  ) {
+    return 'clean-candidates';
   }
   if (store.registryScanStatus === 'loading') {
     return 'scanning';
@@ -112,6 +145,20 @@ export function toggleCandidateSelection(selected: ReadonlySet<string>, path: st
   return next;
 }
 
+// Story 2.33: clean candidates render pre-checked (Design Notes/sprint-change-proposal —
+// unlike scan/register's own candidates, which start unchecked). Tracking the *excluded*
+// set rather than the *selected* one gives that "everything checked by default" behavior
+// for free, with no seed/effect needed: an empty exclusion set already means "all selected".
+export function toggleCleanCandidateExclusion(excluded: ReadonlySet<string>, path: string): Set<string> {
+  const next = new Set(excluded);
+  if (next.has(path)) {
+    next.delete(path);
+  } else {
+    next.add(path);
+  }
+  return next;
+}
+
 function outcomeColor(outcome: RegistryOutcome): string {
   switch (outcome) {
     case 'registered':
@@ -124,6 +171,10 @@ function outcomeColor(outcome: RegistryOutcome): string {
   }
 }
 
+function staleOutcomeColor(outcome: RemoveStaleRegistryOutcome): string {
+  return outcome === 'removed' ? colors.success : colors.error;
+}
+
 export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppStore }) {
   const registryScanStatus = useStore((state) => state.registryScanStatus);
   const registryScanError = useStore((state) => state.registryScanError);
@@ -132,26 +183,51 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const registryRegisterResults = useStore((state) => state.registryRegisterResults);
   const scanRegistryRoot = useStore((state) => state.scanRegistryRoot);
   const registerRegistryCandidates = useStore((state) => state.registerRegistryCandidates);
+  const registryCleanScanStatus = useStore((state) => state.registryCleanScanStatus);
+  const registryCleanScanError = useStore((state) => state.registryCleanScanError);
+  const registryCleanCandidates = useStore((state) => state.registryCleanCandidates);
+  const registryCleanErrors = useStore((state) => state.registryCleanErrors);
+  const scanRegistryStaleEntries = useStore((state) => state.scanRegistryStaleEntries);
+  const registryCleanStatus = useStore((state) => state.registryCleanStatus);
+  const registryCleanResults = useStore((state) => state.registryCleanResults);
+  const removeStaleRegistryCandidates = useStore((state) => state.removeStaleRegistryCandidates);
 
-  // No mount-effect reset here: app-store's openRegistryScreen() clears scan/register state
-  // atomically with becoming open (before this component ever mounts), so a reopened screen
-  // never shows a stale prior session and no post-mount effect races a seeded render.
+  // No mount-effect reset here: app-store's openRegistryScreen() clears scan/register/clean
+  // state atomically with becoming open (before this component ever mounts), so a reopened
+  // screen never shows a stale prior session and no post-mount effect races a seeded render.
   const phase = resolveRegistryScreenPhase({
     registryScanStatus,
     registryScanResult,
     registryRegisterStatus,
     registryRegisterResults,
+    registryCleanScanStatus,
+    registryCleanCandidates,
+    registryCleanStatus,
+    registryCleanResults,
   });
 
   const [root, setRoot] = useState('');
   const [cursor, setCursor] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [cleanCursor, setCleanCursor] = useState(0);
+  const [cleanExcluded, setCleanExcluded] = useState<Set<string>>(new Set());
 
   const candidates = registryScanResult?.candidates ?? [];
   const clampedCursor = candidates.length === 0 ? 0 : Math.min(cursor, candidates.length - 1);
 
+  const staleCandidates = registryCleanCandidates ?? [];
+  const clampedCleanCursor = staleCandidates.length === 0 ? 0 : Math.min(cleanCursor, staleCandidates.length - 1);
+  const selectedStalePaths = staleCandidates.map((candidate) => candidate.path).filter((path) => !cleanExcluded.has(path));
+
   useInput((input, key) => {
     if (phase === 'root-input') {
+      // Ctrl+L: "Clean stale entries" (Boundaries — story 2.33) — never a plain "l"
+      // keypress, which must stay available as ordinary root-path text (mirrors
+      // branch-picker.tsx's own Ctrl+R precedent).
+      if (key.ctrl && input.toLowerCase() === 'l') {
+        void scanRegistryStaleEntries();
+        return;
+      }
       if (key.return) {
         const trimmed = root.trim();
         if (trimmed.length > 0) {
@@ -190,6 +266,30 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         return;
       }
     }
+
+    if (phase === 'clean-candidates' && staleCandidates.length > 0) {
+      if (key.downArrow) {
+        setCleanCursor((current) => moveCandidateCursor(current, 'down', staleCandidates.length));
+        return;
+      }
+      if (key.upArrow) {
+        setCleanCursor((current) => moveCandidateCursor(current, 'up', staleCandidates.length));
+        return;
+      }
+      if (input === ' ') {
+        const candidate = staleCandidates[clampedCleanCursor];
+        if (candidate !== undefined) {
+          setCleanExcluded((current) => toggleCleanCandidateExclusion(current, candidate.path));
+        }
+        return;
+      }
+      if (key.return) {
+        if (selectedStalePaths.length > 0) {
+          void removeStaleRegistryCandidates(selectedStalePaths);
+        }
+        return;
+      }
+    }
   });
 
   return (
@@ -208,6 +308,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               <Text color={colors['text-dim']}>█</Text>
             </Text>
             <DimAnnotation text="Type a path, then Enter to scan." />
+            <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
           </Box>
         ) : null}
 
@@ -271,6 +372,88 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                   {result.path} — <Text color={outcomeColor(result.outcome)}>{result.outcome}</Text>
                 </Text>
                 {result.detail ? <DimAnnotation text={result.detail} /> : null}
+              </Box>
+            ))}
+            <DimAnnotation text="Esc to close." />
+          </Box>
+        ) : null}
+
+        {phase === 'clean-candidates' ? (
+          <Box flexDirection="column">
+            {registryCleanScanStatus === 'loading' ? (
+              <Box>
+                <Spinner />
+                <Text color={colors.text}> Scanning the registry for stale entries…</Text>
+              </Box>
+            ) : registryCleanScanStatus === 'error' ? (
+              <Box flexDirection="column">
+                <Text color={colors.error}>Scan failed.</Text>
+                {registryCleanScanError ? <DimAnnotation text={registryCleanScanError} /> : null}
+              </Box>
+            ) : staleCandidates.length === 0 ? (
+              // Matrix: "No candidates ... explicit result, never silent" — a distinct,
+              // visible state, same convention as the scan flow's own 'empty' phase.
+              <Box flexDirection="column">
+                <Text color={colors['text-dim']}>No stale registry entries found.</Text>
+                {registryCleanErrors.length > 0 ? (
+                  <DimAnnotation
+                    text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
+                      .map((error) => `${error.path} (${error.code})`)
+                      .join(', ')}`}
+                  />
+                ) : null}
+                <DimAnnotation text="Esc to close." />
+              </Box>
+            ) : (
+              <Box flexDirection="column">
+                <Text color={colors['text-dim']}>STALE ENTRIES</Text>
+                {staleCandidates.map((candidate, index) => {
+                  const highlighted = index === clampedCleanCursor;
+                  const memberNote =
+                    candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
+                  return (
+                    <Box key={candidate.path} flexDirection="row">
+                      <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                      <CheckboxListItem
+                        label={`${candidate.path} — ${candidate.reason}${memberNote}`}
+                        selected={highlighted}
+                        state={cleanExcluded.has(candidate.path) ? 'unchecked' : 'checked'}
+                      />
+                    </Box>
+                  );
+                })}
+                {registryCleanErrors.length > 0 ? (
+                  // Review fix: a path that couldn't even be checked (registry.exists()
+                  // errored) is never silently dropped — reported here, distinct from the
+                  // removable candidate list above, never gating or blocking it.
+                  <DimAnnotation
+                    text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
+                      .map((error) => `${error.path} (${error.code})`)
+                      .join(', ')}`}
+                  />
+                ) : null}
+                <DimAnnotation text="Space to toggle, Enter to remove the selection." />
+              </Box>
+            )}
+          </Box>
+        ) : null}
+
+        {phase === 'cleaning' ? (
+          <Box>
+            <Spinner />
+            <Text color={colors.text}> Removing stale entries…</Text>
+          </Box>
+        ) : null}
+
+        {phase === 'clean-results' ? (
+          <Box flexDirection="column">
+            <Text color={colors['text-dim']}>RESULTS</Text>
+            {(registryCleanResults ?? []).map((result) => (
+              <Box key={result.path} flexDirection="column">
+                <Text color={colors.text}>
+                  {result.path} — <Text color={staleOutcomeColor(result.outcome)}>{result.outcome}</Text>
+                </Text>
+                {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
               </Box>
             ))}
             <DimAnnotation text="Esc to close." />

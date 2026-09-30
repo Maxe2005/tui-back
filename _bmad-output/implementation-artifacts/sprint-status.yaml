@@ -1,5 +1,5 @@
 # generated: 2026-08-11
-# last_updated: 2026-09-28
+# last_updated: 2026-09-30
 # project: tui-back
 # project_key: NOKEY
 # tracking_system: file-system
@@ -20,7 +20,7 @@
 #   - backlog: Story only exists in epic file
 #   - ready-for-dev: Story file created in stories folder
 #   - in-progress: Developer actively working on implementation
-#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Ready for code done (via Dev's code-done workflow)
 #   - done: Story completed
 #
 # Retrospective Status:
@@ -37,33 +37,84 @@
 # - Epic transitions to 'in-progress' automatically when first story is created
 # - Stories can be worked in parallel if team capacity allows
 # - Developer typically creates next story after previous one is 'done' to incorporate learnings
-# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Dev moves story to 'done', then runs code-done (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-09-28
+last_updated: 2026-09-30
+# 2026-09-29: Story 3-11 (update commands — main, all-repos, single-service) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-29: Story 2-38 moved to review after the adversarial review + patch loop (bmad-build).
+# 2026-09-29: Story 2-38 (wizard Step 4 — activation & switch choice) started (bmad-build).
+# 2026-09-28: Story 2-41 moved to review after the adversarial review + patch loop (bmad-build).
+# 2026-09-28: Story 2-39 closed (done, merged into epic-2); story 2-41 (switch resolution dialog) started (bmad-build).
+# 2026-09-28: Story 2-39 moved to review after the adversarial review + patch loop (bmad-build).
+# 2026-09-28: Story 2-39 (switch core — three-state partition & dirty-service resolutions) started (bmad-build); 2-38 deferred until 2-39/2-41 land.
+# 2026-09-28: Sprint Change Proposal (sprint-change-proposal-2026-09-28.md) appended stories
+# 2-42 (manifest-defined protected branches) and 2-43 (cross-EDT branch usage alerts & rename
+# gate) to the end of epic-2; PRD FR-7, AD-4/AD-8 and EXPERIENCE.md amended.
+# 2026-09-28: Story 2-37 (wizard Step 3 — global branch strategy & per-service overrides) started (bmad-build).
+# 2026-09-28: Story 2-37 moved to review after the adversarial review + patch loop (bmad-build).
+# 2026-09-28: epic-3-group-update-migrations (stories 3.6-3.10 + shared BranchAutocompleteInput) merged
+# into epic-2 — prerequisite of story 2-37. Epic-3's own 2026-09-22 proposal renamed to
+# sprint-change-proposal-2026-09-22-2.md (filename collided with epic-2's story 2-33 proposal).
+# 2026-09-28: Story 3-11 (update commands — main, all-repos, single-service) set to in-progress (bmad-build).
+# 2026-09-28: Story 3-10 (live per-service run tracking) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-28: Story 3-10 (live per-service run tracking) set to in-progress (bmad-build).
+# 2026-09-24: Story 3-9 (per-service actions — clean restart & single-service update) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-24: Story 3-9 (per-service actions — clean restart & single-service update) spec approved (ready-for-dev), implementation started (bmad-build, worktree tui-back-epic-3, branch story-3-9).
+# 2026-09-23: Stories 3-3, 3-4, 3-6 moved review -> done (specs already status done; human sign-off, bmad-build).
+# 2026-09-23: Story 3-7 (pre-run configuration interface) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-28: Story 2-36 (edt-create wizard shell + Steps 1-2) started (bmad-build).
+# 2026-09-28: Story 2-36 moved to review after the adversarial review + patch loop (bmad-build).
+# 2026-09-28: Story 2-36 validated by the developer, moved to done and merged into epic-2.
+# 2026-09-24: Sprint Change Proposal (sprint-change-proposal-2026-09-24.md) appended stories
+# 2-35..2-38 (edt-create 4-step wizard + per-service branch plans core) to epic-2 and amended
+# story 2-31 in place (still `backlog`, now sequenced after 2-37).
+# 2026-09-24 (2): Sprint Change Proposal (sprint-change-proposal-2026-09-24-2.md) appended stories
+# 2-39..2-41 (edt switch three-state model, dirty-service adopt/discard) to epic-2; story 2-38
+# now sequences after 2-41.
+# 2026-09-23: Story 2-34 (EDT zone — colored, explained service-listing issues) added directly
+# (not a full Sprint Change Proposal cycle), implemented, and moved to done (full test suite +
+# typecheck + depcheck all green; no separate code-review pass run).
+# 2026-09-22: Story 2-33 (registry deregister stale/unreachable/unmanaged repos) started (bmad-build).
+# 2026-09-22: Story 2-33 (registry deregister stale/unreachable/unmanaged repos) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-22: Story 6-2 reviewed (bmad-build + 14 review patches) → review.
+# 2026-09-22: Story 6-2 set to in-progress (bmad-build, cookie-session auth via /auth/me).
+# 2026-09-22: Story 6-1 set to in-progress, epic-6 lifted to in-progress (bmad-build, worktree tui-back-epic-6).
 # 2026-09-16: Story 2-27 set to in-progress (bmad-build).
 # 2026-09-17: Story 2-32 set to in-progress (bmad-build).
 # 2026-09-17: Story 3-1 set to in-progress, epic-3 lifted to in-progress (bmad-build, worktree tui-back-epic-3).
-# 2026-09-17: Story 5-1 moved to review after code-review + patch loop (bmad-build); epic-5 lifted to in-progress.
+# 2026-09-17: Story 5-1 moved to done after code-done + patch loop (bmad-build); epic-5 lifted to in-progress.
 # 2026-09-18: Story 5-2 (filter the aggregated stream) started (bmad-build).
-# 2026-09-18: Story 5-2 (filter the aggregated stream) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-18: Story 5-2 (filter the aggregated stream) moved to done after code-done + patch loop (bmad-build).
 # 2026-09-18: Sprint Change Proposal (sprint-change-proposal-2026-09-18.md) appended story 5-4
 # (filter history recall) to epic-5 — new backlog entry below; story 5-3 confirmed unchanged.
 # 2026-09-19: Story 5-4 (filter history recall) started (bmad-build).
-# 2026-09-20: Story 5-4 (filter history recall) moved to review after code-review + patch loop (bmad-build).
+# 2026-09-20: Story 5-4 (filter history recall) moved to done after code-done + patch loop (bmad-build).
 # 2026-09-20: Sprint Change Proposal (sprint-change-proposal-2026-09-20.md) appended story 5-5
 # (bound list & filter-editor height to the terminal window) to epic-5 — new backlog entry
 # below; story 5-4 confirmed unchanged, its own hint-panel-hidden-while-editing fix retained.
 # 2026-09-21: Story 5-5 (bound list & filter-editor height) started (bmad-build).
-# 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to review after code-review + patch loop (bmad-build).
-# 2026-09-28: Sprint Change Proposal (sprint-change-proposal-2026-09-28.md) appended story 5-6
+# 2026-09-21: Story 5-5 (bound list & filter-editor height) moved to done after code-done + patch loop (bmad-build).
+# 2026-09-22: Sprint Change Proposal (sprint-change-proposal-2026-09-22.md) appended story 2-33
+# (registry — deregister stale, unreachable, or unmanaged repos) to epic-2 — new backlog entry
+# below.
+# 2026-09-22: Sprint Change Proposal (sprint-change-proposal-2026-09-22-2.md) reworked the
+# Update zone's UX (service list & live status, pre-run configuration screen, manifest
+# clean-restart recipe, per-service actions, single-service scope). Stories 3-1..3-4 amended
+# in place (status unchanged); 3-5 superseded and split into new stories 3-6..3-11 below.
+# 2026-09-22: Story 3-6 (update zone shell — service list & live status) started (bmad-build).
+# 2026-09-22: Story 3-6 (update zone shell — service list & live status) moved to review after
+# code-review + patch loop (bmad-build).
+# 2026-09-28: Sprint Change Proposal (sprint-change-proposal-2026-09-28-2.md) appended story 5-6
 # (command history recall + shared input-history primitive) to epic-5 — new backlog entry below;
 # stories 5-4/5-5 not reopened (5-6 refactors 5-4's history code behavior-preservingly).
+# 2026-09-30: epics 3, 5 and 6 synced into epic-2. Epic-5's own 2026-09-28 proposal renamed to
+# sprint-change-proposal-2026-09-28-2.md (filename collided with epic-2's stories 2-42/2-43 proposal).
 project: tui-back
 # 2026-09-16: Sprint Change Proposal (sprint-change-proposal-2026-09-16.md) appended stories
-# 2-27..2-32 to epic-2 and amended story 2-26 in place (still `review`) — see that proposal for
-# the full rationale (functional review of the EDT-management surface + a confirmed blocking bug
+# 2-27..2-32 to epic-2 and amended story 2-26 in place (still `done`) — see that proposal for
+# the full rationale (functional done of the EDT-management surface + a confirmed blocking bug
 # in Create/Modify branch selection).
 project_key: NOKEY
 tracking_system: file-system
@@ -113,20 +164,39 @@ development_status:
   2-24-modify-edt-mandatory-branch-on-add-no-more-silent-default: done
   2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state: done
   2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current: done
-  2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: review
+  2-27-edt-creation-branch-picker-reuse-manifest-aware-base-branch-default: done
   2-28-registry-manifest-semantic-validation: backlog
-  2-29-delete-an-edt: review
-  2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: backlog
+  2-29-delete-an-edt: done
+  2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: done
   2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
-  2-32-text-input-line-cursor-navigation-app-wide-adoption: review
+  2-32-text-input-line-cursor-navigation-app-wide-adoption: done
+  2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: done
+  2-34-edt-zone-colored-explained-service-listing-issues: done
+  2-35-edt-creation-core-per-service-branch-plans-remote-branches: done
+  2-36-edt-creation-wizard-shell-step-navigation-name-services-steps: done
+  2-37-edt-creation-wizard-step-3-global-branch-strategy-per-service-overrides: done
+  2-38-edt-creation-wizard-step-4-activation-switch-choice: review
+  2-39-edt-switch-core-three-state-partition-dirty-service-resolutions: done
+  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
+  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: review
+  2-42-manifest-defined-protected-branches-per-service: backlog
+  2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
   epic-2-retrospective: optional
 
   epic-3: in-progress
   3-1-group-update-pull-restart-edt-scoped: done
   3-2-run-migrations-as-part-of-the-group-update: done
-  3-3-all-repos-maintenance-mode: review
-  3-4-assisted-resolution-of-merge-conflicts-dirty-state: review
-  3-5-per-service-migration-failure-handling-re-trigger: backlog
+  3-3-all-repos-maintenance-mode: done
+  3-4-assisted-resolution-of-merge-conflicts-dirty-state: done
+  # 3-5-per-service-migration-failure-handling-re-trigger: superseded 2026-09-22 (Sprint
+  # Change Proposal sprint-change-proposal-2026-09-22-2.md) — split into 3-9 and 3-10 below,
+  # never started (was `backlog`), no requirement dropped.
+  3-6-update-zone-shell-service-list-live-status: done
+  3-7-pre-run-configuration-interface: done
+  3-8-manifest-defined-clean-restart-recipe: review
+  3-9-per-service-actions-clean-restart-single-service-update: review
+  3-10-live-per-service-run-tracking-current-step-issue-log: review
+  3-11-update-commands-main-all-repos-single-service: review
   epic-3-retrospective: optional
 
   epic-4: backlog
@@ -138,15 +208,15 @@ development_status:
   epic-5: in-progress
   5-1-aggregated-live-log-stream: done
   5-2-filter-the-aggregated-stream: done
-  5-3-inline-service-health-restart-control: review
+  5-3-inline-service-health-restart-control: done
   5-4-filter-history-recall: done
-  5-5-bound-list-filter-editor-height-to-the-terminal-window: review
+  5-5-bound-list-filter-editor-height-to-the-terminal-window: done
   5-6-command-history-recall-shared-input-history-primitive: backlog
   epic-5-retrospective: optional
 
-  epic-6: backlog
-  6-1-route-discovery-via-a-pluggable-scanner-module: backlog
-  6-2-fire-a-request-with-automatic-dev-mode-auth: backlog
+  epic-6: in-progress
+  6-1-route-discovery-via-a-pluggable-scanner-module: review
+  6-2-fire-a-request-with-automatic-dev-mode-auth: review
   6-3-save-customize-and-re-fire-a-request: backlog
   6-4-see-response-and-relevant-logs-together: backlog
   6-5-manage-the-saved-request-library-across-edts: backlog

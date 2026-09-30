@@ -2,18 +2,66 @@
 // core/scripts/group-update.ts use-case the CLI's `tui-back update` wraps, in-process
 // (AD-2, never by shelling out to the CLI). Extracted as a slice factory combined with the
 // other slices into the one Zustand store (AD-10).
+import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import {
   groupUpdate as groupUpdateUseCase,
   markGroupUpdateInterrupted as markGroupUpdateInterruptedUseCase,
+  MIGRATION_FAILED_CODE,
   type GroupUpdateRepoResult,
   type GroupUpdateScope,
+  type GroupUpdateSelectionItem,
+  type OnUpdatePhase,
   type UpdateBlocker,
   type UpdateBlockerChoice,
+  type UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
+import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
+import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
+import { err, ok, type Result } from '../../../../../core/result.js';
+import type { HealthState } from '../../../../../core/ports/docker.js';
+import { mergeLastServiceOutcomes, type ServiceIssue } from '../../zones/update/update-zone.logic.js';
+import {
+  confirmUpdateConfigDraft,
+  createUpdateConfigDraft,
+  type UpdateConfigDraft,
+} from '../../zones/update/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
+// Story 3.11: parses the optional service argument off `:update-service <name>` (mirrors
+// openEdtSwitchDialog's own query-arg parsing in edt-slice.ts): the command name is the
+// first whitespace-separated token, everything after it is the service name. Returns null
+// when no argument was given (the zone-selection / quick-pick path).
+export function parseUpdateServiceArg(fullQuery: string): string | null {
+  const parts = fullQuery.trim().split(/\s+/);
+  if (parts.length <= 1) {
+    return null;
+  }
+  const arg = parts.slice(1).join(' ').trim();
+  return arg === '' ? null : arg;
+}
+
 export type UpdateRunStatus = 'idle' | 'running' | 'done' | 'error';
+
+// Story 3.6: the Update zone's own health-poll cadence — independent of Logs zone's
+// LOGS_HEALTH_POLL_INTERVAL_MS (Never: "no shared subscription"), same 5s cadence by
+// convention rather than by coupling.
+export const UPDATE_HEALTH_POLL_INTERVAL_MS = 5000;
+
+// Story 3.7: per-run overrides threaded from the confirmed pre-run configuration into
+// the core use-case. Undefined fields fall back to the full default selection (no filter),
+// migrate ON, and clean restart OFF — the same configuration the CLI passes explicitly.
+export type UpdateRunOptions = {
+  selection?: GroupUpdateSelectionItem[];
+  runMigrations?: boolean;
+  cleanRestart?: boolean;
+};
+
+// Story 3.7: the pre-run configuration target — an EDT/all scope, or a single service
+// pre-scoped for story 3.9's reuse (`repoPath` disambiguates duplicate service names;
+// without it the service is resolved through the active EDT first, then every managed
+// repo).
+export type OpenUpdateConfigTarget = GroupUpdateScope | { service: string; repoPath?: string };
 
 export type UpdateSlice = {
   // The last (or in-flight) run: `updateResults`/`updateNote` carry a `done` run's outcome
@@ -38,175 +86,954 @@ export type UpdateSlice = {
   // driving side owns only menu rendering and the editor process.
   updateBlocker: UpdateBlocker | null;
   resolveUpdateBlocker: (choice: UpdateBlockerChoice) => void;
+  // Story 3.10: the live per-service run tracking. `liveServicePhase` holds the current
+  // step core's `onPhase` observer reported per service (cleared when the run lands);
+  // `liveServiceIssues` holds the per-service issue log — a blocker firing appends an
+  // unresolved entry, the next phase for that service flips its unresolved entries to
+  // resolved (core resumed, so the re-verify passed; a failed re-verify never emits the
+  // next phase), and a mid-run migration failure appends an unresolved `migration-failed`
+  // entry at completion. Both maps are cleared per run (at start, and on top-level
+  // error); the issue map additionally survives completion so a migration failure that
+  // ended its service mid-run stays inspectable until the next run clears it.
+  liveServicePhase: Record<string, UpdatePhase>;
+  liveServiceIssues: Record<string, ServiceIssue[]>;
   // Starts the core use-case in-process. A no-op-with-signal guard, not a throw, when the
   // store is unwired; a second call while a run is already in flight reports
   // `update-already-running` so double-Enter gives feedback instead of silence.
   // `scope` defaults to `'edt'` (bare update); `'all'` runs the all-repos maintenance mode.
-  runGroupUpdate: (scope?: GroupUpdateScope) => Promise<void>;
+  runGroupUpdate: (scope?: GroupUpdateScope, opts?: UpdateRunOptions) => Promise<void>;
+  // Story 3.7: the pre-run configuration screen's store state. Null when no screen is
+  // open; otherwise the draft the zone renders (rows pre-selected per scope, branches
+  // pre-filled from each manifest `sharedBranch`, migrate ON, clean restart OFF). Opened
+  // by every group-update trigger before any git/docker action runs — the run itself
+  // starts only through `confirmUpdateConfig` with exactly the confirmed configuration.
+  updateConfig: UpdateConfigDraft | null;
+  // Opens the configuration screen pre-scoped to the target, resolving every row's branch
+  // default before the screen renders. Rejects like `runGroupUpdate` when unwired, while a
+  // run is in flight (`update-already-running`), or when the target cannot be resolved
+  // (no-active-edt, edt-not-found, service-not-found) — the screen never opens in those
+  // cases, so no git/docker action ever runs unconfigured.
+  openUpdateConfig: (target: OpenUpdateConfigTarget) => Promise<void>;
+  // Story 3.11: the `:update-service [name]` entry point (mirrors openEdtSwitchDialog's
+  // query-arg contract in edt-slice.ts). With a name, it resolves straight to that
+  // service's pre-scoped single-service config (`service-not-found` when unknown, no
+  // screen). Without one, it raises `updateServiceSelectRequest` for the Update zone to
+  // consume — the zone pre-scopes to its highlighted row when one is selected, else opens
+  // the filterable service quick-pick below. The running/restart guards match
+  // openUpdateConfig's, so no trigger ever opens a screen mid-run.
+  openUpdateServiceDialog: (fullQuery: string) => Promise<void>;
+  // Story 3.11: set by openUpdateServiceDialog's no-arg path; consumed once by the Update
+  // zone's effect (selection → pinned config, else the quick-pick), which clears it via
+  // clearUpdateServiceSelectionRequest. A plain boolean (not a counter): a second no-arg
+  // command while one request is still unconsumed is the same intent, never a queue.
+  updateServiceSelectRequest: boolean;
+  clearUpdateServiceSelectionRequest: () => void;
+  // Story 3.11: the filterable service quick-pick's candidates (the no-arg
+  // `:update-service` fallback when the Update zone has no row selected, mirroring story
+  // 2.30's no-arg `edt-switch` pick). Null when the pick is closed. Filter text and cursor
+  // stay zone-local useState (only cross-visit state belongs in the slice); confirming a
+  // row calls the existing openUpdateConfig({service, repoPath}) directly.
+  updateServicePick: { service: string; repoPath: string }[] | null;
+  // Builds the pick candidates from every managed repo (the openAllReposConfig posture:
+  // unmanaged paths silently skipped; any other load failure still lists a row under its
+  // path-basename service so the run reports it instead of dropping it silently). Empty
+  // registry (or nothing listable) fails `no-services-selected` with no pick opened.
+  openUpdateServicePick: () => Promise<void>;
+  closeUpdateServicePick: () => void;
+  // Replaces the open draft wholesale (the zone computes the next draft through the
+  // dialog logic's pure functions); a no-op without an open screen.
+  setUpdateConfig: (draft: UpdateConfigDraft) => void;
+  // Closes the screen without starting anything — nothing ran.
+  closeUpdateConfig: () => void;
+  // Confirms the open draft: zero selected (or a blank branch) is rejected inline and the
+  // screen stays open; otherwise the screen closes and the run starts immediately with
+  // exactly that configuration, no further prompt.
+  confirmUpdateConfig: () => Promise<void>;
   // Marks the run's EDT `interrupted` after an abandoned run (quit-mid-run confirmation)
   // and refreshes `edts` so the next idle render offers a re-run — but only while a run
   // is actually in flight: a quit-confirm racing completion must never mark a healthy,
   // already-finished EDT interrupted. Never throws when unwired or when no run ever
   // targeted an EDT.
+  // Story 3.9: per-service standalone clean-restart in-flight map, keyed by resolved
+  // repoPath (the core `service:<resolved-repoPath>` lock identity). Checked alongside the
+  // global `updateStatus === 'running'` guard in both directions: a group run never starts
+  // while any standalone restart is in flight, and a standalone restart never starts while
+  // a group run (or the same service's own restart) is in flight. Serialization stays per
+  // service — a different idle service stays triggerable while one restarts.
+  serviceRestartInFlight: Record<string, 'restart'>;
+  // Runs story 3.9's standalone single-service clean restart in-process (recipe or plain
+  // fallback, core-side decision). The row shows `restarting` while the map holds its
+  // repoPath; the final `{service, outcome, detail?}` row merges into `lastServiceOutcomes`
+  // (never into the group run's `updateResults`). Contention surfaces as
+  // `update-already-running`, nothing started.
+  runServiceRestart: (repoPath: string) => Promise<void>;
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
+
+  // Story 3.6: live per-service container health for the Update zone's always-visible
+  // service list — keyed by repoPath, independent of Logs zone's own `logsPanes[*].health`
+  // (Never: "no shared subscription"). A repoPath with no entry yet (poll still in flight,
+  // or never started) is treated as `down` by the zone (matches Logs zone's own
+  // emptyPane default, and the I/O matrix's "glyph falls back to down until the first
+  // health poll resolves").
+  updateServiceHealth: Record<string, HealthState>;
+  // Story 3.6: the last completed run's per-service outcome, keyed by `service` (results
+  // carry no repoPath) — merged, never wholesale-replaced, by runGroupUpdate's success
+  // branch below, so a partial-scope run never drops another service's earlier outcome.
+  lastServiceOutcomes: Record<string, GroupUpdateRepoResult>;
+  // Starts (or restarts, on a changed service list) a one-shot-then-interval poll of every
+  // given repoPath's container health — mirrors logs-slice.ts's pollPaneHealth/
+  // startHealthPolling pattern, but one poll cycle covers every service in `edtsBranches`
+  // at once rather than one timer per pane (Code Map: "polls every service ... on
+  // mount/unmount, independent of Logs zone's pane subscriptions").
+  startUpdateHealthPolling: (repoPaths: readonly string[]) => void;
+  stopUpdateHealthPolling: () => void;
 };
+
+// Story 3.10: appends an unresolved issue entry for a service, deduped — a re-presented
+// menu for the same still-blocked kind (core loops the seam until re-verification passes)
+// must not stack duplicate rows; the single entry flips to resolved once the run resumes.
+function appendLiveIssue(
+  issues: Record<string, ServiceIssue[]>,
+  service: string,
+  issue: ServiceIssue,
+): Record<string, ServiceIssue[]> {
+  const existing = issues[service] ?? [];
+  if (existing.some((entry) => entry.kind === issue.kind && !entry.resolved)) {
+    return issues;
+  }
+  return { ...issues, [service]: [...existing, issue] };
+}
+
+// Story 3.10: marks a service's unresolved entries resolved — called when core emits the
+// service's next phase, which only happens after a passing re-verification (a failed
+// re-verify re-presents the menu instead of advancing the pipeline).
+function resolveLiveIssues(issues: Record<string, ServiceIssue[]>, service: string): Record<string, ServiceIssue[]> {
+  const existing = issues[service];
+  if (existing === undefined || existing.every((entry) => entry.resolved)) {
+    return issues;
+  }
+  return { ...issues, [service]: existing.map((entry) => (entry.resolved ? entry : { ...entry, resolved: true })) };
+}
 
 export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], UpdateSlice> {
   // Story 3.4: the pending seam promise's resolver — installed when core raises a blocker,
   // consumed when the zone menu dispatches a choice. Held in closure, never in Zustand
   // state (a function is non-serializable, and set() replacements must not drop it).
   let pendingBlockerResolve: ((choice: UpdateBlockerChoice) => void) | null = null;
-  return (set, get) => ({
-    updateStatus: 'idle',
-    updateResults: [],
-    updateNote: null,
-    updateTopic: null,
-    updateError: null,
-    updateErrorCode: null,
-    updateUlid: null,
-    updateScope: null,
-    updateBlocker: null,
-    resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
-      const resolve = pendingBlockerResolve;
-      pendingBlockerResolve = null;
-      set({ updateBlocker: null });
-      resolve?.(choice);
-    },
-    runGroupUpdate: async (scope: GroupUpdateScope = 'edt') => {
-      if (!deps || !deps.container || !deps.migration) {
-        set({
-          updateStatus: 'error',
-          updateError: 'No ports wired into the TUI store',
-          updateErrorCode: 'store-not-wired',
-        });
+  // Story 3.6: one shared poll timer for every currently-tracked service (not one per
+  // repoPath, unlike logs-slice.ts) — restarted whenever the tracked list changes so a
+  // service that appears/disappears from `edtsBranches` is picked up without leaking a
+  // stale timer. Held in closure, mirrors logs-slice.ts's own healthPollTimers convention.
+  let healthPollTimer: ReturnType<typeof setInterval> | null = null;
+  let pollingRepoPaths: readonly string[] = [];
+  // Story 3.11: the service quick-pick's generation — bumped on every open and every
+  // close so a slow enumeration from an earlier open can never pop the pick open after
+  // the user already cancelled (or re-opened). Held in closure, never in Zustand state.
+  let servicePickGeneration = 0;
+  return (set, get) => {
+    // Story 3.6: one poll cycle for a single service — resolves its manifest-declared
+    // container and inspects it, updating the badge only on success. Mirrors
+    // logs-slice.ts's own pollPaneHealth: any failure (manifest load fails, inspect
+    // errors, docker unreachable) keeps last-known health and never crashes the view (I/O
+    // matrix: "silent per-poll no-op, mirrors existing Logs-zone precedent").
+    async function pollServiceHealth(repoPath: string): Promise<void> {
+      if (!deps) {
         return;
       }
-      if (get().updateStatus === 'running') {
-        set({
-          updateStatus: 'error',
-          updateError: 'A group update is already in progress — wait for it to finish before starting another.',
-          updateErrorCode: 'update-already-running',
-        });
+      const manifestResult = await deps.manifest.load(repoPath);
+      if (!manifestResult.ok) {
         return;
       }
+      const healthResult = await getServiceHealth({ docker: deps.docker, container: manifestResult.data.container });
+      if (!healthResult.ok) {
+        return;
+      }
+      const health = healthResult.data;
+      set((state) => {
+        if (state.updateServiceHealth[repoPath] === health) {
+          return {};
+        }
+        return { updateServiceHealth: { ...state.updateServiceHealth, [repoPath]: health } };
+      });
+    }
+
+    function pollAll(repoPaths: readonly string[]): void {
+      for (const repoPath of repoPaths) {
+        void pollServiceHealth(repoPath);
+      }
+    }
+
+    // Story 3.7: resolves one repo's branch default for the config screen — the manifest
+    // `sharedBranch`, falling back to the schema default (`development`) when the manifest
+    // fails to load so the row still renders and the run itself reports the load failure
+    // as that service's `failed` row.
+    async function resolveBranchDefault(repoPath: string): Promise<string> {
+      if (!deps) {
+        return 'development';
+      }
+      const loaded = await deps.manifest.load(repoPath);
+      return loaded.ok ? loaded.data.sharedBranch : 'development';
+    }
+
+    function failConfigOpen(code: string, message: string): void {
+      set({ updateStatus: 'error', updateError: message, updateErrorCode: code });
+    }
+
+    // Opens the screen over a clean banner: a stale `done`/`error` outcome from the previous
+    // run must not linger underneath the new configuration. Per-run history
+    // (`updateResults`, `lastServiceOutcomes`) is kept — only the banner fields reset.
+    function openConfigDraft(scope: GroupUpdateScope, rows: { service: string; repoPath: string; sourceBranch: string }[]): void {
       set({
-        updateStatus: 'running',
-        updateResults: [],
-        updateNote: null,
-        updateTopic: null,
+        updateConfig: createUpdateConfigDraft(scope, rows),
+        updateStatus: 'idle',
         updateError: null,
         updateErrorCode: null,
-        updateUlid: null,
-        updateScope: scope,
-        updateBlocker: null,
+        updateNote: null,
       });
-      pendingBlockerResolve = null;
-      get().setRunInProgress(true);
-      // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
-      // unexpected failure in production) must still clear `runInProgress` — otherwise the
-      // AppShell `q` gate and every `runInProgress` reader wedge in `running` forever.
-      try {
-        const result = await groupUpdateUseCase({
-          edtRegistry: deps.edtRegistry,
-          state: deps.state,
-          manifest: deps.manifest,
-          git: deps.git,
-          container: deps.container,
-          migration: deps.migration,
-          lock: deps.lock,
-          registry: deps.registry,
-          scope,
-          // Story 3.4: the TUI backs the assisted-resolution seam — core pauses the run on
-          // each dirty/conflicted repo and waits here while the zone's modal menu collects
-          // the developer's choice (stash / open in editor / cancel repo / cancel run).
-          onUpdateBlocker: async (blocker) => {
-            set({ updateBlocker: blocker });
-            return new Promise<UpdateBlockerChoice>((resolve) => {
-              pendingBlockerResolve = resolve;
-            });
-          },
+    }
+
+    // Story 3.7: pre-scopes the screen to the active EDT's members (deduped by resolved
+    // repoPath, first wins — the core use-case's own rule).
+    async function openEdtConfig(): Promise<void> {
+      if (!deps) {
+        return;
+      }
+      const currentActive = await deps.state.readActiveEdt();
+      if (!currentActive.ok) {
+        failConfigOpen(currentActive.error.code, currentActive.error.message);
+        return;
+      }
+      if (currentActive.data === null) {
+        failConfigOpen('no-active-edt', 'No active EDT — switch to an EDT before running tui-back update');
+        return;
+      }
+      const listed = await deps.edtRegistry.list();
+      if (!listed.ok) {
+        failConfigOpen(listed.error.code, listed.error.message);
+        return;
+      }
+      const active = listed.data.find((candidate) => candidate.ulid === currentActive.data);
+      if (active === undefined) {
+        failConfigOpen('edt-not-found', `Active EDT "${currentActive.data}" is no longer registered`);
+        return;
+      }
+      const seen = new Set<string>();
+      const members = active.members.filter((member) => {
+        const key = resolve(member.repoPath);
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+      const rows = [];
+      for (const member of members) {
+        rows.push({
+          service: member.service,
+          repoPath: member.repoPath,
+          sourceBranch: await resolveBranchDefault(member.repoPath),
         });
-        if (result.ok) {
-          set({
-            updateStatus: 'done',
-            updateResults: result.data.results,
-            updateNote: result.data.note ?? null,
-            updateTopic: result.data.topic,
-            updateUlid: result.data.ulid,
-            updateScope: result.data.scope,
-          });
-        } else {
-          set({
-            updateStatus: 'error',
-            updateError: result.error.message,
-            updateErrorCode: result.error.code,
-          });
+      }
+      if (rows.length === 0) {
+        failConfigOpen('no-services-selected', `EDT "${active.topic}" has no member services — nothing to update.`);
+        return;
+      }
+      openConfigDraft('edt', rows);
+    }
+
+    // Story 3.11: the managed-repo enumeration shared by openAllReposConfig and
+    // openUpdateServicePick (one definition so the all-repos config and the service
+    // quick-pick can never list different services): the list-repos posture — unmanaged
+    // paths silently skipped; any other load failure still yields a row under its
+    // path-basename service so the run reports it instead of dropping it silently;
+    // deduped by resolved repoPath, first wins.
+    async function listManagedServiceRows(): Promise<
+      { ok: true; rows: { service: string; repoPath: string; sourceBranch: string }[] } | { ok: false; code: string; message: string }
+    > {
+      if (!deps) {
+        return { ok: false, code: 'store-not-wired', message: 'No ports wired into the TUI store' };
+      }
+      const listed = await deps.registry.list();
+      if (!listed.ok) {
+        return { ok: false, code: listed.error.code, message: listed.error.message };
+      }
+      const seen = new Set<string>();
+      const paths = listed.data
+        .filter((candidate) => candidate.trim() !== '')
+        .filter((candidate) => {
+          const key = resolve(candidate);
+          if (seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        });
+      const rows = [];
+      for (const repoPath of paths) {
+        const loaded = await deps.manifest.load(repoPath);
+        if (!loaded.ok) {
+          if (loaded.error.code === 'manifest-not-found') {
+            continue;
+          }
+          const base = repoPath.split('/').pop();
+          rows.push({ service: base !== undefined && base !== '' ? base : repoPath, repoPath, sourceBranch: 'development' });
+          continue;
         }
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
-      } finally {
-        // A run that threw while a blocker was still raised (a rejecting fake port under a
-        // test, a truly unexpected failure in production) must not leave the menu raised
-        // forever — the choice path already cleared it via resolveUpdateBlocker.
-        pendingBlockerResolve = null;
-        if (get().updateBlocker !== null) {
-          set({ updateBlocker: null });
-        }
-        get().setRunInProgress(false);
+        rows.push({ service: loaded.data.service, repoPath, sourceBranch: loaded.data.sharedBranch });
       }
-    },
-    markUpdateInterrupted: async () => {
-      // The run already finished (or never started) — the quit-confirm simply raced
-      // completion. Reset the flag and leave the outcome (and the EDT status) alone.
-      if (get().updateStatus !== 'running') {
-        get().setRunInProgress(false);
+      return { ok: true, rows };
+    }
+
+    // Story 3.7: pre-scopes the screen to every managed repo (the list-repos posture:
+    // unmanaged paths silently skipped; any other load failure still renders a row under
+    // its path-basename service so the run reports it instead of dropping it silently).
+    async function openAllReposConfig(): Promise<void> {
+      const enumerated = await listManagedServiceRows();
+      if (!enumerated.ok) {
+        // An unwired store degrades to the same explicit error state openUpdateConfig's
+        // own guard reports — never a throw, never a screen.
+        failConfigOpen(enumerated.code, enumerated.message);
         return;
       }
-      const ulid = get().updateUlid ?? get().activeEdt;
-      // An all-repos run targets no EDT — there is nothing to mark interrupted. Reset to
-      // idle (and clear the flag) without touching the EDT registry.
-      if (get().updateScope === 'all' || ulid === 'all') {
-        get().setRunInProgress(false);
-        set({ updateStatus: 'idle' });
+      if (enumerated.rows.length === 0) {
+        failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
         return;
       }
-      if (!deps || ulid === null) {
-        get().setRunInProgress(false);
-        set({ updateStatus: 'idle' });
+      openConfigDraft('all', enumerated.rows);
+    }
+
+    // Story 3.7: the reusable pre-scoped entry point (story 3.9's single-service update
+    // reuses it): exactly one row. An explicit `repoPath` pins the repo directly;
+    // otherwise the service resolves through the active EDT's members first, then every
+    // managed repo. The run scope follows where the service was found.
+    async function openSingleServiceConfig(service: string, repoPath?: string): Promise<void> {
+      if (!deps) {
         return;
       }
-      // A setStatus/loadEdts failure surfaces as an error state — never a silent return to
-      // `idle` pretending the interruption was recorded.
-      try {
-        const marked = await markGroupUpdateInterruptedUseCase(deps.edtRegistry, ulid);
-        if (!marked.ok) {
-          set({ updateStatus: 'error', updateError: marked.error.message, updateErrorCode: marked.error.code });
+      if (repoPath !== undefined) {
+        const loaded = await deps.manifest.load(repoPath);
+        if (!loaded.ok) {
+          failConfigOpen(loaded.error.code, loaded.error.message);
           return;
         }
-        set({ updateStatus: 'idle' });
-        // Refresh the registry entries so the next idle render sees the `interrupted`
-        // status and offers a re-run (mirrors loadEdts' own mount-effect idiom).
-        await get().loadEdts();
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
-      } finally {
-        get().setRunInProgress(false);
+        const scope = await scopeForRepoPath(repoPath);
+        if (!scope.ok) {
+          failConfigOpen(scope.error.code, scope.error.message);
+          return;
+        }
+        openConfigDraft(scope.data, [
+          { service: loaded.data.service, repoPath, sourceBranch: loaded.data.sharedBranch },
+        ]);
+        return;
       }
-    },
-    clearUpdate: () =>
-      set({
-        updateStatus: 'idle',
-        updateResults: [],
-        updateNote: null,
-        updateTopic: null,
-        updateError: null,
-        updateErrorCode: null,
-        updateUlid: null,
-        updateScope: null,
-        updateBlocker: null,
-      }),
-  });
+      const currentActive = await deps.state.readActiveEdt();
+      if (currentActive.ok && currentActive.data !== null) {
+        const listed = await deps.edtRegistry.list();
+        if (!listed.ok) {
+          failConfigOpen(listed.error.code, listed.error.message);
+          return;
+        }
+        const active = listed.data.find((candidate) => candidate.ulid === currentActive.data);
+        const wanted = service.toLowerCase();
+        const member = active?.members.find((candidate) => candidate.service.toLowerCase() === wanted);
+        if (member !== undefined) {
+          openConfigDraft('edt', [
+            { service: member.service, repoPath: member.repoPath, sourceBranch: await resolveBranchDefault(member.repoPath) },
+          ]);
+          return;
+        }
+      }
+      const registered = await deps.registry.list();
+      if (!registered.ok) {
+        failConfigOpen(registered.error.code, registered.error.message);
+        return;
+      }
+      for (const candidate of registered.data) {
+        if (candidate.trim() === '') {
+          continue;
+        }
+        const loaded = await deps.manifest.load(candidate);
+        if (loaded.ok && loaded.data.service.toLowerCase() === service.toLowerCase()) {
+          openConfigDraft('all', [
+            { service: loaded.data.service, repoPath: candidate, sourceBranch: loaded.data.sharedBranch },
+          ]);
+          return;
+        }
+      }
+      failConfigOpen('service-not-found', `Service "${service}" is neither a member of the active EDT nor a managed repo`);
+    }
+
+    // The run scope for a pinned repoPath: `edt` when it is a member of the active EDT,
+    // `all` otherwise (the core use-case's unexpected-branch gate only applies under `edt`).
+    // A null active pointer still resolves to `all` (no EDT to gate against), but a failing
+    // state read or registry list rejects the open with the underlying error instead of
+    // silently downgrading the gate away.
+    async function scopeForRepoPath(repoPath: string): Promise<Result<GroupUpdateScope>> {
+      if (!deps) {
+        return err('internal-error', 'No ports wired into the TUI store');
+      }
+      const currentActive = await deps.state.readActiveEdt();
+      if (!currentActive.ok) {
+        return err(currentActive.error.code, currentActive.error.message);
+      }
+      if (currentActive.data === null) {
+        return ok('all');
+      }
+      const listed = await deps.edtRegistry.list();
+      if (!listed.ok) {
+        return err(listed.error.code, listed.error.message);
+      }
+      const active = listed.data.find((candidate) => candidate.ulid === currentActive.data);
+      const wanted = resolve(repoPath);
+      return ok(active !== undefined && active.members.some((member) => resolve(member.repoPath) === wanted) ? 'edt' : 'all');
+    }
+
+    return {
+      updateStatus: 'idle',
+      updateResults: [],
+      updateNote: null,
+      updateTopic: null,
+      updateError: null,
+      updateErrorCode: null,
+      updateUlid: null,
+      updateScope: null,
+      updateBlocker: null,
+      liveServicePhase: {},
+      liveServiceIssues: {},
+      resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
+        const resolve = pendingBlockerResolve;
+        pendingBlockerResolve = null;
+        set({ updateBlocker: null });
+        resolve?.(choice);
+      },
+      runGroupUpdate: async (scope: GroupUpdateScope = 'edt', opts: UpdateRunOptions = {}) => {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        set({
+          updateStatus: 'running',
+          updateResults: [],
+          updateNote: null,
+          updateTopic: null,
+          updateError: null,
+          updateErrorCode: null,
+          updateUlid: null,
+          updateScope: scope,
+          updateBlocker: null,
+          // Story 3.10: a fresh run starts with a fresh live view — stale phases and
+          // resolved/unresolved entries from the previous run never leak into this one.
+          liveServicePhase: {},
+          liveServiceIssues: {},
+        });
+        pendingBlockerResolve = null;
+        get().setRunInProgress(true);
+        // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
+        // unexpected failure in production) must still clear `runInProgress` — otherwise the
+        // AppShell `q` gate and every `runInProgress` reader wedge in `running` forever.
+        try {
+          const result = await groupUpdateUseCase({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            restart: deps.restart,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope,
+            // Story 3.7: the confirmed pre-run configuration (or the full defaults when the
+            // run started without a screen — selection omitted, migrate ON, clean OFF).
+            ...(opts.selection !== undefined ? { selection: opts.selection } : {}),
+            ...(opts.runMigrations !== undefined ? { runMigrations: opts.runMigrations } : {}),
+            ...(opts.cleanRestart !== undefined ? { cleanRestart: opts.cleanRestart } : {}),
+            // Story 3.4: the TUI backs the assisted-resolution seam — core pauses the run on
+            // each dirty/conflicted repo and waits here while the zone's modal menu collects
+            // the developer's choice (stash / open in editor / cancel repo / cancel run).
+            // Story 3.10: raising the menu also appends the live issue-log entry (unresolved
+            // until the run re-verifies and moves on).
+            onUpdateBlocker: async (blocker) => {
+              set((state) => ({
+                updateBlocker: blocker,
+                liveServiceIssues: appendLiveIssue(state.liveServiceIssues, blocker.service, {
+                  kind: blocker.kind,
+                  detail: blocker.repoPath,
+                  resolved: false,
+                }),
+              }));
+              return new Promise<UpdateBlockerChoice>((resolve) => {
+                pendingBlockerResolve = resolve;
+              });
+            },
+            // Story 3.10: the TUI backs the live-phase observer — core reports each
+            // service's current step at its phase boundaries. The next phase for a service
+            // implies its re-verification passed, so its unresolved entries flip to
+            // resolved here (a failed re-verify never advances the pipeline).
+            onPhase: ((service: string, phase: UpdatePhase) => {
+              set((state) => ({
+                liveServicePhase: { ...state.liveServicePhase, [service]: phase },
+                liveServiceIssues: resolveLiveIssues(state.liveServiceIssues, service),
+              }));
+            }) satisfies OnUpdatePhase,
+          });
+          if (result.ok) {
+            set((state) => {
+              // Story 3.10: a migration failure ends its service mid-run while the run
+              // continues — core reports it only in the final rows, so the unresolved
+              // `migration-failed` entries are derived here at completion (the detail pane
+              // itself reverts to the final-outcome view; the entries stay inspectable in
+              // the map until the next run clears them).
+              let liveServiceIssues = state.liveServiceIssues;
+              for (const row of result.data.results) {
+                if (row.outcome === 'failed' && row.detail?.code === MIGRATION_FAILED_CODE) {
+                  liveServiceIssues = appendLiveIssue(liveServiceIssues, row.service, {
+                    kind: 'migration-failed',
+                    detail: row.detail.message,
+                    resolved: false,
+                  });
+                }
+              }
+              return {
+                updateStatus: 'done',
+                updateResults: result.data.results,
+                updateNote: result.data.note ?? null,
+                updateTopic: result.data.topic,
+                updateUlid: result.data.ulid,
+                updateScope: result.data.scope,
+                // Story 3.10: the live step clears with the run — revisiting a covered
+                // service shows the final per-service outcome (the 3.6 idle view).
+                liveServicePhase: {},
+                liveServiceIssues,
+                // Story 3.6: merged, never wholesale-replaced — a partial-scope run (a single
+                // EDT) must never drop another service's earlier outcome.
+                lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, result.data.results),
+              };
+            });
+          } else {
+            set({
+              updateStatus: 'error',
+              updateError: result.error.message,
+              updateErrorCode: result.error.code,
+              // Story 3.10: a top-level rejection ran nothing — no live state survives it.
+              liveServicePhase: {},
+              liveServiceIssues: {},
+            });
+          }
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          set({
+            updateStatus: 'error',
+            updateError: detail,
+            updateErrorCode: 'internal-error',
+            liveServicePhase: {},
+            liveServiceIssues: {},
+          });
+        } finally {
+          // A run that threw while a blocker was still raised (a rejecting fake port under a
+          // test, a truly unexpected failure in production) must not leave the menu raised
+          // forever — the choice path already cleared it via resolveUpdateBlocker.
+          pendingBlockerResolve = null;
+          if (get().updateBlocker !== null) {
+            set({ updateBlocker: null });
+          }
+          get().setRunInProgress(false);
+        }
+      },
+      updateConfig: null,
+      updateServiceSelectRequest: false,
+      updateServicePick: null,
+      serviceRestartInFlight: {},
+      openUpdateConfig: async (target: OpenUpdateConfigTarget) => {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (typeof target === 'string') {
+          if (target === 'all') {
+            await openAllReposConfig();
+          } else {
+            await openEdtConfig();
+          }
+          return;
+        }
+        await openSingleServiceConfig(target.service, target.repoPath);
+      },
+      openUpdateServiceDialog: async (fullQuery: string) => {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        const service = parseUpdateServiceArg(fullQuery);
+        if (service !== null) {
+          // A previously raised no-arg request must not survive: the zone would consume it
+          // into a second screen on top of this one.
+          set({ updateServiceSelectRequest: false });
+          await openSingleServiceConfig(service);
+          return;
+        }
+        // No argument: the Update zone consumes this — its highlighted row pre-scopes the
+        // config when one is selected, else the filterable service quick-pick opens.
+        set({ updateServiceSelectRequest: true });
+      },
+      clearUpdateServiceSelectionRequest: () => {
+        if (get().updateServiceSelectRequest) {
+          set({ updateServiceSelectRequest: false });
+        }
+      },
+      openUpdateServicePick: async () => {
+        if (!deps || !deps.container || !deps.migration || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateStatus: 'error',
+            updateError: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        const generation = ++servicePickGeneration;
+        const enumerated = await listManagedServiceRows();
+        if (generation !== servicePickGeneration) {
+          // Cancelled (or superseded by a newer open) while enumerating — never pop a
+          // stale pick open over whatever the developer sees now.
+          return;
+        }
+        if (!enumerated.ok) {
+          failConfigOpen(enumerated.code, enumerated.message);
+          return;
+        }
+        if (enumerated.rows.length === 0) {
+          failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
+          return;
+        }
+        // Opening the pick runs no git/docker action and starts no run — like the config
+        // screen, over a clean banner.
+        set({
+          updateServicePick: enumerated.rows.map((row) => ({ service: row.service, repoPath: row.repoPath })),
+          updateStatus: 'idle',
+          updateError: null,
+          updateErrorCode: null,
+          updateNote: null,
+        });
+      },
+      closeUpdateServicePick: () => {
+        servicePickGeneration += 1;
+        if (get().updateServicePick !== null) {
+          set({ updateServicePick: null });
+        }
+      },
+      setUpdateConfig: (draft: UpdateConfigDraft) => {
+        if (get().updateConfig === null) {
+          return;
+        }
+        set({ updateConfig: draft });
+      },
+      closeUpdateConfig: () => {
+        set({ updateConfig: null });
+      },
+      confirmUpdateConfig: async () => {
+        const draft = get().updateConfig;
+        if (draft === null) {
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateConfig: {
+              ...draft,
+              error: 'A group update is already in progress — wait for it to finish before starting another.',
+            },
+          });
+          return;
+        }
+        if (Object.keys(get().serviceRestartInFlight).length > 0) {
+          set({
+            updateConfig: {
+              ...draft,
+              error: 'A service restart is already in progress — wait for it to finish before starting a group update.',
+            },
+          });
+          return;
+        }
+        const confirmed = confirmUpdateConfigDraft(draft);
+        if (!confirmed.ok) {
+          set({ updateConfig: { ...draft, error: confirmed.error } });
+          return;
+        }
+        const snapshot = draft;
+        set({ updateConfig: null });
+        await get().runGroupUpdate(confirmed.config.scope, {
+          selection: confirmed.config.selection,
+          runMigrations: confirmed.config.runMigrations,
+          cleanRestart: confirmed.config.cleanRestart,
+        });
+        // A core pre-lock rejection (`unknown-branch`, `no-services-selected` — both are
+        // only ever returned before any lock is taken, so nothing ran) restores the screen
+        // with the message inline instead of destroying the confirmed selection, toggles,
+        // and branch edits. The run banner resets to idle around it, mirroring the
+        // zero-selection inline pattern above.
+        const rejection = get().updateErrorCode;
+        if (get().updateStatus === 'error' && (rejection === 'unknown-branch' || rejection === 'no-services-selected')) {
+          set({
+            updateConfig: { ...snapshot, error: get().updateError ?? 'The run was rejected before starting.' },
+            updateStatus: 'idle',
+            updateError: null,
+            updateErrorCode: null,
+            updateNote: null,
+            updateScope: null,
+            updateUlid: null,
+          });
+        }
+      },
+      runServiceRestart: async (repoPath: string) => {
+        if (!deps || !deps.container || !deps.restart) {
+          set({
+            updateStatus: 'error',
+            updateError: 'No ports wired into the TUI store',
+            updateErrorCode: 'store-not-wired',
+          });
+          return;
+        }
+        if (get().updateStatus === 'running') {
+          set({
+            updateStatus: 'error',
+            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        const key = resolve(repoPath);
+        if (get().serviceRestartInFlight[key] !== undefined) {
+          set({
+            updateStatus: 'error',
+            updateError: `A restart for ${repoPath} is already in progress — wait for it to finish before starting another.`,
+            updateErrorCode: 'update-already-running',
+          });
+          return;
+        }
+        // A stale contention banner from an earlier rejection must not linger underneath
+        // a newly started restart — the row's own `restarting` badge is the live signal.
+        if (get().updateStatus === 'error' && get().updateErrorCode === 'update-already-running') {
+          set({ updateStatus: 'idle', updateError: null, updateErrorCode: null });
+        }
+        set((state) => ({ serviceRestartInFlight: { ...state.serviceRestartInFlight, [key]: 'restart' as const } }));
+        // Story 3.10: the standalone path reports through the same live-phase channel —
+        // the emitted service name is captured so only this service's key is cleared below
+        // (a group run can never be in flight alongside, per the guards above).
+        let restartService: string | null = null;
+        try {
+          const result = await serviceRestartUseCase({
+            manifest: deps.manifest,
+            container: deps.container,
+            restart: deps.restart,
+            lock: deps.lock,
+            repoPath,
+            onPhase: ((service: string, phase: UpdatePhase) => {
+              restartService = service;
+              set((state) => {
+                const liveServicePhase = { ...state.liveServicePhase, [service]: phase };
+                // Story 3.10 review fix: a standalone restart opens with a fresh issue
+                // log for its service — stale group-run entries never render under its
+                // live step. The use-case emits exactly once (at the restart boundary),
+                // so resetting on emission is start-scoped, never mid-run.
+                if (state.liveServiceIssues[service] === undefined) {
+                  return { liveServicePhase };
+                }
+                const liveServiceIssues = { ...state.liveServiceIssues };
+                delete liveServiceIssues[service];
+                return { liveServicePhase, liveServiceIssues };
+              });
+            }) satisfies OnUpdatePhase,
+          });
+          if (result.ok) {
+            set((state) => ({
+              lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, [result.data]),
+            }));
+          } else {
+            set({
+              updateStatus: 'error',
+              updateError: result.error.message,
+              updateErrorCode: result.error.code,
+            });
+          }
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
+        } finally {
+          set((state) => {
+            if (state.serviceRestartInFlight[key] === undefined) {
+              return {};
+            }
+            const next = { ...state.serviceRestartInFlight };
+            delete next[key];
+            // Story 3.10: the standalone live step clears with its action.
+            if (restartService === null || state.liveServicePhase[restartService] === undefined) {
+              return { serviceRestartInFlight: next };
+            }
+            const phases = { ...state.liveServicePhase };
+            delete phases[restartService];
+            return { serviceRestartInFlight: next, liveServicePhase: phases };
+          });
+        }
+      },
+      markUpdateInterrupted: async () => {
+        // The run already finished (or never started) — the quit-confirm simply raced
+        // completion. Reset the flag and leave the outcome (and the EDT status) alone.
+        if (get().updateStatus !== 'running') {
+          get().setRunInProgress(false);
+          return;
+        }
+        const ulid = get().updateUlid ?? get().activeEdt;
+        // An all-repos run targets no EDT — there is nothing to mark interrupted. Reset to
+        // idle (and clear the flag) without touching the EDT registry.
+        if (get().updateScope === 'all' || ulid === 'all') {
+          get().setRunInProgress(false);
+          set({ updateStatus: 'idle' });
+          return;
+        }
+        if (!deps || ulid === null) {
+          get().setRunInProgress(false);
+          set({ updateStatus: 'idle' });
+          return;
+        }
+        // A setStatus/loadEdts failure surfaces as an error state — never a silent return to
+        // `idle` pretending the interruption was recorded.
+        try {
+          const marked = await markGroupUpdateInterruptedUseCase(deps.edtRegistry, ulid);
+          if (!marked.ok) {
+            set({ updateStatus: 'error', updateError: marked.error.message, updateErrorCode: marked.error.code });
+            return;
+          }
+          set({ updateStatus: 'idle' });
+          // Refresh the registry entries so the next idle render sees the `interrupted`
+          // status and offers a re-run (mirrors loadEdts' own mount-effect idiom).
+          await get().loadEdts();
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          set({ updateStatus: 'error', updateError: detail, updateErrorCode: 'internal-error' });
+        } finally {
+          get().setRunInProgress(false);
+        }
+      },
+      clearUpdate: () =>
+        set({
+          updateStatus: 'idle',
+          updateResults: [],
+          updateNote: null,
+          updateTopic: null,
+          updateError: null,
+          updateErrorCode: null,
+          updateUlid: null,
+          updateScope: null,
+          updateBlocker: null,
+          updateConfig: null,
+          updateServiceSelectRequest: false,
+          updateServicePick: null,
+          serviceRestartInFlight: {},
+          liveServicePhase: {},
+          liveServiceIssues: {},
+        }),
+
+      updateServiceHealth: {},
+      lastServiceOutcomes: {},
+      startUpdateHealthPolling: (repoPaths) => {
+        pollingRepoPaths = [...repoPaths];
+        pollAll(pollingRepoPaths);
+        if (healthPollTimer !== null) {
+          clearInterval(healthPollTimer);
+        }
+        healthPollTimer = setInterval(() => {
+          pollAll(pollingRepoPaths);
+        }, UPDATE_HEALTH_POLL_INTERVAL_MS);
+        // Never keep the process alive for a poll timer alone (tests, abnormal exits) —
+        // mirrors logs-slice.ts's own startHealthPolling.
+        const unrefable = healthPollTimer as unknown as { unref?: () => void };
+        if (typeof unrefable.unref === 'function') {
+          unrefable.unref();
+        }
+      },
+      stopUpdateHealthPolling: () => {
+        if (healthPollTimer !== null) {
+          clearInterval(healthPollTimer);
+          healthPollTimer = null;
+        }
+        pollingRepoPaths = [];
+      },
+    };
+  };
 }

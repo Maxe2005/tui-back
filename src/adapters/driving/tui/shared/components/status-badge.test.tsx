@@ -11,6 +11,10 @@ const ALL_STATES = [
   'in-progress',
   'selection',
   'action',
+  'restarting',
+  'updating',
+  'migrating',
+  'error',
 ] as const;
 
 describe('STATUS_BADGES', () => {
@@ -43,6 +47,17 @@ describe('STATUS_BADGES', () => {
     expect(STATUS_BADGES.action).toEqual({ glyph: '▸', color: colors.accent });
   });
 
+  it('story 3.6: the Update zone status set gets its own distinct glyphs, never bridged through in-progress (AC2)', () => {
+    const { colors } = theme;
+    expect(STATUS_BADGES.restarting).toEqual({ glyph: '↻', color: colors.info });
+    expect(STATUS_BADGES.updating).toEqual({ glyph: '⇄', color: colors.info });
+    expect(STATUS_BADGES.migrating).toEqual({ glyph: '⇒', color: colors.info });
+    expect(STATUS_BADGES.error).toEqual({ glyph: '✖', color: colors.error });
+    const newGlyphs = [STATUS_BADGES.restarting.glyph, STATUS_BADGES.updating.glyph, STATUS_BADGES.migrating.glyph];
+    expect(new Set(newGlyphs).size).toBe(newGlyphs.length);
+    expect(STATUS_BADGES.restarting.glyph).not.toBe(STATUS_BADGES['in-progress'].glyph);
+  });
+
   it('selection and action use accent, never a status color (AC1, 1.8 AC4)', () => {
     const { colors } = theme;
     const statusColors = new Set<string>([
@@ -67,6 +82,10 @@ describe('StatusBadge', () => {
     ['in-progress', '⣾'],
     ['selection', '›'],
     ['action', '▸'],
+    ['restarting', '↻'],
+    ['updating', '⇄'],
+    ['migrating', '⇒'],
+    ['error', '✖'],
   ] as const)('renders the %s glyph via Ink (AC1)', async (state, glyph) => {
     const output = await renderToString(<StatusBadge state={state} />);
     expect(output).toContain(glyph);

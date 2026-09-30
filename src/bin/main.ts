@@ -13,12 +13,15 @@ import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
+import { createRestartPort } from '../adapters/driven/restart/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
+import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
 
 const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
@@ -34,6 +37,7 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
+const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 
@@ -46,6 +50,28 @@ const state = createStatePort(stateFile);
 // `edt create` locks on the EDT registry file the same way.
 const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
+// AD-3's own isTTY (stdout-only) governs output rendering (human text vs. one JSON line).
+// Review fix (story 2.33): the *interactive-prompt* gate `registry clean` uses is a
+// different, stricter question — can we actually read a y/N answer back? — so it also
+// requires stdin to be a TTY. Piped/redirected stdin with a TTY stdout (e.g. a wrapper
+// script) must never let the CLI block on (or silently misread) an `rl.question()` prompt
+// with nothing live on the other end.
+const isTTY = process.stdout.isTTY === true;
+const interactiveIsTTY = isTTY && process.stdin.isTTY === true;
+// Story 6.1: the route-explorer module's scanner, resolved out of the statically compiled
+// module registry by manifest module id (AD-5) — manifests only ever select this key,
+// never supply code. The lookup cannot fail in practice (registry and key are compiled
+// together); the throw is a loud programmer-error signal, raised before any stdout output
+// so the AD-3 envelope contract is unaffected.
+const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
+if (routeExplorer === undefined) {
+  throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
+}
+// Story 6.2: the fire-request use-case needs the module's auth port alongside its
+// scanner — same static-registry reasoning as the scanner lookup above.
+if (routeExplorer.auth === undefined) {
+  throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
+}
 const subcommands = buildSubcommands({
   registry,
   manifest,
@@ -57,9 +83,13 @@ const subcommands = buildSubcommands({
   git,
   container,
   migration,
+  restart,
   state,
+  isTTY: interactiveIsTTY,
+  scanner: routeExplorer.scanner,
+  auth: routeExplorer.auth,
 });
 
-const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, process.stdout.isTTY === true);
+const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);
 process.stdout.write(output);
 process.exitCode = exitCode;

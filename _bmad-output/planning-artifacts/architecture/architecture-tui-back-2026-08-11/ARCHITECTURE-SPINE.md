@@ -30,12 +30,13 @@ src/
     scripts/                # script/subcommand use-cases: group-update, migrations, propagation...
     logs/                   # aggregation, windowing, fire-correlation
     routes/                 # browse/fire/save, saved-request library, learned affected-service sets
-    ports/                  # GitPort, ContainerPort, ProcessPort, ManifestPort, EdtStorePort, GlobalStorePort,
-                             # RegistryPort, RouteScannerPort, DevAuthPort, SharedTypesPort
+    ports/                  # GitPort, ContainerPort, RestartPort, ProcessPort, ManifestPort, EdtStorePort,
+                             # GlobalStorePort, RegistryPort, RouteScannerPort, DevAuthPort, SharedTypesPort
   adapters/
     driven/
       git/                  # branch-scope safety gate lives here (AD-8)
       docker/                # dockerode
+      restart/               # runs a manifest-declared clean-restart recipe, one command at a time
       process/               # child_process, structured stdout + exit code
       persistence/           # better-sqlite3: EdtStore, GlobalStore
       manifest/              # .tui-back.yaml read + zod validation
@@ -96,7 +97,7 @@ graph LR
 
 - **Binds:** FR-2, FR-19, FR-20
 - **Prevents:** activating a module, or onboarding a new repo, ever requiring a core code change.
-- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), `container` (docker-compose/container target name), optional `migrationCommand` (absent means the service has no migrations — a group update skips the migration step for it without error, FR-10/FR-12), optional `sharedBranch` (default `development` — FR-8), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
+- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), `container` (docker-compose/container target name), optional `migrationCommand` (absent means the service has no migrations — a group update skips the migration step for it without error, FR-10/FR-12), optional `restartCommands` (an ordered list of shell commands, e.g. `["npm i", "npm run d:up"]` — absent means the service has no clean-restart recipe and a group update or standalone trigger falls back to a plain container restart, FR-26), optional `sharedBranch` (default `development` — FR-8), optional `protectedBranches` (a list of branch names the tool must never claim for an EDT — FR-7; absent means only `sharedBranch` is protected; added 2026-09-28, Story 2.42), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
 
 ### AD-5 — Module implementations are statically registered, never dynamically loaded
 
@@ -120,7 +121,11 @@ graph LR
 
 - **Binds:** FR-6, FR-7, FR-8, FR-10, FR-11, FR-15
 - **Prevents:** a call site forgetting the rule and reaching a destructive git operation outside its intended scope.
-- **Rule:** every git write passes through `adapters/driven/git`, which rejects — before any `git` invocation — a write targeting `development`/preprod/prod or any branch not the current EDT's own registered branch for that service. The git-adapter resolves that allowed-branch context itself, by reading current EDT/manifest state directly at write time through `EdtStorePort`/`ManifestPort` — it never trusts a branch name passed in by the caller, closing the gap where a stale or malicious caller-supplied value could bypass the check. No commit or push happens without the developer's explicit approval at the moment it happens. Uncommitted work is always auto-preserved before a tool-triggered branch switch, and the resulting state is re-verified, never assumed.
+- **Rule:** every git write passes through `adapters/driven/git`, which rejects — before any `git` invocation — a write targeting a protected branch of that service (its manifest `protectedBranches` ∪ `sharedBranch`, resolved from the manifest at write time), any branch not the current EDT's own registered branch for that service, or a rename whose old or new name is registered as another EDT's own branch. The git-adapter resolves that allowed-branch context itself, by reading current EDT/manifest state directly at write time through `EdtStorePort`/`ManifestPort` — it never trusts a branch name passed in by the caller, closing the gap where a stale or malicious caller-supplied value could bypass the check. No commit or push happens without the developer's explicit approval at the moment it happens. Uncommitted work is always auto-preserved before a tool-triggered branch switch, and the resulting state is re-verified, never assumed.
+
+> Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): protected set is manifest-defined per service; renames are gated against other EDTs' ownership.
+
+> Amended 2026-09-24 (Sprint Change Proposal, Story 2.39): `GitPort.discardAll` is the single destructive, non-branch-scoped write; it is guarded structurally (explicit per-repo `discard` resolution, still-dirty re-check, sole caller `switch.ts`) rather than by the branch-scope gate.
 
 ### AD-9 — Single-TUI enforcement plus a per-EDT/repo action lock
 
@@ -163,6 +168,12 @@ graph LR
 - **Binds:** TUI navigation structure (Atelier UX spine's 6 zones)
 - **Prevents:** a zone's screen logic reaching across multiple unrelated core modules ad hoc, decoupling the UI's navigation model from the hexagonal capability split it's meant to present.
 - **Rule:** each zone under `adapters/driving/tui/` maps to exactly one core capability area — `edts/`→`core/edt`, `update/`→`core/scripts`, `logs/`→`core/logs`, `routes/`→`core/routes`, `shared-types/`→`adapters/driven/modules/shared-types` — except `dashboard/`, which is the one zone allowed to read (never write) across all of them for its aggregate view. Cross-zone visual components shared by the Atelier spine (list/detail split, modal-dialog, footer-hint) live in `tui/shared/`, imported by zones, never duplicated per zone.
+
+### AD-16 — Clean restart is a distinct port from the plain container restart
+
+- **Binds:** FR-26
+- **Prevents:** overloading `ContainerPort.restart` with two unrelated shapes (a single docker-runtime call vs. an ordered list of arbitrary shell commands), and a core use-case having to guess which one a manifest wants.
+- **Rule:** a manifest's `restartCommands` (AD-4) is executed through a new `RestartPort`, shaped like `MigrationPort` (repoPath + one command in, `{output}` or a failure detail out) but run once per declared command, in order, stopping on the first failure. Core decides which restart to perform — `RestartPort` when `restartCommands` is declared and the run's clean-restart toggle (FR-25) or a standalone trigger (Story 3.9) calls for it, `ContainerPort.restart` otherwise — never both for the same service in the same action.
 
 ## Consistency Conventions
 

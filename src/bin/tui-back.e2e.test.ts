@@ -369,7 +369,7 @@ describe('tui-back list-repos (black-box)', () => {
         'migrationCommand: npm run migration:run',
         'sharedBranch: development',
         'modules:',
-        '  route-explorer: {}',
+        '  bogus-module: {}',
         '',
       ].join('\n'),
     );
@@ -417,6 +417,156 @@ describe('tui-back list-repos (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('registry-invalid-format');
+  });
+});
+
+describe('tui-back list-routes (black-box, story 6.1)', () => {
+  const routesManifest = [
+    'service: api-gateway',
+    'container: api-gateway',
+    'sharedBranch: development',
+    'modules:',
+    '  route-explorer: {}',
+    '',
+  ].join('\n');
+
+  const spec = {
+    openapi: '3.0.0',
+    info: { title: 'Gateway', version: '1.0.0' },
+    paths: {
+      '/users': { get: { summary: 'List users' }, post: { summary: 'Create a user' } },
+      '/health': { get: {} },
+    },
+  };
+
+  async function makeRoutesRepo(specContent: string | null): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'tui-back-e2e-routes-'));
+    tmpDirs.push(dir);
+    await writeFile(join(dir, '.tui-back.yaml'), routesManifest);
+    if (specContent !== null) {
+      await writeFile(join(dir, 'openapi.json'), specContent);
+    }
+    return dir;
+  }
+
+  it('lists every discovered METHOD + path row as exactly one JSON line, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRoutesRepo(JSON.stringify(spec));
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        routes: [
+          { method: 'GET', path: '/users', summary: 'List users' },
+          { method: 'POST', path: '/users', summary: 'Create a user' },
+          { method: 'GET', path: '/health' },
+        ],
+      },
+    });
+  });
+
+  it('rejects a repo whose manifest does not activate route-explorer with route-exploration-not-activated, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(true);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('route-exploration-not-activated');
+    expect(parsed.error.message).toContain('No route list for this repo');
+  });
+
+  it('reports an unparsable spec as route-scan-failed, never as an empty list, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRoutesRepo('{ not valid json, [unclosed');
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('route-scan-failed');
+  });
+
+  it('returns a genuinely-empty ok list for a spec with zero paths, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRoutesRepo(JSON.stringify({ openapi: '3.0.0', info: {}, paths: {} }));
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['list-routes', repo], env);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { routes: [] } });
+  });
+
+  it('rejects a missing repoPath with missing-argument and an excess argument with invalid-argument', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const missing = runCli(['list-routes'], env);
+    expect(missing.status).toBe(1);
+    expect(JSON.parse(missing.stdout.trim())).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+
+    const excess = runCli(['list-routes', '/a', '/b'], env);
+    expect(excess.status).toBe(1);
+    expect(JSON.parse(excess.stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+});
+
+describe('tui-back fire-request (black-box, story 6.2)', () => {
+  // AD-3 envelope + arg-validation only: every case below rejects before any network
+  // call, so no live dev-gateway is needed (the manual live-fire check stays a human
+  // step per the spec's Ask First constraint).
+  it('rejects a missing repoPath with missing-argument as exactly one JSON line, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['fire-request'], env);
+
+    expect(status).toBe(1);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+  });
+
+  it('rejects bad arity and blank arguments with invalid-argument as exactly one JSON line, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    for (const args of [
+      ['fire-request', '/a'],
+      ['fire-request', '/a', 'GET'],
+      ['fire-request', '/a', 'GET', '/x', 'extra'],
+      ['fire-request', '/a', '  ', '/x'],
+    ]) {
+      const { status, stdout } = runCli(args, env);
+
+      expect(status).toBe(1);
+      expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+      expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+  });
+
+  it('rejects a repo whose manifest does not activate route-explorer with route-exploration-not-activated, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(true);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['fire-request', repo, 'GET', '/users'], env);
+
+    expect(status).toBe(1);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('route-exploration-not-activated');
   });
 });
 
@@ -486,14 +636,14 @@ describe('tui-back scan (black-box)', () => {
 });
 
 describe('tui-back --help (black-box)', () => {
-  it('lists every registered command, including edts, edt, and update, exit 0', () => {
+  it('lists every registered command, including edts, edt, update, list-routes, and fire-request, exit 0', () => {
     const { status, stdout } = runCli(['--help']);
 
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'registry', 'list-routes', 'fire-request']);
   });
 });
 
@@ -1123,8 +1273,8 @@ describe('tui-back edt switch (black-box)', () => {
   });
 
   it(
-    'round-trips uncommitted work across a switch: outgoing member is stashed onto the shared branch, ' +
-      'target member checks into its own branch, state.json + edts.yaml both reflect the new active EDT (manual-check scenario, AC)',
+    'round-trips uncommitted work across a switch: an outgoing member (state 1) is stashed under the outgoing tag, ' +
+      'lands clean on its shared branch, and pops back onto its own branch when switching back (story 2.39, manual-check scenario, AC)',
     async () => {
       const xdg = await makeTempDir();
       const env = createEnv(xdg);
@@ -1166,8 +1316,9 @@ describe('tui-back edt switch (black-box)', () => {
       // Dirty r1's working tree while "a" is active and r1 sits on feat/r1.
       await writeFile(join(r1, 'wip.txt'), 'uncommitted work');
 
-      // Switch a -> b: r1 is not a member of b, so it must be preserved (stashed) then reset
-      // onto the shared branch; r2 (b's member) checks into its own branch.
+      // Switch a -> b: r1 is a's member (state 1) and not b's, so its work is stashed under
+      // `tui-back:<a>` for a's return and r1 lands clean on the shared branch; r2 (b's
+      // member) checks into its own branch.
       const switchToB = runCli(['edt', 'switch', '--to', 'b'], env);
 
       expect(switchToB.status).toBe(0);
@@ -1181,12 +1332,10 @@ describe('tui-back edt switch (black-box)', () => {
         wasInterrupted: false,
       });
 
-      // r1: reset to the shared branch, working tree clean, uncommitted work preserved in a
-      // message-tagged stash (not lost).
+      // r1: on the shared branch, clean — the work never leaks out of its EDT (D1 gone).
       expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
       expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toBe('');
-      const r1Stash = runGit(r1, ['stash', 'list']).stdout;
-      expect(r1Stash).toContain(`tui-back:${ulidA}`);
+      expect(runGit(r1, ['stash', 'list']).stdout.trim()).toContain(`tui-back:${ulidA}`);
 
       // r2: checked into its own branch (b's).
       expect(runGit(r2, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r2');
@@ -1206,8 +1355,50 @@ describe('tui-back edt switch (black-box)', () => {
         results: [],
         wasInterrupted: false,
       });
+
+      // Switch back b -> a: r1 is a's member again and its a-tagged stash pops onto feat/r1.
+      const switchBackToA = runCli(['edt', 'switch', '--to', 'a'], env);
+      expect(switchBackToA.status).toBe(0);
+      expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/r1');
+      expect(await readFile(join(r1, 'wip.txt'), 'utf8')).toBe('uncommitted work');
+      expect(runGit(r1, ['stash', 'list']).stdout.trim()).toBe('');
     },
   );
+
+  it('fails safe on a dirty non-member: exits non-zero with switch-dirty-services-unresolved, touching nothing (story 2.39, AC)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const r1 = await makeCleanGitRepo();
+    const r2 = await makeCleanGitRepo();
+    await registerRepos([r1, r2], env);
+
+    const createA = runCli(
+      ['edt', 'create', '--topic', 'a', '--member', r1, '--create-branches', '--branch-name', 'feat/r1'],
+      env,
+    );
+    expect(createA.status).toBe(0);
+    const edtsBefore = await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8');
+
+    // r2 belongs to no EDT: its uncommitted work may only move under an explicit resolution.
+    await writeFile(join(r2, 'orphan.txt'), 'nobody owns this');
+
+    const switched = runCli(['edt', 'switch', '--to', 'a'], env);
+
+    expect(switched.status).not.toBe(0);
+    const parsed = JSON.parse(switched.stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('switch-dirty-services-unresolved');
+    expect(parsed.error.details).toEqual([
+      { service: 'route-explorer', repoPath: expect.stringContaining(r2.split('/').pop() as string), scope: 'non-member', currentBranch: 'development' },
+    ]);
+
+    // Zero repos touched, state.json/edts.yaml untouched.
+    expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+    expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
+    expect(runGit(r2, ['stash', 'list']).stdout.trim()).toBe('');
+    await expect(access(join(xdg, 'tui-back', 'state.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(edtsBefore);
+  });
 
   it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error (AC)', async () => {
     const xdg = await makeTempDir();
@@ -1357,6 +1548,9 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeGitRepo();
+    // Story 2.39: a first-ever switch refuses a dirty target member without a resolution, so
+    // the untracked manifest makeGitRepo() leaves behind is committed first.
+    commitManifest(repo);
     await registerRepos([repo], env);
     const created = runCli(
       ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
@@ -1449,6 +1643,20 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return [...lines, 'sharedBranch: development', 'modules: {}'].join('\n');
   }
 
+  // Story 3.8: the same manifest shape plus a declared clean-restart recipe. Commands are
+  // double-quoted so shell metacharacters survive the YAML round-trip.
+  function manifestYamlWithRestart(migrationCommand: string | null, restartCommands: string[]): string {
+    const lines = ['service: route-explorer', 'container: route-explorer'];
+    if (migrationCommand !== null) {
+      lines.push(`migrationCommand: "${migrationCommand}"`);
+    }
+    lines.push('sharedBranch: development', 'restartCommands:');
+    for (const command of restartCommands) {
+      lines.push(`  - "${command}"`);
+    }
+    return [...lines, 'modules: {}'].join('\n');
+  }
+
   async function registerRepos(repos: string[], env: NodeJS.ProcessEnv): Promise<void> {
     for (const repo of repos) {
       expect(runCli(['register', repo], env).status).toBe(0);
@@ -1465,14 +1673,31 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return stubDir;
   }
 
+  // Story 3.8: the same stub, but recording every invocation's argv — proves which restart
+  // path a run took (plain `docker restart` vs the recipe, which never shells out to
+  // docker at all).
+  async function makeLoggingDockerStub(): Promise<{ stubDir: string; logPath: string }> {
+    const stubDir = await mkdtemp(join(tmpdir(), 'tui-back-e2e-docker-'));
+    tmpDirs.push(stubDir);
+    const logPath = join(stubDir, 'argv.log');
+    await writeFile(join(stubDir, 'docker'), `#!/bin/sh\necho "$@" >> "${logPath}"\nexit 0\n`, { mode: 0o755 });
+    return { stubDir, logPath };
+  }
+
   // A member repo cloned from its own origin, sitting on a feature branch behind the
   // origin's development — the "member on feature branch, behind shared branch, clean
   // tree" matrix row. The clone carries a committed manifest, so the tree starts clean.
   // `migrationCommand` selects the committed manifest variant: a shell command the update
   // really executes (default `true`), or null for a manifest declaring no migrations.
   async function makeBehindMember(migrationCommand: string | null = 'true'): Promise<{ origin: string; repo: string }> {
+    return makeBehindMemberWithManifest(manifestYamlWithMigration(migrationCommand));
+  }
+
+  // Story 3.8: the same behind-member fixture but with a caller-supplied manifest —
+  // the recipe variants commit a manifest declaring `restartCommands`.
+  async function makeBehindMemberWithManifest(manifestYaml: string): Promise<{ origin: string; repo: string }> {
     const origin = await makeGitRepo();
-    await writeFile(join(origin, '.tui-back.yaml'), manifestYamlWithMigration(migrationCommand));
+    await writeFile(join(origin, '.tui-back.yaml'), manifestYaml);
     commitManifest(origin);
     const repo = await mkdtemp(join(tmpdir(), 'tui-back-e2e-clone-'));
     tmpDirs.push(repo);
@@ -1567,9 +1792,11 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const env = createEnv(xdg);
     const a = await makeBehindMember();
     const b = await makeBehindMember();
-    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch: a first-ever switch refuses a dirty member without an
+    // explicit resolution (story 2.39).
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1594,9 +1821,10 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer"}\n');
     runGit(a.repo, ['add', 'package.json']);
     expect(runGit(a.repo, ['commit', '-m', 'add package.json']).status).toBe(0);
-    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch (story 2.39: a first-ever switch refuses unresolved dirt).
+    await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1688,9 +1916,11 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch should-not-run.txt');
     const b = await makeBehindMember();
-    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
+    // Dirtied after the switch: a first-ever switch refuses a dirty member without an
+    // explicit resolution (story 2.39).
+    await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
     const { status, stdout } = runCli(['update'], dockerEnv);
@@ -1821,6 +2051,98 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(parsed.data.note.length).toBeGreaterThan(0);
   });
 
+  it('follows the new group-update signature with full defaults: one JSON line, scope edt, migrations on (story 3.7)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('touch migrated.txt');
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        ulid: expect.any(String),
+        topic: 'demo',
+        results: [{ service: 'route-explorer', outcome: 'updated' }],
+        scope: 'edt',
+      },
+    });
+    // runMigrations defaults to true with no new CLI flags: the marker migration ran.
+    await expect(access(join(a.repo, 'migrated.txt'))).resolves.toBeUndefined();
+  });
+
+  it('update --all --yes follows the new call-site defaults: scope all, migrations on, one JSON line (story 3.7)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMember('touch migrated.txt');
+    const b = await makeBehindMember('touch migrated.txt');
+    await registerRepos([a.repo, b.repo], env);
+    const dockerEnv = withDocker(env, await makeDockerStub());
+
+    const { status, stdout } = runCli(['update', '--all', '--yes'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout.trim())).toEqual({
+      ok: true,
+      data: {
+        ulid: 'all',
+        topic: 'all-repos',
+        results: [
+          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated' },
+        ],
+        scope: 'all',
+      },
+    });
+    // runMigrations defaults to true with no new CLI flags: both marker migrations ran.
+    await expect(access(join(a.repo, 'migrated.txt'))).resolves.toBeUndefined();
+    await expect(access(join(b.repo, 'migrated.txt'))).resolves.toBeUndefined();
+  });
+
+  it('falls back to the plain container restart when no recipe is declared (story 3.8)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const a = await makeBehindMemberWithManifest(manifestYamlWithMigration(null));
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    const { stubDir, logPath } = await makeLoggingDockerStub();
+    const dockerEnv = withDocker(env, stubDir);
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    // No recipe declared, so the run took the plain container-restart path.
+    expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
+  });
+
+  it('leaves a declared recipe untouched without the clean-restart toggle: plain restart runs (story 3.8)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    // The recipe would fail loudly (and mark the working tree) if it ever ran — the CLI
+    // takes no configuration, so clean restart stays OFF and the recipe must stay untouched.
+    const a = await makeBehindMemberWithManifest(manifestYamlWithRestart(null, ['touch recipe-ran.txt', 'exit 3']));
+    await registerRepos([a.repo], env);
+    await createAndSwitchEdt(env, 'demo', [a.repo]);
+    const { stubDir, logPath } = await makeLoggingDockerStub();
+    const dockerEnv = withDocker(env, stubDir);
+
+    const { status, stdout } = runCli(['update'], dockerEnv);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    // The plain container restart ran instead of the recipe.
+    expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
+    // No recipe command ever executed in the repo working directory.
+    await expect(access(join(a.repo, 'recipe-ran.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('rejects a second run while one holds the lock with update-already-running (AC2)', { timeout: 30000 }, async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
@@ -1860,5 +2182,138 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
 
     expect(blocked.status).toBe(1);
     expect(JSON.parse(blocked.stdout.trim())).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
+  });
+});
+
+describe('tui-back registry clean (black-box, story 2.33)', () => {
+  function createEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  it('AC4: --yes --path <p1> --path <p2> removes both stale paths, one outcome row each', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const unreachable = await makeRepo(true);
+    const unmanaged = await makeRepo(false);
+    expect(runCli(['register', unreachable], env).status).toBe(0);
+    expect(runCli(['register', unmanaged], env).status).toBe(0);
+    await rm(unreachable, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(['registry', 'clean', '--yes', '--path', unreachable, '--path', unmanaged], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed).toEqual({
+      ok: true,
+      data: {
+        results: [
+          { path: unreachable, outcome: 'removed' },
+          { path: unmanaged, outcome: 'removed' },
+        ],
+      },
+    });
+    expect(parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'))).toEqual({ repos: [] });
+  });
+
+  it('scripted removal of an unregistered path is a no-op success, never touching the others', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const kept = await makeRepo(true);
+    expect(runCli(['register', kept], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'clean', '--yes', '--path', join(xdg, 'never-registered')], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.data.results).toEqual([{ path: join(xdg, 'never-registered'), outcome: 'removed' }]);
+    expect(parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'))).toEqual({ repos: [kept] });
+  });
+
+  it('a bare, non-interactive run on a fully healthy registry reports zero candidates explicitly, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const healthy = await makeRepo(true);
+    expect(runCli(['register', healthy], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'clean'], env);
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { candidates: [], errors: [], results: [] } });
+  });
+
+  it('a bare, non-interactive run with stale entries present requires confirmation instead of silently removing anything', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const unreachable = await makeRepo(true);
+    expect(runCli(['register', unreachable], env).status).toBe(0);
+    await rm(unreachable, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(['registry', 'clean'], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('confirmation-required');
+    expect(parsed.error.details.candidates).toEqual([{ path: unreachable, reason: 'unreachable', memberOfEdts: [] }]);
+    // Reporting the candidates is never itself a removal — the registry file is untouched.
+    expect(parse(await readFile(join(xdg, 'tui-back', 'registry.yaml'), 'utf8'))).toEqual({ repos: [unreachable] });
+  });
+
+  it('rejects --path without --yes, and --yes without --path, with invalid-argument', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const pathOnly = runCli(['registry', 'clean', '--path', '/repo/a'], env);
+    const yesOnly = runCli(['registry', 'clean', '--yes'], env);
+
+    expect(JSON.parse(pathOnly.stdout.trim()).error.code).toBe('invalid-argument');
+    expect(JSON.parse(yesOnly.stdout.trim()).error.code).toBe('invalid-argument');
+  });
+
+  it('rejects a --path value that looks like another flag or is empty, instead of silently misinterpreting it (review fix)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+
+    const looksLikeFlag = runCli(['registry', 'clean', '--yes', '--path', '--yes'], env);
+    const empty = runCli(['registry', 'clean', '--yes', '--path', ''], env);
+
+    expect(JSON.parse(looksLikeFlag.stdout.trim()).error.code).toBe('invalid-argument');
+    expect(JSON.parse(empty.stdout.trim()).error.code).toBe('invalid-argument');
+  });
+
+  it('de-duplicates the same resolved path given via multiple --path flags (review fix)', async () => {
+    const xdg = await makeTempDir();
+    const env = createEnv(xdg);
+    const unreachable = await makeRepo(true);
+    expect(runCli(['register', unreachable], env).status).toBe(0);
+    await rm(unreachable, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(
+      ['registry', 'clean', '--yes', '--path', unreachable, '--path', unreachable],
+      env,
+    );
+
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [{ path: unreachable, outcome: 'removed' }] } });
+  });
+
+  it('flags a stale candidate that is still an EDT member with a memberOfEdts note, through the real CLI (AC3/AC6, review fix)', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+    const repo = await makeGitRepo();
+    expect(runCli(['register', repo], env).status).toBe(0);
+    const created = runCli(
+      ['edt', 'create', '--topic', 'demo', '--member', repo, '--create-branches', '--branch-name', 'feat/demo'],
+      env,
+    );
+    expect(created.status).toBe(0);
+    await rm(repo, { recursive: true, force: true });
+
+    const { status, stdout } = runCli(['registry', 'clean'], env);
+
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.error.code).toBe('confirmation-required');
+    expect(parsed.error.details.candidates).toEqual([{ path: repo, reason: 'unreachable', memberOfEdts: ['demo'] }]);
   });
 });

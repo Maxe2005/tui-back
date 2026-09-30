@@ -10,6 +10,7 @@ import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { MigrationPort } from '../ports/migration.js';
+import type { RestartPort } from '../ports/restart.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import {
@@ -21,6 +22,7 @@ import {
   type OnUpdateBlocker,
   type UpdateBlocker,
   type UpdateBlockerChoice,
+  type UpdatePhase,
 } from './group-update.js';
 
 function calls(fn: unknown): Array<unknown[]> {
@@ -65,11 +67,16 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     isMergeInProgress: vi.fn(async () => ok(false)),
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
+    discardAll: vi.fn(async () => ok(undefined)),
+    diffNameOnly: vi.fn(async () => ok([])),
+    discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
     ...overrides,
@@ -84,6 +91,13 @@ function fakeContainer(overrides: Partial<ContainerPort> = {}): ContainerPort {
 }
 
 function fakeMigration(overrides: Partial<MigrationPort> = {}): MigrationPort {
+  return {
+    run: vi.fn(async () => ok({ output: '' })),
+    ...overrides,
+  };
+}
+
+function fakeRestart(overrides: Partial<RestartPort> = {}): RestartPort {
   return {
     run: vi.fn(async () => ok({ output: '' })),
     ...overrides,
@@ -128,6 +142,7 @@ function fakeRegistry(paths: string[] = []): RegistryPort {
     exists: vi.fn(async () => ok(true)),
     scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
     reset: vi.fn(async () => ok({ path: '/p', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
   };
 }
 
@@ -152,10 +167,15 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     git: overrides.git ?? fakeGit(),
     container: overrides.container ?? fakeContainer(),
     migration: overrides.migration ?? fakeMigration(),
+    restart: overrides.restart ?? fakeRestart(),
     lock: overrides.lock ?? fakeLock(),
     ...(overrides.registry !== undefined ? { registry: overrides.registry } : {}),
     ...(overrides.scope !== undefined ? { scope: overrides.scope } : {}),
     ...(overrides.onUpdateBlocker !== undefined ? { onUpdateBlocker: overrides.onUpdateBlocker } : {}),
+    ...(overrides.selection !== undefined ? { selection: overrides.selection } : {}),
+    ...(overrides.runMigrations !== undefined ? { runMigrations: overrides.runMigrations } : {}),
+    ...(overrides.cleanRestart !== undefined ? { cleanRestart: overrides.cleanRestart } : {}),
+    ...(overrides.onPhase !== undefined ? { onPhase: overrides.onPhase } : {}),
   };
 }
 
@@ -1724,5 +1744,662 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
     expect(calls(git.pull)).toHaveLength(2);
     expect(calls(git.mergeBranch)).toHaveLength(0);
+  });
+});
+
+describe('groupUpdate — pre-run configuration (story 3.7)', () => {
+  it('an EDT-scoped selection runs only the selected service: the deselected one is never touched and absent from results', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+    const migration = fakeMigration();
+    const lock = fakeLock();
+
+    const result = await groupUpdate(
+      makeParams({ git, container, migration, lock, selection: [{ service: 'svc-a', repoPath: '/repo/a' }] }),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: { ulid: 'edt-active', topic: 'demo', results: [{ service: 'svc-a', outcome: 'updated' }], scope: 'edt' },
+    });
+    // The deselected service never reached git, migration, or container at all.
+    for (const fn of [git.currentBranch, git.fetch, git.pull, git.mergeBranch, git.assertAllowedBranch]) {
+      expect(calls(fn).filter(([path]) => path === '/repo/b')).toHaveLength(0);
+    }
+    expect(calls(migration.run).filter(([path]) => path === '/repo/b')).toHaveLength(0);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-b')).toHaveLength(0);
+    expect(calls(container.restart)).toEqual([['ctr-a']]);
+  });
+
+  it('an empty EDT-scoped selection is rejected no-services-selected before any lock or git action', async () => {
+    const git = fakeGit();
+    const lock = fakeLock();
+    const container = fakeContainer();
+    const migration = fakeMigration();
+
+    const result = await groupUpdate(makeParams({ git, lock, container, migration, selection: [] }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'no-services-selected' } });
+    expect(calls(lock.acquire)).toHaveLength(0);
+    expect(calls(git.currentBranch)).toHaveLength(0);
+    expect(calls(migration.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('an EDT-scoped selection matching no member is rejected no-services-selected, nothing ran', async () => {
+    const git = fakeGit();
+    const lock = fakeLock();
+
+    const result = await groupUpdate(makeParams({ git, lock, selection: [{ service: 'svc-nope', repoPath: '/repo/nope' }] }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'no-services-selected' } });
+    expect(calls(lock.acquire)).toHaveLength(0);
+    expect(calls(git.currentBranch)).toHaveLength(0);
+  });
+
+  it('a per-service sourceBranch override replaces the manifest sharedBranch as the merge source', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({ git, container, selection: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'release/1' }] }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+    });
+    // svc-a fetched/merged the override; svc-b (deselected) was never touched.
+    expect(calls(git.fetch)).toContainEqual(['/repo/a', 'release/1']);
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'release/1']);
+    expect(calls(git.fetch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
+    // The unexpected-branch gate still applies to the member's own recorded branch.
+    expect(calls(git.assertAllowedBranch)).toContainEqual(['/repo/a', 'feat/a', 'edt-active']);
+  });
+
+  it('a whitespace-padded sourceBranch validates and resolves as trimmed', async () => {
+    const git = fakeGit({
+      branchExistsLocally: vi.fn(async () => ok(true)),
+    });
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({ git, container, selection: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: '  release/1  ' }] }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+    });
+    // Validation, fetch, and merge all saw the trimmed branch — never the padded one.
+    expect(calls(git.branchExistsLocally)).toEqual([['/repo/a', 'release/1']]);
+    expect(calls(git.fetch)).toContainEqual(['/repo/a', 'release/1']);
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'release/1']);
+  });
+
+  it('an unresolvable sourceBranch is rejected unknown-branch with no merge, migration, or restart anywhere', async () => {
+    const git = fakeGit({
+      branchExistsLocally: vi.fn(async (_repoPath: string, branch: string) => ok(branch !== 'nope/not-here')),
+    });
+    const container = fakeContainer();
+    const migration = fakeMigration();
+    const lock = fakeLock();
+
+    const result = await groupUpdate(
+      makeParams({
+        git,
+        container,
+        migration,
+        lock,
+        selection: [{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'nope/not-here' }],
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'unknown-branch' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('svc-a');
+      expect(result.error.message).toContain('nope/not-here');
+    }
+    // The run never started: no lock, no pull/merge, no migration, no restart.
+    expect(calls(lock.acquire)).toHaveLength(0);
+    expect(calls(git.fetch)).toHaveLength(0);
+    expect(calls(git.pull)).toHaveLength(0);
+    expect(calls(git.mergeBranch)).toHaveLength(0);
+    expect(calls(migration.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('runMigrations: false skips every migration.run even for services declaring a migrationCommand', async () => {
+    const migration = fakeMigration();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(makeParams({ migration, container, runMigrations: false }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(migration.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(2);
+  });
+
+  it('cleanRestart: true without a declared recipe falls back to the plain container restart', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+
+    const result = await groupUpdate(makeParams({ container, restart, cleanRestart: true }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(container.restart)).toEqual([['ctr-a'], ['ctr-b']]);
+    expect(calls(restart.run)).toHaveLength(0);
+  });
+
+  it('omitting the new params preserves the full default selection with migrations on', async () => {
+    const migration = fakeMigration();
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(migration.run)).toHaveLength(2);
+  });
+
+  it('an all-repos selection filters by service: excluded repos are absent and untouched', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+    const params: GroupUpdateParams = {
+      ...makeParams({ git, container }),
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      selection: [{ service: 'b' }],
+    };
+
+    const result = await groupUpdate(params);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { ulid: 'all', scope: 'all', results: [{ service: 'b', outcome: 'updated' }] },
+    });
+    expect(calls(git.currentBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(0);
+  });
+
+  it('an all-repos empty selection is rejected no-services-selected without taking the lock', async () => {
+    const lock = fakeLock();
+    const git = fakeGit();
+    const params: GroupUpdateParams = {
+      ...makeParams({ lock, git }),
+      registry: fakeRegistry(['/repo/a']),
+      scope: 'all',
+      selection: [],
+    };
+
+    const result = await groupUpdate(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'no-services-selected' } });
+    expect(calls(lock.acquire)).toHaveLength(0);
+    expect(calls(git.currentBranch)).toHaveLength(0);
+  });
+
+  it('an all-repos run with runMigrations: false never runs migrations', async () => {
+    const migration = fakeMigration();
+    const params: GroupUpdateParams = {
+      ...makeParams({ migration }),
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      runMigrations: false,
+    };
+
+    const result = await groupUpdate(params);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'a', outcome: 'updated' }, { service: 'b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(migration.run)).toHaveLength(0);
+  });
+
+  it('an all-repos per-service sourceBranch override is merged instead of the shared branch', async () => {
+    const git = fakeGit();
+    const params: GroupUpdateParams = {
+      ...makeParams({ git }),
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      selection: [
+        { service: 'a', repoPath: '/repo/a', sourceBranch: 'release/1' },
+        { service: 'b', repoPath: '/repo/b' },
+      ],
+    };
+
+    const result = await groupUpdate(params);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(calls(git.fetch)).toContainEqual(['/repo/a', 'release/1']);
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'release/1']);
+    expect(calls(git.fetch)).toContainEqual(['/repo/b', 'development']);
+  });
+});
+
+describe('groupUpdate — clean-restart recipe (story 3.8)', () => {
+  const RECIPE = ['npm ci', 'docker compose up -d --build'];
+
+  function fakeManifestWithRecipe(restartCommands: string[]): ManifestPort {
+    return {
+      load: vi.fn(async (repoPath: string) =>
+        ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), restartCommands }),
+      ),
+    };
+  }
+
+  it('cleanRestart with a declared recipe runs each command in order in the repo cwd, never the plain restart', async () => {
+    const git = fakeGit();
+    const restart = fakeRestart();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({ manifest: fakeManifestWithRecipe(RECIPE), git, restart, container, cleanRestart: true }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(restart.run)).toEqual([
+      ['/repo/a', 'npm ci'],
+      ['/repo/a', 'docker compose up -d --build'],
+      ['/repo/b', 'npm ci'],
+      ['/repo/b', 'docker compose up -d --build'],
+    ]);
+    // Never both ports for the same service in the same action.
+    expect(calls(container.restart)).toHaveLength(0);
+    // Strict per-service order: each repo merges before its own recipe runs (the run is
+    // per-service sequential — svc-a's recipe lands before svc-b's merge).
+    const mergeMock = (git.mergeBranch as unknown as Mock).mock;
+    const recipeMock = (restart.run as unknown as Mock).mock;
+    for (const repoPath of ['/repo/a', '/repo/b']) {
+      const mergeIndex = mergeMock.calls.findIndex((args: unknown[]) => args[0] === repoPath);
+      const recipeIndex = recipeMock.calls.findIndex((args: unknown[]) => args[0] === repoPath);
+      expect(mergeIndex).toBeGreaterThanOrEqual(0);
+      expect(recipeIndex).toBeGreaterThanOrEqual(0);
+      expect(mergeMock.invocationCallOrder[mergeIndex]).toBeLessThan(recipeMock.invocationCallOrder[recipeIndex]);
+    }
+  });
+
+  it('a failing recipe command stops the recipe and fails only that service with service, command, and output — others continue', async () => {
+    const restart = fakeRestart({
+      run: vi.fn(async (repoPath: string, command: string) =>
+        repoPath === '/repo/a' && command === 'npm ci'
+          ? err('restart-failed', 'compose up blew up')
+          : ok({ output: '' }),
+      ),
+    });
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({ manifest: fakeManifestWithRecipe(RECIPE), restart, container, cleanRestart: true }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    if (result.ok) {
+      const message = result.data.results[0].detail?.message ?? '';
+      expect(message).toContain('/repo/a');
+      expect(message).toContain('npm ci');
+      expect(message).toContain('compose up blew up');
+    }
+    // The first failure stopped svc-a's recipe: its second command never ran.
+    expect(calls(restart.run).filter(([path]) => path === '/repo/a')).toEqual([['/repo/a', 'npm ci']]);
+    // svc-b ran its full recipe and never fell back to the plain restart.
+    expect(calls(restart.run).filter(([path]) => path === '/repo/b')).toEqual([
+      ['/repo/b', 'npm ci'],
+      ['/repo/b', 'docker compose up -d --build'],
+    ]);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('a repeatedly failing recipe surfaces identically on every retry with no retry limit', async () => {
+    const restart = fakeRestart({
+      run: vi.fn(async () => err('restart-failed', 'compose up blew up')),
+    });
+    const container = fakeContainer();
+    const params = { manifest: fakeManifestWithRecipe(RECIPE), restart, container, cleanRestart: true };
+
+    const first = await groupUpdate(makeParams(params));
+    const second = await groupUpdate(makeParams(params));
+
+    for (const result of [first, second]) {
+      expect(result).toMatchObject({
+        ok: true,
+        data: {
+          results: [
+            { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+            { service: 'svc-b', outcome: 'failed', detail: { code: 'restart-failed' } },
+          ],
+        },
+      });
+    }
+    // No suppression on retry: the first recipe command ran once per service per run.
+    expect(calls(restart.run)).toHaveLength(4);
+  });
+
+  it('cleanRestart with no declared recipe falls back to the plain container restart without error', async () => {
+    const restart = fakeRestart();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(makeParams({ restart, container, cleanRestart: true }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(restart.run)).toHaveLength(0);
+    expect(calls(container.restart)).toEqual([['ctr-a'], ['ctr-b']]);
+  });
+
+  it('cleanRestart off leaves a declared recipe untouched and runs the plain container restart', async () => {
+    const restart = fakeRestart();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({ manifest: fakeManifestWithRecipe(RECIPE), restart, container, cleanRestart: false }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(restart.run)).toHaveLength(0);
+    expect(calls(container.restart)).toEqual([['ctr-a'], ['ctr-b']]);
+  });
+
+  it('cleanRestart with an empty recipe array falls back to the plain container restart', async () => {
+    const restart = fakeRestart();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({ manifest: fakeManifestWithRecipe([]), restart, container, cleanRestart: true }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(restart.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(2);
+  });
+
+  it('normalizes a non-restart-failed adapter code to the restart-failed row detail', async () => {
+    const restart = fakeRestart({
+      run: vi.fn(async () => err('sh-spawn-error', 'ENOENT')),
+    });
+
+    const result = await groupUpdate(
+      makeParams({ manifest: fakeManifestWithRecipe(RECIPE), restart, cleanRestart: true }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'failed', detail: { code: 'restart-failed' } },
+        ],
+      },
+    });
+    if (result.ok) {
+      expect(result.data.results[0].detail?.message).toContain('ENOENT');
+    }
+  });
+
+  it('a failing recipe keeps the merged code (recipe runs after pull/merge) but reports failed', async () => {
+    const git = fakeGit();
+    const restart = fakeRestart({
+      run: vi.fn(async () => err('restart-failed', 'compose up blew up')),
+    });
+
+    const result = await groupUpdate(
+      makeParams({ manifest: fakeManifestWithRecipe(RECIPE), git, restart, cleanRestart: true }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'failed', detail: { code: 'restart-failed' } },
+        ],
+      },
+    });
+    // Both services merged before their recipe ran — the failure short-circuits only the restart.
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/b', 'development']);
+  });
+
+  it('all-scope with cleanRestart and a declared recipe runs the recipe per repo, never the plain restart', async () => {
+    const restart = fakeRestart();
+    const container = fakeContainer();
+
+    const result = await groupUpdate(
+      makeParams({
+        manifest: fakeManifestWithRecipe(RECIPE),
+        restart,
+        container,
+        cleanRestart: true,
+        scope: 'all',
+        registry: fakeRegistry(['/repo/a', '/repo/b']),
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'a', outcome: 'updated' },
+          { service: 'b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(restart.run)).toEqual([
+      ['/repo/a', 'npm ci'],
+      ['/repo/a', 'docker compose up -d --build'],
+      ['/repo/b', 'npm ci'],
+      ['/repo/b', 'docker compose up -d --build'],
+    ]);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+});
+
+describe('groupUpdate — live per-service phase tracking (story 3.10)', () => {
+  function recordPhases() {
+    const seen: Array<[string, UpdatePhase]> = [];
+    const onPhase = vi.fn((service: string, phase: UpdatePhase) => {
+      seen.push([service, phase]);
+    });
+    return { seen, onPhase };
+  }
+
+  it('fetch+merge path emits merging → migrating → restarting in order per service', async () => {
+    const { seen, onPhase } = recordPhases();
+
+    const result = await groupUpdate(makeParams({ onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      ['svc-a', 'merging'],
+      ['svc-a', 'migrating'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'merging'],
+      ['svc-b', 'migrating'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('pull path emits pulling instead of merging when already on the shared branch', async () => {
+    const { seen, onPhase } = recordPhases();
+    // Each member's configured merge source equals its own recorded branch (the EDT
+    // unexpected-branch gate still passes), so every service pulls.
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), sharedBranch: repoPath === '/repo/b' ? 'feat/b' : 'feat/a' }),
+      ),
+    };
+    const git = fakeGit();
+
+    const result = await groupUpdate(makeParams({ git, manifest, onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(calls(git.pull)).toHaveLength(2);
+    expect(seen).toEqual([
+      ['svc-a', 'pulling'],
+      ['svc-a', 'migrating'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'pulling'],
+      ['svc-b', 'migrating'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('runMigrations off skips the migrating phase without touching migration.run', async () => {
+    const { seen, onPhase } = recordPhases();
+    const migration = fakeMigration();
+
+    const result = await groupUpdate(makeParams({ migration, runMigrations: false, onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      ['svc-a', 'merging'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'merging'],
+      ['svc-b', 'restarting'],
+    ]);
+    expect(calls(migration.run)).toHaveLength(0);
+  });
+
+  it('a blank migrationCommand skips the migrating phase', async () => {
+    const { seen, onPhase } = recordPhases();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) => ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), migrationCommand: '  ' })),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, onPhase }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(seen).toEqual([
+      ['svc-a', 'merging'],
+      ['svc-a', 'restarting'],
+      ['svc-b', 'merging'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('a throwing observer never breaks the pipeline — both services still update', async () => {
+    const onPhase = vi.fn(() => {
+      throw new Error('driving-side bug');
+    });
+
+    const result = await groupUpdate(makeParams({ onPhase }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+  });
+
+  it('mid-recipe stop still emits restarting exactly once per service and fails only that service', async () => {
+    const { seen, onPhase } = recordPhases();
+    const restart = fakeRestart({
+      run: vi.fn(async (repoPath: string, command: string) =>
+        repoPath === '/repo/a' && command === 'npm ci' ? err('restart-failed', 'compose up blew up') : ok({ output: '' }),
+      ),
+    });
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({ ...manifestFor(repoPath.split('/').pop() ?? repoPath), restartCommands: ['npm ci', 'docker compose up -d --build'] }),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, cleanRestart: true, onPhase }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    // One `restarting` emission per service even though svc-a's recipe stopped mid-way.
+    expect(seen.filter(([, phase]) => phase === 'restarting')).toEqual([
+      ['svc-a', 'restarting'],
+      ['svc-b', 'restarting'],
+    ]);
+  });
+
+  it('an observer returning a rejected promise never breaks the pipeline nor leaks an unhandled rejection', async () => {
+    const onPhase = vi.fn(() => Promise.reject(new Error('driving-side bug')));
+
+    const result = await groupUpdate(makeParams({ onPhase }));
+    // Flush the rejection microtask — an unhandled rejection would fail the run.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(onPhase).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+  });
+
+  it('lock contention emits no phase — a rejected run starts nothing', async () => {
+    const { seen, onPhase } = recordPhases();
+    const lock = fakeLock({ acquire: async () => err('action-in-progress', 'held') });
+
+    const result = await groupUpdate(makeParams({ lock, onPhase }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
+    expect(seen).toEqual([]);
+  });
+
+  it('no-callback default runs the full flow with no observer and unchanged rows', async () => {
+    const result = await groupUpdate(makeParams({}));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
   });
 });

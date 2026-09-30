@@ -29,8 +29,8 @@ import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
-
-const SHARED_BRANCHES: readonly string[] = ['development', 'preprod', 'prod'];
+// Story 2.37: the FR-7 shared-branch rule lives in core, shared with the TUI's advisory check.
+import { isSharedBranch } from '../../../core/edt/shared-branches.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
   return {
@@ -52,13 +52,19 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
     mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
     abortMerge: (repoPath) => abortMerge(repoPath),
-    listDirtyPaths: (repoPath) => listDirtyPaths(repoPath),
+    listDirtyPaths: (repoPath, opts) => listDirtyPaths(repoPath, opts),
     discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
+    discardAll: (repoPath) => discardAll(repoPath),
+    diffNameOnly: (repoPath, from, to) => diffNameOnly(repoPath, from, to),
+    discardPathsToHead: (repoPath, paths) => discardPathsToHead(repoPath, paths),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
     renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
+    listRemoteBranches: (repoPath) => listRemoteBranches(repoPath),
+    createTrackingBranch: (repoPath, localName, remoteRef) =>
+      createTrackingBranch(manifest, repoPath, localName, remoteRef),
   };
 }
 
@@ -134,15 +140,31 @@ export async function createBranch(
     return err('git-create-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
   }
 
-  const base = showRef(repoPath, baseBranch);
-  if (base.kind === 'missing') {
-    return err('base-branch-missing', `Base branch "${baseBranch}" does not exist in ${repoPath}`);
+  // Story 2.35: the base may be a local branch or a remote-tracking ref (`origin/release`).
+  // A local branch wins when both exist; the resolved *full* ref is what git receives, so the
+  // start point can never be re-interpreted (e.g. as a same-named tag).
+  const localBase = showFullRef(repoPath, `refs/heads/${baseBranch}`);
+  if (localBase.kind === 'error') {
+    return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${localBase.detail}`);
   }
-  if (base.kind === 'error') {
-    return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${base.detail}`);
+  let baseRef = `refs/heads/${baseBranch}`;
+  if (localBase.kind === 'missing') {
+    const remoteBase = showFullRef(repoPath, `refs/remotes/${baseBranch}`);
+    if (remoteBase.kind === 'missing') {
+      return err('base-branch-missing', `Base branch "${baseBranch}" does not exist in ${repoPath}`);
+    }
+    if (remoteBase.kind === 'error') {
+      return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${remoteBase.detail}`);
+    }
+    baseRef = `refs/remotes/${baseBranch}`;
   }
 
-  const created = spawnSync('git', ['branch', '--', branchName, baseBranch], { cwd: repoPath, encoding: 'utf8' });
+  // `--no-track`: a branch cut from `origin/x` must not inherit `origin/x` as its upstream
+  // (that would skew Story 2.6's ahead/behind); harmless for a local base.
+  const created = spawnSync('git', ['branch', '--no-track', '--', branchName, baseRef], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
   if (created.status !== 0) {
     return err('git-create-branch-error', `git branch failed in ${repoPath}: ${spawnFailureDetail(created)}`);
   }
@@ -319,10 +341,6 @@ function readBranchConfig(repoPath: string, branch: string, key: 'remote' | 'mer
     return { kind: 'unset', value: '', detail: '' };
   }
   return { kind: 'error', value: '', detail: spawnFailureDetail(result) };
-}
-
-function isSharedBranch(branchName: string, manifestSharedBranch: string): boolean {
-  return SHARED_BRANCHES.includes(branchName) || branchName === manifestSharedBranch;
 }
 
 // Story 2.4 — Moves the working tree onto branchName. The trailing `--` (git-checkout(1)'s
@@ -503,8 +521,15 @@ export async function isMergeInProgress(repoPath: string): Promise<Result<boolea
 // dirty path parsed from `git status --porcelain` (each line is `XY<space>path`; renames
 // surface as `old -> new` and contribute both sides so the classifier stays conservative).
 // Empty output means a clean tree. A non-zero exit is a controlled git-status-error.
-export async function listDirtyPaths(repoPath: string): Promise<Result<string[]>> {
-  const result = spawnSync('git', ['status', '--porcelain'], { cwd: repoPath, encoding: 'utf8' });
+// Story 2.39: `expandUntracked` adds `--untracked-files=all`, so an untracked directory is
+// listed file by file (the discard resolution's captured `discardedPaths`); the default stays
+// git's collapsed `dir/` form for story 3.4's classifier.
+export async function listDirtyPaths(
+  repoPath: string,
+  opts?: { expandUntracked?: boolean },
+): Promise<Result<string[]>> {
+  const args = opts?.expandUntracked === true ? ['status', '--porcelain', '--untracked-files=all'] : ['status', '--porcelain'];
+  const result = spawnSync('git', args, { cwd: repoPath, encoding: 'utf8' });
   if (result.status !== 0) {
     return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -544,6 +569,117 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
   const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
   if (result.status !== 0) {
     return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Story 2.38 — read-only list of the paths differing between two revisions, used by the
+// activation pre-flight. `-z` keeps paths with spaces/quotes/non-ASCII bytes raw (no C-style
+// quoting); `--no-renames` lists BOTH sides of a rename (with rename detection only the new
+// side shows, so a dirty old-side path would never be flagged at risk); the trailing `--`
+// forces both arguments to be read as revisions. A large maxBuffer keeps a big diff from
+// failing with ENOBUFS.
+export async function diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', '-z', from, to, '--'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+    maxBuffer: LARGE_OUTPUT_BUFFER,
+  });
+  if (result.status !== 0) {
+    return err('git-diff-error', `git diff --name-only ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).split('\0').filter((path) => path !== ''));
+}
+
+// 64 MiB: the stdout budget of the path-listing calls above/below (spawnSync's default is 1 MiB).
+const LARGE_OUTPUT_BUFFER = 64 * 1024 * 1024;
+
+// How many paths one git invocation receives, so a huge confirmed list never hits E2BIG.
+const PATHS_PER_CALL = 500;
+
+function chunked(paths: readonly string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let index = 0; index < paths.length; index += PATHS_PER_CALL) {
+    chunks.push(paths.slice(index, index + PATHS_PER_CALL));
+  }
+  return chunks;
+}
+
+// Story 2.38 — consent-gated, path-scoped discard back to HEAD (see the GitPort doc comment).
+// Every call runs with the global `--literal-pathspecs`, so a confirmed path such as
+// `src/[id].tsx` is never read as a glob that would also match unconfirmed siblings; paths are
+// passed in chunks of PATHS_PER_CALL. Three steps, each scoped by `--` to exactly the paths:
+//   1. `git reset -q -- paths` drops any staged content (a no-op for a purely untracked path);
+//   2. `git checkout HEAD -- <paths HEAD has>` (found with `ls-tree -r`) restores them;
+//   3. `git clean -f -- <the rest>` removes the untracked leftovers (never `-x`, never `-d`).
+export async function discardPathsToHead(repoPath: string, paths: string[]): Promise<Result<void>> {
+  if (paths.length === 0) {
+    return ok(undefined);
+  }
+  const git = (args: string[], maxBuffer?: number) =>
+    spawnSync('git', ['--literal-pathspecs', ...args], { cwd: repoPath, encoding: 'utf8', ...(maxBuffer ? { maxBuffer } : {}) });
+  const chunks = chunked(paths);
+
+  for (const chunk of chunks) {
+    const reset = git(['reset', '-q', '--', ...chunk]);
+    if (reset.status !== 0) {
+      return err('git-discard-error', `git reset -- failed in ${repoPath}; nothing was discarded: ${spawnFailureDetail(reset)}`);
+    }
+  }
+
+  const inHead = new Set<string>();
+  for (const chunk of chunks) {
+    const listed = git(['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...chunk], LARGE_OUTPUT_BUFFER);
+    if (listed.status !== 0) {
+      return err(
+        'git-discard-error',
+        `git ls-tree HEAD failed in ${repoPath}; the paths were unstaged but nothing was discarded: ${spawnFailureDetail(listed)}`,
+      );
+    }
+    for (const path of String(listed.stdout).split('\0')) {
+      if (path !== '') {
+        inHead.add(path);
+      }
+    }
+  }
+
+  for (const chunk of chunked(paths.filter((path) => inHead.has(path)))) {
+    const restored = git(['checkout', 'HEAD', '--', ...chunk]);
+    if (restored.status !== 0) {
+      return err('git-discard-error', `git checkout HEAD -- failed in ${repoPath}: ${spawnFailureDetail(restored)}`);
+    }
+  }
+  for (const chunk of chunked(paths.filter((path) => !inHead.has(path)))) {
+    const cleaned = git(['clean', '-f', '-q', '--', ...chunk]);
+    if (cleaned.status !== 0) {
+      return err(
+        'git-discard-error',
+        `git clean -f -- failed in ${repoPath} after tracked paths were already restored: ${spawnFailureDetail(cleaned)}`,
+      );
+    }
+  }
+  return ok(undefined);
+}
+
+// Story 2.39 — the one consent-gated destructive primitive (see the GitPort doc comment):
+// `git reset --hard` drops every tracked modification (staged or not), then `git clean -fd`
+// removes untracked files and directories. Never `-x` (ignored files — .env, node_modules,
+// build output — always survive) and never `-ff` (a nested repository is never removed).
+// Only switch.ts calls this, under an explicit per-repo `discard` resolution.
+export async function discardAll(repoPath: string): Promise<Result<void>> {
+  const reset = spawnSync('git', ['reset', '--hard'], { cwd: repoPath, encoding: 'utf8' });
+  if (reset.status !== 0) {
+    return err(
+      'git-discard-error',
+      `discardAll step 1/2 (git reset --hard) failed in ${repoPath}; untracked files were not cleaned: ${spawnFailureDetail(reset)}`,
+    );
+  }
+  const clean = spawnSync('git', ['clean', '-fd'], { cwd: repoPath, encoding: 'utf8' });
+  if (clean.status !== 0) {
+    return err(
+      'git-discard-error',
+      `discardAll step 2/2 (git clean -fd) failed in ${repoPath} after tracked changes were already reset: ${spawnFailureDetail(clean)}`,
+    );
   }
   return ok(undefined);
 }
@@ -604,9 +740,11 @@ export async function listBranches(repoPath: string): Promise<Result<string[]>> 
   return ok(branches);
 }
 
-// Story 2.26 — renames a local branch ref. Gates the *new* name the same way createBranch
-// gates its own target (assertAllowedBranch, no edtId — a rename lands a branchName exactly
-// like a create does, so it must pass the identical shared-branch check). Reuses createBranch's
+// Story 2.26 — renames a local branch ref. Both names pass assertAllowedBranch (no edtId)
+// before any git call: the *new* name the same way createBranch gates its own target (a
+// rename lands a branchName exactly like a create does, so it must pass the identical
+// shared-branch check), and — since Story 2.35 — the *old* name too, so a shared/protected
+// branch such as `development` can never be renamed away. Reuses createBranch's
 // exact 'branch-exists' code when newName is already taken (Boundaries: "reuse createBranch's
 // exact code") so FailedResultList's registry entry for it applies uniformly regardless of
 // which git write produced the collision. A missing oldName is a distinct, new failure mode
@@ -617,6 +755,10 @@ export async function renameBranch(
   oldName: string,
   newName: string,
 ): Promise<Result<void>> {
+  const allowedOld = await assertAllowedBranch(manifest, repoPath, oldName);
+  if (!allowedOld.ok) {
+    return allowedOld;
+  }
   const allowed = await assertAllowedBranch(manifest, repoPath, newName);
   if (!allowed.ok) {
     return allowed;
@@ -652,6 +794,76 @@ export async function renameBranch(
   return ok(undefined);
 }
 
+// Story 2.35 — the remote-tracking refs already present locally, as `<remote>/<branch>`.
+// Uses the full `%(refname)` and strips `refs/remotes/` itself: `%(refname:short)` is unsafe
+// here, git shortens `refs/remotes/origin/HEAD` to a bare `origin`. Only *symbolic* refs
+// (non-empty `%(symref)`, i.e. `<remote>/HEAD`) are dropped — a real branch whose name ends
+// in `/HEAD` (e.g. `origin/release/HEAD`) is kept. Never fetches.
+export async function listRemoteBranches(repoPath: string): Promise<Result<string[]>> {
+  const result = spawnSync('git', ['for-each-ref', '--format=%(refname)%09%(symref)', 'refs/remotes/'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    return err(
+      'git-list-remote-branches-error',
+      `git for-each-ref failed in ${repoPath}: ${spawnFailureDetail(result)}`,
+    );
+  }
+  const prefix = 'refs/remotes/';
+  const branches: string[] = [];
+  for (const line of String(result.stdout).split('\n')) {
+    const [refname = '', symref = ''] = line.split('\t');
+    if (refname.startsWith(prefix) && symref.trim() === '') {
+      branches.push(refname.slice(prefix.length));
+    }
+  }
+  return ok(branches);
+}
+
+// Story 2.35 — creates local branch `localName` tracking the remote-tracking ref `remoteRef`
+// (`git branch --track -- <localName> <remoteRef>`): a ref write only, never a checkout,
+// never a fetch. `localName` passes the shared-branch gate first (a tracking branch lands a
+// branchName exactly like a create does); an existing local `localName` is `branch-exists`
+// (createBranch's exact code); a `remoteRef` absent from `refs/remotes/` is
+// `remote-branch-missing`.
+export async function createTrackingBranch(
+  manifest: ManifestPort,
+  repoPath: string,
+  localName: string,
+  remoteRef: string,
+): Promise<Result<void>> {
+  const allowed = await assertAllowedBranch(manifest, repoPath, localName);
+  if (!allowed.ok) {
+    return allowed;
+  }
+
+  const target = showRef(repoPath, localName);
+  if (target.kind === 'exists') {
+    return err('branch-exists', `Branch "${localName}" already exists in ${repoPath}`);
+  }
+  if (target.kind === 'error') {
+    return err('git-create-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
+  }
+
+  const remote = showFullRef(repoPath, `refs/remotes/${remoteRef}`);
+  if (remote.kind === 'missing') {
+    return err('remote-branch-missing', `Remote branch "${remoteRef}" does not exist in ${repoPath}`);
+  }
+  if (remote.kind === 'error') {
+    return err('git-create-branch-error', `Cannot verify remote branch state in ${repoPath}: ${remote.detail}`);
+  }
+
+  const created = spawnSync('git', ['branch', '--track', '--', localName, `refs/remotes/${remoteRef}`], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  if (created.status !== 0) {
+    return err('git-create-branch-error', `git branch --track failed in ${repoPath}: ${spawnFailureDetail(created)}`);
+  }
+  return ok(undefined);
+}
+
 // git show-ref --verify --quiet exit-code taxonomy: 0 = the ref exists, 1 = the ref is
 // missing (quiet), anything else (e.g. 128 on a non-git directory) is a real git error.
 interface ShowRefOutcome {
@@ -677,7 +889,11 @@ function spawnFailureDetail(result: { status: number | null; stderr: string; err
 }
 
 function showRef(repoPath: string, branchName: string): ShowRefOutcome {
-  const result = spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`], {
+  return showFullRef(repoPath, `refs/heads/${branchName}`);
+}
+
+function showFullRef(repoPath: string, fullRef: string): ShowRefOutcome {
+  const result = spawnSync('git', ['show-ref', '--verify', '--quiet', fullRef], {
     cwd: repoPath,
     encoding: 'utf8',
   });

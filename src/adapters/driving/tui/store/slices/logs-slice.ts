@@ -120,6 +120,11 @@ export type LogsSlice = {
   // one service's two lists (text + regex) — every other service and the global lists are
   // untouched.
   clearServiceFilterHistory: (repoPath: string) => void;
+  // `:reset` (histories category): empties the in-memory map, bumps the version (so no
+  // in-flight load re-applies stale disk data), and resolves only once every already-queued
+  // writeFilterHistory has landed — so the reset's own disk write can't be overwritten by a
+  // save that was still pending when it ran.
+  clearFilterHistoryAndDrainSaves: () => Promise<void>;
 };
 
 export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], LogsSlice> {
@@ -582,6 +587,20 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           persistFilterHistory(get().filterHistory);
         };
         void run();
+      },
+      clearFilterHistoryAndDrainSaves: async () => {
+        if (filterHistoryLoadPromise) {
+          await filterHistoryLoadPromise;
+        }
+        filterHistoryVersion += 1;
+        set({ filterHistory: {} });
+        // A mutator's `run` may itself queue a new save while we wait — loop until the chain
+        // stops growing.
+        let pending: Promise<void>;
+        do {
+          pending = filterHistorySaveChain;
+          await pending;
+        } while (pending !== filterHistorySaveChain);
       },
       clearServiceFilterHistory: (repoPath) => {
         const run = async () => {
