@@ -56,8 +56,13 @@ export function ListRow(props: ListRowProps) {
   const layout = resolveRowLayout(props);
   return (
     <Box paddingLeft={layout.paddingLeft} backgroundColor={layout.background} minWidth={0} overflow="hidden">
-      <Text color={colors.accent}>{layout.barGlyph}</Text>
-      <Text color={colors.accent}>{layout.marker}</Text>
+      {/* The selection bar + marker must never give up width to a long label: as plain
+          sibling <Text>s they shrank to nothing (bar invisible) once the truncated label
+          filled the row. */}
+      <Box flexShrink={0}>
+        <Text color={colors.accent}>{layout.barGlyph}</Text>
+        <Text color={colors.accent}>{layout.marker}</Text>
+      </Box>
       {/* Bugfix (story 2.21 follow-up #2): now that the list pane's own width is genuinely
           ratio-bound (list-detail-split.tsx), a row whose label+meta combined no longer fits
           the real column width surfaced Ink's default word-wrap mid-token (e.g.
@@ -77,7 +82,11 @@ export function ListRow(props: ListRowProps) {
           <Text color={layout.metaColor}> {meta}</Text>
         </Box>
       ) : null}
-      {layout.activeSuffix ? <Text color={colors.info}>{layout.activeSuffix}</Text> : null}
+      {layout.activeSuffix ? (
+        <Box flexShrink={0}>
+          <Text color={colors.info}>{layout.activeSuffix}</Text>
+        </Box>
+      ) : null}
     </Box>
   );
 }

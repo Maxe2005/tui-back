@@ -25,12 +25,27 @@ export function moveRoutesSelection(current: number, direction: RoutesSelectionD
   return Math.min(Math.max(next, 0), length - 1);
 }
 
-// The spec's CLI row shape (`METHOD path`) doubles as the list-row label; the summary (when
-// the scanner found one) rides as the row's dim meta, never crowding the label.
-export function formatRouteRow(route: Route): { label: string; meta?: string } {
-  return route.summary === undefined
-    ? { label: `${route.method} ${route.path}` }
-    : { label: `${route.method} ${route.path}`, meta: route.summary };
+// The spec's CLI row shape (`METHOD path`) is the whole list row: the summary is deliberately
+// NOT rendered in the list (a long summary wrapped and made rows taller than the one-row
+// budget BoundedList assumes) — it only appears in the detail pane (formatRouteDetail) for the
+// focused route.
+export function formatRouteRow(route: Route): { label: string } {
+  return { label: `${route.method} ${route.path}` };
+}
+
+// The route filter: case-insensitive, whitespace-separated terms that must ALL appear in the
+// row's own label (`METHOD path`) — so `get user` matches `GET /users/{id}` and `post` alone
+// narrows to a method. The summary is not matched: it isn't visible in the list, and a row
+// matching on hidden text would look like a false positive.
+export function filterRoutes(routes: readonly Route[], query: string): Route[] {
+  const terms = query.toLowerCase().split(/\s+/).filter((term) => term !== '');
+  if (terms.length === 0) {
+    return [...routes];
+  }
+  return routes.filter((route) => {
+    const label = formatRouteRow(route).label.toLowerCase();
+    return terms.every((term) => label.includes(term));
+  });
 }
 
 // DetailPane wraps its children in a single Ink <Text> internally, so the detail is one

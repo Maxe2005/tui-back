@@ -20,6 +20,7 @@ import type { Route } from '../../../../../core/ports/route-scanner.js';
 import { fireRequest, type FireResult } from '../../../../../core/routes/fire-request.js';
 import { listRoutes } from '../../../../../core/routes/list-routes.js';
 import { listRepos } from '../../../../../core/scripts/list-repos.js';
+import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
@@ -35,6 +36,12 @@ export type RoutesSlice = {
   routes: Route[] | null;
   routesStatus: RoutesStatus;
   routesError: { code: string; message: string } | null;
+  // The route filter lives in the store (not zone-local state) so it survives tab switches,
+  // like the streamed logs do — the zone unmounts on every tab change.
+  routesFilter: TextInputState;
+  routesSelected: number;
+  setRoutesSelected: (index: number) => void;
+  setRoutesFilter: (filter: TextInputState) => void;
   loadRoutes: () => Promise<void>;
   fireStatus: FireStatus;
   fireResult: FireResult | null;
@@ -48,6 +55,10 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     routes: null,
     routesStatus: 'idle',
     routesError: null,
+    routesFilter: { value: '', cursor: 0 },
+    setRoutesFilter: (filter) => set({ routesFilter: filter }),
+    routesSelected: 0,
+    setRoutesSelected: (index) => set({ routesSelected: index }),
     fireStatus: 'idle',
     fireResult: null,
     fireError: null,

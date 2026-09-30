@@ -370,11 +370,12 @@ export function AppShell({
         return;
       }
 
+      // The Routes zone likewise owns `/` (its inline route filter).
       // Story 5.2: the Logs zone owns `/` itself (its own global-filter editor) while it's
       // the active zone — without this guard, this app-wide filter stub would also fire on
       // the same keystroke (Ink dispatches to every mounted `useInput` hook), the same
       // double-dispatch hazard already solved for arrow keys via `logsPaneGridArrowsActive`.
-      if (activeZone !== 'logs' && shouldOpenFilter(input)) {
+      if (activeZone !== 'logs' && activeZone !== 'routes' && shouldOpenFilter(input)) {
         setFilterOpen(true);
         return;
       }

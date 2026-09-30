@@ -1,3 +1,4 @@
+import { Box } from 'ink';
 import { describe, it, expect } from 'vitest';
 import { colors, spacing } from '../theme/theme.js';
 import { ListRow, resolveRowLayout } from './list-row.js';
@@ -169,5 +170,17 @@ describe('ListRow', () => {
     expect(output).toContain('›');
     expect(output).toContain('▌');
     expect(output).toContain('• active');
+  });
+});
+
+describe('ListRow truncation', () => {
+  it('keeps the selection bar and marker visible when a long label is truncated', async () => {
+    const output = await renderToString(
+      <Box width={20}>
+        <ListRow label="GET /a/very/long/route/path/that/cannot/fit/{id}" selected />
+      </Box>,
+    );
+    expect(output).toContain('▌›');
+    expect(output).toContain('…');
   });
 });

@@ -6,8 +6,9 @@
 // genuinely-empty, and not-activated are three visibly distinct states — a failure is
 // never rendered as an empty list. Pure formatting/selection logic lives in
 // routes-zone.logic.ts; this file holds the Ink component only.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
+import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
@@ -15,8 +16,12 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ListDetailSplit } from '../../shared/components/list-detail-split.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { Spinner } from '../../shared/components/spinner.js';
+import { nextTextInputValue, type TextInputState } from '../../shared/components/text-edit.js';
+import { TextInputLine } from '../../shared/components/text-input-line.js';
+import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
+  filterRoutes,
   formatFireError,
   formatFireResult,
   formatRouteDetail,
@@ -26,10 +31,11 @@ import {
   resolveRoutesDirection,
 } from './routes-zone.logic.js';
 
-// Same unbounded-list guard as the Logs/EDTs zones (story 5.5): a rough terminal-chrome
-// budget subtracted from the raw window size before the route list's own BoundedList ever
-// sees it ("an approximation is fine here").
-const ROUTES_LIST_CHROME_ROWS = 8;
+// First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
+// list pane's own header/filter/hint lines), used only until useElementSize has measured the
+// list's real flex-bound area — after that the budget is the measured height, so the list can
+// never overrun the tab bar above or the footer below.
+const ROUTES_LIST_CHROME_ROWS = 9;
 
 export function formatRoutesDisabledMessage(carryingServices: string[]): string {
   const list = carryingServices.join(', ');
@@ -54,8 +60,30 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const fireError = useStore((state) => state.fireError);
   const fireRoute = useStore((state) => state.fireRoute);
 
-  const [selected, setSelected] = useState(0);
+  const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
+
+  // Held in the store like the filter, so the cursor survives tab switches.
+  const selected = useStore((state) => state.routesSelected);
+  const storeSetSelected = useStore((state) => state.setRoutesSelected);
+  const setSelected = (next: number | ((prev: number) => number)) =>
+    storeSetSelected(typeof next === 'function' ? next(selected) : next);
+  // The route filter: `filter` is the applied query; `filterEditing` is true while the inline
+  // input owns the keyboard (captured from AppShell's global shortcuts, like the Logs zone's
+  // filter editor) so typing `q`, `:`, `?` or digits lands as text instead of firing them.
+  const filter = useStore((state) => state.routesFilter);
+  const storeSetFilter = useStore((state) => state.setRoutesFilter);
+  const setFilter = (next: TextInputState | ((prev: TextInputState) => TextInputState)) =>
+    storeSetFilter(typeof next === 'function' ? next(filter) : next);
+  const [filterEditing, setFilterEditing] = useState(false);
   const windowSize = useWindowSize();
+  const [listAreaRef, listAreaSize] = useElementSize();
+
+  useEffect(() => {
+    setZoneInputCaptured(filterEditing);
+  }, [filterEditing, setZoneInputCaptured]);
+  useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+
+  const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
 
   useEffect(() => {
     void loadRoutes();
@@ -66,25 +94,74 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   // Arrowing onto a different repo's list must never leave the cursor on an unrelated row
   // (mirrors edts-zone.tsx's own cursor reset when the focused EDT changes).
+  // The filter survives tab switches (store-held), so it is only dropped when the list really
+  // switches to another repo — never on (re)mount, where the repo path is unchanged.
+  const previousRepoPath = useRef(routesRepoPath);
   useEffect(() => {
-    setSelected(0);
+    if (previousRepoPath.current !== null && previousRepoPath.current !== routesRepoPath) {
+      setSelected(0);
+      storeSetFilter({ value: '', cursor: 0 });
+      setFilterEditing(false);
+    }
+    previousRepoPath.current = routesRepoPath;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routesRepoPath]);
 
   useInput(
-    (_input, key) => {
+    (input, key) => {
+      if (filterEditing) {
+        // Esc drops the filter entirely; Enter keeps it applied and hands the keyboard back
+        // to the list (so Enter never fires a route while the input is still open).
+        if (key.escape === true) {
+          setFilter({ value: '', cursor: 0 });
+          setFilterEditing(false);
+          setSelected(0);
+          return;
+        }
+        if (key.return === true) {
+          setFilterEditing(false);
+          return;
+        }
+        const direction = resolveRoutesDirection(key);
+        if (direction !== null) {
+          setSelected((prev) => moveRoutesSelection(prev, direction, visibleRoutes.length));
+          return;
+        }
+        const next = nextTextInputValue(filter, input, key);
+        if (next.value !== filter.value) {
+          setSelected(0);
+        }
+        setFilter(next);
+        return;
+      }
+      if (input === '/') {
+        setFilter((prev) => ({ ...prev, cursor: prev.value.length }));
+        setFilterEditing(true);
+        return;
+      }
+      if (key.escape === true && filter.value !== '') {
+        setFilter({ value: '', cursor: 0 });
+        setSelected(0);
+        return;
+      }
       // Story 6.2: Enter fires the selected route (`[enter] fire`) — no body/header
       // customization, no saving (Story 6.3 territory); the fire uses the discovered
       // method + path as-is.
       if (key.return === true) {
-        const target = resolveEnterFireTarget(routes, selected);
+        const target = resolveEnterFireTarget(visibleRoutes, selected);
         if (target !== undefined) {
           void fireRoute(target.method, target.path);
         }
         return;
       }
+      const jump = resolveSelectionJump({ ...key, upArrow: false, downArrow: false, tab: false });
+      if (jump !== null) {
+        setSelected(jumpSelection(jump, visibleRoutes.length));
+        return;
+      }
       const direction = resolveRoutesDirection(key);
       if (direction !== null) {
-        setSelected((prev) => moveRoutesSelection(prev, direction, routes?.length ?? 0));
+        setSelected((prev) => moveRoutesSelection(prev, direction, visibleRoutes.length));
       }
     },
     { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
@@ -92,7 +169,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   if (status === 'disabled') {
     return (
-      <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+      <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors.text}>{formatRoutesDisabledMessage(carryingServices)}</Text>
       </Box>
     );
@@ -100,7 +177,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   if (routesStatus === 'error' && routesError?.code === 'route-exploration-not-activated') {
     return (
-      <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+      <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Text color={colors.text}>No route list for this repo.</Text>
         <DimAnnotation text={routesError.message} />
@@ -110,7 +187,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   if (routesStatus === 'error') {
     return (
-      <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+      <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Text color={colors.error}>{routesError ? routesError.message : 'Route scan failed.'}</Text>
       </Box>
@@ -119,7 +196,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   if (routesStatus !== 'ready' || routes === null) {
     return (
-      <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+      <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Box flexDirection="row">
           <Spinner />
@@ -131,40 +208,56 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   if (routes.length === 0) {
     return (
-      <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+      <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Text color={colors.text}>No routes discovered for this repo.</Text>
       </Box>
     );
   }
 
-  const clamped = routes.length === 0 ? 0 : Math.min(selected, routes.length - 1);
-  const focused = routes[clamped];
-  const maxVisibleRows = Math.max(windowSize.rows - ROUTES_LIST_CHROME_ROWS, 4);
+  const clamped = visibleRoutes.length === 0 ? 0 : Math.min(selected, visibleRoutes.length - 1);
+  const focused = visibleRoutes[clamped];
+  // Live, measured budget of the flex-bound list area (it sits between the pane's header and
+  // hint lines), so the BoundedList — indicator rows included — always fits exactly.
+  const maxVisibleRows = listAreaSize !== null ? listAreaSize.height : Math.max(windowSize.rows - ROUTES_LIST_CHROME_ROWS, 3);
+  const filterActive = filter.value !== '';
 
   return (
-    <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
+    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
       <ListDetailSplit
         ratio={ratio}
         listSplitterTargeted={resizeMode?.zone === 'routes' && resizeMode.targetBoundary === 0}
         list={
-          <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
-            <Text color={colors['text-dim']}>ROUTES</Text>
+          <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+            <Text color={colors['text-dim']} wrap="truncate-end">
+              ROUTES{filterActive || routes.length !== visibleRoutes.length ? ` (${visibleRoutes.length}/${routes.length})` : ` (${routes.length})`}
+            </Text>
             {routesRepoPath ? <DimAnnotation text={routesRepoPath} /> : null}
-            <BoundedList
-              items={routes}
-              maxVisibleRows={maxVisibleRows}
-              cursorIndex={clamped}
-              renderItem={(route, index) => {
-                const row = formatRouteRow(route);
-                return <ListRow key={`${route.method} ${route.path}`} label={row.label} meta={row.meta} selected={index === clamped} />;
-              }}
-            />
-            <DimAnnotation text="[enter] fire" />
+            {filterEditing ? (
+              <TextInputLine label="Filter" value={filter.value} cursor={filter.cursor} focused />
+            ) : filterActive ? (
+              <Text color={colors.accent} wrap="truncate-end">Filter: {filter.value}</Text>
+            ) : null}
+            <Box ref={listAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
+              {visibleRoutes.length === 0 ? (
+                <Text color={colors['text-dim']}>No routes match the filter.</Text>
+              ) : (
+                <BoundedList
+                  items={visibleRoutes}
+                  maxVisibleRows={maxVisibleRows}
+                  cursorIndex={clamped}
+                  renderItem={(route, index) => {
+                    const row = formatRouteRow(route);
+                    return <ListRow key={`${route.method} ${route.path}`} label={row.label} selected={index === clamped} />;
+                  }}
+                />
+              )}
+            </Box>
+            <DimAnnotation text={filterEditing ? '[enter] apply  [esc] clear' : '[enter] fire  [/] filter  [home/end] jump'} />
           </Box>
         }
         detail={
-          <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
+          <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {focused ? <DetailPane title="Route">{formatRouteDetail(focused)}</DetailPane> : null}
             {fireStatus === 'firing' ? (
               <Box flexDirection="row">

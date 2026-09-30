@@ -502,6 +502,10 @@ it('shouldQuit returns true for q', () => {
         fireResult: null,
         fireError: null,
         fireRoute: async () => {},
+        routesFilter: { value: '', cursor: 0 },
+        setRoutesFilter: () => {},
+        routesSelected: 0,
+        setRoutesSelected: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
