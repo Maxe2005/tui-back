@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
+import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RestartPort } from '../../../core/ports/restart.js';
@@ -8,6 +9,7 @@ import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
+import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
@@ -190,6 +192,8 @@ describe('subcommand registry guards', () => {
     const container: ContainerPort = { restart: async () => ok(undefined) };
     const migration: MigrationPort = { run: async () => ok({ output: '' }) };
     const restart: RestartPort = { run: async () => ok({ output: '' }) };
+    const scanner: RouteScannerPort = { scan: async () => ok([]) };
+    const auth: DevAuthPort = { getSession: async () => ok({ cookie: 'sid=abc' }) };
     const git: GitPort = {
       assertAllowedBranch: async () => ok(undefined),
       createBranch: async () => ok(undefined),
@@ -235,11 +239,13 @@ describe('subcommand registry guards', () => {
       migration,
       restart,
       state: fakeState(),
+      scanner,
+      auth,
       ...overrides,
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/registry without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/registry/list-routes/fire-request without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -251,6 +257,8 @@ describe('subcommand registry guards', () => {
       'edt',
       'update',
       'registry',
+      'list-routes',
+      'fire-request',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
@@ -265,6 +273,46 @@ describe('subcommand registry guards', () => {
 
     const result = await edts.run([]);
     expect(result).toMatchObject({ ok: true, data: { services: [], unreachable: [], errors: [] } });
+  });
+
+  it('list-routes (story 6.1) rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
+    const subcommands = buildTestSubcommands();
+    const listRoutesCmd = subcommands.find((subcommand) => subcommand.name === 'list-routes');
+    if (!listRoutesCmd) throw new Error('expected list-routes subcommand');
+
+    expect(listRoutesCmd.usage).toBe('tui-back list-routes <repoPath>');
+
+    const missing = await listRoutesCmd.run([]);
+    expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+
+    const excess = await listRoutesCmd.run(['/a', '/b']);
+    expect(excess).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    // The fixture manifest answers manifest-not-found, which the use-case propagates —
+    // proving the wrapper reached the use-case itself rather than rejecting locally.
+    const result = await listRoutesCmd.run(['/repos/gateway']);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+
+  it('fire-request (story 6.2) rejects missing/bad-arity/blank arguments and otherwise delegates to the use-case', async () => {
+    const subcommands = buildTestSubcommands();
+    const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+    if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+    expect(fireRequestCmd.usage).toBe('tui-back fire-request <repoPath> <METHOD> <path>');
+
+    const missing = await fireRequestCmd.run([]);
+    expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+
+    for (const args of [['/a'], ['/a', 'GET'], ['/a', 'GET', '/x', 'extra'], ['/a', '  ', '/x']]) {
+      const rejected = await fireRequestCmd.run(args);
+      expect(rejected).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+
+    // The fixture manifest answers manifest-not-found, which the use-case propagates —
+    // proving the wrapper reached the use-case itself rather than rejecting locally.
+    const result = await fireRequestCmd.run(['/repos/gateway', 'GET', '/users']);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
   it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {

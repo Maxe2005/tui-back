@@ -5,7 +5,7 @@
 - `npm test` — Vitest, all tests (colocated `*.test.ts`). Single file: `npx vitest run src/core/result.test.ts`.
 - `npm run typecheck` — `tsc --noEmit` (no build step exists; TS runs via `tsx`).
 - `npm run depcheck` — dependency-cruiser over `src/**/*.{ts,tsx,mjs}`, enforces the AD-1 `core → adapters` boundary rule.
-- Run the CLI: `node src/bin/tui-back.mjs <subcommand>` (needs Node ≥24). No `npm run` wrapper for it.
+- Run the CLI: `node src/bin/cli-back.mjs <subcommand>` (needs Node ≥24). No `npm run` wrapper for it. The TUI is `node src/bin/tui-back.mjs` (requires an interactive terminal, exits 1 otherwise).
 - Order when changing code: `npm test && npm run typecheck && npm run depcheck`.
 
 ## Architecture (hexagonal, AD-1..AD-15)
@@ -27,7 +27,7 @@ Full invariants: `_bmad-output/planning-artifacts/architecture/architecture-tui-
 
 - `core/` unit-tested against fake ports, no real git/docker/sqlite.
 - `adapters/driven/*` integration-tested against the real system (e.g. XDG uses a temp-dir fixture).
-- `adapters/driving/cli` tested black-box: `src/bin/tui-back.e2e.test.ts` spawns the shipped `tui-back.mjs` as a child process and asserts the AD-3 envelope. No pty lib exists, so e2e only exercises the non-TTY JSON branch; TTY/human rendering is covered directly in `envelope.test.ts`.
+- `adapters/driving/cli` tested black-box: `src/bin/tui-back.e2e.test.ts` spawns the shipped `cli-back.mjs` as a child process and asserts the AD-3 envelope. No pty lib exists, so e2e only exercises the non-TTY JSON branch; TTY/human rendering is covered directly in `envelope.test.ts`.
 
 ## Workflow & planning artifacts
 

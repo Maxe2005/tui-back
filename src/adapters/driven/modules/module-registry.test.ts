@@ -1,8 +1,7 @@
 // adapters/driven/modules: unit tests for the compiled-in static registry (AD-5) — the
-// empty production registry plus the pure helper functions that later modules/epics use.
-// No real module implementations exist yet, so the registry and `knownModuleIds` are empty
-// by design; helpers take a registry argument so tests can exercise a populated map while
-// production stays empty (Design Notes decision D1).
+// production registry carrying story 6.1's first real module (`route-explorer`) plus the
+// pure helper functions. Helpers stay generic so tests can exercise populated maps without
+// importing production module implementations (Design Notes decision D1).
 import { describe, expect, it } from 'vitest';
 import {
   isKnownModuleId,
@@ -12,45 +11,43 @@ import {
   validateModules,
 } from './module-registry.js';
 
-describe('moduleRegistry (AD-5, AC1)', () => {
-  it('production registry is empty by design this story', () => {
-    expect(Object.keys(moduleRegistry)).toEqual([]);
+describe('moduleRegistry (AD-5, story 6.1)', () => {
+  it('production registry carries the route-explorer module', () => {
+    expect(Object.keys(moduleRegistry)).toEqual(['route-explorer']);
+    expect(moduleRegistry['route-explorer']?.kind).toBe('route-explorer');
   });
 
-  it('knownModuleIds is derived from moduleRegistry and empty in production', () => {
+  it('knownModuleIds is derived from moduleRegistry', () => {
     expect(knownModuleIds).toBeInstanceOf(Set);
-    expect([...knownModuleIds]).toEqual([]);
+    expect([...knownModuleIds]).toEqual(['route-explorer']);
   });
 
-  it('isKnownModuleId is false for any id against the empty production registry', () => {
-    expect(isKnownModuleId('route-explorer')).toBe(false);
+  it('isKnownModuleId recognizes route-explorer and rejects anything else', () => {
+    expect(isKnownModuleId('route-explorer')).toBe(true);
     expect(isKnownModuleId('shared-types-consumer')).toBe(false);
+    expect(isKnownModuleId('bogus-module')).toBe(false);
   });
 });
 
 describe('validateModules (AC2/AC3 via injected registry, D1)', () => {
   const populated: Record<string, { kind?: string }> = { 'route-explorer': { kind: 'scanner' } };
 
-  it('returns every key when the registry is empty', () => {
-    expect(validateModules({ a: {}, b: {} })).toEqual(['a', 'b']);
+  it('returns unknown keys against the production registry, sorted (FR-1)', () => {
+    expect(validateModules({ 'z-mod': {}, 'route-explorer': {}, 'a-mod': {} })).toEqual(['a-mod', 'z-mod']);
   });
 
-  it('returns unknown keys in sorted ascending order (FR-1), regardless of insertion order', () => {
-    expect(validateModules({ z: {}, a: {}, m: {} })).toEqual(['a', 'm', 'z']);
+  it('returns an empty list when every key is known to production', () => {
+    expect(validateModules({ 'route-explorer': {} })).toEqual([]);
+  });
+
+  it('returns an empty list for an empty modules map (AC2 baseline)', () => {
+    expect(validateModules({}, populated)).toEqual([]);
   });
 
   it('returns only the unknown keys against a populated registry, sorted', () => {
     expect(validateModules({ 'route-explorer': {}, 'shared-types-consumer': {} }, populated)).toEqual([
       'shared-types-consumer',
     ]);
-  });
-
-  it('returns an empty list when every key is known', () => {
-    expect(validateModules({ 'route-explorer': {} }, populated)).toEqual([]);
-  });
-
-  it('returns an empty list for an empty modules map (AC2 baseline)', () => {
-    expect(validateModules({}, populated)).toEqual([]);
   });
 });
 
@@ -61,8 +58,11 @@ describe('resolveModule (D1)', () => {
     expect(resolveModule(registry, 'missing')).toBeUndefined();
   });
 
-  it('returns undefined for any id against the empty production registry', () => {
-    expect(resolveModule(moduleRegistry, 'anything')).toBeUndefined();
+  it('resolves the production route-explorer module with a working scanner', async () => {
+    const module = resolveModule(moduleRegistry, 'route-explorer');
+    expect(module).toBeDefined();
+    const scanned = await module?.scanner.scan('/repos/gateway', {});
+    expect(scanned).toMatchObject({ ok: false, error: { code: 'route-scan-failed' } });
   });
 
   it('returns undefined for inherited prototype members, never mistaking them for modules', () => {

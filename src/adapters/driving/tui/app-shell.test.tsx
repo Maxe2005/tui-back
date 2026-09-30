@@ -89,9 +89,10 @@ describe('AppShell', () => {
       // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
       // (see edts-zone.test.tsx for its own coverage). Story 3.1: same for Update
       // (see update-zone.test.tsx). Story 5.1: Logs is likewise real content now (see
-      // logs-zone.test.tsx) — every other zone is still the placeholder these two
+      // logs-zone.test.tsx). Story 6.1: Routes is likewise real content now (see
+      // routes-zone.test.tsx) — every other zone is still the placeholder these two
       // literal strings come from.
-      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs') {
+      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
@@ -490,6 +491,17 @@ it('shouldQuit returns true for q', () => {
         closeResetScreen: () => {},
         dismissResetNotice: () => {},
         runReset: async () => {},
+        // Story 6.1: Routes zone state
+        routesRepoPath: null,
+        routes: null,
+        routesStatus: 'idle',
+        routesError: null,
+        loadRoutes: async () => {},
+        // Story 6.2: Routes zone fire state
+        fireStatus: 'idle',
+        fireResult: null,
+        fireError: null,
+        fireRoute: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

@@ -20,6 +20,8 @@ import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/regi
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
+import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
 
 const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
@@ -56,6 +58,20 @@ const lock = createLockPort(lockDir);
 // with nothing live on the other end.
 const isTTY = process.stdout.isTTY === true;
 const interactiveIsTTY = isTTY && process.stdin.isTTY === true;
+// Story 6.1: the route-explorer module's scanner, resolved out of the statically compiled
+// module registry by manifest module id (AD-5) — manifests only ever select this key,
+// never supply code. The lookup cannot fail in practice (registry and key are compiled
+// together); the throw is a loud programmer-error signal, raised before any stdout output
+// so the AD-3 envelope contract is unaffected.
+const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
+if (routeExplorer === undefined) {
+  throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
+}
+// Story 6.2: the fire-request use-case needs the module's auth port alongside its
+// scanner — same static-registry reasoning as the scanner lookup above.
+if (routeExplorer.auth === undefined) {
+  throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
+}
 const subcommands = buildSubcommands({
   registry,
   manifest,
@@ -70,6 +86,8 @@ const subcommands = buildSubcommands({
   restart,
   state,
   isTTY: interactiveIsTTY,
+  scanner: routeExplorer.scanner,
+  auth: routeExplorer.auth,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);
