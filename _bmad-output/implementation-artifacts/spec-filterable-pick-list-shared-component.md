@@ -2,7 +2,7 @@
 title: 'Shared filterable pick list — unify the EDT quick-pick and the update-service pick'
 type: 'refactor'
 created: '2026-09-30'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'f4f3984921285b84c2d51507f8ffebbe969560fe'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-2/epic-2-context.md, _bmad-output/implementation-artifacts/epic-3-context.md]
@@ -54,10 +54,10 @@ context: [_bmad-output/implementation-artifacts/epic-2/epic-2-context.md, _bmad-
 
 **Execution:**
 - [x] `src/adapters/driving/tui/shared/components/filterable-pick-list.tsx` (+ `.test.tsx`, barrel export) -- new shared generic state, substring matcher, pure key reducer emitting `update | select | cancel`, and render-only view; unit tests cover every matrix row -- the single implementation both dialogs reuse.
-- [x] `src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx` + `edts-zone.logic.ts` + `edts-zone.tsx` -- rebuild the EDT pick on the shared component; drop `matchEdtsByPrefix` and the hand-drawn rows -- removes duplicate #1.
-- [x] `src/adapters/driving/tui/zones/update/update-service-pick-dialog.tsx` (new) + `update-zone.tsx` + `update-zone.logic.ts` -- rebuild the service pick on the shared component; pull its key handling out of the zone's `useInput`; drop `matchServicesBySubstring` and the command-bar text helpers import -- removes duplicate #2.
+- [x] `src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx` + `edts-zone.logic.ts` -- rebuild the EDT pick on the shared component; drop `matchEdtsByPrefix` and the hand-drawn rows (`edts-zone.tsx` needed no change: the handler and view keep their signatures) -- removes duplicate #1.
+- [x] `src/adapters/driving/tui/zones/update/update-service-pick-dialog.tsx` (new) + `update-zone.tsx` + `update-zone.logic.ts` -- rebuild the service pick on the shared component; the zone's `useInput` keeps only the dispatch on the reducer's outcome; drop `matchServicesBySubstring` and the command-bar text helpers import -- removes duplicate #2.
 - [x] `edts-zone.test.tsx`, `edts-zone.interaction.test.tsx`, `update-zone.test.tsx`, `update-zone.interaction.test.tsx` -- re-point tests at the shared behavior; rewrite the ones pinning the retired behaviors (prefix-only EDT filter, Home/End jumping the service list, append-only service filter) -- the suite must assert the unified contract.
-- [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- close the 3.11 "two parallel implementations" entry and the 2.30 "identical empty wording" entry; add the `FilterableBranchList` adoption as a new deferred item -- ledger matches reality.
+- [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- close the 3.11 "two parallel implementations" entry and the 2.30 "identical empty wording" and "no empty-pool test" entries; add the `FilterableBranchList` adoption as a new deferred item -- ledger matches reality.
 
 **Acceptance Criteria:**
 - Given `:edt-switch`, `:edt-modify`, `:edt-delete` or `:update-service` run with no argument, when the pick opens, then all four show the same filter field, row style, scrolling indicators and hint line.
@@ -77,7 +77,16 @@ Three user-visible behavior changes are intended and approved — everything els
 
 The hosts stay in charge of state placement: the EDT zone keeps the pick inside its `EdtDialogState` union, the Update zone keeps candidates in the store and the filter/highlight local. The shared component only defines the state shape and the transitions, so neither host has to migrate its storage.
 
-Both hosts pass the same row budget (today's service-pick value, 8) from one shared constant.
+Both dialogs share one row budget (today's service-pick value, 8): a constant inside the shared component, deliberately not a prop.
+
+Unifying the rendering also moves some wording and keys, all consequences of the three changes above rather than separate decisions:
+
+- One hint line for both picks, the filter field's own `[Enter] confirm  [Esc] cancel` (`TextInputLine` is not to be changed). The EDT pick loses its second `[Enter] select  [Esc] cancel` line; the service pick loses `Enter selects, Esc cancels.`
+- The service pick's field is labelled `Filter:` (was `Service:`); its no-match line reads `No matching service` (was `No matching services — [Esc] to close.`).
+- EDT pick rows use the shared `ListRow` style (`▌›` on the highlighted row) instead of an indented `› ` prefix.
+- In the service pick, `Delete` is a forward delete at the caret (it used to act as a second Backspace); Ctrl/Meta combined with any key is inert in both picks.
+
+Hosts apply `update` results by re-running the reducer inside a functional state updater, so two keypresses delivered before a re-render (key-repeat) build on each other.
 
 ## Verification
 
@@ -86,3 +95,58 @@ Both hosts pass the same row budget (today's service-pick value, 8) from one sha
 
 **Manual checks (if no CLI):**
 - Run the TUI, open each of the four no-argument commands, and confirm the dialogs look and respond the same.
+
+## Suggested Review Order
+
+**Shared reducer (start here)**
+
+- Single reducer owning filter editing, highlight movement and the select/cancel outcomes
+  [`filterable-pick-list.tsx:93`](../../src/adapters/driving/tui/shared/components/filterable-pick-list.tsx#L93)
+
+- Substring filter over label and secondary text, shared by both dialogs
+  [`filterable-pick-list.tsx:69`](../../src/adapters/driving/tui/shared/components/filterable-pick-list.tsx#L69)
+
+- Highlight resets only when what is matched changes, not on any edit
+  [`filterable-pick-list.tsx:135`](../../src/adapters/driving/tui/shared/components/filterable-pick-list.tsx#L135)
+
+- Render-only view: TextInputLine, BoundedList, ListRow, two distinct empty lines
+  [`filterable-pick-list.tsx:151`](../../src/adapters/driving/tui/shared/components/filterable-pick-list.tsx#L151)
+
+**EDT quick-pick as a consumer**
+
+- Handler keeps only the per-mode pool and which dialog a selection opens
+  [`quick-pick-dialog.tsx:64`](../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L64)
+
+- Updates re-run the reducer on the latest state, so key-repeat never drops a press
+  [`quick-pick-dialog.tsx:96`](../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L96)
+
+- Dialog state embeds the shared state instead of redeclaring it
+  [`edts-zone.logic.ts:902`](../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L902)
+
+**Update-service pick as a consumer**
+
+- The zone's useInput shrinks to acting on the reducer's outcome
+  [`update-zone.tsx:589`](../../src/adapters/driving/tui/zones/update/update-zone.tsx#L589)
+
+- Closing is the single reset point, including when the store closes the pick
+  [`update-zone.tsx:467`](../../src/adapters/driving/tui/zones/update/update-zone.tsx#L467)
+
+- Candidates become pick items keyed and searchable by repo path
+  [`update-service-pick-dialog.tsx:20`](../../src/adapters/driving/tui/zones/update/update-service-pick-dialog.tsx#L20)
+
+**Peripherals**
+
+- Reducer matrix plus render coverage for rows, scrolling and empty lines
+  [`filterable-pick-list.test.tsx:1`](../../src/adapters/driving/tui/shared/components/filterable-pick-list.test.tsx#L1)
+
+- Real-keypress proof of the prefix-to-substring change in the EDT pick
+  [`edts-zone.interaction.test.tsx:3557`](../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3557)
+
+- Empty-pool wording and bounded window asserted at the zone level
+  [`edts-zone.test.tsx:1459`](../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L1459)
+
+- Home/End caret movement and the reopened-pick reset, by real keypress
+  [`update-zone.interaction.test.tsx:529`](../../src/adapters/driving/tui/zones/update/update-zone.interaction.test.tsx#L529)
+
+- Ledger: three entries resolved, branch-picker adoption logged as follow-up
+  [`deferred-work.md:3`](deferred-work.md#L3)
