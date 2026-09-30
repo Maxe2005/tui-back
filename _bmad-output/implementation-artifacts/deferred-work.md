@@ -564,3 +564,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
   summary: Zero EDTs but a stale `state.json` active pointer (to a removed EDT) makes the first-EDT activation refuse with `activate-has-outgoing`, leaving the new EDT inactive.
   evidence: Story 2.38 review (blind hunter). The wizard decides "first EDT" from the EDT count while `activateEdt` checks the pointer; delete refuses the active EDT, so the stale pointer needs an out-of-band edit, but nothing clears it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
+  summary: After a `:reset` of services, Logs zone panes stay subscribed to (and keep streaming/health-polling) repos that are no longer registered.
+  evidence: runReset rehydrates edts/tabVisibility/registryEmpty/filterHistory only; logs-slice pane subscriptions are never pruned against the new registry.
+- source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
+  summary: After a `:reset` of EDTs, per-zone UI state tied to deleted EDTs (EDT action log/detail pane, zone cursors, Update zone service list) is not cleared until the next natural reload.
+  evidence: runReset only calls four loaders; other slices cache EDT/service-derived state with no reset hook.
