@@ -24,6 +24,7 @@ import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
 import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
 import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
+import { createResetSlice, type ResetSlice } from './slices/reset-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
 export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
@@ -33,6 +34,7 @@ export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryR
 export type { SettingsUpdate } from './slices/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
+export type { ResetPreview } from './slices/reset-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
@@ -76,7 +78,7 @@ export type AppStoreDeps = {
   docker: DockerPort;
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & ResetSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -86,6 +88,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createSettingsSlice(deps)(...args),
     ...createUpdateSlice(deps)(...args),
     ...createLogsSlice(deps)(...args),
+    ...createResetSlice(deps)(...args),
   }));
 }
 

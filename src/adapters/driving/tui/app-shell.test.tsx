@@ -472,6 +472,17 @@ it('shouldQuit returns true for q', () => {
         commitFilterHistoryEntry: () => {},
         clearGlobalFilterHistory: () => {},
         clearServiceFilterHistory: () => {},
+        clearFilterHistoryAndDrainSaves: async () => {},
+        resetScreenOpen: false,
+        resetNotice: null,
+        resetPreview: null,
+        resetStatus: 'idle',
+        resetResult: null,
+        resetError: null,
+        openResetScreen: () => false,
+        closeResetScreen: () => {},
+        dismissResetNotice: () => {},
+        runReset: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

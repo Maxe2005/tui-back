@@ -170,6 +170,7 @@ export function EdtsZone({
   // also silently drove this zone's own pane focus/list-cursor/dialogs at the same time.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
+  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   // Story 2.15: EDT action state for detail pane — tracks in-progress action and action log
   const currentEdtAction = useStore((state) => state.currentEdtAction);
   const setCurrentEdtAction = useStore((state) => state.setCurrentEdtAction);
@@ -837,7 +838,7 @@ export function EdtsZone({
   // Tab/arrows/Enter/Esc to the store directly — see app-shell.tsx), this zone's own Tab/
   // arrow/Enter handling must go inert too, the same way it already does under the other
   // three overlays.
-  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode });
+  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode });
 
   const loading = status === 'loading' && rows.length === 0;
   const edtsLoading = edtsStatus === 'loading' && edts === null;

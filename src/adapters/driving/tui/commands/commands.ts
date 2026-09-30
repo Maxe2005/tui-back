@@ -55,6 +55,15 @@ export const COMMANDS: readonly Command[] = [
     name: 'settings',
     run: (useStore) => useStore.getState().openSettingsScreen(),
   },
+  // `:reset` — the selective tool-data reset overlay, reachable only through this command
+  // (never a raw keybinding). Guarded like `quit`: openResetScreen itself refuses (and
+  // surfaces why) while a group update or an EDT action is in progress.
+  {
+    name: 'reset',
+    run: (useStore) => {
+      useStore.getState().openResetScreen();
+    },
+  },
   // Mirrors shouldQuit's own runInProgress guard (app-shell.tsx) so `:quit` can't bypass it —
   // unlike the raw `q` keypress, this command stays reachable regardless of
   // settings.general.quitShortcutEnabled (that flag only gates the keypress). Goes through

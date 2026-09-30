@@ -109,6 +109,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
+  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   const resizeMode = useStore((state) => state.resizeMode);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const setLogsPaneGridArrowsActive = useStore((state) => state.setLogsPaneGridArrowsActive);
@@ -721,7 +722,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
+    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode },
   );
 
   return (
