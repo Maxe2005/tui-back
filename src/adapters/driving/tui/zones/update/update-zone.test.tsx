@@ -59,11 +59,13 @@ import {
   matchServicesBySubstring,
   mergeLastServiceOutcomes,
   partitionUpdateServiceRows,
+  resolveEditorCommand,
+  tokenizeCommandLine,
 } from './update-zone.logic.js';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
-  return { ...original, spawnSync: vi.fn() };
+  return { ...original, spawnSync: vi.fn(() => ({ status: 0 })) };
 });
 
 const INTERRUPTED_EDTS = [
@@ -427,6 +429,64 @@ describe('launchEditor (story 3.4)', () => {
     launchEditor('/repo/b');
 
     expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('vi', ['/repo/b'], { stdio: 'inherit' });
+  });
+
+  it('the configured command wins over $EDITOR, with <repo> replaced by the blocked repo path', () => {
+    process.env.EDITOR = 'hx';
+
+    expect(launchEditor('/repo/a', 'code <repo>')).toEqual({ ok: true });
+
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('code', ['/repo/a'], { stdio: 'inherit' });
+  });
+
+  it('a blank configured command falls through to $EDITOR', () => {
+    process.env.EDITOR = 'hx';
+
+    launchEditor('/repo/a', '   ');
+
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledWith('hx', ['/repo/a'], { stdio: 'inherit' });
+  });
+
+  it('reports a command that could not be started instead of failing silently', () => {
+    vi.mocked(spawnSync).mockReturnValueOnce({ error: new Error('spawnSync nope ENOENT') } as ReturnType<typeof spawnSync>);
+
+    expect(launchEditor('/repo/a', 'nope <repo>')).toEqual({ ok: false, message: 'Could not launch "nope": spawnSync nope ENOENT' });
+  });
+});
+
+describe('resolveEditorCommand', () => {
+  it('replaces every <repo> occurrence, including inside a larger argument', () => {
+    expect(resolveEditorCommand('code --new-window <repo>', undefined, '/repo/a')).toEqual({ binary: 'code', args: ['--new-window', '/repo/a'] });
+    expect(resolveEditorCommand('ed --folder-uri=file://<repo> <repo>', undefined, '/repo/a')).toEqual({
+      binary: 'ed',
+      args: ['--folder-uri=file:///repo/a', '/repo/a'],
+    });
+  });
+
+  it('appends the repo path when the command carries no placeholder', () => {
+    expect(resolveEditorCommand('code --wait', undefined, '/repo/a')).toEqual({ binary: 'code', args: ['--wait', '/repo/a'] });
+  });
+
+  it('keeps a repo path containing spaces as one argument', () => {
+    expect(resolveEditorCommand('code <repo>', undefined, '/my repos/a')).toEqual({ binary: 'code', args: ['/my repos/a'] });
+  });
+
+  it('falls back setting -> $EDITOR -> vi, skipping blank values', () => {
+    expect(resolveEditorCommand('', 'hx', '/repo/a')).toEqual({ binary: 'hx', args: ['/repo/a'] });
+    expect(resolveEditorCommand('  ', '  ', '/repo/a')).toEqual({ binary: 'vi', args: ['/repo/a'] });
+    expect(resolveEditorCommand('', undefined, '/repo/a')).toEqual({ binary: 'vi', args: ['/repo/a'] });
+  });
+});
+
+describe('tokenizeCommandLine', () => {
+  it('splits on runs of whitespace', () => {
+    expect(tokenizeCommandLine('  code   --wait\t<repo> ')).toEqual(['code', '--wait', '<repo>']);
+    expect(tokenizeCommandLine('   ')).toEqual([]);
+  });
+
+  it('keeps quoted segments (single or double) as one token, quotes removed', () => {
+    expect(tokenizeCommandLine('"/opt/My Editor/bin/ed" --title \'a b\' <repo>')).toEqual(['/opt/My Editor/bin/ed', '--title', 'a b', '<repo>']);
+    expect(tokenizeCommandLine('ed --flag=""')).toEqual(['ed', '--flag=']);
   });
 });
 

@@ -9,8 +9,9 @@
 //
 // Story 3.4 backs core's `onUpdateBlocker` seam here: a dirty/conflicted repo pauses the
 // run on a bounded four-choice modal menu (stash / open in editor / cancel repo / cancel
-// run) rendered as `ListRow`s. The editor spawn is driving-side only (`launchEditor`);
-// every git write still goes through the core use-case (AD-1).
+// run) rendered as `ListRow`s. The editor spawn is driving-side only (`launchEditor`, with
+// the command line taken from the `general.editorCommand` setting); every git write still
+// goes through the core use-case (AD-1).
 //
 // Every keystroke behavior is a standalone pure function below, unit-tested directly — the
 // `useInput` callback stays a thin dispatcher over them (the edts-zone.tsx convention:
@@ -43,6 +44,7 @@ import {
   isServiceTargetedByRun,
   matchServicesBySubstring,
   partitionUpdateServiceRows,
+  resolveEditorCommand,
 } from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
@@ -293,16 +295,23 @@ export function resolveBlockerMenuKey(input: string, key: BlockerMenuKey, cursor
 
 // Story 3.4: the driving-side editor launch — core only ever sees the `edited` choice,
 // never an editor (AD-1: the TUI never calls a driven adapter; spawning the editor is
-// driving-side only). Spawns `$EDITOR` (fallback `vi`) on the blocked repo with the
-// terminal attached and waits for exit; the exit status is deliberately unread — core's
-// re-verification is the gate (a no-op edit simply re-presents the menu). An `$EDITOR`
-// value carries its own flags (`code --wait`, `emacs -nw`, ...) — the first
-// whitespace-separated token is the binary, the rest are leading args with the blocked
-// repo appended last.
-export function launchEditor(repoPath: string): void {
-  const configured = process.env.EDITOR?.trim();
-  const [binary = 'vi', ...leading] = configured !== undefined && configured !== '' ? configured.split(/\s+/) : [];
-  spawnSync(binary, [...leading, repoPath], { stdio: 'inherit' });
+// driving-side only). Spawns the resolved editor command on the blocked repo with the
+// terminal attached and waits for exit: the `general.editorCommand` setting when set
+// (`code <repo>` opens a VS Code window on the repo with its merge in progress), else
+// `$EDITOR`, else `vi` — see resolveEditorCommand. The exit status is deliberately unread
+// — core's re-verification is the gate (a no-op edit, or a GUI editor that returns
+// immediately, simply re-presents the menu). Only a command that could not be started at
+// all (unknown binary, not executable) is reported, so a misconfigured setting is never a
+// silent no-op.
+export type LaunchEditorResult = { ok: true } | { ok: false; message: string };
+
+export function launchEditor(repoPath: string, configured = ''): LaunchEditorResult {
+  const { binary, args } = resolveEditorCommand(configured, process.env.EDITOR, repoPath);
+  const result = spawnSync(binary, args, { stdio: 'inherit' });
+  if (result.error !== undefined) {
+    return { ok: false, message: `Could not launch "${binary}": ${result.error.message}` };
+  }
+  return { ok: true };
 }
 
 export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) {
@@ -359,9 +368,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // directly).
   const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
   const listBranchesAction = useStore((state) => state.listBranches);
+  // The user-defined "Open in editor" command line (empty: `$EDITOR`, else `vi`).
+  const editorCommand = useStore((state) => state.settings.general.editorCommand);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
+  // The last "Open in editor" launch failure for the raised blocker (null when the editor
+  // started, or was never tried) — shown inside the blocker menu, which stays open.
+  const [editorError, setEditorError] = useState<string | null>(null);
   // Story 3.9: the row-local action menu's own target + cursor — zone-local UI state (the
   // same convention as the service-list cursor above; only cross-visit/cross-run state
   // belongs in update-slice.ts). Null when no menu is open.
@@ -456,6 +470,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     if (updateBlocker !== null) {
       setBlockerCursor(0);
     }
+    setEditorError(null);
   }, [updateBlocker]);
 
   // A newly opened config screen always starts browsing on its first row with no branch
@@ -544,9 +559,15 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
           if (step.choice === 'edited') {
-            // Driving-side editor: spawn `$EDITOR` and wait for exit, then report the
-            // choice — core re-verifies before resuming (a no-op edit re-presents).
-            launchEditor(updateBlocker.repoPath);
+            // Driving-side editor: spawn the configured command and wait for exit, then
+            // report the choice — core re-verifies before resuming (a no-op edit
+            // re-presents). An editor that could not be started reports nothing to core:
+            // the menu stays open on its error line so another choice can be made.
+            const launched = launchEditor(updateBlocker.repoPath, editorCommand);
+            if (!launched.ok) {
+              setEditorError(launched.message);
+              return;
+            }
           }
           resolveUpdateBlocker(step.choice);
         }
@@ -928,6 +949,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         {updateBlocker !== null ? (
           <Box flexDirection="column">
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
+            {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
             {UPDATE_BLOCKER_MENU_ITEMS.map((item, index) => (
               <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
             ))}
