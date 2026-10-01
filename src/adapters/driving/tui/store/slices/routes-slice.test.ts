@@ -354,3 +354,136 @@ describe('routes slice fireRoute (story 6.2)', () => {
     expect(state.fireError).toBeNull();
   });
 });
+
+describe('routes slice jsonTreeStates (story 6.7)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function manifestWithBaseUrl(): ManifestPort {
+    return { load: vi.fn(async () => ok(manifestFor('gateway', { 'route-explorer': { baseUrl: 'http://localhost:3000' } }))) };
+  }
+
+  async function loadedStore(overrides: Partial<AppStoreDeps> = {}) {
+    const store = createAppStore(fakeDeps({ manifest: manifestWithBaseUrl(), ...overrides }));
+    await store.getState().loadRoutes();
+    expect(store.getState().routesStatus).toBe('ready');
+    return store;
+  }
+
+  it('starts with no tree state, no fired key, and an unfocused tree', () => {
+    const store = createAppStore(fakeDeps());
+    expect(store.getState().jsonTreeStates).toEqual({});
+    expect(store.getState().firedRouteKey).toBeNull();
+    expect(store.getState().treeFocused).toBe(false);
+  });
+
+  it('focuses the tree and keys its state on a successful fire', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"id":1}', { status: 200 })));
+    const store = await loadedStore();
+
+    await store.getState().fireRoute('GET', '/users');
+
+    const state = store.getState();
+    expect(state.firedRouteKey).toBe('GET /users');
+    expect(state.treeFocused).toBe(true);
+    expect(state.jsonTreeStates['GET /users']).toEqual({
+      foldedPaths: [],
+      hiddenKeys: [],
+      onlyKeys: [],
+      hideNulls: false,
+      selected: 0,
+    });
+  });
+
+  it('keeps prior key rules and folds on a re-fire of the same route', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"id":1}', { status: 200 })));
+    const store = await loadedStore();
+
+    await store.getState().fireRoute('GET', '/users');
+    store.getState().updateJsonTreeState('GET /users', (previous) => ({
+      ...previous,
+      foldedPaths: ['data'],
+      hiddenKeys: ['tags'],
+      selected: 3,
+    }));
+
+    await store.getState().fireRoute('GET', '/users');
+
+    expect(store.getState().jsonTreeStates['GET /users']).toMatchObject({
+      foldedPaths: ['data'],
+      hiddenKeys: ['tags'],
+      selected: 3,
+    });
+    expect(store.getState().treeFocused).toBe(true);
+  });
+
+  it('starts a different route with fresh tree state (per-route isolation)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const scanner: RouteScannerPort = {
+      scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }, { method: 'POST', path: '/users' }] as Route[])),
+    };
+    const store = await loadedStore({ scanner });
+
+    await store.getState().fireRoute('GET', '/users');
+    store.getState().updateJsonTreeState('GET /users', (previous) => ({ ...previous, hiddenKeys: ['tags'] }));
+    await store.getState().fireRoute('POST', '/users');
+
+    expect(store.getState().firedRouteKey).toBe('POST /users');
+    expect(store.getState().jsonTreeStates['GET /users']).toMatchObject({ hiddenKeys: ['tags'] });
+    expect(store.getState().jsonTreeStates['POST /users']).toMatchObject({ hiddenKeys: [] });
+  });
+
+  it('unfocuses the tree on a fire error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
+    const store = await loadedStore();
+    store.getState().setTreeFocused(true);
+
+    await store.getState().fireRoute('GET', '/users');
+
+    expect(store.getState().fireStatus).toBe('error');
+    expect(store.getState().treeFocused).toBe(false);
+  });
+
+  it('resets the fired key and focus (with the fire triple) on routes reload, keeping states', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const store = await loadedStore();
+
+    await store.getState().fireRoute('GET', '/users');
+    store.getState().updateJsonTreeState('GET /users', (previous) => ({ ...previous, hiddenKeys: ['tags'] }));
+
+    await store.getState().loadRoutes();
+
+    const state = store.getState();
+    expect(state.fireStatus).toBe('idle');
+    expect(state.firedRouteKey).toBeNull();
+    expect(state.treeFocused).toBe(false);
+    expect(state.jsonTreeStates['GET /users']).toMatchObject({ hiddenKeys: ['tags'] });
+  });
+
+  it('prunes tree states past the 50 most-recently-touched entries', async () => {
+    const store = createAppStore(fakeDeps());
+    for (let index = 0; index < 52; index += 1) {
+      store.getState().updateJsonTreeState(`GET /r-${index}`, (previous) => previous);
+    }
+    const states = store.getState().jsonTreeStates;
+    expect(Object.keys(states)).toHaveLength(50);
+    expect(states['GET /r-0']).toBeUndefined();
+    expect(states['GET /r-1']).toBeUndefined();
+    expect(states['GET /r-51']).toBeDefined();
+  });
+
+  it('re-touching a route keeps it past the prune (recency, not insertion)', async () => {
+    const store = createAppStore(fakeDeps());
+    for (let index = 0; index < 50; index += 1) {
+      store.getState().updateJsonTreeState(`GET /r-${index}`, (previous) => previous);
+    }
+    store.getState().updateJsonTreeState('GET /r-0', (previous) => previous);
+    store.getState().updateJsonTreeState('GET /fresh', (previous) => previous);
+    const states = store.getState().jsonTreeStates;
+    expect(Object.keys(states)).toHaveLength(50);
+    expect(states['GET /r-0']).toBeDefined();
+    expect(states['GET /r-1']).toBeUndefined();
+    expect(states['GET /fresh']).toBeDefined();
+  });
+});

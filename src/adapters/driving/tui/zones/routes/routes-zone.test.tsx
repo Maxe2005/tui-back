@@ -137,14 +137,21 @@ describe('RoutesZone (story 6.2)', () => {
     expect(output).toContain('Firing');
   });
 
-  it('shows the fired status + duration + body in the detail pane', async () => {
+  it('shows the fired status line plus a navigable tree instead of the raw dump', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
-    store.setState({ fireStatus: 'fired', fireResult: { status: 200, durationMs: 42, body: '{"id":1}' }, fireError: null });
+    store.setState({
+      fireStatus: 'fired',
+      fireResult: { status: 200, durationMs: 42, body: '{"id":1}' },
+      fireError: null,
+      firedRouteKey: 'GET /users',
+      treeFocused: true,
+    });
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('200');
-    expect(output).toContain('42ms');
-    expect(output).toContain('{"id":1}');
+    expect(output).toContain('200 · 42ms');
+    expect(output).toContain('id');
+    expect(output).toContain('0 hidden · 0 rules');
+    expect(output).not.toContain('{"id":1}');
   });
 
   it('shows a distinct auth error instead of a generic failure', async () => {
@@ -157,5 +164,83 @@ describe('RoutesZone (story 6.2)', () => {
     });
     const output = await renderToString(<RoutesZone useStore={store} />);
     expect(output).toContain('Access forbidden');
+  });
+});
+
+describe('RoutesZone (story 6.7)', () => {
+  function seedFiredJson(store: ReturnType<typeof createAppStore>, body = '{"id":1,"tags":["a"]}') {
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+      fireStatus: 'fired',
+      fireResult: { status: 200, durationMs: 42, body },
+      fireError: null,
+      firedRouteKey: 'GET /users',
+      treeFocused: true,
+    });
+  }
+
+  it('renders nested rows with size hints and a live status line', async () => {
+    const store = createAppStore();
+    seedFiredJson(store);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('RESPONSE');
+    expect(output).toContain('{2}');
+    expect(output).toContain('tags');
+    expect(output).toContain('0 hidden · 0 rules');
+  });
+
+  it('re-applies the route’s stored folds and key rules', async () => {
+    const store = createAppStore();
+    seedFiredJson(store);
+    store.getState().updateJsonTreeState('GET /users', (previous) => ({
+      ...previous,
+      foldedPaths: ['tags'],
+      hiddenKeys: ['id'],
+    }));
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('tags');
+    expect(output).not.toContain('"a"');
+    expect(output).toContain('2 hidden · 1 rule');
+  });
+
+  it('shows scrollable raw text with its reason for a non-JSON body, never a partial tree', async () => {
+    const store = createAppStore();
+    seedFiredJson(store, '<html>hi</html>');
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('not JSON');
+    expect(output).toContain('<html>hi</html>');
+    expect(output).not.toContain('0 hidden');
+  });
+
+  it('shows the truncation reason at the cap', async () => {
+    const store = createAppStore();
+    seedFiredJson(store, `{"half": "tree", "pad": "${'x'.repeat(64 * 1024)}"}`);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('truncated at 64 KB');
+    expect(output).not.toContain('0 hidden');
+  });
+
+  it('shows an explicit empty state for empty bodies and empty JSON', async () => {
+    const store = createAppStore();
+    seedFiredJson(store, '');
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('Empty response body');
+    store.setState({ fireResult: { status: 200, durationMs: 1, body: '{}' } });
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('Empty JSON value');
+  });
+
+  it('shows tree hints while focused and list hints once Esc returns focus', async () => {
+    const store = createAppStore();
+    seedFiredJson(store);
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[←→] fold');
+    store.getState().setTreeFocused(false);
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[enter] fire');
   });
 });

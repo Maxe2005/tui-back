@@ -506,6 +506,12 @@ it('shouldQuit returns true for q', () => {
         setRoutesFilter: () => {},
         routesSelected: 0,
         setRoutesSelected: () => {},
+        // Story 6.7: JsonTree session state
+        jsonTreeStates: {},
+        firedRouteKey: null,
+        treeFocused: false,
+        setTreeFocused: () => {},
+        updateJsonTreeState: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

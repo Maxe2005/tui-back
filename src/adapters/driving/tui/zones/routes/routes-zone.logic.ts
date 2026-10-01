@@ -61,6 +61,12 @@ export function formatFireResult(result: FireResult): string {
   return `${result.status} · ${result.durationMs}ms\n\n${result.body}`;
 }
 
+// Story 6.7: the Response header keeps the status line while the body dump moves into
+// the JsonTree (DetailPane's single-<Text> constraint forbids nesting the tree inside).
+export function formatFireStatus(result: FireResult): string {
+  return `${result.status} · ${result.durationMs}ms`;
+}
+
 // Story 6.2: auth failures render distinctly from generic failures so a permission
 // mismatch or a down auth route is never mistaken for a broken endpoint. Non-auth fire
 // errors get the same human-friendly treatment (prefix + raw message) instead of a raw

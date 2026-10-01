@@ -364,7 +364,11 @@ export function AppShell({
       // mounted `useInput` hook (Ink dispatches to all of them, not just the topmost) fires
       // on the same keypress and the zone switches out from under the pane grid before its
       // own handler's `setSubFocus` even matters.
-      const arrowZoneId = state.logsPaneGridArrowsActive ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
+      // Story 6.7: same double-dispatch hazard for the Routes response tree — while it
+      // holds focus, Left/Right fold/unfold there, so the global switch stays inert too
+      // (Up/Down need no gate: no global binding consumes them).
+      const treeOwnsArrows = activeZone === 'routes' && state.treeFocused;
+      const arrowZoneId = state.logsPaneGridArrowsActive || treeOwnsArrows ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;

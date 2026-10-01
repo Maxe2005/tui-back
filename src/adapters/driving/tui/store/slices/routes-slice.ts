@@ -22,6 +22,13 @@ import { listRoutes } from '../../../../../core/routes/list-routes.js';
 import { listRepos } from '../../../../../core/scripts/list-repos.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import {
+  MAX_JSON_TREE_STATES,
+  createDefaultJsonTreeState,
+  pruneJsonTreeStates,
+  routeKeyFor,
+  type JsonTreeState,
+} from '../../shared/components/json-tree/model.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 const NO_SCANNER_ERROR = 'No route scanner wired into the TUI store';
@@ -30,6 +37,8 @@ const NO_AUTH_ERROR = 'No dev auth wired into the TUI store';
 export type RoutesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export type FireStatus = 'idle' | 'firing' | 'fired' | 'error';
+
+export type { JsonTreeState };
 
 export type RoutesSlice = {
   routesRepoPath: string | null;
@@ -47,6 +56,18 @@ export type RoutesSlice = {
   fireResult: FireResult | null;
   fireError: { code: string; message: string } | null;
   fireRoute: (method: string, path: string) => Promise<void>;
+  // Story 6.7: the JsonTree's per-route session state (folds, key rules, hide-nulls,
+  // selection), keyed `METHOD + ' ' + path`. Session-only — never persisted to disk —
+  // and pruned to the MAX_JSON_TREE_STATES most-recently-touched entries on every touch.
+  jsonTreeStates: Record<string, JsonTreeState>;
+  // The fired route's key, stored next to the fire triple so the tree state follows the
+  // response (not the list cursor); a re-fire on the same key re-applies its rules.
+  firedRouteKey: string | null;
+  // Firing moves keyboard focus to the response tree (arrows/fold/filter keys go there);
+  // Esc returns focus to the routes list.
+  treeFocused: boolean;
+  setTreeFocused: (focused: boolean) => void;
+  updateJsonTreeState: (routeKey: string, updater: (previous: JsonTreeState) => JsonTreeState) => void;
 };
 
 export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], RoutesSlice> {
@@ -62,6 +83,21 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     fireStatus: 'idle',
     fireResult: null,
     fireError: null,
+    jsonTreeStates: {},
+    firedRouteKey: null,
+    treeFocused: false,
+    setTreeFocused: (focused) => set({ treeFocused: focused }),
+    // Touch = delete + re-insert (Record insertion order = recency), then prune past the
+    // cap. Creates the route's default state on first touch; updaters must be pure.
+    updateJsonTreeState: (routeKey, updater) =>
+      set((state) => {
+        const previous = state.jsonTreeStates[routeKey] ?? createDefaultJsonTreeState();
+        const next = updater(previous);
+        const touched: Record<string, JsonTreeState> = { ...state.jsonTreeStates };
+        delete touched[routeKey];
+        touched[routeKey] = next;
+        return { jsonTreeStates: pruneJsonTreeStates(touched, MAX_JSON_TREE_STATES) };
+      }),
     loadRoutes: async () => {
       if (!deps) {
         set({ routesStatus: 'error', routesError: { code: 'store-not-wired', message: NO_DEPS_ERROR } });
@@ -118,6 +154,8 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       if (result.ok) {
         // A successful reload (repo switch included) drops any previous fire result — the
         // old response belongs to another route list and must not linger in the detail pane.
+        // The fire triple resets exactly as before, plus its two story-6.7 neighbors (the
+        // per-route tree states themselves survive: a re-fire re-applies them).
         set({
           routesRepoPath: target.path,
           routes: result.data.routes,
@@ -126,6 +164,8 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           fireStatus: 'idle',
           fireResult: null,
           fireError: null,
+          firedRouteKey: null,
+          treeFocused: false,
         });
       } else {
         set({
@@ -176,12 +216,29 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         path,
       );
       if (result.ok) {
-        set({ fireStatus: 'fired', fireResult: result.data, fireError: null });
+        // Story 6.7: firing focuses the response tree and touches (never resets) the
+        // route's tree state, so a re-fire re-applies its key rules and normalized folds.
+        const firedRouteKey = routeKeyFor(method, path);
+        set((state) => {
+          const touched: Record<string, JsonTreeState> = { ...state.jsonTreeStates };
+          const previous = touched[firedRouteKey] ?? createDefaultJsonTreeState();
+          delete touched[firedRouteKey];
+          touched[firedRouteKey] = previous;
+          return {
+            fireStatus: 'fired',
+            fireResult: result.data,
+            fireError: null,
+            firedRouteKey,
+            treeFocused: true,
+            jsonTreeStates: pruneJsonTreeStates(touched, MAX_JSON_TREE_STATES),
+          };
+        });
       } else {
         set({
           fireStatus: 'error',
           fireResult: null,
           fireError: { code: result.error.code, message: result.error.message },
+          treeFocused: false,
         });
       }
     },

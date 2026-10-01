@@ -6,6 +6,7 @@ import {
   formatFireError,
   filterRoutes,
   formatFireResult,
+  formatFireStatus,
   formatRouteDetail,
   formatRouteRow,
   moveRoutesSelection,
@@ -84,6 +85,12 @@ describe('formatRouteDetail', () => {
 describe('formatFireResult (story 6.2)', () => {
   it('joins status, duration, and body into one Text-safe string', () => {
     expect(formatFireResult({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms\n\n{"id":1}');
+  });
+});
+
+describe('formatFireStatus (story 6.7)', () => {
+  it('keeps the status line while the body dump moves into the JsonTree', () => {
+    expect(formatFireStatus({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms');
   });
 });
 

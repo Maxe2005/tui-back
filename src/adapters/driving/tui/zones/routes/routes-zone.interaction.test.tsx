@@ -2,7 +2,7 @@
 // shared with logs-zone.interaction.test.tsx).
 import { createElement } from 'react';
 import { Box, Text, render } from 'ink';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { RoutesZone } from './routes-zone.js';
@@ -174,6 +174,211 @@ describe('RoutesZone route filter', () => {
       expect(lastFrame(second.stdout)).toContain('SUMMARY-2');
     } finally {
       second.instance.unmount();
+    }
+  });
+});
+
+describe('RoutesZone JsonTree (story 6.7)', () => {
+  const BODY = '{"id":1,"tags":["a","b"],"nested":{"x":true}}';
+
+  function seedTree(fireRoute: () => Promise<void> = async () => {}) {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: fireRoute as unknown as () => Promise<void>,
+      fireStatus: 'fired',
+      fireResult: { status: 200, durationMs: 42, body: BODY },
+      fireError: null,
+      firedRouteKey: 'GET /users',
+      treeFocused: true,
+    });
+    return store;
+  }
+
+  function treeSelected(store: ReturnType<typeof createAppStore>): number {
+    return store.getState().jsonTreeStates['GET /users']?.selected ?? 0;
+  }
+
+  async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+    await press(instance, stdin, KEYS.escape);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await instance.waitUntilRenderFlush();
+  }
+
+  it('moves the tree cursor with arrows/Home/End without moving the list cursor', async () => {
+    const store = seedTree();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      expect(treeSelected(store)).toBe(1);
+      expect(store.getState().routesSelected).toBe(0);
+      await press(instance, stdin, KEYS.end);
+      expect(treeSelected(store)).toBe(6);
+      expect(lastFrame(stdout)).toContain('x');
+      await press(instance, stdin, KEYS.home);
+      expect(treeSelected(store)).toBe(0);
+      await press(instance, stdin, KEYS.up);
+      expect(treeSelected(store)).toBe(0);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('folds with ← (jumping to the parent when already folded) and unfolds with →', async () => {
+    const store = seedTree();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      expect(treeSelected(store)).toBe(2);
+      await press(instance, stdin, KEYS.left);
+      expect(store.getState().jsonTreeStates['GET /users']?.foldedPaths).toEqual(['tags']);
+      expect(lastFrame(stdout)).not.toContain('"a"');
+      // ← on the already-folded container jumps to its parent (the root).
+      await press(instance, stdin, KEYS.left);
+      expect(treeSelected(store)).toBe(0);
+      // → on an unfolded container is a no-op; on the folded one it reopens.
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().jsonTreeStates['GET /users']?.foldedPaths).toEqual(['tags']);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().jsonTreeStates['GET /users']?.foldedPaths).toEqual([]);
+      expect(lastFrame(stdout)).toContain('"a"');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('hides a key globally with h and allow-lists with H', async () => {
+    const store = seedTree();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'h');
+      expect(store.getState().jsonTreeStates['GET /users']?.hiddenKeys).toEqual(['id']);
+      expect(lastFrame(stdout)).toContain('1 hidden · 1 rule');
+      // The cursor already sits on `tags` (the row that slid into the hidden row's place).
+      await press(instance, stdin, 'H');
+      expect(store.getState().jsonTreeStates['GET /users']?.onlyKeys).toEqual(['tags']);
+      expect(lastFrame(stdout)).not.toContain('nested');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('opens the filter panel with f, removes per digit, toggles nulls, closes with Esc', async () => {
+    const store = seedTree();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'h');
+      await press(instance, stdin, 'f');
+      expect(lastFrame(stdout)).toContain('[1] hide "id"');
+      await press(instance, stdin, '1');
+      expect(store.getState().jsonTreeStates['GET /users']?.hiddenKeys).toEqual([]);
+      await press(instance, stdin, 'n');
+      expect(store.getState().jsonTreeStates['GET /users']?.hideNulls).toBe(true);
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).not.toContain('[n] hide nulls');
+      expect(store.getState().treeFocused).toBe(true);
+      await pressEscape(instance, stdin);
+      expect(store.getState().treeFocused).toBe(false);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('returns focus to the list on Esc with every list key working as before', async () => {
+    const fireRoute = vi.fn(async () => {});
+    const store = seedTree(fireRoute);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await pressEscape(instance, stdin);
+      expect(store.getState().treeFocused).toBe(false);
+      await press(instance, stdin, KEYS.down);
+      expect(store.getState().routesSelected).toBe(1);
+      await press(instance, stdin, KEYS.enter);
+      expect(fireRoute).toHaveBeenCalledWith('POST', '/users');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('folds/unfolds whole depth levels with -/+ through the zone', async () => {
+    const store = seedTree();
+    store.setState({
+      fireResult: { status: 200, durationMs: 42, body: '{"a":{"b":{"c":1}},"d":2}' },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      const folds = () => store.getState().jsonTreeStates['GET /users']?.foldedPaths ?? [];
+      expect(folds()).toEqual([]);
+      await press(instance, stdin, '-');
+      expect(folds()).toEqual(['a.b']);
+      await press(instance, stdin, '-');
+      expect(folds()).toEqual(['a.b', 'a']);
+      await press(instance, stdin, '+');
+      expect(folds()).toEqual(['a.b']);
+      await press(instance, stdin, '+');
+      expect(folds()).toEqual([]);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('clears all rules with c and closes the panel with f without unfocusing', async () => {
+    const store = seedTree();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'h');
+      await press(instance, stdin, 'f');
+      expect(lastFrame(stdout)).toContain('[1] hide "id"');
+      await press(instance, stdin, 'c');
+      expect(store.getState().jsonTreeStates['GET /users']?.hiddenKeys).toEqual([]);
+      expect(lastFrame(stdout)).toContain('Filters — 0 rules');
+      await press(instance, stdin, 'f');
+      expect(lastFrame(stdout)).not.toContain('Filters —');
+      expect(store.getState().treeFocused).toBe(true);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('scrolls a raw fallback with arrows and shows the selected line', async () => {
+    const store = seedTree();
+    store.setState({
+      fireResult: { status: 200, durationMs: 42, body: Array.from({ length: 30 }, (_, i) => `line-${i}`).join('\n') },
+    });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(lastFrame(stdout)).toContain('not JSON');
+      await press(instance, stdin, KEYS.end);
+      expect(treeSelected(store)).toBe(29);
+      expect(lastFrame(stdout)).toContain('› line-29');
+      await press(instance, stdin, KEYS.pageUp);
+      expect(treeSelected(store)).toBeLessThan(29);
+      await press(instance, stdin, KEYS.home);
+      expect(treeSelected(store)).toBe(0);
+      expect(lastFrame(stdout)).toContain('› line-0');
+    } finally {
+      instance.unmount();
     }
   });
 });

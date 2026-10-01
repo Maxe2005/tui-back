@@ -583,3 +583,6 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-6-scanner-extension-parameters-request-body-skeletons.md`
   summary: The `nestjs-openapi` scanner ignores Swagger/OpenAPI 2.0 specs' request details (`in: body` parameters, `consumes`, `#/definitions/...` refs) and path-item-level `$ref`s.
   evidence: extractRequestDetails only reads OpenAPI 3.x `requestBody`/`components`; 2.0 operations yield plain routes (still listed, no body skeleton) — acceptable for the gateway today, revisit if a 2.0 repo activates route-explorer.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-7-jsontree-component-read-only-navigation-collapse-session-filters.md`
+  summary: JsonTree builds rows via unbounded recursion, so a pathologically deep response (thousands of nesting levels) can overflow the call stack and crash the TUI.
+  evidence: buildNode/flattenJson/countJsonNodes/listTreeContainers in shared/components/json-tree/model.ts recurse per nesting level with no depth cap; dev API responses make this unlikely, but a depth guard with a placeholder row needs a design decision.
