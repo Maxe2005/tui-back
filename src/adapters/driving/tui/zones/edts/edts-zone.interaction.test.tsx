@@ -3721,6 +3721,134 @@ describe('EdtsZone quick-pick dialog (story 2.30)', () => {
 
 // Story 2.38: the wizard's Step 4 — explicit activation. Two services (svc-a, svc-b); svc-a is
 // the new EDT's only member. Every log entry must go to the NEW EDT's ulid ('new-ulid').
+describe('EdtsZone edt-create-from (story 2.31)', () => {
+  const ROOT = edt({
+    ulid: 'root-ulid',
+    topic: 'feat-a',
+    status: 'active',
+    members: [
+      { service: 'svc-a', repoPath: '/repos/a', branch: 'feat/a-api' },
+      { service: 'svc-gone', repoPath: '/repos/gone', branch: 'feat/x' },
+    ],
+  });
+  const OTHER = edt({ ulid: 'other-ulid', topic: 'other-work' });
+  const PICK_TITLE = 'CREATE FROM EDT — SELECT';
+
+  function createFromStore(target: string) {
+    const { store, createCalls } = step3Store({ edts: [ROOT, OTHER] });
+    const logged: string[] = [];
+    store.setState({
+      activeEdt: 'root-ulid',
+      currentEdtAction: { type: 'create-from', target, startedAt: new Date().toISOString() },
+      logEdtAction: async (_ulid, _actionType, _outcome, detail) => {
+        logged.push(detail);
+      },
+    });
+    return { store, createCalls, logged };
+  }
+
+  function lastPickFrame(stdout: FakeTtyStdout): string {
+    return stdout.output.slice(stdout.output.lastIndexOf(PICK_TITLE));
+  }
+
+  it('no argument: opens quick-pick(create-from) over every EDT (active included); Enter opens the seeded wizard', async () => {
+    const { store } = createFromStore('select EDT');
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain(PICK_TITLE);
+      expect(lastPickFrame(stdout)).toContain('feat-a');
+      expect(lastPickFrame(stdout)).toContain('other-work');
+
+      await press(instance, stdin, KEYS.enter); // the active root, first in the pool
+      const frame = lastWizardFrame(stdout);
+      expect(frame).toContain("Depuis l'EDT : feat-a");
+      // The topic is never derived from the root: Step 1 starts empty, so Enter is blocked.
+      await press(instance, stdin, KEYS.enter);
+      expect(lastWizardFrame(stdout)).toContain('Le nom ne doit pas être vide');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('no argument: Esc closes the quick-pick with nothing opened', async () => {
+    const { store } = createFromStore('select EDT');
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await pressEscape(instance, stdin);
+      expect(stdout.output).not.toContain(WIZARD_TITLE);
+      expect(store.getState().currentEdtAction).toBeNull();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('unknown topic: opens quick-pick(create-from) with an inline not-found error, cleared on the first filter edit', async () => {
+    const { store } = createFromStore('nope');
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(lastPickFrame(stdout)).toContain('EDT not found: "nope"');
+
+      await press(instance, stdin, KEYS.down); // not a filter edit: the error stays
+      expect(lastPickFrame(stdout)).toContain('EDT not found: "nope"');
+
+      await type(instance, stdin, 'o');
+      expect(lastPickFrame(stdout)).not.toContain('EDT not found');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('known topic: seeded wizard — inherited row Perso on the root branch, added row Global; submit sends the root bases', async () => {
+    const { store, createCalls, logged } = createFromStore('feat-a');
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(lastWizardFrame(stdout)).toContain("Depuis l'EDT : feat-a");
+
+      await type(instance, stdin, 'next');
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
+      // svc-gone is no longer a registered service: named in a dim note.
+      expect(lastWizardFrame(stdout)).toContain('svc-gone');
+
+      // svc-a is pre-checked (root member); also check svc-b (not in the root).
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3
+      await settle(instance);
+
+      const step3 = lastWizardFrame(stdout);
+      expect(step3).toContain('[Créer (Perso)]');
+      expect(step3).toContain('feat/a-api');
+      expect(step3).toContain('[Créer (Global)]');
+
+      await press(instance, stdin, KEYS.ctrlN); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.space); // "Créer sans basculer"
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+
+      expect(createCalls).toHaveLength(1);
+      expect(createCalls[0]).toMatchObject({
+        topic: 'next',
+        members: ['/repos/a', '/repos/b'],
+        memberPlans: {
+          '/repos/a': { kind: 'create', base: 'feat/a-api', name: 'next' },
+          '/repos/b': { kind: 'create', base: 'development', name: 'next' },
+        },
+      });
+      expect(logged[0]).toContain('Created EDT "next" from "feat-a" with 2 member(s)');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
 describe('EdtsZone create wizard Step 4 — activation & switch choice (story 2.38)', () => {
   const EXISTING = edt({ ulid: 'old-ulid', topic: 'old', members: [] });
   const NEW_ENTRY = edt({ ulid: 'new-ulid', topic: 'feat', members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'feat' }] });

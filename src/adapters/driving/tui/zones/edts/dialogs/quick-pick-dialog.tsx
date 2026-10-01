@@ -9,7 +9,7 @@
 // editing, bounded rows) is shared/components/filterable-pick-list.tsx — the same component
 // the Update zone's service pick renders through. This file only owns what is EDT-specific:
 // the per-mode candidate pool and which pre-targeted dialog a selection opens.
-import type { Key } from 'ink';
+import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
 import {
@@ -18,7 +18,9 @@ import {
   type FilterablePickItem,
 } from '../../../shared/components/filterable-pick-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+import { colors } from '../../../shared/theme/theme.js';
 import {
+  initialCreateDialog,
   initialDeleteDialog,
   initialModifyDialog,
   initialSwitchDialog,
@@ -29,7 +31,8 @@ import {
 
 // The candidate pool for a given mode (Boundaries: "Switch mode filters out the active EDT
 // (today's 'first non-active EDT' invariant, preserved as the candidate pool). Modify and
-// delete modes filter over every EDT, active included.").
+// delete modes filter over every EDT, active included."). Story 2.31: create-from too — any
+// EDT, the active one included, can be the root of a new one.
 export function resolveQuickPickCandidates(
   mode: QuickPickMode,
   edtsRows: readonly EdtRegistryEntry[],
@@ -51,6 +54,7 @@ const QUICK_PICK_TITLE: Record<QuickPickMode, string> = {
   switch: 'SWITCH EDT — SELECT',
   modify: 'MODIFY EDT — SELECT',
   delete: 'DELETE EDT — SELECT',
+  'create-from': 'CREATE FROM EDT — SELECT',
 };
 
 export type QuickPickDialogDeps = {
@@ -83,6 +87,9 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
         deps.setDialog(initialSwitchDialog(target));
       } else if (current.mode === 'modify') {
         deps.setDialog(initialModifyDialog(target));
+      } else if (current.mode === 'create-from') {
+        // Story 2.31: the creation wizard seeded from the chosen root EDT.
+        deps.setDialog(initialCreateDialog(target));
       } else {
         deps.setDialog(initialDeleteDialog(target, target.ulid === deps.activeEdtUlid));
       }
@@ -98,7 +105,12 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
         return prev;
       }
       const latest = handleFilterablePickListKey(prev, items, input, key);
-      return latest.type === 'update' ? { ...prev, ...latest.state } : prev;
+      if (latest.type !== 'update') {
+        return prev;
+      }
+      // Story 2.31: the not-found error clears on the first filter edit.
+      const notFound = latest.state.query !== prev.query ? null : prev.notFound;
+      return { ...prev, ...latest.state, notFound };
     });
   }
 
@@ -108,13 +120,16 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
 export function QuickPickDialogView({ dialog, pool }: { dialog: QuickPickDialogState; pool: readonly EdtRegistryEntry[] }) {
   return (
     <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} onConfirm={() => {}} onCancel={() => {}} open={true}>
-      <FilterablePickList
-        label="Filter"
-        state={dialog}
-        items={toQuickPickItems(pool)}
-        emptyText="No EDT to select"
-        noMatchText="No matching EDT"
-      />
+      <Box flexDirection="column">
+        {dialog.notFound !== null ? <Text color={colors.error}>{dialog.notFound}</Text> : null}
+        <FilterablePickList
+          label="Filter"
+          state={dialog}
+          items={toQuickPickItems(pool)}
+          emptyText="No EDT to select"
+          noMatchText="No matching EDT"
+        />
+      </Box>
     </ModalDialog>
   );
 }

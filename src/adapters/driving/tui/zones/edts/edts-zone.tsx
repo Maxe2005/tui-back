@@ -465,6 +465,21 @@ export function EdtsZone({
           setDialog(initialQuickPickDialog('modify'));
           setCurrentEdtAction(null);
         }
+      } else if (currentEdtAction.type === 'create-from') {
+        // Story 2.31: a known topic opens the wizard seeded from that root EDT; an unknown one
+        // opens the create-from quick-pick with an inline not-found error; no topic opens the
+        // quick-pick plain (every EDT, active included).
+        if (currentEdtAction.target !== 'select EDT') {
+          const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
+          setDialog(
+            targetEdt
+              ? initialCreateDialog(targetEdt)
+              : initialQuickPickDialog('create-from', `EDT not found: "${currentEdtAction.target}"`),
+          );
+        } else {
+          setDialog(initialQuickPickDialog('create-from'));
+        }
+        setCurrentEdtAction(null);
       } else if (currentEdtAction.type === 'delete') {
         // Boundary: "The active EDT can never be deleted ... reject before any git/file
         // write." initialDeleteDialog itself enforces this at open time (isActive param) —

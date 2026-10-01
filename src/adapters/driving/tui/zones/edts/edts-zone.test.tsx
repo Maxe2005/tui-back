@@ -1431,6 +1431,12 @@ describe('quick-pick-dialog pure helpers (story 2.30)', () => {
     expect(quickCandidates('modify', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
     expect(quickCandidates('delete', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
   });
+
+  it('resolveQuickPickCandidates: create-from mode includes every EDT, active included (story 2.31)', () => {
+    const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
+    const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
+    expect(quickCandidates('create-from', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
+  });
 });
 
 describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {

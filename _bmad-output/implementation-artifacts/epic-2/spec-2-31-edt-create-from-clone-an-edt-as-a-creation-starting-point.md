@@ -96,10 +96,10 @@ baseline_commit: 'f47d56c9043423061f8e9c33429fcbc3bb9b332b'
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `commands.ts`, `edt-slice.ts` (+ tests) -- command + store opener -- entry point.
-- [ ] `edts-zone.logic.ts`, `wizard.logic.ts` (+ tests) -- seed state, Step 3 seeding/refresh/prune helpers, log detail -- every matrix row unit-tested at the pure level.
-- [ ] `quick-pick-dialog.tsx`, `edts-zone.tsx`, `create-wizard.tsx`, `step-services.tsx` -- create-from mode, not-found error, seeded wizard, root line, missing note.
-- [ ] `edts-zone.interaction.test.tsx` -- no-arg pick → seeded wizard; known topic; unknown topic error; Step 3 Perso/Global rows; full create submits `memberPlans` with root bases.
+- [x] `commands.ts`, `edt-slice.ts` (+ tests) -- command + store opener -- entry point.
+- [x] `edts-zone.logic.ts`, `wizard.logic.ts` (+ tests) -- seed state, Step 3 seeding/refresh/prune helpers, log detail -- every matrix row unit-tested at the pure level.
+- [x] `quick-pick-dialog.tsx`, `edts-zone.tsx`, `create-wizard.tsx`, `step-services.tsx` -- create-from mode, not-found error, seeded wizard, root line, missing note.
+- [x] `edts-zone.interaction.test.tsx` -- no-arg pick → seeded wizard; known topic; unknown topic error; Step 3 Perso/Global rows; full create submits `memberPlans` with root bases.
 
 **Acceptance Criteria:**
 - Given a seeded wizard, when it is submitted, then `createEdt` receives `memberPlans` where each inherited member is `{kind:'create', base: <root branch>, name}` and each added member uses the global plan.
