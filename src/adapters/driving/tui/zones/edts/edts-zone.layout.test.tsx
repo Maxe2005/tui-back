@@ -1,12 +1,8 @@
-// Bugfix (post-2.21 human review): the EDT zone's list column stacks 3 fixed-but-movable
-// regions (EDTS / EDT SERVICES / OTHER SERVICES). Before this fix, each sub-pane's Box had no
-// explicit `flexBasis`/`minHeight`/`overflow`, so Yoga's default "a flex item's minimum size is
-// its own content size" let a pane with more rows than its ratio share grow past it, dragging
-// the EDTS<->rest and EDT-SERVICES<->OTHER-SERVICES boundaries down with it — the exact
-// "position moves with content volume" regression the story's own AC ("4 regions ... fixed
-// border between each") forbids. Verified with a standalone Ink/Yoga repro before landing here
-// (0 to 100+ rows of content, boundary position unchanged only once flexBasis/minHeight/
-// overflow are all three present).
+// The EDT zone's list column stacks 3 fixed-but-movable regions (EDTS / EDT SERVICES / OTHER
+// SERVICES). Without explicit `flexBasis`/`minHeight`/`overflow` on each sub-pane's Box, Yoga's
+// default (a flex item's minimum size is its content size) lets a pane with more rows than its
+// ratio share grow past it and drag the boundaries down — position must not move with content
+// volume (from 0 to 100+ rows, only with all three props present).
 import { describe, it, expect } from 'vitest';
 import { Box } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';

@@ -1,16 +1,7 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.38 — the create wizard's Step 4 key reducer, kept
-// pure and unit-tested apart from its Ink view (step-activation.tsx), the same pattern as
-// switch-resolution.logic.ts: the reducer runs inside the setDialog updater (so keys arriving
-// in one input chunk each see the previous key's result) and only RAISES a `decision`; the
-// zone's effect hands it to the wizard's effectful handler exactly once.
-//
-//   - Before the create: `Space`/`↑`/`↓` move the radio (switch now / create without switching)
-//     — inert on a first EDT, whose activation is locked on. `Enter`/`Esc`/step keys stay the
-//     wizard's own (create-wizard.tsx).
-//   - The pause panel (first-EDT pre-flight found files at risk): `R` retry, `E` open the
-//     overwrite confirmation, `Esc` stop (the EDT stays created, not active).
-//   - The overwrite confirmation (mirrors Story 2.41's discard confirmation): lists every file,
-//     `↑`/`↓` scroll it, `Ctrl+E` confirms, `Enter`/`Esc` mean Retour.
+// tui/zones/edts/dialogs/create-wizard: the create wizard's Step 4 key reducer, pure and kept apart
+// from its Ink view (step-activation.tsx). It runs inside the setDialog updater (so keys arriving
+// in one input chunk each see the previous key's result) and only RAISES a `decision`; the zone's
+// effect hands it to the wizard's effectful handler exactly once.
 import type { ActivationBlockedRepo } from '../../../../../../../core/edt/activate.js';
 import type { TextEditKey } from '../../../../shared/components/text-edit.js';
 import type { ActivationState } from '../../edts-zone.logic.js';
@@ -47,6 +38,12 @@ function isCtrl(input: string, key: TextEditKey, letter: string): boolean {
   return key.ctrl === true && input.toLowerCase() === letter;
 }
 
+//   - Before the create: `Space`/`↑`/`↓` move the radio (switch now / create without switching)
+//     — inert on a first EDT, whose activation is locked on.
+//   - The pause panel (first-EDT pre-flight found files at risk): `R` retry, `E` open the
+//     overwrite confirmation, `Esc` stop (the EDT stays created, not active).
+//   - The overwrite confirmation: lists every file, `↑`/`↓` scroll it, `Ctrl+E` confirms,
+//     `Enter`/`Esc` mean Retour.
 export function reduceActivationKey(state: ActivationState, input: string, key: TextEditKey): ActivationState {
   if (state.decision !== null || state.outcome !== null) {
     return state;

@@ -1,6 +1,6 @@
-// tui/zones/edts/dialogs/create-wizard: Step 2 "Services" (Story 2.36) — every registered
-// managed repo as a checkbox-list-item (Space toggles, ↑/↓/Home/End move), with the existing
-// loading/error/empty candidate states.
+// tui/zones/edts/dialogs/create-wizard: Step 2 "Services" — every registered managed repo as a
+// checkbox-list-item (Space toggles, ↑/↓/Home/End move), with the loading/error/empty candidate
+// states.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { CheckboxListItem } from '../../../../shared/components/checkbox-list-item.js';
@@ -45,7 +45,7 @@ export function handleServicesStepInput(
     if (prev.kind !== 'create') {
       return prev;
     }
-    // Story 2.37: Step 3 seeds itself on entry (enterBranchStep) — nothing to prefill here.
+    // Step 3 seeds itself on entry (enterBranchStep) — nothing to prefill here.
     const nextSelected = toggleMemberSelection(prev.selectedMembers, path);
     return { ...prev, selectedMembers: nextSelected, error: nextSelected.length > 0 ? null : prev.error };
   });
@@ -60,7 +60,7 @@ export function ServicesStepView({
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
 }) {
-  // Story 2.31: root members no longer in the pool (pruned on entering Step 3).
+  // Root members no longer in the pool (pruned on entering Step 3).
   const missing = candidateState === 'ready' ? missingSeedMembers(dialog.seedFromEdt, candidates) : [];
   return (
     <Box flexDirection="column">

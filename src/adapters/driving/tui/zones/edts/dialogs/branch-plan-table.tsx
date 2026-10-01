@@ -1,12 +1,8 @@
-// tui/zones/edts/dialogs/branch-plan-table: the per-service branch-plan table shared by the
-// create wizard's Step 3 (Story 2.37) and the switch resolution dialog (Story 2.41) — extracted
-// from step-branches.tsx without behavior change so both dialogs render one table.
-//   - `PanelTitle`: a panel heading, accent + `▶` when focused.
-//   - `BranchPlanTable<Row>`: a dim column header, then a height-bounded (NFR-7) `BoundedList`,
-//     one line per row: `› ` cursor marker, cells joined by ` │ `. Every cell is capped with
-//     truncateBranchLabel/BRANCH_MAX_WIDTH, so no column can push the table past the modal;
-//     every column but the last is padded to its widest value (header included).
-// A cell without its own color takes the row color (accent under the focused cursor).
+// tui/zones/edts/dialogs/branch-plan-table: the per-service branch-plan table shared by the create
+// wizard's Step 3 and the switch resolution dialog — `PanelTitle` (accent + `▶` when focused) and
+// `BranchPlanTable<Row>`, a dim header then a height-bounded BoundedList, one line per row with
+// cells joined by ` │ `. Every cell is capped to BRANCH_MAX_WIDTH so no column can push the table
+// past the modal; a cell without its own color takes the row color.
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../../shared/components/bounded-list.js';
 import { colors } from '../../../shared/theme/theme.js';

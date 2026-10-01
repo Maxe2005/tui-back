@@ -31,8 +31,8 @@ import {
 
 const EDTS = [{ topic: 'demo' }];
 const CANDIDATES = [
-  // Story 2.42: manifest fixtures — svc-a's manifest lists its protected branches, the others
-  // declare none (only their sharedBranch is protected).
+  // Manifest fixtures — svc-a's manifest lists its protected branches, the others declare none
+  // (only their sharedBranch is protected).
   { path: '/repos/a', service: 'svc-a', sharedBranch: 'main', protectedBranches: ['development', 'preprod', 'prod'] },
   { path: '/repos/b', service: 'svc-b', sharedBranch: 'development', protectedBranches: [] },
   { path: '/repos/c', service: 'svc-c', sharedBranch: 'development', protectedBranches: [] },
@@ -65,7 +65,7 @@ function validThroughStep3(overrides: Partial<CreateDialogState> = {}, branchOve
   });
 }
 
-describe('checkNameAvailability (story 2.36)', () => {
+describe('checkNameAvailability', () => {
   it('a free name is available', () => {
     expect(checkNameAvailability('auth-flow', EDTS)).toBe('available');
   });
@@ -84,7 +84,7 @@ describe('checkNameAvailability (story 2.36)', () => {
   });
 });
 
-describe('canAdvance (story 2.36)', () => {
+describe('canAdvance', () => {
   it('Step 1: free name passes, taken or empty name blocks with its own message', () => {
     expect(canAdvance(1, state({ topic: 'auth-flow' }), EDTS, CANDIDATES)).toEqual({ ok: true });
     expect(canAdvance(1, state({ topic: ' demo ' }), EDTS, CANDIDATES)).toEqual({ ok: false, error: TAKEN_NAME_ERROR });
@@ -96,7 +96,7 @@ describe('canAdvance (story 2.36)', () => {
     expect(canAdvance(2, state({ selectedMembers: ['/repos/a'] }), EDTS, CANDIDATES)).toEqual({ ok: true });
   });
 
-  it('Step 3 (story 2.37): every row must resolve — an emptied name, a missing base or a loading list blocks, named by service', () => {
+  it('Step 3: every row must resolve — an emptied name, a missing base or a loading list blocks, named by service', () => {
     expect(canAdvance(3, validThroughStep3(), EDTS, CANDIDATES)).toEqual({ ok: true });
     expect(canAdvance(3, validThroughStep3({}, { globalName: { value: ' ', cursor: 1 } }), EDTS, CANDIDATES)).toEqual({
       ok: false,
@@ -117,7 +117,7 @@ describe('canAdvance (story 2.36)', () => {
   });
 });
 
-describe('reachableSteps (story 2.36)', () => {
+describe('reachableSteps', () => {
   it('stops at the first blocked step, inclusive', () => {
     expect(reachableSteps(state(), EDTS, CANDIDATES)).toEqual([1]);
     expect(reachableSteps(state({ topic: 'auth-flow' }), EDTS, CANDIDATES)).toEqual([1, 2]);
@@ -126,7 +126,7 @@ describe('reachableSteps (story 2.36)', () => {
   });
 });
 
-describe('stepSummary / buildBreadcrumb (story 2.36)', () => {
+describe('stepSummary / buildBreadcrumb', () => {
   it('summarizes each completed step', () => {
     const current = validThroughStep3({ selectedMembers: ['/repos/a', '/repos/b', '/repos/c'] });
     expect(stepSummary(1, current)).toBe('1. Nom: auth-flow');
@@ -152,7 +152,7 @@ describe('stepSummary / buildBreadcrumb (story 2.36)', () => {
   });
 });
 
-describe('resolveWizardNavKey (story 2.36)', () => {
+describe('resolveWizardNavKey', () => {
   it('Ctrl+→ and Ctrl+N go forward', () => {
     expect(resolveWizardNavKey('', { ctrl: true, rightArrow: true })).toBe('next');
     expect(resolveWizardNavKey('n', { ctrl: true })).toBe('next');
@@ -170,15 +170,15 @@ describe('resolveWizardNavKey (story 2.36)', () => {
   });
 });
 
-describe('isProtectedTarget / localNameOf (story 2.37)', () => {
-  it('protects the service\'s manifest protectedBranches and its own sharedBranch (FR-7, story 2.42)', () => {
+describe('isProtectedTarget / localNameOf', () => {
+  it('protects the service\'s manifest protectedBranches and its own sharedBranch (FR-7)', () => {
     const protection = { sharedBranch: 'main', protectedBranches: ['preprod'] };
     expect(isProtectedTarget(' preprod ', protection)).toBe(true);
     expect(isProtectedTarget(' main ', protection)).toBe(true);
     expect(isProtectedTarget('feat/q', protection)).toBe(false);
   });
 
-  it('protects nothing implicitly: development/preprod/prod are free unless the manifest lists them (story 2.42)', () => {
+  it('protects nothing implicitly: development/preprod/prod are free unless the manifest lists them', () => {
     const protection = { sharedBranch: 'main' };
     expect(isProtectedTarget('development', protection)).toBe(false);
     expect(isProtectedTarget('prod', protection)).toBe(false);
@@ -191,7 +191,7 @@ describe('isProtectedTarget / localNameOf (story 2.37)', () => {
   });
 });
 
-describe('resolveGlobalBase (story 2.37)', () => {
+describe('resolveGlobalBase', () => {
   it('Default: an empty base uses the service\'s manifest sharedBranch, resolved like a typed base', () => {
     expect(resolveGlobalBase('', ready(['main']), 'main')).toEqual({ kind: 'resolved', base: 'main' });
     expect(resolveGlobalBase('', ready([], ['origin/main']), 'main')).toEqual({ kind: 'resolved', base: 'origin/main' });
@@ -221,9 +221,9 @@ describe('resolveGlobalBase (story 2.37)', () => {
   });
 });
 
-describe('buildRowView / buildMemberPlans (story 2.37)', () => {
+describe('buildRowView / buildMemberPlans', () => {
   const global = { base: '', name: 'auth-flow' };
-  // Story 2.42: svc-a's manifest fixture — its protected set is protectedBranches ∪ {main}.
+  // svc-a's manifest fixture — its protected set is protectedBranches ∪ {main}.
   const PROTECTION = { sharedBranch: 'main', protectedBranches: ['development', 'preprod', 'prod'] };
 
   it('Default: [Créer (Global)] main -> auth-flow, plan {create, main, auth-flow}', () => {
@@ -269,7 +269,7 @@ describe('buildRowView / buildMemberPlans (story 2.37)', () => {
     expect(row).toMatchObject({ targetError: '« development » est protégée par le manifeste du service', plan: null });
   });
 
-  it('Wizard row: a target the service\'s manifest lists is blocked; one it does not list is allowed (story 2.42)', () => {
+  it('Wizard row: a target the service\'s manifest lists is blocked; one it does not list is allowed', () => {
     const listed = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'preprod' }, ready(['main']), PROTECTION);
     expect(listed).toMatchObject({ targetError: '« preprod » est protégée par le manifeste du service', plan: null });
     const unlisted = buildRowView({ path: '/repos/b', service: 'svc-b' }, { base: '', name: 'preprod' }, ready(['development']), { sharedBranch: 'development' });
@@ -307,7 +307,7 @@ describe('buildRowView / buildMemberPlans (story 2.37)', () => {
   });
 });
 
-describe('enterBranchStep (story 2.37)', () => {
+describe('enterBranchStep', () => {
   it('Name tracking: an untouched name follows the Step 1 slug on every entry', () => {
     const entered = enterBranchStep(branches({ globalName: { value: 'old', cursor: 3 } }), 'X Y', ['/repos/a']);
     expect(entered.globalName).toEqual({ value: 'x-y', cursor: 3 });
@@ -336,7 +336,7 @@ describe('enterBranchStep (story 2.37)', () => {
   });
 });
 
-describe('edt-create-from seeding (story 2.31)', () => {
+describe('edt-create-from seeding', () => {
   const ROOT: EdtRegistryEntry = {
     ulid: 'root-ulid',
     topic: 'feat-a',
@@ -482,7 +482,7 @@ describe('edt-create-from seeding (story 2.31)', () => {
   });
 });
 
-describe('Step 4 helpers (story 2.38)', () => {
+describe('Step 4 helpers', () => {
   it('nonMemberReturns lists every non-member service with its own shared branch', () => {
     expect(nonMemberReturns(CANDIDATES, ['/repos/b'])).toEqual([
       { service: 'svc-a', sharedBranch: 'main' },
