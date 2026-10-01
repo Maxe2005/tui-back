@@ -220,13 +220,15 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       routesError: null,
       loadRoutes: async () => {},
       fireRoute: fireRoute as unknown as () => Promise<void>,
-      fireStatus: 'fired',
-      fireResult: { status: 200, durationMs: 42, body: BODY },
-      fireError: null,
-      firedRouteKey: 'GET /users',
-      treeFocused: true,
+      responses: { 'GET /users': { status: 'fired', result: { status: 200, durationMs: 42, body: BODY } } },
+      routesPaneFocus: 'detail',
+      routesPaneTab: 'response',
     });
     return store;
+  }
+
+  function setBody(store: ReturnType<typeof createAppStore>, body: string) {
+    store.setState({ responses: { 'GET /users': { status: 'fired', result: { status: 200, durationMs: 42, body } } } });
   }
 
   function treeSelected(store: ReturnType<typeof createAppStore>): number {
@@ -319,26 +321,35 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       expect(store.getState().jsonTreeStates['GET /users']?.hideNulls).toBe(true);
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('[n] hide nulls');
-      expect(store.getState().treeFocused).toBe(true);
+      expect(store.getState().routesPaneTab).toBe('response');
+      // Story 6.9: Esc on Response returns to the Request tab, not to the list.
       await pressEscape(instance, stdin);
-      expect(store.getState().treeFocused).toBe(false);
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(store.getState().routesPaneFocus).toBe('detail');
     } finally {
       instance.unmount();
     }
   });
 
-  it('returns focus to the list on Esc with every list key working as before', async () => {
+  it('returns focus to the list on Esc (via Request) with every list key working as before', async () => {
     const fireRoute = vi.fn(async () => {});
     const store = seedTree(fireRoute);
     const { instance, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await pressEscape(instance, stdin);
-      expect(store.getState().treeFocused).toBe(false);
+      await pressEscape(instance, stdin);
+      expect(store.getState().routesPaneFocus).toBe('list');
+      expect(store.getState().zoneInputCaptured).toBe(false);
       await press(instance, stdin, KEYS.down);
       expect(store.getState().routesSelected).toBe(1);
+      // Story 6.9: Enter opens the Request tab — it never fires; Ctrl+R does.
       await press(instance, stdin, KEYS.enter);
-      expect(fireRoute).toHaveBeenCalledWith('POST', '/users');
+      expect(fireRoute).not.toHaveBeenCalled();
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      expect(store.getState().routesPaneTab).toBe('request');
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(fireRoute).toHaveBeenCalledWith('POST /users', 'POST', '/users', undefined);
     } finally {
       instance.unmount();
     }
@@ -346,9 +357,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('folds/unfolds whole depth levels with -/+ through the zone', async () => {
     const store = seedTree();
-    store.setState({
-      fireResult: { status: 200, durationMs: 42, body: '{"a":{"b":{"c":1}},"d":2}' },
-    });
+    setBody(store, '{"a":{"b":{"c":1}},"d":2}');
     const { instance, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
@@ -381,7 +390,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       expect(lastFrame(stdout)).toContain('Filters — 0 rules');
       await press(instance, stdin, 'f');
       expect(lastFrame(stdout)).not.toContain('Filters —');
-      expect(store.getState().treeFocused).toBe(true);
+      expect(store.getState().routesPaneTab).toBe('response');
     } finally {
       instance.unmount();
     }
@@ -389,9 +398,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('scrolls a raw fallback with arrows and shows the selected line', async () => {
     const store = seedTree();
-    store.setState({
-      fireResult: { status: 200, durationMs: 42, body: Array.from({ length: 30 }, (_, i) => `line-${i}`).join('\n') },
-    });
+    setBody(store, Array.from({ length: 30 }, (_, i) => `line-${i}`).join('\n'));
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
@@ -455,7 +462,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'e');
       const frame = lastFrame(stdout);
-      expect(frame).toContain('REQUEST BODY');
+      expect(frame).toContain('▸ BODY');
       expect(frame).toContain('POST /users');
       expect(frame).toContain('name');
       expect(frame).toContain('"ada"');
@@ -476,7 +483,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await press(instance, stdin, KEYS.down);
       expect(lastFrame(stdout)).not.toContain('[e] edit body');
       await press(instance, stdin, 'e');
-      expect(lastFrame(stdout)).not.toContain('REQUEST BODY');
+      expect(store.getState().routesPaneFocus).toBe('list');
       expect(store.getState().bodyDrafts).toEqual({});
     } finally {
       instance.unmount();
@@ -549,10 +556,10 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await press(instance, stdin, 'X');
       await pressEscape(instance, stdin);
       expect(draftOf(store)).toMatchObject({ name: 'ada' });
-      expect(lastFrame(stdout)).toContain('REQUEST BODY');
+      expect(lastFrame(stdout)).toContain('▸ BODY');
       await pressEscape(instance, stdin);
-      expect(lastFrame(stdout)).not.toContain('REQUEST BODY');
-      expect(lastFrame(stdout)).toContain('[enter] fire');
+      expect(lastFrame(stdout)).not.toContain('▸ BODY');
+      expect(lastFrame(stdout)).toContain('[enter] request');
     } finally {
       instance.unmount();
     }
@@ -578,7 +585,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       expect(lastFrame(stdout)).toContain('duplicate key');
       expect(lastFrame(stdout)).toContain('Key name');
       await pressEscape(instance, stdin);
-      expect(lastFrame(stdout)).toContain('REQUEST BODY');
+      expect(lastFrame(stdout)).toContain('▸ BODY');
 
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.down);
@@ -648,7 +655,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await press(instance, stdin, KEYS.backspace);
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('Raw JSON');
-      expect(lastFrame(stdout)).toContain('REQUEST BODY');
+      expect(lastFrame(stdout)).toContain('▸ BODY');
       expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
     } finally {
       instance.unmount();
@@ -668,7 +675,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await press(instance, stdin, 'h');
       expect(lastFrame(stdout)).toContain('1 line hidden — still sent');
       await pressEscape(instance, stdin);
-      expect(lastFrame(stdout)).not.toContain('REQUEST BODY');
+      expect(lastFrame(stdout)).not.toContain('▸ BODY');
       await press(instance, stdin, 'e');
       const frame = lastFrame(stdout);
       // The edited body is restored but stays hidden by the surviving filter — the
@@ -676,7 +683,9 @@ describe('RoutesZone body editor (story 6.8)', () => {
       expect(frame).not.toContain('"adaX"');
       expect(frame).toContain('1 line hidden — still sent');
       expect(draftOf(store)).toMatchObject({ name: 'adaX' });
-      expect(store.getState().jsonTreeStates[EDITOR_KEY]).toMatchObject({ hiddenKeys: ['name'] });
+      // Story 6.9: the body tree keeps its own state, apart from the response tree.
+      expect(store.getState().jsonTreeStates[`${EDITOR_KEY} #body`]).toMatchObject({ hiddenKeys: ['name'] });
+      expect(store.getState().jsonTreeStates[EDITOR_KEY]).toBeUndefined();
     } finally {
       instance.unmount();
     }
@@ -697,7 +706,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'e');
       const frame = lastFrame(stdout);
-      expect(frame).toContain('REQUEST BODY');
+      expect(frame).toContain('▸ BODY');
       expect(frame).toContain('Empty body');
       expect(frame).toContain('press r');
     } finally {
@@ -705,7 +714,8 @@ describe('RoutesZone body editor (story 6.8)', () => {
     }
   });
 
-  it('never fires while the editor owns Enter, and fires normally once closed', async () => {    const fireRoute = vi.fn(async () => {});
+  it('never fires on Enter; Ctrl+R sends the edited body draft', async () => {
+    const fireRoute = vi.fn(async () => {});
     const store = seedEditor(fireRoute);
     const { instance, stdin } = mount(store, 30);
     try {
@@ -720,8 +730,10 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await new Promise((resolve) => setTimeout(resolve, 30));
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
+      expect(fireRoute).not.toHaveBeenCalled();
+      await press(instance, stdin, KEYS.ctrlR);
       expect(fireRoute).toHaveBeenCalledTimes(1);
-      expect(fireRoute).toHaveBeenCalledWith('POST', '/users');
+      expect(fireRoute).toHaveBeenCalledWith('POST /users', 'POST', '/users', { body: { name: 'ada', age: 36, tags: ['x'] } });
     } finally {
       instance.unmount();
     }
@@ -836,7 +848,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'e');
       let frame = lastFrame(stdout);
-      expect(frame).toContain('REQUEST BODY');
+      expect(frame).toContain('▸ BODY');
       expect(frame).toContain('null');
       expect(frame).not.toContain('Empty body');
       expect(store.getState().bodyDrafts['POST /maybe']).toBeNull();
@@ -873,7 +885,7 @@ describe('RoutesZone JsonTree panel cursor (story 6.7 trailing)', () => {
       await press(instance, stdin, ' ');
       expect(store.getState().jsonTreeStates['GET /users']?.onlyKeys).toEqual([]);
       expect(store.getState().jsonTreeStates['GET /users']?.hiddenKeys).toEqual(['id']);
-      expect(store.getState().treeFocused).toBe(true);
+      expect(store.getState().routesPaneTab).toBe('response');
     } finally {
       instance.unmount();
     }
@@ -881,4 +893,218 @@ describe('RoutesZone JsonTree panel cursor (story 6.7 trailing)', () => {
 });
 // Closes describe('RoutesZone JsonTree (story 6.7)') — the story 6.8 block above is
 // nested inside it and shares its seedTree/mount helpers.
+});
+
+describe('RoutesZone request step & sub-tabs (story 6.9)', () => {
+  function seedWorkbench(fireRoute: (...args: unknown[]) => Promise<void> = async () => {}) {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/health', summary: 'Health' },
+        {
+          method: 'GET',
+          path: '/users/{id}',
+          summary: 'One user',
+          parameters: [{ name: 'verbose', in: 'query', required: false }],
+        },
+        { method: 'POST', path: '/users', summary: 'Create', bodyExample: { name: 'ada' }, bodyContentType: 'application/json' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: fireRoute as unknown as () => Promise<void>,
+    });
+    return store;
+  }
+
+  async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+    await press(instance, stdin, KEYS.escape);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await instance.waitUntilRenderFlush();
+  }
+
+  async function type(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, text: string): Promise<void> {
+    for (const char of text) {
+      await press(instance, stdin, char);
+    }
+  }
+
+  it('Enter opens the Request tab with captured input, never fires; Esc returns to the list', async () => {
+    const fireRoute = vi.fn(async () => {});
+    const store = seedWorkbench(fireRoute);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      expect(fireRoute).not.toHaveBeenCalled();
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(store.getState().zoneInputCaptured).toBe(true);
+      expect(lastFrame(stdout)).toContain('[ctrl+r] fire');
+      await pressEscape(instance, stdin);
+      expect(store.getState().routesPaneFocus).toBe('list');
+      expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('fires a plain GET in two keypresses (Enter, Ctrl+R)', async () => {
+    const fireRoute = vi.fn(async () => {});
+    const store = seedWorkbench(fireRoute);
+    const { instance, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(fireRoute).toHaveBeenCalledWith('GET /health', 'GET', '/health', undefined);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('blocks a fire with missing required params, then fires the substituted path with query', async () => {
+    const fireRoute = vi.fn(async () => {});
+    const store = seedWorkbench(fireRoute);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      expect(lastFrame(stdout)).toContain('id* = —');
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(fireRoute).not.toHaveBeenCalled();
+      expect(lastFrame(stdout)).toContain('Missing required: id — nothing sent');
+
+      // Fill `id` inline, then the optional `verbose` query row (Tab → Query).
+      await press(instance, stdin, KEYS.enter);
+      await type(instance, stdin, '4 2');
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.tab);
+      expect(lastFrame(stdout)).toContain('▸ QUERY');
+      await press(instance, stdin, KEYS.enter);
+      await type(instance, stdin, 'yes');
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(fireRoute).toHaveBeenCalledWith('GET /users/{id}', 'GET', '/users/4%202', { query: { verbose: 'yes' } });
+      expect(lastFrame(stdout)).not.toContain('Missing required');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('adds, edits and deletes header rows; duplicates are rejected', async () => {
+    const fireRoute = vi.fn(async () => {});
+    const store = seedWorkbench(fireRoute);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.tab);
+      expect(lastFrame(stdout)).toContain('▸ HEADERS');
+      await press(instance, stdin, 'a');
+      await type(instance, stdin, 'X-T');
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.enter);
+      await type(instance, stdin, '1');
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().requestDrafts['GET /health']?.headers).toEqual([{ name: 'X-T', value: '1', required: false }]);
+      await press(instance, stdin, 'a');
+      await type(instance, stdin, 'x-t');
+      await press(instance, stdin, KEYS.enter);
+      expect(lastFrame(stdout)).toContain('already exists');
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(fireRoute).toHaveBeenLastCalledWith('GET /health', 'GET', '/health', { headers: { 'X-T': '1' } });
+      await press(instance, stdin, 'd');
+      expect(store.getState().requestDrafts['GET /health']?.headers).toEqual([]);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('blocks a fire while the body has validation errors', async () => {
+    const fireRoute = vi.fn(async () => {});
+    const store = seedWorkbench(fireRoute);
+    store.getState().ensureBodyDraft('POST /users', { name: 'x' });
+    store.getState().setBodyEditError('POST /users', 'name', { reason: 'expected a number, got "x"', kind: 'number' });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(fireRoute).not.toHaveBeenCalled();
+      expect(lastFrame(stdout)).toContain('Fix the body first');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('switches sub-tabs with Ctrl+→/← and Ctrl+N/P without wrapping', async () => {
+    const store = seedWorkbench();
+    const { instance, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('request');
+      await press(instance, stdin, KEYS.ctrlRight);
+      expect(store.getState().routesPaneTab).toBe('response');
+      await press(instance, stdin, KEYS.ctrlN);
+      expect(store.getState().routesPaneTab).toBe('response');
+      await press(instance, stdin, KEYS.ctrlP);
+      expect(store.getState().routesPaneTab).toBe('request');
+      await press(instance, stdin, KEYS.ctrlN);
+      expect(store.getState().routesPaneTab).toBe('response');
+      // Number keys and [ ] never switch tabs.
+      await press(instance, stdin, '1');
+      await press(instance, stdin, '[');
+      expect(store.getState().routesPaneTab).toBe('response');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('keeps each route’s draft and last response, and returns to an intact draft after a fire', async () => {
+    const store = seedWorkbench();
+    store.setState({
+      fireRoute: async (routeKey: string) => {
+        store.setState({
+          routesPaneTab: 'response',
+          responses: { ...store.getState().responses, [routeKey]: { status: 'fired', result: { status: 204, durationMs: 3, body: '' } } },
+        });
+      },
+    });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, 'a');
+      await type(instance, stdin, 'X-A');
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlR);
+      expect(store.getState().routesPaneTab).toBe('response');
+      expect(lastFrame(stdout)).toContain('204 · 3ms · 0 B');
+      // Esc on Response → Request: the draft is intact and can be re-fired in place.
+      await pressEscape(instance, stdin);
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(lastFrame(stdout)).toContain('X-A = —');
+      // Leave, visit another route, come back: draft and response both survive.
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.down);
+      expect(lastFrame(stdout)).not.toContain('X-A');
+      await press(instance, stdin, KEYS.up);
+      expect(lastFrame(stdout)).toContain('X-A = —');
+      store.getState().setRoutesPaneTab('response');
+      await instance.waitUntilRenderFlush();
+      expect(lastFrame(stdout)).toContain('204 · 3ms');
+    } finally {
+      instance.unmount();
+    }
+  });
 });

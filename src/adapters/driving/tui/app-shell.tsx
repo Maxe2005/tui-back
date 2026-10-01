@@ -288,7 +288,10 @@ export function AppShell({
     // flows) sets zoneInputCaptured while it owns the keystroke — every global shortcut,
     // including `?` help, must not fire while it's set, the same way it's already gated
     // for the zone-mnemonic/filter/command dispatch below.
-    if (state.zoneInputCaptured) {
+    // Story 6.9: the focused Routes right pane counts as captured straight from the store —
+    // the zone's own zoneInputCaptured effect lands one render later, and a keypress in
+    // between must not switch zones (or quit) mid-edit.
+    if (state.zoneInputCaptured || (state.activeZone === 'routes' && state.routesPaneFocus === 'detail')) {
       return;
     }
 
@@ -364,11 +367,9 @@ export function AppShell({
       // mounted `useInput` hook (Ink dispatches to all of them, not just the topmost) fires
       // on the same keypress and the zone switches out from under the pane grid before its
       // own handler's `setSubFocus` even matters.
-      // Story 6.7: same double-dispatch hazard for the Routes response tree — while it
-      // holds focus, Left/Right fold/unfold there, so the global switch stays inert too
-      // (Up/Down need no gate: no global binding consumes them).
-      const treeOwnsArrows = activeZone === 'routes' && state.treeFocused;
-      const arrowZoneId = state.logsPaneGridArrowsActive || treeOwnsArrows ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
+      // Story 6.7/6.9: the Routes right pane needs no gate here — while it holds focus it
+      // sets zoneInputCaptured (returned above), so its arrows never switch zones.
+      const arrowZoneId = state.logsPaneGridArrowsActive ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;

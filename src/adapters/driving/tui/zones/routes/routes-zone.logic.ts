@@ -4,6 +4,8 @@
 // unit-tested directly; the `useInput` callback in the component stays a thin dispatcher.
 import type { Route } from '../../../../../core/ports/route-scanner.js';
 import type { FireResult } from '../../../../../core/routes/fire-request.js';
+import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../shared/components/json-tree/model.js';
+import { formatByteSize } from './routes-request.logic.js';
 
 export type RoutesSelectionDirection = 'up' | 'down';
 
@@ -63,8 +65,11 @@ export function formatFireResult(result: FireResult): string {
 
 // Story 6.7: the Response header keeps the status line while the body dump moves into
 // the JsonTree (DetailPane's single-<Text> constraint forbids nesting the tree inside).
+// Story 6.9 adds the body size — `≥` when the body hit core's 64K-character cap, since
+// the real response was larger than what was kept.
 export function formatFireStatus(result: FireResult): string {
-  return `${result.status} · ${result.durationMs}ms`;
+  const capped = result.body.length >= MAX_FIRE_BODY_CHARS;
+  return `${result.status} · ${result.durationMs}ms · ${capped ? '≥' : ''}${formatByteSize(result.body)}`;
 }
 
 // Story 6.2: auth failures render distinctly from generic failures so a permission
@@ -97,10 +102,9 @@ export function formatFireError(code: string, message: string): string {
   }
 }
 
-// Story 6.2: the Enter key fires the selected route — a pure dispatch helper so the
-// keystroke behavior is unit-testable without Ink. Returns the route to fire, or
-// undefined when there is nothing to fire (empty list): the component calls
-// `fireRoute(target.method, target.path)` only for a defined return.
+// Story 6.2 (6.9: the list cursor's route — the one `Enter` opens and the pane shows) — a
+// pure dispatch helper so the keystroke behavior is unit-testable without Ink. Returns
+// the cursor route, or undefined for an empty list.
 export function resolveEnterFireTarget(
   routes: Route[] | null | undefined,
   selected: number,

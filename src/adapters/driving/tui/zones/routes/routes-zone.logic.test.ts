@@ -90,7 +90,9 @@ describe('formatFireResult (story 6.2)', () => {
 
 describe('formatFireStatus (story 6.7)', () => {
   it('keeps the status line while the body dump moves into the JsonTree', () => {
-    expect(formatFireStatus({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms');
+    expect(formatFireStatus({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms · 8 B');
+    // Story 6.9: a body at core's cap marks the size as a lower bound.
+    expect(formatFireStatus({ status: 200, durationMs: 1, body: 'x'.repeat(64 * 1024) })).toBe('200 · 1ms · ≥64.0 KB');
   });
 });
 

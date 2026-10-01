@@ -14,10 +14,20 @@
 // Non-JSON bodies fall back to scrollable raw text with their reason, empty bodies to an
 // explicit empty state — never a partial tree. The tree lives in the detail Box next to
 // (never inside) DetailPane, which keeps the status line.
+//
+// Story 6.9: the right pane is a focusable pane with Request / Response sub-tabs. `Enter`
+// on the list moves the focus to its Request tab (Params, Query, Headers, Body sections —
+// the request step is mandatory, the list never fires); `Ctrl+R` fires the draft and the
+// pane switches to Response. Drafts and responses are per route (store), so the pane
+// always reflects the list cursor's route. While the pane holds focus it captures the
+// keyboard from AppShell (zone mnemonics, arrows, `q`… stay inert mid-edit); `Esc`
+// unwinds sub-editors, then Response → Request, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
+import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
+import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -36,6 +46,7 @@ import {
   createDefaultJsonTreeState,
   findParentIndex,
   firstEditError,
+  seedBodyDraft,
   flattenJson,
   foldNextDepthLevel,
   getValueAtPath,
@@ -51,7 +62,6 @@ import {
   resolveTreePanelKeyAction,
   routeKeyFor,
   scalarKindOf,
-  seedBodyDraft,
   setValueAtPath,
   toggleFoldPath,
   toggleHideNulls,
@@ -72,14 +82,28 @@ import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
   filterRoutes,
-  formatFireError,
-  formatFireStatus,
   formatRouteDetail,
   formatRouteRow,
   moveRoutesSelection,
   resolveEnterFireTarget,
   resolveRoutesDirection,
 } from './routes-zone.logic.js';
+import {
+  addRequestRow,
+  bodyTreeKey,
+  buildFireRequest,
+  defaultRequestSection,
+  nextRequestSection,
+  removeRequestRow,
+  resolveFireBlock,
+  seedRequestDraft,
+  setRequestRowValue,
+  type RequestDraft,
+  type RequestRowSection,
+  type RequestSection,
+} from './routes-request.logic.js';
+import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
+import { RoutesResponseTab } from './routes-response-tab.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -109,14 +133,16 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const routesError = useStore((state) => state.routesError);
   const routesRepoPath = useStore((state) => state.routesRepoPath);
   const loadRoutes = useStore((state) => state.loadRoutes);
-  const fireStatus = useStore((state) => state.fireStatus);
-  const fireResult = useStore((state) => state.fireResult);
-  const fireError = useStore((state) => state.fireError);
   const fireRoute = useStore((state) => state.fireRoute);
+  const responses = useStore((state) => state.responses);
+  const requestDrafts = useStore((state) => state.requestDrafts);
+  const ensureRequestDraft = useStore((state) => state.ensureRequestDraft);
+  const updateRequestDraft = useStore((state) => state.updateRequestDraft);
+  const paneFocus = useStore((state) => state.routesPaneFocus);
+  const setPaneFocus = useStore((state) => state.setRoutesPaneFocus);
+  const paneTab = useStore((state) => state.routesPaneTab);
+  const setPaneTab = useStore((state) => state.setRoutesPaneTab);
   const jsonTreeStates = useStore((state) => state.jsonTreeStates);
-  const firedRouteKey = useStore((state) => state.firedRouteKey);
-  const treeFocused = useStore((state) => state.treeFocused);
-  const setTreeFocused = useStore((state) => state.setTreeFocused);
   const updateJsonTreeState = useStore((state) => state.updateJsonTreeState);
   const bodyDrafts = useStore((state) => state.bodyDrafts);
   const bodyEditErrors = useStore((state) => state.bodyEditErrors);
@@ -145,30 +171,51 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // auto-focuses the rule list: arrows act immediately, no activation keypress needed.
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [panelCursor, setPanelCursor] = useState(0);
-  // Story 6.8: the request-body editor — which route is being edited (detail pane shows
-  // the editor while open) plus its transient inline/raw UI. Drafts, folds, and filters
-  // live in the store (per-route, session-only), so a revisit restores them together;
-  // only the open editor + its text buffers are zone-local.
-  const [editorRouteKey, setEditorRouteKey] = useState<string | null>(null);
+  // Story 6.9: the Request tab's transient UI — active section, row cursor, inline row
+  // editors and the last fire-block reason. Drafts live in the store (per route).
+  const [section, setSection] = useState<RequestSection>('params');
+  const [rowCursor, setRowCursor] = useState(0);
+  const [rowEdit, setRowEdit] = useState<{ section: RequestRowSection; index: number; input: TextInputState } | null>(null);
+  const [rowAddPrompt, setRowAddPrompt] = useState<{ section: 'query' | 'headers'; input: TextInputState; error: string | null } | null>(null);
+  const [fireBlock, setFireBlock] = useState<string | null>(null);
+  // Story 6.8: the request-body editor's transient inline/raw UI. Drafts, folds, and
+  // filters live in the store (per-route, session-only), so a revisit restores them
+  // together; only the text buffers are zone-local.
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
   const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
   const windowSize = useWindowSize();
   const [listAreaRef, listAreaSize] = useElementSize();
   const [responseAreaRef, responseAreaSize] = useElementSize();
+  const [bodyAreaRef, bodyAreaSize] = useElementSize();
 
+  const paneFocused = paneFocus === 'detail';
   useEffect(() => {
-    setZoneInputCaptured(filterEditing);
-  }, [filterEditing, setZoneInputCaptured]);
+    setZoneInputCaptured(filterEditing || paneFocused);
+  }, [filterEditing, paneFocused, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
 
+  // Story 6.9: the pane always reflects the list cursor's route (the cursor cannot move
+  // while the pane holds focus), with its own draft and last response.
+  const paneRoute = resolveEnterFireTarget(visibleRoutes, selected) ?? null;
+  const paneRouteKey = paneRoute === null ? null : routeKeyFor(paneRoute.method, paneRoute.path);
+  const paneResponse = paneRouteKey === null ? undefined : responses[paneRouteKey];
+  const fireResult = paneResponse?.status === 'fired' ? paneResponse.result : null;
+  const firedRouteKey = paneResponse?.status === 'fired' ? paneRouteKey : null;
+  const treeFocused = paneFocused && paneTab === 'response';
+  const paneDraft: RequestDraft | null = useMemo(
+    () => (paneRoute === null || paneRouteKey === null ? null : (requestDrafts[paneRouteKey] ?? seedRequestDraft(paneRoute))),
+    [paneRoute, paneRouteKey, requestDrafts],
+  );
+  const paneHasBody = paneRoute !== null && canEditRouteBody(paneRoute);
+
   // The fired body, classified in the driving adapter (never core): JSON becomes the
   // navigable tree, anything else its raw/empty fallback.
   const classification = useMemo(
-    () => (fireStatus === 'fired' && fireResult !== null ? classifyResponseBody(fireResult.body) : null),
-    [fireStatus, fireResult],
+    () => (fireResult !== null ? classifyResponseBody(fireResult.body) : null),
+    [fireResult],
   );
   const treeState: JsonTreeState = useMemo(
     () => (firedRouteKey !== null ? (jsonTreeStates[firedRouteKey] ?? createDefaultJsonTreeState()) : createDefaultJsonTreeState()),
@@ -205,14 +252,18 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // `bodyDrafts` entry (`undefined` = empty, press `r`); folds/filters/selection reuse
   // the route's existing `jsonTreeStates` entry, so body, filters, and folds restore
   // together on revisit. Hidden lines are purely visual — still sent.
-  const editorRoute = useMemo(
-    () => (editorRouteKey === null ? null : ((routes ?? []).find((route) => routeKeyFor(route.method, route.path) === editorRouteKey) ?? null)),
-    [editorRouteKey, routes],
-  );
+  // Story 6.9: the body editor is the pane route's Body section; its tree state lives
+  // under bodyTreeKey (apart from the response tree). Before the pane first opens a
+  // route, the preview shows the seed without storing it.
+  const editorRouteKey = paneHasBody ? paneRouteKey : null;
+  const editorRoute = editorRouteKey === null ? null : paneRoute;
   const editorHasDraft = editorRouteKey !== null && Object.prototype.hasOwnProperty.call(bodyDrafts, editorRouteKey);
-  const editorDraft: unknown = editorRouteKey !== null && editorHasDraft ? bodyDrafts[editorRouteKey] : undefined;
+  const editorDraft: unknown = useMemo(
+    () => (editorRouteKey === null || editorRoute === null ? undefined : editorHasDraft ? bodyDrafts[editorRouteKey] : seedBodyDraft(editorRoute)),
+    [editorRouteKey, editorRoute, editorHasDraft, bodyDrafts],
+  );
   const editorTreeState: JsonTreeState = useMemo(
-    () => (editorRouteKey !== null ? (jsonTreeStates[editorRouteKey] ?? createDefaultJsonTreeState()) : createDefaultJsonTreeState()),
+    () => (editorRouteKey !== null ? (jsonTreeStates[bodyTreeKey(editorRouteKey)] ?? createDefaultJsonTreeState()) : createDefaultJsonTreeState()),
     [editorRouteKey, jsonTreeStates],
   );
   const editorRules = useMemo(
@@ -232,8 +283,13 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const editorFirstError = useMemo(() => firstEditError(editorErrors), [editorErrors]);
   const clampedEditorSelected = clampTreeSelection(editorTreeState.selected, editorRows.length);
   const clampedEditorPanelCursor = editorRuleList.length === 0 ? 0 : clampTreeSelection(panelCursor, editorRuleList.length);
-  const editorViewport = resolveTreeListBudget(treeTotalBudget, filterPanelOpen, editorRuleList.length);
-  const editorOpen = editorRouteKey !== null && editorRoute !== null;
+  // First-paint estimate only (the Params/Query/Headers headers + rows above the Body take
+  // roughly 8 more rows than the response view); the measured box takes over after mount.
+  const bodyTotalBudget =
+    bodyAreaSize !== null ? bodyAreaSize.height : Math.max(windowSize.rows - RESPONSE_AREA_CHROME_ROWS - 8, 3);
+  const editorViewport = resolveTreeListBudget(bodyTotalBudget, filterPanelOpen, editorRuleList.length);
+  // The body editor owns the keyboard only while its section is active in a focused pane.
+  const editorOpen = editorRouteKey !== null && paneFocused && paneTab === 'request' && section === 'body';
 
   // Apply a (possibly null = no-op) tree-state recipe against the store's live state;
   // recipes always derive rows/rules from the live snapshot they receive, so two rapid
@@ -267,7 +323,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     if (editorRouteKey === null) {
       return;
     }
-    const key = editorRouteKey;
+    const key = bodyTreeKey(editorRouteKey);
     updateJsonTreeState(key, (live) => recipe(live) ?? live);
   };
 
@@ -297,25 +353,94 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     return useStore.getState().bodyEditErrors[editorRouteKey] ?? {};
   };
 
-  const closeEditor = () => {
-    setEditorRouteKey(null);
+  const resetPaneTransients = () => {
     setScalarEdit(null);
     setAddPrompt(null);
     setRawEditor(null);
-  };
-
-  const openEditorForRoute = (route: { method: string; path: string; bodyExample?: unknown; bodyContentType?: string }) => {
-    if (!canEditRouteBody(route)) {
-      return;
-    }
-    const key = routeKeyFor(route.method, route.path);
-    ensureBodyDraft(key, seedBodyDraft(route));
-    setEditorRouteKey(key);
-    setScalarEdit(null);
-    setAddPrompt(null);
-    setRawEditor(null);
+    setRowEdit(null);
+    setRowAddPrompt(null);
     setFilterPanelOpen(false);
     setPanelCursor(0);
+  };
+
+  // Story 6.9: `Enter` (or `e`, straight to Body) moves the focus into the pane on its
+  // Request tab, seeding the route's drafts lazily. Nothing is fired.
+  const openPaneForRoute = (route: NonNullable<typeof paneRoute>, forcedSection?: RequestSection) => {
+    const key = routeKeyFor(route.method, route.path);
+    const seed = seedRequestDraft(route);
+    ensureRequestDraft(key, seed);
+    if (canEditRouteBody(route)) {
+      ensureBodyDraft(key, seedBodyDraft(route));
+    }
+    const draft = useStore.getState().requestDrafts[key] ?? seed;
+    resetPaneTransients();
+    setSection(forcedSection ?? defaultRequestSection(route, draft));
+    setRowCursor(0);
+    setFireBlock(null);
+    setPaneTab('request');
+    setPaneFocus('detail');
+  };
+
+  const closePane = () => {
+    resetPaneTransients();
+    setPaneFocus('list');
+  };
+
+  // Ctrl+R: fire the pane route's live draft, or show why it cannot go (nothing sent).
+  const firePaneRoute = () => {
+    if (paneRoute === null || paneRouteKey === null) {
+      return;
+    }
+    const live = useStore.getState();
+    const draft = live.requestDrafts[paneRouteKey] ?? seedRequestDraft(paneRoute);
+    const bodyDraft = Object.prototype.hasOwnProperty.call(live.bodyDrafts, paneRouteKey)
+      ? live.bodyDrafts[paneRouteKey]
+      : seedBodyDraft(paneRoute);
+    const bodyError = paneHasBody ? firstEditError(live.bodyEditErrors[paneRouteKey] ?? {}) : null;
+    const block = resolveFireBlock(draft, bodyError);
+    if (block !== null) {
+      setFireBlock(block);
+      setPaneTab('request');
+      return;
+    }
+    setFireBlock(null);
+    setFilterPanelOpen(false);
+    setPanelCursor(0);
+    const request = buildFireRequest(paneRoute, draft, bodyDraft);
+    void fireRoute(
+      paneRouteKey,
+      paneRoute.method,
+      request.path,
+      Object.keys(request.options).length === 0 ? undefined : request.options,
+    );
+  };
+
+  const rowsOf = (draft: RequestDraft | null, rowSection: RequestRowSection) => (draft === null ? [] : draft[rowSection]);
+
+  const confirmRowEdit = () => {
+    if (rowEdit === null || paneRouteKey === null) {
+      return;
+    }
+    const { section: rowSection, index, input } = rowEdit;
+    updateRequestDraft(paneRouteKey, (previous) => ({ ...previous, [rowSection]: setRequestRowValue(previous[rowSection], index, input.value) }));
+    setFireBlock(null);
+    setRowEdit(null);
+  };
+
+  const confirmRowAdd = () => {
+    if (rowAddPrompt === null || paneRouteKey === null || paneRoute === null) {
+      return;
+    }
+    const rowSection = rowAddPrompt.section;
+    const current = useStore.getState().requestDrafts[paneRouteKey] ?? seedRequestDraft(paneRoute);
+    const result = addRequestRow(current[rowSection], rowAddPrompt.input.value, rowSection === 'headers');
+    if (!result.ok) {
+      setRowAddPrompt({ ...rowAddPrompt, error: result.reason });
+      return;
+    }
+    updateRequestDraft(paneRouteKey, (previous) => ({ ...previous, [rowSection]: result.rows }));
+    setRowCursor(result.rows.length - 1);
+    setRowAddPrompt(null);
   };
 
   const scalarToEditableText = (value: unknown): string => {
@@ -748,21 +873,38 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A fresh fire gets a closed panel; the persisted rules/folds come from the slice.
+  // A fresh fire (or another route/tab) gets a closed panel; the persisted rules/folds
+  // come from the slice.
   useEffect(() => {
     setFilterPanelOpen(false);
     setPanelCursor(0);
-  }, [firedRouteKey]);
+  }, [firedRouteKey, paneRouteKey, paneTab]);
 
-  // The editor follows its route: a reload that drops the route closes the editor
-  // (its draft/error map stay in the store under the same key).
+  // Open inline editors belong to one route: a pane route change (e.g. a reload that
+  // reorders the list under the cursor) drops them so nothing is confirmed into another
+  // route's draft at a stale index.
+  const previousPaneRouteKey = useRef(paneRouteKey);
   useEffect(() => {
-    if (editorRouteKey !== null && editorRoute === null) {
-      closeEditor();
+    if (previousPaneRouteKey.current !== paneRouteKey) {
+      setScalarEdit(null);
+      setAddPrompt(null);
+      setRawEditor(null);
+      setRowEdit(null);
+      setRowAddPrompt(null);
+      setFireBlock(null);
     }
-    // closeEditor is a render-local helper over stable setters — not an effect dep.
+    previousPaneRouteKey.current = paneRouteKey;
+  }, [paneRouteKey]);
+
+  // The pane follows its route: a reload that drops the route hands focus back to the
+  // list (its drafts stay in the store under the same key).
+  useEffect(() => {
+    if (paneFocused && paneRoute === null) {
+      closePane();
+    }
+    // closePane is a render-local helper over stable setters — not an effect dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorRouteKey, editorRoute]);
+  }, [paneFocused, paneRoute]);
 
   // Arrowing onto a different repo's list must never leave the cursor on an unrelated row
   // (mirrors edts-zone.tsx's own cursor reset when the focused EDT changes).
@@ -806,132 +948,236 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setFilter(next);
         return;
       }
-      // Story 6.8: while the body editor is open it owns the keyboard — every list
-      // binding (including Enter-fire) stays inert, and the 6.7 response tree never
-      // sees these keypresses. Esc unwinds inline/raw editors first, the rules panel
-      // next, and the editor itself last (the 6.7 panel rule).
-      if (editorOpen) {
-        if (rawEditor !== null) {
+      // Story 6.9: while the right pane holds focus it owns the keyboard (AppShell is
+      // captured too). Open sub-editors own every key first; then Ctrl+R fires, Ctrl+→/N
+      // and Ctrl+←/P switch sub-tabs (no wrap), and each tab handles the rest.
+      if (paneFocused) {
+        if (editorOpen) {
+          if (rawEditor !== null) {
+            if (key.escape === true) {
+              leaveRawEditor();
+              return;
+            }
+            if (key.return === true) {
+              const cursor = Math.min(Math.max(rawEditor.input.cursor, 0), rawEditor.input.value.length);
+              const value = `${rawEditor.input.value.slice(0, cursor)}\n${rawEditor.input.value.slice(cursor)}`;
+              setRawEditor({ input: { value, cursor: cursor + 1 }, error: rawEditor.error });
+              return;
+            }
+            if (key.upArrow === true || key.downArrow === true) {
+              return;
+            }
+            setRawEditor((previous) =>
+              previous === null ? previous : { input: nextTextInputValue(previous.input, input, key), error: previous.error },
+            );
+            return;
+          }
+          if (scalarEdit !== null) {
+            if (key.escape === true) {
+              setScalarEdit(null);
+              return;
+            }
+            if (key.return === true) {
+              confirmScalarEdit();
+              return;
+            }
+            if (key.upArrow === true || key.downArrow === true) {
+              return;
+            }
+            setScalarEdit((previous) =>
+              previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
+            );
+            return;
+          }
+          if (addPrompt !== null) {
+            if (key.escape === true) {
+              setAddPrompt(null);
+              return;
+            }
+            if (key.return === true) {
+              confirmAddPrompt();
+              return;
+            }
+            if (key.upArrow === true || key.downArrow === true) {
+              return;
+            }
+            setAddPrompt((previous) =>
+              previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
+            );
+            return;
+          }
+        }
+        if (rowEdit !== null) {
           if (key.escape === true) {
-            leaveRawEditor();
+            setRowEdit(null);
             return;
           }
           if (key.return === true) {
-            const cursor = Math.min(Math.max(rawEditor.input.cursor, 0), rawEditor.input.value.length);
-            const value = `${rawEditor.input.value.slice(0, cursor)}\n${rawEditor.input.value.slice(cursor)}`;
-            setRawEditor({ input: { value, cursor: cursor + 1 }, error: rawEditor.error });
+            confirmRowEdit();
             return;
           }
-          if (key.upArrow === true || key.downArrow === true) {
+          if (key.upArrow === true || key.downArrow === true || key.tab === true) {
             return;
           }
-          setRawEditor((previous) =>
-            previous === null ? previous : { input: nextTextInputValue(previous.input, input, key), error: previous.error },
-          );
+          setRowEdit((previous) => (previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) }));
           return;
         }
-        if (scalarEdit !== null) {
+        if (rowAddPrompt !== null) {
           if (key.escape === true) {
-            setScalarEdit(null);
+            setRowAddPrompt(null);
             return;
           }
           if (key.return === true) {
-            confirmScalarEdit();
+            confirmRowAdd();
             return;
           }
-          if (key.upArrow === true || key.downArrow === true) {
+          if (key.upArrow === true || key.downArrow === true || key.tab === true) {
             return;
           }
-          setScalarEdit((previous) =>
+          setRowAddPrompt((previous) =>
             previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
           );
           return;
         }
-        if (addPrompt !== null) {
-          if (key.escape === true) {
-            setAddPrompt(null);
-            return;
-          }
-          if (key.return === true) {
-            confirmAddPrompt();
-            return;
-          }
-          if (key.upArrow === true || key.downArrow === true) {
-            return;
-          }
-          setAddPrompt((previous) =>
-            previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
-          );
+        if (key.ctrl === true && (input === 'r' || input === 'R')) {
+          firePaneRoute();
           return;
         }
-        if (key.escape === true) {
-          setFilterPanelOpen(false);
-          if (!filterPanelOpen) {
-            closeEditor();
+        const tabNav = resolveTabNavKey(input, key);
+        if (tabNav !== null) {
+          const nextTab = stepTab(ROUTES_PANE_TABS, paneTab, tabNav);
+          if (nextTab !== paneTab) {
+            setPaneTab(nextTab);
+            setFilterPanelOpen(false);
+            setPanelCursor(0);
           }
           return;
         }
-        if (filterPanelOpen) {
-          // Same auto-owning rule list as the 6.7 response panel, over the editor's
-          // own folds/filters (revisit restores them together with the draft).
-          if (key.upArrow === true) {
-            setPanelCursor((prev) => clampTreeSelection(prev - 1, editorRuleList.length));
-            return;
-          }
-          if (key.downArrow === true) {
-            setPanelCursor((prev) => clampTreeSelection(prev + 1, editorRuleList.length));
-            return;
-          }
-          if (key.home === true) {
+        if (key.ctrl === true || key.meta === true) {
+          return;
+        }
+        if (paneTab === 'request') {
+          if (key.tab === true) {
+            setSection((previous) => nextRequestSection(previous, key.shift === true ? 'back' : 'next'));
+            setRowCursor(0);
+            setFilterPanelOpen(false);
             setPanelCursor(0);
             return;
           }
-          if (key.end === true) {
-            setPanelCursor(Math.max(0, editorRuleList.length - 1));
+          if (section === 'body') {
+            // Esc closes the editor's rules panel first, then leaves the pane.
+            if (key.escape === true) {
+              if (filterPanelOpen) {
+                setFilterPanelOpen(false);
+              } else {
+                closePane();
+              }
+              return;
+            }
+            if (!editorOpen) {
+              return;
+            }
+            if (filterPanelOpen) {
+              // Same auto-owning rule list as the 6.7 response panel, over the editor's
+              // own folds/filters (revisit restores them together with the draft).
+              if (key.upArrow === true) {
+                setPanelCursor((prev) => clampTreeSelection(prev - 1, editorRuleList.length));
+                return;
+              }
+              if (key.downArrow === true) {
+                setPanelCursor((prev) => clampTreeSelection(prev + 1, editorRuleList.length));
+                return;
+              }
+              if (key.home === true) {
+                setPanelCursor(0);
+                return;
+              }
+              if (key.end === true) {
+                setPanelCursor(Math.max(0, editorRuleList.length - 1));
+                return;
+              }
+              if (input === ' ' || input === 'd' || input === 'D') {
+                if (editorRuleList.length > 0) {
+                  const at = clampedEditorPanelCursor;
+                  amendEditorTreeState((live) => {
+                    const next = removeActiveRule(frameEditorTreeState(live, readEditorDraft()).rules, at);
+                    if (next === null) {
+                      return null;
+                    }
+                    return {
+                      ...live,
+                      hiddenKeys: [...next.hiddenKeys],
+                      onlyKeys: [...next.onlyKeys],
+                      hideNulls: next.hideNulls,
+                      selected: editorWithClampedSelection(live, readEditorDraft()),
+                    };
+                  });
+                }
+                return;
+              }
+              const editorPanelAction = resolveTreePanelKeyAction(input, editorRuleList.length);
+              if (editorPanelAction === null) {
+                return;
+              }
+              applyEditorPanelAction(editorPanelAction);
+              return;
+            }
+            const editorAction = resolveTreeKeyAction(input, key);
+            if (editorAction === null) {
+              return;
+            }
+            applyEditorTreeAction(editorAction);
             return;
           }
-          if (input === ' ' || input === 'd' || input === 'D') {
-            if (editorRuleList.length > 0) {
-              const at = clampedEditorPanelCursor;
-              amendEditorTreeState((live) => {
-                const next = removeActiveRule(frameEditorTreeState(live, readEditorDraft()).rules, at);
-                if (next === null) {
-                  return null;
-                }
-                return {
-                  ...live,
-                  hiddenKeys: [...next.hiddenKeys],
-                  onlyKeys: [...next.onlyKeys],
-                  hideNulls: next.hideNulls,
-                  selected: editorWithClampedSelection(live, readEditorDraft()),
-                };
-              });
+          if (key.escape === true) {
+            closePane();
+            return;
+          }
+          const rowSection: RequestRowSection = section;
+          const rows = rowsOf(paneDraft, rowSection);
+          const at = rows.length === 0 ? 0 : Math.min(rowCursor, rows.length - 1);
+          const direction = resolveRoutesDirection(key);
+          if (direction !== null) {
+            setRowCursor(moveRoutesSelection(at, direction, rows.length));
+            return;
+          }
+          if (key.home === true) {
+            setRowCursor(0);
+            return;
+          }
+          if (key.end === true) {
+            setRowCursor(Math.max(0, rows.length - 1));
+            return;
+          }
+          if (key.return === true) {
+            const row = rows[at];
+            if (row !== undefined) {
+              setRowEdit({ section: rowSection, index: at, input: { value: row.value, cursor: row.value.length } });
             }
             return;
           }
-          const editorPanelAction = resolveTreePanelKeyAction(input, editorRuleList.length);
-          if (editorPanelAction === null) {
+          if (rowSection !== 'params' && (input === 'a' || input === 'A')) {
+            setRowAddPrompt({ section: rowSection, input: { value: '', cursor: 0 }, error: null });
             return;
           }
-          applyEditorPanelAction(editorPanelAction);
-          return;
-        }
-        const editorAction = resolveTreeKeyAction(input, key);
-        if (editorAction === null) {
-          return;
-        }
-        applyEditorTreeAction(editorAction);
-        return;
-      }
-      // Story 6.7: while the response tree holds focus it owns the keyboard — every list
-      // binding below stays inert (list behavior is unchanged the moment Esc returns
-      // focus). Esc itself closes the filter panel first, unfocuses second.
-      if (treeFocused && classification !== null) {
-        if (key.escape === true) {
-          setFilterPanelOpen(false);
-          if (!filterPanelOpen) {
-            setTreeFocused(false);
+          if (rowSection !== 'params' && (input === 'd' || input === 'D') && rows[at] !== undefined && paneRouteKey !== null) {
+            updateRequestDraft(paneRouteKey, (previous) => ({ ...previous, [rowSection]: removeRequestRow(previous[rowSection], at) }));
+            setRowCursor(Math.max(0, Math.min(at, rows.length - 2)));
+            return;
           }
+          return;
+        }
+        // Response tab: Esc closes the rules panel first, then returns to Request (the
+        // draft is intact there); the tree/raw keys follow the 6.7 model.
+        if (key.escape === true) {
+          if (filterPanelOpen) {
+            setFilterPanelOpen(false);
+          } else {
+            setPaneTab('request');
+          }
+          return;
+        }
+        if (classification === null) {
           return;
         }
         if (classification.kind === 'raw') {
@@ -1004,13 +1250,13 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         applyTreeAction(action);
         return;
       }
-      // Story 6.8: `e` opens the body editor for the focused route when it carries a
-      // body (an example or any content type — non-JSON starts empty); routes with
-      // neither stay inert with no hint. List Enter-fire below still sends no body.
+      // Story 6.8/6.9: `e` opens the pane straight on the Body section for a route that
+      // carries a body (an example or any content type — non-JSON starts empty); routes
+      // with neither stay inert with no hint.
       if (input === 'e' || input === 'E') {
         const target = resolveEnterFireTarget(visibleRoutes, selected);
-        if (target !== undefined) {
-          openEditorForRoute(target);
+        if (target !== undefined && canEditRouteBody(target)) {
+          openPaneForRoute(target, 'body');
         }
         return;
       }
@@ -1026,13 +1272,12 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setSelected(0);
         return;
       }
-      // Story 6.2: Enter fires the selected route (`[enter] fire`) — no body/header
-      // customization, no saving (Story 6.3 territory); the fire uses the discovered
-      // method + path as-is.
+      // Story 6.9: Enter opens the route's Request tab — the request step is mandatory,
+      // the list never fires directly.
       if (key.return === true) {
         const target = resolveEnterFireTarget(visibleRoutes, selected);
         if (target !== undefined) {
-          void fireRoute(target.method, target.path);
+          openPaneForRoute(target);
         }
         return;
       }
@@ -1103,24 +1348,27 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // hint lines), so the BoundedList — indicator rows included — always fits exactly.
   const maxVisibleRows = listAreaSize !== null ? listAreaSize.height : Math.max(windowSize.rows - ROUTES_LIST_CHROME_ROWS, 3);
   const filterActive = filter.value !== '';
-  const treeActive = treeFocused && classification !== null && !editorOpen;
-  const focusedEditable = focused !== undefined && canEditRouteBody(focused) && !editorOpen;
+  const treeActive = treeFocused && classification !== null;
+  const focusedEditable = focused !== undefined && canEditRouteBody(focused);
   const listHint = filterEditing
     ? '[enter] apply  [esc] clear'
-    : focusedEditable
-      ? '[enter] fire  [/ f] filter  [e] edit body  [home/end] jump'
-      : '[enter] fire  [/ f] filter  [home/end] jump';
-  // The right pane owns its own shortcut line at its bottom while the tree holds focus;
-  // the list pane keeps list-only hints.
+    : paneFocused
+      ? '[esc] back to the list'
+      : focusedEditable
+        ? '[enter] request  [/ f] filter  [e] edit body  [home/end] jump'
+        : '[enter] request  [/ f] filter  [home/end] jump';
+  // Story 6.9: the pane owns its shortcut line at its bottom while it holds focus; the
+  // keys shared by both tabs lead it.
+  const paneKeys = '[ctrl+r] fire · [ctrl+←→] tab';
   const treeHint = !treeActive
     ? null
     : classification?.kind === 'raw'
-      ? '[esc] list · [↑↓] scroll'
+      ? `[esc] request · [↑↓] scroll · ${paneKeys}`
       : classification?.kind === 'empty'
-        ? '[esc] list'
+        ? `[esc] request · ${paneKeys}`
         : filterPanelOpen
           ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : '[esc] list · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level';
+          : `[esc] request · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level · ${paneKeys}`;
   // Story 6.8: footer hints reflect editor focus — the sub-editor owns its line while
   // open, the tree mode lists the edit keys. `[a]` only shows when an add target exists
   // (UX-DR7: never hint an inert key — scalar roots and empty drafts take `r`).
@@ -1135,7 +1383,61 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         ? '[enter] confirm · [esc] cancel'
         : filterPanelOpen
           ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : `[esc] list · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter`;
+          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · ${paneKeys}`;
+  const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
+  const requestHint: string | null =
+    !paneFocused || paneTab !== 'request'
+      ? null
+      : section === 'body'
+        ? (editorHint ?? `[esc] list · [tab] section · ${paneKeys}`)
+        : rowEdit !== null || rowAddPrompt !== null
+          ? '[enter] confirm · [esc] cancel'
+          : `[esc] list · [tab] section · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
+              section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
+            }${paneKeys}`;
+  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
+
+  const bodyNode =
+    rawEditor !== null && editorOpen ? (
+      <JsonRawEditor input={rawEditor.input} error={rawEditor.error} maxVisibleRows={bodyTotalBudget} />
+    ) : (
+      <JsonTreeEditor
+        rows={editorRows}
+        selected={clampedEditorSelected}
+        hiddenCount={editorHiddenCount}
+        rules={editorRuleList}
+        hideNulls={editorTreeState.hideNulls}
+        panelOpen={editorOpen && filterPanelOpen}
+        panelCursor={clampedEditorPanelCursor}
+        maxVisibleRows={bodyTotalBudget}
+        bodyEmpty={editorDraft === undefined}
+        editErrors={editorErrors}
+        firstError={editorFirstError}
+        editingPath={editorOpen ? (scalarEdit?.path ?? null) : null}
+        editInput={editorOpen ? (scalarEdit?.input ?? null) : null}
+        editLabel={scalarEdit !== null ? editLabelFor(scalarEdit.path) : 'Edit value'}
+        addPrompt={editorOpen ? addPrompt : null}
+      />
+    );
+
+  const responseNode =
+    classification === null || fireResult === null ? null : classification.kind === 'json' && treeValue !== undefined ? (
+      <JsonTree
+        rows={treeRows}
+        selected={clampedTreeSelected}
+        hiddenCount={treeHiddenCount}
+        activeRuleCount={treeActiveRuleCount}
+        rules={treeRuleList}
+        hideNulls={treeState.hideNulls}
+        panelOpen={treeActive && filterPanelOpen}
+        panelCursor={clampedPanelCursor}
+        maxVisibleRows={treeTotalBudget}
+      />
+    ) : classification.kind === 'raw' ? (
+      <JsonRawFallback reason={classification.reason} lines={rawLines} selected={clampedRawSelected} maxVisibleRows={treeTotalBudget} />
+    ) : classification.kind === 'empty' ? (
+      <JsonEmptyState emptyKind={classification.emptyKind} />
+    ) : null;
 
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
@@ -1172,75 +1474,29 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           </Box>
         }
         detail={
-          <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+          <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {focused ? <DetailPane title="Route">{formatRouteDetail(focused)}</DetailPane> : null}
-            {fireStatus === 'firing' ? (
-              <Box flexDirection="row">
-                <Spinner />
-                <Text color={colors['text-dim']}> Firing…</Text>
-              </Box>
+            {focused ? <RoutesPaneTabStrip tabs={ROUTES_PANE_TABS} active={paneTab} focused={paneFocused} /> : null}
+            {focused && paneTab === 'request' ? (
+              <RoutesRequestTab
+                draft={paneDraft}
+                section={paneFocused ? section : null}
+                focused={paneFocused}
+                rowCursor={rowCursor}
+                rowEdit={rowEdit}
+                rowAddPrompt={rowAddPrompt}
+                hasBody={paneHasBody}
+                fireBlock={paneFocused ? fireBlock : null}
+                bodyAreaRef={bodyAreaRef}
+                body={bodyNode}
+              />
             ) : null}
-            {editorOpen && editorRoute ? (
-              <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                <Text color={colors['text-dim']} wrap="truncate-end">
-                  {`REQUEST BODY — ${editorRoute.method} ${editorRoute.path}`}
-                </Text>
-                <Box ref={responseAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                  {rawEditor !== null ? (
-                    <JsonRawEditor input={rawEditor.input} error={rawEditor.error} maxVisibleRows={treeTotalBudget} />
-                  ) : (
-                    <JsonTreeEditor
-                      rows={editorRows}
-                      selected={clampedEditorSelected}
-                      hiddenCount={editorHiddenCount}
-                      rules={editorRuleList}
-                      hideNulls={editorTreeState.hideNulls}
-                      panelOpen={filterPanelOpen}
-                      panelCursor={clampedEditorPanelCursor}
-                      maxVisibleRows={treeTotalBudget}
-                      bodyEmpty={editorDraft === undefined}
-                      editErrors={editorErrors}
-                      firstError={editorFirstError}
-                      editingPath={scalarEdit?.path ?? null}
-                      editInput={scalarEdit?.input ?? null}
-                      editLabel={scalarEdit !== null ? editLabelFor(scalarEdit.path) : 'Edit value'}
-                      addPrompt={addPrompt}
-                    />
-                  )}
-                </Box>
-                {editorHint !== null ? <DimAnnotation text={editorHint} /> : null}
-              </Box>
+            {focused && paneTab === 'response' ? (
+              <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
+                {responseNode}
+              </RoutesResponseTab>
             ) : null}
-            {!editorOpen && fireStatus === 'fired' && fireResult ? (
-              <DetailPane title="Response">{formatFireStatus(fireResult)}</DetailPane>
-            ) : null}
-            {!editorOpen && fireStatus === 'fired' && fireResult && classification !== null ? (
-              <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                <Box ref={responseAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                  {classification.kind === 'json' && treeValue !== undefined ? (
-                    <JsonTree
-                      rows={treeRows}
-                      selected={clampedTreeSelected}
-                      hiddenCount={treeHiddenCount}
-                      activeRuleCount={treeActiveRuleCount}
-                      rules={treeRuleList}
-                      hideNulls={treeState.hideNulls}
-                      panelOpen={filterPanelOpen}
-                      panelCursor={clampedPanelCursor}
-                      maxVisibleRows={treeTotalBudget}
-                    />
-                  ) : classification.kind === 'raw' ? (
-                    <JsonRawFallback reason={classification.reason} lines={rawLines} selected={clampedRawSelected} maxVisibleRows={treeTotalBudget} />
-                  ) : classification.kind === 'empty' ? (
-                    <JsonEmptyState emptyKind={classification.emptyKind} />
-                  ) : null}
-                </Box>
-                {treeHint !== null ? <DimAnnotation text={treeHint} /> : null}
-              </Box>
-            ) : null}
-            {fireStatus === 'error' && fireError ? (
-              <Text color={colors.error}>{formatFireError(fireError.code, fireError.message)}</Text>
-            ) : null}
+            {paneHint !== null ? <DimAnnotation text={paneHint} /> : null}
           </Box>
         }
       />
