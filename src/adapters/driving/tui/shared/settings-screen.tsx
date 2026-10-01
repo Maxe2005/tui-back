@@ -30,6 +30,8 @@ import { Box, Text, useInput } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
+import { TextInputLine } from './components/text-input-line.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
@@ -169,6 +171,53 @@ export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null
     return null;
   }
   return clampFilterHistoryGridMaxRows(Number(input));
+}
+
+// General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles, as
+// before this list existed: the cursor starts on it) and the editor command, a free-text
+// field (Enter opens it for editing, Enter again commits, Esc cancels the edit).
+export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command';
+
+export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command'];
+
+export const EDITOR_COMMAND_PLACEHOLDER_TEXT = '(not set — $EDITOR, else vi)';
+
+export type GeneralSettingsView = { cursor: number; editing: TextInputState | null };
+
+export type GeneralSettingsStep =
+  | { type: 'move'; cursor: number }
+  | { type: 'toggle-quit' }
+  | { type: 'begin-edit' }
+  | { type: 'edit'; editing: TextInputState }
+  | { type: 'commit-edit'; value: string }
+  | { type: 'ignore' };
+
+// The General tab's whole key mapping as one pure step (Esc is handled by the screen's own
+// tab-aware Esc branch: it cancels an open edit before it closes anything). While the
+// editor command is being edited every key belongs to the text field — a typed space or
+// `q` is a literal character, never the quit toggle. The committed value is trimmed: a
+// blank command means "not set".
+export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view: GeneralSettingsView): GeneralSettingsStep {
+  if (view.editing !== null) {
+    if (key.return) {
+      return { type: 'commit-edit', value: view.editing.value.trim() };
+    }
+    return { type: 'edit', editing: nextTextInputValue(view.editing, input, key) };
+  }
+  if (key.upArrow) {
+    return { type: 'move', cursor: moveHintCursor(view.cursor, 'up', GENERAL_SETTINGS_ROWS.length) };
+  }
+  if (key.downArrow) {
+    return { type: 'move', cursor: moveHintCursor(view.cursor, 'down', GENERAL_SETTINGS_ROWS.length) };
+  }
+  const row = GENERAL_SETTINGS_ROWS[view.cursor];
+  if (row === 'quit-shortcut' && input === ' ') {
+    return { type: 'toggle-quit' };
+  }
+  if (row === 'editor-command' && key.return) {
+    return { type: 'begin-edit' };
+  }
+  return { type: 'ignore' };
 }
 
 // EDTs tab: the hideable per-context action hints (story 2.18's formatAvailableActionsHint).
@@ -316,6 +365,9 @@ export type SettingsScreenProps = {
   // drill-down. Implies initialLogsGroup = 'clear-history' when that prop is left unset, since
   // the service list is only reachable from within that group.
   initialLogsClearServiceOpen?: boolean;
+  // Same test-only injection idiom for the General tab's editor-command edit session.
+  // Production always starts browsing the row list (false).
+  initialGeneralEditing?: boolean;
 };
 
 export function SettingsScreen({
@@ -325,6 +377,7 @@ export function SettingsScreen({
   initialEdtsGroup = null,
   initialLogsGroup = null,
   initialLogsClearServiceOpen = false,
+  initialGeneralEditing = false,
 }: SettingsScreenProps) {
   const settings = useStore((state) => state.settings);
   const settingsWarning = useStore((state) => state.settingsWarning);
@@ -336,6 +389,12 @@ export function SettingsScreen({
   const edtsBranches = useStore((state) => state.edtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
+  // The General tab's row cursor + in-progress editor-command edit (null when browsing).
+  // The edit is a local draft: only Enter persists it, Esc drops it.
+  const [generalCursor, setGeneralCursor] = useState(initialGeneralEditing ? GENERAL_SETTINGS_ROWS.indexOf('editor-command') : 0);
+  const [generalEditing, setGeneralEditing] = useState<TextInputState | null>(
+    initialGeneralEditing ? { value: settings.general.editorCommand, cursor: settings.general.editorCommand.length } : null,
+  );
   const [edtsGroup, setEdtsGroup] = useState<SettingsGroupId | null>(initialEdtsGroup);
   const [groupCursor, setGroupCursor] = useState(0);
   const [hintCursor, setHintCursor] = useState(0);
@@ -355,10 +414,18 @@ export function SettingsScreen({
   // AC6 (amended 2026-09-20): drilled in on the EDTs tab's own group, or on any Logs tab group
   // (single-field group, "Clear history"'s own row list, or its "clear a service's history"
   // sub-list) — every other combination is "not drilled in" for Esc purposes.
-  const drilledIn = (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
+  // An open editor-command edit on the General tab counts too: Left/Right/Tab belong to the
+  // text field while it is open, and Esc cancels the edit rather than closing the screen.
+  const drilledIn =
+    (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
 
   useInput((input, key) => {
     if (key.escape) {
+      if (tab === 'general' && generalEditing !== null) {
+        // Drops the draft — the persisted command is untouched, the screen stays open.
+        setGeneralEditing(null);
+        return;
+      }
       if (tab === 'edts' && edtsGroup !== null) {
         // Steps back up to the group list — the whole settings screen stays open.
         setEdtsGroup(null);
@@ -405,10 +472,18 @@ export function SettingsScreen({
     }
 
     if (tab === 'general') {
-      // Space toggles quitShortcutEnabled — General has no row cursor yet, mirroring the Logs
-      // tab's single dedicated-key convention for a lone checkbox field.
-      if (input === ' ') {
+      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing });
+      if (step.type === 'move') {
+        setGeneralCursor(step.cursor);
+      } else if (step.type === 'toggle-quit') {
         void updateSettings({ general: { quitShortcutEnabled: !settings.general.quitShortcutEnabled } });
+      } else if (step.type === 'begin-edit') {
+        setGeneralEditing({ value: settings.general.editorCommand, cursor: settings.general.editorCommand.length });
+      } else if (step.type === 'edit') {
+        setGeneralEditing(step.editing);
+      } else if (step.type === 'commit-edit') {
+        setGeneralEditing(null);
+        void updateSettings({ general: { editorCommand: step.value } });
       }
       return;
     }
@@ -664,11 +739,36 @@ export function SettingsScreen({
 
         {tab === 'general' ? (
           <Box flexDirection="column">
-            <CheckboxListItem
-              label="Enable 'q' to quit"
-              state={settings.general.quitShortcutEnabled ? 'checked' : 'unchecked'}
-            />
-            <DimAnnotation text="Space to toggle. Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
+            <Box flexDirection="row">
+              <Text color={colors.accent}>{GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? '›' : ' '}</Text>
+              <CheckboxListItem
+                label="Enable 'q' to quit"
+                selected={GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut'}
+                state={settings.general.quitShortcutEnabled ? 'checked' : 'unchecked'}
+              />
+            </Box>
+            <Box flexDirection="row">
+              <Text color={colors.accent}>{GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? '›' : ' '}</Text>
+              {generalEditing !== null ? (
+                <TextInputLine label="Editor command" value={generalEditing.value} cursor={generalEditing.cursor} focused />
+              ) : (
+                <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? colors.accent : colors.text}>
+                  Editor command:{' '}
+                  {settings.general.editorCommand !== '' ? (
+                    <Text color={colors.accent}>{settings.general.editorCommand}</Text>
+                  ) : (
+                    <Text color={colors['text-dim']}>{EDITOR_COMMAND_PLACEHOLDER_TEXT}</Text>
+                  )}
+                </Text>
+              )}
+            </Box>
+            {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
+              <DimAnnotation text="Space to toggle. Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
+            ) : generalEditing !== null ? (
+              <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
+            ) : (
+              <DimAnnotation text="Enter to edit. Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
+            )}
           </Box>
         ) : null}
 

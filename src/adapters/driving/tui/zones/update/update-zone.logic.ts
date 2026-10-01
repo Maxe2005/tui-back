@@ -4,9 +4,16 @@
 // edts-zone.logic.ts is (that file's own header): the useInput callback stays a thin
 // dispatcher, everything it — or a render — needs to decide is a standalone, independently
 // unit-testable function.
+import { resolve } from 'node:path';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import type { GroupUpdateRepoResult, UpdateBlockerKind, UpdatePhase } from '../../../../../core/scripts/group-update.js';
+import type {
+  GroupUpdateRepoResult,
+  GroupUpdateScope,
+  GroupUpdateSelectionItem,
+  UpdateBlockerKind,
+  UpdatePhase,
+} from '../../../../../core/scripts/group-update.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 
@@ -48,6 +55,34 @@ export function deriveUpdateServiceStatus(
     return 'error';
   }
   return health;
+}
+
+// Whether the in-flight run actually targets this list row. The scope alone is not enough:
+// a run confirmed through the pre-run configuration screen (story 3.7) carries a
+// `selection` that narrows the scope down to exactly the confirmed services — a
+// single-service run (`p`, the row-local menu, `:update-service`) is scoped `edt` or `all`
+// but selects one row only, so every other row in that scope must keep its own glyph.
+// The selection match mirrors core's own `matchSelectionItem` (resolved repoPath when the
+// item carries one, service name otherwise). A null selection is the unfiltered default:
+// every row in scope is targeted.
+export function isServiceTargetedByRun(
+  row: { service: string; path: string },
+  run: {
+    scope: GroupUpdateScope | null;
+    memberPaths: ReadonlySet<string>;
+    selection: readonly GroupUpdateSelectionItem[] | null;
+  },
+): boolean {
+  const inScope = run.scope === 'all' || run.memberPaths.has(row.path);
+  if (!inScope) {
+    return false;
+  }
+  if (run.selection === null) {
+    return true;
+  }
+  return run.selection.some((item) =>
+    item.repoPath !== undefined ? resolve(item.repoPath) === resolve(row.path) : item.service === row.service,
+  );
 }
 
 // One row of the Update zone's always-visible service list — a ServiceBranchDivergence row
@@ -129,6 +164,68 @@ export function matchServicesBySubstring(
   return candidates.filter(
     (candidate) => candidate.service.toLowerCase().includes(needle) || candidate.repoPath.toLowerCase().includes(needle),
   );
+}
+
+// The placeholder a configured editor command carries where the blocked repo's path goes
+// (`code <repo>`, `idea --line 1 <repo>`, `--folder-uri=<repo>`).
+export const EDITOR_REPO_PLACEHOLDER = '<repo>';
+
+// Splits a command line into argv tokens on whitespace, honoring single/double quotes so a
+// binary or argument containing spaces stays one token (`"/opt/My Editor/bin/ed" <repo>`).
+// No shell is ever involved (the command is spawned directly), so there is no escaping,
+// globbing, or variable expansion to emulate — quotes only group.
+export function tokenizeCommandLine(command: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let started = false;
+  let quote: '"' | "'" | null = null;
+  for (const char of command) {
+    if (quote !== null) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (started) {
+        tokens.push(current);
+        current = '';
+        started = false;
+      }
+      continue;
+    }
+    current += char;
+    started = true;
+  }
+  if (started) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+// Resolves the argv the "Open in editor" choice spawns on a blocked repo. Precedence: the
+// `general.editorCommand` setting, then `$EDITOR`, then `vi` — a blank value at any level
+// falls through to the next. Every `<repo>` occurrence is replaced by the repo path; a
+// command without the placeholder gets the path appended as its last argument (the
+// `$EDITOR` convention: `code --wait` -> `code --wait <path>`).
+export function resolveEditorCommand(
+  configured: string,
+  envEditor: string | undefined,
+  repoPath: string,
+): { binary: string; args: string[] } {
+  const source = [configured, envEditor ?? ''].map((candidate) => tokenizeCommandLine(candidate)).find((tokens) => tokens.length > 0);
+  const [binary = 'vi', ...rest] = source ?? [];
+  if (!rest.some((token) => token.includes(EDITOR_REPO_PLACEHOLDER))) {
+    return { binary, args: [...rest, repoPath] };
+  }
+  return { binary, args: rest.map((token) => token.split(EDITOR_REPO_PLACEHOLDER).join(repoPath)) };
 }
 
 // update-slice.ts's own merge (Code Map): "merged — never wholesale-replaced — ... so

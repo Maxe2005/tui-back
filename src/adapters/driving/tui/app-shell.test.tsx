@@ -357,7 +357,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -426,6 +426,7 @@ it('shouldQuit returns true for q', () => {
         updateErrorCode: null,
         updateUlid: null,
         updateScope: null,
+        updateSelection: null,
         updateBlocker: null,
         resolveUpdateBlocker: () => {},
         runGroupUpdate: async () => {},
@@ -507,7 +508,7 @@ it('shouldQuit returns true for q', () => {
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
       expect(shouldQuit('j', {}, minimalState)).toBe(false);
       expect(
-        shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false } } }),
+        shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false, editorCommand: '' } } }),
       ).toBe(false);
     });
   });

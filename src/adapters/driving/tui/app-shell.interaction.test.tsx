@@ -922,7 +922,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
   it('the :quit command requests a quit through the store — reachable regardless of the "q" shortcut setting', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...store.getState().settings, general: { quitShortcutEnabled: false } } });
+    store.setState({ settings: { ...store.getState().settings, general: { quitShortcutEnabled: false, editorCommand: '' } } });
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
@@ -1398,7 +1398,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1464,7 +1464,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.general.quitShortcutEnabled).toBe(false);
       expect(settingsPort.save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: false },
+        general: { quitShortcutEnabled: false, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1601,7 +1601,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.commandPalette.gridMaxRows).toBe(9);
       expect(settingsPort.save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 9 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1636,7 +1636,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.logs.bufferSize).toBe(550);
       expect(settingsPort.save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1672,7 +1672,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(store.getState().settings.logs.startWithHistory).toBe(true);
       expect(store.getState().settings.logs.bufferSize).toBe(DEFAULT_SETTINGS.logs.bufferSize);
       expect(settingsPort.save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: {
@@ -1780,7 +1780,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edts']);
       expect(settingsPort.save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1813,7 +1813,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
 
       expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['create']);
       expect(settingsPort.save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },

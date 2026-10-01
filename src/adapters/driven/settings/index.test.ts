@@ -70,7 +70,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -209,7 +209,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -230,6 +230,28 @@ describe('loadSettings', () => {
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
     expect(result.data.warning).toContain('general.quitShortcutEnabled');
+  });
+
+  it('loads general.editorCommand as-is, and defaults it to empty for a general block written before the field existed', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'general:\n  editorCommand: code <repo>\n');
+
+    const configured = await loadSettings(file);
+
+    expect(configured.ok).toBe(true);
+    if (!configured.ok) throw new Error('expected ok');
+    expect(configured.data.settings.general).toEqual({ quitShortcutEnabled: true, editorCommand: 'code <repo>' });
+    expect(configured.data.warning).toBeNull();
+
+    await writeFile(file, 'general:\n  quitShortcutEnabled: false\n');
+
+    const legacy = await loadSettings(file);
+
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) throw new Error('expected ok');
+    expect(legacy.data.settings.general).toEqual({ quitShortcutEnabled: false, editorCommand: '' });
+    expect(legacy.data.warning).toBeNull();
   });
 
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
@@ -262,7 +284,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -287,7 +309,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15 },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -377,7 +399,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -400,7 +422,7 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -426,7 +448,7 @@ describe('saveSettings', () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'settings.yaml');
     const settings = {
-      general: { quitShortcutEnabled: true },
+      general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 10 },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -444,14 +466,14 @@ describe('saveSettings', () => {
     await saveSettings(file, DEFAULT_SETTINGS);
 
     await saveSettings(file, {
-      general: { quitShortcutEnabled: true },
+      general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
-      general: { quitShortcutEnabled: true },
+      general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20 },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -465,7 +487,7 @@ describe('createSettingsPort', () => {
     const file = join(root, 'settings.yaml');
     const port = createSettingsPort(file);
     const settings = {
-      general: { quitShortcutEnabled: false },
+      general: { quitShortcutEnabled: false, editorCommand: '' },
       commandPalette: { gridMaxRows: 5 },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
       logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },

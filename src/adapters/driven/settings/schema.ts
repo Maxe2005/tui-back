@@ -23,6 +23,10 @@ export const settingsSchema: z.ZodType<Settings> = z
     general: z
       .object({
         quitShortcutEnabled: z.boolean().optional().default(DEFAULT_SETTINGS.general.quitShortcutEnabled),
+        // Additive optional-with-default field (the hiddenActionTypes lesson below): a
+        // settings.yaml written before this field existed has a `general:` block without
+        // it, which must default to '' rather than failing the whole file back to defaults.
+        editorCommand: z.string().optional().default(DEFAULT_SETTINGS.general.editorCommand),
       })
       .strict()
       .optional()

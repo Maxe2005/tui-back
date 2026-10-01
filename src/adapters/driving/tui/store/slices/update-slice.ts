@@ -79,6 +79,11 @@ export type UpdateSlice = {
   // An all-repos run targets no EDT: `updateUlid` is `'all'` and `updateScope` is `'all'`.
   updateUlid: string | null;
   updateScope: GroupUpdateScope | null;
+  // The confirmed selection the current/last run was started with (null when the run
+  // started unfiltered — every service in `updateScope` is targeted). The scope alone
+  // over-reports a narrowed run: a single-service update is scoped `edt`/`all` but
+  // targets one service, so the zone's per-row `updating` status reads this too.
+  updateSelection: GroupUpdateSelectionItem[] | null;
   // Story 3.4: the currently raised resolution blocker (null when no repo is waiting).
   // Core's `onUpdateBlocker` seam sets this and waits; the Update zone renders the bounded
   // four-choice modal menu over it, and this dispatch carries the developer's choice back
@@ -498,6 +503,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateErrorCode: null,
       updateUlid: null,
       updateScope: null,
+      updateSelection: null,
       updateBlocker: null,
       liveServicePhase: {},
       liveServiceIssues: {},
@@ -541,6 +547,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateErrorCode: null,
           updateUlid: null,
           updateScope: scope,
+          updateSelection: opts.selection ?? null,
           updateBlocker: null,
           // Story 3.10: a fresh run starts with a fresh live view — stale phases and
           // resolved/unresolved entries from the previous run never leak into this one.
@@ -1000,6 +1007,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateErrorCode: null,
           updateUlid: null,
           updateScope: null,
+          updateSelection: null,
           updateBlocker: null,
           updateConfig: null,
           updateServiceSelectRequest: false,
