@@ -1,8 +1,6 @@
-// shared/components/branch-autocomplete-input: pure-reducer-first tests (branch-picker.test.tsx
-// precedent) plus render-to-string smoke coverage. The shared renderToString harness's fake
-// stdin never emits data, so no component-owned useInput exists to exercise — every keystroke
-// behavior is covered as a pure function instead (handleBranchAutocompleteKey), with render
-// tests asserting the dropdown cap, the overflow line, and the glyph-paired validity signal.
+// shared/components/branch-autocomplete-input: pure-reducer tests (handleBranchAutocompleteKey
+// covers every keystroke, since renderToString's fake stdin never emits keys) plus render
+// smoke coverage of the dropdown cap, the overflow line, and the glyph-paired validity signal.
 import { describe, it, expect } from 'vitest';
 import { colors } from '../theme/theme.js';
 import {
@@ -24,7 +22,7 @@ function stateWith(overrides: Partial<BranchAutocompleteState> = {}): BranchAuto
 }
 
 describe('matchBranchesBySubstring', () => {
-  it('filters case-insensitively by substring (I/O matrix "Filter as you type")', () => {
+  it('filters case-insensitively by substring', () => {
     expect(matchBranchesBySubstring('f', BRANCHES)).toEqual(['feat-x', 'fix-y']);
     expect(matchBranchesBySubstring('F', BRANCHES)).toEqual(['feat-x', 'fix-y']);
     expect(matchBranchesBySubstring('eat', BRANCHES)).toEqual(['feat-x']);
@@ -96,7 +94,7 @@ describe('resolveBranchAutocompleteDropdown', () => {
   });
 });
 
-describe('handleBranchAutocompleteKey — text caret (I/O matrix "Text caret")', () => {
+describe('handleBranchAutocompleteKey — text caret', () => {
   it('typing inserts at the caret via nextTextInputValue and resets pickCursor to 0', () => {
     const result = handleBranchAutocompleteKey(
       { value: 'fet-x', cursor: 2, pickCursor: 1 },
@@ -139,7 +137,7 @@ describe('handleBranchAutocompleteKey — text caret (I/O matrix "Text caret")',
   });
 });
 
-describe('handleBranchAutocompleteKey — navigate + insert (I/O matrix "Navigate + insert")', () => {
+describe('handleBranchAutocompleteKey — navigate + insert', () => {
   it('Down/Up move pickCursor clamped to the match list, never touching the caret', () => {
     const down = handleBranchAutocompleteKey(stateWith({ value: 'f', cursor: 1, pickCursor: 0 }), BRANCHES, '', {
       downArrow: true,

@@ -1,11 +1,8 @@
-// tui/shared/reset-screen: the `:reset` full-screen overlay — reachable exclusively through
-// the registered `reset` command inside the `:` command bar (never a raw keypress). Three
-// steps (select categories -> review the exact summary -> type `reset`) then a result view
-// listing each category's outcome and every git branch left behind.
-//
-// Self-contained useInput + pure key handling (mirrors settings-screen.tsx): every decision
-// lives in reset-screen.logic.ts; this component only feeds it raw Ink keys and applies the
-// returned state/action. Danger styling: error-colored border and title, never the accent.
+// tui/shared/reset-screen: the `:reset` full-screen overlay, reachable only through the `reset`
+// command. Select categories -> review the exact summary -> type `reset`, then a result view of
+// each category's outcome and every git branch left behind. Every decision lives in
+// reset-screen.logic.ts; this component feeds it raw Ink keys. Danger styling: error-colored
+// border and title, never the accent.
 import { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';

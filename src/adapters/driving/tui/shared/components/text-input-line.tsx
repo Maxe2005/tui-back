@@ -5,10 +5,8 @@ export type TextInputLineProps = {
   label: string;
   value: string;
   focused?: boolean;
-  // Story 2.32: the caret's position within `value`, in [0, value.length]. Defaults to
-  // `value.length` (today's always-trailing look) so every caller that omits it — still most of
-  // them, per the story's deferred command-bar/repo-registry-screen adoption — renders
-  // identically to before this story.
+  // The caret's position within `value`, in [0, value.length]. Defaults to `value.length`
+  // (an always-trailing caret) for callers that don't track one.
   cursor?: number;
 };
 
@@ -29,7 +27,7 @@ export function TextInputLine(props: TextInputLineProps) {
   const { label, value, focused = false, cursor } = props;
   const layout = resolveTextInputLineLayout(props);
   if (!layout.showCursor) {
-    // Unfocused: no caret to place — render exactly as before this story.
+    // Unfocused: no caret to place.
     return (
       <Box flexDirection="column">
         <Box>
@@ -45,7 +43,7 @@ export function TextInputLine(props: TextInputLineProps) {
   const position = Math.min(Math.max(cursor ?? value.length, 0), value.length);
   const before = value.slice(0, position);
   // At the end of the value there's no character to sit the caret on, so it renders as an
-  // inverse space — the pre-story "always-trailing" look, now reachable at any position.
+  // inverse space.
   const atCursor = value.slice(position, position + 1) || ' ';
   const after = value.slice(position + 1);
   return (

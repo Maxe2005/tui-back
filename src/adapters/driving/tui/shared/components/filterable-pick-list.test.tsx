@@ -1,9 +1,6 @@
-// shared/components/filterable-pick-list: pure-reducer-first tests (branch-autocomplete-input
-// precedent) plus render-to-string coverage. The shared renderToString harness's fake stdin
-// never emits data, so no component-owned useInput exists to exercise — every keystroke
-// behavior is covered as a pure function instead (handleFilterablePickListKey), with render
-// tests asserting the row style, the scrolling indicators and the two distinct empty lines.
-// Each describe block names the spec's I/O & Edge-Case Matrix row it covers.
+// shared/components/filterable-pick-list: pure-reducer tests (handleFilterablePickListKey
+// covers every keystroke, since renderToString's fake stdin never emits keys) plus render
+// coverage of the row style, the scrolling indicators and the two distinct empty lines.
 import { describe, it, expect } from 'vitest';
 import {
   FILTERABLE_PICK_LIST_MAX_ROWS,

@@ -1,16 +1,7 @@
-// tui/shared/reset-screen.logic: the `:reset` overlay's pure key-handling state machine —
-// every decision lives here so it's directly unit-testable (render-to-string.ts's fake stdin
-// never drives a useInput callback; see settings-screen.tsx's own testability note). The
-// component only interprets the raw Ink key and applies the returned state/action.
-//
-// Three steps (spec-reset-command.md, Boundaries):
-//   1. select  — checkboxes, all unchecked on open; Up/Down moves, Space toggles, Enter
-//                advances only when at least one box is checked. Checking Services
-//                force-checks EDTs, and EDTs stays locked checked while Services is checked.
-//   2. summary — read-only review of exactly what goes; Enter advances.
-//   3. confirm — a text input; Enter executes only when the value is exactly `reset`
-//                (case-sensitive, no trim). Any other Enter is a no-op.
-// Esc cancels from any step (the caller closes the overlay; nothing was written yet).
+// tui/shared/reset-screen.logic: the `:reset` overlay's pure key-handling state machine. Three
+// steps: select (checkboxes; Services force-checks and locks EDTs; Enter needs one checked),
+// summary (read-only review; Enter advances once the preview loaded), confirm (Enter executes
+// only on exactly `reset`). Esc cancels from any step — nothing was written yet.
 import { resolveResetCategories, type ResetCategory } from '../../../../core/scripts/reset-tool.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
 

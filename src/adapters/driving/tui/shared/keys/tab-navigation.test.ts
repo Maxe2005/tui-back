@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveTabNavKey, stepTab } from './tab-navigation.js';
 
-describe('resolveTabNavKey (story 6.9)', () => {
+describe('resolveTabNavKey', () => {
   it('maps Ctrl+→ / Ctrl+N to next and Ctrl+← / Ctrl+P to back', () => {
     expect(resolveTabNavKey('', { ctrl: true, rightArrow: true })).toBe('next');
     expect(resolveTabNavKey('n', { ctrl: true })).toBe('next');
@@ -16,7 +16,7 @@ describe('resolveTabNavKey (story 6.9)', () => {
   });
 });
 
-describe('stepTab (story 6.9)', () => {
+describe('stepTab', () => {
   const tabs = ['request', 'response'] as const;
 
   it('moves to the adjacent tab', () => {

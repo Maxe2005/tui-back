@@ -1,30 +1,8 @@
-// tui/shared/settings-screen: story 2.19's `:settings` overlay — a tab-organized
-// `modal-dialog` instance (General / EDTs / Command Palette), reachable exclusively through
-// the registered `settings` command inside the `:` command bar (mirrors
-// repo-registry-screen.tsx's own precedent, never a raw keypress). Every change applies to
-// the live store and persists to settings.yaml immediately via the store's `updateSettings`
-// action — there is no separate save step and no local "dirty" state here.
-//
-// Testability convention (render-to-string.ts): the shared renderToString harness's fake
-// stdin never emits data, so a useInput callback itself is never invoked by any test in this
-// repo — every key-handling decision below is a pure, directly-testable function; useInput
-// only interprets the raw Ink Key and dispatches the pure result (mirrors
-// repo-registry-screen.tsx's typeRootInputChar/moveCandidateCursor and command-bar.tsx's
-// resolveTabPress).
-//
-// EDTs-tab token list (Design Notes): the three hideable hint tokens below are exactly the
-// `PaneFocus` contexts edts-zone.tsx's `formatAvailableActionsHint` (story 2.18, its
-// formerly-`formatEdtActionHistory`-embedded hint line) emits one hint string for — 'edts',
-// 'edt-services', 'other-services' — never invented placeholder ids.
-//
-// Amended 2026-08-28 (Sprint Change Proposal): the EDTs tab now holds two distinct settings
-// groups ("Hint visibility" above, "Recent action types" below) behind a drill-down — first
-// opening the tab shows an Up/Down-navigable group list, `Enter` drills into that group's own
-// checkbox list, `Esc` steps back out to the group list (only at this tab; General/Command
-// Palette stay single-level). This is why Esc-close moves from AppShell's centralized handling
-// (registryScreenOpen's precedent) to a self-contained `onClose` prop here, mirroring
-// command-bar.tsx's own self-contained Esc pattern — AppShell no longer knows or needs to know
-// how deep the EDTs tab is drilled.
+// tui/shared/settings-screen: the `:settings` overlay — a tab-organized modal (General / EDTs /
+// Command Palette / Logs) reachable only through the `settings` command. Every change applies
+// to the live store and persists immediately via `updateSettings` (no save step, no dirty
+// state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
+// lives here (`onClose`): only this component knows whether Esc steps back or closes.
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
@@ -58,10 +36,9 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   logs: 'Logs',
 };
 
-// AC1: Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General
-// order (SETTINGS_TABS' own declared order) — Left and Tab both step forward here, deliberately
-// simpler than zones.ts's bidirectional nextZoneId since there's no wrap-skip/omitted-tab
-// concern (every settings tab is always reachable).
+// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General order
+// (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
+// nextZoneId since every settings tab is always reachable.
 export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
   const index = SETTINGS_TABS.indexOf(current);
   const nextIndex = (index + direction + SETTINGS_TABS.length) % SETTINGS_TABS.length;
@@ -75,9 +52,8 @@ export type SettingsTabState = {
   bold: boolean;
 };
 
-// Mirrors zone-tab-bar.tsx's resolveZoneTabState active/inactive treatment at a smaller
-// scale (Boundaries: "visually mirroring zone-tab-bar.tsx's active/inactive treatment") — no
-// strikethrough/badge here, since settings tabs are never manifest-gated or event-badged.
+// Mirrors zone-tab-bar.tsx's active/inactive treatment at a smaller scale — no
+// strikethrough/badge, since settings tabs are never manifest-gated or event-badged.
 export function resolveSettingsTabState(tab: SettingsTab, activeTab: SettingsTab): SettingsTabState {
   const active = tab === activeTab;
   return {
@@ -88,11 +64,10 @@ export function resolveSettingsTabState(tab: SettingsTab, activeTab: SettingsTab
   };
 }
 
-// Command Palette tab: Story 2.17's COMMAND_GRID_MAX_ROWS default (8), now user-overridable.
-// Clamped to a sane, always-positive range — 0/negative would break groupCommandsByColumn's
-// own `Math.max(1, maxRows)` floor, and the zod schema enforces the same [MIN, MAX] bound
-// (core/ports/settings.ts is the single source of truth for both, so they can't drift apart).
-// Re-exported here so existing imports of these two constants from this module keep working.
+// Command Palette tab: the grid rows per column. Clamped to a sane, always-positive range —
+// 0/negative would break groupCommandsByColumn's `Math.max(1, maxRows)` floor, and the zod
+// schema enforces the same [MIN, MAX] bound (core/ports/settings.ts holds both). Re-exported
+// here for existing importers.
 export { MIN_GRID_MAX_ROWS, MAX_GRID_MAX_ROWS };
 
 export function clampGridMaxRows(value: number): number {
@@ -103,9 +78,9 @@ export function adjustGridMaxRows(current: number, direction: 'up' | 'down'): nu
   return clampGridMaxRows(current + (direction === 'up' ? 1 : -1));
 }
 
-// A typed digit sets the value directly (I/O matrix: "Up/Down or typed digit"). Only a single
-// digit 1-9 is meaningful — '0' is never a valid gridMaxRows (zod's `.positive()`), and any
-// non-digit character is ignored rather than appended (this is a value-set field, not free text).
+// A typed digit sets the value directly. Only a single digit 1-9 is meaningful — '0' is never a
+// valid gridMaxRows (zod's `.positive()`), and any non-digit is ignored rather than appended
+// (this is a value-set field, not free text).
 export function parseGridMaxRowsDigit(input: string): number | null {
   if (!/^[1-9]$/.test(input)) {
     return null;
@@ -113,13 +88,10 @@ export function parseGridMaxRowsDigit(input: string): number | null {
   return clampGridMaxRows(Number(input));
 }
 
-// Logs tab (story 5.1): settings.logs.bufferSize, reusing the exact clamp/adjust/parse-digit/
-// render idiom the Command Palette tab established above for gridMaxRows. Scaled for a much
-// wider range (50-5000 vs. 1-99): Up/Down steps by LOG_BUFFER_SIZE_STEP rather than 1 (a
-// single-line step would take dozens of keypresses to cross the range), and a typed digit
-// 1-9 is a quick preset (digit x 100, e.g. '5' -> 500) rather than the literal digit — the
-// same "single keystroke sets a sane value directly" spirit as parseGridMaxRowsDigit, just
-// rescaled to a range where the literal digit itself is never a meaningful buffer size.
+// Logs tab: settings.logs.bufferSize, with the Command Palette tab's clamp/adjust/parse-digit
+// idiom rescaled to its wider range (50-5000 vs. 1-99): Up/Down steps by LOG_BUFFER_SIZE_STEP,
+// and a typed digit 1-9 is a quick preset (digit x 100, e.g. '5' -> 500) since the literal
+// digit is never a meaningful buffer size.
 export const LOG_BUFFER_SIZE_STEP = 50;
 export { MIN_LOG_BUFFER_SIZE, MAX_LOG_BUFFER_SIZE };
 
@@ -138,10 +110,9 @@ export function parseLogBufferSizeDigit(input: string): number | null {
   return clampLogBufferSize(Number(input) * 100);
 }
 
-// Logs tab (story 5.4): settings.logs.filterHistorySize/filterHistoryGridMaxRows, same clamp/
-// adjust idiom as bufferSize/gridMaxRows above. filterHistorySize has no digit preset (its
-// range doesn't lend itself to one the way bufferSize's x100 or gridMaxRows' literal digit
-// do) — Left/Right (see the group model below) is its only adjustment.
+// Logs tab: settings.logs.filterHistorySize/filterHistoryGridMaxRows, same clamp/adjust idiom
+// as bufferSize/gridMaxRows above. filterHistorySize has no digit preset — Left/Right (see the
+// group model below) is its only adjustment.
 export const FILTER_HISTORY_SIZE_STEP = 5;
 export { MIN_FILTER_HISTORY_SIZE, MAX_FILTER_HISTORY_SIZE };
 
@@ -153,9 +124,8 @@ export function adjustFilterHistorySize(current: number, direction: 'up' | 'down
   return clampFilterHistorySize(current + (direction === 'up' ? FILTER_HISTORY_SIZE_STEP : -FILTER_HISTORY_SIZE_STEP));
 }
 
-// filterHistoryGridMaxRows mirrors gridMaxRows' own [1, 99] range and digit-preset convention
-// exactly, but through its own independent constants (Boundaries: "independent of
-// commandPalette.gridMaxRows").
+// filterHistoryGridMaxRows mirrors gridMaxRows' [1, 99] range and digit-preset convention, but
+// through its own constants (the two settings are independent).
 export { MIN_FILTER_HISTORY_GRID_MAX_ROWS, MAX_FILTER_HISTORY_GRID_MAX_ROWS };
 
 export function clampFilterHistoryGridMaxRows(value: number): number {
@@ -173,9 +143,9 @@ export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null
   return clampFilterHistoryGridMaxRows(Number(input));
 }
 
-// General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles, as
-// before this list existed: the cursor starts on it) and the editor command, a free-text
-// field (Enter opens it for editing, Enter again commits, Esc cancels the edit).
+// General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles; the cursor
+// starts on it) and the editor command, a free-text field (Enter opens it for editing, Enter
+// again commits, Esc cancels the edit).
 export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command';
 
 export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command'];
@@ -220,7 +190,7 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
   return { type: 'ignore' };
 }
 
-// EDTs tab: the hideable per-context action hints (story 2.18's formatAvailableActionsHint).
+// EDTs tab: the hideable per-context action hints (formatAvailableActionsHint's contexts).
 export type HideableActionHint = { id: string; label: string };
 
 export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
@@ -229,10 +199,8 @@ export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
   { id: 'other-services', label: 'Other services — "[Enter] Add to EDT"' },
 ];
 
-// Generic clamped cursor mover — reused for the EDTs tab's group-list cursor, its
-// "Hint visibility" checkbox cursor, and its "Recent action types" checkbox cursor (all three
-// are just an index into a small fixed-length list; the name predates the group-list level but
-// the logic was already list-agnostic).
+// Generic clamped cursor mover — reused for the EDTs tab's group-list cursor and both of its
+// checkbox cursors (each just an index into a small fixed-length list).
 export function moveHintCursor(current: number, direction: 'up' | 'down', length: number): number {
   if (length === 0) {
     return 0;
@@ -241,20 +209,15 @@ export function moveHintCursor(current: number, direction: 'up' | 'down', length
   return Math.min(Math.max(next, 0), length - 1);
 }
 
-// Toggles `id` in `hidden`, never mutating the input array (mirrors
-// repo-registry-screen.tsx's toggleCandidateSelection immutability convention, array-shaped
-// since Settings.edts.hiddenActionHints/hiddenActionTypes are each a string[], not a Set).
-// Reused as-is for both the "Hint visibility" and "Recent action types" checkbox groups — the
-// toggle logic is identical, only which settings field it's applied to differs at the call site.
+// Toggles `id` in `hidden`, never mutating the input array (Settings.edts.hiddenActionHints and
+// hiddenActionTypes are each a string[], not a Set). Shared by both EDTs checkbox groups.
 export function toggleHiddenHint(hidden: readonly string[], id: string): string[] {
   return hidden.includes(id) ? hidden.filter((existing) => existing !== id) : [...hidden, id];
 }
 
-// Amended 2026-08-28 (Sprint Change Proposal): the "Recent action types" group's rows — the
-// literal `EdtActionLogEntry['actionType']` domain (app-store.ts), confirmed exhaustive by
-// grepping every `logEdtAction(...)` call site in this file. A closed, hardcoded list, never
-// derived from `edtActionLog` at runtime (an EDT with no `modify` entries yet must still offer
-// to hide `modify`) — Design Notes: "Action-type list is closed, not derived".
+// The "Recent action types" group's rows — the literal `EdtActionLogEntry['actionType']`
+// domain, closed and hardcoded, never derived from `edtActionLog` at runtime (an EDT with no
+// `modify` entries yet must still offer to hide `modify`).
 export type HideableActionType = { id: string; label: string };
 
 export const HIDEABLE_ACTION_TYPES: readonly HideableActionType[] = [
@@ -263,15 +226,12 @@ export const HIDEABLE_ACTION_TYPES: readonly HideableActionType[] = [
   { id: 'modify', label: 'Modify' },
 ];
 
-// Amended 2026-08-28 (Sprint Change Proposal): the EDTs tab's group-list level, ahead of its
-// two checkbox lists (Boundaries: "a single flat checkbox list would conflate two unrelated
-// toggles"; Design Notes explains why this is a drill-down rather than a flat list or a nested
-// tab strip).
+// The EDTs tab's group-list level, ahead of its two checkbox lists (one flat list would
+// conflate two unrelated toggles).
 //
 // Branch autocomplete dropdown rows (shared BranchAutocompleteInput): the visible row count
-// before the `… N more` overflow line, reusing the exact clamp/adjust/parse-digit idiom the
-// Command Palette tab established for gridMaxRows (single source of truth: core's
-// MIN/MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, so the schema and the screen can't drift apart).
+// before the `… N more` overflow line, with the gridMaxRows clamp/adjust/parse-digit idiom
+// (bounds from core's MIN/MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, shared with the schema).
 export { MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS, MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS };
 
 export function clampBranchDropdownMaxRows(value: number): number {
@@ -301,16 +261,10 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
 ];
 
-// Amended 2026-09-20 (visual-corruption fix): the Logs tab used to render all six fields as
-// one flat row-cursor list (plus three DimAnnotation lines) inside ModalDialog, which has no
-// width/height cap — in anything but a tall terminal, that content overflowed the visible
-// viewport and Ink's diff-render corrupted the border/title above it ("SETTINGS" rendering as
-// "--ttings") and overlapped the last two rows. Fixed the same way the EDTs tab already
-// solves this (Design Notes there): a group-list level first, one field (or a small related
-// cluster) per group, so no single screen renders more than a handful of lines. Five groups —
-// four single-field ones plus "Clear history" holding both clear actions — chosen over fewer,
-// denser groups so each screen stays minimal; the extra keystrokes to reach a field are an
-// accepted trade-off (user decision, 2026-09-20).
+// The Logs tab's group list: one field (or a small related cluster) per group, so no screen
+// renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every
+// field overflowed short terminals — Ink's diff-render then corrupted the border and title.
+// Five groups: four single-field ones plus "Clear history" holding both clear actions.
 export type LogsSettingsGroupId =
   | 'buffer-size'
   | 'start-with-history'
@@ -342,28 +296,23 @@ export const LOGS_CLEAR_ROW_LABELS: Record<LogsClearRowId, string> = {
   'clear-service': "Clear a service's filter history",
 };
 
-// Amended 2026-08-28 (Sprint Change Proposal): self-contained Esc handling, mirroring
-// command-bar.tsx's own `onClose` pattern rather than repo-registry-screen.tsx's
-// AppShell-centralized one — the EDTs tab's drill-down state (is a group open?) is local to
-// this component, so only this component can decide whether Esc steps back a level or closes
-// the whole screen (Boundaries: "Esc's meaning is now tab-aware"). `onClose` defaults to a
-// no-op so a bare smoke-test render (no interaction) never crashes for lack of a prop.
+// Self-contained Esc handling (like command-bar.tsx's `onClose`): the drill-down state is local
+// to this component, so only it can decide whether Esc steps back a level or closes the whole
+// screen. `onClose` defaults to a no-op so a bare smoke-test render never crashes.
 export type SettingsScreenProps = {
   useStore?: AppStore;
   onClose?: () => void;
-  // Test-only injection points (mirror edts-zone.tsx's `initialPaneFocus`): renderToString
-  // performs one synchronous render-then-unmount pass and never observes a keypress (the
-  // shared harness's fake stdin never emits data), so a smoke test can't Tab/Enter its way to
-  // a specific tab/drilled-group otherwise. Production always starts on General, group list
-  // (AC1, AC6).
+  // Test-only injection points (like edts-zone.tsx's `initialPaneFocus`): renderToString never
+  // observes a keypress, so a smoke test can't Tab/Enter its way to a specific tab or drilled
+  // group otherwise. Production always starts on General, at the group list.
   initialTab?: SettingsTab;
   initialEdtsGroup?: SettingsGroupId | null;
-  // Amended 2026-09-20: same test-only injection idiom, one level up, for the Logs tab's own
-  // group list (mirrors initialEdtsGroup). Production always starts on the group list (null).
+  // Same test-only injection idiom, one level up, for the Logs tab's own group list (mirrors
+  // initialEdtsGroup). Production always starts on the group list (null).
   initialLogsGroup?: LogsSettingsGroupId | null;
-  // Story 5.4: same test-only injection idiom, for the Logs tab's "clear a service's history"
-  // drill-down. Implies initialLogsGroup = 'clear-history' when that prop is left unset, since
-  // the service list is only reachable from within that group.
+  // Same test-only injection idiom, for the Logs tab's "clear a service's history" drill-down.
+  // Implies initialLogsGroup = 'clear-history' when that prop is left unset, since the service
+  // list is only reachable from within that group.
   initialLogsClearServiceOpen?: boolean;
   // Same test-only injection idiom for the General tab's editor-command edit session.
   // Production always starts browsing the row list (false).
@@ -382,8 +331,8 @@ export function SettingsScreen({
   const settings = useStore((state) => state.settings);
   const settingsWarning = useStore((state) => state.settingsWarning);
   const updateSettings = useStore((state) => state.updateSettings);
-  // Story 5.4: the Logs tab's clear actions and the service list its "clear this service" row
-  // drills into.
+  // The Logs tab's clear actions and the service list its "clear this service" row drills
+  // into.
   const clearGlobalFilterHistory = useStore((state) => state.clearGlobalFilterHistory);
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
   const edtsBranches = useStore((state) => state.edtsBranches);
@@ -399,9 +348,9 @@ export function SettingsScreen({
   const [groupCursor, setGroupCursor] = useState(0);
   const [hintCursor, setHintCursor] = useState(0);
   const [actionTypeCursor, setActionTypeCursor] = useState(0);
-  // Amended 2026-09-20: the Logs tab's own group list (mirrors edtsGroup/groupCursor exactly),
-  // the "Clear history" group's own two-row list one level below that, and the "clear a
-  // service's history" row's drill-down state one level below that again.
+  // The Logs tab's own group list (mirrors edtsGroup/groupCursor), the "Clear history" group's
+  // two-row list one level below that, and the "clear a service's history" row's drill-down
+  // state one level below that again.
   const [logsGroup, setLogsGroup] = useState<LogsSettingsGroupId | null>(
     initialLogsGroup ?? (initialLogsClearServiceOpen ? 'clear-history' : null),
   );
@@ -411,11 +360,11 @@ export function SettingsScreen({
   const [logsClearServiceCursor, setLogsClearServiceCursor] = useState(0);
   const logsServices = edtsBranches ?? [];
 
-  // AC6 (amended 2026-09-20): drilled in on the EDTs tab's own group, or on any Logs tab group
-  // (single-field group, "Clear history"'s own row list, or its "clear a service's history"
-  // sub-list) — every other combination is "not drilled in" for Esc purposes.
-  // An open editor-command edit on the General tab counts too: Left/Right/Tab belong to the
-  // text field while it is open, and Esc cancels the edit rather than closing the screen.
+  // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
+  // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
+  // combination is "not drilled in" for Esc purposes. An open editor-command edit on the
+  // General tab counts too: Left/Right/Tab belong to the text field while it is open, and Esc
+  // cancels the edit rather than closing the screen.
   const drilledIn =
     (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
 
@@ -444,15 +393,11 @@ export function SettingsScreen({
       return;
     }
 
-    // AC1 (amended 2026-09-20): Tab always cycles the top-level tabs (never while drilled in).
-    // Left/Right also cycle tabs at every tab's own top level — the Logs tab no longer needs an
-    // exception here now that it has its own group list (see the group model below) rather than
-    // a flat row list claiming Left/Right at the top level; Tab remains that tab's own way back
-    // out to General/EDTs/Command Palette.
+    // Tab always cycles the top-level tabs (never while drilled in). Left/Right also cycle tabs
+    // at every tab's own top level; Tab remains the Logs tab's way back out.
     if (!drilledIn && key.tab) {
-      // Landing on (or leaving) the EDTs/Logs tab always resets to its own top level (AC6: "on
-      // first opening the EDTs tab" — every arrival, not just the very first — extended to the
-      // Logs tab's group list).
+      // Landing on (or leaving) the EDTs/Logs tab always resets to its own top level — on every
+      // arrival, not just the first.
       setEdtsGroup(null);
       setGroupCursor(0);
       setLogsGroup(null);
@@ -510,9 +455,9 @@ export function SettingsScreen({
     }
 
     if (tab === 'logs') {
-      // Story 5.4: the "clear a service's history" drill-down — its own small Up/Down list,
-      // Enter/Space clears that one service's two lists (text + regex), Esc (handled above)
-      // steps back to the "Clear history" group's row list.
+      // The "clear a service's history" drill-down — its own small Up/Down list, Enter/Space
+      // clears that one service's two lists (text + regex), Esc (handled above) steps back to
+      // the "Clear history" group's row list.
       if (logsClearServiceOpen) {
         if (key.upArrow) {
           setLogsClearServiceCursor((current) => moveHintCursor(current, 'up', logsServices.length));
@@ -531,8 +476,8 @@ export function SettingsScreen({
         return;
       }
 
-      // Amended 2026-09-20: "Clear history" is the one Logs group with more than one field —
-      // its own small Up/Down row list, Enter triggers whichever action is highlighted.
+      // "Clear history" is the one Logs group with more than one field — its own small Up/Down
+      // row list, Enter triggers whichever action is highlighted.
       if (logsGroup === 'clear-history') {
         if (key.upArrow) {
           setLogsClearRowCursor((current) => moveHintCursor(current, 'up', LOGS_CLEAR_ROWS.length));
@@ -638,7 +583,7 @@ export function SettingsScreen({
     }
 
     if (!drilledIn) {
-      // AC6: the group-list level — Up/Down navigates, Enter drills in.
+      // The group-list level — Up/Down navigates, Enter drills in.
       if (key.upArrow) {
         setGroupCursor((current) => moveHintCursor(current, 'up', SETTINGS_GROUPS.length));
         return;
@@ -782,9 +727,8 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'logs' && logsGroup === null ? (
-          // Amended 2026-09-20: the Logs tab's own group-list level, mirroring the EDTs tab's
-          // group list exactly — every field lives behind its own (or a shared) group now,
-          // rather than one flat six-row list, so no single screen overflows the modal.
+          // The Logs tab's group-list level, mirroring the EDTs tab's group list — every field
+          // lives behind its own (or a shared) group, so no single screen overflows the modal.
           <Box flexDirection="column">
             {LOGS_SETTINGS_GROUPS.map((group, index) => {
               const highlighted = index === logsGroupCursor;
@@ -849,8 +793,8 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'logs' && logsGroup === 'clear-history' && !logsClearServiceOpen ? (
-          // Amended 2026-09-20: "Clear history" is the one Logs group holding both clear
-          // actions — its own small Up/Down row list, one level below the group list.
+          // "Clear history" is the one Logs group holding both clear actions — its own small
+          // Up/Down row list, one level below the group list.
           <Box flexDirection="column">
             {LOGS_CLEAR_ROWS.map((row, index) => {
               const highlighted = index === logsClearRowCursor;
@@ -866,9 +810,8 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'logs' && logsGroup === 'clear-history' && logsClearServiceOpen ? (
-          // Story 5.4: the "clear a service's history" row's drill-down — a plain Up/Down list
-          // over every manifest service (Boundaries: "drilled into a list of manifest
-          // services"), never limited to the active EDT's own members.
+          // The "clear a service's history" row's drill-down — a plain Up/Down list over every
+          // manifest service, never limited to the active EDT's own members.
           <Box flexDirection="column">
             {logsServices.length === 0 ? <DimAnnotation text="No manifest services loaded yet." /> : null}
             {logsServices.map((service, index) => {
@@ -885,8 +828,8 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'edts' && !drilledIn ? (
-          // AC6: first opening the EDTs tab (or stepping back out of a group via Esc) shows
-          // this Up/Down-navigable group list — no checkboxes at this level.
+          // Opening the EDTs tab (or stepping back out of a group via Esc) shows this
+          // Up/Down-navigable group list — no checkboxes at this level.
           <Box flexDirection="column">
             {SETTINGS_GROUPS.map((group, index) => {
               const highlighted = index === groupCursor;
@@ -906,9 +849,8 @@ export function SettingsScreen({
             {HIDEABLE_ACTION_HINTS.map((token, index) => {
               const highlighted = index === hintCursor;
               return (
-                // review patch (repo-registry-screen.tsx precedent): checkbox-list-item's own
-                // `selected` prop has no visible effect on its own — the highlighted row needs
-                // its own `›` cursor glyph, rendered as a sibling column.
+                // checkbox-list-item's own `selected` prop has no visible effect on its own — the
+                // highlighted row needs its own `›` cursor glyph, rendered as a sibling column.
                 <Box key={token.id} flexDirection="row">
                   <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
                   <CheckboxListItem

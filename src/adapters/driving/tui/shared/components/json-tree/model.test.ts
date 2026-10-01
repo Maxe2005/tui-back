@@ -341,7 +341,7 @@ describe('resolveTreeKeyAction', () => {
     expect(resolveTreeKeyAction('F', {})).toBe('toggle-panel');
   });
 
-  it('maps the story 6.8 edit keys while leaving Esc, digits, and Ctrl combos to the zone', () => {
+  it('maps the body-editor edit keys while leaving Esc, digits, and Ctrl combos to the zone', () => {
     expect(resolveTreeKeyAction('\r', {})).toBe('edit-value');
     expect(resolveTreeKeyAction('a', {})).toBe('add-entry');
     expect(resolveTreeKeyAction('A', {})).toBe('add-entry');

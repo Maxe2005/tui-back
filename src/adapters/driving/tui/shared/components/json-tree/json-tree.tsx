@@ -1,9 +1,7 @@
-// tui/shared/components/json-tree/view: story 6.7 — the thin Ink view over model.ts.
-// Renders only the visible rows through BoundedList (AD-12) inside a caller-measured
-// budget: the item list, then the filter panel when open, then the always-present status
-// line. All key handling lives in the routes zone's useInput over the model's pure
-// dispatchers (the logs-zone convention: never a component-owned useInput here); this
-// file owns layout, colors, truncation display, and the raw/empty fallbacks only.
+// tui/shared/components/json-tree/json-tree: the thin Ink view over model.ts. Renders only the
+// visible rows through BoundedList inside a caller-measured budget: the item list, then the
+// filter panel when open, then the always-present status line. All key handling lives in the
+// routes zone's useInput over the model's pure dispatchers; this file owns layout and colors.
 import { Box, Text } from 'ink';
 import { BoundedList } from '../bounded-list.js';
 import { colors, jsonTreeColors, spacing } from '../../theme/theme.js';
@@ -108,9 +106,8 @@ export type JsonTreeProps = {
   panelCursor: number;
   // Total row budget for the whole tree block (list + panel + status), measured by the caller.
   maxVisibleRows: number;
-  // Story 6.8: per-path scalar errors — an invalid entry keeps its raw text in the
-  // draft and renders in error color with its reason (glyph + color, never color
-  // alone), never coerced.
+  // Per-path scalar errors — an invalid entry keeps its raw text in the draft and renders in
+  // error color with its reason (glyph + color, never color alone), never coerced.
   editErrors?: Readonly<Record<string, BodyEditError>>;
 };
 
@@ -134,10 +131,10 @@ export function JsonTree({ rows, selected, hiddenCount, activeRuleCount, rules, 
   );
 }
 
-// Story 6.8 — the multi-line raw buffer. Caller-owned `TextInputState` (like
-// FilterPanel): `Return` inserts `\n` (handled by the zone's dispatcher, never here),
-// `Esc` leaves and validates. Invalid JSON keeps the buffer open with the parse error
-// plus its line/column; the previous valid body is preserved (the zone never writes it).
+// The multi-line raw buffer. Caller-owned `TextInputState` (like FilterPanel): `Return`
+// inserts `\n` (handled by the zone's dispatcher, never here), `Esc` leaves and validates.
+// Invalid JSON keeps the buffer open with the parse error plus its line/column; the previous
+// valid body is preserved (the zone never writes it).
 export function JsonRawEditor({ input, error, maxVisibleRows }: { input: TextInputState; error: string | null; maxVisibleRows: number }) {
   const lines = input.value.split('\n');
   const before = input.value.slice(0, Math.min(Math.max(input.cursor, 0), input.value.length));
@@ -180,12 +177,11 @@ export function JsonRawEditor({ input, error, maxVisibleRows }: { input: TextInp
 
 export type JsonTreeAddPrompt = { parentPath: string; input: TextInputState; error: string | null };
 
-// Story 6.8 — the edit-mode tree: the 6.7 visible-rows list (invalid entries in error
-// color) plus the inline scalar editor row, the structural add-key prompt, and the
-// editor status line (first validation error when present, `N lines hidden — still
-// sent` whenever hiddenCount > 0). The raw buffer replaces this whole block while open
-// (rendered by the caller through `JsonRawEditor`); an empty draft renders its own
-// empty state with the `r` hint instead of the all-filtered line.
+// The edit-mode tree: the visible-rows list (invalid entries in error color) plus the inline
+// scalar editor row, the structural add-key prompt, and the editor status line (first
+// validation error when present, `N lines hidden — still sent` whenever hiddenCount > 0). The
+// raw buffer replaces this whole block while open (rendered by the caller through
+// `JsonRawEditor`); an empty draft renders its own empty state with the `r` hint.
 export type JsonTreeEditorProps = {
   rows: readonly JsonTreeRow[];
   selected: number;
@@ -228,8 +224,8 @@ export function JsonTreeEditor({
     (editingPath !== null && editInput !== null ? 2 : 0) +
     (addPrompt !== null ? 2 + (addPrompt.error !== null && addPrompt.error !== '' ? 1 : 0) : 0);
   const listBudget = Math.max(0, resolveTreeListBudget(maxVisibleRows, panelOpen, rules.length) - extraChromeRows);
-  // Zero rules active means no filter can hide rows: an empty list is a genuinely-empty
-  // value (the 6.7 explicit empty state), never the all-filtered line.
+  // Zero rules active means no filter can hide rows: an empty list is a genuinely-empty value
+  // (the explicit empty state), never the all-filtered line.
   const rulesHideRows = rules.length > 0 || hideNulls;
   return (
     <Box flexDirection="column">

@@ -7,9 +7,8 @@ describe('resolveAssistedAction', () => {
     expect(resolveAssistedAction('branch-owned-by-other-edt')).toEqual({ label: 'try a different branch' });
   });
 
-  // Story 2.26: the second registry entry — branch-exists (adapters/driven/git/index.ts's
-  // createBranch/renameBranch) -> "try a different name", backing the branch-picker's
-  // Create-new and rename retry flows.
+  // The second registry entry — branch-exists (the git adapter's createBranch/renameBranch) ->
+  // "try a different name", backing the branch-picker's Create-new and rename retry flows.
   it('resolves branch-exists to the "try a different name" action', () => {
     expect(resolveAssistedAction('branch-exists')).toEqual({ label: 'try a different name' });
   });

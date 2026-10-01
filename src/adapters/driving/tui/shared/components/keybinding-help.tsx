@@ -8,17 +8,14 @@ import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 
 export const DEFAULT_HELP_VISIBLE_LINES = 10;
 
-// Story 5.5: the window/clamp logic itself now lives in bounded-list.tsx
-// (resolveBoundedWindow/clampBoundedOffset — extracted verbatim from what used to be defined
-// here) so every bounded surface in the app shares one implementation. These two names stay
-// exported from this file as thin aliases — no behavior change for keybinding-help.tsx itself
-// (Code Map), and this component deliberately never renders the new shared primitive's
-// more-above/below indicator (KeybindingHelp had none before this story and still has none).
+// The window/clamp logic lives in bounded-list.tsx; these two names stay exported as thin
+// aliases. This component deliberately never renders the shared primitive's more-above/below
+// indicator.
 export const clampHelpOffset = clampBoundedOffset;
 export const resolveHelpWindow = resolveBoundedWindow;
 
-// Story 2.7: canonical navigation contract retires j/k/g/G in favor of arrows/Home/End —
-// arrow/Home/End keys produce an empty `input` string in Ink, only `key` flags are set.
+// Arrows/Home/End only (no j/k/g/G) — these keys produce an empty `input` string in Ink, only
+// `key` flags are set.
 export function resolveHelpScroll(
   key: NavigationKey,
   offset: number,
