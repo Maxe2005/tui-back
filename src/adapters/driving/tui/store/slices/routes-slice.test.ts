@@ -198,7 +198,9 @@ describe('routes slice (story 6.1)', () => {
   });
 });
 
-describe('routes slice fireRoute (story 6.2)', () => {
+// Story 6.9: the 6.2/6.7 fire coverage, migrated from the old global fire triple to the
+// per-route `responses` map (`fireRoute(routeKey, method, path, options?)`).
+describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -214,72 +216,76 @@ describe('routes slice fireRoute (story 6.2)', () => {
     return store;
   }
 
-  it('fires the selected route into fired state with status + duration + body', async () => {
+  it('fires a route into its fired response with status + duration + body and switches to Response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"id":1}', { status: 201 })));
     const store = await loadedStore();
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    const state = store.getState();
-    expect(state.fireStatus).toBe('fired');
-    expect(state.fireResult).toMatchObject({ status: 201, body: '{"id":1}' });
-    expect(typeof state.fireResult?.durationMs).toBe('number');
-    expect(state.fireError).toBeNull();
+    const response = store.getState().responses['GET /users'];
+    expect(response).toMatchObject({ status: 'fired', result: { status: 201, body: '{"id":1}' } });
+    expect(store.getState().routesPaneTab).toBe('response');
+  });
+
+  it('sends the options (body, query, headers) through the use-case', async () => {
+    const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'PATCH', path: '/users/{id}' }] as Route[])) };
+    const store = await loadedStore({ scanner });
+
+    await store.getState().fireRoute('PATCH /users/{id}', 'PATCH', '/users/7', { body: { a: 1 }, query: { q: 'x' }, headers: { 'X-T': '1' } });
+
+    expect(store.getState().responses['PATCH /users/{id}']).toMatchObject({ status: 'fired' });
+    const [url, init] = fetch.mock.calls[0] ?? [];
+    expect(url).toBe('http://localhost:3000/users/7?q=x');
+    expect(init?.body).toBe('{"a":1}');
+    expect(new Headers(init?.headers).get('x-t')).toBe('1');
   });
 
   it('degrades to an explicit error on an unwired store, never throwing', async () => {
     const store = createAppStore();
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    expect(store.getState().fireStatus).toBe('error');
-    expect(store.getState().fireError).toMatchObject({ code: 'store-not-wired' });
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'store-not-wired' } });
   });
 
   it('degrades to an explicit error when no dev auth is wired', async () => {
     const store = createAppStore(fakeDeps({ manifest: manifestWithBaseUrl(), auth: undefined }));
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    expect(store.getState().fireStatus).toBe('error');
-    expect(store.getState().fireError).toMatchObject({ code: 'store-not-wired' });
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'store-not-wired' } });
   });
 
   it('rejects with missing-argument when no routes repo was ever loaded', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
     const store = createAppStore(fakeDeps({ manifest: manifestWithBaseUrl() }));
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    expect(store.getState().fireStatus).toBe('error');
-    expect(store.getState().fireError).toMatchObject({ code: 'missing-argument' });
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'missing-argument' } });
   });
 
-  it('surfaces an auth-endpoint failure with the fire result cleared', async () => {
+  it('surfaces an auth-endpoint failure as the route error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
     const auth: DevAuthPort = {
       getSession: vi.fn(async () => err('auth-endpoint-failed', 'auth down', { reason: 'HTTP 500' })),
     };
     const store = await loadedStore({ auth });
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    const state = store.getState();
-    expect(state.fireStatus).toBe('error');
-    expect(state.fireError).toMatchObject({ code: 'auth-endpoint-failed' });
-    expect(state.fireResult).toBeNull();
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'auth-endpoint-failed' } });
   });
 
   it('surfaces a 403 as the distinct auth-forbidden, never as a generic failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
     const store = await loadedStore();
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    const state = store.getState();
-    expect(state.fireStatus).toBe('error');
-    expect(state.fireError).toMatchObject({ code: 'auth-forbidden' });
-    expect(state.fireResult).toBeNull();
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'auth-forbidden' } });
   });
 
   it('surfaces an unknown route without firing', async () => {
@@ -287,14 +293,13 @@ describe('routes slice fireRoute (story 6.2)', () => {
     vi.stubGlobal('fetch', fetch);
     const store = await loadedStore();
 
-    await store.getState().fireRoute('DELETE', '/users');
+    await store.getState().fireRoute('DELETE /users', 'DELETE', '/users');
 
-    expect(store.getState().fireStatus).toBe('error');
-    expect(store.getState().fireError).toMatchObject({ code: 'unknown-route' });
+    expect(store.getState().responses['DELETE /users']).toMatchObject({ status: 'error', error: { code: 'unknown-route' } });
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('ignores a second fire while one is already in flight, issuing no new fetch or auth call', async () => {
+  it('ignores a second fire of the same route while one is in flight, issuing no new fetch or auth call', async () => {
     let release: ((response: Response) => void) | undefined;
     const fetch = vi.fn(
       () =>
@@ -307,11 +312,10 @@ describe('routes slice fireRoute (story 6.2)', () => {
     const auth: DevAuthPort = { getSession };
     const store = await loadedStore({ auth });
 
-    const first = store.getState().fireRoute('GET', '/users');
-    expect(store.getState().fireStatus).toBe('firing');
-    // Let the first fire run past the manifest gate, scan, and session into the fetch.
+    const first = store.getState().fireRoute('GET /users', 'GET', '/users');
+    expect(store.getState().responses['GET /users']).toEqual({ status: 'firing' });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(getSession).toHaveBeenCalledTimes(1);
@@ -319,11 +323,8 @@ describe('routes slice fireRoute (story 6.2)', () => {
     release?.(new Response('ok', { status: 200 }));
     await first;
 
-    const state = store.getState();
-    expect(state.fireStatus).toBe('fired');
-    expect(state.fireResult).toMatchObject({ status: 200 });
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'fired', result: { status: 200 } });
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(getSession).toHaveBeenCalledTimes(1);
   });
 
   it('degrades to an explicit error when the scanner is unwired even with auth present, firing nothing', async () => {
@@ -331,27 +332,124 @@ describe('routes slice fireRoute (story 6.2)', () => {
     vi.stubGlobal('fetch', fetch);
     const store = createAppStore(fakeDeps({ manifest: manifestWithBaseUrl(), scanner: undefined }));
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    expect(store.getState().fireStatus).toBe('error');
-    expect(store.getState().fireError).toMatchObject({ code: 'store-not-wired' });
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'store-not-wired' } });
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('clears a previous fire result when routes reload successfully', async () => {
+  it('keeps responses and drafts across a same-repo reload (every zone remount)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
     const store = await loadedStore();
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [{ name: 'q', value: 'x', required: false }], headers: [] });
+    store.getState().setRoutesPaneFocus('detail');
 
-    await store.getState().fireRoute('GET', '/users');
-    expect(store.getState().fireStatus).toBe('fired');
-
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
     await store.getState().loadRoutes();
 
     const state = store.getState();
-    expect(state.routesStatus).toBe('ready');
-    expect(state.fireStatus).toBe('idle');
-    expect(state.fireResult).toBeNull();
-    expect(state.fireError).toBeNull();
+    expect(state.responses['GET /users']).toMatchObject({ status: 'fired' });
+    expect(state.requestDrafts['GET /users']?.query).toHaveLength(1);
+    expect(state.routesPaneFocus).toBe('detail');
+  });
+
+  it('drops drafts, responses and body drafts and refocuses the list on a reload onto another repo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const repos = ['/repos/gateway'];
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([...repos])),
+      add: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = await loadedStore({ registry });
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [], headers: [] });
+    store.getState().ensureBodyDraft('GET /users', { a: 1 });
+    store.getState().setRoutesPaneFocus('detail');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    repos.splice(0, 1, '/repos/other');
+    await store.getState().loadRoutes();
+
+    const state = store.getState();
+    expect(state.routesRepoPath).toBe('/repos/other');
+    expect(state.responses).toEqual({});
+    expect(state.requestDrafts).toEqual({});
+    expect(state.bodyDrafts).toEqual({});
+    expect(state.bodyEditErrors).toEqual({});
+    expect(state.routesPaneFocus).toBe('list');
+    expect(state.routesPaneTab).toBe('request');
+  });
+
+  it('never resurrects a response that lands after a reload onto another repo', async () => {
+    let release: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    );
+    const repos = ['/repos/gateway'];
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([...repos])),
+      add: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = await loadedStore({ registry });
+    const inFlight = store.getState().fireRoute('GET /users', 'GET', '/users');
+    await vi.waitFor(() => expect(release).toBeDefined());
+
+    repos.splice(0, 1, '/repos/other');
+    await store.getState().loadRoutes();
+    release?.(new Response('late', { status: 200 }));
+    await inFlight;
+
+    expect(store.getState().responses).toEqual({});
+  });
+
+  it('isolates responses per route', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
+    const scanner: RouteScannerPort = {
+      scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }, { method: 'POST', path: '/users' }] as Route[])),
+    };
+    const store = await loadedStore({ scanner });
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    await store.getState().fireRoute('POST /users', 'POST', '/users');
+
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error' });
+    expect(store.getState().responses['POST /users']).toMatchObject({ status: 'fired' });
+  });
+
+  it('prunes responses and request drafts past the 50 most-recently-touched routes', () => {
+    const store = createAppStore();
+    for (let index = 0; index < 52; index += 1) {
+      store.getState().ensureRequestDraft(`GET /r-${index}`, { params: [], query: [], headers: [] });
+    }
+    expect(Object.keys(store.getState().requestDrafts)).toHaveLength(50);
+    expect(store.getState().requestDrafts['GET /r-0']).toBeUndefined();
+    store.getState().ensureRequestDraft('GET /r-2', { params: [{ name: 'x', value: '', required: true }], query: [], headers: [] });
+    // A second ensure keeps the existing draft (no reseed) and re-touches it.
+    expect(store.getState().requestDrafts['GET /r-2']?.params).toEqual([]);
+    expect(Object.keys(store.getState().requestDrafts).at(-1)).toBe('GET /r-2');
+  });
+
+  it('updates a request draft immutably', () => {
+    const store = createAppStore();
+    store.getState().ensureRequestDraft('GET /u', { params: [], query: [], headers: [] });
+    const before = store.getState().requestDrafts['GET /u'];
+    store.getState().updateRequestDraft('GET /u', (previous) => ({ ...previous, headers: [{ name: 'A', value: '1', required: false }] }));
+    expect(before?.headers).toEqual([]);
+    expect(store.getState().requestDrafts['GET /u']?.headers).toHaveLength(1);
   });
 });
 
@@ -371,23 +469,21 @@ describe('routes slice jsonTreeStates (story 6.7)', () => {
     return store;
   }
 
-  it('starts with no tree state, no fired key, and an unfocused tree', () => {
+  it('starts with no tree state, no response, the list focused on the Request tab', () => {
     const store = createAppStore(fakeDeps());
     expect(store.getState().jsonTreeStates).toEqual({});
-    expect(store.getState().firedRouteKey).toBeNull();
-    expect(store.getState().treeFocused).toBe(false);
+    expect(store.getState().responses).toEqual({});
+    expect(store.getState().routesPaneFocus).toBe('list');
+    expect(store.getState().routesPaneTab).toBe('request');
   });
 
-  it('focuses the tree and keys its state on a successful fire', async () => {
+  it('keys the tree state on a successful fire', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"id":1}', { status: 200 })));
     const store = await loadedStore();
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
-    const state = store.getState();
-    expect(state.firedRouteKey).toBe('GET /users');
-    expect(state.treeFocused).toBe(true);
-    expect(state.jsonTreeStates['GET /users']).toEqual({
+    expect(store.getState().jsonTreeStates['GET /users']).toEqual({
       foldedPaths: [],
       hiddenKeys: [],
       onlyKeys: [],
@@ -400,7 +496,7 @@ describe('routes slice jsonTreeStates (story 6.7)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"id":1}', { status: 200 })));
     const store = await loadedStore();
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
     store.getState().updateJsonTreeState('GET /users', (previous) => ({
       ...previous,
       foldedPaths: ['data'],
@@ -408,14 +504,13 @@ describe('routes slice jsonTreeStates (story 6.7)', () => {
       selected: 3,
     }));
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
 
     expect(store.getState().jsonTreeStates['GET /users']).toMatchObject({
       foldedPaths: ['data'],
       hiddenKeys: ['tags'],
       selected: 3,
     });
-    expect(store.getState().treeFocused).toBe(true);
   });
 
   it('starts a different route with fresh tree state (per-route isolation)', async () => {
@@ -425,40 +520,24 @@ describe('routes slice jsonTreeStates (story 6.7)', () => {
     };
     const store = await loadedStore({ scanner });
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
     store.getState().updateJsonTreeState('GET /users', (previous) => ({ ...previous, hiddenKeys: ['tags'] }));
-    await store.getState().fireRoute('POST', '/users');
+    await store.getState().fireRoute('POST /users', 'POST', '/users');
 
-    expect(store.getState().firedRouteKey).toBe('POST /users');
     expect(store.getState().jsonTreeStates['GET /users']).toMatchObject({ hiddenKeys: ['tags'] });
     expect(store.getState().jsonTreeStates['POST /users']).toMatchObject({ hiddenKeys: [] });
   });
 
-  it('unfocuses the tree on a fire error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
-    const store = await loadedStore();
-    store.getState().setTreeFocused(true);
-
-    await store.getState().fireRoute('GET', '/users');
-
-    expect(store.getState().fireStatus).toBe('error');
-    expect(store.getState().treeFocused).toBe(false);
-  });
-
-  it('resets the fired key and focus (with the fire triple) on routes reload, keeping states', async () => {
+  it('keeps tree states across a routes reload', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
     const store = await loadedStore();
 
-    await store.getState().fireRoute('GET', '/users');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
     store.getState().updateJsonTreeState('GET /users', (previous) => ({ ...previous, hiddenKeys: ['tags'] }));
 
     await store.getState().loadRoutes();
 
-    const state = store.getState();
-    expect(state.fireStatus).toBe('idle');
-    expect(state.firedRouteKey).toBeNull();
-    expect(state.treeFocused).toBe(false);
-    expect(state.jsonTreeStates['GET /users']).toMatchObject({ hiddenKeys: ['tags'] });
+    expect(store.getState().jsonTreeStates['GET /users']).toMatchObject({ hiddenKeys: ['tags'] });
   });
 
   it('prunes tree states past the 50 most-recently-touched entries', async () => {

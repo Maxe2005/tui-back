@@ -106,7 +106,9 @@ describe('RoutesZone (story 6.1)', () => {
   });
 });
 
-describe('RoutesZone (story 6.2)', () => {
+// Story 6.9 migrated the 6.2/6.7/6.8 render coverage from the global fire triple to the
+// per-route `responses` map and the pane focus/tab state.
+describe('RoutesZone (stories 6.2, 6.9)', () => {
   function seedReadyRoutes(store: ReturnType<typeof createAppStore>) {
     store.setState({
       routesStatus: 'ready',
@@ -121,49 +123,102 @@ describe('RoutesZone (story 6.2)', () => {
     });
   }
 
-  it('hints [enter] fire next to the route list', async () => {
+  it('hints [enter] request (never fire) next to the route list', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[enter] fire');
+    expect(output).toContain('[enter] request');
+    expect(output).not.toContain('[enter] fire');
   });
 
-  it('shows a spinner while the fire is in flight', async () => {
+  it('previews the cursor route on the Request tab with its empty sections', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
-    store.setState({ fireStatus: 'firing', fireResult: null, fireError: null });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('▸ Request');
+    expect(output).toContain('Response');
+    expect(output).toContain('PARAMS');
+    expect(output).toContain('QUERY');
+    expect(output).toContain('HEADERS');
+    expect(output).toContain('BODY');
+    expect(output).toContain('(no body for this route)');
+  });
+
+  it('shows a spinner on the Response tab while the fire is in flight', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    store.setState({ responses: { 'GET /users': { status: 'firing' } }, routesPaneTab: 'response' });
     const output = await renderToString(<RoutesZone useStore={store} />);
     expect(output).toContain('⣾');
     expect(output).toContain('Firing');
   });
 
-  it('shows the fired status line plus a navigable tree instead of the raw dump', async () => {
+  it('shows status, duration and size plus a navigable tree instead of the raw dump', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     store.setState({
-      fireStatus: 'fired',
-      fireResult: { status: 200, durationMs: 42, body: '{"id":1}' },
-      fireError: null,
-      firedRouteKey: 'GET /users',
-      treeFocused: true,
+      responses: { 'GET /users': { status: 'fired', result: { status: 200, durationMs: 42, body: '{"id":1}' } } },
+      routesPaneFocus: 'detail',
+      routesPaneTab: 'response',
     });
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('200 · 42ms');
+    expect(output).toContain('200 · 42ms · 8 B');
     expect(output).toContain('id');
     expect(output).toContain('0 hidden · 0 rules');
     expect(output).not.toContain('{"id":1}');
   });
 
-  it('shows a distinct auth error instead of a generic failure', async () => {
+  it('shows a distinct auth error inside the Response tab', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     store.setState({
-      fireStatus: 'error',
-      fireResult: null,
-      fireError: { code: 'auth-forbidden', message: 'Access forbidden for POST /users' },
+      responses: { 'GET /users': { status: 'error', error: { code: 'auth-forbidden', message: 'Access forbidden for GET /users' } } },
+      routesPaneTab: 'response',
     });
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('Access forbidden');
+    expect(output).toContain('Access forbidden — this session lacks permission');
+  });
+
+  it('shows a hint when the route has no response yet', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    store.setState({ routesPaneTab: 'response' });
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('No response yet');
+  });
+
+  it('shows the cursor route’s own response only (per route)', async () => {
+    const store = createAppStore();
+    seedReadyRoutes(store);
+    store.setState({
+      responses: { 'POST /users': { status: 'fired', result: { status: 201, durationMs: 5, body: '' } } },
+      routesPaneTab: 'response',
+    });
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('No response yet');
+    store.getState().setRoutesSelected(1);
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('201 · 5ms');
+  });
+
+  it('marks required params and pre-fills them from the scanner example', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        {
+          method: 'GET',
+          path: '/users/{id}',
+          parameters: [
+            { name: 'id', in: 'path', required: true, example: 42 },
+            { name: 'page', in: 'query', required: false },
+          ],
+        },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+    });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('id* = 42');
+    expect(output).toContain('page = —');
   });
 });
 
@@ -185,17 +240,18 @@ describe('RoutesZone (story 6.8)', () => {
   it('hints [e] edit body on an editable route and hides the hint otherwise', async () => {
     const store = createAppStore();
     seedBodyRoutes(store);
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[e] edit body');
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[e] edit');
     store.getState().setRoutesSelected(1);
-    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[e] edit body');
+    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[e] edit');
   });
 
-  it('keeps the [enter] fire hint next to the edit hint (fire still sends no body)', async () => {
+  it('keeps the [enter] request hint next to the edit hint and previews the seeded body', async () => {
     const store = createAppStore();
     seedBodyRoutes(store);
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[enter] fire');
-    expect(output).toContain('[e] edit body');
+    expect(output).toContain('[enter] request');
+    expect(output).toContain('[e] edit');
+    expect(output).toContain('ada');
   });
 });
 
@@ -211,12 +267,14 @@ describe('RoutesZone (story 6.7)', () => {
       routesError: null,
       loadRoutes: async () => {},
       fireRoute: async () => {},
-      fireStatus: 'fired',
-      fireResult: { status: 200, durationMs: 42, body },
-      fireError: null,
-      firedRouteKey: 'GET /users',
-      treeFocused: true,
+      responses: { 'GET /users': { status: 'fired', result: { status: 200, durationMs: 42, body } } },
+      routesPaneFocus: 'detail',
+      routesPaneTab: 'response',
     });
+  }
+
+  function setBody(store: ReturnType<typeof createAppStore>, body: string) {
+    store.setState({ responses: { 'GET /users': { status: 'fired', result: { status: 200, durationMs: 1, body } } } });
   }
 
   it('renders nested rows with size hints and a live status line', async () => {
@@ -264,7 +322,7 @@ describe('RoutesZone (story 6.7)', () => {
     const store = createAppStore();
     seedFiredJson(store, '');
     expect(await renderToString(<RoutesZone useStore={store} />)).toContain('Empty response body');
-    store.setState({ fireResult: { status: 200, durationMs: 1, body: '{}' } });
+    setBody(store, '{}');
     expect(await renderToString(<RoutesZone useStore={store} />)).toContain('Empty JSON value');
   });
 
@@ -273,13 +331,11 @@ describe('RoutesZone (story 6.7)', () => {
     seedFiredJson(store);
     const focused = await renderToString(<RoutesZone useStore={store} />);
     expect(focused).toContain('[←→] fold');
-    expect(focused).toContain('[enter] fire');
-    // Placement itself is structural (the hint lives in the detail Box); these pin
-    // that each pane keeps its own keys instead of sharing one hint line.
-    expect(focused).not.toContain('[home/end] jump  [esc] list');
-    store.getState().setTreeFocused(false);
+    expect(focused).toContain('[esc] back to the list');
+    expect(focused).not.toContain('[home/end] jump');
+    store.getState().setRoutesPaneFocus('list');
     const unfocused = await renderToString(<RoutesZone useStore={store} />);
-    expect(unfocused).toContain('[enter] fire');
+    expect(unfocused).toContain('[enter] request');
     expect(unfocused).not.toContain('[←→] fold');
   });
 });

@@ -17,7 +17,7 @@ import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { ROUTES_MODULE_ID } from '../../../../../core/edt/resolve-tab-visibility.js';
 import type { Route } from '../../../../../core/ports/route-scanner.js';
-import { fireRequest, type FireResult } from '../../../../../core/routes/fire-request.js';
+import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../core/routes/fire-request.js';
 import { listRoutes } from '../../../../../core/routes/list-routes.js';
 import { listRepos } from '../../../../../core/scripts/list-repos.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
@@ -28,10 +28,14 @@ import {
   createDefaultJsonTreeState,
   pruneBodyDrafts,
   pruneJsonTreeStates,
-  routeKeyFor,
   type BodyEditError,
   type JsonTreeState,
 } from '../../shared/components/json-tree/model.js';
+import {
+  MAX_REQUEST_DRAFTS,
+  MAX_ROUTE_RESPONSES,
+  type RequestDraft,
+} from '../../zones/routes/routes-request.logic.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 const NO_SCANNER_ERROR = 'No route scanner wired into the TUI store';
@@ -39,11 +43,22 @@ const NO_AUTH_ERROR = 'No dev auth wired into the TUI store';
 
 export type RoutesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-export type FireStatus = 'idle' | 'firing' | 'fired' | 'error';
+// Story 6.9: one fire outcome per route (the old global fire triple, now keyed).
+export type RouteResponse =
+  | { status: 'firing' }
+  | { status: 'fired'; result: FireResult }
+  | { status: 'error'; error: { code: string; message: string } };
 
-export type { JsonTreeState };
+export type RoutesPaneFocus = 'list' | 'detail';
 
-export type RoutesSlice = {  routesRepoPath: string | null;
+// The right pane's sub-tabs, in display order. Story 6.4 appends 'logs'.
+export type RoutesPaneTab = 'request' | 'response';
+export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['request', 'response'];
+
+export type { JsonTreeState, RequestDraft };
+
+export type RoutesSlice = {
+  routesRepoPath: string | null;
   routes: Route[] | null;
   routesStatus: RoutesStatus;
   routesError: { code: string; message: string } | null;
@@ -54,10 +69,22 @@ export type RoutesSlice = {  routesRepoPath: string | null;
   setRoutesSelected: (index: number) => void;
   setRoutesFilter: (filter: TextInputState) => void;
   loadRoutes: () => Promise<void>;
-  fireStatus: FireStatus;
-  fireResult: FireResult | null;
-  fireError: { code: string; message: string } | null;
-  fireRoute: (method: string, path: string) => Promise<void>;
+  // Story 6.9: per-route request drafts (params/query/headers — the body stays in
+  // `bodyDrafts`) and last responses, keyed `METHOD + ' ' + templatePath`. Session-only,
+  // pruned to their caps on every touch like `jsonTreeStates`; kept across a same-repo
+  // reload, dropped on a reload onto another repo.
+  requestDrafts: Record<string, RequestDraft>;
+  responses: Record<string, RouteResponse>;
+  ensureRequestDraft: (routeKey: string, seed: RequestDraft) => void;
+  updateRequestDraft: (routeKey: string, updater: (previous: RequestDraft) => RequestDraft) => void;
+  // Which side owns the keyboard, and the right pane's active sub-tab.
+  routesPaneFocus: RoutesPaneFocus;
+  routesPaneTab: RoutesPaneTab;
+  setRoutesPaneFocus: (focus: RoutesPaneFocus) => void;
+  setRoutesPaneTab: (tab: RoutesPaneTab) => void;
+  // Fires `method + path` (path may be concrete, params substituted) and records the
+  // outcome under `routeKey` (the template route's key); switches the pane to Response.
+  fireRoute: (routeKey: string, method: string, path: string, options?: FireRequestOptions) => Promise<void>;
   // Story 6.7: the JsonTree's per-route session state (folds, key rules, hide-nulls,
   // selection), keyed `METHOD + ' ' + path`. Session-only — never persisted to disk —
   // and pruned to the MAX_JSON_TREE_STATES most-recently-touched entries on every touch.
@@ -78,13 +105,6 @@ export type RoutesSlice = {  routesRepoPath: string | null;
   updateBodyDraft: (routeKey: string, updater: (previous: unknown) => unknown) => void;
   setBodyEditError: (routeKey: string, path: string, entry: BodyEditError | null) => void;
   setBodyEditErrors: (routeKey: string, errors: Record<string, BodyEditError>) => void;
-  // The fired route's key, stored next to the fire triple so the tree state follows the
-  // response (not the list cursor); a re-fire on the same key re-applies its rules.
-  firedRouteKey: string | null;
-  // Firing moves keyboard focus to the response tree (arrows/fold/filter keys go there);
-  // Esc returns focus to the routes list.
-  treeFocused: boolean;
-  setTreeFocused: (focused: boolean) => void;
   updateJsonTreeState: (routeKey: string, updater: (previous: JsonTreeState) => JsonTreeState) => void;
 };
 
@@ -95,6 +115,14 @@ function hasDraft(drafts: Record<string, unknown>, routeKey: string): boolean {
 // Joint touch for story 6.8 drafts + error maps: both re-insert the route key (recency),
 // drafts prune to MAX_BODY_DRAFTS, and error maps without a surviving draft drop — the
 // two maps never drift apart. A null `nextErrors` keeps the route's existing map.
+// Touch = delete + re-insert (Record insertion order = recency), then prune past the cap.
+function touchEntry<T>(entries: Record<string, T>, routeKey: string, value: T, limit: number): Record<string, T> {
+  const touched: Record<string, T> = { ...entries };
+  delete touched[routeKey];
+  touched[routeKey] = value;
+  return pruneBodyDrafts(touched, limit);
+}
+
 function touchBodyDraftEntries(
   drafts: Record<string, unknown>,
   errors: Record<string, Record<string, BodyEditError>>,
@@ -127,15 +155,24 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     setRoutesFilter: (filter) => set({ routesFilter: filter }),
     routesSelected: 0,
     setRoutesSelected: (index) => set({ routesSelected: index }),
-    fireStatus: 'idle',
-    fireResult: null,
-    fireError: null,
+    requestDrafts: {},
+    responses: {},
+    routesPaneFocus: 'list',
+    routesPaneTab: 'request',
+    setRoutesPaneFocus: (focus) => set({ routesPaneFocus: focus }),
+    setRoutesPaneTab: (tab) => set({ routesPaneTab: tab }),
+    ensureRequestDraft: (routeKey, seed) =>
+      set((state) => ({
+        requestDrafts: touchEntry(state.requestDrafts, routeKey, state.requestDrafts[routeKey] ?? seed, MAX_REQUEST_DRAFTS),
+      })),
+    updateRequestDraft: (routeKey, updater) =>
+      set((state) => {
+        const previous = state.requestDrafts[routeKey] ?? { params: [], query: [], headers: [] };
+        return { requestDrafts: touchEntry(state.requestDrafts, routeKey, updater(previous), MAX_REQUEST_DRAFTS) };
+      }),
     jsonTreeStates: {},
     bodyDrafts: {},
     bodyEditErrors: {},
-    firedRouteKey: null,
-    treeFocused: false,
-    setTreeFocused: (focused) => set({ treeFocused: focused }),
     // Touch = delete + re-insert (Record insertion order = recency), then prune past the
     // cap. Creates the route's default state on first touch; updaters must be pure.
     updateJsonTreeState: (routeKey, updater) =>
@@ -229,21 +266,27 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
 
       const result = await listRoutes({ manifest: deps.manifest, scanner: deps.scanner }, target.path);
       if (result.ok) {
-        // A successful reload (repo switch included) drops any previous fire result — the
-        // old response belongs to another route list and must not linger in the detail pane.
-        // The fire triple resets exactly as before, plus its two story-6.7 neighbors (the
-        // per-route tree states themselves survive: a re-fire re-applies them). Story 6.8
-        // drafts and their error maps survive too: a reload never clears `bodyDrafts`.
+        // Story 6.9: a same-repo reload (every zone remount) keeps each route's drafts and
+        // last response; a reload onto another repo drops them — they belong to another
+        // route list — and hands the keyboard back to the list. Tree states survive either
+        // way (keyed, harmless; a re-fire re-applies them).
+        const previousRepoPath = get().routesRepoPath;
+        const repoChanged = previousRepoPath !== null && resolve(previousRepoPath) !== resolve(target.path);
         set({
           routesRepoPath: target.path,
           routes: result.data.routes,
           routesStatus: 'ready',
           routesError: null,
-          fireStatus: 'idle',
-          fireResult: null,
-          fireError: null,
-          firedRouteKey: null,
-          treeFocused: false,
+          ...(repoChanged
+            ? {
+                requestDrafts: {},
+                responses: {},
+                bodyDrafts: {},
+                bodyEditErrors: {},
+                routesPaneFocus: 'list' as const,
+                routesPaneTab: 'request' as const,
+              }
+            : {}),
         });
       } else {
         set({
@@ -254,70 +297,65 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         });
       }
     },
-    // Story 6.2: fire the selected route through core/routes/fire-request.ts in-process
-    // (AD-2) — the same use-case `tui-back fire-request` runs out-of-process. The repo is
-    // the slice's own loaded routes repo (no logs pane — Story 6.4); a concurrent fire is
-    // dropped like loadRoutes drops a concurrent load. An unwired store (every pre-6.2
-    // `createAppStore()` call, including tests) degrades to an explicit error rather than
-    // throwing.
-    fireRoute: async (method: string, path: string) => {
+    // Story 6.2: fire a route through core/routes/fire-request.ts in-process (AD-2) — the
+    // same use-case `tui-back fire-request` runs out-of-process. The repo is the slice's
+    // own loaded routes repo. Story 6.9: the outcome is recorded per route; a concurrent
+    // fire of the same route is dropped (other routes may fire meanwhile). An unwired
+    // store (every pre-6.2 `createAppStore()` call, including tests) degrades to an
+    // explicit error rather than throwing.
+    fireRoute: async (routeKey, method, path, options) => {
+      const record = (response: RouteResponse) =>
+        set((state) => ({ responses: touchEntry(state.responses, routeKey, response, MAX_ROUTE_RESPONSES) }));
+      const fail = (code: string, message: string) => record({ status: 'error', error: { code, message } });
+      if (get().responses[routeKey]?.status === 'firing') {
+        return;
+      }
+      set({ routesPaneTab: 'response' });
       if (!deps) {
-        set({ fireStatus: 'error', fireResult: null, fireError: { code: 'store-not-wired', message: NO_DEPS_ERROR } });
+        fail('store-not-wired', NO_DEPS_ERROR);
         return;
       }
       if (!deps.scanner) {
-        set({ fireStatus: 'error', fireResult: null, fireError: { code: 'store-not-wired', message: NO_SCANNER_ERROR } });
+        fail('store-not-wired', NO_SCANNER_ERROR);
         return;
       }
       if (!deps.auth) {
-        set({ fireStatus: 'error', fireResult: null, fireError: { code: 'store-not-wired', message: NO_AUTH_ERROR } });
-        return;
-      }
-      if (get().fireStatus === 'firing') {
+        fail('store-not-wired', NO_AUTH_ERROR);
         return;
       }
       const repoPath = get().routesRepoPath;
       if (repoPath === null) {
-        set({
-          fireStatus: 'error',
-          fireResult: null,
-          fireError: { code: 'missing-argument', message: 'No routes repo selected' },
-        });
+        fail('missing-argument', 'No routes repo selected');
         return;
       }
-      set({ fireStatus: 'firing', fireResult: null, fireError: null });
+      record({ status: 'firing' });
 
       const result = await fireRequest(
         { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
         repoPath,
         method,
         path,
+        ...(options === undefined ? [] : [options]),
       );
+      // A reload onto another repo while in flight dropped this route's entry — the late
+      // outcome belongs to the old route list and must not resurrect it.
+      if (get().routesRepoPath !== repoPath) {
+        return;
+      }
       if (result.ok) {
-        // Story 6.7: firing focuses the response tree and touches (never resets) the
-        // route's tree state, so a re-fire re-applies its key rules and normalized folds.
-        const firedRouteKey = routeKeyFor(method, path);
-        set((state) => {
-          const touched: Record<string, JsonTreeState> = { ...state.jsonTreeStates };
-          const previous = touched[firedRouteKey] ?? createDefaultJsonTreeState();
-          delete touched[firedRouteKey];
-          touched[firedRouteKey] = previous;
-          return {
-            fireStatus: 'fired',
-            fireResult: result.data,
-            fireError: null,
-            firedRouteKey,
-            treeFocused: true,
-            jsonTreeStates: pruneJsonTreeStates(touched, MAX_JSON_TREE_STATES),
-          };
-        });
+        // Story 6.7: touch (never reset) the route's response tree state, so a re-fire
+        // re-applies its key rules and normalized folds.
+        set((state) => ({
+          responses: touchEntry(state.responses, routeKey, { status: 'fired', result: result.data }, MAX_ROUTE_RESPONSES),
+          jsonTreeStates: touchEntry(
+            state.jsonTreeStates,
+            routeKey,
+            state.jsonTreeStates[routeKey] ?? createDefaultJsonTreeState(),
+            MAX_JSON_TREE_STATES,
+          ),
+        }));
       } else {
-        set({
-          fireStatus: 'error',
-          fireResult: null,
-          fireError: { code: result.error.code, message: result.error.message },
-          treeFocused: false,
-        });
+        fail(result.error.code, result.error.message);
       }
     },
   });
