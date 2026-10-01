@@ -25,8 +25,8 @@
 import type { Result } from '../result.js';
 
 export interface GitPort {
-  // Rejects (before any git write) a branchName that is shared/protected for this repo — the
-  // shared-branch set (development/preprod/prod ∪ the repo's manifest sharedBranch) is
+  // Rejects (before any git write) a branchName that is protected for this repo — the
+  // protected set (Story 2.42: the manifest's protectedBranches ∪ its sharedBranch) is
   // resolved by the adapter itself at check time, never trusted from the caller. When edtId
   // is passed (story 2.4) and the adapter has an EdtRegistryPort wired in, it additionally
   // rejects a branchName already registered as a *different* EDT's own branch for this repo.
@@ -162,8 +162,8 @@ export interface GitPort {
   // Story 2.26: renames a local branch ref (`git branch -m`) — backs both Pick existing's
   // per-row inline-rename action and Rename current. Story 2.35: gates *both* names via
   // assertAllowedBranch (no edtId, mirroring createBranch's own gate) before touching git, so
-  // a rename can never land on a shared/protected branch name any more than a create can, nor
-  // rename a shared/protected branch (e.g. `development`) away.
+  // a rename can never land on a protected branch name any more than a create can, nor rename
+  // a protected branch (any name in the manifest-defined set — Story 2.42) away.
   renameBranch(repoPath: string, oldName: string, newName: string): Promise<Result<void>>;
   // Story 2.35: the remote-tracking refs already known locally (`refs/remotes/`), as
   // `<remote>/<branch>` names (e.g. `origin/feat/x`); the symbolic `<remote>/HEAD` ref is

@@ -16,11 +16,14 @@ import {
   type OverrideBoxState,
 } from './override-box.logic.js';
 
+// Story 2.42: svc-a's manifest fixture — it lists development/preprod/prod as protected.
 const CONTEXT: OverrideBoxContext = {
+  service: 'svc-a',
   status: 'ready',
   local: ['main', 'x', 'prod', 'feat/z'],
   remote: ['origin/dev', 'origin/x', 'origin/w', 'origin/prod'],
   sharedBranch: 'main',
+  protectedBranches: ['development', 'preprod', 'prod'],
 };
 
 function box(overrides: Partial<OverrideBoxState> = {}): OverrideBoxState {
@@ -132,31 +135,43 @@ describe('reduceOverrideBoxKey (story 2.37)', () => {
 
   it('a refused Apply stays open with its inline error', () => {
     const refused = updated(press(box({ line: 'apply', name: { value: 'development', cursor: 11 } }), '', { return: true }));
-    expect(refused.error).toBe(protectedNameError('development'));
+    expect(refused.error).toBe(protectedNameError('development', 'svc-a'));
   });
 });
 
 describe('validateOverrideBox (story 2.37)', () => {
   it('Protected: a protected new-branch name, or the service\'s own sharedBranch, is refused', () => {
-    expect(validateOverrideBox(box({ name: { value: 'development', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('development') });
-    expect(validateOverrideBox(box({ name: { value: 'main', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('main') });
+    expect(validateOverrideBox(box({ name: { value: 'development', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('development', 'svc-a') });
+    expect(validateOverrideBox(box({ name: { value: 'main', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('main', 'svc-a') });
+  });
+
+  it('names the branch and the service\'s manifest, in French (story 2.42)', () => {
+    expect(protectedNameError('preprod', 'svc-a')).toBe('« preprod » est protégée par le manifeste de svc-a');
+  });
+
+  it('a branch the service\'s manifest does not list is not protected (story 2.42)', () => {
+    const unlisted: OverrideBoxContext = { ...CONTEXT, protectedBranches: [] };
+    expect(validateOverrideBox(box({ name: { value: 'preprod', cursor: 0 } }), unlisted)).toEqual({
+      ok: true,
+      plan: { kind: 'create', base: 'main', name: 'preprod' },
+    });
   });
 
   it('Protected: a local protected branch is refused even with a rename (renameBranch gates the old name too)', () => {
     const existing = box({ mode: 'existing', existing: { value: 'prod', cursor: 4, pickCursor: 0 } });
-    expect(validateOverrideBox(existing, CONTEXT)).toEqual({ ok: false, error: protectedSourceError('prod') });
+    expect(validateOverrideBox(existing, CONTEXT)).toEqual({ ok: false, error: protectedSourceError('prod', 'svc-a') });
     expect(validateOverrideBox({ ...existing, rename: true, newName: { value: 'p2', cursor: 2 } }, CONTEXT)).toEqual({
       ok: false,
-      error: protectedSourceError('prod'),
+      error: protectedSourceError('prod', 'svc-a'),
     });
   });
 
   it('Protected: a remote origin/prod needs a non-protected rename', () => {
     const remote = box({ mode: 'existing', existing: { value: 'origin/prod', cursor: 11, pickCursor: 0 } });
-    expect(validateOverrideBox(remote, CONTEXT)).toEqual({ ok: false, error: protectedExistingError('prod') });
+    expect(validateOverrideBox(remote, CONTEXT)).toEqual({ ok: false, error: protectedExistingError('prod', 'svc-a') });
     expect(validateOverrideBox({ ...remote, rename: true, newName: { value: 'preprod', cursor: 7 } }, CONTEXT)).toEqual({
       ok: false,
-      error: protectedNameError('preprod'),
+      error: protectedNameError('preprod', 'svc-a'),
     });
     expect(validateOverrideBox({ ...remote, rename: true, newName: { value: 'p2', cursor: 2 } }, CONTEXT)).toEqual({
       ok: true,

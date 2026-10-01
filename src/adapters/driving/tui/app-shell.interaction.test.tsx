@@ -424,6 +424,7 @@ describe('AppShell Logs zone pane-grid arrow ownership (story 5.1 review fix)', 
           behind: 0,
           status: 'current',
           sharedBranch: 'development',
+          protectedBranches: [],
         },
       ],
       edtsBranchesStatus: 'idle',
@@ -512,6 +513,7 @@ describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
           behind: 0,
           status: 'current',
           sharedBranch: 'development',
+          protectedBranches: [],
         },
       ],
       edtsBranchesStatus: 'idle',
@@ -1731,7 +1733,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     store.getState().commitFilterHistoryEntry({ scope: 'pane', repoPath: '/repo/a', mode: 'text' }, 'a-text');
     store.setState({
       edtsBranches: [
-        { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
     });
     store.getState().openSettingsScreen();

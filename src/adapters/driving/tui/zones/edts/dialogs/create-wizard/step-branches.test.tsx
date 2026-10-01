@@ -6,7 +6,7 @@ import { BranchStepView, createBranchStepHandlers, reduceBranchStepKey } from '.
 
 const LONG_SERVICE = 'a-very-long-service-name-that-never-ends';
 const LONG_BRANCH = 'feature/an-extremely-long-branch-name-for-testing';
-const CANDIDATES = [{ path: '/repos/a', service: LONG_SERVICE, sharedBranch: 'main' }];
+const CANDIDATES = [{ path: '/repos/a', service: LONG_SERVICE, sharedBranch: 'main', protectedBranches: [] }];
 
 function dialog(branches: Partial<BranchStepState> = {}): CreateDialogState {
   const base = initialCreateDialog();
@@ -54,7 +54,7 @@ describe('BranchStepView — Panel B cells (story 2.37 review)', () => {
 });
 
 describe('reduceBranchStepKey (story 2.37 review)', () => {
-  const CANDS = [{ path: '/repos/a', service: 'svc-a', sharedBranch: 'main' }];
+  const CANDS = [{ path: '/repos/a', service: 'svc-a', sharedBranch: 'main', protectedBranches: [] }];
   const editingName = (): CreateDialogState => dialog({ globalLine: 'name', editing: true, globalName: { value: 'demo', cursor: 4 } });
 
   it('a pure caret move while editing the global name leaves it untouched', () => {
@@ -110,7 +110,7 @@ describe('createBranchStepHandlers — decisions against the latest state (story
       setDialog: (updater) => {
         queue.push(typeof updater === 'function' ? updater : () => updater);
       },
-      candidates: [{ path: '/repos/a', service: 'svc-a', sharedBranch: 'main' }],
+      candidates: [{ path: '/repos/a', service: 'svc-a', sharedBranch: 'main', protectedBranches: [] }],
     });
     handlers.handleBranchStepInput('\r', { return: true } as never);
     handlers.handleBranchStepInput('', { escape: true } as never);

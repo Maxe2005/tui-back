@@ -678,7 +678,7 @@ describe('tui-back edts (black-box, story 2.6)', () => {
       ok: true,
       data: {
         services: [
-          { service: 'route-explorer', path: repo, isMember: false, sharedBranch: 'development', branch: 'development', ahead: 1, behind: 0, status: 'current' },
+          { service: 'route-explorer', path: repo, isMember: false, sharedBranch: 'development', protectedBranches: [], branch: 'development', ahead: 1, behind: 0, status: 'current' },
         ],
         unreachable: [],
         errors: [],
@@ -698,7 +698,7 @@ describe('tui-back edts (black-box, story 2.6)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     expect(parsed.data.services).toEqual([
-      { service: 'route-explorer', path: repo, isMember: false, sharedBranch: 'development', branch: 'development', ahead: null, behind: null, status: 'no-upstream' },
+      { service: 'route-explorer', path: repo, isMember: false, sharedBranch: 'development', protectedBranches: [], branch: 'development', ahead: null, behind: null, status: 'no-upstream' },
     ]);
   });
 
@@ -939,6 +939,10 @@ describe('tui-back edt create (black-box)', () => {
   it('rejects a shared-branch target before any git invocation (shared-branch-rejected, FR-7)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
+    // Story 2.42: the protected set is manifest-defined — this fixture's manifest lists `prod`.
+    await writeFile(join(repo, '.tui-back.yaml'), `${manifestYaml}\nprotectedBranches: [preprod, prod]\n`);
+    // Story 2.42: the protected set is manifest-defined — this fixture's manifest lists `prod`.
+    await writeFile(join(repo, '.tui-back.yaml'), `${manifestYaml}\nprotectedBranches: [preprod, prod]\n`);
     const env = createEnv(xdg);
     await registerRepos([repo], env);
 

@@ -58,7 +58,7 @@ import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
 import { addMemberUnderLock } from './modify.js';
-import { isSharedBranch } from './shared-branches.js';
+import { isProtectedBranch } from './shared-branches.js';
 
 export interface SwitchEdtRepoResult {
   service: string;
@@ -88,6 +88,9 @@ export type SwitchDirtyScope = 'outgoing-member' | 'member-of-other-edt' | 'non-
 // not be loaded) — the TUI's advisory protected-name check needs it. `dirtyPaths` (state-2/3
 // rows only) is a read-only `listDirtyPaths(..., {expandUntracked: true})` snapshot the TUI's
 // discard confirmation lists; a failed read leaves it unset.
+// Story 2.42: `protectedBranches` is the manifest's own protected list (empty when the
+// manifest declares none or could not be loaded) — with `sharedBranch`, the repo's full FR-7
+// protected set for the TUI's advisory check.
 export interface SwitchDirtyRepo {
   service: string;
   repoPath: string;
@@ -95,6 +98,7 @@ export interface SwitchDirtyRepo {
   currentBranch: string;
   currentBranchShared: boolean;
   sharedBranch: string | null;
+  protectedBranches: string[];
   owningEdtTopics: string[];
   dirtyPaths?: string[];
   resolution?: 'auto-stash';
@@ -429,7 +433,7 @@ async function describeDirtyRepo(
   // not-shared. An adopt of such a repo fails at its own currentBranch read — after the
   // read-only gate, before the stash — so it is a `failed` row with the repo untouched.
   const currentBranch = current.ok ? current.data : 'HEAD';
-  const currentBranchShared = current.ok && loaded.ok ? isSharedBranch(currentBranch, loaded.data.sharedBranch) : false;
+  const currentBranchShared = current.ok && loaded.ok ? isProtectedBranch(currentBranch, loaded.data) : false;
   const row: SwitchDirtyRepo = {
     service,
     repoPath: repo.repoPath,
@@ -437,6 +441,7 @@ async function describeDirtyRepo(
     currentBranch,
     currentBranchShared,
     sharedBranch: loaded.ok ? loaded.data.sharedBranch : null,
+    protectedBranches: loaded.ok ? (loaded.data.protectedBranches ?? []) : [],
     owningEdtTopics: repo.owningTopics,
   };
   if (repo.state === 1) {

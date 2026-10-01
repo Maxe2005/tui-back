@@ -90,6 +90,7 @@ const SERVICE_A = {
   path: '/repo/a',
   isMember: true,
   sharedBranch: 'development',
+  protectedBranches: [] as string[],
   branch: 'feat/a',
   ahead: 0,
   behind: 0,

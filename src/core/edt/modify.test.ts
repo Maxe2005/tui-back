@@ -62,15 +62,19 @@ function makeMockRegistry(initialPaths: Set<string> = new Set()): RegistryPort {
   };
 }
 
+const MANIFEST_PROTECTED_BRANCHES = ['development', 'preprod', 'prod'];
+
 function makeMockGit(): any {
   return {
     currentBranch: async (repoPath: string) => {
       const branch = repoPath.endsWith('-shared') ? 'development' : 'feature-x';
       return ok(branch);
     },
+    // Story 2.42: a manifest fixture — emulates every repo's manifest declaring
+    // `sharedBranch: development` and `protectedBranches: [preprod, prod]`.
     assertAllowedBranch: async (repoPath: string, branchName: string, edtId?: string) => {
-      if (edtId !== undefined && (branchName === 'development' || branchName === 'preprod' || branchName === 'prod')) {
-        return err('shared-branch-rejected', `Branch "${branchName}" is shared/protected`);
+      if (edtId !== undefined && MANIFEST_PROTECTED_BRANCHES.includes(branchName)) {
+        return err('shared-branch-rejected', `Branch "${branchName}" is protected by its service's manifest`);
       }
       return ok(undefined);
     },

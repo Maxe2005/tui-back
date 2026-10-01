@@ -27,11 +27,14 @@ export const STEP3_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la l
 
 export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {
   const lists = state.branches.lists[path];
+  const candidate = candidates.find((entry) => entry.path === path);
   return {
+    service: candidate?.service ?? path,
     status: lists?.status ?? 'pending',
     local: lists?.local ?? [],
     remote: lists?.remote ?? [],
-    sharedBranch: candidates.find((candidate) => candidate.path === path)?.sharedBranch ?? '',
+    sharedBranch: candidate?.sharedBranch ?? '',
+    protectedBranches: candidate?.protectedBranches ?? [],
   };
 }
 

@@ -161,6 +161,7 @@ describe('edt slice — switch dirty-repo seam (story 2.39)', () => {
           currentBranch: 'development',
           currentBranchShared: true,
           sharedBranch: 'development',
+          protectedBranches: [],
           owningEdtTopics: [],
           dirtyPaths: ['junk.txt'],
         },
