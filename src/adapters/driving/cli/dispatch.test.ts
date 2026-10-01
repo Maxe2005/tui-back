@@ -575,6 +575,24 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
   });
 
+  it('update --from-edt without a topic is rejected and the flag is documented', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    expect(update.usage).toContain('--from-edt <topic>');
+    expect(await update.run(['--from-edt'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await update.run(['--from-edt', 'a', '--all'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('update --from-edt fails with no-active-edt when no EDT is active', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    expect(await update.run(['--from-edt', 'sibling'])).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
+  });
+
   describe('registry clean (story 2.33)', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
