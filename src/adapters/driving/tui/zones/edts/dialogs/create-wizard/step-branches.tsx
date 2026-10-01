@@ -20,7 +20,7 @@ import { type BranchStepState, type CreateDialogState, type EdtDialogState } fro
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
-import { buildStep3Rows, type BranchCandidate, type RowView } from './wizard.logic.js';
+import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from './wizard.logic.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 export const STEP3_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Étape suivante';
@@ -102,8 +102,14 @@ export function reduceBranchStepKey(
         return { state: withBranches(state, { ...branches, editing: false }), cancel: false };
       }
       const next = nextTextInputValue(branches[field], input, key);
-      const touched = field === 'globalName' && next.value !== branches.globalName.value ? true : branches.globalNameTouched;
-      return { state: withBranches(state, { ...branches, [field]: next, globalNameTouched: touched }), cancel: false };
+      const nameChanged = field === 'globalName' && next.value !== branches.globalName.value;
+      const touched = nameChanged ? true : branches.globalNameTouched;
+      // Story 2.31 (review): untouched seeded [Créer (Perso)] rows follow a global name edited
+      // here too, not only on Step 3 re-entry.
+      const overrides = nameChanged
+        ? refreshSeededNames(branches.overrides, branches.seededPaths, state.seedFromEdt, branches.globalName.value, next.value)
+        : branches.overrides;
+      return { state: withBranches(state, { ...branches, [field]: next, globalNameTouched: touched, overrides }), cancel: false };
     }
     if (key.escape) {
       return { state, cancel: true };

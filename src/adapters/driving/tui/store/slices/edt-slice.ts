@@ -100,7 +100,9 @@ export type EdtActionState = {
   // Story 2.31: 'create-from' — the create wizard seeded from a root EDT (target = its topic,
   // or 'select EDT' when the quick-pick must choose it).
   type: 'create' | 'create-from' | 'switch' | 'modify' | 'delete';
-  target: string; // EDT topic or "new EDT" for create
+  // EDT topic (for create-from: the root EDT's topic), "new EDT" for create, or 'select EDT'
+  // when no topic was given (switch/modify/delete/create-from open the quick-pick).
+  target: string;
   startedAt: string; // ISO timestamp
 };
 

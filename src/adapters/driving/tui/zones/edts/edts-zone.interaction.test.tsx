@@ -3719,8 +3719,6 @@ describe('EdtsZone quick-pick dialog (story 2.30)', () => {
   });
 });
 
-// Story 2.38: the wizard's Step 4 — explicit activation. Two services (svc-a, svc-b); svc-a is
-// the new EDT's only member. Every log entry must go to the NEW EDT's ulid ('new-ulid').
 describe('EdtsZone edt-create-from (story 2.31)', () => {
   const ROOT = edt({
     ulid: 'root-ulid',
@@ -3847,8 +3845,86 @@ describe('EdtsZone edt-create-from (story 2.31)', () => {
       await instance.waitUntilExit();
     }
   });
+
+  // Steps 1-3 of a seeded create (svc-a inherited, nothing added), landing on Step 4.
+  async function reachSeededStep4(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+    await instance.waitUntilRenderFlush();
+    await type(instance, stdin, 'next');
+    await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
+    await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3
+    await settle(instance);
+    await press(instance, stdin, KEYS.ctrlN); // Step 3 -> Step 4
+  }
+
+  it('switch choice: the logged create detail names the root EDT', async () => {
+    const { store, createCalls, logged } = createFromStore('feat-a');
+    store.setState({
+      switchEdt: async (params): Promise<Result<SwitchActiveEdtData>> => ({
+        ok: true,
+        data: { ulid: 'new-ulid', topic: params.topic, results: [], wasInterrupted: false },
+      }),
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await reachSeededStep4(instance, stdin);
+      await press(instance, stdin, KEYS.enter); // default choice: switch now
+      await settle(instance);
+      expect(createCalls).toHaveLength(1);
+      expect(logged[0]).toContain('Created EDT "next" from "feat-a" with 1 member(s) (switch requested)');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('partial create: the not-activated log detail names the root EDT', async () => {
+    const { store, logged } = createFromStore('feat-a');
+    store.setState({
+      createEdt: async (params): Promise<Result<CreateEdtData>> => ({
+        ok: true,
+        data: { ulid: 'new-ulid', topic: params.topic, results: [{ service: 'svc-a', outcome: 'failed', detail: { code: 'git-error', message: 'boom' } }] },
+      }),
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await reachSeededStep4(instance, stdin);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(logged[0]).toContain('Created EDT "next" from "feat-a" with 1 member(s) — not activated');
+      expect(logged[0]).toContain('boom');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('editing the global name in Step 3 carries the untouched inherited row along', async () => {
+    const { store, createCalls } = createFromStore('feat-a');
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'next');
+      await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
+      await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3
+      await settle(instance);
+      await press(instance, stdin, KEYS.down); // Panel A: base -> name line
+      await press(instance, stdin, KEYS.enter); // edit the global name
+      await type(instance, stdin, '-2');
+      await press(instance, stdin, KEYS.enter); // leave edit mode
+      await press(instance, stdin, KEYS.ctrlN); // Step 3 -> Step 4
+      await press(instance, stdin, KEYS.space); // "Créer sans basculer"
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(createCalls[0]?.memberPlans).toEqual({ '/repos/a': { kind: 'create', base: 'feat/a-api', name: 'next-2' } });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });
 
+// Story 2.38: the wizard's Step 4 — explicit activation. Two services (svc-a, svc-b); svc-a is
+// the new EDT's only member. Every log entry must go to the NEW EDT's ulid ('new-ulid').
 describe('EdtsZone create wizard Step 4 — activation & switch choice (story 2.38)', () => {
   const EXISTING = edt({ ulid: 'old-ulid', topic: 'old', members: [] });
   const NEW_ENTRY = edt({ ulid: 'new-ulid', topic: 'feat', members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'feat' }] });

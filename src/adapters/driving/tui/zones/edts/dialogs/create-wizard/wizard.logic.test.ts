@@ -18,6 +18,7 @@ import {
   localNameOf,
   missingSeedMembers,
   pruneToCandidates,
+  refreshSeededNames,
   nonMemberReturns,
   NO_SERVICE_ERROR,
   reachableSteps,
@@ -424,6 +425,38 @@ describe('edt-create-from seeding (story 2.31)', () => {
     expect(missingSeedMembers(null, CANDIDATES)).toEqual([]);
     expect(pruneToCandidates(['/repos/b', '/repos/gone', '/repos/a'], CANDIDATES)).toEqual(['/repos/b', '/repos/a']);
     expect(pruneToCandidates(['/repos/gone'], [])).toEqual(['/repos/gone']);
+  });
+
+  it('missingSeedMembers lists nothing on an empty pool (same rule as the prune)', () => {
+    expect(missingSeedMembers(ROOT, [])).toEqual([]);
+  });
+
+  it('All root members gone: Step 2 is blocked with NO_SERVICE_ERROR', () => {
+    const state: CreateDialogState = { ...initialCreateDialog(ROOT), selectedMembers: ['/repos/gone'] };
+    expect(canAdvance(2, state, EDTS, CANDIDATES)).toEqual({ ok: false, error: NO_SERVICE_ERROR });
+    // An empty (not yet loaded) pool prunes nothing.
+    expect(canAdvance(2, state, EDTS, [])).toEqual({ ok: true });
+  });
+
+  it('Partly gone: Step 2 passes and its breadcrumb counts only the real services', () => {
+    const state: CreateDialogState = { ...initialCreateDialog(ROOT), topic: 'x', step: 3 };
+    expect(canAdvance(2, state, EDTS, CANDIDATES)).toEqual({ ok: true });
+    expect(stepSummary(2, state, CANDIDATES)).toBe('2. Services (2)');
+    expect(buildBreadcrumb(state, EDTS, CANDIDATES)[1]?.text).toBe('2. Services (2)');
+  });
+
+  it('refreshSeededNames moves only untouched seeded rows, returns the same object when nothing moves', () => {
+    const overrides = {
+      '/repos/b': { kind: 'create' as const, base: 'feat/a', name: 'old' },
+      '/repos/a': { kind: 'create' as const, base: 'other', name: 'old' },
+      '/repos/c': { kind: 'create' as const, base: 'x', name: 'old' },
+    };
+    const next = refreshSeededNames(overrides, ['/repos/b', '/repos/a'], ROOT, 'old', 'new');
+    expect(next['/repos/b']).toEqual({ kind: 'create', base: 'feat/a', name: 'new' });
+    expect(next['/repos/a']).toEqual({ kind: 'create', base: 'other', name: 'old' });
+    expect(next['/repos/c']).toEqual({ kind: 'create', base: 'x', name: 'old' });
+    expect(refreshSeededNames(overrides, [], ROOT, 'old', 'new')).toBe(overrides);
+    expect(refreshSeededNames(overrides, ['/repos/b'], null, 'old', 'new')).toBe(overrides);
   });
 
   it('describeCreateForLog names the root EDT', () => {

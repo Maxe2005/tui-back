@@ -72,7 +72,9 @@ export function canAdvance(
     return availability === 'taken' ? { ok: false, error: TAKEN_NAME_ERROR } : { ok: true };
   }
   if (step === 2) {
-    return state.selectedMembers.length >= 1 ? { ok: true } : { ok: false, error: NO_SERVICE_ERROR };
+    // Story 2.31 (review): root members gone from a non-empty pool are pruned on entering
+    // Step 3 — they must not count here, or Step 3 would open with zero real services.
+    return pruneToCandidates(state.selectedMembers, candidates).length >= 1 ? { ok: true } : { ok: false, error: NO_SERVICE_ERROR };
   }
   if (step === 3) {
     // Story 2.37: every row needs a resolved base (not loading, not introuvable), a non-empty
@@ -100,13 +102,14 @@ export function reachableSteps(
   return reachable;
 }
 
-// A completed step's breadcrumb text: what was decided in it.
-export function stepSummary(step: WizardStep, state: CreateDialogState): string {
+// A completed step's breadcrumb text: what was decided in it. Story 2.31 (review): the Step 2
+// count excludes root members gone from a non-empty pool (`candidates`, as canAdvance).
+export function stepSummary(step: WizardStep, state: CreateDialogState, candidates: readonly Pick<BranchCandidate, 'path'>[] = []): string {
   if (step === 1) {
     return `${STEP_LABELS[1]}: ${state.topic.trim()}`;
   }
   if (step === 2) {
-    return `${STEP_LABELS[2]} (${state.selectedMembers.length})`;
+    return `${STEP_LABELS[2]} (${pruneToCandidates(state.selectedMembers, candidates).length})`;
   }
   if (step === 3) {
     // Story 2.37: the global name, plus how many services carry their own exception.
@@ -132,7 +135,7 @@ export function buildBreadcrumb(
       return { step, text: `▶ ${STEP_LABELS[step]} ◀`, tone: 'current' };
     }
     if (step < state.step) {
-      return { step, text: stepSummary(step, state), tone: 'done' };
+      return { step, text: stepSummary(step, state, candidates), tone: 'done' };
     }
     return { step, text: STEP_LABELS[step], tone: reachable.includes(step) ? 'pending' : 'unreachable' };
   });
@@ -482,30 +485,56 @@ function applyRootSeed(
   if (seed === null) {
     return { overrides: branches.overrides, seededPaths: branches.seededPaths };
   }
-  const previousGlobalName = branches.globalName.value;
-  const overrides: Record<string, RowOverride> = { ...branches.overrides };
+  const overrides: Record<string, RowOverride> = {
+    ...refreshSeededNames(branches.overrides, branches.seededPaths, seed, branches.globalName.value, nextGlobalName),
+  };
   const seededPaths = [...branches.seededPaths];
   for (const member of seed.members) {
     const path = member.repoPath;
-    if (!seededPaths.includes(path)) {
-      if (selectedMembers.includes(path)) {
-        overrides[path] = { kind: 'create', base: member.branch, name: nextGlobalName };
-        seededPaths.push(path);
-      }
-      continue;
-    }
-    const current = overrides[path];
-    if (current !== undefined && current.kind === 'create' && current.base === member.branch && current.name === previousGlobalName) {
-      overrides[path] = { ...current, name: nextGlobalName };
+    if (!seededPaths.includes(path) && selectedMembers.includes(path)) {
+      overrides[path] = { kind: 'create', base: member.branch, name: nextGlobalName };
+      seededPaths.push(path);
     }
   }
   return { overrides, seededPaths };
 }
 
+// Story 2.31: an already-seeded row still exactly `{create, <root branch>, <previous global
+// name>}` is untouched, so it follows the global name to `nextGlobalName` — on Step 3 re-entry
+// (applyRootSeed) and on every Panel A edit of the global name (step-branches.tsx). Returns
+// `overrides` itself when nothing changed.
+export function refreshSeededNames(
+  overrides: Readonly<Record<string, RowOverride>>,
+  seededPaths: readonly string[],
+  seed: EdtRegistryEntry | null,
+  previousGlobalName: string,
+  nextGlobalName: string,
+): Readonly<Record<string, RowOverride>> {
+  if (seed === null || previousGlobalName === nextGlobalName) {
+    return overrides;
+  }
+  let next: Record<string, RowOverride> | null = null;
+  for (const member of seed.members) {
+    const current = overrides[member.repoPath];
+    if (
+      seededPaths.includes(member.repoPath) &&
+      current !== undefined &&
+      current.kind === 'create' &&
+      current.base === member.branch &&
+      current.name === previousGlobalName
+    ) {
+      next ??= { ...overrides };
+      next[member.repoPath] = { ...current, name: nextGlobalName };
+    }
+  }
+  return next ?? overrides;
+}
+
 // Story 2.31: the root members absent from the candidate pool (unregistered or unreachable
-// since the root was created), by service name — Step 2's dim note.
+// since the root was created), by service name — Step 2's dim note. An empty pool lists none,
+// the same rule as pruneToCandidates (which keeps them on an empty pool).
 export function missingSeedMembers(seed: EdtRegistryEntry | null, candidates: readonly Pick<BranchCandidate, 'path'>[]): string[] {
-  if (seed === null) {
+  if (seed === null || candidates.length === 0) {
     return [];
   }
   const known = new Set(candidates.map((candidate) => candidate.path));
