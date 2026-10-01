@@ -30,7 +30,7 @@ const USER_ROUTE: Route = {
   bodyExample: { name: 'x' },
 };
 
-describe('seedRequestDraft (story 6.9)', () => {
+describe('seedRequestDraft', () => {
   it('seeds path params in path order (all required, pre-filled from the scanner) plus query/header rows', () => {
     expect(seedRequestDraft(USER_ROUTE)).toEqual({
       params: [
@@ -64,7 +64,7 @@ describe('seedRequestDraft (story 6.9)', () => {
   });
 });
 
-describe('fire block (story 6.9)', () => {
+describe('fire block', () => {
   it('lists the missing required path params and blocks the fire', () => {
     const draft = seedRequestDraft(USER_ROUTE);
     expect(missingRequiredParams(draft)).toEqual(['orgId']);
@@ -82,7 +82,7 @@ describe('fire block (story 6.9)', () => {
   });
 });
 
-describe('buildFireRequest (story 6.9)', () => {
+describe('buildFireRequest', () => {
   it('substitutes URL-encoded params, sends non-empty query/headers and the body draft', () => {
     const draft: RequestDraft = {
       params: [
@@ -122,7 +122,7 @@ describe('buildFireRequest (story 6.9)', () => {
   });
 });
 
-describe('row editing (story 6.9)', () => {
+describe('row editing', () => {
   it('adds a row and rejects empty or duplicate names (headers case-insensitively)', () => {
     const rows = [{ name: 'X-Trace', value: '1', required: false }];
     expect(addRequestRow(rows, '  ', true)).toEqual({ ok: false, reason: 'Name cannot be empty' });
@@ -144,7 +144,7 @@ describe('row editing (story 6.9)', () => {
   });
 });
 
-describe('sections, keys and size (story 6.9)', () => {
+describe('sections, keys and size', () => {
   it('cycles sections with wrap', () => {
     expect(nextRequestSection('params', 'next')).toBe('query');
     expect(nextRequestSection('body', 'next')).toBe('params');

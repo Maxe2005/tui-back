@@ -1,7 +1,7 @@
-// tui/zones/routes/request tab: story 6.9 — the Routes right pane's sub-tab strip and its
-// Request tab view (Params, Query, Headers, Body sections). Stateless: the zone owns the
-// keys, the cursor, and the inline editors; the Body section renders whatever editor node
-// the zone hands it (the 6.8 JsonTreeEditor / JsonRawEditor) inside a measured box.
+// tui/zones/routes/request tab: the Routes right pane's sub-tab strip and its Request tab view
+// (Params, Query, Headers, Body sections). Stateless: the zone owns the keys, the cursor and the
+// inline editors; the Body section renders whatever editor node the zone hands it
+// (JsonTreeEditor / JsonRawEditor) inside a measured box.
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
 import { BoundedList } from '../../shared/components/bounded-list.js';
