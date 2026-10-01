@@ -42,6 +42,7 @@
 
 generated: 2026-08-11
 last_updated: 2026-10-01
+# 2026-10-01: Story 2-42 validated by the developer, moved to done and merged into epic-2.
 # 2026-10-01: Story 2-42 moved to review after the adversarial review + patch loop (bmad-build).
 # 2026-10-01: Story 2-42 (manifest-defined protected branches per service) started (bmad-build).
 # 2026-09-29: Story 3-11 (update commands — main, all-repos, single-service) moved to review after code-review + patch loop (bmad-build).
@@ -181,7 +182,7 @@ development_status:
   2-39-edt-switch-core-three-state-partition-dirty-service-resolutions: done
   2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
   2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: review
-  2-42-manifest-defined-protected-branches-per-service: review
+  2-42-manifest-defined-protected-branches-per-service: done
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
   epic-2-retrospective: optional
 
