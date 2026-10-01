@@ -299,7 +299,7 @@ describe('subcommand registry guards', () => {
     const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
     if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
 
-    expect(fireRequestCmd.usage).toBe('tui-back fire-request <repoPath> <METHOD> <path>');
+    expect(fireRequestCmd.usage).toMatch(/^tui-back fire-request <repoPath> <METHOD> <path>/);
 
     const missing = await fireRequestCmd.run([]);
     expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
@@ -312,6 +312,32 @@ describe('subcommand registry guards', () => {
     // The fixture manifest answers manifest-not-found, which the use-case propagates —
     // proving the wrapper reached the use-case itself rather than rejecting locally.
     const result = await fireRequestCmd.run(['/repos/gateway', 'GET', '/users']);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+
+  it('fire-request (story 6.9) parses --body/--query/--header and rejects malformed flags', async () => {
+    const subcommands = buildTestSubcommands();
+    const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+    if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+    for (const args of [
+      ['/a', 'POST', '/x', '--body', '{oops'],
+      ['/a', 'POST', '/x', '--body'],
+      ['/a', 'POST', '/x', '--body', '{}', '--body', '{}'],
+      ['/a', 'GET', '/x', '--query', 'novalue'],
+      ['/a', 'GET', '/x', '--query', '=v'],
+      ['/a', 'GET', '/x', '--header', 'NoColon'],
+      ['/a', 'GET', '/x', '--bogus', 'v'],
+      ['/a', '--body', '{}'],
+    ]) {
+      const rejected = await fireRequestCmd.run(args);
+      expect(rejected).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+
+    // Well-formed flags reach the use-case (manifest-not-found from the fixture).
+    const result = await fireRequestCmd.run([
+      '/repos/gateway', 'POST', '/users', '--body', '{"a":1}', '--query', 'q=a=b', '--header', 'X-Trace: t1',
+    ]);
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 

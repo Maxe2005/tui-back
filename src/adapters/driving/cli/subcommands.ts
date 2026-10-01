@@ -31,7 +31,7 @@ import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
 import { scanRepos } from '../../../core/scripts/scan.js';
 import { listRoutes } from '../../../core/routes/list-routes.js';
-import { fireRequest } from '../../../core/routes/fire-request.js';
+import { fireRequest, type FireRequestOptions } from '../../../core/routes/fire-request.js';
 import type { Subcommand } from './dispatch.js';
 
 const EDT_CREATE_USAGE =
@@ -253,29 +253,90 @@ export function buildSubcommands(deps: {
     },
     {
       name: 'fire-request',
-      usage: 'tui-back fire-request <repoPath> <METHOD> <path>',
+      usage: FIRE_REQUEST_USAGE,
       // Story 6.2: thin wrapper around core/routes/fire-request.ts (AD-2) — the wrapper owns
       // argument cardinality (missing → missing-argument like scan/register, any other arity
       // or a blank argument → invalid-argument, never silently ignored); the use-case owns
       // the manifest gate, the route-exists check, the session, and the fire itself.
+      // Story 6.9: optional repeatable --body/--query/--header flags after the three
+      // positionals feed the use-case's options; without them the call is exactly 6.2's.
       run: async (args) => {
         if (args.length === 0) {
-          return err('missing-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+          return err('missing-argument', `Usage: ${FIRE_REQUEST_USAGE}`);
         }
-        if (args.length !== 3 || args.some((arg) => arg.trim() === '')) {
-          return err('invalid-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+        const positionals = args.slice(0, 3);
+        if (positionals.length !== 3 || positionals.some((arg) => arg.trim() === '' || arg.startsWith('--'))) {
+          return err('invalid-argument', `Usage: ${FIRE_REQUEST_USAGE}`);
+        }
+        const options = parseFireRequestFlags(args.slice(3));
+        if (!options.ok) {
+          return options;
         }
         return fireRequest(
           { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
           resolve(args[0]),
           args[1],
           args[2],
+          ...(options.data === null ? [] : [options.data]),
         );
       },
     },
   ];
   assertUniqueSubcommandNames(subcommands);
   return subcommands;
+}
+
+const FIRE_REQUEST_USAGE =
+  "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']...";
+
+// Story 6.9: hand-rolled `fire-request` flags (same dependency-free walk as `edt create`
+// below). `--body` takes JSON (unparsable → invalid-argument, at most once); `--query
+// name=value` and `--header 'Name: value'` repeat. Returns null when no flag was given, so
+// the use-case is called with exactly the 6.2 arguments.
+function parseFireRequestFlags(flags: string[]): Result<FireRequestOptions | null> {
+  if (flags.length === 0) {
+    return ok(null);
+  }
+  const options: FireRequestOptions = {};
+  for (let i = 0; i < flags.length; i++) {
+    const flag = flags[i];
+    const value = flags[i + 1];
+    if (flag !== '--body' && flag !== '--query' && flag !== '--header') {
+      return err('invalid-argument', `Unknown argument ${flag}. Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    if (value === undefined) {
+      return err('invalid-argument', `Missing value for ${flag}. Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    i += 1;
+    if (flag === '--body') {
+      if (options.body !== undefined) {
+        return err('invalid-argument', `--body may be given only once. Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      try {
+        options.body = JSON.parse(value) as unknown;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        return err('invalid-argument', `--body is not valid JSON: ${reason}`);
+      }
+      continue;
+    }
+    if (flag === '--query') {
+      const separator = value.indexOf('=');
+      const name = separator === -1 ? '' : value.slice(0, separator).trim();
+      if (name === '') {
+        return err('invalid-argument', `--query expects name=value, got "${value}". Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      options.query = { ...(options.query ?? {}), [name]: value.slice(separator + 1) };
+      continue;
+    }
+    const separator = value.indexOf(':');
+    const name = separator === -1 ? '' : value.slice(0, separator).trim();
+    if (name === '') {
+      return err('invalid-argument', `--header expects 'Name: value', got "${value}". Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    options.headers = { ...(options.headers ?? {}), [name]: value.slice(separator + 1).trim() };
+  }
+  return ok(options);
 }
 
 // Hand-rolled flag parsing for `edt create` (following the register --reset pattern): the
