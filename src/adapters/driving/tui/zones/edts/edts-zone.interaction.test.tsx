@@ -83,9 +83,10 @@ function step3Store(
     edts: options.edts ?? [],
     edtsStatus: 'idle',
     activeEdt: null,
+    // Story 2.42: manifest fixtures — each service's manifest lists its own protected branches.
     edtsBranches: [
-      { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main' },
-      { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+      { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main', protectedBranches: ['development', 'preprod', 'prod'] },
+      { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: ['preprod', 'prod'] },
     ],
     edtsBranchesStatus: 'idle',
     loadEdts: async () => {},
@@ -215,9 +216,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
         probe.switchCalls += 1;
         store.setState({
           switchDirtyRepos: [
-            { service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'development', currentBranchShared: true, sharedBranch: 'development', owningEdtTopics: [], dirtyPaths: ['pay.ts', 'tmp/new.txt'] },
-            { service: 'svc-billing', repoPath: '/repo/billing', scope: 'member-of-other-edt', currentBranch: 'feat/x', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: ['third'], dirtyPaths: ['bill.ts'] },
-            { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, sharedBranch: 'development', owningEdtTopics: [], resolution: 'auto-stash' },
+            { service: 'svc-payments', repoPath: '/repo/payments', scope: 'non-member', currentBranch: 'development', currentBranchShared: true, sharedBranch: 'development', protectedBranches: [], owningEdtTopics: [], dirtyPaths: ['pay.ts', 'tmp/new.txt'] },
+            { service: 'svc-billing', repoPath: '/repo/billing', scope: 'member-of-other-edt', currentBranch: 'feat/x', currentBranchShared: false, sharedBranch: 'development', protectedBranches: [], owningEdtTopics: ['third'], dirtyPaths: ['bill.ts'] },
+            { service: 'svc-orders', repoPath: '/repo/orders', scope: 'outgoing-member', currentBranch: 'feat/o', currentBranchShared: false, sharedBranch: 'development', protectedBranches: [], owningEdtTopics: [], resolution: 'auto-stash' },
           ],
         });
         const choice = await new Promise<SwitchDirtyReposChoice>((resolve) => {
@@ -497,8 +498,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -572,7 +573,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -623,8 +624,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -668,7 +669,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -811,8 +812,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -876,8 +877,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'feature-shared', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'feature-shared', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -926,7 +927,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -961,7 +962,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1086,7 +1087,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1131,7 +1132,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1173,8 +1174,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [],
       edtsStatus: 'idle',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'development', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'development', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {
@@ -1448,7 +1449,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter); // apply -> refused (protected, no rename)
       let frame = lastWizardFrame(stdout);
       expect(frame).toContain('Configurer svc-a');
-      expect(frame).toContain('« prod » est une branche locale protégée (FR-7)');
+      expect(frame).toContain('« prod » est une branche locale protégée par le manifeste de svc-a');
 
       await press(instance, stdin, KEYS.up); // rename checkbox
       await press(instance, stdin, KEYS.up); // "Branche existante"
@@ -1678,7 +1679,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [edt({ ulid: 'demo-ulid', topic: 'demo' })],
       edtsStatus: 'idle',
       activeEdt: null,
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1720,7 +1721,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1758,7 +1759,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -1818,7 +1819,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edts: [target],
       edtsStatus: 'idle',
       activeEdt: null,
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -2058,8 +2059,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2102,7 +2103,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2149,7 +2150,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2207,7 +2208,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2261,7 +2262,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2307,7 +2308,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2346,7 +2347,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2402,7 +2403,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2460,7 +2461,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'svc-branch', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'svc-branch', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2505,7 +2506,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2561,7 +2562,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2623,7 +2624,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'release' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'release', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -2681,8 +2682,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2793,8 +2794,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2886,7 +2887,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -2966,7 +2967,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -3040,7 +3041,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     store.setState({
       edts: [],
       edtsStatus: 'idle',
-      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' }],
+      edtsBranches: [{ service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] }],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
@@ -3152,7 +3153,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -3201,7 +3202,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -3247,7 +3248,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -3295,7 +3296,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       // No members -> EDT SERVICES is empty; the one service is a non-member, so it lands in
       // OTHER SERVICES instead.
       edtsBranches: [
-        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'feature-y', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -3331,7 +3332,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       activeEdt: 'active-ulid',
       // The one service is a member of the selected EDT -> OTHER SERVICES is empty.
       edtsBranches: [
-        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
@@ -3978,6 +3979,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice (story 2.
               currentBranch: 'wip',
               currentBranchShared: false,
               sharedBranch: 'development',
+              protectedBranches: [],
               owningEdtTopics: [],
               dirtyPaths: ['x.ts'],
             },

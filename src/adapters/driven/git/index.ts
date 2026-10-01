@@ -1,8 +1,8 @@
 // adapters/driven/git: the driven implementation of core's GitPort — the single git
 // touchpoint every git write in the tool flows through (AD-8). `assertAllowedBranch` is the
 // reusable gate: before any `git` invocation, it rejects a target branch name in the
-// shared-branch set (development / preprod / prod / the repo's own manifest `sharedBranch`)
-// with shared-branch-rejected. The shared-branch set is resolved from the repo's manifest at
+// service's protected set (Story 2.42: the manifest's `protectedBranches` ∪ its `sharedBranch`)
+// with shared-branch-rejected. The protected set is resolved from the repo's manifest at
 // check time (through the ManifestPort), never trusted from the caller's arguments — a repo
 // that fails to load a manifest cannot pass the gate. `createBranch`/`deleteBranch` delegate
 // to this gate first (story 2.2's seed extracted into story 2.3's reusable form); `core/edt`
@@ -29,8 +29,9 @@ import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
-// Story 2.37: the FR-7 shared-branch rule lives in core, shared with the TUI's advisory check.
-import { isSharedBranch } from '../../../core/edt/shared-branches.js';
+// Story 2.37: the FR-7 protected-branch rule lives in core, shared with the TUI's advisory
+// check. Story 2.42: the set is manifest-defined per service.
+import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
   return {
@@ -68,7 +69,7 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
   };
 }
 
-// The reusable branch-scope safety gate (AD-8): resolves the shared-branch set from the
+// The reusable branch-scope safety gate (AD-8): resolves the protected set from the
 // repo's own manifest at check time — never trusted from the caller — and rejects
 // before any `git` invocation. A repo whose manifest cannot load fails the gate too (it is
 // not a managed repo, so no branch of it can be judged safe). Story 2.4: when both `edtId`
@@ -87,11 +88,8 @@ export async function assertAllowedBranch(
     return loaded;
   }
 
-  if (isSharedBranch(branchName, loaded.data.sharedBranch)) {
-    return err(
-      'shared-branch-rejected',
-      `Branch "${branchName}" is a shared/protected branch (repo ${repoPath})`,
-    );
+  if (isProtectedBranch(branchName, loaded.data)) {
+    return err('shared-branch-rejected', `Branch "${branchName}" is protected by ${loaded.data.service}'s manifest (repo ${repoPath})`);
   }
 
   if (edtId !== undefined && edtRegistry !== undefined) {

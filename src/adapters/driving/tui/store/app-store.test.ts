@@ -293,6 +293,7 @@ describe("app store", () => {
           path: "/repo/a",
           isMember: false,
           sharedBranch: "development",
+          protectedBranches: [],
           branch: "feat/a",
           ahead: 2,
           behind: 0,

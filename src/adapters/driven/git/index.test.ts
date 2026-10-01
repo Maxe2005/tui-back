@@ -63,7 +63,13 @@ function runGit(dir: string, args: string[]): { status: number | null; stdout: s
   return spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
 }
 
-async function makeGitRepo(manifestSharedBranch?: string): Promise<string> {
+// Story 2.42: the protected set is manifest-defined, so the fixture manifest declares
+// `protectedBranches: [preprod, prod]` by default (alongside the defaulted `development`
+// sharedBranch); pass `protectedBranches: null` to omit the line entirely.
+async function makeGitRepo(
+  manifestSharedBranch?: string,
+  protectedBranches: readonly string[] | null = ['preprod', 'prod'],
+): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'tui-back-git-'));
   tmpDirs.push(dir);
   const manifest = [
@@ -71,6 +77,7 @@ async function makeGitRepo(manifestSharedBranch?: string): Promise<string> {
     'container: route-explorer',
     'migrationCommand: npm run migration:run',
     ...(manifestSharedBranch !== undefined ? [`sharedBranch: ${manifestSharedBranch}`] : []),
+    ...(protectedBranches !== null ? [`protectedBranches: [${protectedBranches.join(', ')}]`] : []),
     'modules: {}',
   ].join('\n');
   await writeFile(join(dir, '.tui-back.yaml'), manifest);
@@ -104,7 +111,10 @@ async function makeCleanGitRepo(): Promise<string> {
 async function makeDirWithManifestOnly(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'tui-back-git-manifest-only-'));
   tmpDirs.push(dir);
-  await writeFile(join(dir, '.tui-back.yaml'), 'service: s\ncontainer: c\nmigrationCommand: m\nmodules: {}\n');
+  await writeFile(
+    join(dir, '.tui-back.yaml'),
+    'service: s\ncontainer: c\nmigrationCommand: m\nprotectedBranches: [preprod, prod]\nmodules: {}\n',
+  );
   return dir;
 }
 
@@ -118,18 +128,51 @@ function branchExists(dir: string, branch: string): boolean {
   return runGit(dir, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
 }
 
-// The adapter resolves the shared-branch set through the real manifest loader, so the full
+// The adapter resolves the protected set through the real manifest loader, so the full
 // manifest → gate → git stack is exercised against the repo's actual .tui-back.yaml.
 const manifest: ManifestPort = { load: loadManifest };
 
 describe('assertAllowedBranch', () => {
-  it('rejects every built-in shared branch without any git invocation', async () => {
+  it('rejects every manifest-protected branch and the sharedBranch without any git invocation', async () => {
     const repo = await makeDirWithManifestOnly();
 
     for (const shared of ['development', 'preprod', 'prod']) {
       const result = await assertAllowedBranch(manifest, repo, shared);
       expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     }
+  });
+
+  it("names the branch and the service's manifest in the rejection (story 2.42)", async () => {
+    const repo = await makeGitRepo();
+
+    const result = await assertAllowedBranch(manifest, repo, 'preprod');
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected', message: `Branch "preprod" is protected by route-explorer's manifest (repo ${repo})` },
+    });
+  });
+
+  it('allows a formerly implicit branch when the manifest does not list it (story 2.42)', async () => {
+    const repo = await makeGitRepo('main', null);
+
+    for (const formerlyImplicit of ['development', 'preprod', 'prod']) {
+      expect(await assertAllowedBranch(manifest, repo, formerlyImplicit)).toEqual({ ok: true, data: undefined });
+    }
+    expect(await assertAllowedBranch(manifest, repo, 'main')).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected' },
+    });
+  });
+
+  it('allows prod with no protectedBranches line and the default development sharedBranch (story 2.42)', async () => {
+    const repo = await makeGitRepo(undefined, null);
+
+    expect(await assertAllowedBranch(manifest, repo, 'prod')).toEqual({ ok: true, data: undefined });
+    expect(await assertAllowedBranch(manifest, repo, 'development')).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected' },
+    });
   });
 
   it('rejects a branch name equal to the repo manifest sharedBranch', async () => {
@@ -290,7 +333,7 @@ describe('createBranch', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'base-branch-missing' } });
   });
 
-  it('rejects every built-in shared branch before any git invocation', async () => {
+  it('rejects every manifest-protected branch before any git invocation', async () => {
     const repo = await makeGitRepo();
 
     for (const shared of ['development', 'preprod', 'prod']) {
@@ -956,7 +999,7 @@ async function makeManagedClone(): Promise<{ origin: string; clone: string }> {
   const pair = await makeGitRepoOriginAndClone();
   await writeFile(
     join(pair.clone, '.tui-back.yaml'),
-    'service: clone\ncontainer: clone\nmigrationCommand: m\nmodules: {}\n',
+    'service: clone\ncontainer: clone\nmigrationCommand: m\nprotectedBranches: [preprod, prod]\nmodules: {}\n',
   );
   return pair;
 }

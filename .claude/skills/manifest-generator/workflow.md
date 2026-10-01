@@ -1,6 +1,6 @@
 # Manifest Generator Workflow
 
-**Goal:** Scan a target repository and produce a `.tui-back.yaml` manifest at its root — declaring `service`, `container`, `migrationCommand`, `sharedBranch`, and `modules` — then self-check the generated file against the project's own manifest adapter so schema drift is caught, not silently shipped.
+**Goal:** Scan a target repository and produce a `.tui-back.yaml` manifest at its root — declaring `service`, `container`, `migrationCommand`, `sharedBranch`, `protectedBranches`, and `modules` — then self-check the generated file against the project's own manifest adapter so schema drift is caught, not silently shipped.
 
 **CRITICAL:** If a step directs you to another snapshot file, read it fully and follow it. No exceptions.
 
@@ -42,6 +42,7 @@ Extract each field by reading files under `{target_repo}` directly (do not guess
 2. **`container`**: Read `{target_repo}/docker-compose.yml` if present. If it has a top-level `services` key, use the name of the first service listed. If the file is absent, or has no `services` key, treat `container` as undetected for this repo (carry this forward as `null` for now — Step 5 will check whether the real schema still accepts that).
 3. **`migrationCommand`**: Read `{target_repo}/package.json` `scripts`. Look for `migrate`, `db:migrate`, `migration`, in that order, and use the first one found. If none exist, treat `migrationCommand` as undetected (`null` for now, same caveat as `container`).
 4. **`sharedBranch`**: Always `"development"`. Never prompt for this value.
+4b. **`protectedBranches`**: Always `[development, preprod, prod]`. Never prompt for this value. Nothing is protected implicitly — a service's protected set is exactly `protectedBranches ∪ {sharedBranch}` — so the default must be written explicitly; the developer adjusts it afterwards to the service's branching model.
 5. **`modules`**: Look for a `modules` config file or directory in `{target_repo}` (e.g. a `modules.json`, `modules.yaml`, or `modules/` directory naming module ids). Collect any ids found as candidates; do not include any of them in the manifest yet — Step 4 filters them against the project's real compiled-in registry.
 
 ### Step 4: Filter module ids against the compiled-in registry
@@ -60,6 +61,7 @@ service: <from Step 3.1>
 container: <from Step 3.2, or omit the key entirely if undetected — see note below>
 migrationCommand: <from Step 3.3, or omit the key entirely if undetected — see note below>
 sharedBranch: development
+protectedBranches: [development, preprod, prod]
 modules:
   <only ids kept in Step 4>
 ```
@@ -88,6 +90,6 @@ Otherwise, run the project's real `loadManifest` against the manifest you just w
 
 ### Step 7: Report and record
 
-1. Report to the user: the fields written, any module ids dropped in Step 4 (with reasons), and the Step 6 verdict (success, or the specific drift/validation findings).
+1. Report to the user: the fields written (mention that `protectedBranches` was written with its default list and should be adjusted to the service's branching model), any module ids dropped in Step 4 (with reasons), and the Step 6 verdict (success, or the specific drift/validation findings).
 2. Record the verdict for auditability: if `{target_repo}/.memlog.md` does not exist yet, create it with `uv run {project-root}/_bmad/scripts/memlog.py init --path {target_repo}/.memlog.md --field topic="manifest generation for <service>"`; then append one entry with `uv run {project-root}/_bmad/scripts/memlog.py append --path {target_repo}/.memlog.md --type event --text "<one-line verdict summary>"`.
 3. This workflow is complete. Do not proceed further.

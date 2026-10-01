@@ -257,8 +257,9 @@ export function validateAdoptBranch(
   if (name === '') {
     return OVERRIDE_BOX_ERRORS.nameRequired;
   }
-  if (isProtectedTarget(name, repo.sharedBranch)) {
-    return protectedNameError(name);
+  // Story 2.42: the repo's own manifest-defined set (protectedBranches ∪ sharedBranch).
+  if (isProtectedTarget(name, { sharedBranch: repo.sharedBranch, protectedBranches: repo.protectedBranches })) {
+    return protectedNameError(name, repo.service);
   }
   const claim = claimOf(name, claims);
   if (claim !== undefined) {

@@ -42,13 +42,16 @@ export type OverrideBoxState = {
   error: string | null;
 };
 
-// What the box needs to know about its service: the loaded lists and the manifest
-// sharedBranch (FR-7's per-service half).
+// What the box needs to know about its service: its name, the loaded lists and the manifest's
+// protected set — `protectedBranches ∪ {sharedBranch}` (FR-7, Story 2.42). `service` names the
+// manifest in the inline protected-branch messages.
 export type OverrideBoxContext = {
+  service: string;
   status: 'pending' | 'loading' | 'ready' | 'error';
   local: readonly string[];
   remote: readonly string[];
   sharedBranch: string;
+  protectedBranches: string[];
 };
 
 export type OverrideBoxKeyResult =
@@ -68,12 +71,14 @@ export const OVERRIDE_BOX_ERRORS = {
   noMatch: 'Aucune branche correspondante',
 } as const;
 
-export function protectedNameError(name: string): string {
-  return `« ${name} » est une branche protégée (FR-7)`;
+// Story 2.42: every protected-branch message names the branch and the service whose
+// manifest protects it.
+export function protectedNameError(name: string, service: string): string {
+  return `« ${name} » est protégée par le manifeste de ${service}`;
 }
 
-export function protectedExistingError(name: string): string {
-  return `« ${name} » est une branche protégée (FR-7) — cochez « Renommer la branche locale »`;
+export function protectedExistingError(name: string, service: string): string {
+  return `« ${name} » est protégée par le manifeste de ${service} — cochez « Renommer la branche locale »`;
 }
 
 export function shadowedRemoteError(localName: string): string {
@@ -120,8 +125,8 @@ export function overrideBoxBranches(context: Pick<OverrideBoxContext, 'local' | 
   return [...context.local, ...context.remote];
 }
 
-export function protectedSourceError(branch: string): string {
-  return `« ${branch} » est une branche locale protégée (FR-7) — elle ne peut être ni reprise ni renommée`;
+export function protectedSourceError(branch: string, service: string): string {
+  return `« ${branch} » est une branche locale protégée par le manifeste de ${service} — elle ne peut être ni reprise ni renommée`;
 }
 
 export function existingTargetError(name: string): string {
@@ -133,16 +138,16 @@ export function noopRenameError(name: string): string {
 }
 
 // The box's wording of wizard.logic.ts's shared PlanIssue (the rows use a short form).
-export function boxIssueMessage(issue: PlanIssue, mode: OverrideBoxMode): string {
+export function boxIssueMessage(issue: PlanIssue, mode: OverrideBoxMode, service: string): string {
   switch (issue.kind) {
     case 'empty-name':
       return mode === 'create' ? OVERRIDE_BOX_ERRORS.nameRequired : OVERRIDE_BOX_ERRORS.newNameRequired;
     case 'protected-name':
-      return protectedNameError(issue.name);
+      return protectedNameError(issue.name, service);
     case 'protected-source':
-      return protectedSourceError(issue.branch);
+      return protectedSourceError(issue.branch, service);
     case 'protected-existing':
-      return protectedExistingError(issue.name);
+      return protectedExistingError(issue.name, service);
     case 'exists':
       return existingTargetError(issue.name);
     case 'noop-rename':
@@ -181,8 +186,8 @@ export function validateOverrideBox(box: OverrideBoxState, context: OverrideBoxC
     }
     plan = box.rename ? { kind: 'existing', branch, renameTo: box.newName.value.trim() } : { kind: 'existing', branch };
   }
-  const issue = checkPlan(plan, { status: 'ready', local: context.local, remote: context.remote }, context.sharedBranch);
-  return issue === null ? { ok: true, plan } : { ok: false, error: boxIssueMessage(issue, box.mode) };
+  const issue = checkPlan(plan, { status: 'ready', local: context.local, remote: context.remote }, context);
+  return issue === null ? { ok: true, plan } : { ok: false, error: boxIssueMessage(issue, box.mode, context.service) };
 }
 
 function update(box: OverrideBoxState): OverrideBoxKeyResult {

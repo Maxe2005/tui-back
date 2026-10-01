@@ -23,6 +23,8 @@ function repo(overrides: Partial<SwitchDirtyRepo> & Pick<SwitchDirtyRepo, 'servi
     currentBranch: 'development',
     currentBranchShared: true,
     sharedBranch: 'development',
+    // Story 2.42: manifest fixture — this repo's manifest lists preprod/prod as protected.
+    protectedBranches: ['preprod', 'prod'],
     owningEdtTopics: [],
     dirtyPaths: ['a.txt'],
     ...overrides,
@@ -98,7 +100,9 @@ describe('switch-resolution rows (story 2.41)', () => {
     const lists = { '/repo/a': { status: 'ready' as const, branches: ['taken', 'development'] } };
     const row = (branch: string, base = SHARED) => ({ repo: base, hasOutgoing: true, claims: [], plan: { kind: 'adopt' as const, branch, source: 'perso' as const } });
     expect(validateRow(row(''), lists)).toBe('Nom de branche requis');
-    expect(validateRow(row('prod'), lists)).toContain('protégée');
+    expect(validateRow(row('prod'), lists)).toBe('« prod » est protégée par le manifeste de svc-a');
+    // Story 2.42: a branch the repo's manifest does not list is not protected.
+    expect(validateRow(row('prod', { ...SHARED, protectedBranches: [] }), lists)).toBeNull();
     expect(validateRow(row('taken'), lists)).toContain('existe déjà');
     expect(validateRow(row('fresh'), lists)).toBeNull();
     // The current branch itself may exist (adopting in place).

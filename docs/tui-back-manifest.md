@@ -28,6 +28,9 @@ migrationCommand: <chaîne non vide>   # omettre la clé si aucune commande
 # Optionnel — valeur par défaut "development" si la clé est absente
 sharedBranch: <chaîne non vide>
 
+# Optionnel — branches protégées du service (en plus de sharedBranch)
+protectedBranches: [<chaîne non vide>, ...]
+
 # Obligatoire (peut être un objet vide)
 modules:
   <module-id>:                        # doit être un id de module connu (compilé en dur)
@@ -74,6 +77,36 @@ modules:
   clé est **absente** du fichier (une valeur vide explicite provoque une
   erreur plutôt que d'utiliser le défaut).
 - **Rôle** : nom de la branche Git partagée/de référence pour le dépôt.
+  Elle est **toujours** protégée (voir `protectedBranches`).
+
+### `protectedBranches` (optionnel)
+
+- **Type** : `string[]`
+- **Validation** : tableau de `trim().min(1)` — chaque entrée est rognée et
+  doit être non vide ; les doublons sont tolérés. Une valeur qui n'est pas
+  une liste (ex. `protectedBranches: preprod`) ou une entrée vide/blanche
+  (`""`, `"   "`) provoque un échec `manifest-validation-failed`, comme
+  toute autre erreur de schéma.
+- **Comportement si absent** : `undefined` — seule `sharedBranch` est alors
+  protégée.
+- **Rôle** : branches qu'aucun EDT ne peut revendiquer comme sa propre
+  branche (FR-7). L'ensemble protégé d'un service est **exactement**
+  `protectedBranches ∪ {sharedBranch}`, comparé à l'identique (sensible à la
+  casse). Aucune branche n'est protégée implicitement : `development`,
+  `preprod` ou `prod` ne le sont que si le manifeste les liste (ou si l'une
+  d'elles est la `sharedBranch`).
+- **Effet** : la porte Git (`assertAllowedBranch`, et à travers elle la
+  création, le renommage — ancien et nouveau nom — et la création de
+  branche de suivi) rejette une branche protégée avec `shared-branch-rejected`
+  (`Branch "<nom>" is protected by <service>'s manifest`), avant tout appel
+  Git. Le TUI applique la même règle en amont (assistant de création,
+  boîte « Configurer », résolution de bascule) avec un message du type
+  « « preprod » est protégée par le manifeste de svc-a ».
+- **Déploiement** : les manifestes existants ne sont **pas** modifiés
+  automatiquement. Un service qui reposait sur l'ancienne protection
+  implicite de `development`/`preprod`/`prod` doit ajouter la ligne à la
+  main, par exemple `protectedBranches: [development, preprod, prod]` (c'est
+  la valeur que le skill `manifest-generator` écrit par défaut).
 
 ### `modules` (obligatoire)
 
@@ -167,6 +200,7 @@ service: api-gateway
 container: api-gateway
 migrationCommand: docker exec api-gateway npx prisma migrate deploy
 sharedBranch: development
+protectedBranches: [development, preprod, prod]
 modules:
   route-explorer:
     # Découverte : spécification OpenAPI exposée par le service
@@ -191,7 +225,8 @@ modules: {}
 ```
 
 (`migrationCommand` omis, `sharedBranch` explicite ici mais pourrait aussi
-être omis pour hériter de `"development"`.)
+être omis pour hériter de `"development"`. `protectedBranches` omis : seule
+`master` est protégée.)
 
 ## Erreurs de chargement possibles
 

@@ -174,6 +174,62 @@ describe('loadManifest', () => {
     });
   });
 
+  describe('protectedBranches (story 2.42)', () => {
+    const base = ['service: route-explorer', 'container: route-explorer', 'modules: {}'];
+
+    it('leaves protectedBranches undefined when the manifest omits it', async () => {
+      const repo = await tempRepo(base.join('\n'));
+
+      const result = await loadManifest(repo);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.protectedBranches).toBeUndefined();
+      }
+    });
+
+    it('trims each entry and tolerates duplicates', async () => {
+      const repo = await tempRepo(
+        [...base, 'protectedBranches:', '  - " preprod "', '  - prod', '  - prod'].join('\n'),
+      );
+
+      const result = await loadManifest(repo);
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { protectedBranches: ['preprod', 'prod', 'prod'] },
+      });
+    });
+
+    it('rejects a non-list value as a schema error', async () => {
+      const repo = await tempRepo([...base, 'protectedBranches: preprod'].join('\n'));
+
+      const result = await loadManifest(repo);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'manifest-validation-failed',
+          message: expect.stringContaining('protectedBranches'),
+        },
+      });
+    });
+
+    it.each([['""'], ['"   "']])('rejects an empty or blank entry (%s) as a schema error', async (entry) => {
+      const repo = await tempRepo([...base, 'protectedBranches:', `  - ${entry}`].join('\n'));
+
+      const result = await loadManifest(repo);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'manifest-validation-failed',
+          message: expect.stringContaining('protectedBranches'),
+        },
+      });
+    });
+  });
+
   it('treats a repo with no .tui-back.yaml as unmanaged (AC3), no throw', async () => {
     const repo = await tempRepo(null);
 

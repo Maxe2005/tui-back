@@ -9,7 +9,7 @@
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
-import { isSharedBranch } from '../../../../../../../core/edt/shared-branches.js';
+import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import type { FailedResultRow } from '../../../../shared/components/failed-result-list.js';
 import {
@@ -165,12 +165,13 @@ export function resolveWizardNavKey(input: string, key: WizardNavKey): 'next' | 
 // Step 3: global branch strategy + per-service exceptions.
 
 // The per-service facts Step 3 reads from the candidate pool (core/edt/list.ts).
-export type BranchCandidate = Pick<ServiceBranchDivergence, 'path' | 'service' | 'sharedBranch'>;
+export type BranchCandidate = Pick<ServiceBranchDivergence, 'path' | 'service' | 'sharedBranch' | 'protectedBranches'>;
 
-// FR-7, advisory: the same rule the git gate enforces (core/edt/shared-branches.ts) — the
-// fixed shared set or this service's own manifest sharedBranch. The gate stays authoritative.
-export function isProtectedTarget(name: string, sharedBranch: string): boolean {
-  return isSharedBranch(name.trim(), sharedBranch);
+// FR-7, advisory: the same rule the git gate enforces (core/edt/shared-branches.ts) — this
+// service's own manifest-defined set, `protectedBranches ∪ {sharedBranch}` (Story 2.42). The
+// gate stays authoritative.
+export function isProtectedTarget(name: string, protection: BranchProtection): boolean {
+  return isProtectedBranch(name.trim(), protection);
 }
 
 // The local name an `existing` plan ends up on, as core derives it: a local branch keeps its
@@ -235,7 +236,9 @@ export const ROW_ERRORS = {
   loadError: 'échec du chargement des branches',
   notFound: 'branche introuvable',
   emptyName: 'nom de branche vide',
-  protected: 'branche protégée (FR-7)',
+  // Story 2.42: names the branch and its manifest. The short row form never repeats the service:
+  // the row and canAdvance's `<service> : ` prefix already name it.
+  protected: (name: string) => `« ${name} » est protégée par le manifeste du service`,
   exists: 'branche déjà existante',
   noopRename: 'renommage sans effet',
   shadowed: 'branche locale du même nom déjà existante',
@@ -254,7 +257,7 @@ export type PlanIssue =
   | { kind: 'noop-rename'; name: string } // renameTo equals the branch's own local name
   | { kind: 'shadowed'; name: string }; // remote-only pick whose local name already exists
 
-export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undefined, sharedBranch: string): PlanIssue | null {
+export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undefined, protection: BranchProtection): PlanIssue | null {
   const known = lists !== undefined && lists.status === 'ready' ? lists : undefined;
   const existsLocally = (name: string) => known !== undefined && known.local.includes(name);
   if (plan.kind === 'create') {
@@ -262,7 +265,7 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
     if (name === '') {
       return { kind: 'empty-name' };
     }
-    if (isProtectedTarget(name, sharedBranch)) {
+    if (isProtectedTarget(name, protection)) {
       return { kind: 'protected-name', name };
     }
     return existsLocally(name) ? { kind: 'exists', name } : null;
@@ -270,7 +273,7 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
   const branch = plan.branch.trim();
   // Unknown lists: assume local (the conservative reading — the gate would reject it anyway).
   const isLocal = known === undefined || known.local.includes(branch);
-  if (isLocal && isProtectedTarget(branch, sharedBranch)) {
+  if (isLocal && isProtectedTarget(branch, protection)) {
     // The adapter's renameBranch gates the old name too, so a rename cannot rescue it.
     return { kind: 'protected-source', branch };
   }
@@ -280,7 +283,7 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
     if (renameTo === '') {
       return { kind: 'empty-name' };
     }
-    if (isProtectedTarget(renameTo, sharedBranch)) {
+    if (isProtectedTarget(renameTo, protection)) {
       return { kind: 'protected-name', name: renameTo };
     }
     if (renameTo === localName) {
@@ -288,7 +291,7 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
     }
     return existsLocally(renameTo) ? { kind: 'exists', name: renameTo } : null;
   }
-  if (isProtectedTarget(localName, sharedBranch)) {
+  if (isProtectedTarget(localName, protection)) {
     return { kind: 'protected-existing', name: localName };
   }
   if (!isLocal && existsLocally(localName)) {
@@ -302,9 +305,10 @@ export function rowIssueMessage(issue: PlanIssue): string {
     case 'empty-name':
       return ROW_ERRORS.emptyName;
     case 'protected-name':
-    case 'protected-source':
     case 'protected-existing':
-      return ROW_ERRORS.protected;
+      return ROW_ERRORS.protected(issue.name);
+    case 'protected-source':
+      return ROW_ERRORS.protected(issue.branch);
     case 'exists':
       return ROW_ERRORS.exists;
     case 'noop-rename':
@@ -333,13 +337,13 @@ export function buildRowView(
   row: { path: string; service: string; override?: RowOverride },
   global: { base: string; name: string },
   lists: BranchListState | undefined,
-  sharedBranch: string,
+  protection: BranchProtection,
 ): RowView {
   const { path, service, override } = row;
   if (override === undefined) {
-    const resolution = resolveGlobalBase(global.base, lists, sharedBranch);
+    const resolution = resolveGlobalBase(global.base, lists, protection.sharedBranch);
     const name = global.name.trim();
-    const issue = checkPlan({ kind: 'create', base: '', name }, lists, sharedBranch);
+    const issue = checkPlan({ kind: 'create', base: '', name }, lists, protection);
     const targetError = issue === null ? null : rowIssueMessage(issue);
     const common = { path, service, mode: 'global' as const, modeLabel: ROW_MODE_LABELS.global, target: name, targetError };
     if (resolution.kind === 'loading') {
@@ -363,7 +367,7 @@ export function buildRowView(
   }
   // Overrides were validated by the box's Apply, but are re-checked here: the lists can have
   // been reloaded since, and a row must never hand core a plan the box would now refuse.
-  const issue = checkPlan(override, lists, sharedBranch);
+  const issue = checkPlan(override, lists, protection);
   const targetError = issue === null ? null : rowIssueMessage(issue);
   if (override.kind === 'create') {
     return {
@@ -407,7 +411,7 @@ export function buildStep3Rows(state: CreateDialogState, candidates: readonly Br
       { path, service: candidate?.service ?? path, ...(override !== undefined ? { override } : {}) },
       global,
       branches.lists[path],
-      candidate?.sharedBranch ?? '',
+      candidate ?? { sharedBranch: '' },
     );
   });
 }

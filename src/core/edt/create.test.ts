@@ -84,13 +84,16 @@ function fakeLock(): LockPort {
   };
 }
 
-const SHARED_BRANCHES = ['development', 'preprod', 'prod'];
+// Story 2.42: a manifest fixture — the protected set these fakes emulate, as if every repo's
+// manifest declared `sharedBranch: development` and `protectedBranches: [preprod, prod]`. The
+// real gate resolves it from each repo's own manifest (core/edt/shared-branches.ts).
+const MANIFEST_PROTECTED_BRANCHES = ['development', 'preprod', 'prod'];
 
 function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
   return {
     assertAllowedBranch: vi.fn(async (_repoPath: string, branchName: string) =>
-      SHARED_BRANCHES.includes(branchName)
-        ? err('shared-branch-rejected', `Branch "${branchName}" is a shared/protected branch`)
+      MANIFEST_PROTECTED_BRANCHES.includes(branchName)
+        ? err('shared-branch-rejected', `Branch "${branchName}" is protected by its service's manifest`)
         : ok(undefined),
     ),
     createBranch: vi.fn(async () => ok(undefined)),
@@ -879,7 +882,7 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
       { local: { '/repo/a': ['development'], '/repo/b': ['feat/w'] } },
       {
         renameBranch: vi.fn(async (_repoPath: string, oldName: string, newName: string) =>
-          SHARED_BRANCHES.includes(oldName) || SHARED_BRANCHES.includes(newName)
+          MANIFEST_PROTECTED_BRANCHES.includes(oldName) || MANIFEST_PROTECTED_BRANCHES.includes(newName)
             ? err('shared-branch-rejected', 'protected')
             : ok(undefined),
         ),
@@ -1035,7 +1038,7 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
       { local: { '/repo/b': ['feat/w'] }, remote: { '/repo/a': ['origin/feat/q'] } },
       {
         createTrackingBranch: vi.fn(async (_repoPath: string, localName: string) =>
-          SHARED_BRANCHES.includes(localName) ? err('shared-branch-rejected', 'protected') : ok(undefined),
+          MANIFEST_PROTECTED_BRANCHES.includes(localName) ? err('shared-branch-rejected', 'protected') : ok(undefined),
         ),
       },
     );

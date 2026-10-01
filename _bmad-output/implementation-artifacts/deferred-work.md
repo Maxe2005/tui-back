@@ -589,3 +589,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
   summary: After a `:reset` of EDTs, per-zone UI state tied to deleted EDTs (EDT action log/detail pane, zone cursors, Update zone service list) is not cleared until the next natural reload.
   evidence: runReset only calls four loaders; other slices cache EDT/service-derived state with no reset hook.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-42-manifest-defined-protected-branches-per-service.md`
+  summary: The manifest schema does not trim `sharedBranch` (unlike `protectedBranches` entries), so a padded value such as `" main "` protects the padded name rather than `main`.
+  evidence: `adapters/driven/manifest/schema.ts` keeps `z.string().min(1)` for `sharedBranch` (documented as non-trimmed in docs/tui-back-manifest.md); `isProtectedBranch` matches exactly, so the per-service protected set can miss the real shared branch.

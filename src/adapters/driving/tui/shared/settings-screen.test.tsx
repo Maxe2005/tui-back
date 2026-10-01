@@ -525,8 +525,8 @@ describe('SettingsScreen (story 2.19)', () => {
     const store = createAppStore();
     store.setState({
       edtsBranches: [
-        { service: 'api-gateway', path: '/repos/api-gateway', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
-        { service: 'route-explorer', path: '/repos/route-explorer', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'api-gateway', path: '/repos/api-gateway', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+        { service: 'route-explorer', path: '/repos/route-explorer', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
     });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsClearServiceOpen />);

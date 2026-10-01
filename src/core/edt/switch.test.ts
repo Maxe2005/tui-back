@@ -785,6 +785,7 @@ describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () =
             currentBranch: 'development',
             currentBranchShared: true,
             sharedBranch: 'development',
+            protectedBranches: [],
             owningEdtTopics: ['other-topic'],
             dirtyPaths: [],
           },
@@ -795,6 +796,7 @@ describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () =
             currentBranch: 'feat/c',
             currentBranchShared: false,
             sharedBranch: 'development',
+            protectedBranches: [],
             owningEdtTopics: [],
             resolution: 'auto-stash',
           },
@@ -874,6 +876,37 @@ describe('switchActiveEdt — seam row facts for the TUI dialog (story 2.41)', (
     expect(stateOne).not.toHaveProperty('dirtyPaths');
     expect(calls(git.listDirtyPaths)).toEqual([['/repo/b', { expandUntracked: true }]]);
     expectZeroWrites(git);
+  });
+
+  it("carries the manifest's protectedBranches and flags a current branch it lists as shared (story 2.42)", async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      currentBranch: vi.fn(async () => ok('preprod')),
+      listDirtyPaths: vi.fn(async () => ok(['x.txt'])),
+    });
+    const manifest = fakeManifest({
+      load: vi.fn(async (path: string) => ok({ ...manifestFor(path), protectedBranches: ['preprod'] })),
+    });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => ({ kind: 'cancel' as const }));
+
+    await switchActiveEdt(makeParams({ git, manifest, onDirtyReposBeforeSwitch }));
+
+    const [row] = calls(onDirtyReposBeforeSwitch)[0]![0] as Array<Record<string, unknown>>;
+    expect(row).toMatchObject({ repoPath: '/repo/b', protectedBranches: ['preprod'], currentBranchShared: true });
+  });
+
+  it('does not flag a formerly implicit branch the manifest does not list (story 2.42)', async () => {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      currentBranch: vi.fn(async () => ok('prod')),
+      listDirtyPaths: vi.fn(async () => ok(['x.txt'])),
+    });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => ({ kind: 'cancel' as const }));
+
+    await switchActiveEdt(makeParams({ git, onDirtyReposBeforeSwitch }));
+
+    const [row] = calls(onDirtyReposBeforeSwitch)[0]![0] as Array<Record<string, unknown>>;
+    expect(row).toMatchObject({ repoPath: '/repo/b', protectedBranches: [], currentBranchShared: false });
   });
 
   it('a failed dirtyPaths read leaves the field unset; a failed manifest load yields sharedBranch null', async () => {

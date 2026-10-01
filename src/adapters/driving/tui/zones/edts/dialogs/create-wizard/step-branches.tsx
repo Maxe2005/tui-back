@@ -27,11 +27,14 @@ export const STEP3_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la l
 
 export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {
   const lists = state.branches.lists[path];
+  const candidate = candidates.find((entry) => entry.path === path);
   return {
+    service: candidate?.service ?? path,
     status: lists?.status ?? 'pending',
     local: lists?.local ?? [],
     remote: lists?.remote ?? [],
-    sharedBranch: candidates.find((candidate) => candidate.path === path)?.sharedBranch ?? '',
+    sharedBranch: candidate?.sharedBranch ?? '',
+    protectedBranches: candidate?.protectedBranches ?? [],
   };
 }
 
@@ -215,8 +218,7 @@ export function BranchStepView({
   const rows = buildStep3Rows(dialog, candidates);
   const box = branches.box;
   if (box !== null) {
-    const service = candidates.find((candidate) => candidate.path === box.path)?.service ?? box.path;
-    return <OverrideBoxView box={box} service={service} context={overrideBoxContextFor(dialog, box.path, candidates)} maxRows={maxRows} />;
+    return <OverrideBoxView box={box} context={overrideBoxContextFor(dialog, box.path, candidates)} maxRows={maxRows} />;
   }
   const globalFocused = branches.panel === 'global';
   const lineFocused = (line: 'base' | 'name') => globalFocused && branches.globalLine === line;
