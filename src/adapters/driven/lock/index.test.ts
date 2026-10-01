@@ -352,8 +352,8 @@ describe('createLockPort / acquireLock (mkdir advisory lock)', () => {
   });
 });
 
-// Story 2.4: peek() is a non-blocking, stat-only read (no mkdir/retry/wait/reclaim) that the
-// EDT-switch use-case uses to check whether the outgoing EDT's `edt:<ulid>` lock is held.
+// peek() is a non-blocking, stat-only read (no mkdir/retry/wait/reclaim) that the EDT-switch
+// use-case uses to check whether the outgoing EDT's `edt:<ulid>` lock is held.
 describe('peekLock (non-blocking, stat-only)', () => {
   it('reports not-locked when no lock dir exists yet', async () => {
     const lockDir = await makeLockDir();

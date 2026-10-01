@@ -1,7 +1,6 @@
 // adapters/driven/modules: unit tests for the compiled-in static registry (AD-5) — the
-// production registry carrying story 6.1's first real module (`route-explorer`) plus the
-// pure helper functions. Helpers stay generic so tests can exercise populated maps without
-// importing production module implementations (Design Notes decision D1).
+// production registry and the pure helper functions. Helpers stay generic so tests can
+// exercise populated maps without importing production module implementations.
 import { describe, expect, it } from 'vitest';
 import {
   isKnownModuleId,
@@ -11,7 +10,7 @@ import {
   validateModules,
 } from './module-registry.js';
 
-describe('moduleRegistry (AD-5, story 6.1)', () => {
+describe('moduleRegistry (AD-5)', () => {
   it('production registry carries the route-explorer module', () => {
     expect(Object.keys(moduleRegistry)).toEqual(['route-explorer']);
     expect(moduleRegistry['route-explorer']?.kind).toBe('route-explorer');
@@ -29,7 +28,7 @@ describe('moduleRegistry (AD-5, story 6.1)', () => {
   });
 });
 
-describe('validateModules (AC2/AC3 via injected registry, D1)', () => {
+describe('validateModules (injected registry)', () => {
   const populated: Record<string, { kind?: string }> = { 'route-explorer': { kind: 'scanner' } };
 
   it('returns unknown keys against the production registry, sorted (FR-1)', () => {
@@ -40,7 +39,7 @@ describe('validateModules (AC2/AC3 via injected registry, D1)', () => {
     expect(validateModules({ 'route-explorer': {} })).toEqual([]);
   });
 
-  it('returns an empty list for an empty modules map (AC2 baseline)', () => {
+  it('returns an empty list for an empty modules map', () => {
     expect(validateModules({}, populated)).toEqual([]);
   });
 

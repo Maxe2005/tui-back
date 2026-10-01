@@ -1,10 +1,7 @@
-// adapters/driven/modules: the compiled-in static module registry (AD-5). Module
-// implementations are statically registered here and selected by a manifest's `modules`
-// key — never dynamically loaded from externally supplied paths. Story 6.1 registers the
-// first real module: `route-explorer` (the nestjs-openapi RouteScannerPort implementation
-// from Epic 6's backend, plus story 6.2's cookie-session DevAuthPort — the service owns
-// issuance, the module only acquires and carries its cookie). The manifest adapter's membership check (and list-repos
-// `moduleIds`) pick it up automatically via the derived `knownModuleIds` set.
+// adapters/driven/modules: the compiled-in static module registry (AD-5). Modules are
+// registered here and selected by a manifest's `modules` key — never loaded dynamically from
+// external paths. `route-explorer` bundles the nestjs-openapi scanner and the cookie-session
+// auth. The manifest membership check and list-repos read the derived `knownModuleIds`.
 import { createNestjsOpenApiScanner } from './route-explorer/nestjs-openapi.js';
 import { createCookieSessionAuth } from './route-explorer/cookie-session-auth.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
@@ -33,8 +30,8 @@ export function isKnownModuleId(id: string): boolean {
 }
 
 // Generic over the value type so tests can exercise populated maps without importing a
-// production module implementation (Design Notes decision D1) — callers pass their own
-// registry; the default is the production one above.
+// production module implementation — callers pass their own registry; the default is the
+// production one above.
 export function resolveModule<T>(registry: Readonly<Record<string, T>>, id: string): T | undefined {
   return Object.prototype.hasOwnProperty.call(registry, id) ? registry[id] : undefined;
 }

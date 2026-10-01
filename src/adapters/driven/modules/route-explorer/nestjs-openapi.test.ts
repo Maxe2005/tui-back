@@ -1,6 +1,5 @@
-// adapters/driven/modules/route-explorer/nestjs-openapi: integration tests against real
-// temp dirs + real files (AD-13). node:fs is deliberately not mocked — this adapter's
-// whole contract is how real OpenAPI documents on disk surface as Route[] vs the named
+// adapters/driven/modules/route-explorer/nestjs-openapi: integration tests against real temp
+// dirs + real files — how OpenAPI documents on disk surface as Route[] vs the named
 // `route-scan-failed` Result (never a throw, never a failure disguised as empty).
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -245,7 +244,7 @@ describe('nestjs-openapi scanner', () => {
     }
   });
 
-  describe('request details (story 6.6)', () => {
+  describe('request details', () => {
     async function scanSpec(spec: unknown) {
       const repo = await tempRepo();
       await writeFile(join(repo, 'openapi.json'), JSON.stringify(spec));
@@ -382,7 +381,7 @@ describe('nestjs-openapi scanner', () => {
       ]);
     });
 
-    it('keeps the exact pre-6.6 shape for operations without request details', async () => {
+    it('keeps the plain route shape for operations without request details', async () => {
       const routes = await scanSpec({ ...base, paths: { '/health': { get: { summary: 'Health' } } } });
 
       expect(routes).toEqual([{ method: 'GET', path: '/health', summary: 'Health' }]);

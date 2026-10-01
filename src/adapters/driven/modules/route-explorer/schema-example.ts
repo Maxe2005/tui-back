@@ -1,10 +1,7 @@
-// adapters/driven/modules/route-explorer/schema-example: pure helpers of the
-// `nestjs-openapi` scanner (story 6.6) — resolve local `#/components/...` `$ref`s and
-// generate a JSON example value from an OpenAPI schema. Never throws: an unresolvable
-// reference, an unknown shape or a cyclic/too-deep branch degrades to `null`, so a
-// malformed schema can at worst yield a poorer skeleton, never a failed scan. Only local
-// references are followed (no file/http `$ref` fetching). Output is bounded twice: by depth
-// and by a total node budget, so a wide schema fanning out at every level cannot blow up.
+// adapters/driven/modules/route-explorer/schema-example: pure helpers of the `nestjs-openapi`
+// scanner — resolve local `#/components/...` `$ref`s (never file/http) and generate a JSON
+// example from an OpenAPI schema. Never throws: an unresolvable, unknown or cyclic branch
+// degrades to `null`. Output is bounded by depth and by a total node budget.
 const MAX_DEPTH = 8;
 const MAX_NODES = 2000;
 const LOCAL_REF_PREFIX = '#/';
