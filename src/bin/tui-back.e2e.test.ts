@@ -895,7 +895,7 @@ describe('tui-back edt create (black-box)', () => {
     expect(edtRegistry.edts[0].members[0]).toMatchObject({ repoPath: repoB, branch: 'feat/x' });
   });
 
-  it('a name collision fails that member only (branch-exists); the other proceeds (matrix)', async () => {
+  it('a name collision fails that member only (branch-exists); the other proceeds', async () => {
     const xdg = await makeTempDir();
     const repoA = await makeGitRepo();
     const repoB = await makeGitRepo();
@@ -1010,7 +1010,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects an unregistered member with invalid-member before any write (matrix)', async () => {
+  it('rejects an unregistered member with invalid-member before any write', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
 
@@ -1613,7 +1613,7 @@ describe('tui-back edt delete (black-box)', () => {
   });
 });
 
-describe('tui-back update (black-box, stories 3.1-3.2)', () => {
+describe('tui-back update (black-box)', () => {
   function createEnv(xdg: string) {
     return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
   }

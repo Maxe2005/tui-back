@@ -1210,7 +1210,7 @@ describe('EdtsZone', () => {
     expect(output).toContain('[Enter] switch/modify');
   });
 
-  it('shows the EDT detail pane (not the services detail pane) by default — the EDT selector is focused by default (Design Notes)', async () => {
+  it('shows the EDT detail pane (not the services detail pane) by default — the EDT selector is focused by default', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ topic: 'my-work', members: [{ service: 'api-gateway', repoPath: '/repos/a', branch: 'feat/x' }] })],
@@ -1584,7 +1584,7 @@ describe('EdtsZone', () => {
   // which the OTHER SERVICES budget must subtract. 28 services is the exact boundary at the
   // default 120x40 test terminal (servicesListsAvailableHeight 28, minus the 1 placeholder row =
   // 27): it overflows by exactly one.
-  it('review fix: the empty EDT SERVICES placeholder counts toward the budget OTHER SERVICES is handed', async () => {
+  it('the empty EDT SERVICES placeholder counts toward the budget OTHER SERVICES is handed', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] })],

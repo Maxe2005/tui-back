@@ -176,7 +176,7 @@ describe('createEdt — validation before any write', () => {
     expect(calls(params.git.createBranch)).toHaveLength(0);
   });
 
-  it('rejects a member that is not a registered managed repo with invalid-member (matrix)', async () => {
+  it('rejects a member that is not a registered managed repo with invalid-member', async () => {
     const params = await makeParams({ members: ['/repo/a', '/not/registered'], registry: fakeRegistry(['/repo/a']) });
 
     const result = await createEdt(params);
@@ -291,7 +291,7 @@ describe('createEdt — branch creation disabled', () => {
     ]);
   });
 
-  it('excludes a member when assertAllowedBranch fails for a reason other than shared-branch-rejected (matrix edge case)', async () => {
+  it('excludes a member when assertAllowedBranch fails for a reason other than shared-branch-rejected (edge case)', async () => {
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('feature-x')),
       assertAllowedBranch: vi.fn(async (path: string) =>

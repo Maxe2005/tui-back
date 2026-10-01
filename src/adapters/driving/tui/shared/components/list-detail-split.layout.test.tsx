@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { Box, Text } from 'ink';
 
-describe('ListDetailSplit list/detail widths are content-independent (post-2.21 bugfix #2)', () => {
+describe('ListDetailSplit list/detail widths are content-independent', () => {
   it('never squeezes the other pane\'s short content when one pane holds a long unbroken run of content', async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { ListDetailSplit } = await import('./list-detail-split.js');

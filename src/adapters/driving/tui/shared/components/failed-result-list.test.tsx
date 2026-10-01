@@ -40,7 +40,7 @@ describe('FailedResultList', () => {
     );
     expect(output).toContain('svc-a: Branch "development" is shared/protected');
     expect(output).toContain('svc-b: Working tree has uncommitted changes');
-    // Never the old `; `-joined single string.
+    // Never a `; `-joined single string.
     expect(output).not.toContain('svc-a: Branch "development" is shared/protected; svc-b');
   });
 

@@ -1060,7 +1060,7 @@ describe('AppShell command-entry bar (:)', () => {
     // Deliberately no Tab press in this test: EdtsZone's own key.tab toggles its local
     // paneFocus to 'services' (also leaked without the gate, per the same root cause) —
     // that pane has no key.return handling at all, so a Tab immediately before Enter would
-    // incidentally mask the very leak this test exists to catch, regardless of the fix.
+    // incidentally mask the very leak this test exists to catch, regardless of the gate.
     // paneFocus itself has no store-observable footprint to assert against directly; the
     // isActive gate covers both leaks identically, and this test proves it via the one leak
     // (Enter -> openEdtAction -> zoneInputCaptured) that is store-observable.
@@ -2530,7 +2530,7 @@ describe('AppShell reset screen (:reset)', () => {
   });
 });
 
-describe('AppShell Routes right-pane key ownership (stories 6.7, 6.9)', () => {
+describe('AppShell Routes right-pane key ownership', () => {
   // Same double-dispatch hazard as the Logs pane grid: Ink dispatches every keypress to every
   // mounted `useInput` hook, so the tree's own Left/Right fold keys would also reach the
   // global Left/Right zone-switch. The focused pane captures the keyboard, which also keeps

@@ -94,7 +94,7 @@ function resetEdtStore() {
   testEdtStore.clear();
 }
 
-describe('modifyEdt — unit / matrix', () => {
+describe('modifyEdt — unit', () => {
   resetEdtStore();
 
   it('adds a member with a matching setBranches entry (no silent currentBranch default)', async () => {

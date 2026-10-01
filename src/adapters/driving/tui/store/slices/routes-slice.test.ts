@@ -199,7 +199,7 @@ describe('routes slice', () => {
 
 // Fire coverage against the per-route `responses` map (`fireRoute(routeKey, method, path,
 // options?)`).
-describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
+describe('routes slice fireRoute', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });

@@ -441,7 +441,7 @@ export function resolveActionHint(
 }
 
 // A hidden hint (resolveActionHint returning '') must vanish cleanly — no dangling blank
-// paragraph left where it used to render — rather than joining an empty string with '\n\n'.
+// paragraph left where it would render — rather than joining an empty string with '\n\n'.
 export function appendHint(hint: string): string {
   return hint ? '\n\n' + hint : '';
 }

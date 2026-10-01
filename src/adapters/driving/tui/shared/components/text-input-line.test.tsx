@@ -47,7 +47,7 @@ describe('TextInputLine', () => {
     expect(output).toContain('[Enter] confirm');
   });
 
-  it('renders empty value with cursor and hint when focused (matrix: focused, empty value)', async () => {
+  it('renders empty value with cursor and hint when focused', async () => {
     const output = await renderToString(<TextInputLine label="Topic" value="" focused />);
     expect(output).toContain('Topic:');
     expect(output).toContain('[Enter] confirm');
@@ -60,7 +60,7 @@ describe('TextInputLine', () => {
 });
 
 describe('TextInputLine cursor navigation', () => {
-  it('renders the glyph after the last character when cursor is omitted (matrix: no cursor prop)', async () => {
+  it('renders the glyph after the last character when cursor is omitted', async () => {
     const output = await renderToString(<TextInputLine label="Topic" value="abc" focused />);
     expect(output).toContain('Topic: abc');
   });

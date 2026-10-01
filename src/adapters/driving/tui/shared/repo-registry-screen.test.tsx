@@ -202,7 +202,7 @@ describe('RepoRegistryScreen', () => {
     expect(output).toContain('Scanning');
   });
 
-  it('shows a distinct scan-failure state with its error detail — never indistinguishable from "nothing found" (matrix)', async () => {
+  it('shows a distinct scan-failure state with its error detail — never indistinguishable from "nothing found"', async () => {
     const store = createAppStore();
     store.setState({ registryScanStatus: 'error', registryScanError: 'Scan root not found: /nope' });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
@@ -299,7 +299,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     expect(output).not.toContain('No stale registry entries found');
   });
 
-  it('shows a distinct "no stale entries" state when classification finds zero candidates — never silent (matrix)', async () => {
+  it('shows a distinct "no stale entries" state when classification finds zero candidates — never silent', async () => {
     const store = createAppStore();
     store.setState({ registryCleanScanStatus: 'idle', registryCleanCandidates: [] });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);

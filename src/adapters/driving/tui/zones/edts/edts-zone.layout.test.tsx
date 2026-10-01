@@ -19,7 +19,7 @@ function edtEntry(topic: string): EdtRegistryEntry {
 
 const noopAsync = async () => {};
 
-describe('EdtsZone list-column boundary positions are content-independent (post-2.21 bugfix)', () => {
+describe('EdtsZone list-column boundary positions are content-independent', () => {
   it('keeps the OTHER SERVICES label on the same row whether the EDTS pane has 1 or 30 entries', async () => {
     const { renderToString } = await import('../../shared/components/render-to-string.js');
     const { createAppStore } = await import('../../store/app-store.js');
