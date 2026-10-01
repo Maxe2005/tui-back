@@ -7,7 +7,7 @@ const commands: Command[] = [
   { name: 'quit', run: () => {} },
 ];
 
-describe('matchCommands (story 2.14)', () => {
+describe('matchCommands', () => {
   it('shows every command on an empty query', () => {
     expect(matchCommands('', commands)).toEqual(commands);
   });
@@ -35,7 +35,7 @@ describe('matchCommands (story 2.14)', () => {
   });
 });
 
-describe('findExactCommand (story 2.14)', () => {
+describe('findExactCommand', () => {
   it('finds an exact, case-insensitive name match', () => {
     expect(findExactCommand('registry', commands)).toBe(commands[0]);
     expect(findExactCommand('REGISTRY', commands)).toBe(commands[0]);
@@ -55,7 +55,7 @@ describe('findExactCommand (story 2.14)', () => {
   });
 });
 
-describe('COMMANDS (story 2.14, 2.15)', () => {
+describe('COMMANDS', () => {
   it('registers the registry command', () => {
     expect(COMMANDS.find((c) => c.name === 'registry')).toBeDefined();
   });
@@ -76,7 +76,7 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(COMMANDS.find((c) => c.name === 'edt-delete')).toBeDefined();
   });
 
-  it('registers the edt-create-from command (story 2.31)', () => {
+  it('registers the edt-create-from command', () => {
     expect(COMMANDS.find((c) => c.name === 'edt-create-from')).toBeDefined();
   });
 
@@ -181,7 +181,7 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(calls).toEqual(['edt-delete my-topic']);
   });
 
-  it('the edt-create-from command calls openEdtCreateFromDialog with full query (story 2.31)', () => {
+  it('the edt-create-from command calls openEdtCreateFromDialog with full query', () => {
     const calls: string[] = [];
     const fakeStore = {
       getState: () => ({

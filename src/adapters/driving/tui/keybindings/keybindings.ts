@@ -3,13 +3,9 @@ export type Keybinding = {
   description: string;
 };
 
-// Story 2.7: the subset of Ink's `Key` type every list-navigation pure function reads
-// (resolveSelectionDirection/resolveSelectionJump in edts-zone.tsx, resolveHelpScroll in
-// keybinding-help.tsx). Shared here so the shape can't drift out of sync across call sites —
-// arrow/Home/End keys produce an empty `input` string in Ink, only these flags are set.
-// Story 2.9 adds `tab`: its first two real consumers are the EDTs zone's Tab-cycle
-// (topic-input ↔ member-checklist inside a form; EDT-selector ↔ SERVICES-list focus in the
-// base view) — Tab already produces an empty `input` in Ink too, only `key.tab` is set.
+// The subset of Ink's `Key` type every list-navigation pure function reads, shared so the
+// shape can't drift across call sites. Arrow/Home/End/Tab keys produce an empty `input`
+// string in Ink — only these flags are set.
 export type NavigationKey = {
   upArrow: boolean;
   downArrow: boolean;
@@ -79,7 +75,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: '← / →',
     description: 'Switch to previous/next zone tab, wrapping at the ends',
   },
-  // Story 2.36: wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
+  // Wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
   {
     keys: 'Ctrl+→ / Ctrl+N',
     description: 'Create-EDT wizard: next step (only if the current step is valid)',
@@ -88,8 +84,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+← / Ctrl+P',
     description: 'Create-EDT wizard: previous step (always allowed, choices kept)',
   },
-  // Story 2.37: scoped to the create-EDT wizard's Step 3 — the generic Tab/Enter rows above
-  // stay true elsewhere; these spell out what the two keys do on that step.
+  // Scoped to the create-EDT wizard's Step 3 — the generic Tab/Enter rows above stay true
+  // elsewhere; these spell out what the two keys do on that step.
   {
     keys: 'Tab (wizard Step 3)',
     description: 'Create-EDT wizard, Step 3: switch between the global strategy and the per-service table',
@@ -98,15 +94,14 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Enter (wizard Step 3)',
     description: 'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   },
-  // Story 2.37: scoped to the create-EDT wizard's Step 3 "Configurer <service>" box — no
-  // collision: BranchPicker's own Ctrl+R (rename a row) lives in other modals, and the wizard
-  // no longer hosts a BranchPicker.
+  // Scoped to the create-EDT wizard's Step 3 "Configurer <service>" box — no collision:
+  // BranchPicker's own Ctrl+R (rename a row) lives in other modals.
   {
     keys: 'Ctrl+R',
     description: 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy',
   },
-  // Story 2.38: scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause
-  // panel and its overwrite confirmation).
+  // Scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause panel and its
+  // overwrite confirmation).
   {
     keys: 'Space / ↑ ↓ (wizard Step 4)',
     description: 'Create-EDT wizard, Step 4: choose between switching to the new EDT now and creating it without switching',
@@ -127,8 +122,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+E (wizard Step 4 overwrite)',
     description: 'Create-EDT wizard, overwrite confirmation: discard exactly the listed files and activate (↑/↓ scroll, Enter/Esc go back)',
   },
-  // Story 2.41: scoped to the SWITCH EDT resolution view (dirty services outside the EDT being
-  // left) — same Tab/Enter/Ctrl+R meanings as the wizard's Step 3 it mirrors.
+  // Scoped to the SWITCH EDT resolution view (dirty services outside the EDT being left) —
+  // same Tab/Enter/Ctrl+R meanings as the wizard's Step 3 it mirrors.
   {
     keys: 'Tab (switch resolution)',
     description: 'Switch EDT, dirty services: switch between the global strategy and the per-service table',

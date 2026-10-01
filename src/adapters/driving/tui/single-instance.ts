@@ -46,7 +46,7 @@ export async function acquireTuiLock(): Promise<{ release: () => Promise<void> }
       if (isPidAlive(existingLock.pid)) {
         return null;
       }
-      // AC1: stale lock (dead PID) → auto-reclaim and proceed
+      // Stale lock (dead PID) → auto-reclaim and proceed
       try {
         unlinkSync(lockFile);
       } catch {
