@@ -19,6 +19,7 @@ Full invariants: `_bmad-output/planning-artifacts/architecture/architecture-tui-
 
 ## Code conventions (non-obvious)
 
+- **Comments (AD-17)**: at most a 5-line file header saying what the file does; otherwise comment only what is hard, surprising or deliberately unusual. Never reference stories, ACs or review patches in `src/` (test names included) — that history lives in commits and story files.
 - **NodeNext imports**: relative imports must end in `.js` even though files are `.ts` — `import { x } from './foo.js'`. No extension or `.ts` extension fails typecheck.
 - **Imports always first in a file.** dependency-cruiser@18.2.0 cannot parse TS itself (the project pins `typescript@7.0.2` past depcruise's hard gate), so it strips via acorn fallback; a generic function returning a locally-defined generic union type (the `Result<T>`/`ok<T>()` shape) silently drops that file's imports from the graph *unless* the imports are the first statements. `dependency-cruiser.config.test.ts` locks this in — see `_bmad-output/implementation-artifacts/deferred-work.md`.
 - Don't "fix" the unanchored `to: { path: 'adapters(/|$)' }` in `.dependency-cruiser.cjs` — depcruise records NodeNext imports as unresolved raw specifiers (`../adapters/foo.js`), so a `^src/` anchor would silently disable the boundary rule.

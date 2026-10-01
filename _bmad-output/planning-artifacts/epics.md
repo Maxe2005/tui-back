@@ -41,6 +41,8 @@ FR-21: A developer can save a request (method, path, body, headers), and when re
 FR-22: Firing a request (saved or ad hoc) surfaces its response and the relevant aggregated logs for the affected services in the same place, immediately after — with the affected-service set learned progressively per route rather than pre-configured.
 FR-23: A developer's saved requests form one global library, not siloed per EDT; each EDT can independently hide individual saved requests from its own view and mark others as favorites (per-EDT or global).
 FR-24 (added 2026-09-16, Sprint Change Proposal): A developer can delete an EDT they no longer need, choosing per member service whether to leave its branch alone or delete it too — informed by that branch's merge status (into its `sharedBranch`) and any uncommitted work — with deletion blocked while the EDT is active and blocked per-service when the branch is also registered as another EDT's own branch for that repo.
+FR-28 (added 2026-10-01, Sprint Change Proposal): Merge source from another EDT — global merge-source strategy (shared branches / another EDT) in the EDT-scoped update configuration, with per-service manual resolution for services absent from the chosen EDT.
+FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed services — `container` optional in the manifest; restart/health/logs degrade to an explicit "no container" state.
 
 ### NonFunctional Requirements
 
@@ -113,6 +115,11 @@ UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the se
 UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): generalized into a shared input-history recall pattern with two consumers — the Logs filter editor (above, scope+mode-keyed lists, with the `↓`-from-draft grid browser) and the `:` command bar (UX-DR29, a single command list, no grid browser). The push/dedup/trim rules, arrow-browse with draft preservation and skip-equal-to-draft, and snap-back-on-keypress behavior are one implementation shared by both; each consumer only supplies its own history list(s) and its own size/dedup settings.
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
 UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
+UX-DR35 (added 2026-10-01, Sprint Change Proposal, Story 7.3): Every zone builds its layout through one shared zone-layout contract declaring its panes and the boundaries between them (orientation, default ratio, min/max); the contract provides splitter rendering, accent recoloring when targeted, Ctrl+W resize-mode, Tab boundary cycling and per-zone persisted ratios — no zone hand-rolls a split.
+UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason.
+UX-DR10 amended 2026-10-01: resize-mode is available in every zone (UX-DR35), not only the EDTs zone.
+UX-DR19 amended 2026-10-01: see EXPERIENCE.md State Patterns › Dashboard (container status + branches + divergence per member, working-tree alerts, quick actions, registry health, operation in progress).
+UX-DR21 amended 2026-10-01: adds the merge-source strategy states (FR-28).
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
 ### FR Coverage Map
@@ -130,6 +137,7 @@ FR-24: Epic 2 - Delete an EDT (added 2026-09-16, Sprint Change Proposal — Stor
 FR-10: Epic 3 - Run a group update, EDT-scoped or all-repos
 FR-11: Epic 3 - Assisted resolution of merge conflicts / dirty state
 FR-12: Epic 3 - Per-service migration failure handling
+FR-28: Epic 3 - Merge source from another EDT (added 2026-10-01, Sprint Change Proposal — Story 3.12)
 FR-13: Epic 4 - Publish a new shared-types version
 FR-14: Epic 4 - See propagation status without a manual check
 FR-15: Epic 4 - Propagate to chosen services
@@ -141,6 +149,7 @@ FR-20: Epic 6 - Fire a request with automatic dev-mode auth
 FR-21: Epic 6 - Save, customize, and re-fire a request
 FR-22: Epic 6 - See response and relevant logs together
 FR-23: Epic 6 - Manage the saved-request library across EDTs
+FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
 
 ## Epic List
 
@@ -173,6 +182,13 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 A developer can discover a repo's routes, fire a request with automatic dev-mode auth, save/customize/re-fire requests in a global library, and see the response and correlated logs together.
 **FRs covered:** FR-19, FR-20, FR-21, FR-22, FR-23
 **Implementation notes:** Second pluggable module (NestJS/OpenAPI scanner + `jose` dev-JWT auth), `global.db` (AD-7), Routes zone (UX-DR23).
+
+### Epic 7: TUI Consistency, Dashboard & Code Hygiene
+> Added 2026-10-01 (Sprint Change Proposal `sprint-change-proposal-2026-10-01.md`).
+
+A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary), support for services that have no container, and a codebase whose comments explain the code rather than its history.
+**FRs covered:** FR-29 (plus completion of UX-DR10, UX-DR19)
+**Implementation notes:** AD-17 (comment convention), AD-4 amendment, UX-DR35, UX-DR36. Story 7.1 runs first, while no other story branch is in flight.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 
@@ -2281,6 +2297,38 @@ So that I can start the right one without hunting through menus.
 **When** it fires
 **Then** it opens the same configuration interface (Story 3.7), pre-scoped to that command's targets — no command skips the configuration step
 
+### Story 3.12: Update — Merge Source from Another EDT
+
+> Added 2026-10-01 (Sprint Change Proposal). Extends Story 3.7's configuration interface (FR-25) with FR-28; mirrors the edt-create wizard's Step 3 two-panel pattern (Story 2.37) so the two screens read the same way.
+
+As a developer,
+I want to tell an EDT update to merge each service from another EDT's branch in one move,
+So that I can bring a colleague's or a sibling EDT's work into mine without retyping every source branch — and still see and fix by hand the services that EDT doesn't cover.
+
+**Acceptance Criteria:**
+
+**Given** an EDT-scoped update's configuration interface **When** it opens **Then** it shows a **global merge-source panel** above the service table with two options: `(•) Shared branches` (default — today's behavior, every row = manifest `sharedBranch`) and `( ) From EDT: <none>`; `Tab` moves focus between the panel and the table (same panel/table navigation as Story 2.37's Step 3).
+
+**Given** "From EDT" is selected **When** the developer activates its field **Then** the EDT quick-pick (Story 2.30's filterable list) opens, listing every EDT **except the one being updated**; picking one applies it.
+
+**Given** a chosen merge EDT **When** rows re-resolve **Then** each service whose repoPath is a member of the chosen EDT gets that member's recorded branch as source, marked `← <edt topic>`; each service not a member of the chosen EDT shows a red `✖ not in <edt topic>` (glyph + color, UX-DR26) and an empty source.
+
+**Given** a resolved branch from the chosen EDT **When** that branch no longer exists locally or on `origin` for that repo **Then** the row shows `✖ branch not found` instead, same blocking treatment.
+
+**Given** an unresolved row **When** the developer presses `Enter` on it **Then** the per-service branch editor opens (the existing `BranchAutocompleteInput` over that repo's branches) **pre-filled with the service's manifest `sharedBranch`**; committing sets the row to a manual override (`[Manual]`), clearing its error.
+
+**Given** any row in `[Manual]` **When** the global strategy changes **Then** the manual row keeps its branch; a documented key (same as Story 2.37's "back to global strategy", `Ctrl+R`) resets it to follow the global strategy.
+
+**Given** at least one **selected** row carries an error **When** the developer tries to start the run (`y`) **Then** start is rejected with a message naming the unresolved services; deselected rows never block.
+
+**Given** the strategy is switched back to "Shared branches" **When** rows re-resolve **Then** every non-manual row returns to its `sharedBranch` and all from-EDT errors clear.
+
+**Given** an all-repos or single-service update **When** its configuration opens **Then** the global merge-source panel is not shown (FR-28 is EDT-scoped); behavior is unchanged from Story 3.7.
+
+**Given** the CLI **When** `tui-back update --from-edt <topic>` runs **Then** it applies the same resolution; if any member service is unresolved it fails with `update-source-unresolved` listing them, with no git write; an unknown topic or the active EDT's own topic fails with `invalid-argument`. `UPDATE_USAGE` documents the flag.
+
+**Implementation notes:** pure resolution helper in core (e.g. `resolveMergeSourcesFromEdt(targetMembers, sourceEdt, branchesByRepo) → rows with {source, origin: 'shared'|'edt'|'manual', error?}`) so the TUI and the CLI share it (FR-1). Draft gains `strategy: {kind:'shared'} | {kind:'edt', ulid, topic}` and per-row `origin`. Reuse `BranchPlanTable`-style row rendering where it fits instead of a new table. Branch lists are already loaded per row by Story 3.7.
+
 ## Epic 4: `shared-types` Propagation
 
 A developer can publish a new `shared-types` version and see/propagate its adoption status across the active EDT's member services, without any manual per-repo check.
@@ -2899,3 +2947,123 @@ resolver in `create-wizard/wizard.logic.ts` is generalized to a shared
 unchanged). The routes slice moves from one global `fireStatus/fireResult/fireError` triple to
 per-route `requestDrafts` / `responses` maps plus a `routesPaneFocus: 'list' | 'detail'` and
 `routesPaneTab: 'request' | 'response'`.
+
+## Epic 7: TUI Consistency, Dashboard & Code Hygiene
+
+### Story 7.1: Source Comment Hygiene (AD-17)
+
+As a developer reading the code, I want comments that explain only what is hard, surprising or deliberately different, so that the code is readable and the useful comments stand out.
+
+**Acceptance Criteria:**
+
+**Given** any file under `src/` **When** the story is done **Then** it opens with at most a 5-line header describing the file's responsibility (or none for a trivially named file such as an `index.ts` barrel).
+
+**Given** a comment that narrates history (story/AC references, "review patch", spec "Boundaries"/"Design Notes" quotes, "previously…", "story X supersedes…") **When** encountered **Then** it is removed; if it carried a real reason (an invariant, a workaround, a "don't change this because…"), that reason is rewritten as a short present-tense comment without the history.
+
+**Given** a non-obvious piece of code with no comment (a workaround, an ordering constraint, a library quirk like Ink's ctrl+letter parsing or depcruise's import-ordering constraint) **When** found during the sweep **Then** a short explanatory comment is added.
+
+**Given** test files **When** swept **Then** story/AC suffixes are removed from `describe`/`it` names and from comments, same rule.
+
+**Given** the sweep **When** done **Then** a guard test asserts `src/` contains no match for `\b[Ss]tory \d+\.\d+|\bAC\d+\b|review patch` (allow-list empty), and `AGENTS.md` › Code conventions states the AD-17 rule in two lines.
+
+**Given** the change **When** reviewed **Then** it is behavior-neutral: `npm test && npm run typecheck && npm run depcheck` pass with zero code changes besides comments, test names and the guard test; commits are split per layer (core, adapters/driven, adapters/driving/cli, adapters/driving/tui per zone, bin) for reviewable diffs.
+
+**Implementation notes:** must start while no other story branch is open. Do not remove the `dependency-cruiser` import-ordering explanation or other comments `AGENTS.md` points at — rewrite them shorter.
+
+### Story 7.2: Container-less Managed Services (FR-29)
+
+As a developer, I want to register and manage a service that has no Docker container, so that libraries and non-dockerized repos (e.g. `shared-types`) are first-class members of my EDTs and updates.
+
+**Acceptance Criteria:**
+
+**Given** a manifest without `container` **When** loaded **Then** it validates (`Manifest.container?: string`; an empty string is still rejected) and the repo registers.
+
+**Given** a group update (any scope) including a container-less service **When** the restart phase is reached **Then** the clean-restart recipe runs if the run asks for it and `restartCommands` is declared; otherwise the phase is reported `skipped` with detail `no container` — never `failed`, and `ContainerPort.restart` is never called.
+
+**Given** the Update zone, the Logs zone or any health badge **When** showing a container-less service **Then** it shows a distinct "no container" state (dim glyph + text) and never polls docker for it.
+
+**Given** the Logs zone **When** a container-less service is selected **Then** no subscription is made and the pane shows "No container — no logs for this service"; the restart control is absent.
+
+**Given** per-service actions (Update/EDT zones) **When** offered for a container-less service **Then** plain "restart" is hidden; "clean restart" is offered only if `restartCommands` is declared.
+
+**Given** the CLI (`repos list`, `service-restart`) **When** a container-less service is involved **Then** `list` shows `container: null` in JSON / `—` on a TTY, and `service-restart` fails with `no-container` unless a clean restart is requested and declared.
+
+**Given** the `manifest-generator` skill **When** run on a repo with no docker-compose service for it **Then** it omits `container` instead of guessing one.
+
+**Implementation notes:** make the type optional first and let `tsc` enumerate every dereference. Architecture AD-4/AD-16 amendments in this proposal apply.
+
+### Story 7.3: Shared Zone Layout Contract & `Ctrl+W` Resize in Every Zone (UX-DR35)
+
+As a developer, I want to resize the panes of whichever zone I'm in with `Ctrl+W`, and have every zone built from the same layout contract, so that resizing works everywhere and new panes get it for free.
+
+**Acceptance Criteria:**
+
+**Given** the TUI **When** the story is done **Then** a shared zone-layout primitive exists (e.g. `ZoneLayout` + a declarative pane/boundary spec: orientation, default ratio, min/max) that renders panes and `Splitter`s, recolors the targeted boundary, and reads/writes ratios from the store; **every** zone (Dashboard, EDTs, Update, Logs, Routes, shared-types) builds its split through it — no zone hand-rolls a split.
+
+**Given** any zone, no overlay open **When** `Ctrl+W` is pressed **Then** resize-mode engages on that zone's boundary 0; `Tab` cycles that zone's boundaries; arrows move the targeted one per its orientation; `Enter`/`Esc` exit — the existing Story 2.21 behavior, generalized (`shouldEnterResizeMode` no longer checks `activeZone === 'edts'`).
+
+**Given** a zone with a single pane (no boundary) **When** `Ctrl+W` is pressed **Then** it is a no-op and the footer never advertises `Ctrl+W` there.
+
+**Given** ratios moved in any zone **When** the app restarts **Then** they are restored per zone (persisted through the state port as today); a persisted ratio array of the wrong length for a zone (layout changed between versions) is replaced by that zone's defaults, never crashes.
+
+**Given** the Logs zone **When** the story is done **Then** "wrap all panes" moves off `Ctrl+W` to a new key (chosen here, no collision with any canonical binding), updated in the footer, the `?` help screen and the Logs keybinding list; the single-pane `w` is unchanged.
+
+**Given** the EDTs zone **When** migrated **Then** its existing 3-boundary behavior and persisted ratios are preserved (no user-visible change).
+
+**Implementation notes:** Routes and Update already pass `listSplitterTargeted` — fold that into the primitive. The Dashboard's pane spec is defined here as a placeholder and filled by 7.5.
+
+### Story 7.4: Interaction Consistency Audit & Alignment (UX-DR36)
+
+As a developer, I want every zone to use the same keys, wording and components for the same intent, so that I never have to remember which zone does what differently.
+
+**Acceptance Criteria:**
+
+**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/epic-7/`) of every zone's and dialog's bindings and components per intent: list cursor/jump, enter/activate, edit-commit-cancel, toggle, confirm/cancel dialog, destructive-action confirmation, filter, refresh/retry, footer hint wording and order, modal title casing/language, empty/loading/error state components, text input (TextInputLine), pick lists (FilterablePickList), branch inputs (BranchAutocompleteInput).
+
+**Given** the inventory **When** divergences are found **Then** one canonical choice per intent is recorded as the UX-DR36 table in EXPERIENCE.md (Interaction Primitives), and the developer validates that table before the alignment work starts.
+
+**Given** the validated table **When** alignment is done **Then** every zone and dialog conforms; duplicated ad-hoc implementations (hand-rolled lists, confirm prompts, footer strings, input handling) are replaced by the shared components; any intentional deviation is listed in the table with its reason.
+
+**Given** UI language **When** audited **Then** mixed French/English labels in the TUI are flagged and unified to the language chosen in the table.
+
+**Given** the footer and `?` help screen **When** rendered in any context **Then** they are generated from the same keybinding declarations (no hand-written duplicate hint strings).
+
+**Given** the result **When** reviewed **Then** existing tests are updated only where a binding or wording deliberately changed, and each such change is listed in the story file.
+
+**Implementation notes:** if the alignment list proves larger than one story, split the remainder into follow-up stories (7.4b…) from the validated table rather than growing this one.
+
+### Story 7.5: Dashboard — Workspace Summary & Last-Update Persistence (UX-DR19)
+
+As a developer, I want the Dashboard to show me my active EDT at a glance — each service's container status, active branch and divergence, and how the last update went — so that I know the state of my workspace the moment I open the tool.
+
+**Acceptance Criteria:**
+
+**Given** the app launches **When** the Dashboard renders **Then** the banner stays (Story 2.16), followed by a cold-load spinner per section while data assembles; sections fill independently.
+
+**Given** an active EDT **When** the summary is ready **Then** it lists each member service with: container status (up/down/restarting/no container — glyph + text, FR-29), current branch, and ahead/behind vs. its `sharedBranch` (FR-9's existing computation, reused), plus the EDT name.
+
+**Given** any group update finishes (any scope, TUI or CLI) **When** it ends **Then** its outcome (finished-at timestamp, scope, updated/skipped/failed counts) is persisted through the state port; the Dashboard shows the latest one ("Last update: <relative time> — 3 updated, 1 failed"), or "No update run yet".
+
+**Given** no EDT exists **When** the Dashboard renders **Then** it prompts to create or choose an EDT instead of an empty summary; with an empty registry the Story 2.11 prompt keeps precedence.
+
+**Given** the Dashboard **When** displayed **Then** the default highlighted action is "Enter [last EDT]" (switches to the EDTs zone with that EDT selected).
+
+**Given** docker or git probes fail for a service **When** rendered **Then** that row shows an explicit error state for that field; other rows and sections are unaffected.
+
+**Implementation notes:** uses Story 7.3's layout contract. The container-status poll reuses the Update zone's health-poll slice logic rather than a third copy.
+
+### Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
+
+As a developer, I want the Dashboard to warn me about anything needing attention and to launch common actions from it, so that it is a real starting point, not just a status page.
+
+**Acceptance Criteria:**
+
+**Given** active-EDT members **When** a member has uncommitted changes or a merge/rebase in progress **Then** it is flagged inline (warning glyph + reason) in the summary.
+
+**Given** the Dashboard **When** focused **Then** a quick-action row offers: enter last EDT, start group update (opens Story 3.7's configuration), open Logs, switch EDT (Story 2.30's quick-pick) — each with its key shown in the row and footer, keys consistent with UX-DR36.
+
+**Given** the registry **When** summarized **Then** a section shows registered-repo count and counts of invalid manifests, unreachable repos and listing issues (Story 2.34's classification), with a shortcut to `:registry`; all-clear shows a single success line.
+
+**Given** an operation holds a lock (update, migration, switch, …) **When** the Dashboard renders **Then** a line names the operation and its progress, and quick actions that would conflict are disabled with the reason.
+
+**Given** a zone has a pending background event **When** on the Dashboard **Then** its tab shows the counter badge (UX-DR19 background-event state).

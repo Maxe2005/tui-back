@@ -110,6 +110,17 @@ The tool only acts on a repo that carries a manifest; the manifest declares that
 
 **Notes:** `[NOTE FOR PM]` The exact manifest file format/schema is a technical-design decision, deliberately deferred to `bmad-architecture` — this PRD specifies the required declared capabilities, not the file's shape.
 
+#### FR-29: Container-less managed services (added 2026-10-01, Sprint Change Proposal)
+
+A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime.
+
+**Consequences (testable):**
+- A manifest without `container` validates and the repo registers like any other.
+- A group update on a container-less service runs pull/merge and migrations, then the clean-restart recipe if the run asks for one and one is declared; otherwise the restart phase is reported as skipped ("no container"), never as a failure.
+- Health surfaces (Update zone, Logs zone, Dashboard) show a distinct "no container" state (glyph + dim text), never "down".
+- The Logs zone never subscribes a container-less service; selecting it shows an explicit "no container — no logs" pane state.
+- Container-only actions (plain restart, logs restart control) are hidden or disabled with an explanation for such a service.
+
 ---
 
 ### 4.2 EDT Workspace Management
@@ -278,6 +289,7 @@ Before any group update starts — EDT-scoped, all-repos, or scoped to a single 
 - Each selected service's source branch defaults to the manifest's `sharedBranch`, but can be changed to any branch the tool can resolve for that repo before the run starts.
 - The migrate toggle and the clean-restart toggle apply uniformly to every service selected for that run.
 - The same configuration screen backs the EDT-scoped update, the all-repos update (still gated by its own explicit confirmation, FR-10), and a single-service update triggered directly from that service's row in the Update zone.
+- For an EDT-scoped update, the configuration screen also offers one global merge-source strategy — the services' shared branches (default) or another EDT's branches (FR-28) — applied to every row before per-service adjustment. (Amended 2026-10-01, Sprint Change Proposal.)
 
 #### FR-26: Manifest-defined clean restart
 
@@ -296,6 +308,17 @@ At any time in the Update zone, the developer sees a list of services (active ED
 - The status list is visible whether or not a run is in progress.
 - A service's status during a run reflects its actual current step (updating vs. migrating vs. restarting), never a single generic "in progress" state.
 - A problem encountered on a service appears in that service's own detail view, distinguished as resolved (after assisted resolution, FR-11) or unresolved (still blocking).
+
+#### FR-28: Merge source from another EDT (added 2026-10-01, Sprint Change Proposal)
+
+When configuring an EDT-scoped group update, a developer can set the merge source for all selected services at once: either each service's own `sharedBranch` (today's default) or another, named EDT. With another EDT chosen, every service of the EDT being updated that is also a member of the chosen EDT merges from the branch that EDT records for it; every service that is not a member of the chosen EDT is flagged as unresolved and must be given a source branch by hand (its `sharedBranch` offered as the default) before the run can start.
+
+**Consequences (testable):**
+- The chosen EDT can never be the EDT being updated.
+- A service is resolved from the chosen EDT only when that EDT has a member with the same repoPath; its source branch is exactly that member's recorded branch.
+- An unresolved selected service blocks the run start with an explicit, per-row message; deselecting it or choosing its branch by hand clears the block.
+- A per-service manual choice survives later changes of the global strategy until the developer resets it to the global rule.
+- CLI parity (FR-1): `tui-back update --from-edt <topic>` applies the same resolution non-interactively and fails (no git write) listing every unresolved service.
 
 ---
 
