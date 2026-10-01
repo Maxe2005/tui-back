@@ -9,8 +9,9 @@
 //
 // Story 3.4 backs core's `onUpdateBlocker` seam here: a dirty/conflicted repo pauses the
 // run on a bounded four-choice modal menu (stash / open in editor / cancel repo / cancel
-// run) rendered as `ListRow`s. The editor spawn is driving-side only (`launchEditor`);
-// every git write still goes through the core use-case (AD-1).
+// run) rendered as `ListRow`s. The editor spawn is driving-side only (`launchEditor`, with
+// the command line taken from the `general.editorCommand` setting); every git write still
+// goes through the core use-case (AD-1).
 //
 // Every keystroke behavior is a standalone pure function below, unit-tested directly — the
 // `useInput` callback stays a thin dispatcher over them (the edts-zone.tsx convention:
@@ -38,7 +39,14 @@ import {
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
-import { deriveUpdateServiceStatus, formatLiveServiceDetail, formatServiceOutcomeDetail, partitionUpdateServiceRows } from './update-zone.logic.js';
+import {
+  deriveUpdateServiceStatus,
+  formatLiveServiceDetail,
+  formatServiceOutcomeDetail,
+  isServiceTargetedByRun,
+  partitionUpdateServiceRows,
+  resolveEditorCommand,
+} from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
@@ -63,6 +71,7 @@ export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode
 export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
+export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
 export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? ([y]/[n])';
@@ -288,16 +297,23 @@ export function resolveBlockerMenuKey(input: string, key: BlockerMenuKey, cursor
 
 // Story 3.4: the driving-side editor launch — core only ever sees the `edited` choice,
 // never an editor (AD-1: the TUI never calls a driven adapter; spawning the editor is
-// driving-side only). Spawns `$EDITOR` (fallback `vi`) on the blocked repo with the
-// terminal attached and waits for exit; the exit status is deliberately unread — core's
-// re-verification is the gate (a no-op edit simply re-presents the menu). An `$EDITOR`
-// value carries its own flags (`code --wait`, `emacs -nw`, ...) — the first
-// whitespace-separated token is the binary, the rest are leading args with the blocked
-// repo appended last.
-export function launchEditor(repoPath: string): void {
-  const configured = process.env.EDITOR?.trim();
-  const [binary = 'vi', ...leading] = configured !== undefined && configured !== '' ? configured.split(/\s+/) : [];
-  spawnSync(binary, [...leading, repoPath], { stdio: 'inherit' });
+// driving-side only). Spawns the resolved editor command on the blocked repo with the
+// terminal attached and waits for exit: the `general.editorCommand` setting when set
+// (`code <repo>` opens a VS Code window on the repo with its merge in progress), else
+// `$EDITOR`, else `vi` — see resolveEditorCommand. The exit status is deliberately unread
+// — core's re-verification is the gate (a no-op edit, or a GUI editor that returns
+// immediately, simply re-presents the menu). Only a command that could not be started at
+// all (unknown binary, not executable) is reported, so a misconfigured setting is never a
+// silent no-op.
+export type LaunchEditorResult = { ok: true } | { ok: false; message: string };
+
+export function launchEditor(repoPath: string, configured = ''): LaunchEditorResult {
+  const { binary, args } = resolveEditorCommand(configured, process.env.EDITOR, repoPath);
+  const result = spawnSync(binary, args, { stdio: 'inherit' });
+  if (result.error !== undefined) {
+    return { ok: false, message: `Could not launch "${binary}": ${result.error.message}` };
+  }
+  return { ok: true };
 }
 
 export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) {
@@ -308,6 +324,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateError = useStore((state) => state.updateError);
   const updateErrorCode = useStore((state) => state.updateErrorCode);
   const updateScope = useStore((state) => state.updateScope);
+  const updateSelection = useStore((state) => state.updateSelection);
   const updateBlocker = useStore((state) => state.updateBlocker);
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
   const updateConfig = useStore((state) => state.updateConfig);
@@ -353,9 +370,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // directly).
   const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
   const listBranchesAction = useStore((state) => state.listBranches);
+  // The user-defined "Open in editor" command line (empty: `$EDITOR`, else `vi`).
+  const editorCommand = useStore((state) => state.settings.general.editorCommand);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
+  // The last "Open in editor" launch failure for the raised blocker (null when the editor
+  // started, or was never tried) — shown inside the blocker menu, which stays open.
+  const [editorError, setEditorError] = useState<string | null>(null);
   // Story 3.9: the row-local action menu's own target + cursor — zone-local UI state (the
   // same convention as the service-list cursor above; only cross-visit/cross-run state
   // belongs in update-slice.ts). Null when no menu is open.
@@ -395,10 +417,19 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   // Story 3.6: this run's currently-targeted services — an all-repos run targets every
   // listed service; an EDT-scoped run targets only the active EDT's own members (the same
-  // `runningMembers` the running-state spinner below already reads).
-  const runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
+  // `runningMembers` the running-state spinner below already reads). A run confirmed with
+  // a narrowed selection (a single-service update above all) targets only the selected
+  // rows inside that scope — see isServiceTargetedByRun.
+  const edtMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? [];
   const isAllRun = updateScope === 'all';
-  const runningMemberPaths = new Set(runningMembers.map((member) => member.repoPath));
+  const runningMemberPaths = new Set(edtMembers.map((member) => member.repoPath));
+  const runTarget = { scope: isAllRun ? ('all' as const) : ('edt' as const), memberPaths: runningMemberPaths, selection: updateSelection };
+  const isRowTargeted = (row: { service: string; path: string }): boolean =>
+    updateStatus === 'running' && isServiceTargetedByRun(row, runTarget);
+  const runningMembers = edtMembers.filter((member) => isRowTargeted({ service: member.service, path: member.repoPath }));
+  // A narrowed all-scope run (a single service outside the active EDT) names its selected
+  // rows — the generic "loading members" line is only for the unfiltered all-repos run.
+  const runningSelectedRows = isAllRun && updateSelection !== null ? serviceRows.filter(isRowTargeted) : [];
 
   // Story 3.6: starts (or restarts, on a changed service list) this zone's own health poll
   // whenever the loaded service list changes — independent of Logs zone's own pane
@@ -441,6 +472,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     if (updateBlocker !== null) {
       setBlockerCursor(0);
     }
+    setEditorError(null);
   }, [updateBlocker]);
 
   // A newly opened config screen always starts browsing on its first row with no branch
@@ -530,9 +562,15 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
           if (step.choice === 'edited') {
-            // Driving-side editor: spawn `$EDITOR` and wait for exit, then report the
-            // choice — core re-verifies before resuming (a no-op edit re-presents).
-            launchEditor(updateBlocker.repoPath);
+            // Driving-side editor: spawn the configured command and wait for exit, then
+            // report the choice — core re-verifies before resuming (a no-op edit
+            // re-presents). An editor that could not be started reports nothing to core:
+            // the menu stays open on its error line so another choice can be made.
+            const launched = launchEditor(updateBlocker.repoPath, editorCommand);
+            if (!launched.ok) {
+              setEditorError(launched.message);
+              return;
+            }
           }
           resolveUpdateBlocker(step.choice);
         }
@@ -690,7 +728,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // core use-case resolves with its per-service outcome rows. An all-repos run targets no
   // single EDT, so it shows the generic loading line instead of EDT member rows.
   const offerRerun = shouldOfferRerun(edts, activeEdt);
-  const runningLabel = isAllRun ? UPDATE_ALL_RUNNING_LABEL : UPDATE_RUNNING_LABEL;
+  const runningLabel = !isAllRun ? UPDATE_RUNNING_LABEL : updateSelection !== null ? UPDATE_SELECTION_RUNNING_LABEL : UPDATE_ALL_RUNNING_LABEL;
 
   // Story 3.6: this zone's own service-list chrome budget (Code Map: "an approximation is
   // fine here", mirrors edts-zone.tsx/logs-zone.tsx's own precedent).
@@ -706,8 +744,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // before its first emission the formatter reports `starting`, never a stale outcome.
   const selectedLivePhase = selectedServiceRow !== undefined ? liveServicePhase[selectedServiceRow.service] : undefined;
   const selectedLiveIssues = selectedServiceRow !== undefined ? (liveServiceIssues[selectedServiceRow.service] ?? []) : [];
-  const isSelectedTargeted =
-    selectedServiceRow !== undefined && updateStatus === 'running' && (isAllRun || runningMemberPaths.has(selectedServiceRow.path));
+  const isSelectedTargeted = selectedServiceRow !== undefined && isRowTargeted(selectedServiceRow);
   const isSelectedRestarting =
     selectedServiceRow !== undefined && serviceRestartInFlight[resolvePath(selectedServiceRow.path)] !== undefined;
   const showLiveDetail = isSelectedTargeted || isSelectedRestarting;
@@ -748,7 +785,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               renderItem={(row, index) => {
                 const health = updateServiceHealth[row.path] ?? 'down';
                 const lastOutcome = lastServiceOutcomes[row.service];
-                const isTargeted = updateStatus === 'running' && (isAllRun || runningMemberPaths.has(row.path));
+                const isTargeted = isRowTargeted(row);
                 // Story 3.9: the coarse standalone-restart flag — the in-flight map holds
                 // this service's resolved repoPath for the duration, no step detail.
                 // Story 3.10: the live phase for this service refines the glyph — the
@@ -778,7 +815,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                   <Spinner />
                   <Text color={colors.text}> {runningLabel}</Text>
                 </Box>
-                {isAllRun || runningMembers.length === 0 ? (
+                {runningSelectedRows.length > 0 ? (
+                  runningSelectedRows.map((row) => (
+                    <Box key={row.path}>
+                      <Spinner />
+                      <Text color={colors.text}> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
+                    </Box>
+                  ))
+                ) : isAllRun || runningMembers.length === 0 ? (
                   <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
                 ) : (
                   runningMembers.map((member) => (
@@ -856,6 +900,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         {updateBlocker !== null ? (
           <Box flexDirection="column">
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
+            {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
             {UPDATE_BLOCKER_MENU_ITEMS.map((item, index) => (
               <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
             ))}

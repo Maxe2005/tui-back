@@ -8,7 +8,9 @@ import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
 import {
+  EDITOR_COMMAND_PLACEHOLDER_TEXT,
   FILTER_HISTORY_SIZE_STEP,
+  GENERAL_SETTINGS_ROWS,
   HIDEABLE_ACTION_HINTS,
   HIDEABLE_ACTION_TYPES,
   LOG_BUFFER_SIZE_STEP,
@@ -42,6 +44,7 @@ import {
   parseFilterHistoryGridMaxRowsDigit,
   parseGridMaxRowsDigit,
   parseLogBufferSizeDigit,
+  resolveGeneralSettingsKey,
   resolveSettingsTabState,
   toggleHiddenHint,
 } from './settings-screen.js';
@@ -339,16 +342,38 @@ describe('SettingsScreen (story 2.19)', () => {
 
   it('renders the quitShortcutEnabled checkbox on the General tab, checked/unchecked to match the live setting', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true, editorCommand: '' } } });
     const checked = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
     const checkedLine = checked.split('\n').find((line) => line.includes("Enable 'q' to quit"));
     expect(checkedLine).toContain('[x]');
     expect(checked).toContain('Space to toggle');
 
-    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: false } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: false, editorCommand: '' } } });
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
     const uncheckedLine = unchecked.split('\n').find((line) => line.includes("Enable 'q' to quit"));
     expect(uncheckedLine).toContain('[ ]');
+  });
+
+  it('renders the editor command row on the General tab: the not-set placeholder, then the configured command', async () => {
+    const store = createAppStore();
+    const unset = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
+    expect(unset).toContain('Editor command:');
+    expect(unset).toContain(EDITOR_COMMAND_PLACEHOLDER_TEXT);
+
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true, editorCommand: 'code <repo>' } } });
+    const configured = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
+    expect(configured).toContain('Editor command: code <repo>');
+    expect(configured).not.toContain(EDITOR_COMMAND_PLACEHOLDER_TEXT);
+  });
+
+  it('renders the open editor-command edit as a focused text field pre-filled with the current command', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true, editorCommand: 'code <repo>' } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="general" initialGeneralEditing />);
+    expect(output).toContain('Editor command: code <repo>');
+    expect(output).toContain('[Enter] confirm  [Esc] cancel');
+    expect(output).toContain('<repo> is replaced by the repo path');
+    expect(output).not.toContain('Enter to edit.');
   });
 
   it('surfaces a non-blocking settings warning without crashing (corrupt-file fallback)', async () => {
@@ -539,5 +564,45 @@ describe('SettingsScreen (story 2.19)', () => {
     const store = createAppStore();
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsClearServiceOpen />);
     expect(output).toContain('No manifest services loaded yet.');
+  });
+});
+
+describe('resolveGeneralSettingsKey (General tab row list + editor command field)', () => {
+  const quitRow = GENERAL_SETTINGS_ROWS.indexOf('quit-shortcut');
+  const editorRow = GENERAL_SETTINGS_ROWS.indexOf('editor-command');
+
+  it('Up/Down move the row cursor, clamped at both ends', () => {
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
+    expect(resolveGeneralSettingsKey('', { upArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: quitRow });
+  });
+
+  it('Space toggles the quit shortcut only on its own row; Enter opens the edit only on the editor row', () => {
+    expect(resolveGeneralSettingsKey(' ', {}, { cursor: quitRow, editing: null })).toEqual({ type: 'toggle-quit' });
+    expect(resolveGeneralSettingsKey(' ', {}, { cursor: editorRow, editing: null })).toEqual({ type: 'ignore' });
+    expect(resolveGeneralSettingsKey('', { return: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'begin-edit' });
+    expect(resolveGeneralSettingsKey('', { return: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'ignore' });
+  });
+
+  it('while editing, every key belongs to the text field — a space or q is a literal character, arrows move the caret', () => {
+    const editing = { value: 'code', cursor: 4 };
+    expect(resolveGeneralSettingsKey(' ', {}, { cursor: editorRow, editing })).toEqual({ type: 'edit', editing: { value: 'code ', cursor: 5 } });
+    expect(resolveGeneralSettingsKey('q', {}, { cursor: editorRow, editing })).toEqual({ type: 'edit', editing: { value: 'codeq', cursor: 5 } });
+    expect(resolveGeneralSettingsKey('', { leftArrow: true }, { cursor: editorRow, editing })).toEqual({
+      type: 'edit',
+      editing: { value: 'code', cursor: 3 },
+    });
+    expect(resolveGeneralSettingsKey('', { upArrow: true }, { cursor: editorRow, editing })).toEqual({ type: 'edit', editing });
+  });
+
+  it('Enter commits the trimmed draft — a blank draft commits as not set', () => {
+    expect(resolveGeneralSettingsKey('', { return: true }, { cursor: editorRow, editing: { value: '  code <repo> ', cursor: 0 } })).toEqual({
+      type: 'commit-edit',
+      value: 'code <repo>',
+    });
+    expect(resolveGeneralSettingsKey('', { return: true }, { cursor: editorRow, editing: { value: '   ', cursor: 0 } })).toEqual({
+      type: 'commit-edit',
+      value: '',
+    });
   });
 });

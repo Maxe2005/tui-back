@@ -1071,7 +1071,7 @@ describe("app store", () => {
         load: vi.fn(async () =>
           ok({
             settings: {
-              general: { quitShortcutEnabled: true },
+              general: { quitShortcutEnabled: true, editorCommand: '' },
               commandPalette: { gridMaxRows: 12 },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
               logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1086,7 +1086,7 @@ describe("app store", () => {
       await store.getState().loadSettings();
 
       expect(store.getState().settings).toEqual({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 12 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1136,7 +1136,7 @@ describe("app store", () => {
       await updatePromise;
 
       expect(save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 15 },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1147,7 +1147,7 @@ describe("app store", () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1157,7 +1157,7 @@ describe("app store", () => {
       await store.getState().updateSettings({ edts: { hiddenActionHints: ["other-services"] } });
 
       expect(store.getState().settings).toEqual({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1168,7 +1168,7 @@ describe("app store", () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20 },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1178,7 +1178,7 @@ describe("app store", () => {
       await store.getState().updateSettings({ edts: { hiddenActionTypes: ["create", "modify"] } });
 
       expect(store.getState().settings).toEqual({
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20 },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1284,7 +1284,7 @@ describe("app store", () => {
       // newer update already applied above.
       resolveLoad?.({
         settings: {
-          general: { quitShortcutEnabled: true },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8 },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },

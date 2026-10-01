@@ -1720,7 +1720,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
       settings: {
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
@@ -1767,7 +1767,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
         },
       ],
       settings: {
-        general: { quitShortcutEnabled: true },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8 },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
