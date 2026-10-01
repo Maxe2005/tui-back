@@ -454,7 +454,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         applyTreeAction(action);
         return;
       }
-      if (input === '/') {
+      // `f` opens the route filter exactly like `/` (mnemonic: filter) — only on the
+      // list: while the response tree holds focus, `f`/`F` belong to its rules panel.
+      if (input === '/' || input === 'f') {
         setFilter((prev) => ({ ...prev, cursor: prev.value.length }));
         setFilterEditing(true);
         return;
@@ -542,7 +544,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const maxVisibleRows = listAreaSize !== null ? listAreaSize.height : Math.max(windowSize.rows - ROUTES_LIST_CHROME_ROWS, 3);
   const filterActive = filter.value !== '';
   const treeActive = treeFocused && classification !== null;
-  const listHint = filterEditing ? '[enter] apply  [esc] clear' : '[enter] fire  [/] filter  [home/end] jump';
+  const listHint = filterEditing ? '[enter] apply  [esc] clear' : '[enter] fire  [/ f] filter  [home/end] jump';
   // The right pane owns its own shortcut line at its bottom while the tree holds focus;
   // the list pane keeps list-only hints.
   const treeHint = !treeActive

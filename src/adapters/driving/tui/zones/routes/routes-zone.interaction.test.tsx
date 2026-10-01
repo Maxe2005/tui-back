@@ -120,6 +120,30 @@ describe('RoutesZone route filter', () => {
     }
   });
 
+  it("'f' opens the route filter exactly like '/' and types literally once editing", async () => {
+    const store = seed();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'f');
+      expect(store.getState().zoneInputCaptured).toBe(true);
+      await press(instance, stdin, 'p');
+      let frame = lastFrame(stdout);
+      expect(frame).toContain('Filter: p');
+      expect(frame).not.toContain('GET /resource-0/{id}');
+      // A second 'f' lands as text in the open editor, it does not reopen anything.
+      await press(instance, stdin, 'f');
+      frame = lastFrame(stdout);
+      expect(frame).toContain('Filter: pf');
+      await press(instance, stdin, KEYS.escape);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await instance.waitUntilRenderFlush();
+      expect(lastFrame(stdout)).not.toContain('Filter:');
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('shows a distinct message when nothing matches', async () => {
     const store = seed();
     const { instance, stdout, stdin } = mount(store);
