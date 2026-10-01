@@ -436,8 +436,22 @@ export function isStep3Busy(state: Pick<CreateDialogState, 'step' | 'branches'>)
 // Step 1's slug again; every selected service without a loaded list (never loaded, or failed
 // last time) is queued for a load; focus resets to Panel A, nothing in edit, box closed.
 // Overrides and loaded lists are kept.
-export function enterBranchStep(branches: BranchStepState, topic: string, selectedMembers: readonly string[]): BranchStepState {
+//
+// Story 2.31: with a `seed` (edt-create-from's root EDT), each selected root member never
+// seeded before gets a [Créer (Perso)] override on its root-EDT branch, named after the global
+// name this entry settles on — once per path (`seededPaths`), so a row reset to global stays
+// global. A seeded override still exactly `{create, <root branch>, <previous global name>}` is
+// untouched, so it follows the new global name, the same way an untouched global name tracks
+// the slug. Non-root members get no override ([Créer (Global)]).
+export function enterBranchStep(
+  branches: BranchStepState,
+  topic: string,
+  selectedMembers: readonly string[],
+  seed: EdtRegistryEntry | null = null,
+): BranchStepState {
   const slug = suggestBranchNameFromTopic(topic);
+  const globalName = branches.globalNameTouched ? branches.globalName : { value: slug, cursor: slug.length };
+  const seeded = applyRootSeed(branches, globalName.value, selectedMembers, seed);
   const lists = { ...branches.lists };
   for (const path of selectedMembers) {
     const current = lists[path];
@@ -447,7 +461,8 @@ export function enterBranchStep(branches: BranchStepState, topic: string, select
   }
   return {
     ...branches,
-    globalName: branches.globalNameTouched ? branches.globalName : { value: slug, cursor: slug.length },
+    ...seeded,
+    globalName,
     lists,
     panel: 'global',
     globalLine: 'base',
@@ -455,6 +470,57 @@ export function enterBranchStep(branches: BranchStepState, topic: string, select
     rowCursor: Math.min(branches.rowCursor, Math.max(selectedMembers.length - 1, 0)),
     box: null,
   };
+}
+
+// Story 2.31: the seeding/refresh half of enterBranchStep (see its comment).
+function applyRootSeed(
+  branches: BranchStepState,
+  nextGlobalName: string,
+  selectedMembers: readonly string[],
+  seed: EdtRegistryEntry | null,
+): Pick<BranchStepState, 'overrides' | 'seededPaths'> {
+  if (seed === null) {
+    return { overrides: branches.overrides, seededPaths: branches.seededPaths };
+  }
+  const previousGlobalName = branches.globalName.value;
+  const overrides: Record<string, RowOverride> = { ...branches.overrides };
+  const seededPaths = [...branches.seededPaths];
+  for (const member of seed.members) {
+    const path = member.repoPath;
+    if (!seededPaths.includes(path)) {
+      if (selectedMembers.includes(path)) {
+        overrides[path] = { kind: 'create', base: member.branch, name: nextGlobalName };
+        seededPaths.push(path);
+      }
+      continue;
+    }
+    const current = overrides[path];
+    if (current !== undefined && current.kind === 'create' && current.base === member.branch && current.name === previousGlobalName) {
+      overrides[path] = { ...current, name: nextGlobalName };
+    }
+  }
+  return { overrides, seededPaths };
+}
+
+// Story 2.31: the root members absent from the candidate pool (unregistered or unreachable
+// since the root was created), by service name — Step 2's dim note.
+export function missingSeedMembers(seed: EdtRegistryEntry | null, candidates: readonly Pick<BranchCandidate, 'path'>[]): string[] {
+  if (seed === null) {
+    return [];
+  }
+  const known = new Set(candidates.map((candidate) => candidate.path));
+  return seed.members.filter((member) => !known.has(member.repoPath)).map((member) => member.service);
+}
+
+// Story 2.31: drops selected paths the candidate pool doesn't have (a root member gone since) —
+// only while the pool is non-empty, so a not-yet-loaded pool never wipes the selection.
+export function pruneToCandidates(selectedMembers: readonly string[], candidates: readonly Pick<BranchCandidate, 'path'>[]): readonly string[] {
+  if (candidates.length === 0) {
+    return selectedMembers;
+  }
+  const known = new Set(candidates.map((candidate) => candidate.path));
+  const pruned = selectedMembers.filter((path) => known.has(path));
+  return pruned.length === selectedMembers.length ? selectedMembers : pruned;
 }
 
 // ---- Step 4: Activation (Story 2.38) --------------------------------------------------------
@@ -496,13 +562,16 @@ export function isActivationAcknowledge(state: Pick<CreateDialogState, 'step' | 
   return state.step === 4 && (state.activation.outcome !== null || state.failedRows.length > 0);
 }
 
-// The action-log detail of a create, with how its activation ended.
+// The action-log detail of a create, with how its activation ended. Story 2.31: a seeded
+// create names its root EDT (`Created EDT "x" from "root" with …`).
 export function describeCreateForLog(
   topic: string,
   memberCount: number,
   activation: 'activated' | 'stopped' | 'not-activated' | 'switch' | 'stay',
+  rootTopic?: string,
 ): string {
-  const created = `Created EDT "${topic}" with ${memberCount} member(s)`;
+  const from = rootTopic !== undefined ? ` from "${rootTopic}"` : '';
+  const created = `Created EDT "${topic}"${from} with ${memberCount} member(s)`;
   switch (activation) {
     case 'activated':
       return `${created} and activated it`;
