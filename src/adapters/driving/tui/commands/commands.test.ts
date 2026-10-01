@@ -76,8 +76,12 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     expect(COMMANDS.find((c) => c.name === 'edt-delete')).toBeDefined();
   });
 
+  it('registers the edt-create-from command (story 2.31)', () => {
+    expect(COMMANDS.find((c) => c.name === 'edt-create-from')).toBeDefined();
+  });
+
   it('tags every edt-* command with the edts zoneId, so runCommand auto-switches to it', () => {
-    for (const name of ['edt-create', 'edt-switch', 'edt-modify', 'edt-delete']) {
+    for (const name of ['edt-create', 'edt-switch', 'edt-modify', 'edt-delete', 'edt-create-from']) {
       expect(COMMANDS.find((c) => c.name === name)!.zoneId).toBe('edts');
     }
   });
@@ -175,6 +179,20 @@ describe('COMMANDS (story 2.14, 2.15)', () => {
     deleteCmd.run(fakeStore, 'edt-delete my-topic');
 
     expect(calls).toEqual(['edt-delete my-topic']);
+  });
+
+  it('the edt-create-from command calls openEdtCreateFromDialog with full query (story 2.31)', () => {
+    const calls: string[] = [];
+    const fakeStore = {
+      getState: () => ({
+        openEdtCreateFromDialog: (query: string) => calls.push(query),
+      }),
+    } as unknown as Parameters<Command['run']>[0];
+
+    const cmd = COMMANDS.find((c) => c.name === 'edt-create-from')!;
+    cmd.run(fakeStore, 'edt-create-from my-topic');
+
+    expect(calls).toEqual(['edt-create-from my-topic']);
   });
 
   it('the settings command calls the store\'s openSettingsScreen action', () => {

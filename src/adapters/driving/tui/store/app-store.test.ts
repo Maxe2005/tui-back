@@ -751,6 +751,22 @@ describe("app store", () => {
 
       expect(store.getState().currentEdtAction).toMatchObject({ type: "delete", target: "select EDT" });
     });
+
+    it("openEdtCreateFromDialog sets currentEdtAction with type 'create-from' and the parsed topic (story 2.31)", () => {
+      const store = createAppStore(fakeDeps());
+
+      store.getState().openEdtCreateFromDialog("edt-create-from feat-a");
+
+      expect(store.getState().currentEdtAction).toMatchObject({ type: "create-from", target: "feat-a" });
+    });
+
+    it("openEdtCreateFromDialog with no topic sets target to 'select EDT' (story 2.31)", () => {
+      const store = createAppStore(fakeDeps());
+
+      store.getState().openEdtCreateFromDialog("edt-create-from");
+
+      expect(store.getState().currentEdtAction).toMatchObject({ type: "create-from", target: "select EDT" });
+    });
   });
 
   // Story 2.22: the create-EDT dialog now always builds and supplies its own

@@ -49,6 +49,12 @@ export const COMMANDS: readonly Command[] = [
     run: (useStore, fullQuery) => useStore.getState().openEdtDeleteDialog(fullQuery),
     zoneId: 'edts',
   },
+  // Story 2.31: `edt-create-from [topic]` — the creation wizard seeded from a root EDT.
+  {
+    name: 'edt-create-from',
+    run: (useStore, fullQuery) => useStore.getState().openEdtCreateFromDialog(fullQuery),
+    zoneId: 'edts',
+  },
   // Story 2.19: the settings screen is reachable exclusively through this registered
   // command (mirrors `registry`'s own precedent) — never bound to a raw keypress.
   {

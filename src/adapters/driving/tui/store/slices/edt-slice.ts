@@ -97,7 +97,9 @@ export type DeleteEdtParams = {
 
 // Story 2.15: EDT action state for in-progress actions shown in the detail pane.
 export type EdtActionState = {
-  type: 'create' | 'switch' | 'modify' | 'delete';
+  // Story 2.31: 'create-from' — the create wizard seeded from a root EDT (target = its topic,
+  // or 'select EDT' when the quick-pick must choose it).
+  type: 'create' | 'create-from' | 'switch' | 'modify' | 'delete';
   target: string; // EDT topic or "new EDT" for create
   startedAt: string; // ISO timestamp
 };
@@ -205,6 +207,8 @@ export type EdtSlice = {
   openEdtSwitchDialog: (fullQuery: string) => void;
   openEdtModifyDialog: (fullQuery: string) => void;
   openEdtDeleteDialog: (fullQuery: string) => void;
+  // Story 2.31: `edt-create-from [topic]` — opens the creation wizard seeded from a root EDT.
+  openEdtCreateFromDialog: (fullQuery: string) => void;
   // Story 2.15: logs an EDT action to the per-EDT SQLite action_log table.
   logEdtAction: (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => Promise<void>;
 };
@@ -521,6 +525,15 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       set({ currentEdtAction: { type: 'delete', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
       // The edts-zone will handle opening the pre-targeted delete-confirm dialog, enforcing
       // the reject-if-active check at open time.
+    },
+    // Story 2.31: mirrors openEdtDeleteDialog — the edts-zone resolves the root EDT (found →
+    // seeded wizard, not found → create-from quick-pick with an inline error, no topic →
+    // create-from quick-pick).
+    openEdtCreateFromDialog: (fullQuery: string) => {
+      // Parse optional topic from query: "edt-create-from [topic]"
+      const parts = fullQuery.trim().split(/\s+/);
+      const topic = parts.length > 1 ? parts.slice(1).join(' ') : null;
+      set({ currentEdtAction: { type: 'create-from', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
     },
     // Story 2.15: log EDT action to per-EDT SQLite
     logEdtAction: async (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => {
