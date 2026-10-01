@@ -487,3 +487,89 @@ describe('routes slice jsonTreeStates (story 6.7)', () => {
     expect(states['GET /fresh']).toBeDefined();
   });
 });
+
+describe('routes slice bodyDrafts (story 6.8)', () => {
+  it('starts with no drafts and no edit errors', () => {
+    const store = createAppStore(fakeDeps());
+    expect(store.getState().bodyDrafts).toEqual({});
+    expect(store.getState().bodyEditErrors).toEqual({});
+  });
+
+  it('seeds lazily from the bodyExample on first open and never mutates it afterwards', () => {
+    const store = createAppStore(fakeDeps());
+    const seed = { name: 'ada', tags: ['x'] };
+    store.getState().ensureBodyDraft('POST /users', seed);
+    expect(store.getState().bodyDrafts['POST /users']).toEqual({ name: 'ada', tags: ['x'] });
+    store.getState().updateBodyDraft('POST /users', () => ({ name: 'grace', tags: ['x'] }));
+    expect(store.getState().bodyDrafts['POST /users']).toEqual({ name: 'grace', tags: ['x'] });
+    expect(seed).toEqual({ name: 'ada', tags: ['x'] });
+  });
+
+  it('keeps the seeded draft on a second open (no reseed)', () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().ensureBodyDraft('POST /users', { v: 1 });
+    store.getState().updateBodyDraft('POST /users', () => ({ v: 2 }));
+    store.getState().ensureBodyDraft('POST /users', { v: 1 });
+    expect(store.getState().bodyDrafts['POST /users']).toEqual({ v: 2 });
+  });
+
+  it('isolates drafts per route', () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().ensureBodyDraft('POST /a', { v: 1 });
+    store.getState().ensureBodyDraft('POST /b', { v: 2 });
+    store.getState().updateBodyDraft('POST /a', () => ({ v: 10 }));
+    expect(store.getState().bodyDrafts['POST /a']).toEqual({ v: 10 });
+    expect(store.getState().bodyDrafts['POST /b']).toEqual({ v: 2 });
+  });
+
+  it('tracks per-path errors and clears them individually or wholesale', () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().ensureBodyDraft('POST /users', { age: 36 });
+    store.getState().setBodyEditError('POST /users', 'age', { reason: 'expected a number, got "x"', kind: 'number' });
+    expect(store.getState().bodyEditErrors['POST /users']).toEqual({ age: { reason: 'expected a number, got "x"', kind: 'number' } });
+    store.getState().setBodyEditError('POST /users', 'age', null);
+    expect(store.getState().bodyEditErrors['POST /users']).toEqual({});
+    store.getState().setBodyEditError('POST /users', 'age', { reason: 'bad', kind: 'string' });
+    store.getState().setBodyEditErrors('POST /users', {});
+    expect(store.getState().bodyEditErrors['POST /users']).toEqual({});
+  });
+
+  it('prunes drafts past the 50 most-recently-touched entries with errors aligned', () => {
+    const store = createAppStore(fakeDeps());
+    for (let index = 0; index < 52; index += 1) {
+      store.getState().ensureBodyDraft(`POST /r-${index}`, { index });
+    }
+    const drafts = store.getState().bodyDrafts;
+    expect(Object.keys(drafts)).toHaveLength(50);
+    expect(drafts['POST /r-0']).toBeUndefined();
+    expect(drafts['POST /r-51']).toBeDefined();
+    expect(store.getState().bodyEditErrors['POST /r-0']).toBeUndefined();
+  });
+
+  it('re-touching a draft keeps it past the prune', () => {
+    const store = createAppStore(fakeDeps());
+    for (let index = 0; index < 50; index += 1) {
+      store.getState().ensureBodyDraft(`POST /r-${index}`, { index });
+    }
+    store.getState().updateBodyDraft('POST /r-0', (previous) => previous);
+    store.getState().ensureBodyDraft('POST /fresh', {});
+    const drafts = store.getState().bodyDrafts;
+    expect(Object.keys(drafts)).toHaveLength(50);
+    expect(drafts['POST /r-0']).toBeDefined();
+    expect(drafts['POST /r-1']).toBeUndefined();
+  });
+
+  it('preserves drafts and errors across a successful routes reload', async () => {
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'POST', path: '/users' }] as Route[])) };
+    const manifest: ManifestPort = {
+      load: vi.fn(async () => ok(manifestFor('gateway', { 'route-explorer': {} }))),
+    };
+    const store = createAppStore(fakeDeps({ scanner, manifest }));
+    await store.getState().loadRoutes();
+    store.getState().ensureBodyDraft('POST /users', { v: 1 });
+    store.getState().setBodyEditError('POST /users', 'v', { reason: 'bad', kind: 'number' });
+    await store.getState().loadRoutes();
+    expect(store.getState().bodyDrafts['POST /users']).toEqual({ v: 1 });
+    expect(store.getState().bodyEditErrors['POST /users']).toEqual({ v: { reason: 'bad', kind: 'number' } });
+  });
+});
