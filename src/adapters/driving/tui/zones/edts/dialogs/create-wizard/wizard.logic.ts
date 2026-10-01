@@ -141,28 +141,10 @@ export function buildBreadcrumb(
   });
 }
 
-export type WizardNavKey = {
-  ctrl?: boolean;
-  leftArrow?: boolean;
-  rightArrow?: boolean;
-};
-
-// Wizard-scoped step navigation: Ctrl+→ / Ctrl+N forward, Ctrl+← / Ctrl+P back. Ink delivers
-// Ctrl+letter as `input === '<letter>'` with `key.ctrl: true`, and Ctrl+Arrow (xterm's
-// `\x1b[1;5C`/`D`) as the arrow flag with `key.ctrl: true`. Ctrl+N/Ctrl+P are the fallbacks
-// for terminals that never send the ctrl modifier on arrow keys.
-export function resolveWizardNavKey(input: string, key: WizardNavKey): 'next' | 'back' | null {
-  if (key.ctrl !== true) {
-    return null;
-  }
-  if (key.rightArrow || input === 'n') {
-    return 'next';
-  }
-  if (key.leftArrow || input === 'p') {
-    return 'back';
-  }
-  return null;
-}
+// Wizard-scoped step navigation: Ctrl+→ / Ctrl+N forward, Ctrl+← / Ctrl+P back — the
+// resolver now lives in shared/keys/tab-navigation.ts (story 6.9, shared with the Routes
+// right pane's sub-tabs); re-exported under its wizard names so callers/tests are unchanged.
+export { resolveTabNavKey as resolveWizardNavKey, type TabNavKey as WizardNavKey } from '../../../../shared/keys/tab-navigation.js';
 
 // Story 2.37 -----------------------------------------------------------------------------
 // Step 3: global branch strategy + per-service exceptions.

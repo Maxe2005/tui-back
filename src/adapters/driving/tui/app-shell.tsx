@@ -288,7 +288,10 @@ export function AppShell({
     // flows) sets zoneInputCaptured while it owns the keystroke — every global shortcut,
     // including `?` help, must not fire while it's set, the same way it's already gated
     // for the zone-mnemonic/filter/command dispatch below.
-    if (state.zoneInputCaptured) {
+    // Story 6.9: the focused Routes right pane counts as captured straight from the store —
+    // the zone's own zoneInputCaptured effect lands one render later, and a keypress in
+    // between must not switch zones (or quit) mid-edit.
+    if (state.zoneInputCaptured || (state.activeZone === 'routes' && state.routesPaneFocus === 'detail')) {
       return;
     }
 
@@ -364,17 +367,20 @@ export function AppShell({
       // mounted `useInput` hook (Ink dispatches to all of them, not just the topmost) fires
       // on the same keypress and the zone switches out from under the pane grid before its
       // own handler's `setSubFocus` even matters.
+      // Story 6.7/6.9: the Routes right pane needs no gate here — while it holds focus it
+      // sets zoneInputCaptured (returned above), so its arrows never switch zones.
       const arrowZoneId = state.logsPaneGridArrowsActive ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;
       }
 
+      // The Routes zone likewise owns `/` (its inline route filter).
       // Story 5.2: the Logs zone owns `/` itself (its own global-filter editor) while it's
       // the active zone — without this guard, this app-wide filter stub would also fire on
       // the same keystroke (Ink dispatches to every mounted `useInput` hook), the same
       // double-dispatch hazard already solved for arrow keys via `logsPaneGridArrowsActive`.
-      if (activeZone !== 'logs' && shouldOpenFilter(input)) {
+      if (activeZone !== 'logs' && activeZone !== 'routes' && shouldOpenFilter(input)) {
         setFilterOpen(true);
         return;
       }

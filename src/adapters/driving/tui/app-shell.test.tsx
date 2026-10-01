@@ -499,11 +499,30 @@ it('shouldQuit returns true for q', () => {
         routesStatus: 'idle',
         routesError: null,
         loadRoutes: async () => {},
-        // Story 6.2: Routes zone fire state
-        fireStatus: 'idle',
-        fireResult: null,
-        fireError: null,
+        // Story 6.2/6.9: Routes zone fire state (per route) and right-pane focus/tab
         fireRoute: async () => {},
+        requestDrafts: {},
+        responses: {},
+        ensureRequestDraft: () => {},
+        updateRequestDraft: () => {},
+        routesPaneFocus: 'list',
+        routesPaneTab: 'request',
+        setRoutesPaneFocus: () => {},
+        setRoutesPaneTab: () => {},
+        routesFilter: { value: '', cursor: 0 },
+        setRoutesFilter: () => {},
+        routesSelected: 0,
+        setRoutesSelected: () => {},
+        // Story 6.7: JsonTree session state
+        jsonTreeStates: {},
+        updateJsonTreeState: () => {},
+        // Story 6.8: body-draft session state
+        bodyDrafts: {},
+        bodyEditErrors: {},
+        ensureBodyDraft: () => {},
+        updateBodyDraft: () => {},
+        setBodyEditError: () => {},
+        setBodyEditErrors: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

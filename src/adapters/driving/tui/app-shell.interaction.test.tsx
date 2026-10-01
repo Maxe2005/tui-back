@@ -2555,3 +2555,84 @@ describe('AppShell reset screen (:reset)', () => {
     }
   });
 });
+
+describe('AppShell Routes right-pane key ownership (stories 6.7, 6.9)', () => {
+  // Same double-dispatch hazard as the Logs pane grid (story 5.1): Ink dispatches every
+  // keypress to every mounted `useInput` hook, so the tree's own Left/Right fold keys
+  // would also reach the global Left/Right zone-switch and leave the Routes zone before
+  // the fold ever mattered. Story 6.9: the focused pane captures the keyboard, which also
+  // keeps zone mnemonics (`d`, `e`, `l`…) inert mid-edit. Only a real-keypress round-trip
+  // through both components together can prove the gate.
+  function seedRoutesStore() {
+    const store = createAppStore();
+    store.setState({
+      activeZone: 'routes',
+      tabVisibility: {
+        routes: { status: 'enabled', carryingServices: [] },
+        sharedTypes: { status: 'omitted', carryingServices: [] },
+      },
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [{ method: 'GET', path: '/users', summary: 'List users' }],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+      responses: { 'GET /users': { status: 'fired', result: { status: 200, durationMs: 42, body: '{"data":{"a":1}}' } } },
+      routesPaneFocus: 'detail',
+      routesPaneTab: 'response',
+    });
+    return store;
+  }
+
+  it('Left folds the tree without switching the active zone while the tree owns the arrows', async () => {
+    const store = seedRoutesStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      expect(store.getState().zoneInputCaptured).toBe(true);
+
+      await press(instance, stdin, KEYS.down); // root -> `data`
+      await press(instance, stdin, KEYS.left); // fold `data`
+
+      expect(store.getState().jsonTreeStates['GET /users']?.foldedPaths).toEqual(['data']);
+      expect(store.getState().activeZone).toBe('routes');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Left switches the active zone normally once focus returns to the list', async () => {
+    const store = seedRoutesStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      await pressEscape(instance, stdin); // Response -> Request
+      await pressEscape(instance, stdin); // Request -> list
+      expect(store.getState().routesPaneFocus).toBe('list');
+
+      await press(instance, stdin, KEYS.left);
+
+      // 'logs' is the previous zone before 'routes' in ZONES order.
+      expect(store.getState().activeZone).toBe('logs');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('keeps zone mnemonics inert while the pane holds focus', async () => {
+    const store = seedRoutesStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      await press(instance, stdin, 'd');
+      await press(instance, stdin, 'l');
+
+      expect(store.getState().activeZone).toBe('routes');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

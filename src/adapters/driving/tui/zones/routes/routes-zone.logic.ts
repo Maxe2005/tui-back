@@ -4,6 +4,8 @@
 // unit-tested directly; the `useInput` callback in the component stays a thin dispatcher.
 import type { Route } from '../../../../../core/ports/route-scanner.js';
 import type { FireResult } from '../../../../../core/routes/fire-request.js';
+import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../shared/components/json-tree/model.js';
+import { formatByteSize } from './routes-request.logic.js';
 
 export type RoutesSelectionDirection = 'up' | 'down';
 
@@ -25,12 +27,27 @@ export function moveRoutesSelection(current: number, direction: RoutesSelectionD
   return Math.min(Math.max(next, 0), length - 1);
 }
 
-// The spec's CLI row shape (`METHOD path`) doubles as the list-row label; the summary (when
-// the scanner found one) rides as the row's dim meta, never crowding the label.
-export function formatRouteRow(route: Route): { label: string; meta?: string } {
-  return route.summary === undefined
-    ? { label: `${route.method} ${route.path}` }
-    : { label: `${route.method} ${route.path}`, meta: route.summary };
+// The spec's CLI row shape (`METHOD path`) is the whole list row: the summary is deliberately
+// NOT rendered in the list (a long summary wrapped and made rows taller than the one-row
+// budget BoundedList assumes) — it only appears in the detail pane (formatRouteDetail) for the
+// focused route.
+export function formatRouteRow(route: Route): { label: string } {
+  return { label: `${route.method} ${route.path}` };
+}
+
+// The route filter: case-insensitive, whitespace-separated terms that must ALL appear in the
+// row's own label (`METHOD path`) — so `get user` matches `GET /users/{id}` and `post` alone
+// narrows to a method. The summary is not matched: it isn't visible in the list, and a row
+// matching on hidden text would look like a false positive.
+export function filterRoutes(routes: readonly Route[], query: string): Route[] {
+  const terms = query.toLowerCase().split(/\s+/).filter((term) => term !== '');
+  if (terms.length === 0) {
+    return [...routes];
+  }
+  return routes.filter((route) => {
+    const label = formatRouteRow(route).label.toLowerCase();
+    return terms.every((term) => label.includes(term));
+  });
 }
 
 // DetailPane wraps its children in a single Ink <Text> internally, so the detail is one
@@ -44,6 +61,15 @@ export function formatRouteDetail(route: Route): string {
 // single-string constraint as the route detail above) — no logs pane (Story 6.4).
 export function formatFireResult(result: FireResult): string {
   return `${result.status} · ${result.durationMs}ms\n\n${result.body}`;
+}
+
+// Story 6.7: the Response header keeps the status line while the body dump moves into
+// the JsonTree (DetailPane's single-<Text> constraint forbids nesting the tree inside).
+// Story 6.9 adds the body size — `≥` when the body hit core's 64K-character cap, since
+// the real response was larger than what was kept.
+export function formatFireStatus(result: FireResult): string {
+  const capped = result.body.length >= MAX_FIRE_BODY_CHARS;
+  return `${result.status} · ${result.durationMs}ms · ${capped ? '≥' : ''}${formatByteSize(result.body)}`;
 }
 
 // Story 6.2: auth failures render distinctly from generic failures so a permission
@@ -76,10 +102,9 @@ export function formatFireError(code: string, message: string): string {
   }
 }
 
-// Story 6.2: the Enter key fires the selected route — a pure dispatch helper so the
-// keystroke behavior is unit-testable without Ink. Returns the route to fire, or
-// undefined when there is nothing to fire (empty list): the component calls
-// `fireRoute(target.method, target.path)` only for a defined return.
+// Story 6.2 (6.9: the list cursor's route — the one `Enter` opens and the pane shows) — a
+// pure dispatch helper so the keystroke behavior is unit-testable without Ink. Returns
+// the cursor route, or undefined for an empty list.
 export function resolveEnterFireTarget(
   routes: Route[] | null | undefined,
   selected: number,

@@ -85,6 +85,10 @@ export const KEYS = {
   right: '\x1b[C',
   home: '\x1b[H',
   end: '\x1b[F',
+  // Story 6.7: PgUp/PgDn (CSI `5~`/`6~`, decoded by ink's parse-keypress.js into
+  // `key.pageUp`/`key.pageDown`) — the JsonTree pages by its own viewport, tree-locally.
+  pageUp: '\x1b[5~',
+  pageDown: '\x1b[6~',
   // Story 2.21: Ctrl+letter comes over the wire as its codepoint-1..26 control byte
   // (ink's parse-keypress.js) — Ctrl+W is 'w' (0x77) - 'a' (0x61) + 1 = 0x17.
   ctrlW: '\x17',

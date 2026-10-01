@@ -39,7 +39,7 @@ export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
 export type { ResetPreview } from './slices/reset-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
-export type { FireStatus } from './slices/routes-slice.js';
+export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 

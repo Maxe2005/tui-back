@@ -21,6 +21,18 @@ export const colors = Object.freeze({
 // column widths in `ch`; section-gap is one blank ROW between logical groups
 // and chrome-row is one chrome ROW — row counts, not `ch` (DESIGN.md
 // §Layout & Spacing).
+// Story 6.7: the JsonTree's scalar type colors — a closed mapping over the existing
+// palette (no new hues): strings read success, numbers info, booleans warning,
+// nulls text-dim, keys text. Kept beside (not inside) `theme` like detail-pane's
+// SUMMARY_LINE_COLORS, so the aggregate shape the theme tests pin stays untouched.
+export const jsonTreeColors = Object.freeze({
+  key: colors.text,
+  string: colors.success,
+  number: colors.info,
+  boolean: colors.warning,
+  null: colors['text-dim'],
+} as const);
+
 export const spacing = Object.freeze({
   '0': 0,
   '1': 1,

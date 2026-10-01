@@ -96,7 +96,7 @@ UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (activ
 UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21). Amended 2026-09-16 (Sprint Change Proposal): adds "EDT deleted" (per-service branch-disposition confirmation, active-EDT-blocked, cross-EDT branch-collision-blocked-per-service — Story 2.29), "EDT quick-pick" (filterable list for `edt-switch`/`edt-modify` with no argument, including its own "no matching EDT" state — Story 2.30), and "Create from existing EDT" (member checklist pre-seeded from a root EDT, root-branch-derived base-branch suggestion — Story 2.31) as new named states. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): EDT SERVICES/OTHER SERVICES lists adopt the same bounded/scrollable list primitive as the Logs zone (UX-DR33), for the same reason.
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): adds filter-history browsing (arrow-recall and grid-browser, see UX-DR32) as a new named state. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): service lists, the hints panel, and `LogFilterEditor` (including its history-grid browser) now render within a bounded, scrollable window (UX-DR33) rather than unconditionally, preventing terminal-overflow rendering corruption.
-UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes).
+UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes). Amended 2026-09-30 (Sprint Change Proposal, Stories 6.6–6.9): the Routes zone's right pane is a focusable two-tab pane (Request / Response, Logs added by Story 6.4) reached with `Enter` from the list; request editing is a mandatory step before any fire; the response is browsed in a JsonTree with session-persistent, per-route filters (UX-DR34).
 UX-DR24: Implement shared-types zone states — no-members explicit state, publish-in-progress per-step status with spinner, publish-step-failure detail + resume-from-failed-step re-trigger, propagation status (on-latest-for-this-branch vs. behind, resolved live via git ancestry, never a global-max version — amended 2026-08-24), publish-success chaining immediately into a propagation offer, propagation-in-progress/per-service-failure independent retriability, and quit-mid-run confirmation with resume offer.
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
@@ -112,6 +112,7 @@ UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the se
 
 UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): generalized into a shared input-history recall pattern with two consumers — the Logs filter editor (above, scope+mode-keyed lists, with the `↓`-from-draft grid browser) and the `:` command bar (UX-DR29, a single command list, no grid browser). The push/dedup/trim rules, arrow-browse with draft preservation and skip-equal-to-draft, and snap-back-on-keypress behavior are one implementation shared by both; each consumer only supplies its own history list(s) and its own size/dedup settings.
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
+UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
 ### FR Coverage Map
@@ -2677,6 +2678,8 @@ So that I build a personal library of realistic examples without losing the abil
 **When** the saved-request list is viewed
 **Then** that request is flagged stale and can be deleted — it is never fired silently
 
+> Amended 2026-09-30 (Sprint Change Proposal): the "customize before firing" mechanics — body, headers, query and params editing, and the mandatory request step — are delivered by Stories 6.8/6.9; 6.3 builds saving on top of them. "Ad hoc customize-then-fire always works without saving" is satisfied by 6.9's request step. Saving also persists the request's JsonTree filters/folds (per-route session state from 6.7), so a saved/favorite request reopens with the same view.
+
 ### Story 6.4: See Response and Relevant Logs Together
 
 As a developer,
@@ -2700,6 +2703,8 @@ So that I can trace an issue without opening a separate terminal.
 **Given** a route's real dependencies change over time
 **When** the developer wants to update them
 **Then** the learned affected-service set can be edited or reset later
+
+> Amended 2026-09-30 (Sprint Change Proposal): the correlated logs are shown in the third **Logs** sub-tab of the Routes right pane (Story 6.9's tab model), shown together with the response's summary line; the response and logs remain reachable without a separate step.
 
 ### Story 6.5: Manage the Saved-Request Library Across EDTs
 
@@ -2727,3 +2732,170 @@ So that a request saved in one EDT is still useful from any other, without clutt
 **Given** hide and favorite are the only clutter-management tools in v1
 **When** the library is viewed
 **Then** no folder or tagging system is offered
+
+### Story 6.6: Scanner Extension — Parameters & Request-Body Skeletons
+
+> Added 2026-09-30 (Sprint Change Proposal): feeds the request editor (6.8/6.9) so a route opens
+> pre-filled instead of empty.
+
+As a developer, I want the route scanner to expose each route's parameters and a request-body
+example, So that the request editor opens with a realistic skeleton instead of a blank body.
+
+**Acceptance Criteria:**
+
+- **Given** an OpenAPI 3.x operation with `parameters` (path / query / header, at operation or
+  path-item level) **When** scanned **Then** the route carries a neutral parameter list
+  (`name`, `in`, `required`, optional `example`) — operation-level entries override path-item
+  ones with the same `name`+`in`.
+- **Given** an operation with a JSON `requestBody` **When** scanned **Then** the route carries
+  `bodyExample` — the spec's `example`/`examples` value when present, else a skeleton generated
+  from the schema (`string → ""`, `number/integer → 0`, `boolean → false`, `array → [one
+  generated item]`, `object → all properties`, `enum → first value`, `default`/`example` on a
+  property win) — plus the body `contentType`. `$ref`s into `components` are resolved.
+- **Given** a recursive or self-referencing schema **When** the skeleton is generated **Then**
+  generation is depth-bounded and cycle-safe (a cyclic branch renders `null`/`{}`) — it never
+  loops or throws.
+- **Given** a `requestBody` that is not JSON (multipart, form-urlencoded, binary) **When**
+  scanned **Then** the route carries its `contentType` and **no** `bodyExample` — the editor
+  (6.8) then starts empty; nothing is fabricated.
+- **Given** a spec that has no parameters/requestBody info, or a scanner implementation for
+  another language that never fills the new fields **When** used **Then** everything keeps
+  working exactly as in Story 6.1/6.2 — every new field is optional (AD-5: no core change is
+  needed to activate a scanner).
+- **Given** a malformed `parameters`/`requestBody`/`$ref` **When** scanned **Then** that
+  operation degrades to a route without the extra fields (the route is still listed); the scan
+  as a whole only fails on the conditions Story 6.1 already defines.
+
+**Implementation notes:** `Route` gains `parameters?: RouteParameter[]`, `bodyContentType?:
+string`, `bodyExample?: unknown` — plain data, no OpenAPI vocabulary crossing the port.
+Schema → example generation lives in a pure function inside the `nestjs-openapi` driven
+adapter (`schema-example.ts`), never in `core/`. Route identity stays `method + path`.
+
+### Story 6.7: JsonTree Component — Read-Only Navigation, Collapse & Session Filters
+
+> Added 2026-09-30 (Sprint Change Proposal): the shared component used to browse a response
+> (this story) and to edit a request body (6.8).
+
+As a developer, I want JSON shown as an indented, scrollable tree I can walk line by line, fold
+and filter, So that I can read large API responses without a separate tool.
+
+**Acceptance Criteria:**
+
+- **Given** a JSON value **When** rendered **Then** it is shown as indented lines
+  (`key: value`, containers with a `{n}` / `[n]` size hint), scalars colored by type (string,
+  number, boolean, null), long strings truncated with `…`, inside a bounded viewport that
+  scrolls with the selection (same behavior and `Home`/`End`/`PgUp`/`PgDn` as the routes list);
+  only visible rows are rendered.
+- **Given** the selection is on a container line **When** `→`/`Space` is pressed **Then** it
+  unfolds; `←` folds it, or moves to the parent when it is already folded. `+`/`-` unfold/fold
+  every node down to the next depth level.
+- **Given** a line is selected **When** the developer hides its key (`h`) **Then** every line
+  with that key name disappears from the tree, everywhere (a global key rule); `H` on a line
+  keeps **only** rules-matching keys visible (allow-list). `f` opens the filter panel to list and
+  remove active rules; a `null`-values toggle hides all nulls. The status line always shows the
+  number of hidden lines and active rules.
+- **Given** a response with hidden or folded content **When** the developer fires another
+  request on the **same route** **Then** the same key rules and folded paths apply to the new
+  response. Fold state is stored per **normalized path** (array indices become `[]`, e.g.
+  `data.items[].tags`), so it survives responses with different array lengths.
+- **Given** the developer selects a different route **When** it is opened **Then** it gets its
+  **own** filter/fold state (filters are per route). Nothing is persisted to disk: state lives
+  in the store for the session, is lost on quit, and has a serializable shape so Story 6.3 can
+  save it with a saved request.
+- **Given** a response that is not valid JSON (plain text, HTML, or a body truncated at the
+  64 KB cap) **When** shown **Then** the Response view falls back to scrollable raw text with a
+  visible reason ("not JSON" / "truncated at 64 KB") — it never renders a partial tree as if
+  complete.
+- **Given** an empty response body or an empty object/array **When** shown **Then** it is an
+  explicit empty state, distinct from an error.
+
+**Implementation notes:** `tui/shared/components/json-tree/` — pure model
+(`flattenJson(value, foldState, rules) → Row[]`, `normalizePath`, rule/fold reducers) with
+unit tests, plus a thin Ink view built on `bounded-list`. Filter/fold state lives in a new
+`jsonTreeStates: Record<routeKey, JsonTreeState>` in the routes slice (AD-10: same single
+store), `routeKey = METHOD + ' ' + path`. In this story the component is wired into the
+existing Response pane (replacing the raw dump); the sub-tab layout arrives in 6.9.
+
+### Story 6.8: JsonTree Edit Mode — Request Body Editing
+
+> Added 2026-09-30 (Sprint Change Proposal).
+
+As a developer, I want to edit a JSON request body in the same tree, So that I can shape a
+realistic payload before firing without leaving the terminal.
+
+**Acceptance Criteria:**
+
+- **Given** the tree in edit mode **When** `Enter` is pressed on a scalar **Then** an inline
+  field (`TextInputLine`) opens with the current value; on confirm the value is validated by
+  its type (number, boolean, `null`, string) and an invalid entry stays displayed in error
+  color with its reason — it is never silently coerced.
+- **Given** a container or key line **When** `a` (add key/item), `d` (delete) or `t` (change
+  type) is pressed **Then** the tree is updated accordingly; adding a key to an object prompts
+  for its name and rejects a duplicate.
+- **Given** the developer wants to paste a whole payload **When** `r` is pressed **Then** a
+  raw-text mode opens (multi-line editable buffer); leaving it validates the JSON — invalid
+  JSON keeps the developer in raw mode with the parse error and line/column shown, and the
+  previous valid body is preserved.
+- **Given** hidden or folded lines in the editor **When** the request is later fired **Then**
+  hidden content **is still sent** and the editor status shows "N lines hidden — still sent";
+  hide/fold in edit mode is purely visual.
+- **Given** the body still has an invalid value or unparsable raw buffer **When** the developer
+  tries to leave the editor to fire **Then** the fire is blocked with the first error shown.
+- **Given** the same route is edited twice in a session **When** the developer comes back
+  **Then** its last edited body and its tree filters/folds are still there (per-route session
+  state, as in 6.7).
+
+**Implementation notes:** extends the 6.7 model with an immutable edit layer
+(`setValue`, `addEntry`, `removeEntry`, `changeType`) — pure, fully unit-tested; the view adds
+the inline editor and the raw mode. Reuses `text-edit.ts`/`TextInputLine`.
+
+### Story 6.9: Routes Right Pane — Mandatory Request Step & Request/Response Sub-Tabs
+
+> Added 2026-09-30 (Sprint Change Proposal).
+
+As a developer, I want selecting a route to open a request editor and firing to reveal the
+response in its own tab, So that I always review what I send and can read what comes back
+without the two fighting for the same space.
+
+**Acceptance Criteria:**
+
+- **Given** the routes list has the focus **When** `Enter` is pressed on a route **Then** the
+  focus moves to the right pane on its **Request** tab (pane title/border highlighted, footer
+  switches to the pane's keys); `Esc` returns the focus to the list. `Enter` on the list never
+  fires directly — the request step is mandatory.
+- **Given** the Request tab **When** opened **Then** it shows sections **Params** (path
+  parameters, required ones marked and pre-filled from `example` when known), **Query**,
+  **Headers** and **Body** (the 6.8 editor, pre-filled with the 6.6 `bodyExample`, empty when
+  the route has none or no body). `Tab`/`Shift+Tab` move between sections. A route with no
+  parameters and no body (e.g. a plain `GET`) shows the sections empty and can be fired in two
+  keypresses (`Enter` to open, `Ctrl+R` to fire) — the step is mandatory to *pass through*, not
+  to fill.
+- **Given** required path parameters are unfilled **When** the developer fires **Then** the fire
+  is blocked with the missing parameter names listed; nothing is sent.
+- **Given** a valid request **When** `Ctrl+R` is pressed **Then** the request is fired through
+  the same core use-case (in-process, AD-2), the pane switches automatically to the **Response**
+  tab, and shows status, duration and size followed by the 6.7 JsonTree (or raw-text fallback).
+  Auth errors keep their distinct rendering (6.2), now inside the Response tab.
+- **Given** the right pane has the focus **When** `Ctrl+→` (fallback `Ctrl+N`) or `Ctrl+←`
+  (fallback `Ctrl+P`) is pressed **Then** the sub-tab changes to the next/previous one, without
+  wrapping. Number keys and `[` `]` are **not** used. The tab strip shows the active tab; a
+  third **Logs** tab is displayed only once Story 6.4 provides it (the tab model supports it).
+- **Given** the developer switches route or sub-tab **When** they come back **Then** each
+  route's request draft and last response are kept for the session (a reload of the routes
+  list for a different repo still drops them, as it does today).
+- **Given** a route the developer edited **When** `Esc`/`Ctrl+←` returns to the Request tab
+  after a fire **Then** the draft is intact and can be tweaked and re-fired without leaving the
+  pane.
+- **Given** `fire-request` is used from the CLI **When** run without the new options **Then** it
+  behaves exactly as in Story 6.2; the new optional `body`/`query`/`headers` options are
+  available on the use-case (and as optional CLI flags) with `Content-Type: application/json`
+  inferred for a JSON body.
+
+**Implementation notes:** `fireRequest(deps, repoPath, method, path, options?: {body?, query?,
+headers?})` — the trailing optional argument keeps 6.2's tests green; the `Cookie` header is
+still owned by the auth port and cannot be overridden by `headers`. The Ctrl+→/N / Ctrl+←/P
+resolver in `create-wizard/wizard.logic.ts` is generalized to a shared
+`shared/keys/tab-navigation.ts` consumed by both the wizard and the Routes pane (wizard tests
+unchanged). The routes slice moves from one global `fireStatus/fireResult/fireError` triple to
+per-route `requestDrafts` / `responses` maps plus a `routesPaneFocus: 'list' | 'detail'` and
+`routesPaneTab: 'request' | 'response'`.

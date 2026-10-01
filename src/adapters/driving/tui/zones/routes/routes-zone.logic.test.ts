@@ -4,7 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatFireError,
+  filterRoutes,
   formatFireResult,
+  formatFireStatus,
   formatRouteDetail,
   formatRouteRow,
   moveRoutesSelection,
@@ -35,17 +37,36 @@ describe('moveRoutesSelection', () => {
 });
 
 describe('formatRouteRow', () => {
-  it('renders METHOD + path with the summary as meta', () => {
-    expect(formatRouteRow({ method: 'GET', path: '/users', summary: 'List users' })).toEqual({
-      label: 'GET /users',
-      meta: 'List users',
-    });
+  it('renders only METHOD + path — the summary never rides in the list row', () => {
+    expect(formatRouteRow({ method: 'GET', path: '/users', summary: 'List users' })).toEqual({ label: 'GET /users' });
+    expect(formatRouteRow({ method: 'DELETE', path: '/users/:id' })).toEqual({ label: 'DELETE /users/:id' });
+  });
+});
+
+describe('filterRoutes', () => {
+  const routes = [
+    { method: 'GET', path: '/users/{id}', summary: 'Fetch a user' },
+    { method: 'POST', path: '/users' },
+    { method: 'GET', path: '/orders' },
+  ];
+
+  it('returns every route for an empty or blank query', () => {
+    expect(filterRoutes(routes, '')).toEqual(routes);
+    expect(filterRoutes(routes, '   ')).toEqual(routes);
   });
 
-  it('omits meta when the scanner found no summary', () => {
-    expect(formatRouteRow({ method: 'DELETE', path: '/users/:id' })).toEqual({
-      label: 'DELETE /users/:id',
-    });
+  it('matches case-insensitively on the method and the path', () => {
+    expect(filterRoutes(routes, 'post')).toEqual([routes[1]]);
+    expect(filterRoutes(routes, 'ORDERS')).toEqual([routes[2]]);
+  });
+
+  it('requires every whitespace-separated term to match', () => {
+    expect(filterRoutes(routes, 'get user')).toEqual([routes[0]]);
+    expect(filterRoutes(routes, 'get zzz')).toEqual([]);
+  });
+
+  it('does not match on the hidden summary', () => {
+    expect(filterRoutes(routes, 'fetch')).toEqual([]);
   });
 });
 
@@ -64,6 +85,14 @@ describe('formatRouteDetail', () => {
 describe('formatFireResult (story 6.2)', () => {
   it('joins status, duration, and body into one Text-safe string', () => {
     expect(formatFireResult({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms\n\n{"id":1}');
+  });
+});
+
+describe('formatFireStatus (story 6.7)', () => {
+  it('keeps the status line while the body dump moves into the JsonTree', () => {
+    expect(formatFireStatus({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms · 8 B');
+    // Story 6.9: a body at core's cap marks the size as a lower bound.
+    expect(formatFireStatus({ status: 200, durationMs: 1, body: 'x'.repeat(64 * 1024) })).toBe('200 · 1ms · ≥64.0 KB');
   });
 });
 
