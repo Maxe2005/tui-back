@@ -71,9 +71,9 @@ import {
 // never overrun the tab bar above or the footer below.
 const ROUTES_LIST_CHROME_ROWS = 9;
 // First-paint estimate of the response tree's total row budget (shell chrome + the route
-// detail + the Response header around the tree's own box); the measured box height takes
-// over after mount, like the list above.
-const RESPONSE_AREA_CHROME_ROWS = 12;
+// detail + the Response header + the right pane's own hint line around the tree's own
+// box); the measured box height takes over after mount, like the list above.
+const RESPONSE_AREA_CHROME_ROWS = 13;
 
 export function formatRoutesDisabledMessage(carryingServices: string[]): string {
   const list = carryingServices.join(', ');
@@ -118,9 +118,11 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const setFilter = (next: TextInputState | ((prev: TextInputState) => TextInputState)) =>
     storeSetFilter(typeof next === 'function' ? next(filter) : next);
   const [filterEditing, setFilterEditing] = useState(false);
-  // The filter-rules panel is transient UI (open/closed), unlike the rules themselves —
-  // zone-local, reset on every fire, never in the store.
+  // The filter-rules panel is transient UI (open/closed + rule cursor), unlike the rules
+  // themselves — zone-local, reset on every fire, never in the store. Opening the panel
+  // auto-focuses the rule list: arrows act immediately, no activation keypress needed.
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [panelCursor, setPanelCursor] = useState(0);
   const windowSize = useWindowSize();
   const [listAreaRef, listAreaSize] = useElementSize();
   const [responseAreaRef, responseAreaSize] = useElementSize();
@@ -157,6 +159,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   );
   const treeActiveRuleCount = useMemo(() => countActiveRules(treeRules), [treeRules]);
   const treeRuleList = useMemo(() => listActiveRules(treeRules), [treeRules]);
+  const clampedPanelCursor = treeRuleList.length === 0 ? 0 : clampTreeSelection(panelCursor, treeRuleList.length);
   const clampedTreeSelected = clampTreeSelection(treeState.selected, treeRows.length);
   const rawLines = useMemo(
     () => (classification?.kind === 'raw' && fireResult !== null ? fireResult.body.split('\n') : []),
@@ -196,6 +199,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const applyTreeAction = (action: TreeKeyAction) => {
     if (action === 'toggle-panel') {
       setFilterPanelOpen(true);
+      setPanelCursor(0);
       return;
     }
     if (action === 'up' || action === 'down' || action === 'home' || action === 'end' || action === 'page-up' || action === 'page-down') {
@@ -324,6 +328,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // A fresh fire gets a closed panel; the persisted rules/folds come from the slice.
   useEffect(() => {
     setFilterPanelOpen(false);
+    setPanelCursor(0);
   }, [firedRouteKey]);
 
   // Arrowing onto a different repo's list must never leave the cursor on an unrelated row
@@ -398,6 +403,43 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           return;
         }
         if (filterPanelOpen) {
+          // The open panel auto-owns the arrows: the cursor navigates the rule list
+          // immediately (no activation keypress), windowed past 10 rows.
+          if (key.upArrow === true) {
+            setPanelCursor((prev) => clampTreeSelection(prev - 1, treeRuleList.length));
+            return;
+          }
+          if (key.downArrow === true) {
+            setPanelCursor((prev) => clampTreeSelection(prev + 1, treeRuleList.length));
+            return;
+          }
+          if (key.home === true) {
+            setPanelCursor(0);
+            return;
+          }
+          if (key.end === true) {
+            setPanelCursor(Math.max(0, treeRuleList.length - 1));
+            return;
+          }
+          if (input === ' ' || input === 'd' || input === 'D') {
+            if (treeRuleList.length > 0) {
+              const at = clampedPanelCursor;
+              amendTreeState((live) => {
+                const next = removeActiveRule(frameTreeState(live).rules, at);
+                if (next === null) {
+                  return null;
+                }
+                return {
+                  ...live,
+                  hiddenKeys: [...next.hiddenKeys],
+                  onlyKeys: [...next.onlyKeys],
+                  hideNulls: next.hideNulls,
+                  selected: withClampedSelection(live, next),
+                };
+              });
+            }
+            return;
+          }
           const panelAction = resolveTreePanelKeyAction(input, treeRuleList.length);
           if (panelAction === null) {
             return;
@@ -500,15 +542,18 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const maxVisibleRows = listAreaSize !== null ? listAreaSize.height : Math.max(windowSize.rows - ROUTES_LIST_CHROME_ROWS, 3);
   const filterActive = filter.value !== '';
   const treeActive = treeFocused && classification !== null;
-  const listHint = filterEditing
-    ? '[enter] apply  [esc] clear'
-    : treeActive && classification?.kind === 'json' && !filterPanelOpen
-      ? '[esc] list · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level'
-      : treeActive && classification?.kind === 'json' && filterPanelOpen
-        ? '[esc/f] close · [1-9] remove · [n] nulls · [c] clear'
-        : treeActive
-          ? '[esc] list · [↑↓] scroll'
-          : '[enter] fire  [/] filter  [home/end] jump';
+  const listHint = filterEditing ? '[enter] apply  [esc] clear' : '[enter] fire  [/] filter  [home/end] jump';
+  // The right pane owns its own shortcut line at its bottom while the tree holds focus;
+  // the list pane keeps list-only hints.
+  const treeHint = !treeActive
+    ? null
+    : classification?.kind === 'raw'
+      ? '[esc] list · [↑↓] scroll'
+      : classification?.kind === 'empty'
+        ? '[esc] list'
+        : filterPanelOpen
+          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
+          : '[esc] list · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level';
 
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
@@ -556,28 +601,28 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {fireStatus === 'fired' && fireResult ? (
               <DetailPane title="Response">{formatFireStatus(fireResult)}</DetailPane>
             ) : null}
-            {fireStatus === 'fired' && fireResult && classification?.kind === 'json' && treeValue !== undefined ? (
-              <Box ref={responseAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                <JsonTree
-                  rows={treeRows}
-                  selected={clampedTreeSelected}
-                  hiddenCount={treeHiddenCount}
-                  activeRuleCount={treeActiveRuleCount}
-                  rules={treeRuleList}
-                  hideNulls={treeState.hideNulls}
-                  panelOpen={filterPanelOpen}
-                  maxVisibleRows={treeTotalBudget}
-                />
-              </Box>
-            ) : null}
-            {fireStatus === 'fired' && fireResult && classification?.kind === 'raw' ? (
-              <Box ref={responseAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                <JsonRawFallback reason={classification.reason} lines={rawLines} selected={clampedRawSelected} maxVisibleRows={treeTotalBudget} />
-              </Box>
-            ) : null}
-            {fireStatus === 'fired' && fireResult && classification?.kind === 'empty' ? (
-              <Box ref={responseAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
-                <JsonEmptyState emptyKind={classification.emptyKind} />
+            {fireStatus === 'fired' && fireResult && classification !== null ? (
+              <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
+                <Box ref={responseAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
+                  {classification.kind === 'json' && treeValue !== undefined ? (
+                    <JsonTree
+                      rows={treeRows}
+                      selected={clampedTreeSelected}
+                      hiddenCount={treeHiddenCount}
+                      activeRuleCount={treeActiveRuleCount}
+                      rules={treeRuleList}
+                      hideNulls={treeState.hideNulls}
+                      panelOpen={filterPanelOpen}
+                      panelCursor={clampedPanelCursor}
+                      maxVisibleRows={treeTotalBudget}
+                    />
+                  ) : classification.kind === 'raw' ? (
+                    <JsonRawFallback reason={classification.reason} lines={rawLines} selected={clampedRawSelected} maxVisibleRows={treeTotalBudget} />
+                  ) : classification.kind === 'empty' ? (
+                    <JsonEmptyState emptyKind={classification.emptyKind} />
+                  ) : null}
+                </Box>
+                {treeHint !== null ? <DimAnnotation text={treeHint} /> : null}
               </Box>
             ) : null}
             {fireStatus === 'error' && fireError ? (

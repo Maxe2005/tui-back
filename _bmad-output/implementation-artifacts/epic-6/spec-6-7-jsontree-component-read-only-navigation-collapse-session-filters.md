@@ -75,14 +75,20 @@ context:
 - [x] `shared/theme/theme.ts` -- scalar type colors -- AC color mapping.
 - [x] `store/slices/routes-slice.ts` + `routes-slice.test.ts` -- `jsonTreeStates`/`firedRouteKey`/`treeFocused` + actions -- per-route isolation, re-fire persistence, 50-entry prune.
 - [x] `zones/routes/routes-zone.tsx` + `routes-zone.logic.ts` + zone tests -- Response pane wiring, detail-area budget, focus + key routing, footer hints -- raw dump replaced, list behavior unchanged when unfocused.
+- [x] Follow-up (reopen 2026-10-01): filter panel cursor (`↑/↓/Home/End`, `Space`/`d` remove, windowed past 10 rule rows, digits kept) -- model + view + zone + tests.
+- [x] Follow-up (reopen 2026-10-01): right-pane shortcut line moved to the bottom of the right pane; list pane keeps list-only hints -- zone + tests.
 
 **Acceptance Criteria:**
 - Given a fired JSON response, when shown, then it is a navigable tree (arrows/Home/End/PgUp/PgDn, fold/unfold, depth +/-, hide/allow-list/panel/null-toggle) with a live status line, inside a bounded viewport.
 - Given a re-fire on the same route, when the new response arrives, then its prior key rules and normalized folds apply; a different route starts fresh.
 - Given a non-JSON or truncated body, when shown, then scrollable raw text with its reason appears, never a partial tree; empty bodies show an explicit empty state.
 - Given the tree focused, when `Esc` is pressed, then focus returns to the routes list with all list keys working as before.
+- Given the filter panel open with any number of rules, when the developer moves `↑/↓/Home/End`, then a cursor navigates the rule list (windowed past 10 rows); `Space`/`d` removes the highlighted rule, digits `1-9` still remove directly.
+- Given the tree focused, when hints render, then the right pane shows its own shortcut line at its bottom while the list pane keeps list-only hints.
 
 ## Spec Change Log
+
+- 2026-10-01 (story reopen — user feedback on `review`): digit-only rule removal caps at 9 individually-removable rules, and tree hints rendered under the left pane. Follow-up tasks appended below (no frozen change: "list and remove active rules" and hint placement were never frozen in detail). KEEP: live-state recipes, path escaping, control-char sanitization, visible raw selection.
 
 ## Verification
 

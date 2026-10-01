@@ -9,6 +9,7 @@ import { BoundedList } from '../bounded-list.js';
 import { colors, jsonTreeColors, spacing } from '../../theme/theme.js';
 import {
   formatTreeStatusLine,
+  PANEL_VISIBLE_RULE_ROWS,
   resolveTreeListBudget,
   type ActiveRule,
   type JsonTreeRow,
@@ -57,19 +58,31 @@ function JsonTreeRowView({ row, selected }: { row: JsonTreeRow; selected: boolea
   );
 }
 
-export function JsonTreeFilterPanel({ rules, hideNulls }: { rules: readonly ActiveRule[]; hideNulls: boolean }) {
+export function JsonTreeFilterPanel({ rules, hideNulls, cursor }: { rules: readonly ActiveRule[]; hideNulls: boolean; cursor: number }) {
+  const clamped = rules.length === 0 ? 0 : Math.min(Math.max(cursor, 0), rules.length - 1);
   return (
     <Box flexDirection="column">
       <Text color={colors['text-dim']}>
         {`Filters — ${rules.length} ${rules.length === 1 ? 'rule' : 'rules'}`}
       </Text>
-      {rules.map((rule, index) => (
-        <Text key={`${rule.kind}:${rule.key}`} color={colors.text} wrap="truncate-end">
-          {`  [${index + 1}] ${rule.kind === 'hide' ? 'hide' : 'only'} "${rule.key}"`}
-        </Text>
-      ))}
+      <BoundedList
+        items={rules}
+        maxVisibleRows={Math.min(rules.length, PANEL_VISIBLE_RULE_ROWS)}
+        cursorIndex={clamped}
+        renderItem={(rule, index) =>
+          index === clamped ? (
+            <Box key={`${rule.kind}:${rule.key}`} backgroundColor={colors['surface-selected']}>
+              <Text color={colors.accent} wrap="truncate-end">{`› [${index + 1}] ${rule.kind === 'hide' ? 'hide' : 'only'} "${rule.key}"`}</Text>
+            </Box>
+          ) : (
+            <Text key={`${rule.kind}:${rule.key}`} color={colors.text} wrap="truncate-end">
+              {`  [${index + 1}] ${rule.kind === 'hide' ? 'hide' : 'only'} "${rule.key}"`}
+            </Text>
+          )
+        }
+      />
       <Text color={colors.text}>{`  [n] hide nulls: ${hideNulls ? 'on' : 'off'}`}</Text>
-      <Text color={colors['text-dim']}>[1-9] remove · [n] nulls · [c] clear · [f] close</Text>
+      <Text color={colors['text-dim']}>[↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear · [f] close</Text>
     </Box>
   );
 }
@@ -82,11 +95,12 @@ export type JsonTreeProps = {
   rules: readonly ActiveRule[];
   hideNulls: boolean;
   panelOpen: boolean;
+  panelCursor: number;
   // Total row budget for the whole tree block (list + panel + status), measured by the caller.
   maxVisibleRows: number;
 };
 
-export function JsonTree({ rows, selected, hiddenCount, activeRuleCount, rules, hideNulls, panelOpen, maxVisibleRows }: JsonTreeProps) {
+export function JsonTree({ rows, selected, hiddenCount, activeRuleCount, rules, hideNulls, panelOpen, panelCursor, maxVisibleRows }: JsonTreeProps) {
   const listBudget = resolveTreeListBudget(maxVisibleRows, panelOpen, rules.length);
   return (
     <Box flexDirection="column">
@@ -100,7 +114,7 @@ export function JsonTree({ rows, selected, hiddenCount, activeRuleCount, rules, 
           renderItem={(row, index) => <JsonTreeRowView key={row.path} row={row} selected={index === selected} />}
         />
       )}
-      {panelOpen ? <JsonTreeFilterPanel rules={rules} hideNulls={hideNulls} /> : null}
+      {panelOpen ? <JsonTreeFilterPanel rules={rules} hideNulls={hideNulls} cursor={panelCursor} /> : null}
       <Text color={colors['text-dim']}>{formatTreeStatusLine(hiddenCount, activeRuleCount)}</Text>
     </Box>
   );

@@ -551,11 +551,17 @@ export function formatTreeStatusLine(hiddenCount: number, activeRuleCount: numbe
   return `${safeHidden} hidden · ${safeRules} ${safeRules === 1 ? 'rule' : 'rules'}`;
 }
 
+// Rule rows visible at once in the filter panel; past this the panel windows through
+// Rule rows visible at once in the filter panel; past this the panel windows through
+// BoundedList like every other list (the cursor still reaches every rule).
+export const PANEL_VISIBLE_RULE_ROWS = 10;
+
 // Total extra rows around the BoundedList: the status line plus, when open, the filter
-// panel (header + one row per rule + the nulls-toggle row + the hints row).
+// panel (header + up to PANEL_VISIBLE_RULE_ROWS windowed rule rows + the nulls-toggle
+// row + the hints row).
 export function treePanelLineCount(ruleCount: number): number {
   const safe = Number.isFinite(ruleCount) ? Math.max(0, Math.floor(ruleCount)) : 0;
-  return 3 + safe;
+  return 3 + Math.min(safe, PANEL_VISIBLE_RULE_ROWS);
 }
 
 export function treeChromeRows(panelOpen: boolean, ruleCount: number): number {

@@ -236,11 +236,18 @@ describe('RoutesZone (story 6.7)', () => {
     expect(await renderToString(<RoutesZone useStore={store} />)).toContain('Empty JSON value');
   });
 
-  it('shows tree hints while focused and list hints once Esc returns focus', async () => {
+  it('shows right-pane hints at the bottom of the right pane while focused', async () => {
     const store = createAppStore();
     seedFiredJson(store);
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[←→] fold');
+    const focused = await renderToString(<RoutesZone useStore={store} />);
+    expect(focused).toContain('[←→] fold');
+    expect(focused).toContain('[enter] fire');
+    // Placement itself is structural (the hint lives in the detail Box); these pin
+    // that each pane keeps its own keys instead of sharing one hint line.
+    expect(focused).not.toContain('[home/end] jump  [esc] list');
     store.getState().setTreeFocused(false);
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[enter] fire');
+    const unfocused = await renderToString(<RoutesZone useStore={store} />);
+    expect(unfocused).toContain('[enter] fire');
+    expect(unfocused).not.toContain('[←→] fold');
   });
 });

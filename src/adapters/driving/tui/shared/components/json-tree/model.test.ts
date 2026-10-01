@@ -386,6 +386,13 @@ describe('status line + budgets', () => {
     expect(resolveTreeListBudget(10, true, 2)).toBe(4);
     expect(resolveTreeListBudget(2, true, 5)).toBe(0);
   });
+
+  it('windows the panel rule rows past 10 instead of growing the chrome', () => {
+    expect(treePanelLineCount(10)).toBe(13);
+    expect(treePanelLineCount(25)).toBe(13);
+    expect(treeChromeRows(true, 25)).toBe(14);
+    expect(resolveTreeListBudget(20, true, 25)).toBe(6);
+  });
 });
 
 describe('pruneJsonTreeStates', () => {

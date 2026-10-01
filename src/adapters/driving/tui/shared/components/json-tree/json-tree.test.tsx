@@ -17,6 +17,7 @@ function treeFor(value: unknown, rules: TreeFilterRules = NO_RULES, extra: Recor
       rules={[]}
       hideNulls={false}
       panelOpen={false}
+      panelCursor={0}
       maxVisibleRows={30}
       {...extra}
     />
@@ -59,7 +60,7 @@ describe('JsonTree', () => {
     const value = { a: { b: 1 }, d: 2 };
     const rows = flattenJson(value, ['a'], NO_RULES);
     const output = await renderToString(
-      <JsonTree rows={rows} selected={0} hiddenCount={1} activeRuleCount={0} rules={[]} hideNulls={false} panelOpen={false} maxVisibleRows={30} />,
+      <JsonTree rows={rows} selected={0} hiddenCount={1} activeRuleCount={0} rules={[]} hideNulls={false} panelOpen={false} panelCursor={0} maxVisibleRows={30} />,
     );
     expect(output).toContain('a');
     expect(output).not.toContain('b');
@@ -70,7 +71,7 @@ describe('JsonTree', () => {
     const value = { rows: Array.from({ length: 20 }, (_, i) => i) };
     const rows = flattenJson(value, [], NO_RULES);
     const output = await renderToString(
-      <JsonTree rows={rows} selected={0} hiddenCount={0} activeRuleCount={0} rules={[]} hideNulls={false} panelOpen={false} maxVisibleRows={6} />,
+      <JsonTree rows={rows} selected={0} hiddenCount={0} activeRuleCount={0} rules={[]} hideNulls={false} panelOpen={false} panelCursor={0} maxVisibleRows={6} />,
     );
     expect(output).toContain('more below');
     expect(output).not.toContain('[19]');
@@ -89,6 +90,7 @@ describe('JsonTree', () => {
         ]}
         hideNulls
         panelOpen
+        panelCursor={1}
         maxVisibleRows={30}
       />,
     );
@@ -96,6 +98,8 @@ describe('JsonTree', () => {
     expect(output).toContain('[2] only "id"');
     expect(output).toContain('[n] hide nulls: on');
     expect(output).toContain('2 hidden · 2 rules');
+    expect(output).toContain('› [2] only "id"');
+    expect(output).toContain('[space] remove');
   });
 
   it('shows no panel when closed', async () => {
@@ -105,7 +109,7 @@ describe('JsonTree', () => {
 
   it('names the all-filtered state instead of rendering blank', async () => {
     const output = await renderToString(
-      <JsonTree rows={[]} selected={0} hiddenCount={4} activeRuleCount={1} rules={[{ kind: 'hide', key: 'a' }]} hideNulls={false} panelOpen={false} maxVisibleRows={30} />,
+      <JsonTree rows={[]} selected={0} hiddenCount={4} activeRuleCount={1} rules={[{ kind: 'hide', key: 'a' }]} hideNulls={false} panelOpen={false} panelCursor={0} maxVisibleRows={30} />,
     );
     expect(output).toContain('All lines hidden by filters');
   });
@@ -130,6 +134,11 @@ describe('JsonRawFallback', () => {
     const output = await renderToString(<JsonRawFallback reason="not JSON" lines={lines} selected={0} maxVisibleRows={5} />);
     expect(output).toContain('more below');
     expect(output).not.toContain('line-19');
+  });
+
+  it('marks the selected raw line visibly', async () => {
+    const output = await renderToString(<JsonRawFallback reason="not JSON" lines={['a', 'b', 'c']} selected={2} maxVisibleRows={10} />);
+    expect(output).toContain('› c');
   });
 });
 

@@ -26,15 +26,15 @@ function seed() {
   return store;
 }
 
-function mount(store: ReturnType<typeof createAppStore>) {
+function mount(store: ReturnType<typeof createAppStore>, rows = ROWS) {
   const stdout = new FakeTtyStdout();
-  Object.assign(stdout, { columns: 100, rows: ROWS });
+  Object.assign(stdout, { columns: 100, rows });
   const stdin = fakeInteractiveTtyStdin();
   // Mirrors AppShell: a fixed-height column with fixed sibling rows above and below the zone.
   const instance = render(
     createElement(
       Box,
-      { flexDirection: 'column', height: ROWS, overflow: 'hidden' },
+      { flexDirection: 'column', height: rows, overflow: 'hidden' },
       createElement(Text, {}, 'TABS-ROW'),
       createElement(RoutesZone, { useStore: store }),
       createElement(Text, {}, 'FOOTER-ROW'),
@@ -179,6 +179,9 @@ describe('RoutesZone route filter', () => {
 });
 
 describe('RoutesZone JsonTree (story 6.7)', () => {
+  // Tree tests render tall (30 rows): the response tree + filter panel + both hint
+  // lines need room — the shared 14-row stress viewport clips detail content, which is
+  // correct bounded behavior but makes frame assertions meaningless.
   const BODY = '{"id":1,"tags":["a","b"],"nested":{"x":true}}';
 
   function seedTree(fireRoute: () => Promise<void> = async () => {}) {
@@ -214,7 +217,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('moves the tree cursor with arrows/Home/End without moving the list cursor', async () => {
     const store = seedTree();
-    const { instance, stdout, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
@@ -234,7 +237,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('folds with ← (jumping to the parent when already folded) and unfolds with →', async () => {
     const store = seedTree();
-    const { instance, stdout, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
@@ -261,7 +264,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('hides a key globally with h and allow-lists with H', async () => {
     const store = seedTree();
-    const { instance, stdout, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
@@ -279,7 +282,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('opens the filter panel with f, removes per digit, toggles nulls, closes with Esc', async () => {
     const store = seedTree();
-    const { instance, stdout, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
@@ -303,7 +306,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
   it('returns focus to the list on Esc with every list key working as before', async () => {
     const fireRoute = vi.fn(async () => {});
     const store = seedTree(fireRoute);
-    const { instance, stdin } = mount(store);
+    const { instance, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await pressEscape(instance, stdin);
@@ -322,7 +325,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
     store.setState({
       fireResult: { status: 200, durationMs: 42, body: '{"a":{"b":{"c":1}},"d":2}' },
     });
-    const { instance, stdin } = mount(store);
+    const { instance, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       const folds = () => store.getState().jsonTreeStates['GET /users']?.foldedPaths ?? [];
@@ -342,7 +345,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
 
   it('clears all rules with c and closes the panel with f without unfocusing', async () => {
     const store = seedTree();
-    const { instance, stdout, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
@@ -365,7 +368,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
     store.setState({
       fireResult: { status: 200, durationMs: 42, body: Array.from({ length: 30 }, (_, i) => `line-${i}`).join('\n') },
     });
-    const { instance, stdout, stdin } = mount(store);
+    const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       expect(lastFrame(stdout)).toContain('not JSON');
@@ -377,6 +380,31 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       await press(instance, stdin, KEYS.home);
       expect(treeSelected(store)).toBe(0);
       expect(lastFrame(stdout)).toContain('› line-0');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('navigates panel rules with a cursor and removes the highlighted one with Space', async () => {
+    const store = seedTree();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      // Two rules: hide "id" (cursor starts on it) + allow "tags".
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'h');
+      await press(instance, stdin, 'H');
+      await press(instance, stdin, 'f');
+      expect(lastFrame(stdout)).toContain('› [1] hide "id"');
+      await press(instance, stdin, KEYS.down);
+      expect(lastFrame(stdout)).toContain('› [2] only "tags"');
+      await press(instance, stdin, KEYS.home);
+      expect(lastFrame(stdout)).toContain('› [1] hide "id"');
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, ' ');
+      expect(store.getState().jsonTreeStates['GET /users']?.onlyKeys).toEqual([]);
+      expect(store.getState().jsonTreeStates['GET /users']?.hiddenKeys).toEqual(['id']);
+      expect(store.getState().treeFocused).toBe(true);
     } finally {
       instance.unmount();
     }
