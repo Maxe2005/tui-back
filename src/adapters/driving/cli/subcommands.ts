@@ -1,9 +1,7 @@
-// adapters/driving/cli/subcommands: the production subcommand registry (AD-2). Each entry
-// is a thin wrapper around exactly one core use-case; the first story registering more than
-// one subcommand, so it also owns the duplicate-name guard (assertUniqueSubcommandNames)
-// that would otherwise let a future registry silently shadow an earlier subcommand.
-// Wrappers also validate argument cardinality so a typo'd or excess argument is an explicit
-// invalid-argument error instead of a silently ignored one.
+// adapters/driving/cli/subcommands: the production subcommand registry (AD-2). Each entry is a
+// thin wrapper around one core use-case that also validates argument cardinality, so a typo'd
+// or excess argument is an explicit invalid-argument instead of being ignored.
+// assertUniqueSubcommandNames keeps a later entry from silently shadowing an earlier one.
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { err, ok, type Result } from '../../../core/result.js';
@@ -63,11 +61,10 @@ export function buildSubcommands(deps: {
   migration: MigrationPort;
   restart: RestartPort;
   state: StatePort;
-  // Story 2.33: gates `registry clean`'s bare-invocation interactive list-then-confirm
-  // prompt. Defaults to false (never prompts) so every existing deps-construction call site
-  // (tests, in particular) is unaffected — only bin/main.ts's composition root wires this,
-  // and (review fix) only when BOTH stdout and stdin are real TTYs — a piped/redirected
-  // stdin must never let `rl.question()` block on or misread a nonexistent live answer.
+  // Gates `registry clean`'s bare-invocation interactive list-then-confirm prompt. Defaults to
+  // false (never prompts); only bin/main.ts wires it, and only when BOTH stdout and stdin are
+  // real TTYs — a piped stdin must never let `rl.question()` block on or misread a
+  // nonexistent answer.
   isTTY?: boolean;
   scanner: RouteScannerPort;
   auth: DevAuthPort;
@@ -121,10 +118,8 @@ export function buildSubcommands(deps: {
     {
       name: 'edts',
       usage: 'tui-back edts',
-      // Story 2.6 (FR-9): every managed service's current branch + ahead/behind divergence
-      // from its own configured upstream, uniformly for EDT members and non-members alike —
-      // the same core/edt/list.ts use-case the TUI's EDTs zone will consume in-process
-      // (AD-2).
+      // Every managed service's current branch + ahead/behind divergence from its own
+      // configured upstream (FR-9), uniformly for EDT members and non-members alike.
       run: async (args) =>
         args.length === 0
           ? listEdtBranchesDivergence({
@@ -159,15 +154,14 @@ export function buildSubcommands(deps: {
     {
       name: 'update',
       usage: UPDATE_USAGE,
-      // Story 3.3: the bare invocation stays EDT-scoped (3.1/3.2, `--all` never implied);
-      // `--all --yes` (order-insensitive) runs the same per-service flow against every
-      // managed repo; `--all` alone is a `confirmation-required` rejection naming `--yes`
-      // (confirmation stays out of core — a driving concern). Any other flag is an explicit
-      // invalid-argument rejection, never silently ignored.
+      // The bare invocation is EDT-scoped (`--all` is never implied); `--all --yes`
+      // (order-insensitive) runs the same per-service flow against every managed repo; `--all`
+      // alone is a `confirmation-required` rejection naming `--yes` (confirmation stays out of
+      // core — a driving concern). Any other flag is an explicit invalid-argument rejection.
       run: async (args) => {
-        // Story 3.4: the CLI explicitly passes no resolution seam — dirty worktrees keep
-        // today's `skipped`/`dirty-worktree` rows and conflicts keep the abort-and-report
-        // `failed`/`merge-conflict` rows, with no prompt and single-line JSON output.
+        // The CLI passes no resolution seam: dirty worktrees stay `skipped`/`dirty-worktree`
+        // rows and conflicts abort-and-report as `failed`/`merge-conflict`, with no prompt and
+        // single-line JSON output.
         if (args.length === 0) {
           return groupUpdate({
             edtRegistry: deps.edtRegistry,
@@ -180,13 +174,12 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
-            // Story 3.7: the CLI takes no configuration — full default selection (no
-            // `selection` filter), migrate ON, clean restart OFF (no new flags).
+            // The CLI takes no configuration — full default selection (no `selection`
+            // filter), migrate ON, clean restart OFF.
             runMigrations: true,
             cleanRestart: false,
             onUpdateBlocker: undefined,
-            // Story 3.10: the CLI takes no live observer either — no new flags, and the
-            // single-line JSON output is unchanged.
+            // No live observer either: the output stays a single JSON line.
             onPhase: undefined,
           });
         }
@@ -203,11 +196,11 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',
-            // Story 3.7: same full-default configuration as the bare invocation above.
+            // Same full-default configuration as the bare invocation above.
             runMigrations: true,
             cleanRestart: false,
             onUpdateBlocker: undefined,
-            // Story 3.10: same no-observer wiring as above.
+            // Same no-observer wiring as above.
             onPhase: undefined,
           });
         }
@@ -223,9 +216,8 @@ export function buildSubcommands(deps: {
     {
       name: 'registry',
       usage: REGISTRY_USAGE,
-      // Story 2.33: verb-dispatch subcommand, same shape as `edt` above — today's only
-      // action is `clean`, but the dispatch shape leaves room for a future registry verb
-      // without renaming the subcommand.
+      // Verb-dispatch subcommand, same shape as `edt` above — `clean` is the only action, but
+      // the dispatch shape leaves room for another registry verb without renaming.
       run: async (args) => {
         if (args[0] === 'clean') {
           return runRegistryClean(deps, args.slice(1));
@@ -237,10 +229,8 @@ export function buildSubcommands(deps: {
     {
       name: 'list-routes',
       usage: 'tui-back list-routes <repoPath>',
-      // Story 6.1: thin wrapper around core/routes/list-routes.ts (AD-2) — the wrapper owns
-      // argument cardinality (missing → missing-argument like scan/register, excess or blank
-      // → invalid-argument, never silently ignored); the use-case owns the manifest gate
-      // and the scanner delegation.
+      // The wrapper owns argument cardinality (missing → missing-argument, excess or blank →
+      // invalid-argument); the use-case owns the manifest gate and the scanner delegation.
       run: async (args) => {
         if (args.length === 0) {
           return err('missing-argument', 'Usage: tui-back list-routes <repoPath>');
@@ -254,12 +244,10 @@ export function buildSubcommands(deps: {
     {
       name: 'fire-request',
       usage: FIRE_REQUEST_USAGE,
-      // Story 6.2: thin wrapper around core/routes/fire-request.ts (AD-2) — the wrapper owns
-      // argument cardinality (missing → missing-argument like scan/register, any other arity
-      // or a blank argument → invalid-argument, never silently ignored); the use-case owns
-      // the manifest gate, the route-exists check, the session, and the fire itself.
-      // Story 6.9: optional repeatable --body/--query/--header flags after the three
-      // positionals feed the use-case's options; without them the call is exactly 6.2's.
+      // The wrapper owns argument cardinality (missing → missing-argument, any other arity or
+      // a blank argument → invalid-argument) and the optional repeatable
+      // --body/--query/--header flags after the three positionals; the use-case owns the
+      // manifest gate, the route-exists check, the session, and the fire itself.
       run: async (args) => {
         if (args.length === 0) {
           return err('missing-argument', `Usage: ${FIRE_REQUEST_USAGE}`);
@@ -289,12 +277,11 @@ export function buildSubcommands(deps: {
 const FIRE_REQUEST_USAGE =
   "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']...";
 
-// Story 6.9: hand-rolled `fire-request` flags (same dependency-free walk as `edt create`
-// below). `--body` takes JSON (unparsable → invalid-argument, at most once); `--query
-// name=value` and `--header 'Name: value'` repeat with distinct names (a repeated query
-// name, or a header name repeated in any case, is invalid-argument rather than silently
-// overwritten or comma-merged). A value that is itself a flag counts as missing. Returns
-// null when no flag was given, so the use-case is called with exactly the 6.2 arguments.
+// Hand-rolled `fire-request` flags (same dependency-free walk as `edt create` below).
+// `--body` takes JSON (unparsable → invalid-argument, at most once); `--query name=value` and
+// `--header 'Name: value'` repeat with distinct names (a repeated query name, or a header name
+// repeated in any case, is invalid-argument rather than silently overwritten or comma-merged).
+// A value that is itself a flag counts as missing. Returns null when no flag was given.
 function parseFireRequestFlags(flags: string[]): Result<FireRequestOptions | null> {
   if (flags.length === 0) {
     return ok(null);
@@ -560,8 +547,7 @@ async function runEdtSwitch(
     state: deps.state,
     topic,
     force,
-    // Story 2.39: the CLI passes neither a seam nor dirtyResolutions yet (its explicit
-    // --adopt-dirty/--discard-dirty flags land in story 2.40), so it fails safe: a dirty
+    // The CLI passes neither a seam nor dirtyResolutions, so it fails safe: a dirty
     // outgoing-EDT member is still auto-stashed, but any other dirty service makes the switch
     // exit non-zero with switch-dirty-services-unresolved before any git write.
     onDirtyReposBeforeSwitch: undefined,
@@ -669,11 +655,10 @@ async function runEdtModify(
   });
 }
 
-// Hand-rolled flag parsing for `edt delete`: a positional <topic> (mirroring the `<topic>`
-// precedent, unlike modify/switch's --topic flag — Code Map) plus repeated
-// `--branches <repoPath>=<leave|delete>` (mirrors --set-branch's `<path>=<value>` parsing).
-// A member with no matching --branches entry defaults to 'leave' — deleteEdt itself already
-// treats an absent disposition that way, so this wrapper never has to fill one in.
+// Hand-rolled flag parsing for `edt delete`: a positional <topic> (unlike modify/switch's
+// --topic flag) plus repeated `--branches <repoPath>=<leave|delete>`. A member with no
+// matching --branches entry defaults to 'leave' — deleteEdt itself treats an absent
+// disposition that way.
 async function runEdtDelete(
   deps: {
     edtRegistry: EdtRegistryPort;
@@ -701,8 +686,8 @@ async function runEdtDelete(
         return err('invalid-argument', `--branches must be <repoPath>=<leave|delete>, got "${value}"`);
       }
       const rawPath = value.slice(0, eq);
-      // Review fix (story 2.29): an empty repoPath before "=" (e.g. "--branches =delete")
-      // used to resolve silently to process.cwd() — reject it instead of guessing.
+      // An empty repoPath before "=" (e.g. "--branches =delete") would resolve to
+      // process.cwd() — reject it instead of guessing.
       if (rawPath.trim() === '') {
         return err('invalid-argument', `--branches "${value}" is missing a repoPath before "="`);
       }
@@ -711,9 +696,8 @@ async function runEdtDelete(
       if (disposition !== 'leave' && disposition !== 'delete') {
         return err('invalid-argument', `--branches disposition must be "leave" or "delete", got "${disposition}"`);
       }
-      // Review fix (story 2.29): a --branches repeated for the same resolved repoPath used to
-      // let the later value silently win — reject it instead, same spirit as the unmatched-path
-      // check below.
+      // A --branches repeated for the same resolved repoPath is rejected rather than letting
+      // the later value silently win.
       if (Object.prototype.hasOwnProperty.call(dispositions, path)) {
         return err('invalid-argument', `--branches "${rawPath}" was specified more than once`);
       }
@@ -732,12 +716,10 @@ async function runEdtDelete(
     return err('invalid-argument', `Missing <topic>. Usage: ${EDT_DELETE_USAGE}`);
   }
 
-  // Review fix (story 2.29): a --branches repoPath that isn't one of the target EDT's own
-  // members used to be silently ignored (that "member" just never had its disposition
-  // filled in, defaulting to 'leave') — reject it instead, naming the unmatched path(s), the
-  // same way a developer typo deserves a loud failure rather than a silent no-op. Skipped
-  // when the topic itself isn't found: deleteEdt's own edt-not-found already covers that,
-  // and there is no real membership to validate --branches against.
+  // A --branches repoPath that isn't one of the target EDT's own members is rejected, naming
+  // the unmatched path(s) — a typo deserves a loud failure, not a silent 'leave'. Skipped when
+  // the topic itself isn't found: deleteEdt's own edt-not-found covers that, and there is no
+  // real membership to validate --branches against.
   if (Object.keys(dispositions).length > 0) {
     const listed = await deps.edtRegistry.list();
     if (!listed.ok) {
@@ -769,16 +751,12 @@ async function runEdtDelete(
   });
 }
 
-// `registry clean` flag parsing + the interactive/scripted split (Boundaries: "list-then-
-// confirm interactive on a TTY; --yes + repeated --path <path> for scripted use, consistent
-// with update's --all --yes"). Scripted mode (--yes together with at least one --path) never
-// classifies — it removes exactly the given paths via removeStaleRegistryEntries, mirroring
-// AC4's `registry clean --yes --path <p1> --path <p2>` example. Bare invocation always
-// classifies first (so a zero-candidates registry is reported the same way regardless of
-// TTY-ness, matrix row "No candidates ... explicit result, never silent"); once candidates
-// exist, a non-TTY run is rejected with confirmation-required (same shape as update's `--all`
-// alone) rather than silently doing nothing, and a TTY run lists every candidate (path +
-// reason + memberOfEdts note) and prompts for one whole-list confirmation before removing.
+// `registry clean` flag parsing + the interactive/scripted split. Scripted mode (--yes with at
+// least one --path) never classifies — it removes exactly the given paths. A bare invocation
+// always classifies first (so zero candidates is reported the same way regardless of TTY);
+// with candidates, a non-TTY run is rejected with confirmation-required (like update's `--all`
+// alone), and a TTY run lists every candidate (path + reason + memberOfEdts note) and prompts
+// for one whole-list confirmation before removing.
 async function runRegistryClean(
   deps: {
     registry: RegistryPort;
@@ -792,9 +770,8 @@ async function runRegistryClean(
 ): Promise<Result<unknown>> {
   let yes = false;
   const paths: string[] = [];
-  // Review fix: the same resolved path given via multiple --path flags used to call
-  // registry.remove twice and produce a duplicate outcome row — deduped here so
-  // removeStaleRegistryEntries only ever sees each path once.
+  // The same resolved path given via multiple --path flags is deduped so
+  // removeStaleRegistryEntries never removes it twice or reports a duplicate row.
   const seenPaths = new Set<string>();
 
   for (let i = 0; i < args.length; i++) {
@@ -808,16 +785,16 @@ async function runRegistryClean(
       if (value === undefined) {
         return err('invalid-argument', `Missing value for --path. Usage: ${REGISTRY_CLEAN_USAGE}`);
       }
-      // Review fix: a value that looks like another flag (e.g. `--path --yes`) is a missing
-      // value in disguise, not a literal path — reject it instead of silently consuming it.
+      // A value that looks like another flag (e.g. `--path --yes`) is a missing value in
+      // disguise, not a literal path.
       if (value.startsWith('--')) {
         return err(
           'invalid-argument',
           `--path value must not look like a flag: "${value}". Usage: ${REGISTRY_CLEAN_USAGE}`,
         );
       }
-      // Review fix: `--path ""` used to resolve() to process.cwd() and could remove an
-      // unintended entry — reject an empty/whitespace-only value instead of guessing.
+      // `--path ""` would resolve() to process.cwd() and could remove an unintended entry —
+      // reject an empty/whitespace-only value instead of guessing.
       if (value.trim() === '') {
         return err('invalid-argument', `--path value must not be empty. Usage: ${REGISTRY_CLEAN_USAGE}`);
       }
@@ -854,10 +831,9 @@ async function runRegistryClean(
     return classified;
   }
   if (classified.data.candidates.length === 0) {
-    // Matrix: "No candidates ... explicit 'no stale entries' result, never silent" — reported
-    // the same way whether or not the run is interactive. `errors` still surfaces any path
-    // that couldn't even be checked (review fix) — a healthy-looking zero-candidates run
-    // never silently hides that.
+    // Zero candidates is an explicit "no stale entries" result, reported the same way whether
+    // or not the run is interactive. `errors` still surfaces any path that couldn't even be
+    // checked, so a healthy-looking run never hides it.
     return ok({ candidates: [], errors: classified.data.errors, results: [] });
   }
 
@@ -876,8 +852,8 @@ async function runRegistryClean(
     const note = candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
     process.stdout.write(`  ${candidate.path} — ${candidate.reason}${note}\n`);
   }
-  // Review fix: a path that couldn't be checked at all used to be invisible — reported here
-  // too, distinct from the removable candidate list above.
+  // A path that couldn't be checked at all is reported too, distinct from the removable
+  // candidate list above.
   if (classified.data.errors.length > 0) {
     process.stdout.write(`Could not be checked (${classified.data.errors.length}, left alone):\n`);
     for (const error of classified.data.errors) {
