@@ -1,0 +1,211 @@
+// tui/store/slices: the `:reset` overlay — reachable exclusively through the registered
+// `reset` command (never a raw keypress). Mirrors settings-slice.ts's open/close triplet, plus
+// a BUSY guard on open, a preview load for the summary step, and `runReset`, which calls the
+// core resetTool use-case in-process (AD-2) and then rehydrates every store field it could
+// have invalidated (loadEdts, loadTabVisibility, checkRegistryEmpty, loadFilterHistory) so
+// the EDTs zone and top bar reflect the reset without restarting the TUI.
+import type { StateCreator } from 'zustand';
+import { resetTool, resolveResetCategories, type ResetCategory, type ResetToolData } from '../../../../../core/scripts/reset-tool.js';
+import type { AppState, AppStoreDeps } from '../app-store.js';
+
+const NO_DEPS_ERROR = 'No ports wired into the TUI store';
+
+export const RESET_NOTICE_TIMEOUT_MS = 5000;
+
+export type ResetPreview = {
+  status: 'loading' | 'ready' | 'error';
+  edtTopics: string[];
+  serviceCount: number;
+  error: string | null;
+  // The files each category touches (resource keys are the absolute file paths).
+  edtRegistryFile: string;
+  registryFile: string;
+  edtsBaseDir: string;
+};
+
+export type ResetSlice = {
+  resetScreenOpen: boolean;
+  // Why `:reset` was refused (BUSY) — shown as a one-line notice, no overlay opened.
+  resetNotice: string | null;
+  resetPreview: ResetPreview | null;
+  resetStatus: 'idle' | 'running' | 'done';
+  resetResult: ResetToolData | null;
+  resetError: string | null;
+  // Returns whether the overlay opened (false = refused, see resetNotice).
+  openResetScreen: () => boolean;
+  closeResetScreen: () => void;
+  dismissResetNotice: () => void;
+  runReset: (categories: ResetCategory[]) => Promise<void>;
+};
+
+export function resolveResetBusyReason(state: Pick<AppState, 'runInProgress' | 'currentEdtAction'>): string | null {
+  if (state.runInProgress) {
+    return 'Reset unavailable: a group update is running. Wait for it to finish.';
+  }
+  if (state.currentEdtAction !== null) {
+    return `Reset unavailable: an EDT action (${state.currentEdtAction.type}) is in progress. Finish or cancel it first.`;
+  }
+  return null;
+}
+
+export function createResetSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], ResetSlice> {
+  // Bumped on every open so a preview load from a superseded session never lands late.
+  let previewSession = 0;
+  // Bumped on every refusal notice so only the latest notice's timer may clear it.
+  let noticeToken = 0;
+
+  return (set, get) => {
+    const loadPreview = async (session: number) => {
+      if (!deps) {
+        set({ resetPreview: { ...emptyPreview(), status: 'error', error: NO_DEPS_ERROR } });
+        return;
+      }
+      const base = {
+        edtRegistryFile: deps.edtRegistryResourceKey,
+        registryFile: deps.registryResourceKey,
+        edtsBaseDir: deps.edtsBaseDir,
+      };
+      try {
+        const [edts, repos] = await Promise.all([deps.edtRegistry.list(), deps.registry.list()]);
+        if (session !== previewSession) {
+          return;
+        }
+        if (!edts.ok || !repos.ok) {
+          const error = !edts.ok ? edts.error.message : !repos.ok ? repos.error.message : null;
+          set({ resetPreview: { ...base, status: 'error', edtTopics: [], serviceCount: 0, error } });
+          return;
+        }
+        set({
+          resetPreview: {
+            ...base,
+            status: 'ready',
+            edtTopics: edts.data.map((entry) => entry.topic),
+            serviceCount: repos.data.length,
+            error: null,
+          },
+        });
+      } catch (error) {
+        // A port that rejects instead of returning an error Result — never leave the summary
+        // stuck on "Loading…".
+        if (session !== previewSession) {
+          return;
+        }
+        set({ resetPreview: { ...base, status: 'error', edtTopics: [], serviceCount: 0, error: errorMessage(error) } });
+      }
+    };
+
+    return {
+      resetScreenOpen: false,
+      resetNotice: null,
+      resetPreview: null,
+      resetStatus: 'idle',
+      resetResult: null,
+      resetError: null,
+      openResetScreen: () => {
+        const reason = resolveResetBusyReason(get());
+        if (reason !== null) {
+          set({ resetNotice: reason });
+          // Auto-dismissed rather than keypress-dismissed: the Enter that ran `:reset` reaches
+          // every mounted useInput, so a "next key clears it" rule could erase the notice
+          // before it was ever seen. The token makes an older timer a no-op once a newer
+          // notice (even one with identical text) has been shown.
+          noticeToken += 1;
+          const token = noticeToken;
+          const timer = setTimeout(() => {
+            if (token === noticeToken) {
+              set({ resetNotice: null });
+            }
+          }, RESET_NOTICE_TIMEOUT_MS);
+          timer.unref?.();
+          return false;
+        }
+        previewSession += 1;
+        set({
+          resetScreenOpen: true,
+          resetNotice: null,
+          resetPreview: { ...emptyPreview(), status: 'loading' },
+          resetStatus: 'idle',
+          resetResult: null,
+          resetError: null,
+        });
+        void loadPreview(previewSession);
+        return true;
+      },
+      closeResetScreen: () => {
+        // A running reset can't be abandoned mid-way — the overlay stays until it settles.
+        if (get().resetStatus === 'running') {
+          return;
+        }
+        previewSession += 1;
+        set({ resetScreenOpen: false, resetPreview: null, resetStatus: 'idle', resetResult: null, resetError: null });
+      },
+      dismissResetNotice: () => {
+        noticeToken += 1;
+        set({ resetNotice: null });
+      },
+      runReset: async (categories) => {
+        if (get().resetStatus === 'running') {
+          return;
+        }
+        if (!deps) {
+          set({ resetStatus: 'done', resetError: NO_DEPS_ERROR });
+          return;
+        }
+        set({ resetStatus: 'running', resetResult: null, resetError: null });
+        let resetResult: ResetToolData | null = null;
+        let resetError: string | null = null;
+        try {
+          if (resolveResetCategories(categories).includes('histories')) {
+            // Empty the in-memory history and let every queued save land first, so a pending
+            // logs-slice write can't overwrite the reset's own `{}` afterwards.
+            await get().clearFilterHistoryAndDrainSaves();
+          }
+          const result = await resetTool({
+            categories,
+            edtRegistry: deps.edtRegistry,
+            registry: deps.registry,
+            state: deps.state,
+            lock: deps.lock,
+            keys: { edtRegistry: deps.edtRegistryResourceKey, registry: deps.registryResourceKey },
+            edtsBaseDir: deps.edtsBaseDir,
+          });
+          if (result.ok) {
+            resetResult = result.data;
+          } else {
+            resetError = result.error.message;
+          }
+        } catch (error) {
+          resetError = errorMessage(error);
+        } finally {
+          // Rehydrate only after every disk write has settled (Design Notes), and always —
+          // even after a throw, disk may have partly changed. allSettled + a wrapped call so
+          // one failing (or synchronously throwing) loader never skips the others, and the
+          // status below always leaves 'running'.
+          const loaders = [get().loadEdts, get().loadTabVisibility, get().checkRegistryEmpty, get().loadFilterHistory];
+          const settled = await Promise.allSettled(loaders.map((load) => Promise.resolve().then(() => load())));
+          const failedReload = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+          if (failedReload && resetError === null) {
+            resetError = `Reloading the UI after the reset failed (restart the TUI to refresh): ${errorMessage(failedReload.reason)}`;
+          }
+          set({ resetStatus: 'done', resetResult, resetError });
+        }
+      },
+    };
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function emptyPreview(): ResetPreview {
+  return {
+    status: 'loading',
+    edtTopics: [],
+    serviceCount: 0,
+    error: null,
+    edtRegistryFile: '',
+    registryFile: '',
+    edtsBaseDir: '',
+  };
+}

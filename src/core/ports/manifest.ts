@@ -7,7 +7,11 @@ export interface Manifest {
   service: string;
   container: string;
   migrationCommand?: string;
+  restartCommands?: string[];
   sharedBranch: string;
+  // Story 2.42: the service's own protected branches (FR-7). The effective protected set is
+  // exactly `protectedBranches ∪ {sharedBranch}` — nothing is protected implicitly.
+  protectedBranches?: string[];
   modules: Record<string, Record<string, unknown>>;
 }
 

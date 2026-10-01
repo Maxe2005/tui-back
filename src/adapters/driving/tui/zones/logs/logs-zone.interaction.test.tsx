@@ -20,6 +20,7 @@ function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranc
     behind: 0,
     status: 'current',
     sharedBranch: 'development',
+    protectedBranches: [],
     ...overrides,
   };
 }

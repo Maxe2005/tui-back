@@ -6,7 +6,8 @@
 // manifest-only directory that is NOT a git repository still gets the gate error rather than
 // a git failure (any git invocation there would have failed as "not a git repository").
 import { describe, expect, it, afterEach } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -22,9 +23,13 @@ import {
   checkoutBranch,
   createBranch,
   createGitPort,
+  createTrackingBranch,
   currentBranch,
   deleteBranch,
+  diffNameOnly,
+  discardAll,
   discardPaths,
+  discardPathsToHead,
   fetchBranch,
   finalizeMerge,
   hasStash,
@@ -35,6 +40,7 @@ import {
   isRebaseInProgress,
   listBranches,
   listDirtyPaths,
+  listRemoteBranches,
   mergeBranch,
   pullBranch,
   renameBranch,
@@ -57,7 +63,13 @@ function runGit(dir: string, args: string[]): { status: number | null; stdout: s
   return spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
 }
 
-async function makeGitRepo(manifestSharedBranch?: string): Promise<string> {
+// Story 2.42: the protected set is manifest-defined, so the fixture manifest declares
+// `protectedBranches: [preprod, prod]` by default (alongside the defaulted `development`
+// sharedBranch); pass `protectedBranches: null` to omit the line entirely.
+async function makeGitRepo(
+  manifestSharedBranch?: string,
+  protectedBranches: readonly string[] | null = ['preprod', 'prod'],
+): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'tui-back-git-'));
   tmpDirs.push(dir);
   const manifest = [
@@ -65,6 +77,7 @@ async function makeGitRepo(manifestSharedBranch?: string): Promise<string> {
     'container: route-explorer',
     'migrationCommand: npm run migration:run',
     ...(manifestSharedBranch !== undefined ? [`sharedBranch: ${manifestSharedBranch}`] : []),
+    ...(protectedBranches !== null ? [`protectedBranches: [${protectedBranches.join(', ')}]`] : []),
     'modules: {}',
   ].join('\n');
   await writeFile(join(dir, '.tui-back.yaml'), manifest);
@@ -98,7 +111,10 @@ async function makeCleanGitRepo(): Promise<string> {
 async function makeDirWithManifestOnly(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'tui-back-git-manifest-only-'));
   tmpDirs.push(dir);
-  await writeFile(join(dir, '.tui-back.yaml'), 'service: s\ncontainer: c\nmigrationCommand: m\nmodules: {}\n');
+  await writeFile(
+    join(dir, '.tui-back.yaml'),
+    'service: s\ncontainer: c\nmigrationCommand: m\nprotectedBranches: [preprod, prod]\nmodules: {}\n',
+  );
   return dir;
 }
 
@@ -112,18 +128,51 @@ function branchExists(dir: string, branch: string): boolean {
   return runGit(dir, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
 }
 
-// The adapter resolves the shared-branch set through the real manifest loader, so the full
+// The adapter resolves the protected set through the real manifest loader, so the full
 // manifest → gate → git stack is exercised against the repo's actual .tui-back.yaml.
 const manifest: ManifestPort = { load: loadManifest };
 
 describe('assertAllowedBranch', () => {
-  it('rejects every built-in shared branch without any git invocation', async () => {
+  it('rejects every manifest-protected branch and the sharedBranch without any git invocation', async () => {
     const repo = await makeDirWithManifestOnly();
 
     for (const shared of ['development', 'preprod', 'prod']) {
       const result = await assertAllowedBranch(manifest, repo, shared);
       expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     }
+  });
+
+  it("names the branch and the service's manifest in the rejection (story 2.42)", async () => {
+    const repo = await makeGitRepo();
+
+    const result = await assertAllowedBranch(manifest, repo, 'preprod');
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected', message: `Branch "preprod" is protected by route-explorer's manifest (repo ${repo})` },
+    });
+  });
+
+  it('allows a formerly implicit branch when the manifest does not list it (story 2.42)', async () => {
+    const repo = await makeGitRepo('main', null);
+
+    for (const formerlyImplicit of ['development', 'preprod', 'prod']) {
+      expect(await assertAllowedBranch(manifest, repo, formerlyImplicit)).toEqual({ ok: true, data: undefined });
+    }
+    expect(await assertAllowedBranch(manifest, repo, 'main')).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected' },
+    });
+  });
+
+  it('allows prod with no protectedBranches line and the default development sharedBranch (story 2.42)', async () => {
+    const repo = await makeGitRepo(undefined, null);
+
+    expect(await assertAllowedBranch(manifest, repo, 'prod')).toEqual({ ok: true, data: undefined });
+    expect(await assertAllowedBranch(manifest, repo, 'development')).toMatchObject({
+      ok: false,
+      error: { code: 'shared-branch-rejected' },
+    });
   });
 
   it('rejects a branch name equal to the repo manifest sharedBranch', async () => {
@@ -284,7 +333,7 @@ describe('createBranch', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'base-branch-missing' } });
   });
 
-  it('rejects every built-in shared branch before any git invocation', async () => {
+  it('rejects every manifest-protected branch before any git invocation', async () => {
     const repo = await makeGitRepo();
 
     for (const shared of ['development', 'preprod', 'prod']) {
@@ -922,6 +971,185 @@ describe('renameBranch', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     expect(branchExists(repo, 'feat/old')).toBe(true);
   });
+
+  it('rejects an oldName that is a shared/protected branch before any git invocation (story 2.35)', async () => {
+    const repo = await makeGitRepo();
+
+    const result = await renameBranch(manifest, repo, 'development', 'feat/renamed');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(repo, 'development')).toBe(true);
+    expect(branchExists(repo, 'feat/renamed')).toBe(false);
+  });
+
+  it('rejects an oldName equal to the repo manifest sharedBranch (story 2.35)', async () => {
+    const repo = await makeGitRepo('staging');
+    expect(runGit(repo, ['branch', 'staging']).status).toBe(0);
+
+    const result = await renameBranch(manifest, repo, 'staging', 'feat/renamed');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(repo, 'staging')).toBe(true);
+  });
+});
+
+// Story 2.35 — a clone of makeGitRepoOriginAndClone's origin carries no manifest (origin's
+// .tui-back.yaml is untracked, so it is never cloned); the gated writes below need one.
+async function makeManagedClone(): Promise<{ origin: string; clone: string }> {
+  const pair = await makeGitRepoOriginAndClone();
+  await writeFile(
+    join(pair.clone, '.tui-back.yaml'),
+    'service: clone\ncontainer: clone\nmigrationCommand: m\nprotectedBranches: [preprod, prod]\nmodules: {}\n',
+  );
+  return pair;
+}
+
+function remoteRefExists(dir: string, ref: string): boolean {
+  return runGit(dir, ['show-ref', '--verify', '--quiet', `refs/remotes/${ref}`]).status === 0;
+}
+
+function upstreamOf(dir: string, branch: string): string | null {
+  const result = runGit(dir, ['rev-parse', '--abbrev-ref', `${branch}@{u}`]);
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+describe('listRemoteBranches (story 2.35)', () => {
+  it('lists remote-tracking refs as <remote>/<branch>, excluding the symbolic <remote>/HEAD', async () => {
+    const { clone } = await makeGitRepoOriginAndClone();
+    expect(remoteRefExists(clone, 'origin/HEAD')).toBe(true);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect([...result.data].sort()).toEqual(['origin/development', 'origin/feat/remote-only']);
+      expect(result.data).not.toContain('origin');
+      expect(result.data).not.toContain('origin/HEAD');
+    }
+  });
+
+  it('keeps a real branch whose name ends in /HEAD, dropping only the symbolic origin/HEAD (review)', async () => {
+    const origin = await makeGitRepo();
+    expect(runGit(origin, ['branch', 'release/HEAD']).status).toBe(0);
+    const clone = await mkdtemp(join(tmpdir(), 'tui-back-git-clone-head-'));
+    tmpDirs.push(clone);
+    expect(spawnSync('git', ['clone', origin, clone], { encoding: 'utf8' }).status).toBe(0);
+    expect(remoteRefExists(clone, 'origin/HEAD')).toBe(true);
+    expect(remoteRefExists(clone, 'origin/release/HEAD')).toBe(true);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect([...result.data].sort()).toEqual(['origin/development', 'origin/release/HEAD']);
+    }
+  });
+
+  it('never fetches — a branch pushed to origin after the clone is not listed', async () => {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    expect(runGit(origin, ['branch', 'feat/after-clone']).status).toBe(0);
+
+    const result = await listRemoteBranches(clone);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).not.toContain('origin/feat/after-clone');
+    }
+    expect(remoteRefExists(clone, 'origin/feat/after-clone')).toBe(false);
+  });
+
+  it('returns an empty list for a repo with no remotes', async () => {
+    const repo = await makeGitRepo();
+
+    expect(await listRemoteBranches(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('reports a controlled error outside a git repository', async () => {
+    const dir = await makePlainDir();
+
+    expect(await listRemoteBranches(dir)).toMatchObject({
+      ok: false,
+      error: { code: 'git-list-remote-branches-error' },
+    });
+  });
+});
+
+describe('createTrackingBranch (story 2.35)', () => {
+  it('creates a local branch tracking the remote ref, without checking it out', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createTrackingBranch(manifest, clone, 'feat/remote-only', 'origin/feat/remote-only');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(clone, 'feat/remote-only')).toBe(true);
+    expect(upstreamOf(clone, 'feat/remote-only')).toBe('origin/feat/remote-only');
+    expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+  });
+
+  it('accepts a local name different from the remote branch name', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createTrackingBranch(manifest, clone, 'mine', 'origin/feat/remote-only');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(upstreamOf(clone, 'mine')).toBe('origin/feat/remote-only');
+  });
+
+  it('rejects a shared/protected local name before any git invocation', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createTrackingBranch(manifest, clone, 'preprod', 'origin/feat/remote-only');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(branchExists(clone, 'preprod')).toBe(false);
+  });
+
+  it('rejects an already-existing local name with branch-exists', async () => {
+    const { clone } = await makeManagedClone();
+    expect(runGit(clone, ['branch', 'feat/remote-only']).status).toBe(0);
+
+    const result = await createTrackingBranch(manifest, clone, 'feat/remote-only', 'origin/feat/remote-only');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-exists' } });
+    expect(upstreamOf(clone, 'feat/remote-only')).toBeNull();
+  });
+
+  it('rejects a missing remote ref with remote-branch-missing (never fetches it)', async () => {
+    const { origin, clone } = await makeManagedClone();
+    expect(runGit(origin, ['branch', 'feat/after-clone']).status).toBe(0);
+
+    const result = await createTrackingBranch(manifest, clone, 'feat/after-clone', 'origin/feat/after-clone');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'remote-branch-missing' } });
+    expect(branchExists(clone, 'feat/after-clone')).toBe(false);
+    expect(remoteRefExists(clone, 'origin/feat/after-clone')).toBe(false);
+  });
+});
+
+describe('createBranch — remote-tracking base (story 2.35)', () => {
+  it('creates a branch from a remote-tracking ref with no local counterpart, without an upstream', async () => {
+    const { clone } = await makeManagedClone();
+    expect(branchExists(clone, 'feat/remote-only')).toBe(false);
+
+    const result = await createBranch(manifest, clone, 'feat/cut', 'origin/feat/remote-only');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(clone, 'feat/cut')).toBe(true);
+    expect(runGit(clone, ['rev-parse', 'feat/cut']).stdout.trim()).toBe(
+      runGit(clone, ['rev-parse', 'refs/remotes/origin/feat/remote-only']).stdout.trim(),
+    );
+    expect(upstreamOf(clone, 'feat/cut')).toBeNull();
+    expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
+  });
+
+  it('still reports base-branch-missing when neither a local nor a remote-tracking ref exists', async () => {
+    const { clone } = await makeManagedClone();
+
+    const result = await createBranch(manifest, clone, 'feat/cut', 'origin/nope');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'base-branch-missing' } });
+    expect(branchExists(clone, 'feat/cut')).toBe(false);
+  });
 });
 
 describe('fetchBranch', () => {
@@ -1254,6 +1482,22 @@ describe('createGitPort', () => {
     expect(branchExists(repo, 'feat/y')).toBe(true);
   });
 
+  it('wires listRemoteBranches/createTrackingBranch (story 2.35) behind the factory pattern', async () => {
+    const { clone } = await makeManagedClone();
+    const port = createGitPort(manifest);
+
+    const listed = await port.listRemoteBranches(clone);
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.data).toContain('origin/feat/remote-only');
+    }
+    expect(await port.createTrackingBranch(clone, 'feat/q', 'origin/feat/remote-only')).toEqual({
+      ok: true,
+      data: undefined,
+    });
+    expect(upstreamOf(clone, 'feat/q')).toBe('origin/feat/remote-only');
+  });
+
   it('wires the story 3.4 methods behind the factory pattern', async () => {
     const repo = await makeCleanGitRepo();
     const port = createGitPort(manifest);
@@ -1294,12 +1538,94 @@ describe('listDirtyPaths', () => {
     }
   });
 
+  it('collapses an untracked directory by default, expands it file by file on opt-in (story 2.39)', async () => {
+    const repo = await makeCleanGitRepo();
+    await mkdir(join(repo, 'newdir', 'nested'), { recursive: true });
+    await writeFile(join(repo, 'newdir', 'a.txt'), 'a');
+    await writeFile(join(repo, 'newdir', 'nested', 'b.txt'), 'b');
+
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: ['newdir/'] });
+    const expanded = await listDirtyPaths(repo, { expandUntracked: true });
+    expect(expanded.ok).toBe(true);
+    if (expanded.ok) {
+      expect([...expanded.data].sort()).toEqual(['newdir/a.txt', 'newdir/nested/b.txt']);
+    }
+  });
+
   it('reports a controlled error on a non-git directory', async () => {
     const dir = await makeDirWithManifestOnly();
 
     const result = await listDirtyPaths(dir);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-status-error' } });
+  });
+});
+
+// Story 2.39 — the consent-gated destructive primitive, proven against real git.
+describe('discardAll', () => {
+  it('drops tracked modifications, untracked files and untracked dirs, but never ignored files', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, '.gitignore'), '.env\n');
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', '.gitignore', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked + ignore']).status).toBe(0);
+
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await writeFile(join(repo, 'staged.txt'), 'staged');
+    runGit(repo, ['add', 'staged.txt']);
+    await writeFile(join(repo, 'untracked.txt'), 'new');
+    await mkdir(join(repo, 'newdir'), { recursive: true });
+    await writeFile(join(repo, 'newdir', 'inner.txt'), 'inner');
+    await writeFile(join(repo, '.env'), 'SECRET=1');
+
+    expect(await discardAll(repo)).toEqual({ ok: true, data: undefined });
+
+    expect(await readFile(join(repo, 'tracked.txt'), 'utf8')).toBe('v1');
+    expect(existsSync(join(repo, 'staged.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'untracked.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'newdir'))).toBe(false);
+    expect(await readFile(join(repo, '.env'), 'utf8')).toBe('SECRET=1');
+    expect(await hasUncommittedChanges(repo)).toEqual({ ok: true, data: false });
+  });
+
+  it('is wired behind the factory', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'wip.txt'), 'work');
+
+    expect(await createGitPort(manifest).discardAll(repo)).toEqual({ ok: true, data: undefined });
+    expect(existsSync(join(repo, 'wip.txt'))).toBe(false);
+  });
+
+  it('reports git-discard-error naming the reset step on a non-git directory', async () => {
+    const dir = await makeDirWithManifestOnly();
+
+    expect(await discardAll(dir)).toMatchObject({
+      ok: false,
+      error: { code: 'git-discard-error', message: expect.stringContaining('step 1/2 (git reset --hard)') },
+    });
+  });
+
+  // Root ignores directory permissions, so the clean could not be made to fail there.
+  it.skipIf(process.getuid?.() === 0)('names the clean step, after the reset already ran, when an untracked file cannot be removed', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    runGit(repo, ['add', 'tracked.txt']);
+    expect(runGit(repo, ['commit', '-m', 'add tracked']).status).toBe(0);
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await mkdir(join(repo, 'locked'));
+    await writeFile(join(repo, 'locked', 'f.txt'), 'x');
+    await chmod(join(repo, 'locked'), 0o500);
+    try {
+      const result = await discardAll(repo);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'git-discard-error', message: expect.stringContaining('step 2/2 (git clean -fd)') },
+      });
+      expect(await readFile(join(repo, 'tracked.txt'), 'utf8')).toBe('v1');
+    } finally {
+      await chmod(join(repo, 'locked'), 0o700);
+    }
   });
 });
 
@@ -1346,6 +1672,149 @@ describe('discardPaths', () => {
     const result = await discardPaths(repo, ['no-such-file.txt']);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
+  });
+});
+
+// Story 2.38 — the activation pre-flight's read-only diff.
+describe('diffNameOnly', () => {
+  it('lists every path that differs between two branches, including spaces and nested dirs', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'same.txt'), 'same');
+    await writeFile(join(repo, 'a.ts'), 'v1');
+    runGit(repo, ['add', 'same.txt', 'a.ts']);
+    expect(runGit(repo, ['commit', '-m', 'base']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-q', '-b', 'feat/x']).status).toBe(0);
+    await writeFile(join(repo, 'a.ts'), 'v2');
+    await mkdir(join(repo, 'dir'));
+    await writeFile(join(repo, 'dir', 'with space.txt'), 'n');
+    runGit(repo, ['add', '.']);
+    expect(runGit(repo, ['commit', '-m', 'change']).status).toBe(0);
+
+    const result = await diffNameOnly(repo, 'development', 'feat/x');
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && [...result.data].sort()).toEqual(['a.ts', 'dir/with space.txt']);
+    expect(await createGitPort(manifest).diffNameOnly(repo, 'feat/x', 'feat/x')).toEqual({ ok: true, data: [] });
+  });
+
+  it('lists both sides of a rename, so a dirty old-side path is visible', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'old.ts'), 'content that stays the same across the rename\n'.repeat(5));
+    runGit(repo, ['add', 'old.ts']);
+    expect(runGit(repo, ['commit', '-m', 'old']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-q', '-b', 'feat/rename']).status).toBe(0);
+    expect(runGit(repo, ['mv', 'old.ts', 'new.ts']).status).toBe(0);
+    expect(runGit(repo, ['commit', '-m', 'rename']).status).toBe(0);
+
+    const result = await diffNameOnly(repo, 'development', 'feat/rename');
+
+    expect(result.ok && [...result.data].sort()).toEqual(['new.ts', 'old.ts']);
+  });
+
+  it('reports git-diff-error for an unknown revision', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await diffNameOnly(repo, 'development', 'no-such-branch')).toMatchObject({
+      ok: false,
+      error: { code: 'git-diff-error' },
+    });
+  });
+});
+
+// Story 2.38 — path-scoped discard back to HEAD (the activation overwrite).
+describe('discardPathsToHead', () => {
+  it('discards exactly the given tracked, staged and untracked paths and nothing else', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, '.gitignore'), '.env\n');
+    await writeFile(join(repo, 'tracked.txt'), 'v1');
+    await writeFile(join(repo, 'staged-mod.txt'), 'v1');
+    await writeFile(join(repo, 'keep.txt'), 'v1');
+    runGit(repo, ['add', '.gitignore', 'tracked.txt', 'staged-mod.txt', 'keep.txt']);
+    expect(runGit(repo, ['commit', '-m', 'files']).status).toBe(0);
+
+    await writeFile(join(repo, 'tracked.txt'), 'v2');
+    await writeFile(join(repo, 'staged-mod.txt'), 'v2');
+    runGit(repo, ['add', 'staged-mod.txt']);
+    await writeFile(join(repo, 'staged-new.txt'), 'new');
+    runGit(repo, ['add', 'staged-new.txt']);
+    await mkdir(join(repo, 'dir'));
+    await writeFile(join(repo, 'dir', 'untracked.txt'), 'u');
+    await writeFile(join(repo, 'keep.txt'), 'mine');
+    await writeFile(join(repo, 'other-untracked.txt'), 'mine');
+    await writeFile(join(repo, '.env'), 'SECRET=1');
+
+    const result = await createGitPort(manifest).discardPathsToHead(repo, [
+      'tracked.txt',
+      'staged-mod.txt',
+      'staged-new.txt',
+      'dir/untracked.txt',
+    ]);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'tracked.txt'), 'utf8')).toBe('v1');
+    expect(await readFile(join(repo, 'staged-mod.txt'), 'utf8')).toBe('v1');
+    expect(existsSync(join(repo, 'staged-new.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'dir', 'untracked.txt'))).toBe(false);
+    expect(await readFile(join(repo, 'keep.txt'), 'utf8')).toBe('mine');
+    expect(await readFile(join(repo, 'other-untracked.txt'), 'utf8')).toBe('mine');
+    expect(await readFile(join(repo, '.env'), 'utf8')).toBe('SECRET=1');
+    const dirty = await listDirtyPaths(repo, { expandUntracked: true });
+    expect(dirty.ok && [...dirty.data].sort()).toEqual(['keep.txt', 'other-untracked.txt']);
+  });
+
+  it('treats paths literally — a glob-character name never matches its siblings', async () => {
+    const repo = await makeCleanGitRepo();
+    await mkdir(join(repo, 'src'));
+    await writeFile(join(repo, 'src', 'i.tsx'), 'v1');
+    runGit(repo, ['add', 'src']);
+    expect(runGit(repo, ['commit', '-m', 'pages']).status).toBe(0);
+    // Confirmed: an untracked `[id].tsx`. Unconfirmed siblings its glob reading would match:
+    // an untracked `d.tsx` and a staged modification of `i.tsx`.
+    await writeFile(join(repo, 'src', '[id].tsx'), 'new page');
+    await writeFile(join(repo, 'src', 'd.tsx'), 'untracked sibling');
+    await writeFile(join(repo, 'src', 'i.tsx'), 'staged sibling');
+    runGit(repo, ['add', 'src/i.tsx']);
+
+    expect(await discardPathsToHead(repo, ['src/[id].tsx'])).toEqual({ ok: true, data: undefined });
+
+    expect(existsSync(join(repo, 'src', '[id].tsx'))).toBe(false);
+    expect(await readFile(join(repo, 'src', 'd.tsx'), 'utf8')).toBe('untracked sibling');
+    expect(await readFile(join(repo, 'src', 'i.tsx'), 'utf8')).toBe('staged sibling');
+    expect(runGit(repo, ['diff', '--cached', '--name-only']).stdout.trim()).toBe('src/i.tsx');
+  });
+
+  it('handles a path list larger than one chunk', async () => {
+    const repo = await makeCleanGitRepo();
+    const paths = Array.from({ length: 1203 }, (_, index) => `u${index}.txt`);
+    await Promise.all(paths.map((path) => writeFile(join(repo, path), 'x')));
+    await writeFile(join(repo, 'keep.txt'), 'x');
+
+    expect(await discardPathsToHead(repo, paths)).toEqual({ ok: true, data: undefined });
+
+    expect(await listDirtyPaths(repo)).toEqual({ ok: true, data: ['keep.txt'] });
+  });
+
+  it('restores a tracked file deleted from the working tree', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'gone.txt'), 'v1');
+    runGit(repo, ['add', 'gone.txt']);
+    expect(runGit(repo, ['commit', '-m', 'gone']).status).toBe(0);
+    await rm(join(repo, 'gone.txt'));
+
+    expect(await discardPathsToHead(repo, ['gone.txt'])).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'gone.txt'), 'utf8')).toBe('v1');
+  });
+
+  it('is a no-op success for an empty path list', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await discardPathsToHead(repo, [])).toEqual({ ok: true, data: undefined });
+  });
+
+  it('reports git-discard-error on a non-git directory', async () => {
+    const dir = await makePlainDir();
+
+    expect(await discardPathsToHead(dir, ['a.txt'])).toMatchObject({ ok: false, error: { code: 'git-discard-error' } });
   });
 });
 

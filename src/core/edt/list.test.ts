@@ -37,6 +37,7 @@ function fakeRegistry(paths: string[], overrides: Partial<RegistryPort> = {}): R
     exists: vi.fn(async () => ok(true)),
     scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
     reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -83,11 +84,16 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     isMergeInProgress: vi.fn(async () => ok(false)),
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
+    discardAll: vi.fn(async () => ok(undefined)),
+    diffNameOnly: vi.fn(async () => ok([])),
+    discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
     ...overrides,
@@ -118,7 +124,7 @@ describe('listEdtBranchesDivergence', () => {
       ok: true,
       data: {
         services: [
-          { service: 'svc-a', path: '/repo/a', isMember: false, sharedBranch: 'development', branch: 'feat/a', ahead: 2, behind: 1, status: 'current' },
+          { service: 'svc-a', path: '/repo/a', isMember: false, sharedBranch: 'development', protectedBranches: [], branch: 'feat/a', ahead: 2, behind: 1, status: 'current' },
         ],
         unreachable: [],
         errors: [],
@@ -143,7 +149,7 @@ describe('listEdtBranchesDivergence', () => {
 
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.services).toEqual([
-      { service: 'svc-a', path: '/repo/a', isMember: false, sharedBranch: 'development', branch: 'feat/a', ahead: null, behind: null, status: 'no-upstream' },
+      { service: 'svc-a', path: '/repo/a', isMember: false, sharedBranch: 'development', protectedBranches: [], branch: 'feat/a', ahead: null, behind: null, status: 'no-upstream' },
     ]);
   });
 
@@ -169,6 +175,7 @@ describe('listEdtBranchesDivergence', () => {
         path: '/repo/a',
         isMember: false,
         sharedBranch: 'development',
+        protectedBranches: [],
         branch: 'feat/a',
         ahead: null,
         behind: null,
@@ -199,6 +206,7 @@ describe('listEdtBranchesDivergence', () => {
         path: '/repo/a',
         isMember: false,
         sharedBranch: 'development',
+        protectedBranches: [],
         branch: null,
         ahead: null,
         behind: null,
@@ -249,6 +257,7 @@ describe('listEdtBranchesDivergence', () => {
         path: '/repo/kept-on-development',
         isMember: false,
         sharedBranch: 'development',
+        protectedBranches: [],
         branch: 'development',
         ahead: 0,
         behind: 0,
@@ -370,6 +379,30 @@ describe('listEdtBranchesDivergence', () => {
     const byPath = new Map(result.data.services.map((s) => [s.path, s.sharedBranch]));
     expect(byPath.get('/repo/a')).toBe('main');
     expect(byPath.get('/repo/b')).toBe('master');
+  });
+
+  // Story 2.42: the manifest's own protectedBranches ride along next to sharedBranch — an
+  // empty array when the manifest declares none.
+  it("threads the repo's manifest protectedBranches through, defaulting to an empty list", async () => {
+    const registry = fakeRegistry(['/repo/a', '/repo/b']);
+    const manifest = fakeManifest({
+      load: vi.fn(async (path: string) =>
+        ok(path === '/repo/a' ? { ...manifestFor(path), protectedBranches: ['preprod', 'prod'] } : manifestFor(path)),
+      ),
+    });
+
+    const result = await listEdtBranchesDivergence({
+      registry,
+      manifest,
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    const byPath = new Map(result.data.services.map((s) => [s.path, s.protectedBranches]));
+    expect(byPath.get('/repo/a')).toEqual(['preprod', 'prod']);
+    expect(byPath.get('/repo/b')).toEqual([]);
   });
 
   it('propagates an edtRegistry.list() failure once an active EDT is set', async () => {

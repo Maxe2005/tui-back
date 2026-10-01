@@ -8,7 +8,10 @@
 // technique (shared/test-support/fake-tty.ts) to close that gap.
 import { createElement } from 'react';
 import { render } from 'ink';
-import { describe, it, expect, vi } from 'vitest';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { ok } from '../../../core/result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -45,6 +48,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     exists: vi.fn(async () => ok(true)),
     scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
     reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    remove: vi.fn(async () => ok(undefined)),
   };
   const manifest: ManifestPort = {
     load: vi.fn(async (path: string) => ok(manifestFor(path))),
@@ -67,11 +71,16 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     isMergeInProgress: vi.fn(async () => ok(false)),
     listDirtyPaths: vi.fn(async () => ok([])),
     discardPaths: vi.fn(async () => ok(undefined)),
+    discardAll: vi.fn(async () => ok(undefined)),
+    diffNameOnly: vi.fn(async () => ok([])),
+    discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
+    listRemoteBranches: vi.fn(async () => ok([])),
+    createTrackingBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
   };
@@ -415,6 +424,7 @@ describe('AppShell Logs zone pane-grid arrow ownership (story 5.1 review fix)', 
           behind: 0,
           status: 'current',
           sharedBranch: 'development',
+          protectedBranches: [],
         },
       ],
       edtsBranchesStatus: 'idle',
@@ -503,6 +513,7 @@ describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
           behind: 0,
           status: 'current',
           sharedBranch: 'development',
+          protectedBranches: [],
         },
       ],
       edtsBranchesStatus: 'idle',
@@ -1180,7 +1191,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
   it('Down from the input enters the grid at the top of the first column; Enter on the highlighted cell completes the query and returns focus to the input (story 2.17)', async () => {
     const store = createAppStore();
-    const { instance, stdin } = mount(store);
+    const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, ':');
@@ -1196,7 +1207,12 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       // Enter (only reachable from input focus) now runs it.
       await press(instance, stdin, KEYS.enter);
 
-      expect(store.getState().currentEdtAction?.type).toBe('create');
+      // Started from the Dashboard zone (mount's default): running edt-create auto-switches to
+      // EDTs (runCommand) and the zone's own currentEdtAction effect immediately consumes the
+      // action and opens the create wizard — so the dialog itself, not the transient
+      // currentEdtAction flag, is what proves the command actually ran.
+      expect(store.getState().activeZone).toBe('edts');
+      expect(stdout.output).toContain("EDT Wizard: Création d'un espace de travail");
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1384,7 +1400,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+      settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1400,9 +1416,12 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       // maxRows=8) would instead put every command on its own line, with "edt-create"
       // sharing no line with "registry" either way — the positive signal here is
       // "edt-switch" sharing registry's line, which only maxRows=2 grouping produces.
+      // Story 2.31: `edt-create-from` widened the grid enough that Ink's flex layout now
+      // squeezes column 1's label ("edt-switc"), so the positive signal is column 2's row 0
+      // ("edt-delete") sharing registry's line instead — equally only possible with maxRows=2.
       const registryLine = lines.find((line) => line.includes('registry'));
       expect(registryLine).toBeDefined();
-      expect(registryLine).toContain('edt-switch');
+      expect(registryLine).toContain('edt-delete');
       expect(registryLine).not.toContain('edt-create');
     } finally {
       instance.unmount();
@@ -1452,7 +1471,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: false },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
 
@@ -1589,7 +1608,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 9 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
@@ -1624,7 +1643,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
 
@@ -1660,7 +1679,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: {
           bufferSize: DEFAULT_SETTINGS.logs.bufferSize,
           startWithHistory: true,
@@ -1717,7 +1736,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     store.getState().commitFilterHistoryEntry({ scope: 'pane', repoPath: '/repo/a', mode: 'text' }, 'a-text');
     store.setState({
       edtsBranches: [
-        { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development' },
+        { service: 'svc-a', path: '/repo/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
       ],
     });
     store.getState().openSettingsScreen();
@@ -1768,7 +1787,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
@@ -1801,7 +1820,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
     } finally {
@@ -2290,6 +2309,246 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(writeSplitterRatios).toHaveBeenCalledWith(store.getState().splitterRatios);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell reset screen (:reset)', () => {
+  function statefulDeps() {
+    const disk = {
+      edts: [
+        {
+          ulid: 'ULID1',
+          topic: 'feature-a',
+          createdAt: '2026-09-29T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+        },
+      ] as EdtRegistryEntry[],
+      activeEdt: 'ULID1' as string | null,
+    };
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () => ok([...disk.edts])),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async (ulid: string) => {
+        disk.edts = disk.edts.filter((e) => e.ulid !== ulid);
+        return ok(undefined);
+      }),
+    };
+    const base = fakeDeps();
+    const state: StatePort = {
+      ...base.state,
+      readActiveEdt: vi.fn(async () => ok(disk.activeEdt)),
+      writeActiveEdt: vi.fn(async (ulid: string | null) => {
+        disk.activeEdt = ulid;
+        return ok(undefined);
+      }),
+    };
+    return { deps: fakeDeps({ edtRegistry, state, edtsBaseDir: resetEdtsBaseDir }), disk };
+  }
+
+  // A real tmp EDT data dir, so the wipe is exercised against the filesystem.
+  let resetTmpRoot: string;
+  let resetEdtsBaseDir: string;
+  beforeEach(async () => {
+    resetTmpRoot = await mkdtemp(join(tmpdir(), 'tui-back-reset-shell-'));
+    resetEdtsBaseDir = join(resetTmpRoot, 'edts');
+    await mkdir(join(resetEdtsBaseDir, 'ULID1'), { recursive: true });
+    await writeFile(join(resetEdtsBaseDir, 'ULID1.db'), 'db');
+  });
+  afterEach(async () => {
+    await rm(resetTmpRoot, { recursive: true, force: true });
+  });
+
+  function mountWithQuitSpy(store: ReturnType<typeof createAppStore>) {
+    const stdout = new FakeTtyStdout();
+    const stdin = fakeInteractiveTtyStdin();
+    const onQuit = vi.fn();
+    const instance = render(createElement(AppShell, { useStore: store, onQuit }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    return { instance, stdout, stdin, onQuit };
+  }
+
+  it('with the overlay open, single global-shortcut keys never leak to AppShell', async () => {
+    const { deps } = statefulDeps();
+    const store = createAppStore(deps);
+    const { instance, stdin, onQuit } = mountWithQuitSpy(store);
+    try {
+      await flushAsyncLoad(instance);
+      store.getState().openResetScreen();
+      await flushAsyncLoad(instance);
+      const zoneBefore = store.getState().activeZone;
+
+      // One character per press, so each one arrives as its own keystroke.
+      for (const key of ['e', 'r', 'l', ':', 'q', '?', KEYS.right]) {
+        await press(instance, stdin, key);
+      }
+
+      expect(store.getState().activeZone).toBe(zoneBefore);
+      expect(store.getState().commandBarOpen).toBe(false);
+      expect(store.getState().helpOpen).toBe(false);
+      expect(onQuit).not.toHaveBeenCalled();
+      expect(store.getState().resetScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('with the overlay open over the EDTs zone, Enter/Space never reach the zone', async () => {
+    const { deps } = statefulDeps();
+    const store = createAppStore(deps);
+    store.getState().setActiveZone('edts');
+    const { instance, stdin } = mountWithQuitSpy(store);
+    try {
+      await flushAsyncLoad(instance);
+      store.getState().openResetScreen();
+      await flushAsyncLoad(instance);
+
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+
+      // Enter on the EDTs zone's focused (active) EDT would open its modify dialog, which
+      // captures input — it must not have happened underneath the overlay.
+      expect(store.getState().zoneInputCaptured).toBe(false);
+      expect(store.getState().activeZone).toBe('edts');
+
+      // Control: once the overlay closes, the same Enter does reach the zone.
+      await pressEscape(instance, stdin);
+      expect(store.getState().resetScreenOpen).toBe(false);
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+      expect(store.getState().zoneInputCaptured).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('while a reset is running, Esc and other keys are ignored', async () => {
+    const store = createAppStore();
+    store.setState({ resetScreenOpen: true, resetStatus: 'running' });
+    const { instance, stdin, stdout } = mountWithQuitSpy(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('Resetting…');
+
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, ':');
+
+      expect(store.getState().resetScreenOpen).toBe(true);
+      expect(store.getState().resetStatus).toBe('running');
+      expect(store.getState().commandBarOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('opens only through the `reset` command, and Esc closes it with zero writes', async () => {
+    const { deps } = statefulDeps();
+    const store = createAppStore(deps);
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'reset');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().resetScreenOpen).toBe(true);
+      expect(stdout.output).toContain('RESET TOOL DATA');
+
+      await press(instance, stdin, KEYS.space);
+      await press(instance, stdin, KEYS.enter);
+      await pressEscape(instance, stdin);
+
+      expect(store.getState().resetScreenOpen).toBe(false);
+      expect(deps.edtRegistry.remove).not.toHaveBeenCalled();
+      expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+      expect(deps.state.writeFilterHistory).not.toHaveBeenCalled();
+      expect(deps.registry.remove).not.toHaveBeenCalled();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('BUSY: is refused while a run is in progress, with the reason shown', async () => {
+    const store = createAppStore();
+    store.getState().setRunInProgress(true);
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'reset');
+      await press(instance, stdin, KEYS.enter);
+
+      expect(store.getState().resetScreenOpen).toBe(false);
+      expect(stdout.output).toContain('Reset unavailable');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a wrong confirmation word writes nothing; the exact word resets and rehydrates the store', async () => {
+    const { deps, disk } = statefulDeps();
+    const store = createAppStore(deps);
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      expect(store.getState().activeEdt).toBe('ULID1');
+
+      store.getState().openResetScreen();
+      await flushAsyncLoad(instance);
+
+      await press(instance, stdin, KEYS.space); // EDTs
+      await press(instance, stdin, KEYS.enter); // -> summary
+      expect(stdout.output).toContain('feature-a');
+      await press(instance, stdin, KEYS.enter); // -> confirm
+
+      // `?` must type into the confirm field, never open global help on top of it.
+      await press(instance, stdin, '?');
+      expect(store.getState().helpOpen).toBe(false);
+      await press(instance, stdin, KEYS.backspace);
+
+      await press(instance, stdin, 'Reset');
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+      expect(deps.edtRegistry.remove).not.toHaveBeenCalled();
+      expect(store.getState().resetStatus).toBe('idle');
+
+      for (let i = 0; i < 5; i += 1) {
+        await press(instance, stdin, KEYS.backspace);
+      }
+      await press(instance, stdin, 'reset');
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+
+      expect(disk.edts).toEqual([]);
+      expect(disk.activeEdt).toBeNull();
+      expect(await readdir(resetEdtsBaseDir)).toEqual([]);
+      expect(store.getState().resetStatus).toBe('done');
+      expect(store.getState().edts).toEqual([]);
+      expect(store.getState().activeEdt).toBeNull();
+      expect(stdout.output).toContain('svc-a / /repo/a / feat/a');
+
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().resetScreenOpen).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

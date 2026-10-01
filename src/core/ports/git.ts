@@ -25,12 +25,15 @@
 import type { Result } from '../result.js';
 
 export interface GitPort {
-  // Rejects (before any git write) a branchName that is shared/protected for this repo — the
-  // shared-branch set (development/preprod/prod ∪ the repo's manifest sharedBranch) is
+  // Rejects (before any git write) a branchName that is protected for this repo — the
+  // protected set (Story 2.42: the manifest's protectedBranches ∪ its sharedBranch) is
   // resolved by the adapter itself at check time, never trusted from the caller. When edtId
   // is passed (story 2.4) and the adapter has an EdtRegistryPort wired in, it additionally
   // rejects a branchName already registered as a *different* EDT's own branch for this repo.
   assertAllowedBranch(repoPath: string, branchName: string, edtId?: string): Promise<Result<void>>;
+  // Creates branchName from baseBranch without checking it out. Story 2.35: baseBranch may be
+  // a local branch (`refs/heads/`) or a remote-tracking ref (`refs/remotes/`, e.g.
+  // `origin/release`); the new branch never inherits an upstream from its base (`--no-track`).
   createBranch(repoPath: string, branchName: string, baseBranch: string): Promise<Result<void>>;
   // Deletes a branch ref that this tool created (rollback path: a failed EDT creation must
   // not leave orphaned branch refs behind) or that a developer explicitly chose to delete
@@ -113,11 +116,32 @@ export interface GitPort {
   abortMerge(repoPath: string): Promise<Result<void>>;
   // Story 3.4: porcelain file list backing the lockfile-only classifier — the raw
   // `git status --porcelain` paths (one entry per dirty path; renames surface both sides so
-  // the classifier stays conservative). Empty when the tree is clean.
-  listDirtyPaths(repoPath: string): Promise<Result<string[]>>;
+  // the classifier stays conservative). Empty when the tree is clean. Story 2.39: the opt-in
+  // `expandUntracked` lists every file inside an untracked directory (`--untracked-files=all`)
+  // instead of the directory itself — used by switch.ts to capture exactly what a `discard`
+  // resolution removes. Story 3.4's classifier keeps the default (collapsed) listing.
+  listDirtyPaths(repoPath: string, opts?: { expandUntracked?: boolean }): Promise<Result<string[]>>;
   // Story 3.4: path-scoped discard (`git checkout -- <paths>` equivalent) for the
   // lockfile-only auto-fix. Never touches paths outside the given list.
   discardPaths(repoPath: string, paths: string[]): Promise<Result<void>>;
+  // Story 2.39: THE one consent-gated destructive primitive — `git reset --hard` then
+  // `git clean -fd` (never `-x`: ignored files are never touched; never `-ff`: nested repos
+  // are never removed). Its only permitted caller is core/edt/switch.ts, and only under an
+  // explicit per-repo `discard` resolution supplied by the developer. Fails `git-discard-error`.
+  discardAll(repoPath: string): Promise<Result<void>>;
+  // Story 2.38: the paths that differ between two revisions (`git diff --name-only -z from to
+  // --`), repo-root relative — read-only, gated nowhere. Backs activate.ts's pre-flight: the
+  // uncommitted paths a checkout from `from` to `to` would overwrite are the dirty paths that
+  // also appear here. Fails `git-diff-error`.
+  diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>>;
+  // Story 2.38: consent-gated, path-scoped discard back to HEAD — only core/edt/activate.ts
+  // calls it, and only for at-risk paths the developer explicitly confirmed overwriting. Per
+  // path, whatever its state: unstaged (`reset -q -- paths`), then restored from HEAD when HEAD
+  // has it (`checkout HEAD -- …`), else removed as untracked (`clean -f -- …`). Never touches a
+  // path outside the list, never ignored files (no `-x`). Unlike `discardPaths` (index
+  // checkout), it handles untracked and staged paths. An empty list is a no-op success.
+  // Fails `git-discard-error`.
+  discardPathsToHead(repoPath: string, paths: string[]): Promise<Result<void>>;
   // Story 3.4: true while a `git rebase` is still in progress (rebase-merge/rebase-apply
   // state dirs exist under the repo's git dir). The tool never touches a rebase — this is
   // only a detector so a pre-existing mid-rebase surfaces as its own distinct state.
@@ -136,8 +160,20 @@ export interface GitPort {
   // listBranches stays local-only") — never fetches, never lists remote-tracking refs.
   listBranches(repoPath: string): Promise<Result<string[]>>;
   // Story 2.26: renames a local branch ref (`git branch -m`) — backs both Pick existing's
-  // per-row inline-rename action and Rename current. Internally gates the *new* name via
+  // per-row inline-rename action and Rename current. Story 2.35: gates *both* names via
   // assertAllowedBranch (no edtId, mirroring createBranch's own gate) before touching git, so
-  // a rename can never land on a shared/protected branch name any more than a create can.
+  // a rename can never land on a protected branch name any more than a create can, nor rename
+  // a protected branch (any name in the manifest-defined set — Story 2.42) away.
   renameBranch(repoPath: string, oldName: string, newName: string): Promise<Result<void>>;
+  // Story 2.35: the remote-tracking refs already known locally (`refs/remotes/`), as
+  // `<remote>/<branch>` names (e.g. `origin/feat/x`); the symbolic `<remote>/HEAD` ref is
+  // excluded. Never fetches — it lists only what the last fetch left behind. listBranches
+  // stays local-only; this is its remote-side sibling.
+  listRemoteBranches(repoPath: string): Promise<Result<string[]>>;
+  // Story 2.35: creates local branch `localName` tracking the remote-tracking ref `remoteRef`
+  // (`git branch --track -- <localName> <remoteRef>`) — a ref write only, never a checkout.
+  // Gates `localName` via assertAllowedBranch before any git call; `branch-exists` when
+  // `localName` already exists locally; `remote-branch-missing` when `refs/remotes/<remoteRef>`
+  // is absent (never fetches to find it).
+  createTrackingBranch(repoPath: string, localName: string, remoteRef: string): Promise<Result<void>>;
 }

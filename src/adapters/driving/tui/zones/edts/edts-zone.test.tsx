@@ -9,16 +9,20 @@ import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
-import { NO_BRANCH_CREATION } from '../../store/app-store.js';
 import { EdtsZone } from './edts-zone.js';
+import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
+import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
+import { resolveQuickPickCandidates as quickCandidates, toQuickPickItems } from './dialogs/quick-pick-dialog.js';
+import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import {
-  advanceCreateFormFocus,
+  initialCreateDialog,
   appendHint,
-  buildCreateBranchOptions,
   buildDeleteMemberRows,
   canEditMemberBranch,
   cycleFormFocus,
   cyclePaneFocus,
+  explainIssueErrorCode,
+  explainUnreachable,
   formatAvailableActionsHint,
   formatEdtActionHistory,
   formatEdtDetail,
@@ -27,29 +31,23 @@ import {
   formatIssuesSummary,
   formatServiceDetail,
   formatServiceMeta,
-  isBranchStepFocus,
   isSwitchBlockedError,
   jumpSelection,
   moveSelection,
-  nextTextInputValue,
   partitionServicesByEdtMembership,
-  prefillBranchNames,
-  prefillBaseBranches,
-  resolveBaseBranchMode,
   resolveCandidateListState,
   resolveActionHint,
+  resolveIssuesSeverity,
   resolveModifyEnterAction,
   resolveModifyOps,
   resolveSelectionDirection,
   resolveSelectionJump,
-  suggestBaseBranchFor,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
   toggleMemberSelection,
   truncateBranchLabel,
   validateBranchEditValue,
-  validateCreateBranchFields,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.logic.js';
 
@@ -74,6 +72,7 @@ function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranc
     behind: 0,
     status: 'current',
     sharedBranch: 'development',
+    protectedBranches: [],
     ...overrides,
   };
 }
@@ -153,6 +152,50 @@ describe('formatIssuesSummary', () => {
 
   it('combines both counts', () => {
     expect(formatIssuesSummary(3, 2)).toBe('3 unreachable, 2 errors');
+  });
+});
+
+// Story 2.34: severity picks which of the theme's two "something's wrong" colors the summary
+// line renders with.
+describe('resolveIssuesSeverity', () => {
+  it('returns null when there is nothing to report', () => {
+    expect(resolveIssuesSeverity(0, 0)).toBeNull();
+  });
+
+  it('returns warning when only unreachable is non-empty', () => {
+    expect(resolveIssuesSeverity(2, 0)).toBe('warning');
+  });
+
+  it('returns error when errors is non-empty, even alongside unreachable', () => {
+    expect(resolveIssuesSeverity(0, 1)).toBe('error');
+    expect(resolveIssuesSeverity(3, 1)).toBe('error');
+  });
+});
+
+describe('explainIssueErrorCode', () => {
+  it('resolves a known code to its reason + suggestion', () => {
+    const explanation = explainIssueErrorCode('manifest-invalid-yaml');
+    expect(explanation.reason).toContain('YAML');
+    expect(explanation.suggestion.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to a generic explanation for an unrecognized code, never a blank one', () => {
+    const explanation = explainIssueErrorCode('some-future-code');
+    expect(explanation.reason.length).toBeGreaterThan(0);
+    expect(explanation.suggestion.length).toBeGreaterThan(0);
+  });
+
+  it('guards against an inherited Object.prototype key (mirrors resolveAssistedAction)', () => {
+    const explanation = explainIssueErrorCode('constructor');
+    expect(explanation.reason).toBe('an unexpected error occurred');
+  });
+});
+
+describe('explainUnreachable', () => {
+  it('always points at Repo Registry -> Clean stale entries', () => {
+    const explanation = explainUnreachable();
+    expect(explanation.suggestion).toContain('Repo Registry');
+    expect(explanation.suggestion).toContain('Clean stale entries');
   });
 });
 
@@ -393,6 +436,26 @@ describe('EdtsZone (story 2.6)', () => {
     const output = await renderToString(<EdtsZone useStore={store} />);
     expect(output).toContain('2 unreachable');
     expect(output).toContain('1 error');
+    // Story 2.34: the "[i] details" hint into the issues dialog, shown whenever the summary is.
+    expect(output).toContain('[i] details');
+  });
+
+  it('opens a read-only issues dialog explaining each unreachable/error entry (story 2.34)', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranchesStatus: 'idle',
+      edtsBranches: [service({ service: 'api-gateway' })],
+      edtsUnreachable: ['/repos/gone-a'],
+      edtsErrors: [{ path: '/repos/bad', code: 'manifest-invalid-yaml', message: 'Invalid .tui-back.yaml' }],
+      loadEdtsBranches: noopLoad,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="issues" />);
+    expect(output).toContain('SERVICE LISTING ISSUES');
+    expect(output).toContain('/repos/gone-a');
+    expect(output).toContain('Clean stale entries');
+    expect(output).toContain('/repos/bad');
+    expect(output).toContain('Invalid .tui-back.yaml');
+    expect(output).toContain('YAML');
   });
 
   it('shows no summary line when unreachable/errors are both empty', async () => {
@@ -552,205 +615,6 @@ describe('suggestBranchNameFromTopic (story 2.22)', () => {
 
   it('leaves an already-slug-shaped topic unchanged', () => {
     expect(suggestBranchNameFromTopic('already-a-slug')).toBe('already-a-slug');
-  });
-});
-
-describe('isBranchStepFocus (story 2.22)', () => {
-  it('is true for every branch-step field, false for topic/members', () => {
-    expect(isBranchStepFocus('branch-base')).toBe(true);
-    expect(isBranchStepFocus('branch-mode')).toBe(true);
-    expect(isBranchStepFocus('branch-name')).toBe(true);
-    expect(isBranchStepFocus('topic')).toBe(false);
-    expect(isBranchStepFocus('members')).toBe(false);
-  });
-});
-
-describe('advanceCreateFormFocus (story 2.22)', () => {
-  it('topic -> members unconditionally', () => {
-    expect(advanceCreateFormFocus('topic', false, 'grouped', 0, 1)).toEqual({ focus: 'members', nameIndex: 0 });
-  });
-
-  it('members -> branch-base once >=1 member is selected', () => {
-    expect(advanceCreateFormFocus('members', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-base', nameIndex: 0 });
-  });
-
-  it('members -> topic when zero members are selected (Boundaries: no branch step)', () => {
-    expect(advanceCreateFormFocus('members', false, 'grouped', 0, 0)).toEqual({ focus: 'topic', nameIndex: 0 });
-  });
-
-  it('branch-base -> branch-mode -> branch-name', () => {
-    expect(advanceCreateFormFocus('branch-base', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-mode', nameIndex: 0 });
-    expect(advanceCreateFormFocus('branch-mode', true, 'grouped', 0, 1)).toEqual({ focus: 'branch-name', nameIndex: 0 });
-  });
-
-  it('grouped mode has exactly one name field: branch-name wraps straight back to topic', () => {
-    expect(advanceCreateFormFocus('branch-name', true, 'grouped', 0, 1)).toEqual({ focus: 'topic', nameIndex: 0 });
-  });
-
-  it('individual mode advances through each per-member name field before wrapping to topic', () => {
-    expect(advanceCreateFormFocus('branch-name', true, 'individual', 0, 3)).toEqual({ focus: 'branch-name', nameIndex: 1 });
-    expect(advanceCreateFormFocus('branch-name', true, 'individual', 1, 3)).toEqual({ focus: 'branch-name', nameIndex: 2 });
-    expect(advanceCreateFormFocus('branch-name', true, 'individual', 2, 3)).toEqual({ focus: 'topic', nameIndex: 0 });
-  });
-});
-
-describe('prefillBranchNames (story 2.22)', () => {
-  it('grouped mode fills the shared field from the topic slug when untouched', () => {
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {}, false, {})).toEqual({
-      branchName: 'fix-auth-bug',
-      branchNames: {},
-    });
-  });
-
-  it('grouped mode never overwrites a value the developer already typed (touched)', () => {
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], 'my-custom-name', {}, true, {})).toEqual({
-      branchName: 'my-custom-name',
-      branchNames: {},
-    });
-  });
-
-  it('individual mode fills every untouched selected member, leaves touched entries untouched', () => {
-    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': 'kept' }, false, { '/a': true })).toEqual({
-      branchName: '',
-      branchNames: { '/a': 'kept', '/b': 'fix-auth-bug' },
-    });
-  });
-
-  // Review fix (story 2.22): the original version gated on "is the value currently empty",
-  // which conflated "never touched" with "touched, then deliberately cleared" — a developer
-  // who backspaced a field to '' (to exercise the empty-value rejection) would see the very
-  // next prefill call (a further member toggled, or the naming mode switched) silently
-  // resurrect the old suggestion. Gating on the explicit touched flag instead of the value
-  // fixes this: once touched, a field's '' stays '' no matter how many more prefill calls
-  // follow.
-  it('never re-fills a field the developer deliberately cleared back to empty, even on a later prefill call', () => {
-    // Simulates: the field was filled once, then the developer backspaced it to '' — the
-    // touched flag flips true at that point (handleCreateBranchStepInput), so a second
-    // prefill call (e.g. a further member toggled) must leave it exactly as the developer
-    // left it: ''.
-    expect(prefillBranchNames('grouped', 'Fix Auth Bug', ['/a'], '', {}, true, {})).toEqual({ branchName: '', branchNames: {} });
-  });
-
-  it('individual mode: a member field cleared and touched stays empty on a later prefill call', () => {
-    expect(prefillBranchNames('individual', 'Fix Auth Bug', ['/a', '/b'], '', { '/a': '' }, false, { '/a': true })).toEqual({
-      branchName: '',
-      branchNames: { '/a': '', '/b': 'fix-auth-bug' },
-    });
-  });
-});
-
-describe('buildCreateBranchOptions (story 2.22, signature updated story 2.27)', () => {
-  it('zero members -> the exact NO_BRANCH_CREATION value (core param is mandatory)', () => {
-    expect(buildCreateBranchOptions([], 'grouped', 'unused', {}, {}, NO_BRANCH_CREATION)).toBe(NO_BRANCH_CREATION);
-  });
-
-  it('grouped mode: the identical name for every selected member, per-member bases threaded through', () => {
-    expect(
-      buildCreateBranchOptions(['/a', '/b'], 'grouped', 'feature-x', {}, { '/a': 'development', '/b': 'development' }, NO_BRANCH_CREATION),
-    ).toEqual({
-      create: true,
-      base: 'development',
-      bases: { '/a': 'development', '/b': 'development' },
-      mode: 'grouped',
-      names: { '/a': 'feature-x', '/b': 'feature-x' },
-    });
-  });
-
-  it('individual mode: a per-repoPath name map, and a per-repoPath base map (diverging sharedBranch)', () => {
-    expect(
-      buildCreateBranchOptions(
-        ['/a', '/b'],
-        'individual',
-        'unused',
-        { '/a': 'feature-a', '/b': 'feature-b' },
-        { '/a': 'main', '/b': 'master' },
-        NO_BRANCH_CREATION,
-      ),
-    ).toEqual({
-      create: true,
-      base: 'main',
-      bases: { '/a': 'main', '/b': 'master' },
-      mode: 'individual',
-      names: { '/a': 'feature-a', '/b': 'feature-b' },
-    });
-  });
-});
-
-describe('validateCreateBranchFields (story 2.22, base-branch validation added story 2.27)', () => {
-  it('zero members: nothing to validate', () => {
-    expect(validateCreateBranchFields('grouped', [], '', {}, {})).toBeNull();
-  });
-
-  it('grouped mode: rejects an empty shared name field', () => {
-    expect(validateCreateBranchFields('grouped', ['/a'], '', {}, { '/a': 'development' })).toBe('Branch name must not be empty');
-    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {}, { '/a': 'development' })).toBeNull();
-  });
-
-  it('individual mode: rejects if any selected member is missing a name', () => {
-    expect(validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a' }, { '/a': 'development', '/b': 'development' })).toBe(
-      'Branch name must not be empty',
-    );
-    expect(
-      validateCreateBranchFields('individual', ['/a', '/b'], '', { '/a': 'feature-a', '/b': 'feature-b' }, { '/a': 'development', '/b': 'development' }),
-    ).toBeNull();
-  });
-
-  it('rejects an empty base-branch field before ever checking the name field(s)', () => {
-    expect(validateCreateBranchFields('grouped', ['/a'], 'feature-x', {}, { '/a': '' })).toBe('Base branch: Branch name must not be empty');
-  });
-});
-
-describe('resolveBaseBranchMode (story 2.27)', () => {
-  it('a single selected member is always "shared"', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(resolveBaseBranchMode(['/a'], candidates)).toBe('shared');
-  });
-
-  it('>=2 members with a unanimous sharedBranch stay "shared"', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'main' })];
-    expect(resolveBaseBranchMode(['/a', '/b'], candidates)).toBe('shared');
-  });
-
-  it('>=2 members with a diverging sharedBranch are forced "per-member"', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'master' })];
-    expect(resolveBaseBranchMode(['/a', '/b'], candidates)).toBe('per-member');
-  });
-});
-
-describe('suggestBaseBranchFor (story 2.27)', () => {
-  it("suggests the repo's own manifest-declared sharedBranch, never a hardcoded literal", () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(suggestBaseBranchFor('/a', candidates)).toBe('main');
-  });
-
-  it('falls back to an empty string when the path is not among the known candidates', () => {
-    expect(suggestBaseBranchFor('/unknown', [])).toBe('');
-  });
-});
-
-describe('prefillBaseBranches (story 2.27)', () => {
-  it('single repo: fills the shared field from that repo\'s own sharedBranch when untouched', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(prefillBaseBranches(['/a'], candidates, '', {}, false, {})).toEqual({
-      baseBranch: 'main',
-      baseBranches: { '/a': 'main' },
-    });
-  });
-
-  it('never overwrites a value the developer already typed (touched)', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' })];
-    expect(prefillBaseBranches(['/a'], candidates, 'my-custom-base', {}, true, {})).toEqual({
-      baseBranch: 'my-custom-base',
-      baseBranches: { '/a': 'main' },
-    });
-  });
-
-  it('fills every untouched selected member from its own sharedBranch, leaves touched entries untouched', () => {
-    const candidates = [service({ path: '/a', sharedBranch: 'main' }), service({ path: '/b', sharedBranch: 'master' })];
-    expect(prefillBaseBranches(['/a', '/b'], candidates, '', { '/a': 'kept' }, false, { '/a': true })).toEqual({
-      baseBranch: 'main',
-      baseBranches: { '/a': 'kept', '/b': 'master' },
-    });
   });
 });
 
@@ -1167,7 +1031,7 @@ describe('formatEdtActionHistory hiddenActionTypes filter (story 2.19 amended, A
 const noopAsync = async () => {};
 
 describe('EdtsZone (story 2.9 zone states)', () => {
-  it('AC1: no EDT exists -> the create prompt auto-opens with topic input + member checklist, never a bare empty list', async () => {
+  it('AC1 / story 2.36: no EDT exists -> the create wizard opens on Step 1 with its breadcrumb, intro and name field', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1178,40 +1042,87 @@ describe('EdtsZone (story 2.9 zone states)', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain('CREATE EDT');
-    expect(output).toContain('Topic:');
-    expect(output).toContain('api-gateway');
+    expect(output).toContain("EDT Wizard: Création d'un espace de travail");
+    expect(output).toContain('[▶ 1. Nom ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
+    expect(output).toContain('Choisissez un nom unique');
+    expect(output).toContain('Nom:');
+    // With zero EDTs, Esc has nothing to cancel back to — the hint says it quits.
+    expect(output).toContain('[Esc] Quitter');
   });
 
-  it('AC1: the create prompt shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
-    const store = createAppStore();
-    store.setState({
-      edts: [],
-      edtsStatus: 'idle',
-      edtsBranches: null,
-      edtsBranchesStatus: 'loading',
-      loadEdts: noopAsync,
-      loadEdtsBranches: noopAsync,
-    });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain('CREATE EDT');
+  it('story 2.36: Step 2 shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
+    const output = await renderToString(
+      <ServicesStepView dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members' }} candidates={[]} candidateState="loading" />,
+    );
     expect(output).toContain('Loading services');
     expect(output).not.toContain('No registered services available');
   });
 
-  it('AC1: the create prompt shows a genuinely-empty registry distinctly from loading', async () => {
-    const store = createAppStore();
-    store.setState({
-      edts: [],
-      edtsStatus: 'idle',
-      edtsBranches: [],
-      edtsBranchesStatus: 'idle',
-      loadEdts: noopAsync,
-      loadEdtsBranches: noopAsync,
-    });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain('CREATE EDT');
+  it('story 2.36: Step 2 shows a genuinely-empty registry distinctly from loading', async () => {
+    const output = await renderToString(
+      <ServicesStepView dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members' }} candidates={[]} candidateState="empty" />,
+    );
     expect(output).toContain('No registered services available.');
+  });
+
+  it("story 2.37: the Step 4 recap shows each service's row (mode, base, target) from Step 3", async () => {
+    const candidates = [
+      service({ service: 'api-gateway', path: '/repos/api-gateway', sharedBranch: 'development' }),
+      service({ service: 'billing', path: '/repos/billing', sharedBranch: 'main' }),
+      service({ service: 'crm', path: '/repos/crm', sharedBranch: 'main' }),
+      service({ service: 'docs', path: '/repos/docs', sharedBranch: 'main' }),
+    ];
+    const ready = { status: 'ready' as const, local: ['development', 'main', 'feat/crm'], remote: ['origin/feat/docs'] };
+    const base = initialCreateDialog();
+    const dialog = {
+      ...base,
+      step: 4 as const,
+      topic: ' auth-flow ',
+      selectedMembers: ['/repos/api-gateway', '/repos/billing', '/repos/crm', '/repos/docs'],
+      branches: {
+        ...base.branches,
+        globalName: { value: 'auth-flow', cursor: 9 },
+        lists: { '/repos/api-gateway': ready, '/repos/billing': ready, '/repos/crm': ready, '/repos/docs': ready },
+        overrides: {
+          '/repos/billing': { kind: 'existing' as const, branch: 'feat/bill', renameTo: 'feat/b2' },
+          '/repos/crm': { kind: 'existing' as const, branch: 'feat/crm' },
+          '/repos/docs': { kind: 'existing' as const, branch: 'origin/feat/docs' },
+        },
+      },
+    };
+    const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={10} />);
+    expect(output).toContain('Nom : auth-flow');
+    expect(output).toContain('Services : api-gateway, billing, crm, docs');
+    expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
+    expect(output).toContain('billing : [Renommer] feat/bill -> feat/b2');
+    // An [Existante] branch attached under its own name is printed once; a remote one still
+    // shows the local name it lands on.
+    expect(output).toMatch(/crm : \[Existante\] feat\/crm\s*\n/);
+    expect(output).toContain('docs : [Existante] origin/feat/docs → feat/docs');
+    expect(output).toContain("[Entrée] Créer l'EDT");
+
+    const acknowledged = await renderToString(
+      <ActivationStepView
+        dialog={{ ...dialog, activation: { ...dialog.activation, created: { ulid: 'u', topic: 'auth-flow' }, outcome: 'not-activated' } }}
+        candidates={candidates}
+        maxVisibleRows={10}
+      />,
+    );
+    expect(acknowledged).not.toContain("[Entrée] Créer l'EDT");
+    expect(acknowledged).toContain('EDT créé mais non activé');
+  });
+
+  it('story 2.36: Step 2 lists every registered managed repo as a checkbox row', async () => {
+    const candidates = [service({ service: 'api-gateway', path: '/repos/api-gateway' }), service({ service: 'billing', path: '/repos/billing' })];
+    const output = await renderToString(
+      <ServicesStepView
+        dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members', selectedMembers: ['/repos/billing'] }}
+        candidates={candidates}
+        candidateState="ready"
+      />,
+    );
+    expect(output).toContain('›[ ] api-gateway');
+    expect(output).toContain('[x] billing');
   });
 
   it('shows the EDT selector above the flat SERVICES list once EDTs exist — the flat list is never replaced (AC5)', async () => {
@@ -1491,6 +1402,110 @@ describe('EdtsZone (story 2.9 zone states)', () => {
 });
 
 // ==========================================================================================
+// Story 2.30 — EDT quick-pick: shared filterable-list dialog for edt-switch/modify/delete's
+// no-argument path (edts-zone.tsx's currentEdtAction effect), plus the pure
+// resolveQuickPickCandidates/toQuickPickItems helpers from quick-pick-dialog.tsx. Filtering,
+// highlight movement and filter-text editing are shared/components/filterable-pick-list.tsx's
+// own (covered by its test file) — only the EDT-specific wiring is asserted here.
+// ==========================================================================================
+
+describe('quick-pick-dialog pure helpers (story 2.30)', () => {
+  it('toQuickPickItems: one item per EDT, labelled by topic, keyed by ulid, with no secondary text', () => {
+    const first = edtEntry({ ulid: 'first-ulid', topic: 'Feature-Work' });
+    const second = edtEntry({ ulid: 'second-ulid', topic: 'other' });
+    expect(toQuickPickItems([first, second])).toEqual([
+      { key: 'first-ulid', label: 'Feature-Work', value: first },
+      { key: 'second-ulid', label: 'other', value: second },
+    ]);
+  });
+
+  it('resolveQuickPickCandidates: switch mode excludes the active EDT (today\'s "first non-active EDT" invariant, preserved as the candidate pool)', () => {
+    const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
+    const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
+    const pool = quickCandidates('switch', [active, other], 'active-ulid');
+    expect(pool.map((e) => e.ulid)).toEqual(['other-ulid']);
+  });
+
+  it('resolveQuickPickCandidates: modify/delete modes include the active EDT', () => {
+    const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
+    const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
+    expect(quickCandidates('modify', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
+    expect(quickCandidates('delete', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
+  });
+
+  it('resolveQuickPickCandidates: create-from mode includes every EDT, active included (story 2.31)', () => {
+    const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
+    const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
+    expect(quickCandidates('create-from', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
+  });
+});
+
+describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
+  it('renders the filter field, the matching rows, and the highlighted-row marker', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'feature-work' }), edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
+    expect(output).toContain('Filter');
+    expect(output).toContain('feature-work');
+    expect(output).toContain('other-work');
+    // The shared pick's row style: the highlighted row carries the selection glyphs.
+    const dialogFrame = output.slice(output.lastIndexOf('╔'));
+    const highlighted = dialogFrame.split('\n').filter((line) => line.includes('▌›'));
+    expect(highlighted).toHaveLength(1);
+    expect(highlighted[0]).toContain('feature-work');
+  });
+
+  it('a genuinely empty pool shows its own "No EDT to select" line, distinct from the filtered-to-zero wording', async () => {
+    const store = createAppStore();
+    // Switch mode with exactly one EDT, and it's active: the non-active candidate pool is
+    // empty before any filtering. (Zero EDTs in total never reaches the pick — the zone's
+    // auto-open-create guard fires first.) A filter matching nothing in a non-empty pool —
+    // the "No matching EDT" wording — needs real keypresses: edts-zone.interaction.test.tsx.
+    store.setState({
+      edts: [edtEntry({ ulid: 'only-ulid', topic: 'only-work' })],
+      edtsStatus: 'idle',
+      activeEdt: 'only-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
+    expect(output).toContain('SWITCH EDT — SELECT');
+    expect(output).toContain('No EDT to select');
+    expect(output).not.toContain('No matching EDT');
+  });
+
+  it('a long EDT list scrolls inside a bounded window instead of growing the dialog', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: Array.from({ length: 20 }, (_, index) =>
+        edtEntry({ ulid: `ulid-${index}`, topic: `topic-${String(index).padStart(2, '0')}` }),
+      ),
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
+    const dialogFrame = output.slice(output.lastIndexOf('╔'));
+    expect(dialogFrame).toContain('topic-00');
+    expect(dialogFrame).toContain('▼ more below');
+    expect(dialogFrame).not.toContain('topic-19');
+  });
+});
+
+// ==========================================================================================
 // Story 2.18 — active highlight, EDT SERVICES / OTHER SERVICES panes, per-service actions
 // ==========================================================================================
 
@@ -1707,7 +1722,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       settings: {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [] },
+        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       },
     });
@@ -1754,7 +1769,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       settings: {
         general: { quitShortcutEnabled: true },
         commandPalette: { gridMaxRows: 8 },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'] },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       },
     });

@@ -5,8 +5,21 @@
 // header for why) — a StateCreator factory combined with the other slices into one Zustand
 // store (AD-10: still exactly one store/one hook).
 import type { StateCreator } from 'zustand';
-import { createEdt as createEdtUseCase, type CreateBranchOptions, type CreateEdtData } from '../../../../../core/edt/create.js';
-import { switchActiveEdt as switchActiveEdtUseCase, type SwitchActiveEdtData } from '../../../../../core/edt/switch.js';
+import {
+  createEdt as createEdtUseCase,
+  listCreateCandidateBranches as listCreateCandidateBranchesUseCase,
+  type CreateBranchOptions,
+  type CreateCandidateBranches,
+  type CreateEdtData,
+  type MemberBranchPlan,
+} from '../../../../../core/edt/create.js';
+import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../core/edt/activate.js';
+import {
+  switchActiveEdt as switchActiveEdtUseCase,
+  type SwitchActiveEdtData,
+  type SwitchDirtyRepo,
+  type SwitchDirtyReposChoice,
+} from '../../../../../core/edt/switch.js';
 import {
   modifyEdt as modifyEdtUseCase,
   createMemberBranch as createMemberBranchUseCase,
@@ -37,19 +50,27 @@ export const DEFAULT_BASE_BRANCH = 'development';
 // scoped it to topic + member selection only). Story 2.22 adds the mandatory branch-setup
 // step, so this is no longer the store's own unconditional default — it's now the exact
 // value the zone itself passes through `createEdt`'s `branchOptions` param for the
-// zero-member case (core's `branchOptions` stays mandatory even then). Exported so the zone
-// doesn't need to duplicate the literal.
+// zero-member case. Story 2.37: the create wizard now sends `memberPlans` instead, so this
+// only remains the canonical "reuse each current branch" value for `branchOptions` callers.
 export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DEFAULT_BASE_BRANCH, mode: 'grouped', names: {} };
 
 export type CreateEdtParams = {
   topic: string;
   members: string[];
-  // Story 2.22: the create-EDT dialog now always builds and passes a real
-  // CreateBranchOptions (grouped/individual naming, base branch) instead of the store
-  // hardcoding NO_BRANCH_CREATION for every call — mandatory, not optional, so every caller
-  // makes its own branch-creation choice explicit (zero members still passes
-  // NO_BRANCH_CREATION below, exported so the zone can reuse the exact same value).
-  branchOptions: CreateBranchOptions;
+  // Exactly one of the two branch strategies is expected (core rejects a call carrying
+  // neither with invalid-argument; `memberPlans` wins when both are set):
+  //   - `branchOptions` (Stories 2.22/2.27): one CreateBranchOptions for every member — the
+  //     CLI-shaped path, e.g. NO_BRANCH_CREATION above for "reuse each current branch".
+  //   - `memberPlans` (Story 2.35, used by the create wizard since Story 2.37): one plan per
+  //     member repoPath, built from the wizard's Step 3 rows.
+  branchOptions?: CreateBranchOptions;
+  memberPlans?: Record<string, MemberBranchPlan>;
+};
+
+// Story 2.38: `overwrite` holds the at-risk paths the developer confirmed discarding, per repoPath.
+export type ActivateEdtRequest = {
+  topic: string;
+  overwrite?: Record<string, string[]>;
 };
 
 export type SwitchEdtParams = {
@@ -76,8 +97,12 @@ export type DeleteEdtParams = {
 
 // Story 2.15: EDT action state for in-progress actions shown in the detail pane.
 export type EdtActionState = {
-  type: 'create' | 'switch' | 'modify' | 'delete';
-  target: string; // EDT topic or "new EDT" for create
+  // Story 2.31: 'create-from' — the create wizard seeded from a root EDT (target = its topic,
+  // or 'select EDT' when the quick-pick must choose it).
+  type: 'create' | 'create-from' | 'switch' | 'modify' | 'delete';
+  // EDT topic (for create-from: the root EDT's topic), "new EDT" for create, or 'select EDT'
+  // when no topic was given (switch/modify/delete/create-from open the quick-pick).
+  target: string;
   startedAt: string; // ISO timestamp
 };
 
@@ -135,7 +160,20 @@ export type EdtSlice = {
   // loadEdtsBranches' are; an unwired store degrades to an explicit error Result rather than
   // throwing (every pre-2.9 `createAppStore()` call, including tests, stays usable).
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
+  // Story 2.38: the first EDT's explicit activation (wizard Step 4) — core/edt/activate.ts.
+  // `blocked` changes nothing; `activated` updates the cached active pointer like switchEdt.
+  activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
+  // The switch dirty-repo seam — mirrors UpdateSlice's updateBlocker/resolveUpdateBlocker
+  // (story 3.4). Non-null while switchActiveEdt is paused inside switchEdt: story 2.39 raises
+  // it only when a state-2/3 repo (outside the outgoing EDT) is dirty, and waits for a
+  // SwitchDirtyReposChoice (`cancel`, or `proceed` with per-repo adopt/discard resolutions).
+  // While this is set the switch dialog renders story 2.41's resolution view (global strategy,
+  // per-service overrides, discard confirmation — its draft lives in the dialog state, never
+  // here or in core) and calls resolveSwitchDirtyRepos to resume the paused core call with
+  // `{ kind: 'proceed', resolutions }` or `{ kind: 'cancel' }`.
+  switchDirtyRepos: SwitchDirtyRepo[] | null;
+  resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
   // Story 2.29: mirrors createEdt/switchEdt/modifyEdt's own call shape — the delete dialog's
   // confirm calls core/edt/delete.ts's deleteEdt in-process (AD-2), never via the CLI.
@@ -153,6 +191,9 @@ export type EdtSlice = {
   // entry point where modifyEdt's own `renameBranches` param structurally cannot apply (no
   // existing membership to resolve `oldName` from).
   listBranches: (repoPath: string) => Promise<Result<string[]>>;
+  // Story 2.37: the create wizard's Step 3 per-service lists (local + remote-tracking refs),
+  // wrapping core/edt/create.ts's listCreateCandidateBranches — never fetches.
+  listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
   renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<Result<void>>;
   // Story 2.15: EDT action state for the detail pane — tracks in-progress action and
@@ -168,11 +209,17 @@ export type EdtSlice = {
   openEdtSwitchDialog: (fullQuery: string) => void;
   openEdtModifyDialog: (fullQuery: string) => void;
   openEdtDeleteDialog: (fullQuery: string) => void;
+  // Story 2.31: `edt-create-from [topic]` — opens the creation wizard seeded from a root EDT.
+  openEdtCreateFromDialog: (fullQuery: string) => void;
   // Story 2.15: logs an EDT action to the per-EDT SQLite action_log table.
   logEdtAction: (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => Promise<void>;
 };
 
 export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], EdtSlice> {
+  // Bug fix: the pending seam promise's resolver — installed when switchActiveEdt raises a
+  // dirty-repo preview, consumed when the dialog dispatches its choice. Held in closure,
+  // never in Zustand state (mirrors UpdateSlice's own pendingBlockerResolve).
+  let pendingSwitchDirtyResolve: ((choice: SwitchDirtyReposChoice) => void) | null = null;
   return (set, get) => ({
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
@@ -259,20 +306,12 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         topic: params.topic,
         members: params.members,
         branchOptions: params.branchOptions,
+        memberPlans: params.memberPlans,
       });
       if (result.ok) {
-        // Review patch (story 2.9): unlike switchEdt, createEdt itself never writes
-        // state.json's active-EDT pointer (create.ts only sets the registry entry's own
-        // `status: 'active'`, not an exclusive flag — see the `edts` field comment above).
-        // The TUI's create dialog is only ever reachable via AC1's zero-EDT prompt today
-        // (a second EDT is CLI-only, see deferred-work.md), so every TUI-driven create is
-        // the first EDT and should become the active one — exactly as if the user had
-        // immediately switched to it. Best-effort: if the state.json write fails, the EDT
-        // is still created successfully; the active pointer just stays whatever it was.
-        const wroteActive = await deps.state.writeActiveEdt(result.data.ulid);
-        if (wroteActive.ok) {
-          set({ activeEdt: result.data.ulid });
-        }
+        // Story 2.38: a create never touches state.json's active pointer any more — the old
+        // unconditional write made every TUI create silently active. Activation only happens
+        // through the wizard's Step 4: activateEdt (first EDT) or switchEdt.
         // Story 2.13: a newly-created EDT is a fresh set of active-EDT members — reload
         // gated-tab visibility so a carrying member just added flips its tab enabled
         // immediately. Fire-and-forget: never blocks the create flow's own result.
@@ -280,11 +319,11 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       return result;
     },
-    switchEdt: async (params) => {
+    activateEdt: async (params) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
-      const result = await switchActiveEdtUseCase({
+      const result = await activateEdtUseCase({
         edtRegistry: deps.edtRegistry,
         edtRegistryResourceKey: deps.edtRegistryResourceKey,
         registry: deps.registry,
@@ -293,18 +332,65 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         lock: deps.lock,
         state: deps.state,
         topic: params.topic,
-        force: params.force,
+        overwrite: params.overwrite,
       });
-      if (result.ok) {
-        // Success updates the store's cached active-EDT pointer immediately — a direct
-        // consequence of this TUI-driven switch, not the continuous fs.watch/poll re-sync
-        // AD-10 also describes (that half stays out of this story's scope).
+      if (result.ok && result.data.status === 'activated') {
         set({ activeEdt: result.data.ulid });
-        // Story 2.13: switching the active EDT swaps its whole member set — reload
-        // gated-tab visibility so a newly (in)active member's tab flips immediately.
         void get().loadTabVisibility();
       }
       return result;
+    },
+    switchDirtyRepos: null,
+    resolveSwitchDirtyRepos: (choice) => {
+      const resolve = pendingSwitchDirtyResolve;
+      pendingSwitchDirtyResolve = null;
+      set({ switchDirtyRepos: null });
+      resolve?.(choice);
+    },
+    switchEdt: async (params) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      try {
+        const result = await switchActiveEdtUseCase({
+          edtRegistry: deps.edtRegistry,
+          edtRegistryResourceKey: deps.edtRegistryResourceKey,
+          registry: deps.registry,
+          manifest: deps.manifest,
+          git: deps.git,
+          lock: deps.lock,
+          state: deps.state,
+          topic: params.topic,
+          force: params.force,
+          // The TUI backs the dirty-repo seam — core pauses the switch (before any git
+          // write) on the batch of dirty repos and waits here while the switch dialog's
+          // resolution view (story 2.41) collects the developer's choice. No explicit
+          // dirtyResolutions: the seam is the TUI's only resolution source.
+          onDirtyReposBeforeSwitch: async (dirty) => {
+            set({ switchDirtyRepos: dirty });
+            return new Promise<SwitchDirtyReposChoice>((resolve) => {
+              pendingSwitchDirtyResolve = resolve;
+            });
+          },
+        });
+        if (result.ok) {
+          // Success updates the store's cached active-EDT pointer immediately — a direct
+          // consequence of this TUI-driven switch, not the continuous fs.watch/poll re-sync
+          // AD-10 also describes (that half stays out of this story's scope).
+          set({ activeEdt: result.data.ulid });
+          // Story 2.13: switching the active EDT swaps its whole member set — reload
+          // gated-tab visibility so a newly (in)active member's tab flips immediately.
+          void get().loadTabVisibility();
+        }
+        return result;
+      } finally {
+        // A run that threw (or resolved) while a preview was still raised must not leave the
+        // dialog stuck waiting forever — mirrors UpdateSlice's own defensive cleanup.
+        pendingSwitchDirtyResolve = null;
+        if (get().switchDirtyRepos !== null) {
+          set({ switchDirtyRepos: null });
+        }
+      }
     },
     modifyEdt: async (params) => {
       if (!deps) {
@@ -364,6 +450,12 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
       return listMemberBranchesUseCase(deps.git, repoPath);
+    },
+    listCreateBranches: async (repoPath) => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      return listCreateCandidateBranchesUseCase(deps.git, repoPath);
     },
     createMemberBranch: async (repoPath, branchName, baseBranch) => {
       if (!deps) {
@@ -435,6 +527,15 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       set({ currentEdtAction: { type: 'delete', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
       // The edts-zone will handle opening the pre-targeted delete-confirm dialog, enforcing
       // the reject-if-active check at open time.
+    },
+    // Story 2.31: mirrors openEdtDeleteDialog — the edts-zone resolves the root EDT (found →
+    // seeded wizard, not found → create-from quick-pick with an inline error, no topic →
+    // create-from quick-pick).
+    openEdtCreateFromDialog: (fullQuery: string) => {
+      // Parse optional topic from query: "edt-create-from [topic]"
+      const parts = fullQuery.trim().split(/\s+/);
+      const topic = parts.length > 1 ? parts.slice(1).join(' ') : null;
+      set({ currentEdtAction: { type: 'create-from', target: topic ?? 'select EDT', startedAt: new Date().toISOString() } });
     },
     // Story 2.15: log EDT action to per-EDT SQLite
     logEdtAction: async (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => {

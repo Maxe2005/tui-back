@@ -89,9 +89,10 @@ describe('AppShell', () => {
       // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
       // (see edts-zone.test.tsx for its own coverage). Story 3.1: same for Update
       // (see update-zone.test.tsx). Story 5.1: Logs is likewise real content now (see
-      // logs-zone.test.tsx) — every other zone is still the placeholder these two
+      // logs-zone.test.tsx). Story 6.1: Routes is likewise real content now (see
+      // routes-zone.test.tsx) — every other zone is still the placeholder these two
       // literal strings come from.
-      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs') {
+      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
@@ -356,7 +357,7 @@ it('shouldQuit returns true for q', () => {
         openCommandBar: () => {},
         closeCommandBar: () => {},
         // Story 2.19
-        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [] }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -374,17 +375,29 @@ it('shouldQuit returns true for q', () => {
         registryRegisterStatus: 'idle',
         registryRegisterResults: null,
         registerRegistryCandidates: async () => {},
+        registryCleanScanStatus: 'idle',
+        registryCleanScanError: null,
+        registryCleanCandidates: null,
+        registryCleanErrors: [],
+        scanRegistryStaleEntries: async () => {},
+        registryCleanStatus: 'idle',
+        registryCleanResults: null,
+        removeStaleRegistryCandidates: async () => {},
         resetRegistryScreen: () => {},
         edts: null,
         edtsStatus: 'idle',
         edtsError: null,
         loadEdts: async () => {},
         createEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        activateEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         switchEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        switchDirtyRepos: null,
+        resolveSwitchDirtyRepos: () => {},
         modifyEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         deleteEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         resolveMemberDeleteStatuses: async () => [],
         listBranches: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        listCreateBranches: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         createMemberBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         renameBranch: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         zoneInputCaptured: false,
@@ -403,6 +416,7 @@ it('shouldQuit returns true for q', () => {
         openEdtSwitchDialog: () => {},
         openEdtModifyDialog: () => {},
         openEdtDeleteDialog: () => {},
+        openEdtCreateFromDialog: () => {},
         logEdtAction: async () => {},
         // Story 3.1: Update zone run state
         updateStatus: 'idle',
@@ -416,8 +430,32 @@ it('shouldQuit returns true for q', () => {
         updateBlocker: null,
         resolveUpdateBlocker: () => {},
         runGroupUpdate: async () => {},
+        // Story 3.7: pre-run configuration screen state
+        updateConfig: null,
+        openUpdateConfig: async () => {},
+        // Story 3.11: single-service command entry point + service quick-pick state
+        openUpdateServiceDialog: async () => {},
+        updateServiceSelectRequest: false,
+        clearUpdateServiceSelectionRequest: () => {},
+        updateServicePick: null,
+        openUpdateServicePick: async () => {},
+        closeUpdateServicePick: () => {},
+        setUpdateConfig: () => {},
+        closeUpdateConfig: () => {},
+        confirmUpdateConfig: async () => {},
+        // Story 3.9: per-service standalone restart in-flight map + runner
+        serviceRestartInFlight: {},
+        runServiceRestart: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
+        // Story 3.6: Update zone service-list health poll + last-outcome map
+        updateServiceHealth: {},
+        lastServiceOutcomes: {},
+        startUpdateHealthPolling: () => {},
+        stopUpdateHealthPolling: () => {},
+        // Story 3.10: live per-service run tracking + issue log
+        liveServicePhase: {},
+        liveServiceIssues: {},
         // Story 5.1: Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],
@@ -443,6 +481,28 @@ it('shouldQuit returns true for q', () => {
         commitFilterHistoryEntry: () => {},
         clearGlobalFilterHistory: () => {},
         clearServiceFilterHistory: () => {},
+        clearFilterHistoryAndDrainSaves: async () => {},
+        resetScreenOpen: false,
+        resetNotice: null,
+        resetPreview: null,
+        resetStatus: 'idle',
+        resetResult: null,
+        resetError: null,
+        openResetScreen: () => false,
+        closeResetScreen: () => {},
+        dismissResetNotice: () => {},
+        runReset: async () => {},
+        // Story 6.1: Routes zone state
+        routesRepoPath: null,
+        routes: null,
+        routesStatus: 'idle',
+        routesError: null,
+        loadRoutes: async () => {},
+        // Story 6.2: Routes zone fire state
+        fireStatus: 'idle',
+        fireResult: null,
+        fireError: null,
+        fireRoute: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

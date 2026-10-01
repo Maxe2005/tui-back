@@ -1,5 +1,79 @@
 # Deferred Work
 
+## Deferred from: spec-filterable-pick-list-shared-component (2026-09-30)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md`
+  summary: `branch-picker.tsx`'s `FilterableBranchList` (pick-existing mode) is a third hand-written filter-and-select list that does not yet render through the shared `FilterablePickList`.
+  evidence: kept out of scope by the spec's own Never tier (same two-step split as the branch-autocomplete component: shared component first, adoption as a follow-up spec). `FilterableBranchList` still draws its own `› ` rows and the picker still owns its own `pickCursor` handling (`handlePickExistingKey`). **Track:** a follow-up adoption spec, which also has to decide whether the picker's prefix/substring conventions converge with the shared filter.
+
+## Deferred from: review of 3-11-update-commands-main-all-repos-single-service (2026-09-29)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
+  summary: A future epic-2 → epic-3 merge must reconcile two parallel implementations of the command zone-switch (`runCommand()` + `zoneId`) and the filterable quick-pick (update-service pick vs 2.30 EDT pick).
+  evidence: the 3.11 spec required syncing epic-2 first, but epic-2 has diverged (wizard stories 2.35-2.38), so 3.11 built the assumed contracts locally in `src/adapters/driving/tui/shared/command-bar.tsx` (`runCommand`) and `src/adapters/driving/tui/zones/update/` (service pick) instead of reusing epic-2's `670bfcb`/`7fcf592` — a side-effect fix to `edt-switch <topic>` arg dispatch is also bundled in. Surfaced by design (documented in the spec's own task 1 DONE AS), not by review layers.
+  resolved_by: the 2026-09-30 epic sync merge `5557b8a` (command zone-switch — `command-bar.tsx`'s `runCommand` now delegates to `commands.ts`'s) and `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30, quick-pick — both dialogs now render through the shared `FilterablePickList`).
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
+  summary: Duplicate service names across managed repos have no disambiguation in the `:update-service <name>` path — it resolves to the first match with no ambiguous-name handling.
+  evidence: `src/adapters/driving/tui/store/slices/update-slice.ts`'s `openSingleServiceConfig` returns the first case-insensitive match in both the EDT-member and registry loops; the same duplicate-name collision is already tracked for the Update zone's outcome map (see 3-6 deferred entries). Surfaced by blind-hunter review layer.
+
+## Deferred from: sprint-change-proposal-2026-09-24-2 (edt switch three-state model) (2026-09-24)
+
+- source_spec: `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-24-2.md`
+  summary: Removing a member from an EDT (Story 2.24 modify / 2.29 delete) while a stash tagged `tui-back:<that ulid>` is still pending for that repo leaves the stash orphaned — nothing pops it once the repo is no longer a member of that EDT.
+  evidence: state-1 stashes (Story 2.39) and adopt stashes are popped only by a switch into the owning EDT where the repo is still a member (`switchMemberRepo`). Not introduced by this change (same gap exists today for member stashes) but made more reachable by adopt. **Track:** on member removal / EDT delete, either warn about a pending tagged stash (`git.hasStash`) or offer to restore/drop it.
+
+## Deferred from: review of 2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify (2026-09-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: The quick-pick's `dialog.cursor` is a raw index into a match list recomputed fresh from the live store on every render/keypress, but `cursor` itself only updates on an arrow-key press or an actual filter-text edit — if `edtsRows`/`activeEdtUlid` change from a concurrent source (AD-10: `state.json` + `fs.watch` syncs a CLI-driven change into an open TUI) while the dialog is open and idle, the list can shrink/reorder under an unmoved cursor.
+  evidence: `quick-pick-dialog.tsx`'s `handleQuickPickDialogInput` only clamps `cursor` inside the Up/Down and text-edit branches (`moveSelection`, and `nextCursor = edited.value === current.query ? current.cursor : 0`); Enter's `matches[current.cursor]` guards only the exact `undefined` case (list shrank below the cursor), not a same-length reorder. Surfaced by edge-case-hunter + blind-hunter independently. In practice `QuickPickDialogView` re-renders live, so whatever is highlighted at Enter-time is what gets selected (no display/selection mismatch) — the risk is narrow (requires a concurrent external EDT mutation while the picker sits open and idle) and shared by every other positional-cursor list in this codebase (branch-picker's `pickCursor`, delete-dialog's `memberCursor`, the base EDT list's own focus tracking), none of which re-derive cursor identity against a live-reordering source either. **Track:** worth a codebase-wide look at cursor-by-identity vs. cursor-by-index for live-synced lists, not a fix scoped to this story alone.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: The spec's own Code Map named `edts-zone.styles.test.tsx`/`edts-zone.layout.test.tsx` among the "tests to extend" for the new `quick-pick` dialog kind (mirroring spec-2-29's pattern), but the Tasks & Acceptance checklist only required `.test.tsx`/`.interaction.test.tsx`, and the implementation followed the narrower Tasks list — so the new dialog kind has zero styles/layout coverage.
+  evidence: Flagged by blind-hunter; internal inconsistency between this spec's own Code Map and its Tasks section. Low risk (378 tests across the two extended files already exercise the dialog's behavior and one rendering snapshot), but worth closing the gap if `edts-zone.styles.test.tsx`/`.layout.test.tsx` turn out to assert something dialog-kind-specific that would have caught a real regression.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: No test opens quick-pick when the candidate pool is genuinely empty (not just filtered-to-zero) — reachable in switch mode whenever exactly one EDT exists total (it's active, so the non-active candidate pool is `[]`).
+  evidence: Flagged by blind-hunter. In the zero-*total*-EDTs case the zone's pre-existing "auto-open the create dialog" guard (`edts.length === 0 && dialog.kind === 'none'`, edts-zone.tsx:321) fires first and quick-pick can never open at all, so that sub-case is unreachable — but the "exactly 1 EDT, it's active" sub-case for switch mode specifically *is* reachable and untested.
+  resolved_by: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30). `edts-zone.test.tsx` now opens the switch-mode pick with a single, active EDT and asserts the empty-pool line; the shared reducer's own tests cover Enter/Esc on an empty pool.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
+  summary: `QuickPickDialogView` renders the identical "No matching EDT" wording whether the pool is genuinely empty (nothing to select, ever, for this mode) or just the current filter text matches nothing — unlike the base EDT list's own distinct "No EDTs yet." message for its own true-empty state.
+  evidence: Flagged by blind-hunter. Not incorrect, just imprecise in the genuinely-empty-pool case (most reachable for switch mode with exactly one, active, EDT — see the entry above). Cosmetic wording polish, not a behavior bug.
+  resolved_by: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30). The shared `FilterablePickList` takes two distinct lines — the EDT pick shows "No EDT to select" for an empty pool and keeps "No matching EDT" for a filter matching nothing.
+
+## Deferred from: review of 3-8-manifest-defined-clean-restart-recipe (2026-09-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-8-manifest-defined-clean-restart-recipe.md`
+  summary: `runRestart` (like the migration and container adapters it mirrors) runs `spawnSync` with no timeout — a hanging recipe command blocks the group update forever.
+  evidence: `src/adapters/driven/restart/index.ts`'s `spawnSync` call has no `timeout` option, matching `src/adapters/driven/migration/index.ts:42` and `src/adapters/driven/container/index.ts:29` exactly — a codebase-wide spawn-timeout decision, not a single-adapter fix. Surfaced by blind-hunter + edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-8-manifest-defined-clean-restart-recipe.md`
+  summary: `spawnFailureDetail` reports a signal-killed child as a bare `unknown error` instead of naming the signal.
+  evidence: `src/adapters/driven/restart/index.ts`'s null-status branch reads only `result.error.message/code`, which are undefined on signal kills (only `result.signal` is set) — the migration/container adapters share the identical shape, so fixing one adapter alone would diverge the trio. Surfaced by edge-case-hunter review layer.
+
+## Deferred from: review of 3-6-update-zone-shell-service-list-live-status (2026-09-22)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `pollServiceHealth` (update-slice.ts) has no try/catch around `deps.manifest.load`/`getServiceHealth` — an unexpected throw (vs. a returned `err(...)` Result) would produce an unhandled promise rejection instead of the intended silent per-poll no-op.
+  evidence: this mirrors `logs-slice.ts`'s own `pollPaneHealth`, which has the identical gap — the Code Map explicitly directed 3.6 to mirror that existing pattern, so the root cause (no defensive try/catch around a poll cycle) predates this story. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: The health-poll timer has no cancellation/generation guard — a poll cycle already in flight when `stopUpdateHealthPolling` runs (or `startUpdateHealthPolling` restarts with a new service list) can still resolve afterward and write a now-stale value into `updateServiceHealth`.
+  evidence: same shape as `logs-slice.ts`'s own health-poll timer, which has no such guard either — pre-existing pattern this story's Code Map directed it to mirror. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `UpdateZone`'s `runningMembers` (and now, via this story, the new per-service `isTargeted` status derivation) is computed from the currently *active* EDT, not from the EDT the in-flight run actually targets (`updateUlid`) — switching the active EDT while a scoped run is in progress can misattribute the `updating` status to the wrong EDT's services.
+  evidence: `runningMembers = edts?.find((entry) => entry.ulid === activeEdt)?.members ?? []` already existed before 3.6 (it fed the pre-existing running-spinner rows in stories 3.1-3.4) — this story only reused it to also drive the new status glyphs, so it did not introduce the root cause, just widened where it's visible. No guard anywhere in the TUI blocks switching the active EDT while `runInProgress` is true (confirmed: only the `q`/`:quit` gate reads `runInProgress`). Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `updateServiceHealth`/`lastServiceOutcomes` entries are never pruned when a service leaves the currently-tracked list (e.g. active EDT membership changes), so stale entries can persist and, on a very unlikely repoPath/service reuse, render an out-of-date glyph.
+  evidence: low real-world impact (the tracked set is bounded by the manifest registry's own service count, not unbounded growth), but confirmed no pruning logic exists in either `startUpdateHealthPolling` or the `lastServiceOutcomes` merge. Surfaced incidentally by blind-hunter and edge-case-hunter review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-6-update-zone-shell-service-list-live-status.md`
+  summary: `lastServiceOutcomes` is keyed by bare `service` name; two repos sharing the same service name within one EDT (an already-acknowledged possibility elsewhere in this codebase) collide, and one's outcome silently overwrites the other's in the Update zone's new detail pane/status glyph.
+  evidence: `update-zone.tsx`'s own pre-existing `updateResults.map` already carries the comment "Duplicate service names occur within one EDT — key by service + index" — this is a known, pre-3.6 possibility. The root cause is that `GroupUpdateRepoResult` (from `group-update.ts`, story 3.1/3.2) never carries a repoPath to disambiguate by, and this spec explicitly put `group-update.ts` out of bounds ("Never: do not touch group-update.ts"), so a real fix is out of this story's scope. Surfaced incidentally by edge-case-hunter review layer.
+
 ## Deferred from: code review of 2-32-text-input-line-cursor-navigation-app-wide-adoption (2026-09-17)
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-32-text-input-line-cursor-navigation-app-wide-adoption.md`
@@ -37,7 +111,8 @@
   evidence: `src/core/edt/modify.ts`'s add/remove loops (unchanged by this story) do no such de-duplication or cross-array conflict check; pre-existing since story 2.5. Explicitly out of this story's scope (spec's Never list: "Don't 'fix' the pre-existing, unreached-by-this-story's-TUI gaps ..."). **Track:** decide the CLI-side semantics (reject vs. last-write-wins vs. add-wins-over-remove) the next time `modify.ts`'s core logic is touched.
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md`
   summary: Creating a *second* (or later) EDT from the TUI is not wired — the EDTs zone's create dialog only ever opens automatically when the registry is genuinely empty (AC1's literal "no EDT exists" trigger); there is no populated-view affordance to create another one.
-  evidence: `src/adapters/driving/tui/zones/edts/edts-zone.tsx`'s only path to `dialog.kind === 'create'` is the zero-EDT auto-open effect; Enter on an existing EDT row always opens switch-confirm or modify, never create. This story's Tasks/AC text scopes the create-prompt requirement to the empty-registry case specifically, and the canonical keybinding contract (arrows/Home/End/Tab/Space/Enter/Esc only) leaves no free key for a "new EDT" action in the populated view without inventing one outside that contract. **Track:** the CLI (`tui-back edt create`) remains the only way to create a second EDT until a future story either grows the keybinding contract or repurposes an existing affordance for it.
+  evidence: `src/adapters/driving/tui/zones/edts/edts-zone.tsx`'s only path to `dialog.kind === 'create'` is the zero-EDT auto-open effect; Enter on an existing EDT row always opens switch-confirm or modify, never create. This story's Tasks/AC text scopes the create-prompt requirement to the empty-registry case specifically, and the canonical keybinding contract (arrows/Home/End/Tab/Space/Enter/Esc only) leaves no free key for a "new EDT" action in the populated view without inventing one outside that contract. **Track:** the CLI (`tui-back edt create`) remains the only way to create a second EDT until a future story either grows the keybinding contract or repurposes an existing affordance for it. **tracked_by:** Story 2.15 (entry point, shipped) + Story 2.38 (explicit activation choice; the store's unconditional active-pointer write is removed there) — Sprint Change Proposal 2026-09-24.
+  resolved_by: Story 2.38 (2026-09-29). The store's `createEdt` no longer writes `state.json`'s active pointer; the create wizard's Step 4 makes activation explicit — a first EDT goes through the new `core/edt/activate.ts` (pre-flight of files at risk, Retry / Overwrite / Esc), a later one is either handed to the protected switch (`switchActiveEdt`, Story 2.41 resolution dialog) or created without switching. Second-EDT creation from the TUI itself shipped with Story 2.15's entry point.
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md`
   summary: Two pre-existing tests in `src/core/edt/modify.test.ts` fail independently of this story — `rejects adding a member on a shared branch` and `fails with edt-not-found for unknown topic`.
   evidence: Confirmed by checking out `src/core/edt/modify.test.ts` at this story's `baseline_commit` (`6b8b84a`, unchanged by this story's diff) and re-running it standalone: the same 2 failures reproduce. Root causes are test-file bugs pre-dating this story: (1) the shared-branch test's mock `currentBranch` gates on `repoPath.endsWith('-shared')` but the test passes `/repos/shared-repo`, which doesn't match, so the mock never returns the shared branch the assertion expects; (2) the edt-not-found test passes no operation (`addMembers`/`removeMembers`/`setBranches` all empty, `renameTo` undefined), so `modifyEdt` fast-fails on `hasOp` with `invalid-argument` before ever reaching the existence check the test means to exercise. **Track:** fix both mock/fixture bugs (not `modify.ts` itself) the next time `modify.test.ts` is touched.
@@ -445,3 +520,85 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-4-filter-history-recall.md`
   summary: `filterHistoryKeyString`'s flat `service:${repoPath}:${mode}` encoding is ambiguous if a `repoPath` ever contains a literal colon (e.g. a Windows-style path) — safe today since the key is used only opaquely, but fragile for any future code that needs to decode it.
   evidence: `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`'s `filterHistoryKeyString` joins scope/repoPath/mode with `:` and is never parsed back today. Surfaced by review (blind-hunter). **Track:** switch to a safer separator or a structured (non-string) key before any decode-needing code (e.g. the manifest-removal GC above) is written against it.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-35-edt-creation-core-per-service-branch-plans-remote-branches.md`
+  summary: Remote-only branch plans derive the local name by stripping the first path segment, which is wrong for remote names containing a slash (e.g. `team/fork/feat/q` → `fork/feat/q`).
+  evidence: `listRemoteBranches` returns flat `<remote>/<branch>` strings, so core cannot tell where a slashed remote name ends; fixing it needs `git remote` or structured `{remote, branch}` entries.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-35-edt-creation-core-per-service-branch-plans-remote-branches.md`
+  summary: Picking `origin/x` in an `existing` plan when a local `x` already exists fails with `branch-exists` instead of offering the local branch — Story 2.37's wizard should steer the choice (or core should fall back to the gated local branch).
+  evidence: `createTrackingBranch` rejects a colliding local name by design; the re-attach case (local `x` already tracking `origin/x`) is common and currently a dead end.
+
+## Deferred from: code review of 3-7-pre-run-configuration-interface (2026-09-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
+  summary: The manifest schema accepts a whitespace-only `sharedBranch` (`z.string().min(1)` with no `.trim()`), which passes validation and later reaches git as a blank merge source on paths that bypass the TUI's inline blank-branch reject (e.g. a direct core call or the bare CLI with such a manifest).
+  evidence: `src/adapters/driven/manifest/schema.ts` declares `sharedBranch` without `.trim()`; the root cause (schema laxity) predates this story — the bare-CLI 3.1 path already merges `loaded.sharedBranch` verbatim. Surfaced incidentally by review (edge-case-hunter). **Track:** trim/normalize `sharedBranch` (and audit sibling string fields) as part of backlog story 2-28 (registry-manifest-semantic-validation).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-7-pre-run-configuration-interface.md`
+  summary: `UpdateConfigDialog` renders every targeted-service row unconditionally with no `BoundedList` windowing or scroll, so a large fleet (dozens of managed repos) would clip rows inside the `ModalDialog` without any way to reach them.
+  evidence: `src/adapters/driving/tui/zones/update/update-config-dialog.tsx` maps all `draft.rows` directly, unlike the 3.6 shell which bounds the service list via `BoundedList` + terminal-height chrome budget. Surfaced by review (blind-hunter); v1 fleets are small so impact is theoretical today. **Track:** reuse the `BoundedList` + cursor-windowing pattern if a large-fleet case is ever observed.
+
+## Deferred from: review of 3-9-per-service-actions-clean-restart-single-service-update (2026-09-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
+  summary: A CLI group update and a TUI standalone restart can overlap on the same repo — core locks don't intersect (`service:<repoPath>` vs global/`edt:<ulid>`), only the TUI store guards separate them.
+  evidence: `src/core/scripts/service-restart.ts` takes only the per-service lock while `group-update.ts` takes global (+edt) locks; no CLI entry for the standalone action exists yet, so the race needs concurrent CLI+TUI use. Surfaced by blind-hunter review layer. **Track:** resolve when Story 3.11 adds CLI commands (taking the global lock in serviceRestart is NOT the fix — it would serialize standalone restarts across different services, violating the per-service matrix row).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-9-per-service-actions-clean-restart-single-service-update.md`
+  summary: A clean restart (recipe commands like `npm ci` / compose rebuild) runs on a single menu Enter with no confirmation step, unlike the update path's config-screen gate.
+  evidence: `src/adapters/driving/tui/zones/update/update-zone.tsx`'s menu-choice branch runs `runServiceRestart` immediately after `setServiceMenu(null)`; the approved spec mandates no confirm step. Surfaced by blind-hunter review layer. **Track:** human UX-safety decision — confirm dialog, dry-run hint, or keep as-is — for Story 3.10/3.11 or a later pass.
+
+## Deferred from: review of 2-39-edt-switch-core-three-state-partition-dirty-service-resolutions (2026-09-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: The switch classifies repos once before the `onDirtyReposBeforeSwitch` seam and never re-reads edts.yaml/state.json after the (unbounded) TUI pause, so resolutions can be applied to a stale classification if another process switches or edits EDTs meanwhile.
+  evidence: `src/core/edt/switch.ts` computes `classifySwitchRepos` before `resolveDirtyRepos` awaits the seam; no lock is held across the pause (pre-existing seam shape from the pre-2.39 preview). Surfaced by edge-case-hunter and blind-hunter. **Track:** Story 2.41 (the real resolution dialog) should re-list and re-classify after the seam resolves, or refuse when the snapshot changed.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: A `discard` resolution on a repo with a rebase in progress runs `git reset --hard` + `clean -fd`, which does not end the rebase; the repo can be left mid-rebase after the switch.
+  evidence: `discardAll` in `src/adapters/driven/git/index.ts` has no mid-merge/mid-rebase guard (`isRebaseInProgress` exists from story 3.4). Surfaced by edge-case-hunter. **Track:** decide in 2.41 whether a mid-rebase/merge repo is refused for discard or shown as its own state in the resolution dialog.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: `detail.discardedPaths` can list an untracked nested git repository as discarded although `git clean -fd` (no `-ff`) keeps it.
+  evidence: `listDirtyPaths(repo, { expandUntracked: true })` reports a nested repo as `nested/`; `discardAll` intentionally never uses `-ff`. Surfaced by edge-case-hunter and blind-hunter. **Track:** re-list after discardAll and report only paths actually removed, when the 2.41 confirmation screen lists files.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-39-edt-switch-core-three-state-partition-dirty-service-resolutions.md`
+  summary: Stashes left under the removed fixed `tui-back:shared` tag (by a pre-2.39 switch whose restore failed) are no longer popped or surfaced by any code path.
+  evidence: story 2.39 removed `NON_MEMBER_STASH_TAG` and its unconditional post-checkout pop from `src/core/edt/switch.ts` (required by the AC); the old pop also healed leftovers. Surfaced by edge-case-hunter and blind-hunter. **Track:** a one-off detection (dirty preview note or a doctor/status check) if any user reports such a stash.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation.md`
+  summary: A deliberate cancel from the switch dialog (`switch-cancelled-by-user`) is still written to the action log as a `failed` action on the focused EDT, and every non-ok switch still logs to the focused EDT rather than a defined target.
+  evidence: `handleSwitchConfirm` error branch in `src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx` predates 2.41 (kept unchanged by its spec); surfaced by blind-hunter.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation.md`
+  summary: Branch names typed in the switch resolution dialog (and the create wizard) are not checked against git ref-name rules, so an invalid name passes inline validation and only fails the row at `createBranch`.
+  evidence: no `check-ref-format`-style validator exists in the TUI layer; the git gate stays authoritative. Surfaced by edge-case-hunter.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
+  summary: `listDirtyPaths` parses non-`-z` porcelain, so git C-quoted paths (non-ASCII/special characters) never match the raw `-z` paths from `diffNameOnly` — such an at-risk file is not flagged and the first-EDT pre-flight does not pause on it.
+  evidence: Story 2.38 review (edge-case + blind hunters). Safe today (git's own checkout refuses to overwrite it, reported as a failed row), but the pause/overwrite UX is skipped; the fix (`status --porcelain -z` parsing) touches shared callers (switch.ts confirmedPaths, group-update's lockfile classifier).
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
+  summary: The first-EDT pause panel lists only repos with at-risk files; repos whose pre-flight already failed (missing member branch, manifest or diff error) are not shown before the developer confirms an overwrite.
+  evidence: Story 2.38 review (blind hunter). Those repos surface as failed rows only after activation; the overwrite itself stays scoped to confirmed paths, so no data-loss impact.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-38-edt-creation-wizard-step-4-activation-switch-choice.md`
+  summary: Zero EDTs but a stale `state.json` active pointer (to a removed EDT) makes the first-EDT activation refuse with `activate-has-outgoing`, leaving the new EDT inactive.
+  evidence: Story 2.38 review (blind hunter). The wizard decides "first EDT" from the EDT count while `activateEdt` checks the pointer; delete refuses the active EDT, so the stale pointer needs an out-of-band edit, but nothing clears it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
+  summary: After a `:reset` of services, Logs zone panes stay subscribed to (and keep streaming/health-polling) repos that are no longer registered.
+  evidence: runReset rehydrates edts/tabVisibility/registryEmpty/filterHistory only; logs-slice pane subscriptions are never pruned against the new registry.
+- source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
+  summary: After a `:reset` of EDTs, per-zone UI state tied to deleted EDTs (EDT action log/detail pane, zone cursors, Update zone service list) is not cleared until the next natural reload.
+  evidence: runReset only calls four loaders; other slices cache EDT/service-derived state with no reset hook.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-42-manifest-defined-protected-branches-per-service.md`
+  summary: The manifest schema does not trim `sharedBranch` (unlike `protectedBranches` entries), so a padded value such as `" main "` protects the padded name rather than `main`.
+  evidence: `adapters/driven/manifest/schema.ts` keeps `z.string().min(1)` for `sharedBranch` (documented as non-trimmed in docs/tui-back-manifest.md); `isProtectedBranch` matches exactly, so the per-service protected set can miss the real shared branch.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
+  summary: The EDT command openers (`edt-switch`/`edt-modify`/`edt-delete`/`edt-create-from`) encode "no argument" as the magic target `'select EDT'` and rebuild the topic with `split(/\s+/).join(' ')`, so an EDT literally named "select EDT" is unreachable by name and a topic with repeated inner whitespace never matches.
+  evidence: Story 2.31 review (blind hunter, edge case hunter). `edt-slice.ts` openers and the `currentEdtAction` effect in `edts-zone.tsx` share the sentinel; a `target: string | null` would remove it for all four commands at once.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
+  summary: An EDT command with a topic run before `edtsRows` has loaded resolves against an empty list — `edt-create-from` then shows a false "EDT not found", and switch/modify/delete silently close.
+  evidence: Story 2.31 review (edge case hunter). The `currentEdtAction` effect in `edts-zone.tsx` consumes the action without waiting for the EDT list status.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
+  summary: The `:` command-bar grid truncates command labels (e.g. `edt-switch` renders as `edt-switc`) once a longer command name widens the layout.
+  evidence: Story 2.31 adding `edt-create-from` made `app-shell.interaction.test.tsx`'s grid assertion fail on the clipped label; the test was re-anchored on `edt-delete`, the layout itself was not fixed.

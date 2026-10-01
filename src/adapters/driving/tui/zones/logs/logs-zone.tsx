@@ -14,6 +14,7 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
+import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import { FullscreenPane } from './fullscreen-pane.js';
 import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
@@ -21,7 +22,6 @@ import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
   jumpSelection,
   moveSelection,
-  nextTextInputValue,
   partitionServicesByEdtMembership,
   resolveSelectionDirection,
   resolveSelectionJump,
@@ -109,6 +109,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
+  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   const resizeMode = useStore((state) => state.resizeMode);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const setLogsPaneGridArrowsActive = useStore((state) => state.setLogsPaneGridArrowsActive);
@@ -721,7 +722,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
+    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode },
   );
 
   return (

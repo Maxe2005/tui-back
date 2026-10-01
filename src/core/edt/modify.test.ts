@@ -10,10 +10,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ulid as generateUlid } from 'ulid';
 import { stringify } from 'yaml';
-import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches } from './modify.js';
+import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches, addMemberUnderLock } from './modify.js';
 import type { ModifyEdtResult, ModifyEdtData } from './modify.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { ManifestPort } from '../ports/manifest.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
+import type { LockPort } from '../ports/lock.js';
 import { Result, err, ok } from '../result.js';
 
 const tmpDirs: string[] = [];
@@ -56,8 +58,11 @@ function makeMockRegistry(initialPaths: Set<string> = new Set()): RegistryPort {
     exists: async (_path: string) => ok(false),
     scan: async (_root: string) => ok({ candidates: [], skipped: [] }),
     reset: async (_path: string) => ok({ path: _path, backupPath: null }),
+    remove: async (_path: string) => ok(undefined),
   };
 }
+
+const MANIFEST_PROTECTED_BRANCHES = ['development', 'preprod', 'prod'];
 
 function makeMockGit(): any {
   return {
@@ -65,9 +70,11 @@ function makeMockGit(): any {
       const branch = repoPath.endsWith('-shared') ? 'development' : 'feature-x';
       return ok(branch);
     },
+    // Story 2.42: a manifest fixture — emulates every repo's manifest declaring
+    // `sharedBranch: development` and `protectedBranches: [preprod, prod]`.
     assertAllowedBranch: async (repoPath: string, branchName: string, edtId?: string) => {
-      if (edtId !== undefined && (branchName === 'development' || branchName === 'preprod' || branchName === 'prod')) {
-        return err('shared-branch-rejected', `Branch "${branchName}" is shared/protected`);
+      if (edtId !== undefined && MANIFEST_PROTECTED_BRANCHES.includes(branchName)) {
+        return err('shared-branch-rejected', `Branch "${branchName}" is protected by its service's manifest`);
       }
       return ok(undefined);
     },
@@ -680,5 +687,112 @@ describe('listMemberBranches (story 2.26)', () => {
     const result = await listMemberBranches(git, '/repos/a');
 
     expect(result).toEqual({ ok: true, data: ['development', 'feature-x'] });
+  });
+});
+
+describe('addMemberUnderLock (story 2.39)', () => {
+  const base = { ulid: '01JOUT', topic: 'out', createdAt: '2026-09-28T00:00:00.000Z', status: 'active' as const };
+  const existing: EdtMember = { service: 'a', repoPath: '/repos/a', branch: 'feat/a' };
+  type RegistryPatch = { topic?: string; members?: EdtMember[] };
+
+  function fakeLock(events: string[]): LockPort {
+    return {
+      acquire: async (key: string) => {
+        events.push(`acquire:${key}`);
+        return ok({
+          release: async () => {
+            events.push('release');
+            return ok(undefined);
+          },
+        });
+      },
+      peek: async () => ok({ locked: false }),
+    };
+  }
+
+  function fakeEdtRegistry(
+    entries: EdtRegistryEntry[],
+    update: (ulid: string, patch: RegistryPatch) => Promise<Result<void>>,
+    onList: () => void = () => {},
+  ): EdtRegistryPort {
+    return {
+      add: async () => ok(undefined),
+      list: async () => {
+        onList();
+        return ok(entries);
+      },
+      update,
+      setStatus: async () => ok(undefined),
+      remove: async () => ok(undefined),
+    };
+  }
+
+  it('appends the member under the edts.yaml lock, re-reading the authoritative list, never touching git', async () => {
+    const events: string[] = [];
+    const updates: Array<{ ulid: string; patch: RegistryPatch }> = [];
+    const edtRegistry = fakeEdtRegistry(
+      [{ ...base, members: [existing] }],
+      async (ulid, patch) => {
+        events.push('update');
+        updates.push({ ulid, patch });
+        return ok(undefined);
+      },
+      () => events.push('list'),
+    );
+
+    const result = await addMemberUnderLock({
+      edtRegistry,
+      lock: fakeLock(events),
+      edtRegistryResourceKey: '/cfg/edts.yaml',
+      edt: { ...base, members: [] },
+      member: { service: 'b', repoPath: '/repos/b/', branch: 'feat/b' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(events).toEqual(['acquire:/cfg/edts.yaml', 'list', 'update', 'release']);
+    expect(updates).toEqual([
+      { ulid: '01JOUT', patch: { topic: 'out', members: [existing, { service: 'b', repoPath: '/repos/b', branch: 'feat/b' }] } },
+    ]);
+  });
+
+  it('is a no-op add when a racing writer already registered the same repo (no duplicate)', async () => {
+    const patches: RegistryPatch[] = [];
+    const edtRegistry = fakeEdtRegistry([{ ...base, members: [existing] }], async (_ulid, patch) => {
+      patches.push(patch);
+      return ok(undefined);
+    });
+
+    const result = await addMemberUnderLock({
+      edtRegistry,
+      lock: fakeLock([]),
+      edtRegistryResourceKey: 'k',
+      edt: { ...base, members: [] },
+      member: { service: 'a', repoPath: '/repos/a', branch: 'other' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(patches[0]?.members).toEqual([existing]);
+  });
+
+  it('propagates a write failure and an unknown EDT', async () => {
+    const failing = fakeEdtRegistry([{ ...base, members: [] }], async () => err('edt-registry-write-error', 'disk full'));
+    const written = await addMemberUnderLock({
+      edtRegistry: failing,
+      lock: fakeLock([]),
+      edtRegistryResourceKey: 'k',
+      edt: { ...base, members: [] },
+      member: { service: 'b', repoPath: '/repos/b', branch: 'feat/b' },
+    });
+    expect(written).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
+
+    const gone = fakeEdtRegistry([], async () => ok(undefined));
+    const missing = await addMemberUnderLock({
+      edtRegistry: gone,
+      lock: fakeLock([]),
+      edtRegistryResourceKey: 'k',
+      edt: { ...base, members: [] },
+      member: { service: 'b', repoPath: '/repos/b', branch: 'feat/b' },
+    });
+    expect(missing).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
   });
 });

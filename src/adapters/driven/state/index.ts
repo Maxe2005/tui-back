@@ -224,7 +224,7 @@ async function readActiveEdt(stateFile: string): Promise<Result<string | null>> 
   return recovered.ok ? ok(recovered.data) : result;
 }
 
-async function writeActiveEdt(stateFile: string, ulid: string): Promise<Result<void>> {
+async function writeActiveEdt(stateFile: string, ulid: string | null): Promise<Result<void>> {
   return withWriteLock(stateFile, async () => {
     // Read-merge-write: preserves whatever `splitterRatios`/`filterHistory` are already on
     // disk (or leaves them absent) rather than clobbering the whole file with only

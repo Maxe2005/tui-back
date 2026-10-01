@@ -5,10 +5,12 @@
 import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
+  MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
   MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
+  MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
   MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
@@ -45,6 +47,18 @@ export const settingsSchema: z.ZodType<Settings> = z
         // nested key is optional... so ... parses to the full default shape rather than
         // failing" convention this violated.
         hiddenActionTypes: z.array(z.string()).optional().default(DEFAULT_SETTINGS.edts.hiddenActionTypes),
+        // Branch autocomplete dropdown row count: additive optional-with-default numeric field
+        // (same hiddenActionTypes lesson as above) — a settings.yaml written before this field
+        // existed has an `edts:` block without this key, which must default to 5 rather than
+        // failing the whole file back to every default. Out-of-range/hand-edited values fail
+        // validation as a unit, falling back to every default with a field-naming warning.
+        branchDropdownMaxRows: z
+          .number()
+          .int()
+          .min(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS)
+          .max(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS)
+          .optional()
+          .default(DEFAULT_SETTINGS.edts.branchDropdownMaxRows),
       })
       .strict()
       .optional()

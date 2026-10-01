@@ -64,4 +64,36 @@ export type {
   BranchPickerProps,
   BranchPickerKeyResult,
 } from './branch-picker.js';
-
+export {
+  BranchAutocompleteInput,
+  createBranchAutocompleteState,
+  clampAutocompletePickCursor,
+  matchBranchesBySubstring,
+  isBranchAutocompleteExactMatch,
+  resolveBranchAutocompleteValidity,
+  resolveBranchAutocompleteDropdown,
+  handleBranchAutocompleteKey,
+} from './branch-autocomplete-input.js';
+export type {
+  BranchAutocompleteStatus,
+  BranchAutocompleteState,
+  BranchAutocompleteValidity,
+  BranchAutocompleteKey,
+  BranchAutocompleteKeyResult,
+  BranchAutocompleteInputProps,
+} from './branch-autocomplete-input.js';
+export {
+  FilterablePickList,
+  FILTERABLE_PICK_LIST_MAX_ROWS,
+  createFilterablePickListState,
+  matchPickItemsBySubstring,
+  clampPickListCursor,
+  handleFilterablePickListKey,
+} from './filterable-pick-list.js';
+export type {
+  FilterablePickItem,
+  FilterablePickListState,
+  FilterablePickListKey,
+  FilterablePickListKeyResult,
+  FilterablePickListProps,
+} from './filterable-pick-list.js';

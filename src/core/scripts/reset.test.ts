@@ -23,6 +23,7 @@ function fakeRegistry(options: { reset?: () => Promise<Result<ResetResult>> } = 
     exists: async () => ok(false),
     scan: async () => ok({ candidates: [], skipped: [] }),
     reset: async (path) => reset(path),
+    remove: async () => ok(undefined),
   };
   return { port, reset };
 }

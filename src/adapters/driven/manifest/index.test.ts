@@ -118,6 +118,118 @@ describe('loadManifest', () => {
     });
   });
 
+  it('loads a manifest omitting restartCommands as having no clean-restart recipe', async () => {
+    const repo = await tempRepo(
+      ['service: route-explorer', 'container: route-explorer', 'modules: {}'].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.restartCommands).toBeUndefined();
+    }
+  });
+
+  it('loads a manifest declaring an ordered restartCommands recipe as-is', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'restartCommands:',
+        '  - npm ci',
+        '  - docker compose up -d --build',
+        'modules: {}',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { restartCommands: ['npm ci', 'docker compose up -d --build'] },
+    });
+  });
+
+  it('rejects a recipe containing a blank entry instead of running it', async () => {
+    const repo = await tempRepo(
+      [
+        'service: route-explorer',
+        'container: route-explorer',
+        'restartCommands:',
+        '  - npm ci',
+        '  - "   "',
+        'modules: {}',
+      ].join('\n'),
+    );
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('restartCommands'),
+      },
+    });
+  });
+
+  describe('protectedBranches (story 2.42)', () => {
+    const base = ['service: route-explorer', 'container: route-explorer', 'modules: {}'];
+
+    it('leaves protectedBranches undefined when the manifest omits it', async () => {
+      const repo = await tempRepo(base.join('\n'));
+
+      const result = await loadManifest(repo);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.protectedBranches).toBeUndefined();
+      }
+    });
+
+    it('trims each entry and tolerates duplicates', async () => {
+      const repo = await tempRepo(
+        [...base, 'protectedBranches:', '  - " preprod "', '  - prod', '  - prod'].join('\n'),
+      );
+
+      const result = await loadManifest(repo);
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { protectedBranches: ['preprod', 'prod', 'prod'] },
+      });
+    });
+
+    it('rejects a non-list value as a schema error', async () => {
+      const repo = await tempRepo([...base, 'protectedBranches: preprod'].join('\n'));
+
+      const result = await loadManifest(repo);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'manifest-validation-failed',
+          message: expect.stringContaining('protectedBranches'),
+        },
+      });
+    });
+
+    it.each([['""'], ['"   "']])('rejects an empty or blank entry (%s) as a schema error', async (entry) => {
+      const repo = await tempRepo([...base, 'protectedBranches:', `  - ${entry}`].join('\n'));
+
+      const result = await loadManifest(repo);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'manifest-validation-failed',
+          message: expect.stringContaining('protectedBranches'),
+        },
+      });
+    });
+  });
+
   it('treats a repo with no .tui-back.yaml as unmanaged (AC3), no throw', async () => {
     const repo = await tempRepo(null);
 
@@ -333,14 +445,14 @@ describe('loadManifest', () => {
 
   it('fails with unknown-module naming the id and repo path for an unknown id (AC3)', async () => {
     const repo = await tempRepo(
-      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  route-explorer: {}'].join('\n'),
+      ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  bogus-module: {}'].join('\n'),
     );
 
     const result = await loadManifest(repo);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
     if (!result.ok) {
-      expect(result.error.message).toContain('route-explorer');
+      expect(result.error.message).toContain('bogus-module');
       expect(result.error.message).toContain(repo);
     }
   });

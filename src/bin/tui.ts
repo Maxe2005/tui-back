@@ -10,6 +10,7 @@ import {
 import { loadManifest } from "../adapters/driven/manifest/index.js";
 import { createContainerPort } from "../adapters/driven/container/index.js";
 import { createMigrationPort } from "../adapters/driven/migration/index.js";
+import { createRestartPort } from "../adapters/driven/restart/index.js";
 import { createGitPort } from "../adapters/driven/git/index.js";
 import { createLockPort } from "../adapters/driven/lock/index.js";
 import {
@@ -30,6 +31,8 @@ import {
 } from "../adapters/driven/settings/index.js";
 import { createDockerPort } from "../adapters/driven/docker/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
+import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
+import { ROUTES_MODULE_ID } from "../core/edt/resolve-tab-visibility.js";
 
 if (!process.stdin.isTTY) {
   process.stderr.write("tui-back-tui requires an interactive terminal\n");
@@ -93,6 +96,7 @@ const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
+const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 // Story 2.11: the repo registry screen reuses Story 1.5's registerRepo use-case as-is
@@ -109,12 +113,27 @@ const settings = createSettingsPort(settingsFile);
 // Story 5.1: the Logs zone's Docker touchpoint — no XDG/lock wiring needed (DockerPort has no
 // persisted state of its own; the Logs zone's ring buffers live only in memory, per-process).
 const docker = createDockerPort();
+// Story 6.1: the Routes zone's scanner touchpoint — resolved out of the statically
+// compiled module registry by manifest module id (AD-5), mirroring src/bin/main.ts's own
+// CLI wiring exactly so `tui-back list-routes` and the Routes zone scan through the same
+// implementation in and out of process.
+const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
+if (!routeExplorer) {
+  throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
+}
+// Story 6.2: the Routes zone's fire path needs the module's auth port alongside its
+// scanner — mirrors src/bin/main.ts's own CLI wiring exactly so `tui-back fire-request`
+// and the Routes zone fire through the same implementations in and out of process.
+if (!routeExplorer.auth) {
+  throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
+}
 const store = createAppStore({
   registry,
   manifest,
   git,
   container,
   migration,
+  restart,
   edtRegistry,
   state,
   lock: actionLock,
@@ -123,6 +142,8 @@ const store = createAppStore({
   edtsBaseDir,
   settings,
   docker,
+  scanner: routeExplorer.scanner,
+  auth: routeExplorer.auth,
 });
 const onQuit = async () => {
   if (tuiLock) {
