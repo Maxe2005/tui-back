@@ -12,6 +12,7 @@
 // editing hosts the shared autocomplete reducer (text via shared/components/text-edit.ts's
 // `nextTextInputValue`, never reimplemented).
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../core/scripts/group-update.js';
+import type { MergeSourceError, MergeSourceOrigin, MergeSourceRow } from '../../../../../core/scripts/resolve-merge-sources.js';
 import type { TextEditKey, TextInputState } from '../../shared/components/text-edit.js';
 import {
   createBranchAutocompleteState,
@@ -39,8 +40,19 @@ export interface UpdateConfigRow {
   service: string;
   repoPath: string;
   sourceBranch: string;
+  // The manifest `sharedBranch`: what the row follows under the shared strategy and what
+  // the manual editor is pre-filled with.
+  sharedBranch: string;
+  origin: MergeSourceOrigin;
+  // Set while a from-EDT row cannot resolve; blocks the run only when the row is selected.
+  sourceError?: MergeSourceError;
   selected: boolean;
 }
+
+// Where non-manual rows take their source from: each manifest `sharedBranch`, or the
+// branch recorded for the service in another EDT. `resolved` is that EDT's resolution,
+// kept so a manual row can be reset without re-reading git.
+export type MergeStrategy = { kind: 'shared' } | { kind: 'edt'; ulid: string; topic: string; resolved: MergeSourceRow[] };
 
 // The store-owned draft (live run state lives in Zustand): the run `scope`, one row per
 // targeted service, the two run-wide toggles, and the current inline `error` (null when
@@ -52,6 +64,9 @@ export interface UpdateConfigDraft {
   runMigrations: boolean;
   cleanRestart: boolean;
   error: string | null;
+  // Only the EDT-scoped config over every member offers a merge-source strategy.
+  mergePanel: boolean;
+  strategy: MergeStrategy;
 }
 
 export interface UpdateConfigRowInput {
@@ -62,14 +77,65 @@ export interface UpdateConfigRowInput {
 
 // Every targeted service starts pre-selected with its branch pre-filled; migrate ON and
 // clean restart OFF (the Ask-First defaults — never anything else without renegotiation).
-export function createUpdateConfigDraft(scope: GroupUpdateScope, rows: readonly UpdateConfigRowInput[]): UpdateConfigDraft {
+export function createUpdateConfigDraft(
+  scope: GroupUpdateScope,
+  rows: readonly UpdateConfigRowInput[],
+  options: { mergePanel?: boolean } = {},
+): UpdateConfigDraft {
   return {
     scope,
-    rows: rows.map((row) => ({ ...row, selected: true })),
+    rows: rows.map((row) => ({ ...row, sharedBranch: row.sourceBranch, origin: 'shared', selected: true })),
     runMigrations: true,
     cleanRestart: false,
     error: null,
+    mergePanel: options.mergePanel === true,
+    strategy: { kind: 'shared' },
   };
+}
+
+// Re-resolves every non-manual row under `strategy`; manual rows keep their branch. Rows
+// the chosen EDT cannot resolve get an empty source plus the reason.
+export function applyMergeStrategy(draft: UpdateConfigDraft, strategy: MergeStrategy): UpdateConfigDraft {
+  return {
+    ...draft,
+    strategy,
+    rows: draft.rows.map((row) => (row.origin === 'manual' ? row : followStrategy(row, strategy))),
+    error: null,
+  };
+}
+
+function followStrategy(row: UpdateConfigRow, strategy: MergeStrategy): UpdateConfigRow {
+  const { sourceError: _dropped, ...rest } = row;
+  if (strategy.kind === 'shared') {
+    return { ...rest, sourceBranch: row.sharedBranch, origin: 'shared' };
+  }
+  const resolved = strategy.resolved.find((candidate) => candidate.repoPath === row.repoPath);
+  return {
+    ...rest,
+    sourceBranch: resolved?.source ?? '',
+    origin: 'edt',
+    ...(resolved?.error !== undefined ? { sourceError: resolved.error } : {}),
+  };
+}
+
+// Ctrl+R on a manual row hands it back to the global strategy. Other rows are untouched.
+export function resetUpdateConfigRow(draft: UpdateConfigDraft, index: number): UpdateConfigDraft {
+  const row = draft.rows[index];
+  if (row === undefined || row.origin !== 'manual') {
+    return draft;
+  }
+  return {
+    ...draft,
+    rows: draft.rows.map((candidate, candidateIndex) =>
+      candidateIndex === index ? followStrategy(candidate, draft.strategy) : candidate,
+    ),
+    error: null,
+  };
+}
+
+// An unresolved row opens the editor on its manifest `sharedBranch`, not on the empty source.
+function editorSeed(row: UpdateConfigRow): string {
+  return row.sourceError !== undefined ? row.sharedBranch : row.sourceBranch;
 }
 
 // The focusable rows: every service row in order, then the migrate toggle, then the
@@ -121,7 +187,7 @@ export function beginUpdateConfigBranchEdit(draft: UpdateConfigDraft, index: num
   if (row === undefined) {
     return null;
   }
-  return createBranchAutocompleteState({ value: row.sourceBranch });
+  return createBranchAutocompleteState({ value: editorSeed(row) });
 }
 
 // One branch-editor keystroke — delegates to the shared autocomplete reducer (typing at the
@@ -159,9 +225,13 @@ export function commitUpdateConfigBranchEdit(draft: UpdateConfigDraft, index: nu
   }
   return {
     ...draft,
-    rows: draft.rows.map((candidate, candidateIndex) =>
-      candidateIndex === index ? { ...candidate, sourceBranch: value } : candidate,
-    ),
+    rows: draft.rows.map((candidate, candidateIndex) => {
+      if (candidateIndex !== index) {
+        return candidate;
+      }
+      const { sourceError: _cleared, ...rest } = candidate;
+      return { ...rest, sourceBranch: value, origin: 'manual' };
+    }),
     error: null,
   };
 }
@@ -185,6 +255,11 @@ export function confirmUpdateConfigDraft(
   if (selected.length === 0) {
     return { ok: false, error: 'No services selected — select at least one service before starting the run.' };
   }
+  const unresolved = selected.filter((row) => row.sourceError !== undefined);
+  if (unresolved.length > 0) {
+    const names = unresolved.map((row) => row.service).join(', ');
+    return { ok: false, error: `Unresolved merge source for: ${names} — pick a branch (Enter) or deselect.` };
+  }
   for (const row of selected) {
     if (row.sourceBranch.trim() === '') {
       return { ok: false, error: `Service "${row.service}" has an empty source branch — enter a branch or deselect it.` };
@@ -207,7 +282,14 @@ export function confirmUpdateConfigDraft(
 export interface UpdateConfigViewState {
   cursor: number;
   editing: BranchAutocompleteState | null;
+  // Which half of the screen owns the keys (table when absent) and which strategy option
+  // the panel cursor sits on (0 = shared branches, 1 = from EDT). Only meaningful while
+  // the draft shows the merge-source panel.
+  focus?: 'panel' | 'table';
+  panelCursor?: number;
 }
+
+export const MERGE_PANEL_OPTION_COUNT = 2;
 
 export function clampUpdateConfigCursor(draft: UpdateConfigDraft, cursor: number): number {
   const count = updateConfigRowCount(draft);
@@ -241,6 +323,10 @@ export type UpdateConfigStep =
   | { type: 'commit-edit' }
   | { type: 'cancel-edit' }
   | { type: 'confirm' }
+  | { type: 'switch-focus' }
+  | { type: 'panel-move'; panelCursor: number }
+  | { type: 'panel-activate'; panelCursor: number }
+  | { type: 'reset-row' }
   | { type: 'cancel' }
   | { type: 'ignore' };
 
@@ -281,11 +367,20 @@ export function resolveUpdateConfigKey(
     }
     return { type: 'edit', editing: stepUpdateConfigBranchEdit(view.editing, input, key, branches) };
   }
+  if (key.ctrl === true && input === 'r' && view.focus !== 'panel' && draft.rows[view.cursor]?.origin === 'manual') {
+    return { type: 'reset-row' };
+  }
   if (key.ctrl === true || key.meta === true) {
     return { type: 'ignore' };
   }
   if (key.escape === true) {
     return { type: 'cancel' };
+  }
+  if (draft.mergePanel && key.tab === true) {
+    return { type: 'switch-focus' };
+  }
+  if (draft.mergePanel && view.focus === 'panel') {
+    return resolvePanelKey(input, key, view.panelCursor ?? 0);
   }
   const count = updateConfigRowCount(draft);
   // `resolveSelectionJump`/`resolveSelectionDirection` read Ink's required-boolean
@@ -316,6 +411,22 @@ export function resolveUpdateConfigKey(
   }
   if (key.return === true) {
     return draft.rows[view.cursor] !== undefined ? { type: 'begin-edit' } : { type: 'toggle' };
+  }
+  return { type: 'ignore' };
+}
+
+// Panel focus: the two strategy options behave like a short radio list — arrows move,
+// Enter/Space activate the option under the cursor, `y` still starts the run.
+function resolvePanelKey(input: string, key: UpdateConfigInputKey, panelCursor: number): UpdateConfigStep {
+  if (key.upArrow === true || key.downArrow === true) {
+    const next = key.downArrow === true ? panelCursor + 1 : panelCursor - 1;
+    return { type: 'panel-move', panelCursor: Math.min(Math.max(next, 0), MERGE_PANEL_OPTION_COUNT - 1) };
+  }
+  if (key.return === true || input === ' ') {
+    return { type: 'panel-activate', panelCursor };
+  }
+  if (input === 'y' || input === 'Y') {
+    return { type: 'confirm' };
   }
   return { type: 'ignore' };
 }

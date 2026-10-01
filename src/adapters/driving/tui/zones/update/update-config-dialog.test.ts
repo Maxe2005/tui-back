@@ -34,8 +34,8 @@ describe('createUpdateConfigDraft', () => {
 
     expect(created.scope).toBe('edt');
     expect(created.rows).toEqual([
-      { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
-      { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+      { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true },
+      { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true },
     ]);
     expect(created.runMigrations).toBe(true);
     expect(created.cleanRestart).toBe(false);

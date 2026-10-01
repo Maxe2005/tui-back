@@ -3,6 +3,8 @@
 // resolve identically. A branch counts as present only with a local ref — the update's own
 // source check is local-only, so an origin-only branch would be rejected later anyway.
 import { resolve } from 'node:path';
+import { ok, type Result } from '../result.js';
+import type { GitPort } from '../ports/git.js';
 import type { EdtMember, EdtRegistryEntry } from '../ports/edt-registry.js';
 
 export type MergeSourceOrigin = 'shared' | 'edt' | 'manual';
@@ -34,4 +36,19 @@ export function resolveMergeSourcesFromEdt(
     }
     return { ...base, source: branch, origin: 'edt' };
   });
+}
+
+// Gathers each target's local branch list, then resolves. A repo whose listing fails is
+// reported as `branch-not-found` rather than aborting the other rows.
+export async function loadMergeSourcesFromEdt(
+  git: Pick<GitPort, 'listBranches'>,
+  targetMembers: readonly Pick<EdtMember, 'service' | 'repoPath'>[],
+  sourceEdt: Pick<EdtRegistryEntry, 'members'>,
+): Promise<Result<MergeSourceRow[]>> {
+  const branchesByRepo: Record<string, string[]> = {};
+  for (const target of targetMembers) {
+    const listed = await git.listBranches(target.repoPath);
+    branchesByRepo[target.repoPath] = listed.ok ? listed.data : [];
+  }
+  return ok(resolveMergeSourcesFromEdt(targetMembers, sourceEdt, branchesByRepo));
 }
