@@ -21,7 +21,9 @@ import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { mergeLastServiceOutcomes, type ServiceIssue } from '../../zones/update/update-zone.logic.js';
+import { loadMergeSourcesFromEdt } from '../../../../../core/scripts/resolve-merge-sources.js';
 import {
+  applyMergeStrategy,
   confirmUpdateConfigDraft,
   createUpdateConfigDraft,
   type UpdateConfigDraft,
@@ -154,6 +156,12 @@ export type UpdateSlice = {
   // screen stays open; otherwise the screen closes and the run starts immediately with
   // exactly that configuration, no further prompt.
   confirmUpdateConfig: () => Promise<void>;
+  // The EDTs the merge-source quick-pick offers: every registered EDT except the one being
+  // updated. Empty when unwired or the registry cannot be read.
+  listMergeSourceEdts: () => Promise<{ ulid: string; topic: string }[]>;
+  // Re-resolves the open draft's rows from the chosen EDT's recorded member branches. A
+  // vanished EDT leaves the draft untouched and reports inline.
+  chooseMergeSourceEdt: (ulid: string) => Promise<void>;
   // Marks the run's EDT `interrupted` after an abandoned run (quit-mid-run confirmation)
   // and refreshes `edts` so the next idle render offers a re-run — but only while a run
   // is actually in flight: a quit-confirm racing completion must never mark a healthy,
@@ -288,9 +296,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // Opens the screen over a clean banner: a stale `done`/`error` outcome from the previous
     // run must not linger underneath the new configuration. Per-run history
     // (`updateResults`, `lastServiceOutcomes`) is kept — only the banner fields reset.
-    function openConfigDraft(scope: GroupUpdateScope, rows: { service: string; repoPath: string; sourceBranch: string }[]): void {
+    function openConfigDraft(
+      scope: GroupUpdateScope,
+      rows: { service: string; repoPath: string; sourceBranch: string }[],
+      options?: { mergePanel?: boolean },
+    ): void {
       set({
-        updateConfig: createUpdateConfigDraft(scope, rows),
+        updateConfig: createUpdateConfigDraft(scope, rows, options),
         updateStatus: 'idle',
         updateError: null,
         updateErrorCode: null,
@@ -344,7 +356,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         failConfigOpen('no-services-selected', `EDT "${active.topic}" has no member services — nothing to update.`);
         return;
       }
-      openConfigDraft('edt', rows);
+      openConfigDraft('edt', rows, { mergePanel: true });
     }
 
     // Story 3.11: the managed-repo enumeration shared by openAllReposConfig and
@@ -810,6 +822,35 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         set({ updateConfig: draft });
+      },
+      listMergeSourceEdts: async () => {
+        if (!deps) {
+          return [];
+        }
+        const [active, listed] = await Promise.all([deps.state.readActiveEdt(), deps.edtRegistry.list()]);
+        if (!listed.ok) {
+          return [];
+        }
+        const activeUlid = active.ok ? active.data : null;
+        return listed.data.filter((entry) => entry.ulid !== activeUlid).map((entry) => ({ ulid: entry.ulid, topic: entry.topic }));
+      },
+      chooseMergeSourceEdt: async (ulid: string) => {
+        const draft = get().updateConfig;
+        if (!deps || draft === null) {
+          return;
+        }
+        const listed = await deps.edtRegistry.list();
+        const source = listed.ok ? listed.data.find((entry) => entry.ulid === ulid) : undefined;
+        if (source === undefined) {
+          set({ updateConfig: { ...draft, error: 'The chosen EDT is no longer registered.' } });
+          return;
+        }
+        const resolved = await loadMergeSourcesFromEdt(deps.git, draft.rows, source);
+        const current = get().updateConfig;
+        if (!resolved.ok || current === null) {
+          return;
+        }
+        set({ updateConfig: applyMergeStrategy(current, { kind: 'edt', ulid, topic: source.topic, resolved: resolved.data }) });
       },
       closeUpdateConfig: () => {
         set({ updateConfig: null });

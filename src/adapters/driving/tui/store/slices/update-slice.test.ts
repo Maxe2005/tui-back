@@ -701,12 +701,14 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(store.getState().updateConfig).toEqual({
       scope: 'edt',
       rows: [
-        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
-        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true },
       ],
       runMigrations: true,
       cleanRestart: false,
       error: null,
+      mergePanel: true,
+      strategy: { kind: 'shared' },
     });
     // Opening the screen runs no git/docker action and starts no run.
     expect(store.getState().updateStatus).toBe('idle');
@@ -1174,6 +1176,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
       runMigrations: true,
       cleanRestart: false,
       error: null,
+      mergePanel: false,
+      strategy: { kind: 'shared' },
     })).not.toThrow();
     expect(store.getState().updateConfig).toBeNull();
   });
@@ -1903,5 +1907,50 @@ describe('update slice: single-service command dialog (story 3.11)', () => {
 
     expect(store.getState().updateServiceSelectRequest).toBe(false);
     expect(store.getState().updateServicePick).toBeNull();
+  });
+});
+
+describe('update slice: merge source from another EDT', () => {
+  function depsWithSibling() {
+    const deps = fakeDeps();
+    const base = deps.edtRegistry!.list as ReturnType<typeof vi.fn>;
+    base.mockImplementation(async () =>
+      ok([
+        { ulid: 'edt-1', topic: 'demo', createdAt: '', status: 'active' as const, members: MEMBERS },
+        {
+          ulid: 'edt-2',
+          topic: 'sibling',
+          createdAt: '',
+          status: 'inactive' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/sib' }],
+        },
+      ]),
+    );
+    (deps.git!.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) =>
+      ok(path === '/repo/a' ? ['development', 'feat/sib'] : ['development']),
+    );
+    return deps;
+  }
+
+  it('lists every EDT except the one being updated', async () => {
+    const store = createAppStore(depsWithSibling());
+    expect(await store.getState().listMergeSourceEdts()).toEqual([{ ulid: 'edt-2', topic: 'sibling' }]);
+  });
+
+  it('resolves rows from the chosen EDT and flags services it does not cover', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig('edt');
+
+    await store.getState().chooseMergeSourceEdt('edt-2');
+
+    const rows = store.getState().updateConfig!.rows;
+    expect(rows[0]).toMatchObject({ sourceBranch: 'feat/sib', origin: 'edt' });
+    expect(rows[1]).toMatchObject({ sourceBranch: '', sourceError: 'not-in-edt' });
+  });
+
+  it('does not offer the panel on a single-service config', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+    expect(store.getState().updateConfig!.mergePanel).toBe(false);
   });
 });
