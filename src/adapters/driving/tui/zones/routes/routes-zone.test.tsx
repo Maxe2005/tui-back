@@ -167,6 +167,38 @@ describe('RoutesZone (story 6.2)', () => {
   });
 });
 
+describe('RoutesZone (story 6.8)', () => {
+  function seedBodyRoutes(store: ReturnType<typeof createAppStore>) {
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'POST', path: '/users', summary: 'Create a user', bodyExample: { name: 'ada' }, bodyContentType: 'application/json' },
+        { method: 'GET', path: '/users', summary: 'List users' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+  }
+
+  it('hints [e] edit body on an editable route and hides the hint otherwise', async () => {
+    const store = createAppStore();
+    seedBodyRoutes(store);
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[e] edit body');
+    store.getState().setRoutesSelected(1);
+    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[e] edit body');
+  });
+
+  it('keeps the [enter] fire hint next to the edit hint (fire still sends no body)', async () => {
+    const store = createAppStore();
+    seedBodyRoutes(store);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('[enter] fire');
+    expect(output).toContain('[e] edit body');
+  });
+});
+
 describe('RoutesZone (story 6.7)', () => {
   function seedFiredJson(store: ReturnType<typeof createAppStore>, body = '{"id":1,"tags":["a"]}') {
     store.setState({

@@ -512,6 +512,13 @@ it('shouldQuit returns true for q', () => {
         treeFocused: false,
         setTreeFocused: () => {},
         updateJsonTreeState: () => {},
+        // Story 6.8: body-draft session state
+        bodyDrafts: {},
+        bodyEditErrors: {},
+        ensureBodyDraft: () => {},
+        updateBodyDraft: () => {},
+        setBodyEditError: () => {},
+        setBodyEditErrors: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

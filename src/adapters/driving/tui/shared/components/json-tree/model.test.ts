@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_BODY_CHARS,
+  MAX_BODY_DRAFTS,
   MAX_JSON_TREE_STATES,
+  addEntryAtPath,
   addHiddenKey,
   addOnlyKey,
+  canEditRouteBody,
+  changeTypeAtPath,
   clampTreeSelection,
   classifyResponseBody,
   clearTreeRules,
@@ -11,25 +15,40 @@ import {
   countJsonNodes,
   createDefaultJsonTreeState,
   findParentIndex,
+  firstEditError,
   flattenJson,
   foldNextDepthLevel,
+  formatBodyEditStatus,
   formatTreeStatusLine,
+  getValueAtPath,
+  isPathUnderPrefix,
   listActiveRules,
   listTreeContainers,
   moveTreeSelection,
   normalizePath,
+  parentPathOf,
+  parseJsonPath,
+  parseRawJsonBuffer,
+  pruneBodyDrafts,
   pruneJsonTreeStates,
+  remapErrorsForDelete,
   removeActiveRule,
+  removeEntryAtPath,
+  resolveAddParentPath,
   resolveTreeKeyAction,
   resolveTreeListBudget,
   resolveTreePanelKeyAction,
   routeKeyFor,
+  scalarKindOf,
+  seedBodyDraft,
+  setValueAtPath,
   toggleFoldPath,
   toggleHideNulls,
   treeChromeRows,
   treePanelLineCount,
   truncateStringValue,
   unfoldNextDepthLevel,
+  validateScalarText,
   type TreeFilterRules,
 } from './model.js';
 
@@ -322,8 +341,19 @@ describe('resolveTreeKeyAction', () => {
     expect(resolveTreeKeyAction('F', {})).toBe('toggle-panel');
   });
 
-  it('leaves Enter, Esc, digits, and Ctrl combos to the zone', () => {
-    expect(resolveTreeKeyAction('\r', { ctrl: false })).toBeNull();
+  it('maps the story 6.8 edit keys while leaving Esc, digits, and Ctrl combos to the zone', () => {
+    expect(resolveTreeKeyAction('\r', {})).toBe('edit-value');
+    expect(resolveTreeKeyAction('a', {})).toBe('add-entry');
+    expect(resolveTreeKeyAction('A', {})).toBe('add-entry');
+    expect(resolveTreeKeyAction('d', {})).toBe('delete-entry');
+    expect(resolveTreeKeyAction('D', {})).toBe('delete-entry');
+    expect(resolveTreeKeyAction('t', {})).toBe('change-type');
+    expect(resolveTreeKeyAction('T', {})).toBe('change-type');
+    expect(resolveTreeKeyAction('r', {})).toBe('open-raw');
+    expect(resolveTreeKeyAction('R', {})).toBe('open-raw');
+  });
+
+  it('leaves Esc, digits, and Ctrl combos to the zone', () => {
     expect(resolveTreeKeyAction('', {})).toBeNull();
     expect(resolveTreeKeyAction('1', {})).toBeNull();
     expect(resolveTreeKeyAction('q', {})).toBeNull();
@@ -415,5 +445,313 @@ describe('pruneJsonTreeStates', () => {
     expect(pruned['GET /r-0']).toBeUndefined();
     expect(pruned['GET /r-1']).toBeUndefined();
     expect(pruned['GET /r-51']).toBeDefined();
+  });
+});
+
+describe('validateScalarText (scalar edit matrix row)', () => {
+  it('accepts any string, including the empty string', () => {
+    expect(validateScalarText('string', '12x')).toEqual({ ok: true, value: '12x' });
+    expect(validateScalarText('string', '')).toEqual({ ok: true, value: '' });
+  });
+
+  it('parses numbers but never coerces garbage (12x stays invalid)', () => {
+    expect(validateScalarText('number', '12')).toEqual({ ok: true, value: 12 });
+    expect(validateScalarText('number', '3.5')).toEqual({ ok: true, value: 3.5 });
+    const invalid = validateScalarText('number', '12x');
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.reason).toContain('number');
+    }
+    expect(validateScalarText('number', '').ok).toBe(false);
+    expect(validateScalarText('number', 'Infinity').ok).toBe(false);
+  });
+
+  it('requires exactly true/false for booleans', () => {
+    expect(validateScalarText('boolean', 'true')).toEqual({ ok: true, value: true });
+    expect(validateScalarText('boolean', 'false')).toEqual({ ok: true, value: false });
+    expect(validateScalarText('boolean', '1').ok).toBe(false);
+    expect(validateScalarText('boolean', 'True').ok).toBe(false);
+  });
+
+  it('requires the literal null', () => {
+    expect(validateScalarText('null', 'null')).toEqual({ ok: true, value: null });
+    expect(validateScalarText('null', '').ok).toBe(false);
+    expect(validateScalarText('null', 'nil').ok).toBe(false);
+  });
+});
+
+describe('parseJsonPath (escaped concrete paths)', () => {
+  it('splits dotted keys and indices', () => {
+    expect(parseJsonPath('')).toEqual([]);
+    expect(parseJsonPath('data.items[0].tags')).toEqual([
+      { type: 'key', key: 'data' },
+      { type: 'key', key: 'items' },
+      { type: 'index', index: 0 },
+      { type: 'key', key: 'tags' },
+    ]);
+    expect(parseJsonPath('[0]')).toEqual([{ type: 'index', index: 0 }]);
+  });
+
+  it('unescapes literal dots and brackets', () => {
+    expect(parseJsonPath('a\\.b')).toEqual([{ type: 'key', key: 'a.b' }]);
+    expect(parseJsonPath('a\\[0\\].b[2]')).toEqual([
+      { type: 'key', key: 'a[0]' },
+      { type: 'key', key: 'b' },
+      { type: 'index', index: 2 },
+    ]);
+  });
+
+  it('rejects malformed paths', () => {
+    expect(parseJsonPath('a[')).toBeNull();
+    expect(parseJsonPath('a[x]')).toBeNull();
+    expect(parseJsonPath('a\\')).toBeNull();
+    expect(parseJsonPath('.a')).toBeNull();
+  });
+
+  it('round-trips parent paths', () => {
+    expect(parentPathOf('data.items[0].tags')).toBe('data.items[0]');
+    expect(parentPathOf('data')).toBe('');
+    expect(parentPathOf('')).toBeNull();
+    expect(getValueAtPath({ 'a.b': { c: 1 } }, 'a\\.b.c')).toEqual({ found: true, value: 1 });
+  });
+});
+
+describe('setValueAtPath (immutable scalar set)', () => {
+  it('replaces a nested scalar without mutating the original', () => {
+    const original = { data: { age: 36, tags: ['x'] } };
+    const result = setValueAtPath(original, 'data.age', 37);
+    expect(result).toEqual({ ok: true, value: { data: { age: 37, tags: ['x'] } } });
+    expect(original).toEqual({ data: { age: 36, tags: ['x'] } });
+  });
+
+  it('replaces array items and the root itself', () => {
+    expect(setValueAtPath({ tags: ['x', 'y'] }, 'tags[1]', 'z')).toEqual({ ok: true, value: { tags: ['x', 'z'] } });
+    expect(setValueAtPath({ a: 1 }, '', { b: 2 })).toEqual({ ok: true, value: { b: 2 } });
+  });
+
+  it('fails with the original preserved on missing or malformed paths', () => {
+    const original = { a: 1 };
+    expect(setValueAtPath(original, 'missing', 2)).toMatchObject({ ok: false });
+    expect(setValueAtPath(original, 'missing', 2)).toMatchObject({ value: original });
+    expect(setValueAtPath(original, 'a[', 1).ok).toBe(false);
+  });
+});
+
+describe('addEntryAtPath (structural add matrix row)', () => {
+  it('adds an object key defaulting to an empty string', () => {
+    expect(addEntryAtPath({ a: 1 }, '', 'id')).toEqual({ ok: true, value: { a: 1, id: '' } });
+  });
+
+  it('rejects duplicates and empty names with the prompt staying (no value change)', () => {
+    const original = { id: 1 };
+    expect(addEntryAtPath(original, '', 'id')).toMatchObject({ ok: false, reason: expect.stringContaining('duplicate') });
+    expect(addEntryAtPath(original, '', '')).toMatchObject({ ok: false });
+    expect(addEntryAtPath(original, '', '')).toMatchObject({ value: original });
+    expect(addEntryAtPath(original, '', '   ')).toMatchObject({ ok: false, reason: expect.stringContaining('empty') });
+  });
+
+  it('rejects prototype-polluting key names', () => {
+    const original = { a: 1 };
+    for (const name of ['__proto__', 'constructor', 'prototype']) {
+      const result = addEntryAtPath(original, '', name);
+      expect(result.ok).toBe(false);
+      expect(result.value).toEqual(original);
+      if (!result.ok) {
+        expect(result.reason).toContain('reserved');
+      }
+    }
+  });
+
+  it('appends an empty-string item to arrays', () => {
+    expect(addEntryAtPath({ tags: ['a'] }, 'tags')).toEqual({ ok: true, value: { tags: ['a', ''] } });
+  });
+
+  it('fails on scalars and missing parents', () => {
+    expect(addEntryAtPath({ a: 1 }, 'a', 'x').ok).toBe(false);
+    expect(addEntryAtPath({ a: 1 }, 'missing', 'x').ok).toBe(false);
+  });
+});
+
+describe('removeEntryAtPath (delete matrix row)', () => {
+  it('removes object keys and clamps callers re-derive selection afterwards', () => {
+    expect(removeEntryAtPath({ a: 1, b: 2 }, 'a')).toEqual({ ok: true, value: { b: 2 } });
+  });
+
+  it('splices array items', () => {
+    expect(removeEntryAtPath({ tags: ['a', 'b'] }, 'tags[0]')).toEqual({ ok: true, value: { tags: ['b'] } });
+  });
+
+  it('refuses the root and missing paths', () => {
+    const original = { a: 1 };
+    expect(removeEntryAtPath(original, '')).toMatchObject({ ok: false });
+    expect(removeEntryAtPath(original, 'missing').ok).toBe(false);
+  });
+});
+
+describe('changeTypeAtPath (t cycle matrix row)', () => {
+  it('re-parses string "3" to number 3', () => {
+    expect(changeTypeAtPath({ v: '3' }, 'v')).toEqual({ ok: true, value: { v: 3 } });
+  });
+
+  it('falls back to kind string when the text does not re-parse (never an error state)', () => {
+    expect(changeTypeAtPath({ v: 'hi' }, 'v')).toEqual({ ok: true, value: { v: 'hi' } });
+    expect(changeTypeAtPath({ v: '' }, 'v')).toEqual({ ok: true, value: { v: '' } });
+  });
+
+  it('cycles number → boolean → null → string', () => {
+    expect(changeTypeAtPath({ v: 1 }, 'v')).toEqual({ ok: true, value: { v: true } });
+    expect(changeTypeAtPath({ v: 0 }, 'v')).toEqual({ ok: true, value: { v: false } });
+    expect(changeTypeAtPath({ v: true }, 'v')).toEqual({ ok: true, value: { v: null } });
+    expect(changeTypeAtPath({ v: null }, 'v')).toEqual({ ok: true, value: { v: '' } });
+  });
+
+  it('refuses containers', () => {
+    expect(changeTypeAtPath({ v: { a: 1 } }, 'v').ok).toBe(false);
+    expect(changeTypeAtPath({ v: [1] }, 'v').ok).toBe(false);
+  });
+
+  it('exposes scalar kinds for the editor', () => {
+    expect(scalarKindOf('x')).toBe('string');
+    expect(scalarKindOf(1)).toBe('number');
+    expect(scalarKindOf(true)).toBe('boolean');
+    expect(scalarKindOf(null)).toBe('null');
+    expect(scalarKindOf({})).toBeNull();
+    expect(scalarKindOf([1])).toBeNull();
+  });
+});
+
+describe('resolveAddParentPath', () => {
+  it('targets the container itself, or a scalar parent', () => {
+    expect(resolveAddParentPath({ a: { b: 1 } }, 'a')).toBe('a');
+    expect(resolveAddParentPath({ a: { b: 1 } }, 'a.b')).toBe('a');
+    expect(resolveAddParentPath({ tags: ['x'] }, 'tags[0]')).toBe('tags');
+  });
+
+  it('returns null with no container to add into', () => {
+    expect(resolveAddParentPath(undefined, '')).toBeNull();
+    expect(resolveAddParentPath('scalar', '')).toBeNull();
+    expect(resolveAddParentPath(42, '')).toBeNull();
+  });
+});
+
+describe('parseRawJsonBuffer (raw valid/invalid matrix rows)', () => {
+  it('replaces the body on valid JSON', () => {
+    expect(parseRawJsonBuffer('{"a":1}')).toEqual({ ok: true, value: { a: 1 } });
+  });
+
+  it('reports broken JSON with a 1-based line/column and preserves nothing itself', () => {
+    const result = parseRawJsonBuffer('{\n"a":}');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBeTruthy();
+      expect(result.line).toBeGreaterThanOrEqual(1);
+      expect(result.column).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('pins the error location on single-line input', () => {
+    const result = parseRawJsonBuffer('{"a":}');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.line).toBe(1);
+      expect(result.column).toBeGreaterThan(1);
+    }
+  });
+});
+
+describe('draft gating, seeding, and prune (bodyDrafts matrix rows)', () => {
+  it('opens only for bodyExample or any bodyContentType', () => {
+    expect(canEditRouteBody({ bodyExample: { a: 1 } })).toBe(true);
+    expect(canEditRouteBody({ bodyExample: null })).toBe(true);
+    expect(canEditRouteBody({ bodyContentType: 'multipart/form-data' })).toBe(true);
+    expect(canEditRouteBody({ bodyContentType: 'application/json' })).toBe(true);
+    expect(canEditRouteBody({})).toBe(false);
+    expect(canEditRouteBody({ bodyContentType: '' })).toBe(false);
+  });
+
+  it('seeds a deep clone of the example and empty for content-type-only routes', () => {
+    const example = { data: { tags: [1] } };
+    const seeded = seedBodyDraft({ bodyExample: example });
+    expect(seeded).toEqual(example);
+    expect(seeded).not.toBe(example);
+    expect(seedBodyDraft({ bodyContentType: 'multipart/form-data' })).toBeUndefined();
+    expect(seedBodyDraft({})).toBeUndefined();
+  });
+
+  it('prunes drafts past the same 50-entry cap', () => {
+    expect(MAX_BODY_DRAFTS).toBe(50);
+    const states: Record<string, unknown> = {};
+    for (let index = 0; index < 52; index += 1) {
+      states[`POST /r-${index}`] = { index };
+    }
+    const pruned = pruneBodyDrafts(states);
+    expect(Object.keys(pruned)).toHaveLength(50);
+    expect(pruned['POST /r-0']).toBeUndefined();
+    expect(pruned['POST /r-51']).toBeDefined();
+  });
+
+  it('reports the first error deterministically and formats the edit status', () => {
+    expect(firstEditError({})).toBeNull();
+    expect(
+      firstEditError({
+        b: { reason: 'second', kind: 'string' },
+        a: { reason: 'first', kind: 'number' },
+      }),
+    ).toBe('first');
+    expect(formatBodyEditStatus(null, 0)).toBe('0 lines hidden — still sent');
+    expect(formatBodyEditStatus(null, 3)).toBe('3 lines hidden — still sent');
+    expect(formatBodyEditStatus('expected a number, got "x"', 0)).toContain('expected a number');
+    expect(formatBodyEditStatus('expected a number, got "x"', 3)).toContain('3 lines hidden — still sent');
+    expect(isPathUnderPrefix('a.b', 'a')).toBe(true);
+    expect(isPathUnderPrefix('a[0]', 'a')).toBe(true);
+    expect(isPathUnderPrefix('ab', 'a')).toBe(false);
+  });
+
+  it('seeds an explicit null example as null (editable null row, not the empty state)', () => {
+    expect(seedBodyDraft({ bodyExample: null })).toBeNull();
+    expect(seedBodyDraft({ bodyExample: 42 })).toBe(42);
+  });
+});
+
+describe('remapErrorsForDelete (array-shift remap)', () => {
+  const numberError = (reason: string) => ({ reason, kind: 'number' as const });
+
+  it('drops the removed subtree on object deletes', () => {
+    expect(remapErrorsForDelete({ a: numberError('x'), 'a.b': numberError('y'), c: numberError('z') }, 'a')).toEqual({
+      c: numberError('z'),
+    });
+  });
+
+  it('shifts later array siblings down by one and drops the removed item', () => {
+    expect(
+      remapErrorsForDelete(
+        { 'scores[0]': numberError('e0'), 'scores[1]': numberError('e1'), 'scores[2]': numberError('e2'), other: numberError('e3') },
+        'scores[0]',
+      ),
+    ).toEqual({
+      'scores[0]': numberError('e1'),
+      'scores[1]': numberError('e2'),
+      other: numberError('e3'),
+    });
+  });
+
+  it('leaves earlier siblings and unrelated branches untouched', () => {
+    expect(
+      remapErrorsForDelete({ 'scores[0]': numberError('e0'), 'scores[2].v': numberError('e2'), 'tags[5]': numberError('t') }, 'scores[1]'),
+    ).toEqual({
+      'scores[0]': numberError('e0'),
+      'scores[1].v': numberError('e2'),
+      'tags[5]': numberError('t'),
+    });
+  });
+
+  it('handles nested array parents and the root array', () => {
+    expect(remapErrorsForDelete({ 'a[1].v': numberError('x'), 'a[0].v': numberError('y') }, 'a[0]')).toEqual({
+      'a[0].v': numberError('x'),
+    });
+    expect(remapErrorsForDelete({ '[2]': numberError('x'), '[0]': numberError('y') }, '[1]')).toEqual({
+      '[1]': numberError('x'),
+      '[0]': numberError('y'),
+    });
   });
 });

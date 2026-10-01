@@ -409,6 +409,451 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
     }
   });
 
+describe('RoutesZone body editor (story 6.8)', () => {
+  const EDITOR_KEY = 'POST /users';
+
+  function seedEditor(fireRoute: () => Promise<void> = async () => {}) {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        {
+          method: 'POST',
+          path: '/users',
+          summary: 'Create a user',
+          bodyExample: { name: 'ada', age: 36, tags: ['x'] },
+          bodyContentType: 'application/json',
+        },
+        { method: 'GET', path: '/users', summary: 'List users' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: fireRoute as unknown as () => Promise<void>,
+    });
+    return store;
+  }
+
+  function draftOf(store: ReturnType<typeof createAppStore>): unknown {
+    return (store.getState().bodyDrafts as Record<string, unknown>)[EDITOR_KEY];
+  }
+
+  function errorsOf(store: ReturnType<typeof createAppStore>): Record<string, { reason: string; kind: string }> {
+    return store.getState().bodyEditErrors[EDITOR_KEY] ?? {};
+  }
+
+  async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+    await press(instance, stdin, KEYS.escape);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await instance.waitUntilRenderFlush();
+  }
+
+  it('opens the editor with e on a route carrying a body, seeded from the example', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      const frame = lastFrame(stdout);
+      expect(frame).toContain('REQUEST BODY');
+      expect(frame).toContain('POST /users');
+      expect(frame).toContain('name');
+      expect(frame).toContain('"ada"');
+      expect(frame).toContain('0 lines hidden — still sent');
+      expect(frame).toContain('[enter] edit');
+      expect(frame).toContain('[a] add');
+      expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('leaves e inert with no hint on a route with neither example nor content type', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      expect(lastFrame(stdout)).not.toContain('[e] edit body');
+      await press(instance, stdin, 'e');
+      expect(lastFrame(stdout)).not.toContain('REQUEST BODY');
+      expect(store.getState().bodyDrafts).toEqual({});
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('edits a scalar validly and keeps an invalid number in error without coercing', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      expect(lastFrame(stdout)).toContain('Edit name');
+      await press(instance, stdin, 'X');
+      await press(instance, stdin, KEYS.enter);
+      expect(draftOf(store)).toMatchObject({ name: 'adaX' });
+      expect(errorsOf(store)).toEqual({});
+      expect(lastFrame(stdout)).toContain('"adaX"');
+
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 'x');
+      await press(instance, stdin, KEYS.enter);
+      expect(draftOf(store)).toMatchObject({ age: '36x' });
+      expect(errorsOf(store)['age']?.reason).toContain('expected a number');
+      const frame = lastFrame(stdout);
+      expect(frame).toContain('✖');
+      expect(frame).toContain('expected a number');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('re-validates a fixed entry against its pre-error kind (number stays a number)', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 'x');
+      await press(instance, stdin, KEYS.enter);
+      expect(errorsOf(store)['age']?.kind).toBe('number');
+      // Re-open the errored row: the stored text re-validates as a number, so fixing
+      // it writes a number (not a string) and clears the entry.
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.backspace);
+      await press(instance, stdin, KEYS.backspace);
+      await press(instance, stdin, '7');
+      await press(instance, stdin, KEYS.enter);
+      expect(draftOf(store)).toMatchObject({ age: 37 });
+      expect(errorsOf(store)).toEqual({});
+      expect(lastFrame(stdout)).not.toContain('✖');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('cancels an inline edit on Esc and closes the editor on a second Esc', async () => {    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 'X');
+      await pressEscape(instance, stdin);
+      expect(draftOf(store)).toMatchObject({ name: 'ada' });
+      expect(lastFrame(stdout)).toContain('REQUEST BODY');
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).not.toContain('REQUEST BODY');
+      expect(lastFrame(stdout)).toContain('[enter] fire');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('prompts for an object key, rejects duplicates, and appends array items directly', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, 'a');
+      expect(lastFrame(stdout)).toContain('Key name');
+      await press(instance, stdin, 'i');
+      await press(instance, stdin, 'd');
+      await press(instance, stdin, KEYS.enter);
+      expect(draftOf(store)).toMatchObject({ id: '' });
+
+      await press(instance, stdin, 'a');
+      await press(instance, stdin, 'i');
+      await press(instance, stdin, 'd');
+      await press(instance, stdin, KEYS.enter);
+      expect(lastFrame(stdout)).toContain('duplicate key');
+      expect(lastFrame(stdout)).toContain('Key name');
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).toContain('REQUEST BODY');
+
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'a');
+      expect(draftOf(store)).toMatchObject({ tags: ['x', ''] });
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('deletes the selected entry and clamps the selection', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'd');
+      expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: [] });
+      expect(lastFrame(stdout)).not.toContain('"x"');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('cycles scalar types with t, falling back to string when the text does not re-parse', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 't');
+      // 'ada' is not a number: no error state, the value visibly stays a string.
+      expect(draftOf(store)).toMatchObject({ name: 'ada' });
+      expect(errorsOf(store)).toEqual({});
+      expect(lastFrame(stdout)).not.toContain('✖');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 't');
+      expect(draftOf(store)).toMatchObject({ age: true });
+      expect(errorsOf(store)['age']).toBeUndefined();
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('keeps an invalid raw buffer open with line/column and preserves the previous body', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, 'r');
+      expect(lastFrame(stdout)).toContain('Raw JSON');
+      await press(instance, stdin, 'x');
+      await pressEscape(instance, stdin);
+      const frame = lastFrame(stdout);
+      expect(frame).toContain('Raw JSON');
+      expect(frame).toContain('✖');
+      expect(frame).toContain('line ');
+      expect(frame).toContain('column');
+      expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
+      await press(instance, stdin, KEYS.backspace);
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).not.toContain('Raw JSON');
+      expect(lastFrame(stdout)).toContain('REQUEST BODY');
+      expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('restores the last body plus folds and filters on revisit', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 'X');
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 'h');
+      expect(lastFrame(stdout)).toContain('1 line hidden — still sent');
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).not.toContain('REQUEST BODY');
+      await press(instance, stdin, 'e');
+      const frame = lastFrame(stdout);
+      // The edited body is restored but stays hidden by the surviving filter — the
+      // draft (not the hidden row) proves the body survived the revisit.
+      expect(frame).not.toContain('"adaX"');
+      expect(frame).toContain('1 line hidden — still sent');
+      expect(draftOf(store)).toMatchObject({ name: 'adaX' });
+      expect(store.getState().jsonTreeStates[EDITOR_KEY]).toMatchObject({ hiddenKeys: ['name'] });
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('starts a non-JSON body empty with the r hint', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [{ method: 'POST', path: '/upload', summary: 'Upload', bodyContentType: 'multipart/form-data' }],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      const frame = lastFrame(stdout);
+      expect(frame).toContain('REQUEST BODY');
+      expect(frame).toContain('Empty body');
+      expect(frame).toContain('press r');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('never fires while the editor owns Enter, and fires normally once closed', async () => {    const fireRoute = vi.fn(async () => {});
+    const store = seedEditor(fireRoute);
+    const { instance, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.enter);
+      expect(fireRoute).not.toHaveBeenCalled();
+      await press(instance, stdin, KEYS.escape);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.escape);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      expect(fireRoute).toHaveBeenCalledTimes(1);
+      expect(fireRoute).toHaveBeenCalledWith('POST', '/users');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('T1: drops deleted-subtree errors, preserves errors on append, remaps shifted siblings', async () => {
+    const store = seedEditor();
+    store.getState().ensureBodyDraft(EDITOR_KEY, { name: 'ada', scores: [1, 2, 3] });
+    store.getState().setBodyEditErrors(EDITOR_KEY, {
+      name: { reason: 'expected a number, got "ada"', kind: 'number' },
+      'scores[2]': { reason: 'expected a number, got "x"', kind: 'number' },
+    });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      // Rows: root, name, scores, [0], [1], [2] — delete `name`.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'd');
+      expect(errorsOf(store)).toEqual({ 'scores[2]': { reason: 'expected a number, got "x"', kind: 'number' } });
+      // Append to `scores`: shifts no indices, so the sibling error is preserved.
+      await press(instance, stdin, 'a');
+      expect(draftOf(store)).toMatchObject({ scores: [1, 2, 3, ''] });
+      expect(errorsOf(store)).toEqual({ 'scores[2]': { reason: 'expected a number, got "x"', kind: 'number' } });
+      // Delete `scores[0]`: the later sibling error remaps down to `scores[1]`.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'd');
+      expect(draftOf(store)).toMatchObject({ scores: [2, 3, ''] });
+      expect(errorsOf(store)).toEqual({ 'scores[1]': { reason: 'expected a number, got "x"', kind: 'number' } });
+      expect(lastFrame(stdout)).toContain('✖');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('T2: clears the error map when raw mode replaces the body with valid JSON', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 'x');
+      await press(instance, stdin, KEYS.enter);
+      expect(errorsOf(store)['age']).toBeDefined();
+      await press(instance, stdin, 'r');
+      expect(lastFrame(stdout)).toContain('Raw JSON');
+      await press(instance, stdin, ' ');
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).not.toContain('Raw JSON');
+      expect(lastFrame(stdout)).not.toContain('✖');
+      expect(errorsOf(store)).toEqual({});
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('T3: builds a content-type-only body from an empty raw buffer', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [{ method: 'POST', path: '/upload', summary: 'Upload', bodyContentType: 'multipart/form-data' }],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      expect(lastFrame(stdout)).toContain('Empty body');
+      expect(lastFrame(stdout)).not.toContain('[a] add');
+      // Esc on the empty buffer cancels instead of trapping on a parse error.
+      await press(instance, stdin, 'r');
+      expect(lastFrame(stdout)).toContain('Raw JSON');
+      await pressEscape(instance, stdin);
+      expect(lastFrame(stdout)).not.toContain('Raw JSON');
+      expect(lastFrame(stdout)).toContain('Empty body');
+      expect(store.getState().bodyDrafts['POST /upload']).toBeUndefined();
+      // Typing a valid object then leaving writes it as the draft.
+      await press(instance, stdin, 'r');
+      for (const char of ['{', '"', 'a', '"', ':', '1', '}']) {
+        await press(instance, stdin, char);
+      }
+      await pressEscape(instance, stdin);
+      expect(store.getState().bodyDrafts['POST /upload']).toEqual({ a: 1 });
+      expect(lastFrame(stdout)).toContain('{1}');
+      expect(lastFrame(stdout)).not.toContain('Empty body');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('T4: opens null and scalar-root seeds as editable rows, never the empty state', async () => {
+    const store = createAppStore();
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'POST', path: '/maybe', summary: 'Maybe', bodyExample: null, bodyContentType: 'application/json' },
+        { method: 'POST', path: '/count', summary: 'Count', bodyExample: 42, bodyContentType: 'application/json' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'e');
+      let frame = lastFrame(stdout);
+      expect(frame).toContain('REQUEST BODY');
+      expect(frame).toContain('null');
+      expect(frame).not.toContain('Empty body');
+      expect(store.getState().bodyDrafts['POST /maybe']).toBeNull();
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'e');
+      frame = lastFrame(stdout);
+      expect(frame).toContain('42');
+      expect(frame).not.toContain('Empty body');
+      expect(store.getState().bodyDrafts['POST /count']).toBe(42);
+    } finally {
+      instance.unmount();
+    }
+  });
+});
+
+describe('RoutesZone JsonTree panel cursor (story 6.7 trailing)', () => {
   it('navigates panel rules with a cursor and removes the highlighted one with Space', async () => {
     const store = seedTree();
     const { instance, stdout, stdin } = mount(store, 30);
@@ -433,4 +878,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       instance.unmount();
     }
   });
+});
+// Closes describe('RoutesZone JsonTree (story 6.7)') — the story 6.8 block above is
+// nested inside it and shares its seedTree/mount helpers.
 });

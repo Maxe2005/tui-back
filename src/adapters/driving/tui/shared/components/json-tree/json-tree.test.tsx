@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { colors, jsonTreeColors } from '../../theme/theme.js';
 import { renderToString } from '../render-to-string.js';
 import { flattenJson, type TreeFilterRules } from './model.js';
-import { JsonEmptyState, JsonRawFallback, JsonTree } from './json-tree.js';
+import { JsonEmptyState, JsonRawFallback, JsonRawEditor, JsonTree, JsonTreeEditor } from './json-tree.js';
 
 const NO_RULES: TreeFilterRules = { hiddenKeys: [], onlyKeys: [], hideNulls: false };
 
@@ -146,5 +146,156 @@ describe('JsonEmptyState', () => {
   it('distinguishes an empty body from an empty JSON value', async () => {
     expect(await renderToString(<JsonEmptyState emptyKind="empty-body" />)).toContain('Empty response body');
     expect(await renderToString(<JsonEmptyState emptyKind="empty-json" />)).toContain('Empty JSON value');
+  });
+});
+
+describe('JsonTreeEditor (story 6.8)', () => {
+  function editorFor(value: unknown, extra: Record<string, unknown> = {}) {
+    const rows = value === undefined ? [] : flattenJson(value, [], NO_RULES);
+    return (
+      <JsonTreeEditor
+        rows={rows}
+        selected={0}
+        hiddenCount={0}
+        rules={[]}
+        hideNulls={false}
+        panelOpen={false}
+        panelCursor={0}
+        maxVisibleRows={30}
+        bodyEmpty={value === undefined}
+        editErrors={{}}
+        firstError={null}
+        editingPath={null}
+        editInput={null}
+        editLabel="Edit"
+        addPrompt={null}
+        {...extra}
+      />
+    );
+  }
+
+  it('renders the draft tree with the still-sent status line', async () => {
+    const output = await renderToString(editorFor({ name: 'ada' }));
+    expect(output).toContain('name');
+    expect(output).toContain('"ada"');
+    expect(output).toContain('0 lines hidden — still sent');
+  });
+
+  it('renders invalid entries in error color with their reason and surfaces the first error', async () => {
+    const output = await renderToString(
+      editorFor(
+        { age: '12x' },
+        {
+          editErrors: { age: { reason: 'expected a number, got "12x"', kind: 'number' } },
+          firstError: 'expected a number, got "12x"',
+        },
+      ),
+    );
+    expect(output).toContain('12x');
+    expect(output).toContain('✖');
+    expect(output).toContain('expected a number');
+  });
+
+  it('shows N lines hidden — still sent whenever filters hide rows', async () => {
+    const rows = flattenJson({ a: 1, b: 2 }, [], NO_RULES);
+    const output = await renderToString(editorFor({ a: 1, b: 2 }, { rows, hiddenCount: 3 }));
+    expect(output).toContain('3 lines hidden — still sent');
+  });
+
+  it('renders the inline scalar editor row while editing', async () => {
+    const output = await renderToString(editorFor({ age: 36 }, { editingPath: 'age', editInput: { value: '37', cursor: 2 }, editLabel: 'Edit age' }));
+    expect(output).toContain('Edit age');
+    expect(output).toContain('37');
+  });
+
+  it('renders the add-key prompt with its duplicate rejection inline', async () => {
+    const output = await renderToString(
+      editorFor({ id: 1 }, { addPrompt: { parentPath: '', input: { value: 'id', cursor: 2 }, error: 'duplicate key: "id"' } }),
+    );
+    expect(output).toContain('Key name');
+    expect(output).toContain('duplicate key');
+  });
+
+  it('names the empty-body state with the r hint instead of the all-filtered line', async () => {
+    const output = await renderToString(editorFor(undefined));
+    expect(output).toContain('Empty body');
+    expect(output).toContain('press r');
+    expect(output).not.toContain('All lines hidden');
+  });
+
+  it('names a genuinely-empty value instead of the all-filtered line when no rules hide rows', async () => {
+    const empty = await renderToString(
+      <JsonTreeEditor
+        rows={[]}
+        selected={0}
+        hiddenCount={0}
+        rules={[]}
+        hideNulls={false}
+        panelOpen={false}
+        panelCursor={0}
+        maxVisibleRows={30}
+        bodyEmpty={false}
+        editErrors={{}}
+        firstError={null}
+        editingPath={null}
+        editInput={null}
+        editLabel="Edit"
+        addPrompt={null}
+      />,
+    );
+    expect(empty).toContain('Empty JSON value');
+    expect(empty).not.toContain('All lines hidden');
+    const filtered = await renderToString(
+      <JsonTreeEditor
+        rows={[]}
+        selected={0}
+        hiddenCount={4}
+        rules={[{ kind: 'hide', key: 'a' }]}
+        hideNulls={false}
+        panelOpen={false}
+        panelCursor={0}
+        maxVisibleRows={30}
+        bodyEmpty={false}
+        editErrors={{}}
+        firstError={null}
+        editingPath={null}
+        editInput={null}
+        editLabel="Edit"
+        addPrompt={null}
+      />,
+    );
+    expect(filtered).toContain('All lines hidden by filters');
+  });
+
+  it('renders only the visible rows inside a small budget', async () => {
+    const value = { rows: Array.from({ length: 20 }, (_, i) => i) };
+    const output = await renderToString(editorFor(value, { maxVisibleRows: 6 }));
+    expect(output).toContain('more below');
+    expect(output).not.toContain('[19]');
+  });
+});
+
+describe('JsonRawEditor (story 6.8)', () => {
+  it('renders the buffer with its newline/done hints', async () => {
+    const output = await renderToString(<JsonRawEditor input={{ value: '{"a":1}', cursor: 7 }} error={null} maxVisibleRows={10} />);
+    expect(output).toContain('{"a":1}');
+    expect(output).toContain('[enter] newline');
+    expect(output).toContain('[esc] done');
+  });
+
+  it('keeps parse errors visible with the buffer preserved', async () => {
+    const output = await renderToString(
+      <JsonRawEditor input={{ value: '{"a":}', cursor: 6 }} error={'Unexpected token (line 1, column 7)'} maxVisibleRows={10} />,
+    );
+    expect(output).toContain('{"a":}');
+    expect(output).toContain('✖');
+    expect(output).toContain('line 1');
+  });
+
+  it('windows long buffers instead of growing', async () => {
+    const value = Array.from({ length: 20 }, (_, i) => `line-${i}`).join('\n');
+    const output = await renderToString(<JsonRawEditor input={{ value, cursor: 0 }} error={null} maxVisibleRows={5} />);
+    expect(output).toContain('more below');
+    expect(output).not.toContain('line-19');
   });
 });
