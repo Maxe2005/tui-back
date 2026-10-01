@@ -55,7 +55,7 @@ The skill walks the repo and extracts values for each manifest field:
 
 4. **`sharedBranch`**: Always `"development"` — the schema provides this default; the skill does not prompt for it.
 
-4b. **`protectedBranches`**: Always emit `protectedBranches: [development, preprod, prod]`. Since Story 2.42 a service's protected set (FR-7) is exactly `protectedBranches ∪ {sharedBranch}` — nothing is protected implicitly — so the generator writes the usual release branches explicitly. The developer trims or extends the list to match the service's branching model. The field is optional in the schema; every entry must be a non-empty string.
+4b. **`protectedBranches`**: Always emit `protectedBranches: [development, preprod, prod]`. A service's protected set (FR-7) is exactly `protectedBranches ∪ {sharedBranch}` — nothing is protected implicitly — so the generator writes the usual release branches explicitly. The developer trims or extends the list to match the service's branching model. The field is optional in the schema; every entry must be a non-empty string.
 
 5. **`modules`**: The manifest's `modules` record keys must be members of the compiled-in `knownModuleIds` set (currently empty — Epics 4/6 will populate it). The skill attempts to map any module ids it finds in the repo against this set. Unknown ids are recorded in a `.memlog.md` note but do not prevent manifest generation; the generated manifest will only include known module ids.
 

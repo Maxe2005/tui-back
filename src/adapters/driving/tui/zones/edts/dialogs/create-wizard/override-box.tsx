@@ -67,12 +67,11 @@ export const OVERRIDE_BOX_FOOTER =
 
 export function OverrideBoxView({
   box,
-  service,
   context,
   maxRows,
 }: {
   box: OverrideBoxState;
-  service: string;
+  // Its `service` is the single source for the title and every inline protected message.
   context: OverrideBoxContext;
   maxRows: number;
 }) {
@@ -82,7 +81,7 @@ export function OverrideBoxView({
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
       <Text color={colors.accent} bold>
-        Configurer {service}
+        Configurer {context.service}
       </Text>
       <Box>
         <LineMarker focused={focused('mode')} />
@@ -102,7 +101,7 @@ export function OverrideBoxView({
             maxRows={maxRows}
           />
           <BoxField label="Nom de la branche" focused={focused('name')} editing={box.editing} value={box.name} context={context} maxRows={maxRows} />
-          {nameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.name.value.trim(), service)}</Text> : null}
+          {nameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.name.value.trim(), context.service)}</Text> : null}
         </>
       ) : (
         <>
@@ -122,7 +121,7 @@ export function OverrideBoxView({
           {box.rename ? (
             <BoxField label="Nouveau nom" focused={focused('newName')} editing={box.editing} value={box.newName} context={context} maxRows={maxRows} />
           ) : null}
-          {newNameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.newName.value.trim(), service)}</Text> : null}
+          {newNameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.newName.value.trim(), context.service)}</Text> : null}
         </>
       )}
       <Box>

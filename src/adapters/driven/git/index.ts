@@ -89,7 +89,7 @@ export async function assertAllowedBranch(
   }
 
   if (isProtectedBranch(branchName, loaded.data)) {
-    return err('shared-branch-rejected', `Branch "${branchName}" is protected by ${loaded.data.service}'s manifest`);
+    return err('shared-branch-rejected', `Branch "${branchName}" is protected by ${loaded.data.service}'s manifest (repo ${repoPath})`);
   }
 
   if (edtId !== undefined && edtRegistry !== undefined) {

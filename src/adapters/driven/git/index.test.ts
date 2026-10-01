@@ -149,7 +149,7 @@ describe('assertAllowedBranch', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { code: 'shared-branch-rejected', message: `Branch "preprod" is protected by route-explorer's manifest` },
+      error: { code: 'shared-branch-rejected', message: `Branch "preprod" is protected by route-explorer's manifest (repo ${repo})` },
     });
   });
 

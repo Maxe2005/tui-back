@@ -7,7 +7,8 @@ service: SERVICE_IDENTITY
 container: DOCKER_COMPOSE_SERVICE_NAME
 migrationCommand: MIGRATION_COMMAND_TO_RUN
 sharedBranch: development
-# Story 2.42: the branches no EDT may claim (with sharedBranch). Adjust to this service.
+# Branches no EDT may claim as its own, in addition to sharedBranch. Adjust to this
+# service's branching model; omit the key to protect only sharedBranch.
 protectedBranches: [development, preprod, prod]
 modules:
   # known module ids only — keys must be in the compiled-in knownModuleIds set

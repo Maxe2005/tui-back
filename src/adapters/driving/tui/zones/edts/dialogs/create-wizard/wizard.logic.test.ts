@@ -108,7 +108,7 @@ describe('canAdvance (story 2.36)', () => {
     });
     expect(canAdvance(3, validThroughStep3({}, { globalName: { value: 'prod', cursor: 4 } }), EDTS, CANDIDATES)).toEqual({
       ok: false,
-      error: 'svc-a : « prod » est protégée par le manifeste de svc-a',
+      error: 'svc-a : « prod » est protégée par le manifeste du service',
     });
   });
 });
@@ -253,7 +253,7 @@ describe('buildRowView / buildMemberPlans (story 2.37)', () => {
 
   it('existing overrides are re-checked on the row: local protected even with a rename, shadowed remote, taken or no-op rename', () => {
     const view = (override: RowOverride, lists: BranchListState) => buildRowView({ path: '/repos/a', service: 'svc-a', override }, global, lists, PROTECTION);
-    expect(view({ kind: 'existing', branch: 'prod', renameTo: 'p2' }, ready(['prod'])).error).toBe('« prod » est protégée par le manifeste de svc-a');
+    expect(view({ kind: 'existing', branch: 'prod', renameTo: 'p2' }, ready(['prod'])).error).toBe('« prod » est protégée par le manifeste du service');
     expect(view({ kind: 'existing', branch: 'origin/prod', renameTo: 'p2' }, ready([], ['origin/prod'])).error).toBeNull();
     expect(view({ kind: 'existing', branch: 'origin/x' }, ready(['x'], ['origin/x'])).error).toBe('branche locale du même nom déjà existante');
     expect(view({ kind: 'existing', branch: 'feat/z', renameTo: 'main2' }, ready(['feat/z', 'main2'])).error).toBe('branche déjà existante');
@@ -262,12 +262,12 @@ describe('buildRowView / buildMemberPlans (story 2.37)', () => {
 
   it('Protected: a global name equal to a shared branch is rejected on the target column', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'development' }, ready(['main']), PROTECTION);
-    expect(row).toMatchObject({ targetError: '« development » est protégée par le manifeste de svc-a', plan: null });
+    expect(row).toMatchObject({ targetError: '« development » est protégée par le manifeste du service', plan: null });
   });
 
   it('Wizard row: a target the service\'s manifest lists is blocked; one it does not list is allowed (story 2.42)', () => {
     const listed = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'preprod' }, ready(['main']), PROTECTION);
-    expect(listed).toMatchObject({ targetError: '« preprod » est protégée par le manifeste de svc-a', plan: null });
+    expect(listed).toMatchObject({ targetError: '« preprod » est protégée par le manifeste du service', plan: null });
     const unlisted = buildRowView({ path: '/repos/b', service: 'svc-b' }, { base: '', name: 'preprod' }, ready(['development']), { sharedBranch: 'development' });
     expect(unlisted).toMatchObject({ targetError: null, plan: { kind: 'create', base: 'development', name: 'preprod' } });
   });
@@ -294,7 +294,7 @@ describe('buildRowView / buildMemberPlans (story 2.37)', () => {
 
   it('Existing protected without a rename is rejected', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a', override: { kind: 'existing', branch: 'prod' } }, global, ready(['prod']), PROTECTION);
-    expect(row).toMatchObject({ targetError: '« prod » est protégée par le manifeste de svc-a', plan: null });
+    expect(row).toMatchObject({ targetError: '« prod » est protégée par le manifeste du service', plan: null });
   });
 
   it('buildStep3Rows follows selection order and each service\'s own sharedBranch', () => {

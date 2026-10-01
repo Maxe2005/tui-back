@@ -41,7 +41,8 @@ export const MANIFEST_GUIDANCE_LINES: readonly string[] = [
   'A repo is managed once it has a root .tui-back.yaml declaring service, container,',
   'and modules (migrationCommand is optional — omit it if the service has no migrations;',
   'sharedBranch is optional too, defaults to "development").',
-  'protectedBranches (optional list) names the branches no EDT may claim, besides sharedBranch.',
+  'protectedBranches (optional list) names the branches no EDT may claim, besides sharedBranch;',
+  'omit it and only sharedBranch is protected.',
   'Create one by hand, or run the /manifest-generator skill inside the target repo.',
 ];
 

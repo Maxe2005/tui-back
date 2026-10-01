@@ -941,8 +941,6 @@ describe('tui-back edt create (black-box)', () => {
     const repo = await makeGitRepo();
     // Story 2.42: the protected set is manifest-defined — this fixture's manifest lists `prod`.
     await writeFile(join(repo, '.tui-back.yaml'), `${manifestYaml}\nprotectedBranches: [preprod, prod]\n`);
-    // Story 2.42: the protected set is manifest-defined — this fixture's manifest lists `prod`.
-    await writeFile(join(repo, '.tui-back.yaml'), `${manifestYaml}\nprotectedBranches: [preprod, prod]\n`);
     const env = createEnv(xdg);
     await registerRepos([repo], env);
 

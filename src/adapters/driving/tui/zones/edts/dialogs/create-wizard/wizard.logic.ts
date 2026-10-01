@@ -236,8 +236,9 @@ export const ROW_ERRORS = {
   loadError: 'échec du chargement des branches',
   notFound: 'branche introuvable',
   emptyName: 'nom de branche vide',
-  // Story 2.42: names the branch and the service whose manifest protects it.
-  protected: (name: string, service: string) => `« ${name} » est protégée par le manifeste de ${service}`,
+  // Story 2.42: names the branch and its manifest. The short row form never repeats the service:
+  // the row and canAdvance's `<service> : ` prefix already name it.
+  protected: (name: string) => `« ${name} » est protégée par le manifeste du service`,
   exists: 'branche déjà existante',
   noopRename: 'renommage sans effet',
   shadowed: 'branche locale du même nom déjà existante',
@@ -299,15 +300,15 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
   return null;
 }
 
-export function rowIssueMessage(issue: PlanIssue, service: string): string {
+export function rowIssueMessage(issue: PlanIssue): string {
   switch (issue.kind) {
     case 'empty-name':
       return ROW_ERRORS.emptyName;
     case 'protected-name':
     case 'protected-existing':
-      return ROW_ERRORS.protected(issue.name, service);
+      return ROW_ERRORS.protected(issue.name);
     case 'protected-source':
-      return ROW_ERRORS.protected(issue.branch, service);
+      return ROW_ERRORS.protected(issue.branch);
     case 'exists':
       return ROW_ERRORS.exists;
     case 'noop-rename':
@@ -343,7 +344,7 @@ export function buildRowView(
     const resolution = resolveGlobalBase(global.base, lists, protection.sharedBranch);
     const name = global.name.trim();
     const issue = checkPlan({ kind: 'create', base: '', name }, lists, protection);
-    const targetError = issue === null ? null : rowIssueMessage(issue, service);
+    const targetError = issue === null ? null : rowIssueMessage(issue);
     const common = { path, service, mode: 'global' as const, modeLabel: ROW_MODE_LABELS.global, target: name, targetError };
     if (resolution.kind === 'loading') {
       return { ...common, base: 'Chargement…', baseStatus: 'loading', error: ROW_ERRORS.loading, plan: null };
@@ -367,7 +368,7 @@ export function buildRowView(
   // Overrides were validated by the box's Apply, but are re-checked here: the lists can have
   // been reloaded since, and a row must never hand core a plan the box would now refuse.
   const issue = checkPlan(override, lists, protection);
-  const targetError = issue === null ? null : rowIssueMessage(issue, service);
+  const targetError = issue === null ? null : rowIssueMessage(issue);
   if (override.kind === 'create') {
     return {
       path,

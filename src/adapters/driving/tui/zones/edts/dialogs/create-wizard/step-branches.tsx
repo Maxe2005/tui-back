@@ -218,8 +218,7 @@ export function BranchStepView({
   const rows = buildStep3Rows(dialog, candidates);
   const box = branches.box;
   if (box !== null) {
-    const service = candidates.find((candidate) => candidate.path === box.path)?.service ?? box.path;
-    return <OverrideBoxView box={box} service={service} context={overrideBoxContextFor(dialog, box.path, candidates)} maxRows={maxRows} />;
+    return <OverrideBoxView box={box} context={overrideBoxContextFor(dialog, box.path, candidates)} maxRows={maxRows} />;
   }
   const globalFocused = branches.panel === 'global';
   const lineFocused = (line: 'base' | 'name') => globalFocused && branches.globalLine === line;
