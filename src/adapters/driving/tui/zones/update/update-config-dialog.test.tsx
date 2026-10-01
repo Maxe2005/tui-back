@@ -4,7 +4,7 @@
 // the behavior behind every row is unit-tested in update-config-dialog.test.ts).
 import { describe, expect, it } from 'vitest';
 import { UpdateConfigDialog, UPDATE_CONFIG_HINTS, UPDATE_CONFIG_TITLE_ALL, UPDATE_CONFIG_TITLE_EDT } from './update-config-dialog.js';
-import { createUpdateConfigDraft, toggleUpdateConfigRow, type UpdateConfigDraft } from './update-config-dialog.logic.js';
+import { applyMergeStrategy, createUpdateConfigDraft, toggleUpdateConfigRow, type UpdateConfigDraft } from './update-config-dialog.logic.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 
 function edtDraft(): UpdateConfigDraft {
@@ -130,5 +130,44 @@ describe('UpdateConfigDialog rendering', () => {
     expect(output).toContain('Failed to load branches.');
     expect(output).toContain('Merge from');
     expect(output).toContain('dev');
+  });
+});
+
+describe('UpdateConfigDialog merge-source panel', () => {
+  const rows = [
+    { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development' },
+    { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development' },
+  ];
+
+  it('shows the panel with shared branches selected by default', async () => {
+    const draft = createUpdateConfigDraft('edt', rows, { mergePanel: true });
+    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
+
+    expect(output).toContain('(•) Shared branches');
+    expect(output).toContain('( ) From EDT: <none>');
+  });
+
+  it('hides the panel when the config is not the full EDT scope', async () => {
+    const output = await renderToString(<UpdateConfigDialog draft={edtDraft()} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
+
+    expect(output).not.toContain('Shared branches');
+  });
+
+  it('marks resolved rows with the EDT topic and unresolved rows with a red error', async () => {
+    const draft = applyMergeStrategy(createUpdateConfigDraft('edt', rows, { mergePanel: true }), {
+      kind: 'edt',
+      ulid: 'U1',
+      topic: 'sibling',
+      resolved: [
+        { service: 'svc-a', repoPath: '/repo/a', source: 'feat/x', origin: 'edt' },
+        { service: 'svc-b', repoPath: '/repo/b', source: '', origin: 'edt', error: 'not-in-edt' },
+      ],
+    });
+    const output = await renderToString(<UpdateConfigDialog draft={draft} view={{ cursor: 0, editing: null }} {...IDLE_SOURCE} />);
+
+    expect(output).toContain('From EDT: sibling');
+    expect(output).toContain('feat/x');
+    expect(output).toContain('← sibling');
+    expect(output).toContain('✖ not in sibling');
   });
 });
