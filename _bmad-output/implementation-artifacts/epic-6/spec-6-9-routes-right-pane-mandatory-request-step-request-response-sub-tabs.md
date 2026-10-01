@@ -2,7 +2,7 @@
 title: 'Routes Right Pane — Mandatory Request Step & Request/Response Sub-Tabs'
 type: 'feature'
 created: '2026-10-01'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'c89689184e96b6d01720be731342553df29bba7a'
 context:
@@ -67,12 +67,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/routes/fire-request.ts` + test -- options, template match, body/GET guard, cookie drop, query -- matrix core rows.
-- [ ] `src/adapters/driving/cli/subcommands.ts` + test -- flags parsing -- CLI parity (AD-2).
-- [ ] `src/adapters/driving/tui/shared/keys/tab-navigation.ts` + test; `wizard.logic.ts` re-export -- shared resolver + no-wrap stepper.
-- [ ] `zones/routes/routes-request.logic.ts` + test -- pure request model -- missing/size/build rows.
-- [ ] `store/slices/routes-slice.ts` + test -- per-route maps, pane focus/tab, `fireRoute(routeKey, method, path, options)` -- revisit/repo-switch/concurrency rows.
-- [ ] `zones/routes/routes-request-tab.tsx`, `routes-response-tab.tsx`, `routes-zone.tsx`, `app-shell.tsx` + zone/app-shell tests -- focus, sections, tab nav, Esc unwind, capture, hints.
+- [x] `src/core/routes/fire-request.ts` + test -- options, template match, body/GET guard, cookie drop, query -- matrix core rows.
+- [x] `src/adapters/driving/cli/subcommands.ts` + test -- flags parsing -- CLI parity (AD-2).
+- [x] `src/adapters/driving/tui/shared/keys/tab-navigation.ts` + test; `wizard.logic.ts` re-export -- shared resolver + no-wrap stepper.
+- [x] `zones/routes/routes-request.logic.ts` + test -- pure request model -- missing/size/build rows.
+- [x] `store/slices/routes-slice.ts` + test -- per-route maps, pane focus/tab, `fireRoute(routeKey, method, path, options)` -- revisit/repo-switch/concurrency rows.
+- [x] `zones/routes/routes-request-tab.tsx`, `routes-response-tab.tsx`, `routes-zone.tsx`, `app-shell.tsx` + zone/app-shell tests -- focus, sections, tab nav, Esc unwind, capture, hints.
 
 **Acceptance Criteria:**
 - Given the list focused, when `Enter` is pressed on a route, then the pane takes focus on its Request tab and nothing is fired; `Esc` returns to the list.
@@ -92,3 +92,80 @@ Template matching (not a `pathParams` option) keeps the 6.9 signature as planned
 - `npm test` -- expected: Vitest green (6.2 and wizard tests untouched).
 - `npm run typecheck` -- expected: clean.
 - `npm run depcheck` -- expected: no `core → adapters` violation.
+
+## Suggested Review Order
+
+**Pane focus & key model (start here)**
+
+- Focused pane owns every key: sub-editors, then Ctrl+R, tab nav, per-tab handling
+  [`routes-zone.tsx:954`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L954)
+
+- Enter/e seed drafts lazily and focus the Request tab — never fire
+  [`routes-zone.tsx:368`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L368)
+
+- Ctrl+R reads live drafts, blocks with a reason, else builds and fires
+  [`routes-zone.tsx:390`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L390)
+
+- AppShell treats the focused pane as captured synchronously (no one-render leak)
+  [`app-shell.tsx:294`](../../../src/adapters/driving/tui/app-shell.tsx#L294)
+
+- Inline editors drop when the pane route changes under them
+  [`routes-zone.tsx:886`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L886)
+
+**Request model (pure)**
+
+- Path params from the template only, pre-filled from scanner examples
+  [`routes-request.logic.ts:78`](../../../src/adapters/driving/tui/zones/routes/routes-request.logic.ts#L78)
+
+- Fire-block rules: missing required params, then body validation errors
+  [`routes-request.logic.ts:94`](../../../src/adapters/driving/tui/zones/routes/routes-request.logic.ts#L94)
+
+- What actually travels: substituted path, non-empty query/headers, gated body
+  [`routes-request.logic.ts:128`](../../../src/adapters/driving/tui/zones/routes/routes-request.logic.ts#L128)
+
+**Per-route session state**
+
+- Global fire triple replaced by per-route responses + pane focus/tab
+  [`routes-slice.ts:47`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L47)
+
+- In-flight set and repo generation guard duplicates and late outcomes
+  [`routes-slice.ts:158`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L158)
+
+- Same-repo reload keeps drafts; another repo drops them and refocuses the list
+  [`routes-slice.ts:285`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L285)
+
+- fireRoute records per route, never throws, switches to Response
+  [`routes-slice.ts:320`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L320)
+
+**Core use-case & CLI parity**
+
+- Backwards-compatible trailing options keep every 6.2 caller unchanged
+  [`fire-request.ts:38`](../../../src/core/routes/fire-request.ts#L38)
+
+- Concrete path ↔ templated route, mixed segments, no dot-segments
+  [`fire-request.ts:83`](../../../src/core/routes/fire-request.ts#L83)
+
+- Auth cookie always wins; JSON content type inferred unless given
+  [`fire-request.ts:125`](../../../src/core/routes/fire-request.ts#L125)
+
+- Exact match first, else the most specific template
+  [`fire-request.ts:212`](../../../src/core/routes/fire-request.ts#L212)
+
+- Hand-rolled repeatable flags, duplicates and malformed values rejected
+  [`subcommands.ts:298`](../../../src/adapters/driving/cli/subcommands.ts#L298)
+
+**Views & shared keys**
+
+- Shared Ctrl+arrow/N/P resolver plus no-wrap stepper (wizard re-exports it)
+  [`tab-navigation.ts:16`](../../../src/adapters/driving/tui/shared/keys/tab-navigation.ts#L16)
+
+- Stateless Request tab: sections, rows, inline editors, body slot
+  [`routes-request-tab.tsx:74`](../../../src/adapters/driving/tui/zones/routes/routes-request-tab.tsx#L74)
+
+- Stateless Response tab: firing, error, status·duration·size + tree
+  [`routes-response-tab.tsx:13`](../../../src/adapters/driving/tui/zones/routes/routes-response-tab.tsx#L13)
+
+**Tests**
+
+- End-to-end keypress coverage of the request step and sub-tabs
+  [`routes-zone.interaction.test.tsx:898`](../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L898)
