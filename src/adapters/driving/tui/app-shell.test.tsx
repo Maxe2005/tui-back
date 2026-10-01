@@ -416,6 +416,7 @@ it('shouldQuit returns true for q', () => {
         openEdtSwitchDialog: () => {},
         openEdtModifyDialog: () => {},
         openEdtDeleteDialog: () => {},
+        openEdtCreateFromDialog: () => {},
         logEdtAction: async () => {},
         // Story 3.1: Update zone run state
         updateStatus: 'idle',

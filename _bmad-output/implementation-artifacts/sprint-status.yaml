@@ -1,5 +1,5 @@
 # generated: 2026-08-11
-# last_updated: 2026-09-30
+# last_updated: 2026-10-01
 # project: tui-back
 # project_key: NOKEY
 # tracking_system: file-system
@@ -46,6 +46,8 @@ last_updated: 2026-10-01
 # 2026-10-01: Story 2-42 validated by the developer, moved to done and merged into epic-2.
 # 2026-10-01: Story 2-42 moved to review after the adversarial review + patch loop (bmad-build).
 # 2026-10-01: Story 2-42 (manifest-defined protected branches per service) started (bmad-build).
+# 2026-10-01: Story 2-31 moved to review after the adversarial review + patch loop (bmad-build).
+# 2026-10-01: Story 2-31 (edt-create-from — clone an EDT as a creation starting point) started (bmad-build).
 # 2026-09-29: Story 3-11 (update commands — main, all-repos, single-service) moved to review after code-review + patch loop (bmad-build).
 # 2026-09-29: Story 2-38 moved to review after the adversarial review + patch loop (bmad-build).
 # 2026-09-29: Story 2-38 (wizard Step 4 — activation & switch choice) started (bmad-build).
@@ -172,7 +174,7 @@ development_status:
   2-28-registry-manifest-semantic-validation: backlog
   2-29-delete-an-edt: done
   2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify: done
-  2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: backlog
+  2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point: done
   2-32-text-input-line-cursor-navigation-app-wide-adoption: done
   2-33-registry-deregister-stale-unreachable-or-unmanaged-repos: done
   2-34-edt-zone-colored-explained-service-listing-issues: done

@@ -321,6 +321,9 @@ export type BranchStepState = {
   overrides: Readonly<Record<string, RowOverride>>;
   lists: Readonly<Record<string, BranchListState>>;
   box: OverrideBoxState | null;
+  // Story 2.31: the root-EDT members already given their seeded [Créer (Perso)] override —
+  // each path is seeded at most once, so a row the developer reset to global stays global.
+  seededPaths: readonly string[];
 };
 
 export function initialBranchStepState(): BranchStepState {
@@ -335,6 +338,7 @@ export function initialBranchStepState(): BranchStepState {
     overrides: {},
     lists: {},
     box: null,
+    seededPaths: [],
   };
 }
 
@@ -412,7 +416,7 @@ export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): str
 // working unchanged.
 export function formatEdtActionHistory(
   actionLog: Array<{ id: string; timestamp: string; actionType: string; outcome: 'success' | 'failed'; detail: string }>,
-  inProgressAction: { type: 'create' | 'switch' | 'modify' | 'delete'; target: string; startedAt: string } | null,
+  inProgressAction: { type: 'create' | 'create-from' | 'switch' | 'modify' | 'delete'; target: string; startedAt: string } | null,
   hiddenActionTypes: readonly string[] = [],
 ): string {
   const lines: string[] = [];
@@ -656,6 +660,9 @@ export type CreateDialogState = {
   cancelRequested: boolean;
   // Story 2.38: Step 4's activation state (see ActivationState).
   activation: ActivationState;
+  // Story 2.31: the root EDT `edt-create-from` seeded this wizard from (TUI-only state): Step 2
+  // starts on its members, Step 3 seeds each inherited row on that member's root branch.
+  seedFromEdt: EdtRegistryEntry | null;
 };
 
 // Story 2.38: what Step 4 asks the effectful handler to do once its key reducer decided
@@ -894,7 +901,9 @@ export type IssuesDialogState = { kind: 'issues' };
 // modes (Intent/Design Notes), never three near-duplicate dialogs. `mode` decides both the
 // candidate pool (quick-pick-dialog.tsx's resolveQuickPickCandidates: switch excludes the
 // active EDT, modify/delete include it) and which pre-targeted dialog Enter opens.
-export type QuickPickMode = 'switch' | 'modify' | 'delete';
+// Story 2.31: `create-from` picks the root EDT of a seeded create wizard (every EDT, active
+// included).
+export type QuickPickMode = 'switch' | 'modify' | 'delete' | 'create-from';
 
 // The pick's own filter text, caret and highlighted row are the shared component's state
 // (shared/components/filterable-pick-list.tsx), embedded here so the dialog stays one member
@@ -902,6 +911,9 @@ export type QuickPickMode = 'switch' | 'modify' | 'delete';
 export type QuickPickDialogState = {
   kind: 'quick-pick';
   mode: QuickPickMode;
+  // Story 2.31: `edt-create-from <unknown>`'s inline error (`EDT not found: "<topic>"`),
+  // cleared on the first filter edit.
+  notFound: string | null;
 } & FilterablePickListState;
 
 export type EdtDialogState =
@@ -919,18 +931,21 @@ export function initialIssuesDialog(): IssuesDialogState {
   return { kind: 'issues' };
 }
 
-export function initialQuickPickDialog(mode: QuickPickMode): QuickPickDialogState {
-  return { kind: 'quick-pick', mode, ...createFilterablePickListState() };
+export function initialQuickPickDialog(mode: QuickPickMode, notFound: string | null = null): QuickPickDialogState {
+  return { kind: 'quick-pick', mode, notFound, ...createFilterablePickListState() };
 }
 
-export function initialCreateDialog(): CreateDialogState {
+// Story 2.31: `seed` (edt-create-from's root EDT) pre-checks Step 2 with its members, in root
+// order; Step 3's per-row seeding happens on entering it (wizard.logic.ts's enterBranchStep),
+// once the global name is known. The topic always starts empty — never derived from the root.
+export function initialCreateDialog(seed?: EdtRegistryEntry): CreateDialogState {
   return {
     kind: 'create',
     step: 1,
     topic: '',
     topicCursor: 0,
     formFocus: 'topic',
-    selectedMembers: [],
+    selectedMembers: seed !== undefined ? seed.members.map((member) => member.repoPath) : [],
     memberCursor: 0,
     submitting: false,
     error: null,
@@ -940,6 +955,7 @@ export function initialCreateDialog(): CreateDialogState {
     cancelRequested: false,
     // Story 2.38: re-seeded (firstEdt captured) when Step 4 is entered — see create-wizard.tsx.
     activation: initialActivationState(),
+    seedFromEdt: seed ?? null,
   };
 }
 

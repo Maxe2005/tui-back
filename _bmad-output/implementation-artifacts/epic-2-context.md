@@ -4,10 +4,11 @@
 
 ## Goal
 
-A developer can create, modify, safely switch between and delete EDTs. An EDT is an isolated coding-session workspace spanning a manually chosen set of managed repos. None of this may ever lose uncommitted work unless the developer explicitly consents, file by file. Every managed repo shows its branch and divergence. Non-member repos always return to their own shared branch. The epic's branch also absorbed cross-cutting TUI infrastructure: the command bar, settings screen, resizable multi-pane layout, structured failure display and text-input primitives. Its remaining batches are:
-- **Creation wizard (2.35–2.38):** a 4-step wizard (Name → Services → Branches → Activation) with per-service branch plans, remote branches and an explicit activation choice.
-- **Switch redesign (2.39–2.41):** an authoritative three-state switch in which dirty work outside the outgoing EDT is explicitly adopted or discarded.
-- **Branch protection (2.42–2.43):** each service's manifest defines its protected branches, and branches owned by another EDT are flagged in every chooser and can be neither attached nor renamed.
+A developer can create, modify, switch between and delete EDTs. An EDT is an isolated coding-session workspace over a hand-picked set of managed repos. Uncommitted work is never lost without explicit, per-file consent. Every managed repo shows its branch and divergence, and repos outside the active EDT always return to their own shared branch. The epic also absorbed cross-cutting TUI infrastructure: the command bar, settings screen, resizable multi-pane layout, structured failure display and text-input primitives. Most stories are done. The remaining work is the end of three batches plus two older stories:
+- **Creation wizard (2.35–2.38):** a 4-step wizard with per-service branch plans and an explicit activation step. 2.38 is in review.
+- **Switch redesign (2.39–2.41):** a three-state switch where dirty work outside the outgoing EDT is explicitly adopted or discarded. 2.41 is in review and the CLI story 2.40 is in the backlog.
+- **Branch protection (2.42–2.43):** protected branches defined in each service's manifest, and branches owned by another EDT flagged and gated. Both are in the backlog.
+- **Older backlog:** 2.28 (registry semantic validation) and 2.31 (`edt-create-from`).
 
 ## Stories
 
@@ -33,145 +34,173 @@ A developer can create, modify, safely switch between and delete EDTs. An EDT is
 - Story 2.20: Top bar & footer hint accuracy fixes
 - Story 2.21: EDT zone — multi-splitter layout with keyboard resize-mode
 - Story 2.22: EDT creation — mandatory branch creation UI
-- Story 2.23: Visible text-input cursor (EDT zone text fields)
-- Story 2.24: Modify EDT — mandatory branch on add, no silent default
-- Story 2.25: EDT zone — structured per-repo failure display & branch-collision state
-- Story 2.26: Branch-picker — 3 explicit modes (pick existing / create new / rename current)
-- Story 2.27: EDT creation — branch-picker reuse & manifest-aware base-branch default
+- Story 2.23: Visible text-input cursor
+- Story 2.24: Modify EDT — mandatory branch on add
+- Story 2.25: Structured per-repo failure display & branch-collision state
+- Story 2.26: Branch-picker — 3 explicit modes
+- Story 2.27: EDT creation — branch-picker reuse & manifest-aware base default
 - Story 2.28: Registry — manifest semantic validation
 - Story 2.29: Delete an EDT
-- Story 2.30: EDT quick-pick — filterable list for edt-switch / edt-modify
-- Story 2.31: edt-create-from — clone an EDT's membership as a creation starting point (re-targeted to the wizard)
+- Story 2.30: EDT quick-pick for edt-switch / edt-modify
+- Story 2.31: `edt-create-from` — clone an EDT's membership into the wizard
 - Story 2.32: TextInputLine — cursor navigation & app-wide adoption
 - Story 2.33: Registry — deregister stale, unreachable, or unmanaged repos
 - Story 2.34: EDT zone — colored, explained service-listing issues
 - Story 2.35: EDT creation core — per-service branch plans & remote branches
-- Story 2.36: EDT creation wizard — shell, step navigation, name & services steps
-- Story 2.37: EDT creation wizard — Step 3: global branch strategy & per-service overrides
-- Story 2.38: EDT creation wizard — Step 4: activation & switch choice
+- Story 2.36: Creation wizard — shell, step navigation, name & services steps
+- Story 2.37: Creation wizard — Step 3: global branch strategy & per-service overrides
+- Story 2.38: Creation wizard — Step 4: activation & switch choice
 - Story 2.39: EDT switch core — three-state partition & dirty-service resolutions
 - Story 2.40: `edt switch` CLI — fail-safe dirty handling & explicit flags
-- Story 2.41: EDT switch resolution dialog — global strategy, per-service overrides & discard confirmation
+- Story 2.41: EDT switch resolution dialog
 - Story 2.42: Manifest-defined protected branches per service
 - Story 2.43: Cross-EDT branch usage — alerts in branch choosers & rename gate
 
 ## Requirements & Constraints
 
+- **Data-loss rule:**
+  - Uncommitted work is always preserved automatically.
+  - There are exactly two consent-gated exceptions: the first-EDT overwrite at activation and a per-service discard during a switch.
 - **Create:**
-  - An EDT needs a unique topic and at least one member service. A duplicate topic or zero members is rejected before any file is written. The wizard checks the name live on every keystroke (trimmed, case-sensitive).
-  - Every member always gets a branch on the TUI path. A global strategy applies by default: the base is each repo's manifest `sharedBranch` unless one is typed, and the name is the topic slug.
-  - Any service can override the global strategy by creating from its own base, or by attaching an existing local or remote branch (optionally renamed).
-  - The CLI `edt create` keeps its original shape: one base and one naming mode for the whole action. Its behavior and tests stay unchanged.
+  - The topic must be unique (trimmed, case-sensitive) and there must be at least one member. Both are checked before anything is written.
+  - On the TUI path, every member gets a branch. By default each one comes from the service's manifest `sharedBranch` and is named with the topic slug, and any service can override that.
+  - The CLI `edt create` keeps one base and one naming mode for the whole action, unchanged.
   - A failure on one service never aborts the others.
-- **Protected branches:**
-  - A service's protected set is exactly its manifest `protectedBranches` plus its `sharedBranch`. `sharedBranch` is always protected and defaults to `development`. Without `protectedBranches`, only `sharedBranch` is protected. `development`, preprod and prod are no longer protected implicitly.
-  - A protected branch can never become an EDT's own branch. Renaming onto or away from a protected name is refused.
-  - The tool rejects these before any git write, with a message naming the branch and the manifest that protects it.
-  - The `manifest-generator` skill must emit `protectedBranches: [development, preprod, prod]` by default. Existing manifests need that line added by hand to keep today's protection.
-- **Cross-EDT ownership:**
-  - A branch registered as another EDT's own branch for a service can be neither attached nor renamed, whether as the old or the new name. Otherwise that EDT would break silently.
-  - Using an owned branch only as a *base* is allowed, since creating from it never modifies it; it is still annotated.
+  - The action-log entry always goes to the **new** EDT's database.
+- **Activation:**
+  - Activation is always explicit, and the store never sets the active pointer on create.
+  - **First EDT:** a pre-flight that checks nothing out lists the files at risk per repo. The developer can then:
+    - Retry, as many times as needed;
+    - Overwrite, after a second confirmation;
+    - or stop, which leaves the EDT created but inactive.
+  - **Later EDTs:** "switch now" (the default) goes through the protected switch. The alternative is "create without switching".
+  - A create with a partial failure never activates.
 - **Switch:**
-  - Repos are classified against the **outgoing** EDT:
-    - **State 1**, a member of the outgoing EDT: a dirty repo is auto-stashed with the outgoing ulid and popped when the developer switches back.
+  - Each repo is classified against the **outgoing** EDT:
+    - **State 1**, a member of the outgoing EDT: its dirty work is auto-stashed and tagged with the outgoing ulid.
     - **State 2**, a member of another EDT only.
     - **State 3**, a member of no EDT.
-  - A dirty state-2/3 repo needs an explicit resolution. With none, the switch returns `switch-dirty-services-unresolved` and writes nothing.
-    - `adopt` moves the work onto a branch registered in the outgoing EDT, never a protected one. It is rejected when there is no outgoing EDT.
-    - `discard` runs a consent-gated `reset --hard` + `clean -fd`, keeps ignored files, and records the discarded paths.
-  - The old fixed `tui-back:shared` stash round-trip is removed.
-  - The CLI fails safe by default and accepts `--adopt-dirty --adopt-branch <name>` or `--discard-dirty` (the two are mutually exclusive).
-  - Non-member repos go back to their shared branch, which is fetched first if it is missing locally.
-  - The switch is blocked while a locked action runs on the outgoing EDT, with an offer to stop the action and resume it later.
-- **Activation after creation** is always explicit. The store never writes the active pointer on create.
-  - **First EDT:** a pre-flight checks out nothing and lists, per repo, the uncommitted files a checkout would overwrite. The developer can Retry (repeatable), Overwrite (needs a second confirmation naming every file) or press Esc (the EDT stays created but inactive).
-  - **Later EDTs:** "switch now" (the default, through the protected switch) or "create without switching".
-- **Data-loss rule:** uncommitted work is always auto-preserved. There are exactly two consent-gated exceptions: first-EDT overwrite and a per-service switch discard.
-- The create action-log entry always goes to the **new** EDT's database.
-- Members, branches and topic are editable after creation without disturbing other members. A zero-member EDT is valid. Adding a member requires an explicit branch.
-- Every managed service shows its branch plus ahead/behind counts. Without an upstream it shows "no upstream", and offline it shows "unknown (offline)".
-- **Delete:** deleting a non-active EDT offers a leave/delete choice for each member's branch, informed by merge status and uncommitted work. Deletion is blocked while the EDT is active, and for any service whose branch another EDT uses.
-- A crash affecting one EDT's SQLite file never affects another EDT. Remote branches come only from local remote-tracking refs, and the wizard never fetches.
+  - A dirty state-2/3 repo needs an `adopt` or `discard` resolution. Otherwise the result is `switch-dirty-services-unresolved` and nothing is written.
+  - `adopt` is not allowed when there is no outgoing EDT (`switch-adopt-without-outgoing`).
+  - `discard` keeps ignored files and records the discarded paths.
+  - Non-member repos go to their `sharedBranch`, which is fetched first if it is missing locally.
+- **CLI switch (2.40):**
+  - The default is fail-safe.
+  - `--discard-dirty` discards the dirty work in every state-2/3 repo.
+  - `--adopt-dirty --adopt-branch <name>`:
+    - Repos on a shared branch get the new branch `<name>`. Other repos keep their current branch.
+    - If any repo is on a shared branch and no name is given, the command fails with `missing-argument`.
+  - Passing both flags fails with `invalid-argument`.
+  - Help text, docs and e2e tests must be updated.
+- **Protected branches (2.42):**
+  - A service's protected set is exactly its manifest `protectedBranches` plus its `sharedBranch` (which defaults to `development`). Nothing is protected implicitly.
+  - A rejection names the branch and the manifest that protects it.
+  - The `manifest-generator` skill emits `protectedBranches: [development, preprod, prod]` by default.
+- **Cross-EDT ownership (2.43):**
+  - A branch registered as another EDT's own branch can be neither attached nor renamed, as either the old or the new name.
+  - Using such a branch only as a *base* is allowed, but it is still annotated.
+- **Modify / Delete:**
+  - Members, branches and topic can be edited without disturbing other members. A zero-member EDT is valid, and adding a member requires an explicit branch.
+  - Delete is blocked while the EDT is active. Each member's branch gets its own leave/delete choice, informed by merge status and dirty state. A branch that another EDT uses blocks deletion for that service.
+- **Visibility:** every managed service shows its branch with ahead/behind counts. Without an upstream it shows "no upstream", and offline it shows "unknown (offline)".
+- **Registry validation (2.28):**
+  - Adds a "Validate registered repos" action on the registry screen and `tui-back registry validate` for CLI parity.
+  - Checks are an extensible registry. The only check for now is that `sharedBranch` exists, locally or fetchable.
+  - A manifest that fails to load is reported with its existing load error.
+- **Isolation:** a crash in one EDT's SQLite file never affects another EDT. Remote branches come only from local remote-tracking refs, and the wizard never fetches.
 
 ## Technical Decisions
 
-- **Storage:** one SQLite file per EDT at `XDG_DATA_HOME/tui-back/edts/<ulid>.db`, with the topic stored inside it. Settings live in `XDG_CONFIG_HOME/tui-back/settings.yaml`, behind a zod-validated `SettingsPort`. The active EDT is recorded in `XDG_STATE_HOME/tui-back/state.json`.
-- **Git gate:** every git write goes through the centralized `adapters/driven/git` gate. It resolves the allowed branch from EDT and manifest state at write time and never trusts a branch passed in by the caller.
-  - The gate rejects a protected branch, any branch that is not the current EDT's own branch, and a rename whose old or new name is owned by another EDT.
-  - A single core helper, `isProtectedBranch(name, manifest)`, replaces `SHARED_BRANCHES`/`isSharedBranch`. No hardcoded branch list may remain in `src/`.
-- **Manifest:** the schema gains an optional `protectedBranches: string[]` (entries trimmed and non-empty; a malformed value is a schema error). `ServiceBranchDivergence` carries `protectedBranches` next to `sharedBranch`.
-- **`GitPort` additions:**
-  - `listBranches` stays local-only.
-  - `listRemoteBranches`: `origin/<x>` refs minus `origin/HEAD`; never fetches.
-  - `renameBranch(…, edtId?)`: gates both names. When `edtId` is omitted, any registered owner blocks the rename. Callers pass their own EDT's ulid.
-  - `createTrackingBranch`: gated like `createBranch`.
-  - `isBranchMerged`, `deleteBranch`.
-  - `diffNameOnly(from, to)`: read-only, not gated.
-  - `listDirtyPaths`.
-  - `discardAll`: the only consent-gated destructive primitive; its only caller is `switch.ts` under a `discard` resolution.
-- **`createEdt`** takes an optional `memberPlans: Record<repoPath, MemberBranchPlan>` (`{kind:'create', base, name}` | `{kind:'existing', branch, renameTo?}`).
-  - When present, it is authoritative: a member missing from it is rejected with `invalid-argument`.
-  - When absent, the `branchOptions` path runs unchanged. The two paths stay side by side.
-  - Outcomes: `created | existing-branch | renamed | failed`.
-  - Rollback deletes created branches, renames renamed ones back, and logs a rollback failure without throwing.
-- **`core/edt/activate.ts`** is used only by the wizard. It reuses the switch's per-repo target computation without stash tagging, and discards only the explicit `overwrite` paths (uncommitted paths ∩ `diffNameOnly(current, target)`).
+- **Storage:**
+  - One SQLite file per EDT at `XDG_DATA_HOME/tui-back/edts/<ulid>.db`.
+  - The active pointer and per-zone pane ratios live in `XDG_STATE_HOME/tui-back/state.json`. `fs.watch` lets CLI changes reach an open TUI.
+  - Settings live in `XDG_CONFIG_HOME/tui-back/settings.yaml`, behind a zod-validated `SettingsPort`.
+- **Git gate:**
+  - Every git write goes through `adapters/driven/git`. The gate resolves the allowed branch from EDT and manifest state at write time and never trusts the caller.
+  - With 2.42, one core helper, `isProtectedBranch(name, manifest)`, replaces `SHARED_BRANCHES`/`isSharedBranch`. No hardcoded branch list may remain in `src/`.
+  - The manifest schema gains an optional `protectedBranches: string[]` (trimmed, non-empty).
+  - `ServiceBranchDivergence` carries `protectedBranches`.
+  - Hardcoded test fixtures become manifest fixtures.
+- **`GitPort`:**
+  - `listBranches` covers local branches only.
+  - `listRemoteBranches` returns `origin/*` without `origin/HEAD` and never fetches.
+  - `createTrackingBranch` is gated.
+  - `renameBranch(…, edtId?)`:
+    - With 2.43 it also gates both names against cross-EDT ownership (`branch-owned-by-other-edt`). Without an `edtId`, any owner blocks the rename.
+    - Callers pass their EDT's ulid: modify, Add-to-EDT, create, and create's rollback.
+  - `diffNameOnly(from, to)` is read-only and not gated.
+  - `discardPaths` (exact paths) is used by activation.
+  - `discardAll` runs `reset --hard` then `clean -fd`, never `-x`. Its only caller is `switch.ts` under `discard`.
+- **`createEdt`:**
+  - Takes optional `memberPlans` (`{kind:'create', base, name}` | `{kind:'existing', branch, renameTo?}`).
+  - When the plans are present they are authoritative, and a missing member gives `invalid-argument`. Otherwise the older `branchOptions` path runs unchanged.
+  - Rollback deletes created branches, renames renamed ones back, and logs any rollback failure without throwing.
+- **`core/edt/activate.ts` (2.38):**
+  - Reuses the switch's per-repo target computation without stash tagging.
+  - Discards only the confirmed `overwrite` paths: uncommitted paths that also differ between the current and target branch.
 - **`switch.ts`:**
-  - A pure `classifySwitchRepos` helper does the classification.
-  - Resolutions: `dirtyResolutions: Record<repoPath, {kind:'adopt', branch} | {kind:'discard'}>`, plus a CLI `dirtyPolicy` sugar that expands after the core's classification.
-  - The `onDirtyReposBeforeSwitch` seam returns `cancel | proceed(resolutions)`.
-  - `adopt` runs: gate → stash → create branch if needed → add to the outgoing EDT → checkout. A failure restores the stash.
-- **Cross-EDT ownership:** a pure `branchOwners(edts, repoPath, branch, excludeUlid)` helper reads the store's loaded EDT list; no new port. `BranchAutocompleteInput` gains a generic `annotations?: Record<branch, string>` prop and stays EDT-agnostic.
-- **Shared components:**
-  - `TextInputLine`: cursor with Left/Right/Home/End.
-  - `BranchPicker`: pick existing / create new / rename current.
-  - `BranchAutocompleteInput` (from Epic 3): reuse it, never copy it.
-  - `FailedResultList`: structured per-repo failures, with a `resolveAssistedAction(code)` registry, e.g. `branch-already-claimed`.
-- **Wizard:** lives in `dialogs/create-wizard/`, with one file per step and a pure, unit-tested `wizard.logic.ts`. Step 3's reusable table and override-box components are shared with the switch dialog, which gets its own pure `switch-resolution.logic.ts`.
-- **EDTs zone:** the first multi-splitter zone (`Ctrl+W` resize mode), with pane ratios saved per zone in `state.json`. The active EDT stays in sync through `state.json` + `fs.watch`, so CLI changes reach an open TUI.
+  - Classification is done by a pure `classifySwitchRepos` helper.
+  - Resolutions come as `dirtyResolutions: Record<repoPath, {kind:'adopt', branch} | {kind:'discard'}>`.
+  - The CLI passes `dirtyPolicy` sugar, which is expanded *after* the core classifies the repos; the CLI never classifies.
+  - The seam `onDirtyReposBeforeSwitch` returns `cancel | proceed(resolutions)`.
+  - `adopt` runs gate → stash → create branch → add to the outgoing EDT → checkout, and restores the stash if any step fails.
+- **Cross-EDT ownership:**
+  - A pure `branchOwners(edts, repoPath, branch, excludeUlid)` helper works from the store's loaded EDT list, with paths compared via `resolve()`. No new port.
+  - `BranchAutocompleteInput` gains a generic `annotations?: Record<branch, string>` prop and stays EDT-agnostic.
+- **Shared components (reuse, never copy):**
+  - `TextInputLine` and `nextTextInputValue`;
+  - `BranchPicker` (pick / create / rename);
+  - `BranchAutocompleteInput`;
+  - `FailedResultList`, with its `resolveAssistedAction(code)` registry;
+  - `BoundedList`;
+  - the shared filterable pick list behind the EDT quick-pick.
+- **Wizard:**
+  - Lives in `dialogs/create-wizard/` with one file per step and a pure `wizard.logic.ts`.
+  - Step 3's table and override box are reused by the switch dialog, whose own pure logic is in `switch-resolution.logic.ts`.
+  - 2.31 adds `seedFromEdt` to the wizard's initial state.
 
 ## UX & Interaction Patterns
 
-- **EDT selector:** the focused row gets the `emphasized` style (accent + bold). The tool-wide active EDT gets a separate, discreet `" active"` suffix.
-- **Per-service `Enter` menu:** members get Remove and Change-branch; Restart is shown disabled until Epic 5. Non-members get Add-to-EDT.
-- **Command bar:** `:` registers `edt-create`, `edt-switch`, `edt-modify`, `edt-delete` and `edt-create-from`. Run without an argument, switch, modify and create-from open a filterable quick-pick.
-- **Wizard** (all labels in French):
-  - Breadcrumb: `[1. Nom] ── [2. Services] ── [3. Branches] ── [4. Activation]`. The current step shows `▶ … ◀`, completed steps show a summary, unreachable steps are dim, and each step opens with a short intro.
-  - Keys:
-    - `Ctrl+→`/`Ctrl+N` go forward, only if the current step is valid.
-    - `Ctrl+←` goes back and keeps the step's state.
-    - `Tab` moves within a step.
-    - `Enter` advances on Steps 1–2.
-    - `Esc` closes the innermost field first, then cancels with nothing written. With zero EDTs, it requests quit.
+- All wizard and dialog labels are in **French**.
+- **Wizard breadcrumb:** `[1. Nom] ── [2. Services] ── [3. Branches] ── [4. Activation]`. Keys:
+  - `Ctrl+→`/`Ctrl+N` go to the next step, only if the current step is valid.
+  - `Ctrl+←`/`Ctrl+P` go back and keep the step's choices.
+  - `Tab` moves within a step.
+  - `Esc` closes the innermost field first, then cancels with nothing written.
   - These wizard-scoped keys belong in the keybinding contract.
 - **Step 3:**
-  - Panel A ("STRATÉGIE GLOBALE"):
-    - The base shows a dim `<shared-branch>` placeholder, and any row without a match shows `✖ branche introuvable`, which blocks advancing.
-    - The name follows the topic slug until the developer edits it.
+  - Panel A, "STRATÉGIE GLOBALE": the base shows a dim `<shared-branch>` placeholder, and the name follows the topic slug until it is edited.
   - Panel B: a height-bounded table `Service | Mode | Base / Source | Branche cible`.
-    - Modes are `[Créer (Global)]`, `[Créer (Perso)]`, `[Existante]` and `[Renommer]`.
-    - `Enter` opens a "Configurer" box, and `Ctrl+R` reverts the row to the global strategy.
+    - Modes: `[Créer (Global)]`, `[Créer (Perso)]`, `[Existante]`, `[Renommer]`.
+    - `✖ branche introuvable` blocks `Ctrl+N`.
+    - `Enter` opens the "Configurer" box, and `Ctrl+R` reverts the row to the global strategy.
 - **Step 4:**
-  - First EDT: activation is locked to "Oui", with an `[R] Réessayer` / `[E] Écraser` / `[Esc]` pause panel when files are at risk.
-  - Later EDTs: a switch/stay radio choice, plus a list of the shared branch each non-member returns to.
+  - First EDT: locked on "Oui". The pause panel offers `R` (retry), `E` (open the overwrite confirmation, which lists every file; `Ctrl+E` confirms) and `Esc`.
+  - Later EDTs: a radio choice, with the shared branch each non-member returns to listed by name.
 - **Switch resolution dialog:** it mirrors Step 3.
-  - Panel A: "Adopter dans <outgoing> / Écraser", plus a global branch name for rows on a protected branch.
-  - Panel B: `Service | Portée | Branche actuelle | Action | Branche cible`, with state-1 rows shown dim and read-only.
-  - Any `[Écraser]` row triggers a second confirmation that lists every file. Its default action is *Retour*.
+  - Panel A: "Adopter dans <outgoing> / Écraser", plus a global branch name for repos on a shared branch.
+  - Panel B: `Service | Portée | Branche actuelle | Action | Branche cible`. State-1 rows are shown dim and read-only.
+  - Any `[Écraser]` row requires a second confirmation that lists every file. Its default is *Retour*.
   - `Esc` cancels the switch.
-- **Owned-branch annotation:** in every branch chooser (the Step 3 box and `BranchPicker` pick-existing/rename), a branch owned by another EDT shows `⚠ EDT « <topic> »` (glyph + warning color, never color alone). Attaching or renaming it is refused inline with "utilisée par l'EDT « <topic> » — la reprendre ou la renommer casserait cet EDT", and an affected Step 3 row blocks `Ctrl+N`.
-- **Delete confirmation:** lists each member's branch with its merge and uncommitted-work status, each with its own leave/delete toggle. Unreachable services show a severity-colored summary and an `[i] details` dialog.
+- **Owned-branch annotation (2.43):**
+  - A branch owned by another EDT shows `⚠ EDT « <topic> »` (glyph + warning color, never color alone) in the Step 3 box and in `BranchPicker` pick-existing/rename.
+  - Choosing it is refused inline with "utilisée par l'EDT « <topic> » — la reprendre ou la renommer casserait cet EDT". An affected Step 3 row blocks `Ctrl+N`.
+- **Command bar:**
+  - `edt-create`, `edt-switch`, `edt-modify`, `edt-delete` and `edt-create-from` are registered commands.
+  - Without an argument, switch, modify and create-from open the quick-pick. `edt-create-from <topic>` skips it, and an unknown topic gives "EDT not found".
+- **2.31 seeding:** Step 2 is pre-checked with the root EDT's members and stays editable. Inherited members' rows start as `[Créer (Perso)]`, with the member's root-EDT branch as base. The topic is always typed fresh.
 
 ## Cross-Story Dependencies
 
-- **Git gate (2.3):** underlies every story that writes branches. 2.42 changes its protected-set rule and 2.43 extends its rename check. Epic 3's group update inherits both through the same gate.
-- **Earlier foundations:**
-  - Story 2.6 feeds the EDTs zone lists and Story 2.34's issue counts.
-  - `TextInputLine` comes from 2.23 and 2.32.
-  - `FailedResultList` comes from 2.25.
-  - The command bar (2.14) comes before 2.15, 2.19, 2.29, 2.30 and 2.31.
-- **Wizard:** 2.35, 2.36 and 2.37 are done. The epic-3 → epic-2 merge (bringing `BranchAutocompleteInput`) has landed.
-- **Switch batch:** 2.39 (core) → 2.40 (CLI) and 2.41 (TUI dialog). 2.41 also reuses 2.37's table and box.
-- **2.38** needs 2.39 and 2.41, and is sequenced after 2.41. Until it lands, Step 4 is a plain confirm.
-- **2.31** needs 2.30 and 2.37. It pre-selects Step 2 and pre-sets Step 3 rows to `[Créer (Perso)]` from the source EDT.
-- **2.42 and 2.43** build on 2.37's `shared-branches.ts` and Step 3. They are independent of each other, and either can go first. 2.41's inline protected-branch check must call the core helper, so it picks up 2.42's rule.
-- **Other epics:** Epics 3–5 depend on this epic's gate and assisted resolution, and Restart depends on Epic 5. The epic-2 → `devlopment` PR will also carry the Epic 3 stories already merged in.
+- **Git gate (2.3):** underlies every branch-writing story, including Epic 3's group update. 2.42 changes its protected-set rule and 2.43 extends its rename check.
+- **Ordering:**
+  - 2.42 and 2.43 each require 2.37, whose `src/core/edt/shared-branches.ts` must be merged first; otherwise HALT. They are independent of each other.
+  - Every inline protected-branch check, including 2.41's, must call the core helper so that it picks up 2.42's rule.
+  - 2.40 builds on 2.39's core and only wires the CLI.
+  - 2.38 builds on 2.39 and 2.41.
+  - 2.31 builds on 2.30 and 2.37.
+- **Epic 5:**
+  - Story 5.6 adds `↑`/`↓` history recall to the `:` command bar through a shared input-history primitive. Whichever of 5.6 and the `TextInputLine` adoption lands second puts the cursor at the end of the value on recall.
+  - Story 5.5's `BoundedList` bounds the EDTs zone's service lists.
+  - Per-service Restart stays disabled until Epic 5.
+- **Rollout:** the epic-2 → `devlopment` PR also carries the Epic 3 and Epic 5 work already merged into this branch. Existing `.tui-back.yaml` files need `protectedBranches` added by hand to keep today's protection.

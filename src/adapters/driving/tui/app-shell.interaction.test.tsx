@@ -1416,9 +1416,12 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       // maxRows=8) would instead put every command on its own line, with "edt-create"
       // sharing no line with "registry" either way — the positive signal here is
       // "edt-switch" sharing registry's line, which only maxRows=2 grouping produces.
+      // Story 2.31: `edt-create-from` widened the grid enough that Ink's flex layout now
+      // squeezes column 1's label ("edt-switc"), so the positive signal is column 2's row 0
+      // ("edt-delete") sharing registry's line instead — equally only possible with maxRows=2.
       const registryLine = lines.find((line) => line.includes('registry'));
       expect(registryLine).toBeDefined();
-      expect(registryLine).toContain('edt-switch');
+      expect(registryLine).toContain('edt-delete');
       expect(registryLine).not.toContain('edt-create');
     } finally {
       instance.unmount();

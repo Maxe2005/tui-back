@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { initialCreateDialog, type BranchListState, type BranchStepState, type CreateDialogState, type RowOverride } from '../../edts-zone.logic.js';
 import {
   buildBreadcrumb,
@@ -15,6 +16,9 @@ import {
   isActivationAcknowledge,
   isProtectedTarget,
   localNameOf,
+  missingSeedMembers,
+  pruneToCandidates,
+  refreshSeededNames,
   nonMemberReturns,
   NO_SERVICE_ERROR,
   reachableSteps,
@@ -329,6 +333,152 @@ describe('enterBranchStep (story 2.37)', () => {
     expect(entered.lists['/repos/b']?.status).toBe('pending');
     expect(entered.lists['/repos/c']?.status).toBe('pending');
     expect(entered).toMatchObject({ panel: 'global', globalLine: 'base', editing: false, rowCursor: 2, box: null });
+  });
+});
+
+describe('edt-create-from seeding (story 2.31)', () => {
+  const ROOT: EdtRegistryEntry = {
+    ulid: 'root-ulid',
+    topic: 'feat-a',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    status: 'inactive',
+    members: [
+      { service: 'svc-b', repoPath: '/repos/b', branch: 'feat/a' },
+      { service: 'svc-a', repoPath: '/repos/a', branch: 'feat/a-api' },
+      { service: 'svc-gone', repoPath: '/repos/gone', branch: 'feat/x' },
+    ],
+  };
+
+  it('initialCreateDialog(seed) pre-checks the root members in root order, topic empty', () => {
+    const dialog = initialCreateDialog(ROOT);
+    expect(dialog.selectedMembers).toEqual(['/repos/b', '/repos/a', '/repos/gone']);
+    expect(dialog.topic).toBe('');
+    expect(dialog.seedFromEdt).toBe(ROOT);
+    expect(initialCreateDialog().seedFromEdt).toBeNull();
+  });
+
+  it('Inherited row: each selected root member is seeded [Créer (Perso)] on its root branch, named after the slug', () => {
+    const entered = enterBranchStep(branches(), 'New Topic', ['/repos/b', '/repos/a', '/repos/c'], ROOT);
+    expect(entered.overrides).toEqual({
+      '/repos/b': { kind: 'create', base: 'feat/a', name: 'new-topic' },
+      '/repos/a': { kind: 'create', base: 'feat/a-api', name: 'new-topic' },
+    });
+    expect(entered.seededPaths).toEqual(['/repos/b', '/repos/a']);
+  });
+
+  it('Added service: a non-root member gets no override (follows the global rule)', () => {
+    const entered = enterBranchStep(branches(), 'New Topic', ['/repos/c'], ROOT);
+    expect(entered.overrides['/repos/c']).toBeUndefined();
+  });
+
+  it('Unchecked root member: not seeded, no row', () => {
+    const entered = enterBranchStep(branches(), 'New Topic', ['/repos/a'], ROOT);
+    expect(Object.keys(entered.overrides)).toEqual(['/repos/a']);
+    expect(entered.seededPaths).toEqual(['/repos/a']);
+  });
+
+  it('Topic changed: an untouched seeded row follows the new slug, an edited one is kept', () => {
+    const first = enterBranchStep(branches(), 'One', ['/repos/b', '/repos/a'], ROOT);
+    const edited = { ...first, overrides: { ...first.overrides, '/repos/a': { kind: 'create' as const, base: 'feat/a-api', name: 'mine' } } };
+    const second = enterBranchStep(edited, 'Two', ['/repos/b', '/repos/a'], ROOT);
+    expect(second.overrides['/repos/b']).toEqual({ kind: 'create', base: 'feat/a', name: 'two' });
+    expect(second.overrides['/repos/a']).toEqual({ kind: 'create', base: 'feat/a-api', name: 'mine' });
+  });
+
+  it('A seeded row whose base was edited is not refreshed', () => {
+    const first = enterBranchStep(branches(), 'One', ['/repos/b'], ROOT);
+    const edited = { ...first, overrides: { '/repos/b': { kind: 'create' as const, base: 'main', name: 'one' } } };
+    const second = enterBranchStep(edited, 'Two', ['/repos/b'], ROOT);
+    expect(second.overrides['/repos/b']).toEqual({ kind: 'create', base: 'main', name: 'one' });
+  });
+
+  it('Reset to global: a seeded path is never reseeded', () => {
+    const first = enterBranchStep(branches(), 'One', ['/repos/b', '/repos/a'], ROOT);
+    const { ['/repos/b']: _dropped, ...rest } = first.overrides;
+    const second = enterBranchStep({ ...first, overrides: rest }, 'One', ['/repos/b', '/repos/a'], ROOT);
+    expect(second.overrides['/repos/b']).toBeUndefined();
+  });
+
+  it('A root member checked only later is seeded on that later entry', () => {
+    const first = enterBranchStep(branches(), 'One', ['/repos/b'], ROOT);
+    const second = enterBranchStep(first, 'One', ['/repos/b', '/repos/a'], ROOT);
+    expect(second.overrides['/repos/a']).toEqual({ kind: 'create', base: 'feat/a-api', name: 'one' });
+  });
+
+  it('A touched global name seeds rows with that name', () => {
+    const entered = enterBranchStep(branches({ globalName: { value: 'feat/q', cursor: 6 }, globalNameTouched: true }), 'X', ['/repos/b'], ROOT);
+    expect(entered.overrides['/repos/b']).toEqual({ kind: 'create', base: 'feat/a', name: 'feat/q' });
+  });
+
+  it('No seed: overrides and seededPaths are untouched', () => {
+    const entered = enterBranchStep(branches(), 'One', ['/repos/b'], null);
+    expect(entered.overrides).toEqual({});
+    expect(entered.seededPaths).toEqual([]);
+  });
+
+  it('Inherited rows render [Créer (Perso)] on the root base; added ones [Créer (Global)]', () => {
+    const base = initialCreateDialog(ROOT);
+    const state: CreateDialogState = {
+      ...base,
+      topic: 'New',
+      selectedMembers: ['/repos/b', '/repos/c'],
+      branches: {
+        ...enterBranchStep(base.branches, 'New', ['/repos/b', '/repos/c'], ROOT),
+        lists: { '/repos/b': ready(['development', 'feat/a']), '/repos/c': ready(['development']) },
+      },
+    };
+    const rows = buildStep3Rows(state, CANDIDATES);
+    expect(rows.map((row) => [row.modeLabel, row.base, row.target])).toEqual([
+      ['[Créer (Perso)]', 'feat/a', 'new'],
+      ['[Créer (Global)]', 'development', 'new'],
+    ]);
+    expect(buildMemberPlans(rows)).toEqual({
+      '/repos/b': { kind: 'create', base: 'feat/a', name: 'new' },
+      '/repos/c': { kind: 'create', base: 'development', name: 'new' },
+    });
+  });
+
+  it('Root member gone: named by missingSeedMembers, pruned by pruneToCandidates (non-empty pool only)', () => {
+    expect(missingSeedMembers(ROOT, CANDIDATES)).toEqual(['svc-gone']);
+    expect(missingSeedMembers(null, CANDIDATES)).toEqual([]);
+    expect(pruneToCandidates(['/repos/b', '/repos/gone', '/repos/a'], CANDIDATES)).toEqual(['/repos/b', '/repos/a']);
+    expect(pruneToCandidates(['/repos/gone'], [])).toEqual(['/repos/gone']);
+  });
+
+  it('missingSeedMembers lists nothing on an empty pool (same rule as the prune)', () => {
+    expect(missingSeedMembers(ROOT, [])).toEqual([]);
+  });
+
+  it('All root members gone: Step 2 is blocked with NO_SERVICE_ERROR', () => {
+    const state: CreateDialogState = { ...initialCreateDialog(ROOT), selectedMembers: ['/repos/gone'] };
+    expect(canAdvance(2, state, EDTS, CANDIDATES)).toEqual({ ok: false, error: NO_SERVICE_ERROR });
+    // An empty (not yet loaded) pool prunes nothing.
+    expect(canAdvance(2, state, EDTS, [])).toEqual({ ok: true });
+  });
+
+  it('Partly gone: Step 2 passes and its breadcrumb counts only the real services', () => {
+    const state: CreateDialogState = { ...initialCreateDialog(ROOT), topic: 'x', step: 3 };
+    expect(canAdvance(2, state, EDTS, CANDIDATES)).toEqual({ ok: true });
+    expect(stepSummary(2, state, CANDIDATES)).toBe('2. Services (2)');
+    expect(buildBreadcrumb(state, EDTS, CANDIDATES)[1]?.text).toBe('2. Services (2)');
+  });
+
+  it('refreshSeededNames moves only untouched seeded rows, returns the same object when nothing moves', () => {
+    const overrides = {
+      '/repos/b': { kind: 'create' as const, base: 'feat/a', name: 'old' },
+      '/repos/a': { kind: 'create' as const, base: 'other', name: 'old' },
+      '/repos/c': { kind: 'create' as const, base: 'x', name: 'old' },
+    };
+    const next = refreshSeededNames(overrides, ['/repos/b', '/repos/a'], ROOT, 'old', 'new');
+    expect(next['/repos/b']).toEqual({ kind: 'create', base: 'feat/a', name: 'new' });
+    expect(next['/repos/a']).toEqual({ kind: 'create', base: 'other', name: 'old' });
+    expect(next['/repos/c']).toEqual({ kind: 'create', base: 'x', name: 'old' });
+    expect(refreshSeededNames(overrides, [], ROOT, 'old', 'new')).toBe(overrides);
+    expect(refreshSeededNames(overrides, ['/repos/b'], null, 'old', 'new')).toBe(overrides);
+  });
+
+  it('describeCreateForLog names the root EDT', () => {
+    expect(describeCreateForLog('x', 2, 'stay', 'root')).toBe('Created EDT "x" from "root" with 2 member(s) — active EDT unchanged');
   });
 });
 

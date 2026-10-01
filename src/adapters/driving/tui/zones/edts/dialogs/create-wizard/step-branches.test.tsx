@@ -67,6 +67,35 @@ describe('reduceBranchStepKey (story 2.37 review)', () => {
     expect(moved.branches.globalName.cursor).toBe(0);
   });
 
+  it('editing the global name in Panel A carries untouched seeded rows along, never edited ones (story 2.31)', () => {
+    const seed = {
+      ulid: 'root',
+      topic: 'root',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [
+        { service: 'svc-a', repoPath: '/repos/a', branch: 'feat/a' },
+        { service: 'svc-b', repoPath: '/repos/b', branch: 'feat/b' },
+      ],
+    };
+    const seeded: CreateDialogState = {
+      ...editingName(),
+      seedFromEdt: seed,
+      selectedMembers: ['/repos/a', '/repos/b'],
+    };
+    seeded.branches = {
+      ...seeded.branches,
+      seededPaths: ['/repos/a', '/repos/b'],
+      overrides: {
+        '/repos/a': { kind: 'create', base: 'feat/a', name: 'demo' },
+        '/repos/b': { kind: 'create', base: 'feat/b', name: 'mine' },
+      },
+    };
+    const { state } = reduceBranchStepKey(seeded, CANDS, 'x', {});
+    expect(state.branches.overrides['/repos/a']).toEqual({ kind: 'create', base: 'feat/a', name: 'demox' });
+    expect(state.branches.overrides['/repos/b']).toEqual({ kind: 'create', base: 'feat/b', name: 'mine' });
+  });
+
   it('a value change marks the global name touched', () => {
     const { state } = reduceBranchStepKey(editingName(), CANDS, 'x', {});
     expect(state.branches.globalName.value).toBe('demox');

@@ -593,3 +593,12 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-42-manifest-defined-protected-branches-per-service.md`
   summary: The manifest schema does not trim `sharedBranch` (unlike `protectedBranches` entries), so a padded value such as `" main "` protects the padded name rather than `main`.
   evidence: `adapters/driven/manifest/schema.ts` keeps `z.string().min(1)` for `sharedBranch` (documented as non-trimmed in docs/tui-back-manifest.md); `isProtectedBranch` matches exactly, so the per-service protected set can miss the real shared branch.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
+  summary: The EDT command openers (`edt-switch`/`edt-modify`/`edt-delete`/`edt-create-from`) encode "no argument" as the magic target `'select EDT'` and rebuild the topic with `split(/\s+/).join(' ')`, so an EDT literally named "select EDT" is unreachable by name and a topic with repeated inner whitespace never matches.
+  evidence: Story 2.31 review (blind hunter, edge case hunter). `edt-slice.ts` openers and the `currentEdtAction` effect in `edts-zone.tsx` share the sentinel; a `target: string | null` would remove it for all four commands at once.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
+  summary: An EDT command with a topic run before `edtsRows` has loaded resolves against an empty list — `edt-create-from` then shows a false "EDT not found", and switch/modify/delete silently close.
+  evidence: Story 2.31 review (edge case hunter). The `currentEdtAction` effect in `edts-zone.tsx` consumes the action without waiting for the EDT list status.
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
+  summary: The `:` command-bar grid truncates command labels (e.g. `edt-switch` renders as `edt-switc`) once a longer command name widens the layout.
+  evidence: Story 2.31 adding `edt-create-from` made `app-shell.interaction.test.tsx`'s grid assertion fail on the clipped label; the test was re-anchored on `edt-delete`, the layout itself was not fixed.

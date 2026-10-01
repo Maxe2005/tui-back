@@ -15,6 +15,7 @@ import {
   resolveSelectionJump,
   toggleMemberSelection,
 } from '../../edts-zone.logic.js';
+import { missingSeedMembers } from './wizard.logic.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,
@@ -59,6 +60,8 @@ export function ServicesStepView({
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
 }) {
+  // Story 2.31: root members no longer in the pool (pruned on entering Step 3).
+  const missing = candidateState === 'ready' ? missingSeedMembers(dialog.seedFromEdt, candidates) : [];
   return (
     <Box flexDirection="column">
       {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
@@ -72,6 +75,9 @@ export function ServicesStepView({
             </Box>
           ))
         : null}
+      {missing.length > 0 ? (
+        <Text color={colors['text-dim']}>Services de l'EDT source introuvables (ignorés) : {missing.join(', ')}</Text>
+      ) : null}
     </Box>
   );
 }

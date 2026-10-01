@@ -49,6 +49,7 @@ import {
   enterBranchStep,
   isActivationAcknowledge,
   isStep3Busy,
+  pruneToCandidates,
   resolveWizardNavKey,
   STEP_INTROS,
   summarizeActivationResults,
@@ -117,6 +118,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     }
     const created = { ulid: result.data.ulid, topic: result.data.topic };
     const memberCount = current.selectedMembers.length;
+    // Story 2.31: a seeded create names its root EDT in every log detail.
+    const rootTopic = current.seedFromEdt?.topic;
     // Awaited (not fire-and-forget) so the store's `edts` holds the new EDT before the switch
     // handoff resolves it, and `edtsRows` reflects it for Escape's cancel-vs-quit choice.
     await deps.loadEdts();
@@ -130,28 +133,33 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
         created.ulid,
         'create',
         'failed',
-        `${describeCreateForLog(current.topic.trim(), memberCount, 'not-activated')}: ${failedRows.map((row) => row.message).join('; ')}`,
+        `${describeCreateForLog(current.topic.trim(), memberCount, 'not-activated', rootTopic)}: ${failedRows.map((row) => row.message).join('; ')}`,
       );
       return;
     }
     if (current.activation.firstEdt) {
       patchActivation({ created });
-      await runActivation(created, memberCount);
+      await runActivation(created, memberCount, rootTopic);
       return;
     }
     if (current.activation.choice === 'switch') {
-      await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'switch'));
+      await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'switch', rootTopic));
       deps.startSwitch(created);
       return;
     }
     deps.setDialog({ kind: 'none' });
     deps.setCurrentEdtAction(null);
-    await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'stay'));
+    await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'stay', rootTopic));
   }
 
   // Story 2.38: the first EDT's activation (and every Retry/Overwrite after a pause) — only ever
   // activateEdt, never createEdt again.
-  async function runActivation(created: { ulid: string; topic: string }, memberCount: number, overwrite?: Record<string, string[]>) {
+  async function runActivation(
+    created: { ulid: string; topic: string },
+    memberCount: number,
+    rootTopic: string | undefined,
+    overwrite?: Record<string, string[]>,
+  ) {
     patchActivation({ decision: null }, { submitting: true, error: null, failedRows: [] });
     const result = await deps.activateEdtAction(overwrite !== undefined ? { topic: created.topic, overwrite } : { topic: created.topic });
     if (!result.ok) {
@@ -165,7 +173,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
         created.ulid,
         'create',
         'failed',
-        `${describeCreateForLog(created.topic, memberCount, 'not-activated')}: ${result.error.message}${rows}`,
+        `${describeCreateForLog(created.topic, memberCount, 'not-activated', rootTopic)}: ${result.error.message}${rows}`,
       );
       return;
     }
@@ -181,7 +189,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     const discarded = results
       .filter((row) => row.outcome === 'discarded')
       .map((row) => `${row.service} (${(row.detail?.discardedPaths ?? []).join(', ')})`);
-    const parts = [describeCreateForLog(created.topic, memberCount, 'activated')];
+    const parts = [describeCreateForLog(created.topic, memberCount, 'activated', rootTopic)];
     if (discarded.length > 0) {
       parts.push(`discarded: ${discarded.join('; ')}`);
     }
@@ -206,12 +214,13 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return;
     }
     const memberCount = current.selectedMembers.length;
+    const rootTopic = current.seedFromEdt?.topic;
     if (decision.kind === 'stop') {
       patchActivation({ decision: null, blocked: null, confirm: null, outcome: 'stopped' });
-      void deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(created.topic, memberCount, 'stopped'));
+      void deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(created.topic, memberCount, 'stopped', rootTopic));
       return;
     }
-    void runActivation(created, memberCount, decision.kind === 'overwrite' ? overwriteFrom(blocked ?? []) : undefined);
+    void runActivation(created, memberCount, rootTopic, decision.kind === 'overwrite' ? overwriteFrom(blocked ?? []) : undefined);
   }
 
   // Moving to any step clears the previous step's error/failure rows and closes Step 3's box;
@@ -232,7 +241,14 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return { ...base, formFocus: 'members' };
     }
     if (target === 3) {
-      return { ...base, branches: enterBranchStep(base.branches, base.topic, base.selectedMembers) };
+      // Story 2.31: root members gone from the pool are dropped first (non-empty pool only),
+      // then the seeded wizard's inherited rows are seeded/refreshed.
+      const selectedMembers = pruneToCandidates(base.selectedMembers, deps.candidates);
+      return {
+        ...base,
+        selectedMembers,
+        branches: enterBranchStep(base.branches, base.topic, selectedMembers, base.seedFromEdt),
+      };
     }
     // Story 2.38: a first EDT is one created while no EDT exists — captured on entering Step 4.
     return { ...base, activation: initialActivationState(deps.edtsRows.length === 0) };
@@ -450,6 +466,7 @@ export function CreateWizardView({
             </Text>
           ))}
         </Box>
+        {dialog.seedFromEdt !== null ? <Text color={colors['text-dim']}>Depuis l'EDT : {dialog.seedFromEdt.topic}</Text> : null}
         <Text color={colors['text-dim']}>{STEP_INTROS[dialog.step]}</Text>
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
