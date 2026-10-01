@@ -291,8 +291,10 @@ const FIRE_REQUEST_USAGE =
 
 // Story 6.9: hand-rolled `fire-request` flags (same dependency-free walk as `edt create`
 // below). `--body` takes JSON (unparsable → invalid-argument, at most once); `--query
-// name=value` and `--header 'Name: value'` repeat. Returns null when no flag was given, so
-// the use-case is called with exactly the 6.2 arguments.
+// name=value` and `--header 'Name: value'` repeat with distinct names (a repeated query
+// name, or a header name repeated in any case, is invalid-argument rather than silently
+// overwritten or comma-merged). A value that is itself a flag counts as missing. Returns
+// null when no flag was given, so the use-case is called with exactly the 6.2 arguments.
 function parseFireRequestFlags(flags: string[]): Result<FireRequestOptions | null> {
   if (flags.length === 0) {
     return ok(null);
@@ -304,7 +306,7 @@ function parseFireRequestFlags(flags: string[]): Result<FireRequestOptions | nul
     if (flag !== '--body' && flag !== '--query' && flag !== '--header') {
       return err('invalid-argument', `Unknown argument ${flag}. Usage: ${FIRE_REQUEST_USAGE}`);
     }
-    if (value === undefined) {
+    if (value === undefined || value.startsWith('--')) {
       return err('invalid-argument', `Missing value for ${flag}. Usage: ${FIRE_REQUEST_USAGE}`);
     }
     i += 1;
@@ -326,6 +328,9 @@ function parseFireRequestFlags(flags: string[]): Result<FireRequestOptions | nul
       if (name === '') {
         return err('invalid-argument', `--query expects name=value, got "${value}". Usage: ${FIRE_REQUEST_USAGE}`);
       }
+      if (options.query !== undefined && Object.prototype.hasOwnProperty.call(options.query, name)) {
+        return err('invalid-argument', `--query ${name} is given more than once. Usage: ${FIRE_REQUEST_USAGE}`);
+      }
       options.query = { ...(options.query ?? {}), [name]: value.slice(separator + 1) };
       continue;
     }
@@ -333,6 +338,9 @@ function parseFireRequestFlags(flags: string[]): Result<FireRequestOptions | nul
     const name = separator === -1 ? '' : value.slice(0, separator).trim();
     if (name === '') {
       return err('invalid-argument', `--header expects 'Name: value', got "${value}". Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    if (Object.keys(options.headers ?? {}).some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+      return err('invalid-argument', `--header ${name} is given more than once. Usage: ${FIRE_REQUEST_USAGE}`);
     }
     options.headers = { ...(options.headers ?? {}), [name]: value.slice(separator + 1).trim() };
   }

@@ -70,21 +70,44 @@ function stripSingleTrailingSlash(value: string): string {
   return value.length > 1 && value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
-// A templated segment (`{id}`) matches exactly one non-empty concrete segment; every
-// other segment must match literally. Segment counts must agree.
-function matchesTemplate(template: string, concrete: string): boolean {
+// A templated segment matches one non-empty concrete segment: `{id}` alone, or mixed with
+// literal text (`{name}.json`, `v{version}`); every other segment must match literally.
+// Segment counts must agree, and `.`/`..` never fill a param (URL normalization would fire
+// a different endpoint). Returns the number of param segments (specificity), or null.
+const TEMPLATE_PARAM = /\{[^/{}]+\}/g;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchTemplate(template: string, concrete: string): number | null {
   const templateSegments = template.split('/');
   const concreteSegments = concrete.split('/');
   if (templateSegments.length !== concreteSegments.length) {
-    return false;
+    return null;
   }
-  return templateSegments.every((segment, index) => {
-    const candidate = concreteSegments[index];
-    if (/^\{[^/{}]+\}$/.test(segment)) {
-      return candidate !== '';
+  let params = 0;
+  for (const [index, segment] of templateSegments.entries()) {
+    const candidate = concreteSegments[index] ?? '';
+    if (!segment.includes('{')) {
+      if (segment !== candidate) {
+        return null;
+      }
+      continue;
     }
-    return segment === candidate;
-  });
+    if (candidate === '' || candidate === '.' || candidate === '..') {
+      return null;
+    }
+    const pattern = segment
+      .split(TEMPLATE_PARAM)
+      .map(escapeRegExp)
+      .join('[^/]+');
+    if (!new RegExp(`^${pattern}$`).test(candidate)) {
+      return null;
+    }
+    params += 1;
+  }
+  return params;
 }
 
 function buildQueryString(query: Record<string, string> | undefined): string {
@@ -161,6 +184,9 @@ export async function fireRequest(
 
   const normalizedMethod = method.trim().toUpperCase();
   const normalizedPath = stripSingleTrailingSlash(path.trim());
+  if (/[?#]/.test(normalizedPath)) {
+    return err('invalid-argument', `The path must not carry a query or fragment (${normalizedPath}): pass the query separately`);
+  }
   const hasBody = options.body !== undefined;
   if (hasBody && (normalizedMethod === 'GET' || normalizedMethod === 'HEAD')) {
     return err('invalid-argument', `A ${normalizedMethod} request cannot carry a body`);
@@ -183,10 +209,18 @@ export async function fireRequest(
   }
   const sameMethod = scanned.data.filter((route) => route.method.toUpperCase() === normalizedMethod);
   const exact = sameMethod.find((route) => stripSingleTrailingSlash(route.path) === normalizedPath);
-  const templated =
-    exact === undefined
-      ? sameMethod.find((route) => matchesTemplate(stripSingleTrailingSlash(route.path), normalizedPath))
-      : undefined;
+  // Several templates may match: the most specific (fewest param segments) wins.
+  let templated: (typeof sameMethod)[number] | undefined;
+  let templatedParams = Number.POSITIVE_INFINITY;
+  if (exact === undefined) {
+    for (const route of sameMethod) {
+      const params = matchTemplate(stripSingleTrailingSlash(route.path), normalizedPath);
+      if (params !== null && params < templatedParams) {
+        templated = route;
+        templatedParams = params;
+      }
+    }
+  }
   const matched = exact ?? templated;
   if (matched === undefined) {
     return err(

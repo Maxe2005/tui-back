@@ -70,17 +70,19 @@ function rowsFor(parameters: readonly RouteParameter[], location: RouteParameter
     .map((parameter) => ({ name: parameter.name, value: exampleToText(parameter.example), required: parameter.required }));
 }
 
-// Path params = the scanner's `in: 'path'` params ∪ the path's own `{name}` segments; all
-// required (the path cannot be built without them). Query/header rows keep the scanner's
-// own `required` flag (marked, not enforced).
+// Path params = the path's own `{name}` segments, in path order, all required (the path
+// cannot be built without them), pre-filled from the scanner's matching `in: 'path'`
+// example. A scanner path param absent from the template is dropped: it could never be
+// substituted, so it must never block a fire. Query/header rows keep the scanner's own
+// `required` flag (marked, not enforced).
 export function seedRequestDraft(route: Pick<Route, 'path' | 'parameters'>): RequestDraft {
   const parameters = route.parameters ?? [];
-  const params = rowsFor(parameters, 'path').map((row) => ({ ...row, required: true }));
-  for (const name of extractPathParamNames(route.path)) {
-    if (!params.some((row) => row.name === name)) {
-      params.push({ name, value: '', required: true });
-    }
-  }
+  const declared = rowsFor(parameters, 'path');
+  const params = extractPathParamNames(route.path).map((name) => ({
+    name,
+    value: declared.find((row) => row.name === name)?.value ?? '',
+    required: true,
+  }));
   return { params, query: rowsFor(parameters, 'query'), headers: rowsFor(parameters, 'header') };
 }
 
@@ -108,8 +110,9 @@ export function substitutePathParams(path: string, params: readonly RequestRow[]
   });
 }
 
+// Same emptiness rule as the path params: a whitespace-only value counts as empty.
 function sentRows(rows: readonly RequestRow[]): Record<string, string> | undefined {
-  const sent = rows.filter((row) => row.name.trim() !== '' && row.value !== '');
+  const sent = rows.filter((row) => row.name.trim() !== '' && row.value.trim() !== '');
   if (sent.length === 0) {
     return undefined;
   }

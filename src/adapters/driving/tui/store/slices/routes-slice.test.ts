@@ -325,6 +325,45 @@ describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
 
     expect(store.getState().responses['GET /users']).toMatchObject({ status: 'fired', result: { status: 200 } });
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps a throwing port to a request-failed error instead of staying stuck in firing', async () => {
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }] as Route[])) };
+    const store = await loadedStore({ scanner });
+    scanner.scan = vi.fn(async () => {
+      throw new Error('scanner exploded');
+    });
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'request-failed' } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    scanner.scan = vi.fn(async () => ok([{ method: 'GET', path: '/users' }] as Route[]));
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+    expect(store.getState().responses['GET /users']).toMatchObject({ status: 'fired' });
+  });
+
+  it('keeps refusing a duplicate fire even after the firing entry was pruned, and shows Response', async () => {
+    let release: ((response: Response) => void) | undefined;
+    const fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const store = await loadedStore();
+    const inFlight = store.getState().fireRoute('GET /users', 'GET', '/users');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    store.setState({ responses: {}, routesPaneTab: 'request' });
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(store.getState().routesPaneTab).toBe('response');
+    release?.(new Response('ok', { status: 200 }));
+    await inFlight;
   });
 
   it('degrades to an explicit error when the scanner is unwired even with auth present, firing nothing', async () => {
@@ -383,7 +422,7 @@ describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
     expect(state.routesPaneTab).toBe('request');
   });
 
-  it('never resurrects a response that lands after a reload onto another repo', async () => {
+  it('never resurrects a response that lands after a repo switch, even one switched back (A → B → A)', async () => {
     let release: ((response: Response) => void) | undefined;
     vi.stubGlobal(
       'fetch',
@@ -409,6 +448,9 @@ describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
 
     repos.splice(0, 1, '/repos/other');
     await store.getState().loadRoutes();
+    repos.splice(0, 1, '/repos/gateway');
+    await store.getState().loadRoutes();
+    expect(store.getState().routesRepoPath).toBe('/repos/gateway');
     release?.(new Response('late', { status: 200 }));
     await inFlight;
 
@@ -441,6 +483,22 @@ describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
     // A second ensure keeps the existing draft (no reseed) and re-touches it.
     expect(store.getState().requestDrafts['GET /r-2']?.params).toEqual([]);
     expect(Object.keys(store.getState().requestDrafts).at(-1)).toBe('GET /r-2');
+  });
+
+  it('prunes responses past the 50 most-recently-fired routes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const routes = Array.from({ length: 52 }, (_, index) => ({ method: 'GET', path: `/r-${index}` }));
+    const store = await loadedStore({ scanner: { scan: vi.fn(async () => ok(routes as Route[])) } });
+
+    for (const route of routes) {
+      await store.getState().fireRoute(`GET ${route.path}`, 'GET', route.path);
+    }
+
+    const responses = store.getState().responses;
+    expect(Object.keys(responses)).toHaveLength(50);
+    expect(responses['GET /r-0']).toBeUndefined();
+    expect(responses['GET /r-1']).toBeUndefined();
+    expect(responses['GET /r-51']).toMatchObject({ status: 'fired' });
   });
 
   it('updates a request draft immutably', () => {

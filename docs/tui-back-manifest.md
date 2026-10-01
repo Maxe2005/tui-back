@@ -129,8 +129,17 @@ Définie dans
 [`src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`](../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts),
 consommée par le use-case
 [`src/core/routes/fire-request.ts`](../src/core/routes/fire-request.ts)
-(commande `tui-back fire-request <repoPath> <METHOD> <path>`, touche `Entrée`
-dans la zone Routes).
+(commande `tui-back fire-request <repoPath> <METHOD> <path> [--body <json>]
+[--query name=value]... [--header 'Name: value']...` ; dans la zone Routes,
+`Entrée` ouvre l'onglet **Request** — Params, Query, Headers, Body — et
+`Ctrl+R` tire la requête, la réponse s'affichant dans l'onglet **Response**).
+
+Côté CLI : `--body` n'accepte que du JSON (envoyé avec
+`Content-Type: application/json` sauf en-tête `content-type` explicite) et est
+refusé sur `GET`/`HEAD` ; un nom de `--query` ou de `--header` répété est
+refusé ; un en-tête `cookie` fourni est ignoré (la session d'auth prime). Le
+chemin peut être concret (`/users/42` pour la route `/users/{id}`) mais ne
+doit contenir ni `?` ni `#` — la query passe par `--query`.
 
 L'auth est une **session cookie** : le module appelle
 `GET {baseUrl}{authPath}`, stocke la valeur `Set-Cookie` et l'envoie comme

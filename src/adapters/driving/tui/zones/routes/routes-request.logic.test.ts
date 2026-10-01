@@ -31,15 +31,21 @@ const USER_ROUTE: Route = {
 };
 
 describe('seedRequestDraft (story 6.9)', () => {
-  it('seeds path params from the scanner ∪ template segments (all required) plus query/header rows', () => {
+  it('seeds path params in path order (all required, pre-filled from the scanner) plus query/header rows', () => {
     expect(seedRequestDraft(USER_ROUTE)).toEqual({
       params: [
-        { name: 'id', value: '42', required: true },
         { name: 'orgId', value: '', required: true },
+        { name: 'id', value: '42', required: true },
       ],
       query: [{ name: 'verbose', value: 'true', required: false }],
       headers: [{ name: 'X-Tenant', value: '', required: true }],
     });
+  });
+
+  it('drops a scanner path param absent from the template (it could never block a fire)', () => {
+    const draft = seedRequestDraft({ path: '/users', parameters: [{ name: 'ghost', in: 'path', required: true }] });
+    expect(draft.params).toEqual([]);
+    expect(missingRequiredParams(draft)).toEqual([]);
   });
 
   it('seeds an empty draft for a plain GET', () => {
@@ -100,6 +106,15 @@ describe('buildFireRequest (story 6.9)', () => {
     expect(buildFireRequest({ method: 'POST', path: '/x', bodyContentType: 'text/plain' }, empty, undefined).options).toEqual({});
     expect(buildFireRequest({ method: 'POST', path: '/x' }, empty, { a: 1 }).options).toEqual({});
     expect(buildFireRequest({ method: 'get', path: '/x', bodyExample: {} }, empty, { a: 1 }).options).toEqual({});
+  });
+
+  it('treats whitespace-only query/header values as empty (not sent)', () => {
+    const draft: RequestDraft = { params: [], query: [{ name: 'q', value: '  ', required: false }], headers: [{ name: 'H', value: ' ', required: false }] };
+    expect(buildFireRequest({ method: 'GET', path: '/x' }, draft, undefined).options).toEqual({});
+  });
+
+  it('substitutes params inside mixed segments', () => {
+    expect(substitutePathParams('/files/{name}.json', [{ name: 'name', value: 'a b', required: true }])).toBe('/files/a%20b.json');
   });
 
   it('leaves an unfilled template segment untouched', () => {

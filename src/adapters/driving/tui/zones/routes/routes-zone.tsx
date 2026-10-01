@@ -283,6 +283,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const editorFirstError = useMemo(() => firstEditError(editorErrors), [editorErrors]);
   const clampedEditorSelected = clampTreeSelection(editorTreeState.selected, editorRows.length);
   const clampedEditorPanelCursor = editorRuleList.length === 0 ? 0 : clampTreeSelection(panelCursor, editorRuleList.length);
+  // First-paint estimate only (the Params/Query/Headers headers + rows above the Body take
+  // roughly 8 more rows than the response view); the measured box takes over after mount.
   const bodyTotalBudget =
     bodyAreaSize !== null ? bodyAreaSize.height : Math.max(windowSize.rows - RESPONSE_AREA_CHROME_ROWS - 8, 3);
   const editorViewport = resolveTreeListBudget(bodyTotalBudget, filterPanelOpen, editorRuleList.length);
@@ -878,6 +880,22 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     setPanelCursor(0);
   }, [firedRouteKey, paneRouteKey, paneTab]);
 
+  // Open inline editors belong to one route: a pane route change (e.g. a reload that
+  // reorders the list under the cursor) drops them so nothing is confirmed into another
+  // route's draft at a stale index.
+  const previousPaneRouteKey = useRef(paneRouteKey);
+  useEffect(() => {
+    if (previousPaneRouteKey.current !== paneRouteKey) {
+      setScalarEdit(null);
+      setAddPrompt(null);
+      setRawEditor(null);
+      setRowEdit(null);
+      setRowAddPrompt(null);
+      setFireBlock(null);
+    }
+    previousPaneRouteKey.current = paneRouteKey;
+  }, [paneRouteKey]);
+
   // The pane follows its route: a reload that drops the route hands focus back to the
   // list (its drafts stay in the store under the same key).
   useEffect(() => {
@@ -935,59 +953,59 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // and Ctrl+←/P switch sub-tabs (no wrap), and each tab handles the rest.
       if (paneFocused) {
         if (editorOpen) {
-            if (rawEditor !== null) {
-              if (key.escape === true) {
-                leaveRawEditor();
-                return;
-              }
-              if (key.return === true) {
-                const cursor = Math.min(Math.max(rawEditor.input.cursor, 0), rawEditor.input.value.length);
-                const value = `${rawEditor.input.value.slice(0, cursor)}\n${rawEditor.input.value.slice(cursor)}`;
-                setRawEditor({ input: { value, cursor: cursor + 1 }, error: rawEditor.error });
-                return;
-              }
-              if (key.upArrow === true || key.downArrow === true) {
-                return;
-              }
-              setRawEditor((previous) =>
-                previous === null ? previous : { input: nextTextInputValue(previous.input, input, key), error: previous.error },
-              );
+          if (rawEditor !== null) {
+            if (key.escape === true) {
+              leaveRawEditor();
               return;
             }
-            if (scalarEdit !== null) {
-              if (key.escape === true) {
-                setScalarEdit(null);
-                return;
-              }
-              if (key.return === true) {
-                confirmScalarEdit();
-                return;
-              }
-              if (key.upArrow === true || key.downArrow === true) {
-                return;
-              }
-              setScalarEdit((previous) =>
-                previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
-              );
+            if (key.return === true) {
+              const cursor = Math.min(Math.max(rawEditor.input.cursor, 0), rawEditor.input.value.length);
+              const value = `${rawEditor.input.value.slice(0, cursor)}\n${rawEditor.input.value.slice(cursor)}`;
+              setRawEditor({ input: { value, cursor: cursor + 1 }, error: rawEditor.error });
               return;
             }
-            if (addPrompt !== null) {
-              if (key.escape === true) {
-                setAddPrompt(null);
-                return;
-              }
-              if (key.return === true) {
-                confirmAddPrompt();
-                return;
-              }
-              if (key.upArrow === true || key.downArrow === true) {
-                return;
-              }
-              setAddPrompt((previous) =>
-                previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
-              );
+            if (key.upArrow === true || key.downArrow === true) {
               return;
             }
+            setRawEditor((previous) =>
+              previous === null ? previous : { input: nextTextInputValue(previous.input, input, key), error: previous.error },
+            );
+            return;
+          }
+          if (scalarEdit !== null) {
+            if (key.escape === true) {
+              setScalarEdit(null);
+              return;
+            }
+            if (key.return === true) {
+              confirmScalarEdit();
+              return;
+            }
+            if (key.upArrow === true || key.downArrow === true) {
+              return;
+            }
+            setScalarEdit((previous) =>
+              previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
+            );
+            return;
+          }
+          if (addPrompt !== null) {
+            if (key.escape === true) {
+              setAddPrompt(null);
+              return;
+            }
+            if (key.return === true) {
+              confirmAddPrompt();
+              return;
+            }
+            if (key.upArrow === true || key.downArrow === true) {
+              return;
+            }
+            setAddPrompt((previous) =>
+              previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
+            );
+            return;
+          }
         }
         if (rowEdit !== null) {
           if (key.escape === true) {
@@ -1474,7 +1492,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               />
             ) : null}
             {focused && paneTab === 'response' ? (
-              <RoutesResponseTab response={paneResponse} areaRef={responseAreaRef}>
+              <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
                 {responseNode}
               </RoutesResponseTab>
             ) : null}

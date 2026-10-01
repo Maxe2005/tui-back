@@ -183,7 +183,11 @@ describe('RoutesZone (stories 6.2, 6.9)', () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     store.setState({ routesPaneTab: 'response' });
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('No response yet');
+    const unfocused = await renderToString(<RoutesZone useStore={store} />);
+    expect(unfocused).toContain('No response yet');
+    expect(unfocused).not.toContain('[ctrl+r]');
+    store.setState({ routesPaneFocus: 'detail' });
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[ctrl+r] fires the request');
   });
 
   it('shows the cursor route’s own response only (per route)', async () => {

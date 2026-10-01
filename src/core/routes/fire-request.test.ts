@@ -536,6 +536,39 @@ describe('fireRequest options (story 6.9)', () => {
     expect(calls[0].url).toBe('http://localhost:3000/users/42');
   });
 
+  it('matches mixed literal/param segments and prefers the most specific template', async () => {
+    const routes: Route[] = [
+      { method: 'GET', path: '/files/{name}.json' },
+      { method: 'GET', path: '/{a}/{b}' },
+      { method: 'GET', path: '/orgs/{id}' },
+    ];
+    // A fresh stub per fire: a Response body can only be read once.
+    const fire = async (path: string) => {
+      const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+      const result = await fireRequest({ manifest: manifestOk(), scanner: scannerOk(routes), auth: authOk(), fetchFn }, '/repos/gateway', 'GET', path);
+      return { result, calls };
+    };
+
+    const json = await fire('/files/report.json');
+    expect(json.result.ok).toBe(true);
+    expect(json.calls[0].url).toBe('http://localhost:3000/files/report.json');
+    // `/files/report.txt` only fits the generic `/{a}/{b}`; `/orgs/7` prefers `/orgs/{id}` (1 param) over it (2).
+    expect((await fire('/files/report.txt')).result.ok).toBe(true);
+    expect((await fire('/orgs/7')).result.ok).toBe(true);
+    expect((await fire('/a/b/c')).result).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+  });
+
+  it('never lets . or .. fill a param, and rejects a path carrying a query or fragment', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+    const deps = { manifest: manifestOk(), scanner: scannerOk(TEMPLATED_ROUTES), auth: authOk(), fetchFn };
+
+    expect(await fireRequest(deps, '/repos/gateway', 'GET', '/users/..')).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+    expect(await fireRequest(deps, '/repos/gateway', 'GET', '/users/.')).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+    expect(await fireRequest(deps, '/repos/gateway', 'GET', '/users/1?x=2')).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await fireRequest(deps, '/repos/gateway', 'GET', '/users/1#top')).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(calls).toEqual([]);
+  });
+
   it('prefers an exact route over a template, and rejects a segment-count mismatch or an empty segment', async () => {
     const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
     const deps = { manifest: manifestOk(), scanner: scannerOk(TEMPLATED_ROUTES), auth: authOk(), fetchFn };

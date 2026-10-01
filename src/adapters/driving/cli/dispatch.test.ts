@@ -299,7 +299,9 @@ describe('subcommand registry guards', () => {
     const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
     if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
 
-    expect(fireRequestCmd.usage).toMatch(/^tui-back fire-request <repoPath> <METHOD> <path>/);
+    expect(fireRequestCmd.usage).toBe(
+      "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']...",
+    );
 
     const missing = await fireRequestCmd.run([]);
     expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
@@ -329,6 +331,9 @@ describe('subcommand registry guards', () => {
       ['/a', 'GET', '/x', '--header', 'NoColon'],
       ['/a', 'GET', '/x', '--bogus', 'v'],
       ['/a', '--body', '{}'],
+      ['/a', 'GET', '/x', '--header', '--body'],
+      ['/a', 'GET', '/x', '--query', 'q=1', '--query', 'q=2'],
+      ['/a', 'GET', '/x', '--header', 'X-A: 1', '--header', 'x-a: 2'],
     ]) {
       const rejected = await fireRequestCmd.run(args);
       expect(rejected).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
@@ -339,6 +344,35 @@ describe('subcommand registry guards', () => {
       '/repos/gateway', 'POST', '/users', '--body', '{"a":1}', '--query', 'q=a=b', '--header', 'X-Trace: t1',
     ]);
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+
+  it('fire-request (story 6.9) sends the parsed flags as the request body, query and headers', async () => {
+    const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'POST', path: '/users/{id}' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+      });
+      const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+      if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+      const result = await fireRequestCmd.run([
+        '/repos/gateway', 'POST', '/users/7', '--body', '{"a":1}', '--query', 'q=a=b', '--header', 'X-Trace:  t1 ',
+      ]);
+
+      expect(result).toMatchObject({ ok: true, data: { status: 200 } });
+      const [url, init] = fetch.mock.calls[0] ?? [];
+      expect(url).toBe('http://localhost:3000/users/7?q=a%3Db');
+      expect(init?.body).toBe('{"a":1}');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-trace')).toBe('t1');
+      expect(headers.get('content-type')).toBe('application/json');
+      expect(headers.get('cookie')).toBe('sid=abc');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {

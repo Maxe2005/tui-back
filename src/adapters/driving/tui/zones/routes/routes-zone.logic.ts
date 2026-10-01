@@ -4,6 +4,7 @@
 // unit-tested directly; the `useInput` callback in the component stays a thin dispatcher.
 import type { Route } from '../../../../../core/ports/route-scanner.js';
 import type { FireResult } from '../../../../../core/routes/fire-request.js';
+import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../shared/components/json-tree/model.js';
 import { formatByteSize } from './routes-request.logic.js';
 
 export type RoutesSelectionDirection = 'up' | 'down';
@@ -64,9 +65,11 @@ export function formatFireResult(result: FireResult): string {
 
 // Story 6.7: the Response header keeps the status line while the body dump moves into
 // the JsonTree (DetailPane's single-<Text> constraint forbids nesting the tree inside).
-// Story 6.9 adds the body size.
+// Story 6.9 adds the body size — `≥` when the body hit core's 64K-character cap, since
+// the real response was larger than what was kept.
 export function formatFireStatus(result: FireResult): string {
-  return `${result.status} · ${result.durationMs}ms · ${formatByteSize(result.body)}`;
+  const capped = result.body.length >= MAX_FIRE_BODY_CHARS;
+  return `${result.status} · ${result.durationMs}ms · ${capped ? '≥' : ''}${formatByteSize(result.body)}`;
 }
 
 // Story 6.2: auth failures render distinctly from generic failures so a permission

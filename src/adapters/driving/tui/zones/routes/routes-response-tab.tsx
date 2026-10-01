@@ -12,15 +12,18 @@ import { formatFireError, formatFireStatus } from './routes-zone.logic.js';
 
 export function RoutesResponseTab({
   response,
+  focused,
   areaRef,
   children,
 }: {
   response: RouteResponse | undefined;
+  // Ctrl+R only works from the focused pane (UX-DR7: never hint an inert key).
+  focused: boolean;
   areaRef: { current: DOMElement | null };
   children: ReactNode;
 }) {
   if (response === undefined) {
-    return <Text color={colors['text-dim']}>No response yet — [ctrl+r] fires the request.</Text>;
+    return <Text color={colors['text-dim']}>{focused ? 'No response yet — [ctrl+r] fires the request.' : 'No response yet.'}</Text>;
   }
   if (response.status === 'firing') {
     return (

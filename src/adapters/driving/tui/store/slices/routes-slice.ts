@@ -112,10 +112,8 @@ function hasDraft(drafts: Record<string, unknown>, routeKey: string): boolean {
   return Object.prototype.hasOwnProperty.call(drafts, routeKey);
 }
 
-// Joint touch for story 6.8 drafts + error maps: both re-insert the route key (recency),
-// drafts prune to MAX_BODY_DRAFTS, and error maps without a surviving draft drop — the
-// two maps never drift apart. A null `nextErrors` keeps the route's existing map.
-// Touch = delete + re-insert (Record insertion order = recency), then prune past the cap.
+// Touch = delete + re-insert (Record insertion order = recency), then prune past the cap
+// (`pruneBodyDrafts` is the generic most-recent-N pruner, despite its 6.8 name).
 function touchEntry<T>(entries: Record<string, T>, routeKey: string, value: T, limit: number): Record<string, T> {
   const touched: Record<string, T> = { ...entries };
   delete touched[routeKey];
@@ -123,6 +121,9 @@ function touchEntry<T>(entries: Record<string, T>, routeKey: string, value: T, l
   return pruneBodyDrafts(touched, limit);
 }
 
+// Joint touch for story 6.8 drafts + error maps: both re-insert the route key (recency),
+// drafts prune to MAX_BODY_DRAFTS, and error maps without a surviving draft drop — the
+// two maps never drift apart. A null `nextErrors` keeps the route's existing map.
 function touchBodyDraftEntries(
   drafts: Record<string, unknown>,
   errors: Record<string, Record<string, BodyEditError>>,
@@ -145,7 +146,17 @@ function touchBodyDraftEntries(
   return { bodyDrafts: prunedDrafts, bodyEditErrors: aligned };
 }
 
+function reasonOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], RoutesSlice> {
+  // Story 6.9: in-flight fires are tracked apart from the pruned `responses` map (a pruned
+  // `firing` entry must never re-open the door to a duplicate fire), and every reload onto
+  // another repo bumps a generation so a late outcome from before it — even after a
+  // switch back to the same repo — never lands in the fresh maps.
+  const inFlight = new Set<string>();
+  let repoGeneration = 0;
   return (set, get) => ({
     routesRepoPath: null,
     routes: null,
@@ -272,6 +283,9 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         // way (keyed, harmless; a re-fire re-applies them).
         const previousRepoPath = get().routesRepoPath;
         const repoChanged = previousRepoPath !== null && resolve(previousRepoPath) !== resolve(target.path);
+        if (repoChanged) {
+          repoGeneration += 1;
+        }
         set({
           routesRepoPath: target.path,
           routes: result.data.routes,
@@ -307,10 +321,11 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       const record = (response: RouteResponse) =>
         set((state) => ({ responses: touchEntry(state.responses, routeKey, response, MAX_ROUTE_RESPONSES) }));
       const fail = (code: string, message: string) => record({ status: 'error', error: { code, message } });
-      if (get().responses[routeKey]?.status === 'firing') {
+      // The pane shows Response even for a dropped duplicate, so Ctrl+R always answers.
+      set({ routesPaneTab: 'response' });
+      if (inFlight.has(routeKey)) {
         return;
       }
-      set({ routesPaneTab: 'response' });
       if (!deps) {
         fail('store-not-wired', NO_DEPS_ERROR);
         return;
@@ -329,17 +344,27 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         return;
       }
       record({ status: 'firing' });
+      inFlight.add(routeKey);
+      const generation = repoGeneration;
 
-      const result = await fireRequest(
-        { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
-        repoPath,
-        method,
-        path,
-        ...(options === undefined ? [] : [options]),
-      );
+      let result: Awaited<ReturnType<typeof fireRequest>>;
+      try {
+        result = await fireRequest(
+          { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
+          repoPath,
+          method,
+          path,
+          ...(options === undefined ? [] : [options]),
+        );
+      } catch (error) {
+        // A throwing port must never leave the route stuck in `firing`.
+        result = { ok: false, error: { code: 'request-failed', message: `Request failed for ${method} ${path}: ${reasonOf(error)}` } };
+      } finally {
+        inFlight.delete(routeKey);
+      }
       // A reload onto another repo while in flight dropped this route's entry — the late
       // outcome belongs to the old route list and must not resurrect it.
-      if (get().routesRepoPath !== repoPath) {
+      if (repoGeneration !== generation) {
         return;
       }
       if (result.ok) {

@@ -288,7 +288,10 @@ export function AppShell({
     // flows) sets zoneInputCaptured while it owns the keystroke — every global shortcut,
     // including `?` help, must not fire while it's set, the same way it's already gated
     // for the zone-mnemonic/filter/command dispatch below.
-    if (state.zoneInputCaptured) {
+    // Story 6.9: the focused Routes right pane counts as captured straight from the store —
+    // the zone's own zoneInputCaptured effect lands one render later, and a keypress in
+    // between must not switch zones (or quit) mid-edit.
+    if (state.zoneInputCaptured || (state.activeZone === 'routes' && state.routesPaneFocus === 'detail')) {
       return;
     }
 
