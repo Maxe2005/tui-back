@@ -415,3 +415,135 @@ describe('fireRequest (story 6.2 I/O matrix)', () => {
     expect(load).not.toHaveBeenCalled();
   });
 });
+
+// Story 6.9: the request workbench's optional trailing options (body/query/headers) and
+// the concrete-path-against-template route match. A separate recording stub keeps the
+// 6.2 `stubFetch` (and its exact `calls` assertions above) untouched.
+function recordingFetch(response: Response): {
+  fetchFn: typeof fetch;
+  calls: Array<{ url: string; method: string; headers: Headers; body: unknown }>;
+} {
+  const calls: Array<{ url: string; method: string; headers: Headers; body: unknown }> = [];
+  const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    calls.push({ url, method: init?.method ?? 'GET', headers: new Headers(init?.headers), body: init?.body });
+    return response;
+  }) as typeof fetch;
+  return { fetchFn, calls };
+}
+
+const TEMPLATED_ROUTES: Route[] = [
+  { method: 'GET', path: '/users/{id}' },
+  { method: 'GET', path: '/users/me' },
+  { method: 'PATCH', path: '/users/{id}' },
+  { method: 'GET', path: '/health' },
+];
+
+describe('fireRequest options (story 6.9)', () => {
+  it('serializes a JSON body with an inferred application/json content type', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(201, 'ok'));
+
+    const result = await fireRequest(
+      { manifest: manifestOk(), scanner: scannerOk(), auth: authOk('sid=abc'), fetchFn },
+      '/repos/gateway',
+      'POST',
+      '/api/orders',
+      { body: { qty: 2, tags: ['a'] } },
+    );
+
+    expect(result).toMatchObject({ ok: true, data: { status: 201 } });
+    expect(calls[0].body).toBe('{"qty":2,"tags":["a"]}');
+    expect(calls[0].headers.get('content-type')).toBe('application/json');
+    expect(calls[0].headers.get('cookie')).toBe('sid=abc');
+  });
+
+  it('keeps a caller content-type header instead of inferring one', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+
+    await fireRequest(
+      { manifest: manifestOk(), scanner: scannerOk(), auth: authOk(), fetchFn },
+      '/repos/gateway',
+      'POST',
+      '/api/orders',
+      { body: { a: 1 }, headers: { 'content-type': 'application/merge-patch+json' } },
+    );
+
+    expect(calls[0].headers.get('content-type')).toBe('application/merge-patch+json');
+  });
+
+  it('rejects a body on GET/HEAD with invalid-argument before any network call', async () => {
+    for (const method of ['GET', 'head']) {
+      const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+      const getSession = vi.fn(async () => ok({ cookie: 'sid=abc' }));
+
+      const result = await fireRequest(
+        { manifest: manifestOk(), scanner: scannerOk([{ method: 'GET', path: '/api/orders' }, { method: 'HEAD', path: '/api/orders' }]), auth: fakeAuth(getSession), fetchFn },
+        '/repos/gateway',
+        method,
+        '/api/orders',
+        { body: { a: 1 } },
+      );
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(calls).toEqual([]);
+      expect(getSession).not.toHaveBeenCalled();
+    }
+  });
+
+  it('drops a caller cookie header (any case): the auth session cookie always wins and is never leaked', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+
+    await fireRequest(
+      { manifest: manifestOk(), scanner: scannerOk(), auth: authOk('sid=real'), fetchFn },
+      '/repos/gateway',
+      'GET',
+      '/api/orders',
+      { headers: { COOKIE: 'sid=forged', 'X-Trace': 't1' } },
+    );
+
+    expect(calls[0].headers.get('cookie')).toBe('sid=real');
+    expect(calls[0].headers.get('x-trace')).toBe('t1');
+  });
+
+  it('appends the query URL-encoded and sends no body/content-type without a body', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+
+    await fireRequest(
+      { manifest: manifestOk(), scanner: scannerOk(), auth: authOk(), fetchFn },
+      '/repos/gateway',
+      'GET',
+      '/api/orders',
+      { query: { q: 'a b&c', page: '2' } },
+    );
+
+    expect(calls[0].url).toBe('http://localhost:3000/api/orders?q=a+b%26c&page=2');
+    expect(calls[0].body).toBeUndefined();
+    expect(calls[0].headers.get('content-type')).toBeNull();
+  });
+
+  it('fires a concrete path against a templated route', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+
+    const result = await fireRequest(
+      { manifest: manifestOk(), scanner: scannerOk(TEMPLATED_ROUTES), auth: authOk(), fetchFn },
+      '/repos/gateway',
+      'PATCH',
+      '/users/42',
+      { body: { name: 'x' } },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls[0].url).toBe('http://localhost:3000/users/42');
+  });
+
+  it('prefers an exact route over a template, and rejects a segment-count mismatch or an empty segment', async () => {
+    const { fetchFn, calls } = recordingFetch(jsonResponse(200, 'ok'));
+    const deps = { manifest: manifestOk(), scanner: scannerOk(TEMPLATED_ROUTES), auth: authOk(), fetchFn };
+
+    expect((await fireRequest(deps, '/repos/gateway', 'GET', '/users/me')).ok).toBe(true);
+    expect(calls[0].url).toBe('http://localhost:3000/users/me');
+    expect(await fireRequest(deps, '/repos/gateway', 'GET', '/users/42/extra')).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+    expect(await fireRequest(deps, '/repos/gateway', 'GET', '/users//')).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+    expect(await fireRequest(deps, '/repos/gateway', 'POST', '/users/42')).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+  });
+});
