@@ -1,6 +1,6 @@
-// core/scripts/clean-registry: unit tests against fake ports (AD-13) — every I/O-matrix row
-// of story 2.33: unreachable, manifest-not-found, other-manifest-error-left-alone, EDT-member
-// note, zero-candidates, per-path removal isolation, and no-op removal of an unregistered path.
+// core/scripts/clean-registry: unit tests against fake ports — unreachable, manifest-not-found,
+// other-manifest-error-left-alone, EDT-member note, zero-candidates, per-path removal
+// isolation, and no-op removal of an unregistered path.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
@@ -103,7 +103,7 @@ describe('classifyStaleRegistry', () => {
     expect(result).toEqual({ ok: true, data: { candidates: [], errors: [] } });
   });
 
-  it('leaves a path with a manifest-load error other than manifest-not-found alone (Story 2.28 territory)', async () => {
+  it('leaves a path with a manifest-load error other than manifest-not-found alone', async () => {
     const registry = fakeRegistry(['/repo/bad-manifest']);
     const manifest = fakeManifest({ '/repo/bad-manifest': err('unknown-module', 'unknown module id') });
     const edtRegistry = fakeEdtRegistry();
@@ -180,7 +180,7 @@ describe('classifyStaleRegistry', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-read-error' } });
   });
 
-  it('reports a registry.exists() error in `errors`, never silently drops it and never treats it as evidence of staleness (review fix)', async () => {
+  it('reports a registry.exists() error in `errors`, never silently drops it and never treats it as evidence of staleness', async () => {
     const registry = fakeRegistry(['/repo/unknown'], {
       exists: vi.fn(async () => err('registry-stat-error', 'permission denied')),
     });

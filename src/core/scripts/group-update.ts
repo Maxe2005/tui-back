@@ -1,29 +1,8 @@
-// core/scripts/group-update: the group-update use-case (story 3.1). Brings every member
-// service of the active EDT up to date with its manifest sharedBranch and restarts its
-// container, reporting one per-service row (`updated`/`skipped`/`failed`) — none silently
-// absent. Mirrors core/edt/switch.ts's per-repo isolation: one repo's failure is a `failed`
-// (or `skipped`) row, never aborts the others. Merge means `git merge`, never rebase; a
-// second run with no intervening change is a safe no-op (idempotent rerun).
-//
-// Lock nesting order: the global `group-update` key first (cross-scope rejection, story 3.3
-// included — a second trigger serializes on it), then `edt:<ulid>` (the switch-block
-// precedent story 2.4 reserves: a switch away peeks this key). A lock-contention failure
-// (`action-in-progress`) surfaces as `update-already-running`, never the raw lock code.
-//
-// Per-repo flow: `currentBranch` must equal the member's recorded branch (anything else
-// is an `unexpected-branch` failure with no git write, no migration, and no restart) →
-// pre-existing mid-merge/mid-rebase surfaces as its own distinct `skipped` state (never
-// aborted) → dirty check (lockfile-only dirt silently discarded per the `update_repo.sh`
-// convention, other dirt `skipped` without a seam) → equals `sharedBranch` ? `pull` :
-// (`fetch` shared branch, `assertAllowedBranch` on the member branch, `mergeBranch`); on
-// a `merge-conflict` (or a conflicting pull that leaves the repo mid-merge) without a
-// seam, `git merge --abort` restores the pre-run HEAD (abort cancels only the attempted
-// merge, never developer work). Story 3.4: with the `onUpdateBlocker` seam, dirty and
-// conflict states pause on a driving-provided four-choice menu (stash / edited /
-// cancel-repo / cancel-run) with re-verification before resuming, abort-only-own-merge,
-// and an unbounded, counted retry loop on conflicts (only cancel exits). Story 3.2 inserts the migrate phase next (the
-// manifest's `migrationCommand`, skipped without error when undeclared; a failure is a
-// `migration-failed` row with no restart) → `container.restart`.
+// core/scripts/group-update: brings every member service of the active EDT (or every repo, in
+// all-repos scope) up to date with its merge source, runs its migration and restarts it — one
+// `updated`/`skipped`/`failed` row per service, none silently absent, one failure never
+// aborting the others. Merge means `git merge`, never rebase; a rerun with no change is a
+// no-op. Lock order: global `group-update` key, then `edt:<ulid>` (which switch peeks).
 import { basename, resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
@@ -37,15 +16,15 @@ import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
 
-// The global run-in-flight key: every group-update trigger (EDT-scoped today, all-repos in
-// story 3.3) serializes on it, so a second trigger is rejected, never queued or raced.
+// The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)
+// serializes on it, so a second trigger is rejected, never queued or raced.
 export const GROUP_UPDATE_LOCK_KEY = 'group-update';
 
 export function edtUpdateLockKey(ulid: string): string {
   return `edt:${ulid}`;
 }
 
-// Story 3.7: matches one enumerated target against the confirmed selection. A selection
+// Matches one enumerated target against the confirmed selection. A selection
 // item carrying `repoPath` matches by resolved path (duplicate service names in one EDT);
 // otherwise it matches by service name. First match wins.
 function matchSelectionItem(
@@ -57,7 +36,7 @@ function matchSelectionItem(
   );
 }
 
-// Story 3.7: the configured merge source for one service — a non-blank per-service
+// The configured merge source for one service — a non-blank per-service
 // `sourceBranch` override wins, otherwise the manifest `sharedBranch`. The override is
 // trimmed once here so `" release/1 "` resolves exactly like `release/1` everywhere
 // (validation, fetch, merge) instead of failing the branch check on padding.
@@ -66,7 +45,7 @@ function effectiveSourceBranch(sharedBranch: string, override: string | undefine
   return trimmed !== '' ? trimmed : sharedBranch;
 }
 
-// Story 3.7: validates every custom `sourceBranch` against the local branch listing
+// Validates every custom `sourceBranch` against the local branch listing
 // (`branchExistsLocally`, the `git rev-parse --verify`-backed adapter — no new git
 // machinery) before any lock is taken, so an unresolvable branch rejects the run before
 // any git/docker action. A failing check itself is an unexpected git failure and rejects
@@ -111,7 +90,7 @@ export interface GroupUpdateData {
 
 export type GroupUpdateScope = 'edt' | 'all';
 
-// Story 3.7: one pre-run configuration row. `repoPath` disambiguates duplicate service
+// One pre-run configuration row. `repoPath` disambiguates duplicate service
 // names (the EDT dedupe precedent); `sourceBranch` overrides the manifest `sharedBranch`
 // as this service's merge source (blank/undefined falls back to `sharedBranch`).
 export interface GroupUpdateSelectionItem {
@@ -131,32 +110,30 @@ export interface GroupUpdateParams {
   lock: LockPort;
   registry?: RegistryPort;
   scope?: GroupUpdateScope;
-  // Story 3.7: the pre-run configuration. `selection` filters the enumerated targets down
-  // to exactly the confirmed set — a deselected service is excluded entirely (never
-  // touched, never reported). Undefined means the full default selection (every enumerated
-  // target); an empty array is an explicit `no-services-selected` rejection before any
-  // lock is taken. `runMigrations` defaults to true (the migrate toggle ON); `cleanRestart`
-  // defaults to false — on it runs the manifest's `restartCommands` recipe in order when
-  // declared (story 3.8), falling back to today's plain container restart when absent.
+  // The pre-run configuration. `selection` filters the enumerated targets down to exactly the
+  // confirmed set — a deselected service is excluded entirely (never touched, never
+  // reported). Undefined means every enumerated target; an empty array is an explicit
+  // `no-services-selected` rejection before any lock is taken. `runMigrations` defaults to
+  // true; `cleanRestart` defaults to false — on, it runs the manifest's `restartCommands`
+  // recipe in order when declared, falling back to the plain container restart.
   selection?: GroupUpdateSelectionItem[];
   runMigrations?: boolean;
   cleanRestart?: boolean;
-  // Story 3.4: the assisted-resolution seam. Absent by default (the CLI path passes no
-  // seam, keeping today's skip/abort rows); the TUI backs it with a bounded modal menu.
-  // Core owns classification, auto-fix, stash, re-verification, and merge finalization —
-  // the driving side owns only menu rendering and the editor process (core only ever sees
-  // the `edited` choice, never an editor).
+  // The assisted-resolution seam. Absent on the CLI path (dirty/conflict repos are skipped or
+  // aborted); the TUI backs it with a bounded modal menu. Core owns classification, auto-fix,
+  // stash, re-verification and merge finalization — the driving side owns only the menu and
+  // the editor process (core only ever sees the `edited` choice).
   onUpdateBlocker?: OnUpdateBlocker;
-  // Story 3.10: the live per-service step observer. Absent by default (the CLI path
-  // passes no observer); the TUI store backs it with its live phase map. Emitted at
-  // phase boundaries (pulling/merging → migrating → restarting), never allowed to throw
-  // into the pipeline — a throwing observer is swallowed per emission.
+  // The live per-service step observer. Absent on the CLI path; the TUI store backs it with
+  // its live phase map. Emitted at phase boundaries (pulling/merging → migrating →
+  // restarting), never allowed to throw into the pipeline — a throwing observer is swallowed
+  // per emission.
   onPhase?: OnUpdatePhase;
 }
 
-// Story 3.4: the resolution seam shape (Design Notes). `kind` distinguishes a dirty
-// worktree from a mid-run conflict from a pre-existing mid-merge/mid-rebase (surfaced
-// before any menu); the driving side answers with one of four bounded choices.
+// The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
+// from a pre-existing mid-merge/mid-rebase (surfaced before any menu); the driving side
+// answers with one of four bounded choices.
 export type UpdateBlockerKind = 'dirty-worktree' | 'merge-conflict' | 'mid-merge' | 'mid-rebase';
 
 export interface UpdateBlocker {
@@ -174,17 +151,15 @@ export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-r
 
 export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerChoice>;
 
-// Story 3.10: the live per-service step vocabulary (the I/O matrix's current-step set).
-// Mirrors the `onUpdateBlocker` seam shape rather than inventing an event bus: one
-// optional callback, set by the store, no-op by default.
+// The live per-service step vocabulary. One optional callback, set by the store, no-op by
+// default — no event bus.
 export type UpdatePhase = 'pulling' | 'merging' | 'migrating' | 'restarting';
 
 export type OnUpdatePhase = (service: string, phase: UpdatePhase) => void;
 
-// Story 3.10: a driving-side phase observer must never break the pipeline — a throwing
-// observer (a driving-side bug) is swallowed per emission so one repo's live view never
-// strands the others' rows (the story 3.4 `askSeam` precedent, sync variant). A
-// misbehaving observer that returns a rejected promise past the `void` contract is
+// A driving-side phase observer must never break the pipeline — a throwing observer (a
+// driving-side bug) is swallowed per emission so one repo's live view never strands the
+// others' rows. An observer that returns a rejected promise despite its `void` contract is
 // sunk the same way, so it never surfaces as an unhandled rejection.
 function emitPhase(onPhase: OnUpdatePhase | undefined, service: string, phase: UpdatePhase): void {
   if (onPhase === undefined) {
@@ -202,13 +177,12 @@ function emitPhase(onPhase: OnUpdatePhase | undefined, service: string, phase: U
   }
 }
 
-// Story 3.2, shared with the driving layer (review hardening, story 3.10): the
-// normalized row-detail code for a failed migration — a named export instead of a
-// magic string, so the TUI's live issue log cannot drift from core's contract.
+// The normalized row-detail code for a failed migration — a named export instead of a magic
+// string, so the TUI's live issue log cannot drift from core's contract.
 export const MIGRATION_FAILED_CODE = 'migration-failed';
 
-// Story 3.4: lockfile-only dirt (the `update_repo.sh` convention) is silently discarded,
-// everything else pauses on the seam. Basename-matched at any depth ("any scope").
+// Lockfile-only dirt (the `update_repo.sh` convention) is silently discarded, everything else
+// pauses on the seam. Basename-matched at any depth.
 const LOCKFILE_BASENAMES: readonly string[] = [
   'package.json',
   'package-lock.json',
@@ -226,8 +200,8 @@ function isLockfileOnly(paths: readonly string[]): boolean {
   );
 }
 
-// Story 3.4: the message tag for seam-driven stashes (message-tagged, not stack-position —
-// the switch.ts precedent — safe alongside the developer's own unrelated stashes).
+// The message tag for seam-driven stashes (message-tagged, not stack-position — safe alongside
+// the developer's own unrelated stashes).
 const UPDATE_STASH_MESSAGE = 'tui-back:update';
 
 export async function groupUpdate(params: GroupUpdateParams): Promise<Result<GroupUpdateData>> {
@@ -277,11 +251,11 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
     });
   }
 
-  // Story 3.7: narrow the enumerated paths down to the confirmed selection before any
-  // lock is taken — deselected services are excluded entirely (never touched, never
-  // reported). Reads only (manifest loads for service-name matching, local branch
-  // checks); no git write, no migration, no restart below this point runs for an
-  // excluded service — or at all when the selection rejects the run outright.
+  // Narrow the enumerated paths down to the confirmed selection before any lock is taken —
+  // deselected services are excluded entirely (never touched, never reported). Reads only
+  // (manifest loads for service-name matching, local branch checks); no git write, no
+  // migration, no restart below this point runs for an excluded service — or at all when the
+  // selection rejects the run outright.
   let targets: { repoPath: string; sourceBranch: string | undefined }[] = paths.map((repoPath) => ({
     repoPath,
     sourceBranch: undefined,
@@ -317,8 +291,8 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         results.push(failed(serviceFallback(repoPath), loaded.error));
         continue;
       }
-      // Story 3.4: `cancel-run` stops the loop but still returns `ok` with rows so far
-      // (a cancelled repo is `skipped`, never `failed`).
+      // `cancel-run` stops the loop but still returns `ok` with rows so far (a cancelled repo
+      // is `skipped`, never `failed`).
       const outcome = await updateWithLoadedManifest(
         loaded.data,
         git,
@@ -366,7 +340,7 @@ function serviceFallback(repoPath: string): string {
   return base !== '' ? base : repoPath;
 }
 
-// Story 3.7: narrows all-repos enumeration to the confirmed selection. Items carrying
+// Narrows all-repos enumeration to the confirmed selection. Items carrying
 // `repoPath` match by resolved path; the rest match by loaded manifest service (an
 // unloadable manifest falls back to the path-basename service, the same label the run
 // loop would report its failure under, so a genuine load error still surfaces as a
@@ -432,10 +406,10 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
     });
   }
 
-  // Story 3.7: narrow the EDT members down to the confirmed selection before any lock
-  // is taken — deselected services are excluded entirely (never touched, never
-  // reported). Reads only (a local branch check per custom sourceBranch); the
-  // unexpected-branch gate and assertAllowedBranch gating below are unchanged.
+  // Narrow the EDT members down to the confirmed selection before any lock is taken —
+  // deselected services are excluded entirely (never touched, never reported). Reads only (a
+  // local branch check per custom sourceBranch); the unexpected-branch gate and
+  // assertAllowedBranch gating below still apply.
   let configured: { member: (typeof active.members)[number]; sourceBranch: string | undefined }[] | null = null;
   if (selection !== undefined) {
     if (selection.length === 0) {
@@ -489,7 +463,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
       });
       const results: GroupUpdateRepoResult[] = [];
       for (const { member, sourceBranch } of enlisted) {
-        // Story 3.4: `cancel-run` stops the loop but still returns `ok` with rows so far.
+        // `cancel-run` stops the loop but still returns `ok` with rows so far.
         const outcome = await updateMember(
           manifest,
           git,
@@ -543,13 +517,12 @@ export async function markGroupUpdateInterrupted(
   return edtRegistry.setStatus(ulid, 'interrupted');
 }
 
-// Story 3.9: the shared restart step — the story 3.8 recipe-vs-plain branch extracted so
-// `updateWithLoadedManifest` and the standalone single-service use-case both call it.
-// Recipe (cleanRestart on + non-empty `restartCommands`): each command runs in the repo's
-// working directory in declared order via the restart port, stopping on the first failure
-// (normalized to a `restart-failed` detail naming the repo, the command, and the error
-// output). Otherwise today's plain container restart runs untouched — never both ports
-// for the same service in the same action.
+// The shared restart step, called by `updateWithLoadedManifest` and the standalone
+// single-service use-case. Recipe (cleanRestart on + non-empty `restartCommands`): each
+// command runs in the repo's working directory in declared order via the restart port,
+// stopping on the first failure (normalized to a `restart-failed` detail naming the repo, the
+// command, and the error output). Otherwise the plain container restart runs — never both
+// ports for the same service in the same action.
 export interface RestartStepInput {
   container: ContainerPort;
   restart: RestartPort;
@@ -557,10 +530,10 @@ export interface RestartStepInput {
   restartCommands: string[] | undefined;
   repoPath: string;
   cleanRestart: boolean;
-  // Story 3.10: the service label the phase observer reports under, plus the observer
-  // itself — emitted once at the restart boundary so both the group and the standalone
-  // paths share the same `restarting` signal (mid-recipe stop still reports the failure
-  // below, never a second phase).
+  // The service label the phase observer reports under, plus the observer itself — emitted
+  // once at the restart boundary so the group and standalone paths share the same
+  // `restarting` signal (a mid-recipe stop still reports the failure below, never a second
+  // phase).
   service: string;
   onPhase?: OnUpdatePhase;
 }
@@ -635,7 +608,7 @@ async function updateMember(
   );
 }
 
-// Story 3.4: the per-repo outcome plus the `cancel-run` loop-stop signal. The cancelled
+// The per-repo outcome plus the `cancel-run` loop-stop signal. The cancelled
 // repo itself is always a `skipped` row, never `failed` — the outer loops push the row
 // and break, still returning `ok` with rows so far.
 interface RepoOutcome {
@@ -651,23 +624,18 @@ function failedOutcome(service: string, error: ResultError): RepoOutcome {
   return { row: failed(service, error), cancelRun: false };
 }
 
-// Shared per-service flow for both scopes (story 3.3 reuses the EDT mechanic unchanged):
-// pull/merge → migrate → restart. The EDT scope passes its recorded `branch` plus its ulid
-// (unexpected-branch gate + gated write); the all-repos scope passes neither, operating on
-// `currentBranch` as-is (`==sourceBranch` → `pull`, else `fetch` + ungated
-// `assertAllowedBranch` + `mergeBranch`). Story 3.7: `sourceBranch` is the configured merge
-// source (manifest `sharedBranch` unless a per-service override was confirmed); the migrate
-// phase runs only when `runMigrations` is on; story 3.8: `cleanRestart` runs the
-// manifest's `restartCommands` recipe in order when declared, else today's plain
-// container restart.
+// Shared per-service flow for both scopes: pull/merge → migrate → restart. The EDT scope
+// passes its recorded `branch` plus its ulid (unexpected-branch gate + gated write); the
+// all-repos scope passes neither, operating on `currentBranch` as-is (`==sourceBranch` →
+// `pull`, else `fetch` + ungated `assertAllowedBranch` + `mergeBranch`). The migrate phase runs
+// only when `runMigrations` is on; `cleanRestart` runs the `restartCommands` recipe when
+// declared.
 //
-// Story 3.4 layers assisted resolution onto this flow: lockfile-only dirt is silently
-// discarded (the `update_repo.sh` convention, seam or not); a pre-existing
-// mid-merge/mid-rebase surfaces as its own distinct state before any menu (never aborted
-// by any choice); any other dirty worktree or mid-run conflict pauses on the
-// `onUpdateBlocker` seam when present (absent seam preserves today's skip/abort rows).
-// Every resumed repo is re-verified before continuing; one repo's resolution never touches
-// another repo.
+// Assisted resolution: lockfile-only dirt is silently discarded (seam or not); a pre-existing
+// mid-merge/mid-rebase surfaces as its own state before any menu and is never aborted; any
+// other dirty worktree or mid-run conflict pauses on the `onUpdateBlocker` seam when present
+// (without it, the repo is skipped or its merge aborted). Every resumed repo is re-verified
+// before continuing; one repo's resolution never touches another repo.
 async function updateWithLoadedManifest(
   loaded: Manifest,
   git: GitPort,
@@ -685,10 +653,9 @@ async function updateWithLoadedManifest(
   onPhase?: OnUpdatePhase,
 ): Promise<RepoOutcome> {
   const { container: containerName, migrationCommand, restartCommands } = loaded;
-  // Story 3.7: the configured merge source — the manifest `sharedBranch` unless the
-  // pre-run screen confirmed a per-service override (trimmed once inside
-  // `effectiveSourceBranch`, so padding never reaches fetch/merge). Merge stays
-  // `git merge`, never rebase.
+  // The configured merge source — the manifest `sharedBranch` unless the pre-run screen
+  // confirmed a per-service override (trimmed once inside `effectiveSourceBranch`, so padding
+  // never reaches fetch/merge). Merge stays `git merge`, never rebase.
   const mergeSource = effectiveSourceBranch(loaded.sharedBranch, sourceBranch);
 
   const current = await git.currentBranch(repoPath);
@@ -713,10 +680,10 @@ async function updateWithLoadedManifest(
     };
   }
 
-  // Story 3.4 — pre-existing mid-merge/mid-rebase is detected as its own distinct case
-  // before the dirty gate and before any pull/merge of this run. Core aborts only merges
-  // the current run started — this state is never aborted, only reported (seam or not)
-  // with the menu applying after the report.
+  // A pre-existing mid-merge/mid-rebase is detected as its own case before the dirty gate and
+  // before any pull/merge of this run. Core aborts only merges the current run started — this
+  // state is never aborted, only reported (seam or not), with the menu applying after the
+  // report.
   const settledPreexisting = await settlePreexistingMidState(service, repoPath, git, onUpdateBlocker);
   if (!settledPreexisting.resumed) {
     return settledPreexisting.cancelRun
@@ -724,9 +691,8 @@ async function updateWithLoadedManifest(
       : { row: settledPreexisting.row, cancelRun: false };
   }
 
-  // Story 3.4 — dirty gate: lockfile-only dirt is discarded silently (seam or not) and
-  // the repo proceeds; any other dirt pauses on the seam when present, else keeps today's
-  // `skipped`/`dirty-worktree` row.
+  // Dirty gate: lockfile-only dirt is discarded silently (seam or not) and the repo proceeds;
+  // any other dirt pauses on the seam when present, else is a `skipped`/`dirty-worktree` row.
   const dirtyPaths = await git.listDirtyPaths(repoPath);
   if (!dirtyPaths.ok) {
     return failedOutcome(service, dirtyPaths.error);
@@ -758,14 +724,13 @@ async function updateWithLoadedManifest(
   }
 
   if (current.data === mergeSource) {
-    // Story 3.10: the live current-step signal for the pull path.
+    // The live current-step signal for the pull path.
     emitPhase(onPhase, service, 'pulling');
     const pulled = await git.pull(repoPath);
     if (!pulled.ok) {
-      // A conflicting pull leaves the repo mid-merge exactly like a conflicting merge
-      // does — without a seam, abort back to the pre-run HEAD and report it as such
-      // (today's behavior); with a seam, the bounded resolution menu applies. Any other
-      // pull failure keeps its own code.
+      // A conflicting pull leaves the repo mid-merge exactly like a conflicting merge does —
+      // without a seam, abort back to the pre-run HEAD and report it as such; with a seam,
+      // the bounded resolution menu applies. Any other pull failure keeps its own code.
       const merging = await git.isMergeInProgress(repoPath);
       if (merging.ok && merging.data) {
         const settlement = await resolveMidRunConflict(
@@ -787,7 +752,7 @@ async function updateWithLoadedManifest(
       }
     }
   } else {
-    // Story 3.10: the live current-step signal for the fetch+merge path.
+    // The live current-step signal for the fetch+merge path.
     emitPhase(onPhase, service, 'merging');
     const fetched = await git.fetch(repoPath, mergeSource);
     if (!fetched.ok) {
@@ -821,17 +786,14 @@ async function updateWithLoadedManifest(
     }
   }
 
-  // Story 3.2 — the migrate phase runs between the pull/merge and the restart: the
-  // manifest-declared `migrationCommand` (skipped without error when absent or blank) runs
-  // with the repo as its working directory. A failing migration keeps the repo on its
-  // merged code but skips the restart — a `failed` row with `migration-failed` detail
-  // naming the service (via the row), the command, and the error output — and never blocks
-  // or rolls back the other services (each failure short-circuits only its own service).
-  // Story 3.7: the run-wide migrate toggle gates the whole phase — off means no
-  // `migration.run` executes for this service even when a command is declared.
+  // The migrate phase runs between the pull/merge and the restart: the manifest-declared
+  // `migrationCommand` (skipped without error when absent or blank) runs with the repo as its
+  // working directory, and only when the run-wide migrate toggle is on. A failing migration
+  // keeps the repo on its merged code but skips the restart — a `failed` row with
+  // `migration-failed` detail naming the command and the error output — and never blocks or
+  // rolls back the other services.
   if (runMigrations && migrationCommand !== undefined && migrationCommand.trim() !== '') {
-    // Story 3.10: the live current-step signal for the migrate phase — the first (and
-    // only) producer of the `migrating` glyph's underlying phase.
+    // The live current-step signal for the migrate phase.
     emitPhase(onPhase, service, 'migrating');
     const migrated = await migration.run(repoPath, migrationCommand);
     if (!migrated.ok) {
@@ -842,10 +804,8 @@ async function updateWithLoadedManifest(
     }
   }
 
-  // Story 3.8 — the restart phase (story 3.9: shared via runRestartStep so the
-  // standalone single-service use-case runs the identical recipe-or-fallback). Story
-  // 3.10: the `restarting` phase itself is emitted inside runRestartStep so both paths
-  // share it.
+  // The restart phase, shared with the standalone single-service use-case via runRestartStep
+  // (which also emits the `restarting` phase).
   const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });
   if (!restarted.ok) {
     return failedOutcome(service, restarted.error);
@@ -873,10 +833,10 @@ async function failConflicted(
   return failedOutcome(service, conflict);
 }
 
-// Story 3.4 — asks the driving-provided seam for a blocker choice. A throwing seam (a
-// driving-side bug — dispatch maps top-level throws to `internal-error`) is folded into a
-// per-service `failed` row here instead, so one repo's menu failure never strands the
-// others' rows; an unknown choice string is the same class of driving bug.
+// Asks the driving-provided seam for a blocker choice. A throwing seam (a driving-side bug —
+// dispatch maps top-level throws to `internal-error`) is folded into a per-service `failed`
+// row here instead, so one repo's menu failure never strands the others' rows; an unknown
+// choice string is the same class of driving bug.
 async function askSeam(
   onUpdateBlocker: OnUpdateBlocker,
   blocker: UpdateBlocker,
@@ -898,9 +858,9 @@ async function askSeam(
   }
 }
 
-// Story 3.4 — re-verifies a repo before resuming it after a `stash`/`edited` choice:
-// no mid-merge, no mid-rebase, and zero dirty paths. Real conflict content is never
-// auto-resolved here — this only reads state.
+// Re-verifies a repo before resuming it after a `stash`/`edited` choice: no mid-merge, no
+// mid-rebase, and zero dirty paths. Real conflict content is never auto-resolved here — this
+// only reads state.
 async function reverifyClean(git: GitPort, repoPath: string): Promise<Result<boolean>> {
   const merging = await git.isMergeInProgress(repoPath);
   if (!merging.ok) {
@@ -927,12 +887,11 @@ type BlockerSettlement =
   | { resumed: true }
   | { resumed: false; row: GroupUpdateRepoResult; cancelRun: boolean };
 
-// Story 3.4 — pre-existing mid-merge/mid-rebase settlement. Without a seam this is a
-// distinct `skipped` row (never today's dirty/conflict codes, never aborted); with a seam
-// the same four-choice menu applies after the report, and cancel choices never abort the
-// pre-existing state (only merges this run started are ever aborted). Resumption means
-// the mid-state cleared — ordinary dirt left behind falls through to the dirty gate,
-// which re-reads the tree fresh.
+// Pre-existing mid-merge/mid-rebase settlement. Without a seam this is a distinct `skipped`
+// row (never the dirty/conflict codes, never aborted); with a seam the same four-choice menu
+// applies after the report, and cancel choices never abort the pre-existing state (only
+// merges this run started are ever aborted). Resumption means the mid-state cleared —
+// ordinary dirt left behind falls through to the dirty gate, which re-reads the tree fresh.
 async function settlePreexistingMidState(
   service: string,
   repoPath: string,
@@ -1011,10 +970,10 @@ async function settlePreexistingMidState(
   }
 }
 
-// Story 3.4 — ordinary (non-lockfile) dirty-worktree settlement. Without a seam this is
-// today's `skipped`/`dirty-worktree` row with zero writes; with a seam the run waits on
-// the four-choice menu and resumes only after a passing re-verification (`stash` stashes
-// via the git port, `edited` re-verifies a driving-side edit; still dirty re-presents).
+// Ordinary (non-lockfile) dirty-worktree settlement. Without a seam this is a
+// `skipped`/`dirty-worktree` row with zero writes; with a seam the run waits on the
+// four-choice menu and resumes only after a passing re-verification (`stash` stashes via the
+// git port, `edited` re-verifies a driving-side edit; still dirty re-presents).
 async function resolveDirtyBlocker(
   service: string,
   repoPath: string,
@@ -1076,15 +1035,13 @@ async function resolveDirtyBlocker(
   }
 }
 
-// Story 3.4 — mid-run conflict settlement (a merge — or pull — this run started now leaves
-// the repo mid-merge). Without a seam this is today's abort-and-report `failed`/
-// `merge-conflict` row; with a seam there is no abort and no retry bound: every
-// `edited` choice retries the update, and any attempt that does not settle the
-// conflict re-presents the menu with an incremented `retry` counter and its reason. The
-// only clean exits from an unresolvable conflict are the two cancel choices, which abort
-// the own-started merge (never a pre-existing one — this state is by construction
-// own-started) and land a `skipped` row. A resumed conflict rejoins the caller's pipeline
-// (migrate → restart) via `{ done: false }`.
+// Mid-run conflict settlement (a merge — or pull — this run started now leaves the repo
+// mid-merge). Without a seam this is an abort-and-report `failed`/`merge-conflict` row; with
+// a seam there is no abort and no retry bound: every `edited` choice retries the update, and
+// any attempt that does not settle the conflict re-presents the menu with an incremented
+// `retry` counter and its reason. The only clean exits from an unresolvable conflict are the
+// two cancel choices, which abort the own-started merge and land a `skipped` row. A resumed
+// conflict rejoins the caller's pipeline (migrate → restart) via `{ done: false }`.
 type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false };
 
 async function resolveMidRunConflict(

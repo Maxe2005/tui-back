@@ -95,7 +95,7 @@ describe('listRepos', () => {
     expect(result.data.repos.map((r) => r.path)).toEqual(paths);
   });
 
-  it('fills moduleIds in sorted ascending order from the manifest modules keys (AC4)', async () => {
+  it('fills moduleIds in sorted ascending order from the manifest modules keys', async () => {
     const path = '/m/mod';
     const registry = fakeRegistry({ list: async () => ok([path]) });
     const manifest = fakeManifest({
@@ -121,7 +121,7 @@ describe('listRepos', () => {
     });
   });
 
-  it('sets moduleIds to the empty array for a module-free repo (AC4 baseline)', async () => {
+  it('sets moduleIds to the empty array for a module-free repo', async () => {
     const path = '/m/plain';
     const registry = fakeRegistry({ list: async () => ok([path]) });
     const manifest = fakeManifest({

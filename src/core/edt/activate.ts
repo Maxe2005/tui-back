@@ -1,30 +1,8 @@
-// core/edt/activate: the core use-case that makes the very FIRST EDT active (story 2.38).
-//
-// Once one EDT is active, the protected switch (`switchActiveEdt`) is the only path to
-// activate another — it owns the outgoing EDT's auto-stash and the dirty-service resolutions.
-// With no outgoing EDT there is nothing to preserve, so this use-case needs no stash tagging
-// at all; instead it refuses (`activate-has-outgoing`) whenever an active EDT already exists.
-//
-// Destination (FR-8, `resolveTargetBranch` shared with switch.ts): a member of the new EDT goes
-// to its own registered branch, gated by `assertAllowedBranch(..., ulid)`; any other managed
-// repo goes to its manifest `sharedBranch`, fetched first when absent locally.
-//
-// Pre-flight — before any checkout anywhere: per repo, the paths a checkout would overwrite
-// ("at risk") are the uncommitted paths (`listDirtyPaths`, untracked expanded to files) that
-// also differ between the current branch and the target (`diffNameOnly`; `HEAD` when the
-// current branch is unreadable). A repo already on its target has no risk. Its only writes are
-// the FR-8 fetches. When any repo has an at-risk path the caller did not confirm in `overwrite`
-// (keyed by repoPath), the result is `blocked` — every repo with at-risk paths is listed, with
-// its full list — and nothing else is written.
-//
-// Activation — each ready repo: its at-risk paths (all confirmed by then) are discarded with
-// the path-scoped `discardPathsToHead`, never `discardAll`, then it is checked out. A repo whose
-// pre-flight read or checkout failed is a `failed` row; it never blocks the others. Finally
-// state.json's active pointer and the registry status `active` are written under the
-// edts.yaml lock (AD-9), whatever the per-repo outcomes (switch.ts's philosophy) — after
-// re-reading the pointer under that lock: if another activation or switch set it meanwhile,
-// the pointer is kept and the call fails `activate-has-outgoing` with the per-repo `results`
-// in its details.
+// core/edt/activate: makes the very first EDT active. Once one is active, `switchActiveEdt` is
+// the only path (it owns the outgoing EDT's stash); this refuses with `activate-has-outgoing`.
+// Pre-flight before any checkout: paths a checkout would overwrite (dirty AND differing from the
+// target) block the run unless confirmed in `overwrite`. Confirmed paths are discarded path by
+// path, never with discardAll; per-repo failures never block the others.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
@@ -137,8 +115,8 @@ export async function activateEdt(params: ActivateEdtParams): Promise<Result<Act
     results.push(entry.kind === 'failed' ? entry.row : await activateRepo(git, entry.repo));
   }
 
-  // Same review patch as switch.ts: a member no longer in the managed-repo registry is
-  // surfaced as `failed`, never silently skipped.
+    // A member no longer in the managed-repo registry is surfaced as `failed`, never silently
+    // skipped.
   for (const found of target.members) {
     if (!registeredPaths.has(resolve(found.repoPath))) {
       results.push(

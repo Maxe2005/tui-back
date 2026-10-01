@@ -1,70 +1,8 @@
-// core/edt/create: the core use-case for creating a new EDT (Environment de Développement
-// Temporisé). Story 2.2 extends Story 2.1's skeleton: an EDT now requires a topic and at
-// least one manually selected member service (drawn from the managed-repo registry), and
-// may optionally create a dev branch per member (default base `development`, naming mode
-// grouped = one shared name / individual = one name per member, or disabled = reuse the
-// existing branch). Returns a Result carrying { ulid, topic, results } on success.
-//
-// AD-7: one SQLite per EDT — the DB file lives at edtsBaseDir/<ulid>.db, a sibling of the
-//       EDT directory (edtsBaseDir/<ulid>/), not nested inside it.
-// AD-4: the .tui-back.yaml manifest is written with non-empty, ulid-based placeholder values
-//       (service/container/migrationCommand are stubs — story 2.5 "modify an EDT" is where a
-//       user fills in the real values) and validated through the caller-supplied
-//       ManifestPort, the same zod schema every other manifest consumer enforces.
-// AD-6: the EDT is recorded in a dedicated EDT registry (ports/edt-registry.ts, not
-//       RegistryPort's { repos: string[] } shape) under the same per-resource advisory lock
-//       (AD-9) register/reset already use for their own registry writes, so concurrent
-//       `edt create` runs don't race the read-modify-write.
-// AD-1: core/ never imports adapters/ — XDG paths and every port (manifest, registry, git,
-//       EDT registry, lock) are provided by the caller (CLI/TUI composition root). Direct
-//       node:fs / node:path and the `ulid`/`better-sqlite3` packages are plain runtime deps,
-//       not adapters, so importing them here doesn't cross the boundary.
-// AD-8: git writes go through the caller-supplied GitPort only; the driven git adapter owns
-//       the shared-branch gate (assertAllowedBranch). createEdt itself never shells out to
-//       git.
-//
-// Story 2.2 semantics (from the story spec):
-//   - topic + zero-member + duplicate-topic + unregistered-member rejections all happen
-//     before any file write.
-//   - Branch creation is all-or-nothing per action but per-service isolated: one member's
-//     failure never aborts the others and never fails EDT creation; per-service outcomes
-//     flow into data.results as { service, outcome, detail? } with outcome in the closed
-//     set created | existing-branch | failed.
-//   - Branch creation never checks out the created branch (git branch <name> <base> creates
-//     a ref; moving the working tree onto it is Story 2.4's protected-switch).
-//
-// Story 2.3 semantics (git branch-scope safety gate, FR-7/AD-8):
-//   - The branch-creation-disabled path's existing current branch is not exempt from the
-//     shared-branch gate: it is checked via git.assertAllowedBranch before being reused as
-//     the member's own EDT branch, same as a newly created branch already is via
-//     git.createBranch.
-//   - A member whose outcome is `failed` — for any reason (shared-branch rejection, a
-//     git/manifest read error, a branch-creation failure) — is excluded from the registered
-//     `members` entirely; there is no "best effort" fallback branch recorded for a failed
-//     member any more, closing the gap where a fallback could itself be a shared branch.
-//     The member still gets a `failed` row in `results`, so the failure is never silently
-//     dropped, and the batch stays per-member isolated (one failure never blocks another
-//     member or the EDT's creation, even down to zero members — Story 2.5's invariant).
-//
-// Story 2.35 semantics (per-service branch plans, remote branches):
-//   - `memberPlans` (optional) carries one MemberBranchPlan per member — `create` (own base +
-//     name, the base may be a remote-tracking ref such as `origin/release`) or `existing`
-//     (attach a local or remote-only branch, optionally renaming it). When present it is
-//     authoritative: `branchOptions` is ignored and never converted into plans. Keys are
-//     resolve()d like `members`; a member without a plan, a plan for a non-member, a
-//     duplicate key after resolve(), or an empty base/name/branch/renameTo is rejected with
-//     invalid-argument before any write. `branchOptions` becomes optional; providing neither
-//     is invalid-argument. Without `memberPlans`, the Story 2.2/2.27 `branchOptions` path runs
-//     exactly as before.
-//   - `existing` resolution order: a local branch wins (gated via assertAllowedBranch, or
-//     renamed via renameBranch — which gates both names); else a remote-tracking ref listed
-//     by listRemoteBranches becomes a local tracking branch (default local name = the ref
-//     minus its remote segment, `origin/feat/q` -> `feat/q`, or `renameTo`); else the member
-//     fails with branch-missing. Nothing is ever checked out or fetched.
-//   - Outcomes widen to created | existing-branch | renamed | failed; per-member isolation is
-//     unchanged. Registry-write rollback is typed: created and tracking branches are
-//     force-deleted, renamed branches are renamed back; every rollback failure is
-//     console.error-logged, never thrown.
+// core/edt/create: creates an EDT — validates topic and members, writes the EDT dir, manifest
+// and SQLite db, resolves one branch per member (branchOptions, or authoritative memberPlans),
+// then registers the EDT under the registry lock. Every rejection happens before any write;
+// a member's failure never aborts the others and a failed member is never registered.
+// Branches are created or attached, never checked out or fetched.
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
@@ -81,11 +19,8 @@ import { err, ok, type Result } from '../result.js';
 export interface CreateBranchOptions {
   create: boolean;
   base: string;
-  // Story 2.27: per-member base-branch override — the TUI forces one of these when selected
-  // members' manifest-declared sharedBranch values diverge (never inferred/guessed, always
-  // an explicit developer choice). `bases[member]` wins over `base` for that member when
-  // present; optional and purely additive, so every pre-2.27 caller (CLI, existing tests)
-  // that never sets it keeps applying `base` uniformly, unchanged.
+  // Per-member base override, set by the TUI when members' manifest sharedBranch values
+  // diverge. `bases[member]` wins over `base` for that member.
   bases?: Record<string, string>;
   mode: 'grouped' | 'individual';
   // Branch name per member repoPath. Grouped mode: the same shared name for every member.
@@ -94,7 +29,8 @@ export interface CreateBranchOptions {
   names: Record<string, string>;
 }
 
-// Story 2.35: one member's authoritative branch plan (see the header comment).
+// One member's authoritative branch plan: `create` (own base + name, the base may be a
+// remote-tracking ref) or `existing` (attach a local or remote-only branch, optionally renamed).
 export type MemberBranchPlan =
   | { kind: 'create'; base: string; name: string }
   | { kind: 'existing'; branch: string; renameTo?: string };
@@ -121,9 +57,9 @@ export interface CreateEdtParams {
   git: GitPort;
   topic: string;
   members: string[];
-  // Optional since Story 2.35: required unless `memberPlans` is provided.
+  // Required unless `memberPlans` is provided.
   branchOptions?: CreateBranchOptions;
-  // Story 2.35: per-member plans keyed by member repoPath; authoritative when present.
+  // Per-member plans keyed by member repoPath; when present `branchOptions` is ignored.
   memberPlans?: Record<string, MemberBranchPlan>;
 }
 
@@ -258,8 +194,7 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
 
   // Create the SQLite database (AD-7) as a sibling of the EDT directory, at
   // edtsBaseDir/<ulid>.db — better-sqlite3 gives a real, valid (empty) SQLite file rather
-  // than a 0-byte placeholder. Real schema/migrations land in later stories.
-  // Story 2.15: create the action_log table for per-EDT action history.
+  // than a 0-byte placeholder. The action_log table holds per-EDT action history.
   try {
     const db = new Database(dbPath);
     db.exec(`
@@ -277,23 +212,20 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
     return err('edt-creation-failed', `Failed to create SQLite database at ${dbPath}`, dbError);
   }
 
-  // Per-member branch loop (Story 2.2). Iterates members in caller order for deterministic
-  // results; per-service failure isolation: one member's branch outcome never affects the
-  // others and never fails EDT creation.
+  // Per-member branch loop, in caller order for deterministic results. One member's outcome
+  // never affects the others and never fails EDT creation.
   const results: CreateEdtMemberResult[] = [];
   const memberEntries: EdtMember[] = [];
   // Branch writes made in this run, tracked for rollback: if the registry write below fails,
   // the EDT dir/db is cleaned up and each write is undone (created/tracking branches deleted,
-  // renamed branches renamed back — Story 2.35) so a failed creation leaves no trace in the
-  // member repos.
+  // renamed branches renamed back) so a failed creation leaves no trace in the member repos.
   const branchWrites: BranchWrite[] = [];
   for (const member of members) {
     const resolved = await resolveMemberBranch(git, manifest, member, strategy, ulid);
     results.push({ service: resolved.service, outcome: resolved.outcome, ...(resolved.detail !== undefined ? { detail: resolved.detail } : {}) });
-    // A failed member is never registered as a member — closes the gap where a "best
-    // effort" fallback branch (e.g. the repo's current branch) could itself be shared
-    // (story 2.3, AD-8). `branch` is only set for non-failed outcomes (see
-    // ResolvedMemberBranch), so this doubles as the type-narrowing check.
+    // A failed member is never registered: a "best effort" fallback branch (e.g. the repo's
+    // current branch) could itself be shared (AD-8). `branch` is only set for non-failed
+    // outcomes (see ResolvedMemberBranch), so this doubles as the type-narrowing check.
     if (resolved.branch !== undefined) {
       memberEntries.push({ service: resolved.service, repoPath: member, branch: resolved.branch });
     }
@@ -302,7 +234,7 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
     }
   }
 
-  // Record the EDT in the EDT registry (AD-6/Task 2), under the same advisory-lock pattern
+  // Record the EDT in the EDT registry (AD-6), under the same advisory-lock pattern
   // register/reset already use for their own registry writes (AD-9). The topic-uniqueness
   // check runs again inside the locked section: the pre-lock fast-fail above covers the
   // sequential case, but two racing `edt create --topic demo` runs would both pass it — the
@@ -321,8 +253,7 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
     rollback();
     for (const write of branchWrites) {
       if (write.kind === 'created') {
-        // Story 2.29: deleteBranch now requires an explicit force flag — `true` preserves this
-        // rollback path's pre-existing `-D` (unconditional) behavior exactly.
+        // `true` keeps this rollback's unconditional `-D` behavior.
         const deleted = await git.deleteBranch(write.repoPath, write.branchName, true);
         if (!deleted.ok) {
           console.error(
@@ -331,8 +262,8 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
           );
         }
       } else {
-        // Story 2.35: a rename only succeeded if neither name was protected, so renaming back
-        // cannot hit renameBranch's old-name gate.
+        // A rename only succeeded if neither name was protected, so renaming back cannot hit
+        // renameBranch's old-name gate.
         const restored = await git.renameBranch(write.repoPath, write.renamedTo, write.originalName);
         if (!restored.ok) {
           console.error(
@@ -348,21 +279,22 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   return ok({ ulid, topic, results });
 }
 
-// Story 2.35: how members' branches are resolved — the legacy uniform `branchOptions`, or the
-// authoritative per-member plans (keys already resolve()d and validated).
+// How members' branches are resolved — the uniform `branchOptions`, or the authoritative
+// per-member plans (keys already resolve()d and validated).
 type BranchStrategy =
   | { kind: 'options'; options: CreateBranchOptions }
   | { kind: 'plans'; plans: Map<string, MemberBranchPlan> };
 
-// Story 2.35: a git write made for one member, recorded so a registry-write failure can undo
-// it — `created` covers both createBranch and createTrackingBranch (force-deleted on
-// rollback), `renamed` a renameBranch (renamed back on rollback).
+// A git write made for one member, recorded so a registry-write failure can undo it —
+// `created` covers both createBranch and createTrackingBranch (force-deleted on rollback),
+// `renamed` a renameBranch (renamed back on rollback).
 type BranchWrite =
   | { kind: 'created'; repoPath: string; branchName: string }
   | { kind: 'renamed'; repoPath: string; originalName: string; renamedTo: string };
 
-// Story 2.35: validates `memberPlans` against the resolve()d members before any write —
-// returns the plans keyed by resolved path, or invalid-argument.
+// Validates `memberPlans` against the resolve()d members before any write: a member without a
+// plan, a plan for a non-member, a duplicate key after resolve(), or an empty
+// base/name/branch/renameTo is invalid-argument.
 function validateMemberPlans(
   members: string[],
   memberPlans: Record<string, MemberBranchPlan>,
@@ -431,9 +363,9 @@ interface ResolvedMemberBranch {
   outcome: CreateEdtMemberResult['outcome'];
   detail?: CreateEdtMemberResult['detail'];
   // Set only when outcome !== 'failed': a failed member is never registered as an EDT
-  // member (story 2.3), so there is nothing to compute a fallback value for.
+  // member, so there is nothing to compute a fallback value for.
   branch?: string;
-  // Story 2.35: the git write this member's resolution made, for registry-write rollback.
+  // The git write this member's resolution made, for registry-write rollback.
   write?: BranchWrite;
 }
 
@@ -454,7 +386,7 @@ async function resolveMemberBranch(
   // A member whose manifest cannot load has no identifiable service identity, and both
   // branch paths need the manifest (the git adapter resolves the shared-branch gate from
   // it). Report it as a per-service failure without aborting the batch; a failed member is
-  // never registered (story 2.3), so no branch needs to be read here.
+  // never registered, so no branch needs to be read here.
   if (!loaded.ok) {
     return { service, outcome: 'failed', detail: { code: loaded.error.code, message: loaded.error.message } };
   }
@@ -471,9 +403,9 @@ async function resolveMemberBranch(
       return { service, outcome: 'failed', detail: { code: current.error.code, message: current.error.message } };
     }
 
-    // Story 2.3: the existing current branch is never checked by git.createBranch (there is
-    // no create call on this path), so it must pass the shared-branch gate itself before
-    // being reused as the member's own EDT branch (AD-8, FR-7).
+    // The existing current branch is never checked by git.createBranch (there is no create
+    // call on this path), so it must pass the shared-branch gate itself before being reused
+    // as the member's own EDT branch (AD-8, FR-7).
     const allowed = await git.assertAllowedBranch(member, current.data);
     if (!allowed.ok) {
       return { service, outcome: 'failed', detail: { code: allowed.error.code, message: allowed.error.message } };
@@ -482,9 +414,8 @@ async function resolveMemberBranch(
     return { service, outcome: 'existing-branch', branch: current.data };
   }
 
-  // Code review (story 2.27): `??` alone would pass an explicit empty-string `bases[member]`
-  // straight to git as an empty base ref instead of falling back to `options.base` — `||`
-  // treats an empty override the same as an absent one.
+  // `||`, not `??`: an explicit empty-string `bases[member]` must fall back to `options.base`
+  // instead of reaching git as an empty base ref.
   const created = await git.createBranch(member, options.names[member], options.bases?.[member] || options.base);
   if (created.ok) {
     return {
@@ -495,14 +426,14 @@ async function resolveMemberBranch(
     };
   }
 
-  // The branch could not be created. A failed member is never registered as an EDT member
-  // any more (story 2.3), so there is no fallback branch to compute — unlike pre-2.3, this
-  // no longer reads the member's current branch as a "best effort" substitute.
+  // The branch could not be created. A failed member is never registered, so there is no
+  // fallback branch to compute.
   return { service, outcome: 'failed', detail: { code: created.error.code, message: created.error.message } };
 }
 
-// Story 2.35: executes one member's authoritative plan. Never checks out, never fetches;
-// every git write is gated by the adapter (AD-8, FR-7).
+// Executes one member's authoritative plan. Never checks out, never fetches; every git write
+// is gated by the adapter (AD-8, FR-7). `existing` order: a local branch wins, else a listed
+// remote-tracking ref becomes a local tracking branch, else the member fails branch-missing.
 async function resolvePlannedMemberBranch(
   git: GitPort,
   member: string,
@@ -539,7 +470,7 @@ async function resolvePlannedMemberBranch(
       return failed(service, allowed.error);
     }
     if (plan.renameTo !== undefined && plan.renameTo !== plan.branch) {
-      // renameBranch gates both the old and the new name against the shared set (Story 2.35).
+      // renameBranch gates both the old and the new name against the shared set.
       const renamed = await git.renameBranch(member, plan.branch, plan.renameTo);
       if (!renamed.ok) {
         return failed(service, renamed.error);
@@ -551,8 +482,7 @@ async function resolvePlannedMemberBranch(
         write: { kind: 'renamed', repoPath: member, originalName: plan.branch, renamedTo: plan.renameTo },
       };
     }
-    // Reused as-is: no git write gates it, so the gate above is its only check (Story 2.3
-    // precedent for the branch-creation-disabled path).
+    // Reused as-is: no git write gates it, so the gate above is its only check.
     return { service, outcome: 'existing-branch', branch: plan.branch };
   }
 
@@ -587,13 +517,10 @@ async function resolvePlannedMemberBranch(
   };
 }
 
-// Story 2.37: the create wizard's Step 3 per-service branch lists — local branches plus
-// remote-tracking refs (`origin/x`), read through the caller's GitPort (the TUI never touches
-// deps.git directly, mirroring modify.ts's listMemberBranches thin-wrapper precedent). Pure
-// reads: nothing is ever fetched, so the remote list is whatever the last fetch left behind.
-// Either read failing fails the whole call — a half-known list would make the wizard's
-// "local preferred over origin/<x>" resolution silently wrong.
-// Story 2.37: one service's candidate branches — local names plus remote-tracking refs.
+// The create wizard's per-service branch lists — local branches plus remote-tracking refs
+// (`origin/x`). Pure reads: nothing is fetched, so the remote list is whatever the last fetch
+// left behind. Either read failing fails the whole call — a half-known list would make the
+// wizard's "local preferred over origin/<x>" resolution silently wrong.
 export type CreateCandidateBranches = { local: string[]; remote: string[] };
 
 export async function listCreateCandidateBranches(git: GitPort, repoPath: string): Promise<Result<CreateCandidateBranches>> {

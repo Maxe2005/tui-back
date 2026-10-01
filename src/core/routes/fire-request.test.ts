@@ -1,8 +1,6 @@
-// core/routes/fire-request: unit tests against fake ports + a stub fetchFn (AD-13) — no
-// real manifests, no live servers. Covers the spec's I/O & Edge-Case Matrix row by row.
-// The stub fetchFn is the story's only network seam: it serves both the fire itself (the
-// auth module is faked here; its own stub-fetch coverage lives in
-// cookie-session-auth.test.ts).
+// core/routes/fire-request: unit tests against fake ports + a stub fetchFn — no real
+// manifests, no live servers. The stub fetchFn is the only network seam: it serves the fire
+// itself (the auth module is faked here; its own coverage lives in cookie-session-auth.test.ts).
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '../result.js';
 import type { DevAuthPort, DevAuthSession } from '../ports/dev-auth.js';
@@ -76,7 +74,7 @@ function stubFetch(responses: Array<Response | Error>): {
   return { fetchFn, calls };
 }
 
-describe('fireRequest (story 6.2 I/O matrix)', () => {
+describe('fireRequest', () => {
   it('fires the discovered method + path with the session cookie, returning status + duration + body', async () => {
     const { fetchFn, calls } = stubFetch([jsonResponse(200, '{"id":1}')]);
 
@@ -416,9 +414,9 @@ describe('fireRequest (story 6.2 I/O matrix)', () => {
   });
 });
 
-// Story 6.9: the request workbench's optional trailing options (body/query/headers) and
-// the concrete-path-against-template route match. A separate recording stub keeps the
-// 6.2 `stubFetch` (and its exact `calls` assertions above) untouched.
+// The request workbench's optional trailing options (body/query/headers) and the
+// concrete-path-against-template route match. A separate recording stub keeps `stubFetch`
+// (and its exact `calls` assertions above) untouched.
 function recordingFetch(response: Response): {
   fetchFn: typeof fetch;
   calls: Array<{ url: string; method: string; headers: Headers; body: unknown }>;
@@ -439,7 +437,7 @@ const TEMPLATED_ROUTES: Route[] = [
   { method: 'GET', path: '/health' },
 ];
 
-describe('fireRequest options (story 6.9)', () => {
+describe('fireRequest options', () => {
   it('serializes a JSON body with an inferred application/json content type', async () => {
     const { fetchFn, calls } = recordingFetch(jsonResponse(201, 'ok'));
 
