@@ -36,11 +36,13 @@ import {
   UPDATE_RUNNING_LABEL,
   UPDATE_SELECTION_RUNNING_LABEL,
   formatBlockerBody,
+  formatBlockerRetry,
   formatUpdateRow,
   formatUpdateSummary,
   launchEditor,
   resolveAllConfirm,
   resolveBlockerMenuKey,
+  blockerMenuItems,
   resolveQuitConfirm,
   resolveUpdateTrigger,
   resolveUpdateTone,
@@ -495,6 +497,34 @@ describe('formatBlockerBody (story 3.4)', () => {
   });
 });
 
+describe('blockerMenuItems', () => {
+  it('drops stash for a merge conflict and keeps all four choices otherwise', () => {
+    expect(blockerMenuItems('merge-conflict').map((item) => item.value)).toEqual(['edited', 'cancel-repo', 'cancel-run']);
+    for (const kind of ['dirty-worktree', 'mid-merge', 'mid-rebase'] as const) {
+      expect(blockerMenuItems(kind).map((item) => item.value)).toEqual(['stash', 'edited', 'cancel-repo', 'cancel-run']);
+    }
+  });
+
+  it('navigates the merge-conflict menu over its three rows', () => {
+    const items = blockerMenuItems('merge-conflict');
+    expect(resolveBlockerMenuKey('', { return: true }, 0, items)).toEqual({ type: 'choose', choice: 'edited' });
+    expect(resolveBlockerMenuKey('', { end: true }, 0, items)).toEqual({ type: 'move', cursor: 2 });
+    expect(resolveBlockerMenuKey('', { return: true }, 2, items)).toEqual({ type: 'choose', choice: 'cancel-run' });
+  });
+});
+
+describe('formatBlockerRetry', () => {
+  it('is null on a first prompt', () => {
+    expect(formatBlockerRetry({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' })).toBeNull();
+  });
+
+  it('shows the retry counter and the last failed attempt reason', () => {
+    const line = formatBlockerRetry({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 3, retryReason: 'Unmerged paths remain' });
+    expect(line).toContain('Retry #3');
+    expect(line).toContain('Unmerged paths remain');
+  });
+});
+
 describe('UpdateZone rendering', () => {
   it('idle with no interruption shows the Enter prompt plus the all-repos affordance', async () => {
     const store = createAppStore();
@@ -703,6 +733,32 @@ describe('UpdateZone rendering', () => {
     for (const item of UPDATE_BLOCKER_MENU_ITEMS) {
       expect(output).toContain(item.label);
     }
+  });
+
+  it('a re-presented merge conflict renders its retry counter and reason', async () => {
+    const store = createAppStore();
+    store.setState({
+      updateStatus: 'running',
+      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' },
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('Retry #2');
+    expect(output).toContain('Unmerged paths remain');
+  });
+
+  it('a merge-conflict blocker never offers the stash choice', async () => {
+    const store = createAppStore();
+    store.setState({
+      updateStatus: 'running',
+      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' },
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).not.toContain('Stash changes');
+    expect(output).toContain('Open in editor, then retry');
   });
 
   it('no raised blocker renders no blocker modal', async () => {

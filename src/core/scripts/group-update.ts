@@ -21,7 +21,7 @@
 // merge, never developer work). Story 3.4: with the `onUpdateBlocker` seam, dirty and
 // conflict states pause on a driving-provided four-choice menu (stash / edited /
 // cancel-repo / cancel-run) with re-verification before resuming, abort-only-own-merge,
-// and a single-retry bound on conflicts. Story 3.2 inserts the migrate phase next (the
+// and an unbounded, counted retry loop on conflicts (only cancel exits). Story 3.2 inserts the migrate phase next (the
 // manifest's `migrationCommand`, skipped without error when undeclared; a failure is a
 // `migration-failed` row with no restart) → `container.restart`.
 import { basename, resolve } from 'node:path';
@@ -163,6 +163,11 @@ export interface UpdateBlocker {
   service: string;
   repoPath: string;
   kind: UpdateBlockerKind;
+  // Merge-conflict re-presentations only: how many resolution attempts already failed for
+  // this conflict (absent on the first prompt) and why the last one did not settle it —
+  // the driving side shows both so an endless retry loop stays legible.
+  retry?: number;
+  retryReason?: string;
 }
 
 export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
@@ -1073,11 +1078,13 @@ async function resolveDirtyBlocker(
 
 // Story 3.4 — mid-run conflict settlement (a merge — or pull — this run started now leaves
 // the repo mid-merge). Without a seam this is today's abort-and-report `failed`/
-// `merge-conflict` row; with a seam there is no abort yet — one prompt, then a bounded
-// single retry: a still-conflicted retry ends as one `failed`/`merge-conflict` row with no
-// second prompt. Cancel choices abort the own-started merge (never a pre-existing one —
-// this state is by construction own-started) and land a `skipped` row. A resumed conflict
-// rejoins the caller's pipeline (migrate → restart) via `{ done: false }`.
+// `merge-conflict` row; with a seam there is no abort and no retry bound: every
+// `edited` choice retries the update, and any attempt that does not settle the
+// conflict re-presents the menu with an incremented `retry` counter and its reason. The
+// only clean exits from an unresolvable conflict are the two cancel choices, which abort
+// the own-started merge (never a pre-existing one — this state is by construction
+// own-started) and land a `skipped` row. A resumed conflict rejoins the caller's pipeline
+// (migrate → restart) via `{ done: false }`.
 type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false };
 
 async function resolveMidRunConflict(
@@ -1092,91 +1099,120 @@ async function resolveMidRunConflict(
   if (onUpdateBlocker === undefined) {
     return { done: true, outcome: await failConflicted(service, git, repoPath, conflict) };
   }
-  const asked = await askSeam(onUpdateBlocker, { service, repoPath, kind: 'merge-conflict' });
-  if ('error' in asked) {
-    return { done: true, outcome: await failConflicted(service, git, repoPath, asked.error) };
-  }
-  if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
-    // Own-started merge aborted, repo left at pre-run HEAD; a cancelled repo is `skipped`,
-    // never `failed` — even when the abort itself fails, the code stays informative.
-    const aborted = await git.abortMerge(repoPath);
-    const row: GroupUpdateRepoResult = aborted.ok
-      ? {
-          service,
-          outcome: 'skipped',
-          detail: { code: 'merge-conflict', message: `Repo ${repoPath} update cancelled by developer — merge aborted` },
-        }
-      : {
-          service,
-          outcome: 'skipped',
-          detail: {
-            code: 'merge-conflict',
-            message: `Repo ${repoPath} update cancelled by developer (merge --abort also failed: ${aborted.error.message})`,
-          },
-        };
-    return asked.choice === 'cancel-run' ? { done: true, outcome: { row, cancelRun: true } } : { done: true, outcome: { row, cancelRun: false } };
-  }
-  if (asked.choice === 'stash') {
-    await git.stashSave(repoPath, UPDATE_STASH_MESSAGE);
-    // A stash cannot clear a mid-merge by itself — re-verify, and only a clean tree earns
-    // the single bounded resume below; anything still blocked ends the retry bound here.
-    const verify = await reverifyClean(git, repoPath);
-    if (!verify.ok) {
-      return { done: true, outcome: await failConflicted(service, git, repoPath, verify.error) };
+  let retry = 0;
+  let retryReason = '';
+  for (;;) {
+    const blocker: UpdateBlocker =
+      retry === 0 ? { service, repoPath, kind: 'merge-conflict' } : { service, repoPath, kind: 'merge-conflict', retry, retryReason };
+    const asked = await askSeam(onUpdateBlocker, blocker);
+    if ('error' in asked) {
+      return { done: true, outcome: await failConflicted(service, git, repoPath, asked.error) };
     }
-    if (!verify.data) {
-      return { done: true, outcome: await failConflicted(service, git, repoPath, conflict) };
+    if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
+      // Own-started merge aborted, repo left at pre-run HEAD; a cancelled repo is `skipped`,
+      // never `failed` — even when the abort itself fails, the code stays informative.
+      const aborted = await git.abortMerge(repoPath);
+      const row: GroupUpdateRepoResult = aborted.ok
+        ? {
+            service,
+            outcome: 'skipped',
+            detail: { code: 'merge-conflict', message: `Repo ${repoPath} update cancelled by developer — merge aborted` },
+          }
+        : {
+            service,
+            outcome: 'skipped',
+            detail: {
+              code: 'merge-conflict',
+              message: `Repo ${repoPath} update cancelled by developer (merge --abort also failed: ${aborted.error.message})`,
+            },
+          };
+      return asked.choice === 'cancel-run' ? { done: true, outcome: { row, cancelRun: true } } : { done: true, outcome: { row, cancelRun: false } };
     }
-    return resumeOnceAfterConflict(service, git, repoPath, via, sharedBranch);
-  }
-  // `edited` — the developer resolved by hand driving-side. Verify zero unmerged paths,
-  // then finalize the merge commit and rejoin the pipeline (migrate → restart). A
-  // still-conflicted tree earns the single bounded re-merge, never a second prompt.
-  const unmerged = await git.hasUnmergedPaths(repoPath);
-  if (!unmerged.ok) {
-    return { done: true, outcome: await failConflicted(service, git, repoPath, unmerged.error) };
-  }
-  if (!unmerged.data) {
-    const finalized = await git.finalizeMerge(repoPath);
-    if (!finalized.ok) {
-      // Never abort here: the tree carries the developer's own in-the-moment resolution
-      // (staged, uncommitted) — discarding it via --abort without an explicit choice
-      // would violate the never-discard rule. Leave the repo as-is for hand finishing.
-      return { done: true, outcome: failedOutcome(service, finalized.error) };
+    // `stash` is never run on a conflict (the TUI does not offer it): git refuses to stash
+    // unmerged paths, and on a resolved-but-uncommitted merge it would shelve the
+    // resolution and clear the merge — a seam answering it just re-presents the menu.
+    const attempt: ConflictAttempt =
+      asked.choice === 'stash'
+        ? { type: 'blocked', reason: 'Stash is not available during a merge conflict' }
+        : await attemptEdited(git, repoPath, via, sharedBranch);
+    if (attempt.type === 'resumed') {
+      return { done: false };
     }
-    // Finalized — the merge commit exists; rejoin the pipeline (migrate → restart).
-    return { done: false };
+    if (attempt.type === 'failed') {
+      return { done: true, outcome: attempt.outcome(service) };
+    }
+    // Still blocked → re-present the menu, counting the failed attempt.
+    retry += 1;
+    retryReason = attempt.reason;
   }
-  return resumeOnceAfterConflict(service, git, repoPath, via, sharedBranch);
 }
 
-// Story 3.4 — the single bounded resume after a conflict choice: one re-pull/re-merge,
-// still conflicted → abort + one `failed`/`merge-conflict` row, no second prompt. A clean
-// resume rejoins the caller's pipeline via `{ done: false }` (migrate → restart still run).
-async function resumeOnceAfterConflict(
-  service: string,
-  git: GitPort,
-  repoPath: string,
-  via: 'pull' | 'merge',
-  sharedBranch: string,
-): Promise<ConflictSettlement> {
+// One resolution attempt's verdict: `resumed` rejoins the pipeline, `blocked` re-presents
+// the menu with its reason, `failed` ends the repo on a non-conflict error (a git read or
+// a non-conflict pull/merge failure — retrying the menu cannot fix those).
+type ConflictAttempt =
+  | { type: 'resumed' }
+  | { type: 'blocked'; reason: string }
+  | { type: 'failed'; outcome: (service: string) => RepoOutcome };
+
+function failedAttempt(error: ResultError): ConflictAttempt {
+  return { type: 'failed', outcome: (service) => failedOutcome(service, error) };
+}
+
+// `edited` — the developer resolved by hand driving-side. Still mid-merge: zero unmerged
+// paths finalizes the merge commit; anything else re-presents (never aborts — the tree
+// carries the developer's own in-the-moment resolution). No longer mid-merge (committed or
+// aborted from the editor): a clean tree retries the update — a no-op when the merge was
+// committed, a fresh conflict when it was aborted.
+async function attemptEdited(git: GitPort, repoPath: string, via: 'pull' | 'merge', sharedBranch: string): Promise<ConflictAttempt> {
+  const merging = await git.isMergeInProgress(repoPath);
+  if (!merging.ok) {
+    return failedAttempt(merging.error);
+  }
+  if (merging.data) {
+    const unmerged = await git.hasUnmergedPaths(repoPath);
+    if (!unmerged.ok) {
+      return failedAttempt(unmerged.error);
+    }
+    if (unmerged.data) {
+      return { type: 'blocked', reason: 'Unmerged paths remain — resolve and stage (git add) every conflicted file' };
+    }
+    const finalized = await git.finalizeMerge(repoPath);
+    if (!finalized.ok) {
+      return { type: 'blocked', reason: finalized.error.message };
+    }
+    return { type: 'resumed' };
+  }
+  const verify = await reverifyClean(git, repoPath);
+  if (!verify.ok) {
+    return failedAttempt(verify.error);
+  }
+  if (!verify.data) {
+    return { type: 'blocked', reason: 'The merge is no longer in progress but the worktree has uncommitted changes' };
+  }
+  return retryUpdate(git, repoPath, via, sharedBranch);
+}
+
+// One re-pull/re-merge on a settled tree: a clean one resumes, a conflicting one leaves the
+// repo mid-merge again and re-presents the menu, any other failure keeps its own code.
+async function retryUpdate(git: GitPort, repoPath: string, via: 'pull' | 'merge', sharedBranch: string): Promise<ConflictAttempt> {
   if (via === 'pull') {
     const retried = await git.pull(repoPath);
-    if (!retried.ok) {
-      const stillMerging = await git.isMergeInProgress(repoPath);
-      if (stillMerging.ok && stillMerging.data) {
-        return { done: true, outcome: await failConflicted(service, git, repoPath, { code: 'merge-conflict', message: retried.error.message }) };
-      }
-      return { done: true, outcome: failedOutcome(service, retried.error) };
+    if (retried.ok) {
+      return { type: 'resumed' };
     }
-    return { done: false };
+    const stillMerging = await git.isMergeInProgress(repoPath);
+    if (stillMerging.ok && stillMerging.data) {
+      return { type: 'blocked', reason: `Retried pull conflicted again: ${retried.error.message}` };
+    }
+    return failedAttempt(retried.error);
   }
   const retried = await git.mergeBranch(repoPath, sharedBranch);
-  if (!retried.ok) {
-    if (retried.error.code === 'merge-conflict') {
-      return { done: true, outcome: await failConflicted(service, git, repoPath, retried.error) };
-    }
-    return { done: true, outcome: failedOutcome(service, retried.error) };
+  if (retried.ok) {
+    return { type: 'resumed' };
   }
-  return { done: false };
+  if (retried.error.code === 'merge-conflict') {
+    return { type: 'blocked', reason: `Retried merge conflicted again: ${retried.error.message}` };
+  }
+  return failedAttempt(retried.error);
 }
