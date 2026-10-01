@@ -22,6 +22,8 @@ export function createManifestSchema(known: ReadonlySet<string>): z.ZodType<Mani
       migrationCommand: z.string().trim().min(1).optional(),
       restartCommands: z.array(z.string().trim().min(1)).optional(),
       sharedBranch: z.string().min(1).optional().default('development'),
+      // Story 2.42: optional; each entry trimmed and non-empty, duplicates tolerated.
+      protectedBranches: z.array(z.string().trim().min(1)).optional(),
       modules: z.record(z.string(), moduleConfigSchema),
     })
     .strict()
