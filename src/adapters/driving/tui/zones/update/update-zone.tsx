@@ -234,7 +234,7 @@ export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
 
 export const UPDATE_BLOCKER_MENU_ITEMS = Object.freeze([
   { value: 'stash', label: 'Stash changes and continue' },
-  { value: 'edited', label: 'Open in editor — I resolved it by hand' },
+  { value: 'edited', label: 'Open in editor, then retry' },
   { value: 'cancel-repo', label: 'Cancel this repo (continue with the rest)' },
   { value: 'cancel-run', label: 'Cancel the whole run' },
 ] as const);
@@ -255,6 +255,17 @@ export function formatBlockerBody(blocker: UpdateBlocker): string {
     case 'mid-rebase':
       return `"${blocker.service}" is already mid-rebase from an earlier run (${blocker.repoPath}) — rebases are never touched.`;
   }
+}
+
+// A re-presented merge conflict (a failed stash/edit attempt) carries core's retry counter
+// and the reason the last attempt did not settle it — rendered under the body so the
+// endless resolve-and-retry loop stays legible. Null on a first prompt.
+export function formatBlockerRetry(blocker: UpdateBlocker): string | null {
+  if (blocker.retry === undefined || blocker.retry <= 0) {
+    return null;
+  }
+  const reason = blocker.retryReason !== undefined && blocker.retryReason !== '' ? ` — ${blocker.retryReason}` : '';
+  return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
 }
 
 export type BlockerMenuKey = {
@@ -900,6 +911,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         {updateBlocker !== null ? (
           <Box flexDirection="column">
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
+            {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
             {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
             {UPDATE_BLOCKER_MENU_ITEMS.map((item, index) => (
               <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
