@@ -1079,7 +1079,7 @@ async function resolveDirtyBlocker(
 // Story 3.4 — mid-run conflict settlement (a merge — or pull — this run started now leaves
 // the repo mid-merge). Without a seam this is today's abort-and-report `failed`/
 // `merge-conflict` row; with a seam there is no abort and no retry bound: every
-// `stash`/`edited` choice retries the update, and any attempt that does not settle the
+// `edited` choice retries the update, and any attempt that does not settle the
 // conflict re-presents the menu with an incremented `retry` counter and its reason. The
 // only clean exits from an unresolvable conflict are the two cancel choices, which abort
 // the own-started merge (never a pre-existing one — this state is by construction
@@ -1128,7 +1128,13 @@ async function resolveMidRunConflict(
           };
       return asked.choice === 'cancel-run' ? { done: true, outcome: { row, cancelRun: true } } : { done: true, outcome: { row, cancelRun: false } };
     }
-    const attempt = asked.choice === 'stash' ? await attemptStash(git, repoPath, via, sharedBranch) : await attemptEdited(git, repoPath, via, sharedBranch);
+    // `stash` is never run on a conflict (the TUI does not offer it): git refuses to stash
+    // unmerged paths, and on a resolved-but-uncommitted merge it would shelve the
+    // resolution and clear the merge — a seam answering it just re-presents the menu.
+    const attempt: ConflictAttempt =
+      asked.choice === 'stash'
+        ? { type: 'blocked', reason: 'Stash is not available during a merge conflict' }
+        : await attemptEdited(git, repoPath, via, sharedBranch);
     if (attempt.type === 'resumed') {
       return { done: false };
     }
@@ -1151,20 +1157,6 @@ type ConflictAttempt =
 
 function failedAttempt(error: ResultError): ConflictAttempt {
   return { type: 'failed', outcome: (service) => failedOutcome(service, error) };
-}
-
-// `stash` — a stash cannot clear a mid-merge by itself (git refuses with unmerged paths),
-// but whatever it leaves is re-verified: only a clean tree earns the re-pull/re-merge.
-async function attemptStash(git: GitPort, repoPath: string, via: 'pull' | 'merge', sharedBranch: string): Promise<ConflictAttempt> {
-  await git.stashSave(repoPath, UPDATE_STASH_MESSAGE);
-  const verify = await reverifyClean(git, repoPath);
-  if (!verify.ok) {
-    return failedAttempt(verify.error);
-  }
-  if (!verify.data) {
-    return { type: 'blocked', reason: 'Stash could not clear the conflicted merge' };
-  }
-  return retryUpdate(git, repoPath, via, sharedBranch);
 }
 
 // `edited` — the developer resolved by hand driving-side. Still mid-merge: zero unmerged

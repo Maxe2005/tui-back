@@ -1460,28 +1460,19 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
   });
 
-  it('mid-run conflict with seam: stash with a clean re-verification resumes the merge once', async () => {
-    const single = edtEntry('edt-single', 'demo', [member('svc-a', '/repo/a', 'feat/a')]);
-    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([single])) });
-    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-single')) });
-    const { seam, blockers } = scriptedSeam(['stash']);
-    let merges = 0;
-    const git = fakeGit({
-      mergeBranch: vi.fn(async () => {
-        merges += 1;
-        return merges <= 1 ? err('merge-conflict', 'Automatic merge failed') : ok(undefined);
-      }),
-    });
+  it('mid-run conflict with seam: a stash answer never stashes — it re-presents the menu', async () => {
+    const { seam, blockers } = scriptedSeam(['stash', 'edited']);
+    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a');
 
-    const result = await groupUpdate(makeParams({ edtRegistry, state, git, onUpdateBlocker: seam }));
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
 
     expect(result).toMatchObject({
       ok: true,
-      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
     });
-    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
-    expect(calls(git.stashSave)).toEqual([['/repo/a', 'tui-back:update']]);
-    expect(calls(git.mergeBranch)).toHaveLength(2);
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
+    expect(blockers[1]?.retryReason).toMatch(/stash is not available/i);
+    expect(calls(git.stashSave)).toHaveLength(0);
     expect(calls(git.abortMerge)).toHaveLength(0);
   });
 
@@ -1543,21 +1534,6 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
     expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
     expect(calls(git.currentBranch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
-  });
-
-  it('mid-run conflict with seam: a stash that cannot clear the merge re-presents instead of failing', async () => {
-    const { seam, blockers } = scriptedSeam(['stash', 'edited']);
-    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a');
-
-    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
-
-    expect(result).toMatchObject({
-      ok: true,
-      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
-    });
-    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
-    expect(blockers[1]?.retryReason).toMatch(/stash/i);
-    expect(calls(git.abortMerge)).toHaveLength(0);
   });
 
   it('mid-run conflict with seam: a merge aborted from the editor is retried, and a fresh conflict re-presents', async () => {

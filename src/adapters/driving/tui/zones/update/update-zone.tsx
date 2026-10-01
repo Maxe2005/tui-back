@@ -225,7 +225,7 @@ export function resolveQuitConfirm(input: string, key: { return?: boolean; escap
   return null;
 }
 
-// Story 3.4: the assisted-resolution menu — the seam's four fixed choices rendered as
+// Story 3.4: the assisted-resolution menu — the seam's fixed choices rendered as
 // `ListRow`s navigated like the EDT zone's `SERVICE_ACTION_MENU_ITEMS` (arrows/Home/End +
 // Enter — the story 2.7 canonical contract; filterable-list widgets are overkill for four
 // fixed rows). `Escape` answers `cancel-repo`: the least-destructive unblock (the repo is
@@ -240,6 +240,16 @@ export const UPDATE_BLOCKER_MENU_ITEMS = Object.freeze([
 ] as const);
 
 export type UpdateBlockerMenuValue = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number]['value'];
+
+export type UpdateBlockerMenuItem = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number];
+
+// The choices offered for a blocker kind. A merge conflict drops `stash`: git refuses to
+// stash unmerged paths, and once the conflict is resolved and staged a stash silently
+// shelves the resolution and clears the merge (the retry then re-conflicts) — the editor
+// retry and the two cancels are the only meaningful exits there.
+export function blockerMenuItems(kind: UpdateBlocker['kind']): readonly UpdateBlockerMenuItem[] {
+  return kind === 'merge-conflict' ? UPDATE_BLOCKER_MENU_ITEMS.filter((item) => item.value !== 'stash') : UPDATE_BLOCKER_MENU_ITEMS;
+}
 
 // The modal body names the blocked service, its repo path, and the blocker kind —
 // mid-merge/mid-rebase rows stress that the pre-existing state is reported, never
@@ -279,8 +289,13 @@ export type BlockerMenuKey = {
 
 export type BlockerMenuStep = { type: 'move'; cursor: number } | { type: 'choose'; choice: UpdateBlockerMenuValue } | { type: 'ignore' };
 
-export function resolveBlockerMenuKey(input: string, key: BlockerMenuKey, cursor: number): BlockerMenuStep {
-  const length = UPDATE_BLOCKER_MENU_ITEMS.length;
+export function resolveBlockerMenuKey(
+  input: string,
+  key: BlockerMenuKey,
+  cursor: number,
+  items: readonly UpdateBlockerMenuItem[] = UPDATE_BLOCKER_MENU_ITEMS,
+): BlockerMenuStep {
+  const length = items.length;
   if (key.home === true) {
     return { type: 'move', cursor: 0 };
   }
@@ -294,7 +309,7 @@ export function resolveBlockerMenuKey(input: string, key: BlockerMenuKey, cursor
     return { type: 'move', cursor: Math.min(length - 1, cursor + 1) };
   }
   if (key.return === true) {
-    const item = UPDATE_BLOCKER_MENU_ITEMS[cursor];
+    const item = items[cursor];
     if (item === undefined) {
       return { type: 'ignore' };
     }
@@ -568,7 +583,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // keystroke — `q` must not open the quit-confirm underneath it (cancel the run
       // through the menu instead).
       if (updateBlocker !== null) {
-        const step = resolveBlockerMenuKey(input, key, blockerCursor);
+        const step = resolveBlockerMenuKey(input, key, blockerCursor, blockerMenuItems(updateBlocker.kind));
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -913,7 +928,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
             {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
             {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
-            {UPDATE_BLOCKER_MENU_ITEMS.map((item, index) => (
+            {blockerMenuItems(updateBlocker.kind).map((item, index) => (
               <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
             ))}
           </Box>
