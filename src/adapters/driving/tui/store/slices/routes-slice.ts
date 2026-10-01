@@ -1,18 +1,8 @@
-// tui/store/slices: the Routes zone's domain state (story 6.1) — which repo's routes are
-// shown, the discovered Route[] itself, and the scan lifecycle. Extracted from app-store.ts
-// (see that file's header for why) — a StateCreator factory combined with the other slices
-// into one Zustand store (AD-10: still exactly one store/one hook).
-//
-// The zone shows one repo's routes: the active EDT's member carrying `route-explorer when
-// one exists, else the first registry-wide carrying repo (mirroring
-// core/edt/resolve-tab-visibility.ts's own active-member resolution, which this slice does
-// not duplicate — it reuses listRepos' ManagedRepo rows plus the same state/edtRegistry
-// reads). No carrying repo at all is the named `route-exploration-not-activated` error,
-// never an empty list; a scanner failure is `route-scan-failed` with its reason; a
-// successful zero-route scan is `ready` with `[]` — failure and genuinely-empty stay
-// visibly distinct downstream because the status/error fields (not the array length)
-// drive the zone's rendering. An unwired store (every pre-6.1 `createAppStore()` call,
-// including tests) degrades to an explicit error rather than throwing.
+// tui/store/slices: the Routes zone's state — one repo's discovered routes (the active EDT's
+// member carrying `route-explorer`, else the first carrying repo), the scan lifecycle, and the
+// per-route drafts, responses, tree states and body drafts. No carrying repo is
+// `route-exploration-not-activated`, never an empty list: the status/error fields, not the
+// array length, drive the zone so failure and genuinely-empty stay distinct.
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { ROUTES_MODULE_ID } from '../../../../../core/edt/resolve-tab-visibility.js';
@@ -43,7 +33,7 @@ const NO_AUTH_ERROR = 'No dev auth wired into the TUI store';
 
 export type RoutesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-// Story 6.9: one fire outcome per route (the old global fire triple, now keyed).
+// One fire outcome per route.
 export type RouteResponse =
   | { status: 'firing' }
   | { status: 'fired'; result: FireResult }
@@ -51,7 +41,7 @@ export type RouteResponse =
 
 export type RoutesPaneFocus = 'list' | 'detail';
 
-// The right pane's sub-tabs, in display order. Story 6.4 appends 'logs'.
+// The right pane's sub-tabs, in display order.
 export type RoutesPaneTab = 'request' | 'response';
 export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['request', 'response'];
 
@@ -69,10 +59,10 @@ export type RoutesSlice = {
   setRoutesSelected: (index: number) => void;
   setRoutesFilter: (filter: TextInputState) => void;
   loadRoutes: () => Promise<void>;
-  // Story 6.9: per-route request drafts (params/query/headers — the body stays in
-  // `bodyDrafts`) and last responses, keyed `METHOD + ' ' + templatePath`. Session-only,
-  // pruned to their caps on every touch like `jsonTreeStates`; kept across a same-repo
-  // reload, dropped on a reload onto another repo.
+  // Per-route request drafts (params/query/headers — the body stays in `bodyDrafts`) and last
+  // responses, keyed `METHOD + ' ' + templatePath`. Session-only, pruned to their caps on every
+  // touch like `jsonTreeStates`; kept across a same-repo reload, dropped on a reload onto
+  // another repo.
   requestDrafts: Record<string, RequestDraft>;
   responses: Record<string, RouteResponse>;
   ensureRequestDraft: (routeKey: string, seed: RequestDraft) => void;
@@ -85,14 +75,14 @@ export type RoutesSlice = {
   // Fires `method + path` (path may be concrete, params substituted) and records the
   // outcome under `routeKey` (the template route's key); switches the pane to Response.
   fireRoute: (routeKey: string, method: string, path: string, options?: FireRequestOptions) => Promise<void>;
-  // Story 6.7: the JsonTree's per-route session state (folds, key rules, hide-nulls,
-  // selection), keyed `METHOD + ' ' + path`. Session-only — never persisted to disk —
-  // and pruned to the MAX_JSON_TREE_STATES most-recently-touched entries on every touch.
+  // The JsonTree's per-route session state (folds, key rules, hide-nulls, selection), keyed
+  // `METHOD + ' ' + path`. Session-only — never persisted to disk — and pruned to the
+  // MAX_JSON_TREE_STATES most-recently-touched entries on every touch.
   jsonTreeStates: Record<string, JsonTreeState>;
-  // Story 6.8: the body editor's per-route session drafts, keyed the same way.
-  // Session-only, never persisted; seeded lazily from the route's `bodyExample` on first
-  // open (`undefined` = empty, press `r`) and pruned to the MAX_BODY_DRAFTS
-  // most-recently-touched entries on every touch, mirroring `jsonTreeStates`.
+  // The body editor's per-route session drafts, keyed the same way. Session-only, never
+  // persisted; seeded lazily from the route's `bodyExample` on first open (`undefined` =
+  // empty, press `r`) and pruned to the MAX_BODY_DRAFTS most-recently-touched entries on
+  // every touch, mirroring `jsonTreeStates`.
   bodyDrafts: Record<string, unknown>;
   // Per-path scalar validation entries for the draft (`Record<routeKey,
   // Record<concretePath, BodyEditError>>`): an invalid entry keeps its raw text in the
@@ -113,7 +103,7 @@ function hasDraft(drafts: Record<string, unknown>, routeKey: string): boolean {
 }
 
 // Touch = delete + re-insert (Record insertion order = recency), then prune past the cap
-// (`pruneBodyDrafts` is the generic most-recent-N pruner, despite its 6.8 name).
+// (`pruneBodyDrafts` is the generic most-recent-N pruner, despite its name).
 function touchEntry<T>(entries: Record<string, T>, routeKey: string, value: T, limit: number): Record<string, T> {
   const touched: Record<string, T> = { ...entries };
   delete touched[routeKey];
@@ -121,9 +111,9 @@ function touchEntry<T>(entries: Record<string, T>, routeKey: string, value: T, l
   return pruneBodyDrafts(touched, limit);
 }
 
-// Joint touch for story 6.8 drafts + error maps: both re-insert the route key (recency),
-// drafts prune to MAX_BODY_DRAFTS, and error maps without a surviving draft drop — the
-// two maps never drift apart. A null `nextErrors` keeps the route's existing map.
+// Joint touch for drafts + error maps: both re-insert the route key (recency), drafts prune
+// to MAX_BODY_DRAFTS, and error maps without a surviving draft drop — the two maps never
+// drift apart. A null `nextErrors` keeps the route's existing map.
 function touchBodyDraftEntries(
   drafts: Record<string, unknown>,
   errors: Record<string, Record<string, BodyEditError>>,
@@ -151,10 +141,10 @@ function reasonOf(error: unknown): string {
 }
 
 export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], RoutesSlice> {
-  // Story 6.9: in-flight fires are tracked apart from the pruned `responses` map (a pruned
-  // `firing` entry must never re-open the door to a duplicate fire), and every reload onto
-  // another repo bumps a generation so a late outcome from before it — even after a
-  // switch back to the same repo — never lands in the fresh maps.
+  // In-flight fires are tracked apart from the pruned `responses` map (a pruned `firing` entry
+  // must never re-open the door to a duplicate fire), and every reload onto another repo bumps
+  // a generation so a late outcome from before it — even after a switch back to the same repo
+  // — never lands in the fresh maps.
   const inFlight = new Set<string>();
   let repoGeneration = 0;
   return (set, get) => ({
@@ -195,10 +185,10 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         touched[routeKey] = next;
         return { jsonTreeStates: pruneJsonTreeStates(touched, MAX_JSON_TREE_STATES) };
       }),
-    // Story 6.8: draft touches mirror the tree-state pattern. Drafts and their error
-    // maps touch together (opening/editing a draft marks both recent); the prune keeps
-    // the drafts to MAX_BODY_DRAFTS and drops error maps for keys without a draft, so
-    // the two never drift apart.
+    // Draft touches mirror the tree-state pattern. Drafts and their error maps touch together
+    // (opening/editing a draft marks both recent); the prune keeps the drafts to
+    // MAX_BODY_DRAFTS and drops error maps for keys without a draft, so the two never drift
+    // apart.
     ensureBodyDraft: (routeKey, seed) =>
       set((state) => touchBodyDraftEntries(state.bodyDrafts, state.bodyEditErrors, routeKey, hasDraft(state.bodyDrafts, routeKey) ? state.bodyDrafts[routeKey] : seed, null)),
     updateBodyDraft: (routeKey, updater) =>
@@ -277,10 +267,10 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
 
       const result = await listRoutes({ manifest: deps.manifest, scanner: deps.scanner }, target.path);
       if (result.ok) {
-        // Story 6.9: a same-repo reload (every zone remount) keeps each route's drafts and
-        // last response; a reload onto another repo drops them — they belong to another
-        // route list — and hands the keyboard back to the list. Tree states survive either
-        // way (keyed, harmless; a re-fire re-applies them).
+        // A same-repo reload (every zone remount) keeps each route's drafts and last response;
+        // a reload onto another repo drops them — they belong to another route list — and hands
+        // the keyboard back to the list. Tree states survive either way (keyed, harmless; a
+        // re-fire re-applies them).
         const previousRepoPath = get().routesRepoPath;
         const repoChanged = previousRepoPath !== null && resolve(previousRepoPath) !== resolve(target.path);
         if (repoChanged) {
@@ -311,12 +301,10 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         });
       }
     },
-    // Story 6.2: fire a route through core/routes/fire-request.ts in-process (AD-2) — the
-    // same use-case `tui-back fire-request` runs out-of-process. The repo is the slice's
-    // own loaded routes repo. Story 6.9: the outcome is recorded per route; a concurrent
-    // fire of the same route is dropped (other routes may fire meanwhile). An unwired
-    // store (every pre-6.2 `createAppStore()` call, including tests) degrades to an
-    // explicit error rather than throwing.
+    // Fires a route through core/routes/fire-request.ts in-process (AD-2) — the same use-case
+    // `tui-back fire-request` runs — against the slice's loaded routes repo. The outcome is
+    // recorded per route; a concurrent fire of the same route is dropped (other routes may
+    // fire meanwhile). An unwired store degrades to an explicit error rather than throwing.
     fireRoute: async (routeKey, method, path, options) => {
       const record = (response: RouteResponse) =>
         set((state) => ({ responses: touchEntry(state.responses, routeKey, response, MAX_ROUTE_RESPONSES) }));
@@ -368,8 +356,8 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         return;
       }
       if (result.ok) {
-        // Story 6.7: touch (never reset) the route's response tree state, so a re-fire
-        // re-applies its key rules and normalized folds.
+        // Touch (never reset) the route's response tree state, so a re-fire re-applies its key
+        // rules and normalized folds.
         set((state) => ({
           responses: touchEntry(state.responses, routeKey, { status: 'fired', result: result.data }, MAX_ROUTE_RESPONSES),
           jsonTreeStates: touchEntry(

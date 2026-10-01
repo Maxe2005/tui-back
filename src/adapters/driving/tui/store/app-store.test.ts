@@ -157,12 +157,12 @@ describe("app store", () => {
     }
   });
 
-  it("defaults resizeMode to null (story 2.21)", () => {
+  it("defaults resizeMode to null", () => {
     const store = createAppStore();
     expect(store.getState().resizeMode).toBeNull();
   });
 
-  it("covers exactly the six compiled-in zones — no duplicate copy per zone (AC5)", () => {
+  it("covers exactly the six compiled-in zones — no duplicate copy per zone", () => {
     const store = createAppStore();
     const state = store.getState();
     expect(ZONES).toHaveLength(6);
@@ -173,7 +173,7 @@ describe("app store", () => {
     );
   });
 
-  it("switches the active zone and clears pending events for the visited zone (AC3)", () => {
+  it("switches the active zone and clears pending events for the visited zone", () => {
     const store = createAppStore();
     store.getState().addZoneEvent("logs");
     store.getState().addZoneEvent("logs");
@@ -183,7 +183,7 @@ describe("app store", () => {
     expect(store.getState().zoneEvents.logs).toBe(0);
   });
 
-  it("adds pending background-event counts per zone independently (AC3)", () => {
+  it("adds pending background-event counts per zone independently", () => {
     const store = createAppStore();
     store.getState().addZoneEvent("routes");
     store.getState().addZoneEvent("routes");
@@ -192,7 +192,7 @@ describe("app store", () => {
     expect(store.getState().zoneEvents.dashboard).toBe(1);
   });
 
-  it("stores the splitter ratio per zone/boundary, clamped to keep both panes usable (AC4)", () => {
+  it("stores the splitter ratio per zone/boundary, clamped to keep both panes usable", () => {
     const store = createAppStore();
     store.getState().setSplitterRatio("edts", 0, 0.5);
     expect(store.getState().splitterRatios.edts[0]).toBe(0.5);
@@ -203,9 +203,9 @@ describe("app store", () => {
     expect(store.getState().splitterRatios.dashboard[0]).toBe(DEFAULT_LIST_RATIO);
   });
 
-  // Story 2.21: the EDTs zone has 3 independently movable boundaries — each setSplitterRatio
-  // call only ever touches the one boundaryIndex it's given, never the other two.
-  it("moves only the targeted boundary within a multi-boundary zone (story 2.21)", () => {
+  // The EDTs zone has 3 independently movable boundaries — each setSplitterRatio call only
+  // ever touches the one boundaryIndex it's given, never the other two.
+  it("moves only the targeted boundary within a multi-boundary zone", () => {
     const store = createAppStore();
     store.getState().setSplitterRatio("edts", 1, 0.7);
     expect(store.getState().splitterRatios.edts).toEqual([DEFAULT_LIST_RATIO, 0.7, DEFAULT_LIST_RATIO]);
@@ -213,14 +213,14 @@ describe("app store", () => {
     expect(store.getState().splitterRatios.edts).toEqual([DEFAULT_LIST_RATIO, 0.7, 0.3]);
   });
 
-  it("ignores an out-of-range boundaryIndex rather than writing a sparse array (story 2.21)", () => {
+  it("ignores an out-of-range boundaryIndex rather than writing a sparse array", () => {
     const store = createAppStore();
     const before = store.getState().splitterRatios.dashboard;
     store.getState().setSplitterRatio("dashboard", 5, 0.5);
     expect(store.getState().splitterRatios.dashboard).toEqual(before);
   });
 
-  describe("resizeMode (story 2.21, Ctrl+W keyboard resize-mode)", () => {
+  describe("resizeMode (Ctrl+W keyboard resize-mode)", () => {
     it("enterResizeMode sets the zone with targetBoundary 0", () => {
       const store = createAppStore();
       store.getState().enterResizeMode("edts");
@@ -269,7 +269,7 @@ describe("app store", () => {
     expect(store.getState().helpOpen).toBe(false);
   });
 
-  describe("loadEdtsBranches (story 2.6, FR-9)", () => {
+  describe("loadEdtsBranches (FR-9)", () => {
     it("starts idle with no data before the first load", () => {
       const store = createAppStore(fakeDeps());
       expect(store.getState().edtsBranches).toBeNull();
@@ -330,7 +330,7 @@ describe("app store", () => {
       expect(store.getState().edtsBranches).toBeNull();
     });
 
-    it("populates edtsUnreachable/edtsErrors from the core use-case alongside edtsBranches (review patch)", async () => {
+    it("populates edtsUnreachable/edtsErrors from the core use-case alongside edtsBranches", async () => {
       const registry: RegistryPort = {
         list: vi.fn(async () => ok(["/repo/a", "/repo/gone", "/repo/bad"])),
         add: vi.fn(async () => ok(undefined)),
@@ -394,7 +394,7 @@ describe("app store", () => {
     });
   });
 
-  describe("loadTabVisibility (story 2.13)", () => {
+  describe("loadTabVisibility", () => {
     it("starts with the default reachable state (both enabled) before the first load — no spinner, no flash-then-hide", () => {
       const store = createAppStore(fakeDeps());
       expect(store.getState().tabVisibility).toEqual({
@@ -483,7 +483,7 @@ describe("app store", () => {
       expect(store.getState().tabVisibilityStatus).toBe("idle");
     });
 
-    it("keeps the last known-good tabVisibility on a later reload failure (review-guard, mirrors edtsBranches' rule)", async () => {
+    it("keeps the last known-good tabVisibility on a later reload failure (mirrors edtsBranches' rule)", async () => {
       let call = 0;
       const registry: RegistryPort = {
         list: vi.fn(async () => {
@@ -510,7 +510,7 @@ describe("app store", () => {
     });
   });
 
-  describe("active-EDT membership change reloads tabVisibility (story 2.13)", () => {
+  describe("active-EDT membership change reloads tabVisibility", () => {
     it("createEdt success triggers a tabVisibility reload", async () => {
       const edtsBaseDir = await makeEdtsBaseDir();
       const store = createAppStore(fakeDeps({ edtsBaseDir }));
@@ -625,8 +625,7 @@ describe("app store", () => {
     });
   });
 
-  // Story 2.29: delete an EDT.
-  describe("deleteEdt / resolveMemberDeleteStatuses / openEdtDeleteDialog (story 2.29)", () => {
+  describe("deleteEdt / resolveMemberDeleteStatuses / openEdtDeleteDialog", () => {
     function fakeTarget(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
       return {
         ulid: "edt-1",
@@ -753,7 +752,7 @@ describe("app store", () => {
       expect(store.getState().currentEdtAction).toMatchObject({ type: "delete", target: "select EDT" });
     });
 
-    it("openEdtCreateFromDialog sets currentEdtAction with type 'create-from' and the parsed topic (story 2.31)", () => {
+    it("openEdtCreateFromDialog sets currentEdtAction with type 'create-from' and the parsed topic", () => {
       const store = createAppStore(fakeDeps());
 
       store.getState().openEdtCreateFromDialog("edt-create-from feat-a");
@@ -761,7 +760,7 @@ describe("app store", () => {
       expect(store.getState().currentEdtAction).toMatchObject({ type: "create-from", target: "feat-a" });
     });
 
-    it("openEdtCreateFromDialog with no topic sets target to 'select EDT' (story 2.31)", () => {
+    it("openEdtCreateFromDialog with no topic sets target to 'select EDT'", () => {
       const store = createAppStore(fakeDeps());
 
       store.getState().openEdtCreateFromDialog("edt-create-from");
@@ -770,10 +769,9 @@ describe("app store", () => {
     });
   });
 
-  // Story 2.22: the create-EDT dialog now always builds and supplies its own
-  // CreateBranchOptions — the store must forward exactly what it's given through to
-  // core/edt/create.ts rather than silently substituting its own hardcoded default.
-  describe("createEdt passes branchOptions through unchanged (story 2.22)", () => {
+  // The create-EDT dialog always builds and supplies its own CreateBranchOptions — the store
+  // must forward exactly what it's given to core/edt/create.ts, never substitute a default.
+  describe("createEdt passes branchOptions through unchanged", () => {
     it("a real (non-NO_BRANCH_CREATION) branchOptions reaches git.createBranch with the caller's base/name", async () => {
       const edtsBaseDir = await makeEdtsBaseDir();
       const git: GitPort = {
@@ -867,12 +865,11 @@ describe("app store", () => {
     });
   });
 
-  // Story 2.26: the branch-picker's own store actions and modifyEdt's renameBranches param
-  // wrap real core exports (createMemberBranch/renameMemberBranch/listMemberBranches, and
-  // modifyEdtUseCase itself) — every interaction test exercising the picker instead replaces
-  // these actions wholesale via store.setState(...), so nothing else in the suite verifies
-  // that the real wiring below actually reaches deps.git with the right arguments in order.
-  describe("branch-picker store actions (story 2.26)", () => {
+  // The branch-picker's store actions and modifyEdt's renameBranches param wrap real core
+  // exports — every interaction test exercising the picker replaces these actions wholesale
+  // via store.setState(...), so only these tests verify that the real wiring reaches deps.git
+  // with the right arguments in order.
+  describe("branch-picker store actions", () => {
     it("listBranches forwards repoPath to git.listBranches and returns its result unchanged", async () => {
       const git: GitPort = {
         assertAllowedBranch: vi.fn(async () => ok(undefined)),
@@ -1059,7 +1056,7 @@ describe("app store", () => {
     });
   });
 
-  describe("settings slice (story 2.19)", () => {
+  describe("settings slice", () => {
     it("seeds `settings` with DEFAULT_SETTINGS before loadSettings() ever resolves", () => {
       const store = createAppStore(fakeDeps());
       expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
@@ -1113,7 +1110,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
     });
 
-    it("updateSettings() applies optimistically before persistence resolves, then persists (Boundaries: no separate save step)", async () => {
+    it("updateSettings() applies optimistically before persistence resolves, then persists (no separate save step)", async () => {
       let resolveSave: (() => void) | undefined;
       const savePromise = new Promise<void>((resolve) => {
         resolveSave = resolve;
@@ -1164,7 +1161,7 @@ describe("app store", () => {
       });
     });
 
-    it("updateSettings() shallow-merges hiddenActionTypes independently of hiddenActionHints (amended 2026-08-28)", async () => {
+    it("updateSettings() shallow-merges hiddenActionTypes independently of hiddenActionHints", async () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
@@ -1297,8 +1294,8 @@ describe("app store", () => {
     });
   });
 
-  describe("splitterRatios persistence (story 2.21)", () => {
-    it("setSplitterRatio() applies live before persistence resolves, then persists the whole ratios map (Boundaries: no separate save step)", async () => {
+  describe("splitterRatios persistence", () => {
+    it("setSplitterRatio() applies live before persistence resolves, then persists the whole ratios map (no separate save step)", async () => {
       let resolveSave: (() => void) | undefined;
       const savePromise = new Promise<void>((resolve) => {
         resolveSave = resolve;
@@ -1427,7 +1424,7 @@ describe("app store", () => {
       ]);
     });
 
-    it("loadSplitterRatios() on a fresh/pre-2.21 machine (null) keeps the built-in defaults", async () => {
+    it("loadSplitterRatios() on a fresh machine (null) keeps the built-in defaults", async () => {
       const state: StatePort = {
         readActiveEdt: vi.fn(async () => ok(null)),
         writeActiveEdt: vi.fn(async () => ok(undefined)),
@@ -1457,11 +1454,10 @@ describe("app store", () => {
       ]);
     });
 
-    // Review fix (story 2.21, finding 4): mirrors the settingsVersion-guarded
-    // "loadSettings() discards a stale result superseded by a newer updateSettings()" test
-    // above — loadSplitterRatios() (AppShell's mount-time load) must never overwrite a live
-    // setSplitterRatio() move (e.g. a Ctrl+W resize) that lands while the read is still in
-    // flight with the stale pre-move value it read from disk.
+    // Mirrors the settingsVersion-guarded "loadSettings() discards a stale result superseded
+    // by a newer updateSettings()" test above — loadSplitterRatios() (AppShell's mount-time
+    // load) must never overwrite a live setSplitterRatio() move (e.g. a Ctrl+W resize) that
+    // lands while the read is still in flight with the stale pre-move value it read from disk.
     it("loadSplitterRatios() discards a stale result superseded by a newer setSplitterRatio() while it was in flight", async () => {
       let resolveLoad: ((value: { ok: true; data: Record<string, number[]> }) => void) | undefined;
       const loadPromise = new Promise<{ ok: true; data: Record<string, number[]> }>((resolve) => {
@@ -1491,7 +1487,7 @@ describe("app store", () => {
   });
 });
 
-describe("logs slice (story 5.1)", () => {
+describe("logs slice", () => {
   it("toggleLogsEdtSelection/toggleLogsOtherSelection add then remove a repoPath (Space toggle)", () => {
     const store = createAppStore(fakeDeps());
 
@@ -1514,7 +1510,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsEdtSelected).toEqual([]);
   });
 
-  it("openLogsFullscreen/closeLogsFullscreen set and clear logsFullscreenTarget/logsFullscreenServiceName without touching selection (I/O matrix FULLSCREEN_PREVIEW)", () => {
+  it("openLogsFullscreen/closeLogsFullscreen set and clear logsFullscreenTarget/logsFullscreenServiceName without touching selection", () => {
     const store = createAppStore(fakeDeps());
     store.getState().selectAllLogsEdtServices(["/repo/a"]);
 
@@ -1585,7 +1581,7 @@ describe("logs slice (story 5.1)", () => {
     });
   });
 
-  it("subscribeLogsPane surfaces a docker-unavailable Result as this pane's own streamError (I/O matrix DOCKER_UNAVAILABLE)", async () => {
+  it("subscribeLogsPane surfaces a docker-unavailable Result as this pane's own streamError", async () => {
     const docker: DockerPort = {
       streamLogs: vi.fn((_container, _onLine, onError) => {
         onError({ code: "docker-unavailable", message: "docker daemon unreachable" });
@@ -1605,7 +1601,7 @@ describe("logs slice (story 5.1)", () => {
     });
   });
 
-  it("unsubscribeLogsPane stops the stream and removes the pane entry (I/O matrix SELECTION_CHANGE: that stream stops, its pane is removed)", async () => {
+  it("unsubscribeLogsPane stops the stream and removes the pane entry", async () => {
     const stop = vi.fn();
     const docker: DockerPort = {
       streamLogs: vi.fn(() => stop),
@@ -1622,7 +1618,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]).toBeUndefined();
   });
 
-  it("loadOlderLogsPane on a pane that started genuinely empty pins scrollOffset to 0 — the newest of the just-fetched history — rather than overshooting past every line just loaded (review fix)", async () => {
+  it("loadOlderLogsPane on a pane that started genuinely empty pins scrollOffset to 0 — the newest of the just-fetched history — rather than overshooting past every line just loaded", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1639,7 +1635,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(0);
   });
 
-  it("loadOlderLogsPane on a pane that already had visible lines bumps scrollOffset to preserve the viewport (I/O matrix SCROLLBACK_RELOAD)", async () => {
+  it("loadOlderLogsPane on a pane that already had visible lines bumps scrollOffset to preserve the viewport", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     let fetchOlder = false;
     const docker: DockerPort = {
@@ -1664,12 +1660,12 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(1);
   });
 
-  it("loadOlderLogsPane surfaces a manifest.load failure as this pane's own streamError, instead of silently no-oping forever (review fix)", async () => {
+  it("loadOlderLogsPane surfaces a manifest.load failure as this pane's own streamError, instead of silently no-oping forever", async () => {
     const manifest: ManifestPort = {
       load: vi
         .fn()
-        // Story 5.3: subscribeLogsPane's immediate health poll issues its own manifest.load
-        // synchronously before subscribe's own load, so the queue needs one extra ok.
+        // subscribeLogsPane's immediate health poll issues its own manifest.load synchronously
+        // before subscribe's own load, so the queue needs one extra ok.
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(err("manifest-not-found", "no manifest here")),
@@ -1691,7 +1687,7 @@ describe("logs slice (story 5.1)", () => {
     });
   });
 
-  it("loadOlderLogsPane on a fetch failure sets noMoreHistory without erroring (I/O matrix: fetch fails -> scrolling stops at the edge)", async () => {
+  it("loadOlderLogsPane on a fetch failure sets noMoreHistory without erroring (scrolling stops at the edge)", async () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => err("docker-unavailable", "daemon down")),
@@ -1722,7 +1718,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.lines).toEqual([]);
   });
 
-  it("subscribeLogsPane immediately loads the most recent history when settings.logs.startWithHistory is true (Settings tab, review fix)", async () => {
+  it("subscribeLogsPane immediately loads the most recent history when settings.logs.startWithHistory is true", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1795,7 +1791,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(0);
   });
 
-  it("stopAllLogsPanes stops every active pane's stream and clears all pane state (process-exit teardown fallback, review fix)", async () => {
+  it("stopAllLogsPanes stops every active pane's stream and clears all pane state (process-exit teardown fallback)", async () => {
     const stopA = vi.fn();
     const stopB = vi.fn();
     const docker: DockerPort = {
@@ -1834,12 +1830,12 @@ describe("logs slice (story 5.1)", () => {
   });
 });
 
-describe("logs slice: inline service health & restart (story 5.3)", () => {
+describe("logs slice: inline service health & restart", () => {
   async function flushPolls(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
-  it("subscribeLogsPane polls container health on subscribe and reflects it on the pane badge (I/O matrix HEALTH_UP)", async () => {
+  it("subscribeLogsPane polls container health on subscribe and reflects it on the pane badge", async () => {
     const getContainerHealth = vi.fn(async () => ok("up" as const));
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1856,7 +1852,7 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
   });
 
-  it("a failed health poll keeps last-known health instead of clearing the badge (I/O matrix POLL_ERROR)", async () => {
+  it("a failed health poll keeps last-known health instead of clearing the badge", async () => {
     vi.useFakeTimers();
     try {
       const getContainerHealth = vi.fn(async () => ok("up" as const));
@@ -1945,7 +1941,7 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
     }
   });
 
-  it("restartLogsPane issues exactly one docker restart for that pane's container and re-polls health immediately (I/O matrix RESTART_COMPLETES)", async () => {
+  it("restartLogsPane issues exactly one docker restart for that pane's container and re-polls health immediately", async () => {
     const getContainerHealth = vi.fn(async () => ok("up" as const));
     const restartContainer = vi.fn(async () => ok(undefined));
     const docker: DockerPort = {
@@ -1967,7 +1963,7 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
     expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsAfterSubscribe);
   });
 
-  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent docker restart (I/O matrix RESTART_NOOP)", async () => {
+  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent docker restart", async () => {
     const restartContainer = vi.fn(async () => ok(undefined));
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -2039,9 +2035,8 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
   });
 });
 
-// Story 5.4: filter-history persistence — mirrors "splitterRatios persistence (story 2.21)"'s
-// own coverage shape in app-store.test.ts.
-describe("logs slice: filter history (story 5.4)", () => {
+// Filter-history persistence — mirrors "splitterRatios persistence"'s coverage shape.
+describe("logs slice: filter history", () => {
   it("commitFilterHistoryEntry pushes onto the exact (scope, mode) list and persists the whole map immediately (no separate save step)", async () => {
     const writeFilterHistory = vi.fn(async () => ok(undefined));
     const state: StatePort = {
@@ -2105,7 +2100,7 @@ describe("logs slice: filter history (story 5.4)", () => {
     expect(store.getState().filterHistory["global:text"]).toEqual(["a", "b", "a"]);
   });
 
-  it("clearGlobalFilterHistory only touches the two global lists (Boundaries)", async () => {
+  it("clearGlobalFilterHistory only touches the two global lists", async () => {
     const writeFilterHistory = vi.fn(async () => ok(undefined));
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok(null)),
@@ -2129,7 +2124,7 @@ describe("logs slice: filter history (story 5.4)", () => {
     expect(writeFilterHistory).toHaveBeenLastCalledWith({ "service:/repo/a:text": ["p-text"] });
   });
 
-  it("clearServiceFilterHistory (I/O matrix CLEAR_SERVICE) only touches that one service's two lists", () => {
+  it("clearServiceFilterHistory only touches that one service's two lists", () => {
     const store = createAppStore(fakeDeps());
     store.getState().commitFilterHistoryEntry({ scope: "pane", repoPath: "/repo/a", mode: "text" }, "a-text");
     store.getState().commitFilterHistoryEntry({ scope: "pane", repoPath: "/repo/a", mode: "regex" }, "a-regex");
@@ -2160,7 +2155,7 @@ describe("logs slice: filter history (story 5.4)", () => {
     expect(store.getState().filterHistory).toEqual({ "global:text": ["boom"] });
   });
 
-  it("loadFilterHistory on a genuine I/O error or a fresh machine (null) keeps the empty default (RESTART_PERSIST's corrupt-field isolation, never a crash)", async () => {
+  it("loadFilterHistory on a genuine I/O error or a fresh machine (null) keeps the empty default (never a crash)", async () => {
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok(null)),
       writeActiveEdt: vi.fn(async () => ok(undefined)),
@@ -2186,13 +2181,11 @@ describe("logs slice: filter history (story 5.4)", () => {
     await expect(store.getState().loadFilterHistory()).resolves.toBeUndefined();
   });
 
-  // Review fix: mirrors "loadSplitterRatios() discards a stale result superseded by a newer
-  // setSplitterRatio() while it was in flight" above, but for the opposite failure mode —
-  // filterHistoryVersion alone only protects a *stale read* from clobbering a *newer write*; it
-  // does nothing for a *write that fires while the very first (mount-time) loadFilterHistory()
-  // is still in flight*. Without gating, commitFilterHistoryEntry would read/persist the
-  // still-empty pre-load map, permanently discarding whatever was already on disk for every
-  // other scope/service.
+  // Mirrors "loadSplitterRatios() discards a stale result..." above, but for the opposite
+  // failure mode — filterHistoryVersion only protects a *stale read* from clobbering a *newer
+  // write*; it does nothing for a *write that fires while the first (mount-time)
+  // loadFilterHistory() is still in flight*. Without gating, commitFilterHistoryEntry would
+  // persist the still-empty pre-load map, discarding every other scope/service on disk.
   it("commitFilterHistoryEntry awaits an in-flight initial loadFilterHistory() before reading/persisting, so it never wipes out already-persisted history for other keys", async () => {
     let resolveLoad: ((value: { ok: true; data: Record<string, string[]> }) => void) | undefined;
     const loadPromise = new Promise<{ ok: true; data: Record<string, string[]> }>((resolve) => {
