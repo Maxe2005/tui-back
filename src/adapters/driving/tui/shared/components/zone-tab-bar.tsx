@@ -7,9 +7,8 @@ import {
 import { ZONES, zoneGatedStatus, type Zone, type ZoneId } from '../../zones/zones.js';
 import { colors, spacing, typography } from '../theme/theme.js';
 
-// Re-exported for callers that don't (yet) care about manifest-gating — every zone renders
-// 'enabled', matching this component's pre-story-2.13 behavior exactly. Single source of
-// truth lives in resolve-tab-visibility.ts (also used by app-store.ts's pre-load default).
+// Re-exported for callers that don't care about manifest-gating — every zone renders
+// 'enabled'. The single source of truth lives in resolve-tab-visibility.ts.
 export { DEFAULT_TAB_VISIBILITY };
 
 export type ZoneTabState = {
@@ -31,9 +30,8 @@ export function resolveZoneTabState(
   const disabled = status === 'disabled';
   return {
     active,
-    // Boundaries: disabled renders text-dim + strikethrough, never accent — even while
-    // active (a disabled tab can be the active zone once reached; it never gets the
-    // accent-fill treatment an enabled active tab does).
+    // Disabled renders text-dim + strikethrough, never accent — even while active (a disabled
+    // tab can be the active zone once reached; it never gets the accent-fill treatment).
     labelColor: disabled ? colors['text-dim'] : active ? colors.background : colors['text-dim'],
     backgroundColor: disabled ? colors.background : active ? colors.accent : colors.background,
     bold: disabled
@@ -42,7 +40,7 @@ export function resolveZoneTabState(
         ? typography['active-tab'].bold
         : typography.label.bold,
     strikethrough: disabled ? typography['disabled-tab'].strikethrough : false,
-    // Boundaries: never a badge on a disabled tab, regardless of pending events.
+    // Never a badge on a disabled tab, regardless of pending events.
     badge:
       !active && !disabled && eventCount > 0
         ? { text: `●${eventCount}`, color: colors[zone.statusColor] }

@@ -1,20 +1,8 @@
-// adapters/driven/modules/route-explorer/nestjs-openapi: the `nestjs-openapi`
-// RouteScannerPort implementation (AD-5) — this backend's only scanner. Turns an OpenAPI
-// 3.x document (JSON or YAML, from a manifest-configured file path / live URL, else a
-// conventional spec file under the repo root) into the minimal purpose-built `Route[]`
-// the Routes zone and `list-routes` render — never a generic Swagger schema browser.
-//
-// Manifest config shape (all optional, first defined string wins): `openapi` (a relative
-// file path or an http(s) URL), `openapiPath`/`specPath` (file path), `openapiUrl`/`specUrl`
-// (URL). With no config, the conventional candidates `openapi.json`, `openapi.yaml`,
-// `openapi.yml`, `swagger.json`, `swagger.yaml`, `swagger.yml` are tried in order under
-// the repo root. Anything unreadable/unparsable/not-an-OpenAPI-document is a named
-// `route-scan-failed` with `details.reason` — never a throw, never an empty list. A
-// document that parses but declares zero paths is the genuinely-empty `ok([])` case.
-// Route identity is `method + path` (uppercase method); `summary` falls back to the
-// operation's `description` when `summary` is absent. Story 6.6 adds the optional request
-// details (`parameters`, `bodyContentType`, `bodyExample`) — omitted when the spec has
-// none, and a malformed detail degrades that one route to a plain route, never a failure.
+// adapters/driven/modules/route-explorer/nestjs-openapi: the `route-explorer` RouteScannerPort.
+// Reads an OpenAPI 3.x document (JSON/YAML) from the manifest's `openapi`/`openapiPath`/
+// `specPath` file or `openapi`/`openapiUrl`/`specUrl` URL (first defined wins), else the
+// conventional openapi.*/swagger.* files under the repo root. Unreadable or non-OpenAPI is
+// `route-scan-failed`, never a throw; zero paths is `ok([])`. Route identity: method + path.
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -85,7 +73,7 @@ function isJsonContentType(type: string): boolean {
   return /^[^/;\s]+\/([^;\s]*\+)?json\s*(;|$)/i.test(type.trim());
 }
 
-// Story 6.6: path-item + operation `parameters` merged by `name`+`in` (the operation wins),
+// Path-item + operation `parameters` merged by `name`+`in` (the operation wins),
 // cookie parameters ignored, path parameters always required. A malformed list or entry is
 // skipped, never a failure.
 function extractParameters(document: unknown, pathItem: Record<string, unknown>, operation: Record<string, unknown>): RouteParameter[] {
@@ -138,7 +126,7 @@ function pickBodyContentType(content: Record<string, unknown>): string | undefin
   );
 }
 
-// Story 6.6: the request body's content type plus, for a JSON type only, an example —
+// The request body's content type plus, for a JSON type only, an example —
 // the spec's own `example`/`examples` first, else a skeleton generated from the schema.
 function extractBody(
   document: unknown,
@@ -173,7 +161,7 @@ function extractBody(
 }
 
 // The request details never fail a scan: parameters and body degrade independently, and
-// an operation with neither is a plain route (method, path, summary), the pre-6.6 shape.
+// an operation with neither is a plain route (method, path, summary).
 function extractRequestDetails(
   document: unknown,
   pathItem: Record<string, unknown>,

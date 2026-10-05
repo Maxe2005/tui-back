@@ -1,7 +1,7 @@
-// tui/zones/edts/dialogs/switch-resolution: Story 2.41 — the SWITCH EDT resolution view's Ink
-// rendering: the intro, Panel A (global strategy), Panel B (the shared BranchPlanTable, then the
-// read-only dim state-1 rows), the "Configurer <service>" box and the discard confirmation. Its
-// state and key handling live in switch-resolution.logic.ts.
+// tui/zones/edts/dialogs/switch-resolution: the SWITCH EDT resolution view's Ink rendering — the
+// intro, Panel A (global strategy), Panel B (the shared BranchPlanTable, then the read-only dim
+// state-1 rows), the "Configurer <service>" box and the discard confirmation. State and key
+// handling live in switch-resolution.logic.ts.
 import { Box, Text } from 'ink';
 import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';

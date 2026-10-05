@@ -52,11 +52,9 @@ export function resolveServiceMenuKey(input: string, key: ServiceMenuKey, cursor
 }
 
 // The menu choice's store routing — pure so the zone's `useInput` branch stays a thin
-// dispatcher (the zone convention: useInput is never driven in tests). `update` opens the
-// 3.7 config screen pre-scoped to that single service (both fields pinned — `repoPath`
-// disambiguates duplicate service names); `restart` runs the standalone single-service
-// use-case for that repo alone; `cancel` (or Esc, which resolves to `cancel`) calls
-// nothing.
+// dispatcher. `update` opens the pre-run config screen pre-scoped to that single service (both
+// fields pinned — `repoPath` disambiguates duplicate service names); `restart` runs the
+// standalone single-service use-case for that repo alone; `cancel` (or Esc) calls nothing.
 export type ServiceMenuTarget = { service: string; repoPath: string };
 
 export type ServiceMenuAction =

@@ -15,8 +15,7 @@ import { useAppStore, type AppStore, type AppState } from './store/app-store.js'
 import { getZoneScreen } from './zones/index.js';
 import { ALL_ZONE_IDS, ZONES, nextZoneId, resolveReachableZones, zoneGatedStatus, type ZoneId } from './zones/zones.js';
 
-// Story 2.21: the Ctrl+W keyboard resize-mode's per-keypress step — an implementation choice
-// (Design Notes: "pick something responsive"), ~12 positions across the
+// The Ctrl+W keyboard resize-mode's per-keypress step: ~12 positions across the
 // MIN_LIST_RATIO..MAX_LIST_RATIO (0.2..0.8) clamp range.
 export const RESIZE_STEP = 0.05;
 
@@ -47,11 +46,9 @@ export function resolveHelpDispatch(
   }
 }
 
-// Story 2.13 adds the optional `reachable` param (defaults to every zone, preserving the
-// pre-2.13 behavior every existing call site relies on): a mnemonic whose zone isn't in
-// `reachable` (i.e. it's currently `omitted`) resolves to null — the mnemonic does nothing,
-// same as it never existed. A `disabled` zone stays in `reachable` and is landed on as
-// normal.
+// `reachable` defaults to every zone. A mnemonic whose zone isn't in `reachable` (it's
+// currently `omitted`) resolves to null and does nothing; a `disabled` zone stays reachable and
+// is landed on as normal.
 export function shouldSwitchZone(
   input: string,
   reachable: ReadonlySet<ZoneId> = ALL_ZONE_IDS,
@@ -63,11 +60,9 @@ export function shouldSwitchZone(
   return zone.id;
 }
 
-// Story 2.12: `Left`/`Right` directly switch the active zone to the previous/next zone in
-// `ZONES` order, wrapping at the ends — no mode to enter first, gated exactly like
-// `shouldSwitchZone`'s mnemonic dispatch (same `if` block, same early-return guards).
-// Story 2.13 adds the optional `reachable` param, forwarded straight to `nextZoneId` (same
-// default-preserving behavior as `shouldSwitchZone` above).
+// `Left`/`Right` directly switch the active zone to the previous/next zone in `ZONES` order,
+// wrapping at the ends — no mode to enter first, gated exactly like `shouldSwitchZone`'s
+// mnemonic dispatch. `reachable` is forwarded to `nextZoneId`.
 export function resolveZoneArrowSwitch(
   key: { leftArrow?: boolean; rightArrow?: boolean },
   activeZone: ZoneId,
@@ -82,10 +77,9 @@ export function resolveZoneArrowSwitch(
   return null;
 }
 
-// Story 2.21: Ctrl+W engages resize-mode only while the EDTs zone is active (Boundaries:
-// "Ctrl+W engages resize-mode only while the EDT zone is active — a no-op elsewhere"). Ink
-// delivers a ctrl+letter combo as `input === '<letter>'` with `key.ctrl: true` (confirmed
-// against ink's own parse-keypress.js), never a distinct `key` flag of its own.
+// Ctrl+W engages resize-mode only while the EDTs zone is active — a no-op elsewhere. Ink
+// delivers a ctrl+letter combo as `input === '<letter>'` with `key.ctrl: true` (see ink's
+// parse-keypress.js), never a distinct `key` flag of its own.
 export function shouldEnterResizeMode(
   input: string,
   key: { ctrl?: boolean },
@@ -94,11 +88,9 @@ export function shouldEnterResizeMode(
   return key.ctrl === true && input === 'w' && activeZone === 'edts';
 }
 
-// Story 2.21: boundary 0 is always the vertical list<->detail split (Design Notes) — every
-// other boundary (1, 2, ... for a future multi-boundary zone) is one of that zone's own
-// horizontal sub-splits. Arrow-key axis follows the boundary's own orientation: `←`/`→` for
-// the vertical boundary, `↑`/`↓` for a horizontal one (AC: "on a horizontal boundary, ↑/↓
-// moves it ... on the vertical boundary, ←/→ does likewise").
+// Boundary 0 is always the vertical list<->detail split; every other boundary is one of the
+// zone's horizontal sub-splits. The arrow axis follows the boundary's orientation: `←`/`→`
+// for the vertical boundary, `↑`/`↓` for a horizontal one.
 export function isVerticalResizeBoundary(boundaryIndex: number): boolean {
   return boundaryIndex === 0;
 }
@@ -127,16 +119,15 @@ export function resolveResizeStep(
   return null;
 }
 
-// Enter or Esc both exit resize-mode with no separate save step (AC: "Enter or Esc exits with
-// no separate save step") — every boundary move already applied/persisted live as it happened.
+// Enter or Esc both exit resize-mode with no separate save step — every boundary move was
+// already applied and persisted live.
 export function shouldExitResizeMode(key: { return?: boolean; escape?: boolean }): boolean {
   return key.return === true || key.escape === true;
 }
 
-// Story 2.13: the active zone falling to `omitted` (a registry change removed the only
-// carrying repo while that gated zone was active) has no explanatory-message content to
-// fall back to in place — unlike a mere disable, this one forces navigation back to
-// Dashboard (Boundaries: "Active tab going omitted -> AppShell falls back to dashboard").
+// The active zone falling to `omitted` (a registry change removed the only carrying repo while
+// that gated zone was active) has no explanatory message to show in place — unlike a mere
+// disable, it forces navigation back to Dashboard.
 export function shouldFallbackToDashboard(
   activeZone: ZoneId,
   tabVisibility: ResolveTabVisibilityData,
@@ -172,24 +163,20 @@ export function AppShell({
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
   const closeHelp = useStore((state) => state.closeHelp);
-  // Story 2.11: the registry screen's open/close flag lives in the store (not local AppShell
-  // state) so both the `registry` command inside Story 2.14's command bar and Dashboard's
-  // empty-registry prompt can trigger it.
+  // The registry screen's open/close flag lives in the store (not local AppShell state) so
+  // both the `registry` command and Dashboard's empty-registry prompt can trigger it.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
   const closeRegistryScreen = useStore((state) => state.closeRegistryScreen);
-  // Story 2.14: lives in the store (like registryScreenOpen, not local AppShell state as
-  // originally sketched) so a mounted zone screen can also read it and gate its own
-  // `useInput` with `{ isActive: !commandBarOpen }` — Ink dispatches every keypress to every
-  // mounted `useInput` hook regardless of z-order, so without this a zone's own key handling
-  // would silently fire underneath the bar (see EdtsZone).
+  // Lives in the store so a mounted zone screen can gate its own `useInput` with
+  // `{ isActive: !commandBarOpen }` — Ink dispatches every keypress to every mounted
+  // `useInput` hook regardless of z-order, so a zone's key handling would otherwise fire
+  // underneath the bar (see EdtsZone).
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const openCommandBar = useStore((state) => state.openCommandBar);
   const closeCommandBar = useStore((state) => state.closeCommandBar);
-  // Story 2.19: the `:settings` screen's open/close flag — mirrors registryScreenOpen for the
-  // store-level open flag and the global-shortcut skip below, but (amended 2026-08-28) Esc no
-  // longer closes it centrally here — `closeSettingsScreen` is instead passed down as
-  // SettingsScreen's own `onClose` prop, since only that component knows whether the EDTs
-  // tab's group-list is drilled in (Esc should step back, not close).
+  // The `:settings` screen's open/close flag. Esc is not handled here: `closeSettingsScreen`
+  // is SettingsScreen's own `onClose`, since only that component knows whether a tab's group
+  // list is drilled in (Esc steps back rather than closing).
   const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const closeSettingsScreen = useStore((state) => state.closeSettingsScreen);
   const loadSettings = useStore((state) => state.loadSettings);
@@ -199,19 +186,17 @@ export function AppShell({
   const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   const closeResetScreen = useStore((state) => state.closeResetScreen);
   const resetNotice = useStore((state) => state.resetNotice);
-  // Story 2.13: manifest-gated Routes/shared-types tab visibility — loaded once on mount and
-  // reloaded on registry-screen close / active-EDT membership change (see the effect below
-  // and app-store.ts's createEdt/switchEdt/modifyEdt).
+  // Manifest-gated Routes/shared-types tab visibility — loaded on mount and reloaded on
+  // registry-screen close / active-EDT membership change (see the effect below and
+  // app-store.ts's createEdt/switchEdt/modifyEdt).
   const tabVisibility = useStore((state) => state.tabVisibility);
   const loadTabVisibility = useStore((state) => state.loadTabVisibility);
-  // Story 2.21: loaded once at mount (mirrors loadSettings' own mount-once idiom below) so the
-  // EDTs zone's persisted boundary ratios are live before it ever renders, independent of
-  // whether the EDTs zone is the first one visited.
+  // Loaded once at mount so the EDTs zone's persisted boundary ratios are live before it ever
+  // renders, whichever zone is visited first.
   const loadSplitterRatios = useStore((state) => state.loadSplitterRatios);
-  // Story 5.4: same mount-once idiom — the Logs zone's filter editor and the Settings screen's
-  // Logs tab both read `store.filterHistory` unconditionally (arrow-recall/grid-browse and the
-  // clear actions), so the persisted lists must be live before either is ever opened
-  // (RESTART_PERSIST: "loaded from state.json on the next filter-editor open").
+  // Same mount-once idiom — the Logs zone's filter editor and the Settings screen's Logs tab
+  // both read `store.filterHistory` unconditionally, so the persisted lists must be live before
+  // either is ever opened.
   const loadFilterHistory = useStore((state) => state.loadFilterHistory);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
@@ -219,62 +204,55 @@ export function AppShell({
 
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Story 2.13: mirrors dashboard-zone.tsx's own checkRegistryEmpty effect idiom — a single
-  // effect keyed on `registryScreenOpen` both fires the mount-time load (it runs once on
-  // mount, `registryScreenOpen` starting false) and reloads whenever the registry screen
-  // closes (Story 2.11: registering may newly show/hide a gated tab). loadTabVisibility()
-  // itself no-ops a call that lands while a prior one is still in flight, so this never races.
+  // A single effect keyed on `registryScreenOpen` both fires the mount-time load (it starts
+  // false) and reloads whenever the registry screen closes (registering may show/hide a gated
+  // tab). loadTabVisibility() no-ops a call that lands while a prior one is in flight, so this
+  // never races.
   useEffect(() => {
     void loadTabVisibility();
   }, [registryScreenOpen, loadTabVisibility]);
 
-  // Story 2.20: load `edts` once at mount so the top bar's active-EDT topic label is
-  // correct regardless of which zone renders first — EdtsZone's own mount-time
-  // `loadEdts()` call is untouched and still reloads fresh whenever that zone is visited.
+  // Load `edts` once at mount so the top bar's active-EDT topic label is correct whichever
+  // zone renders first — EdtsZone still reloads whenever that zone is visited.
   useEffect(() => {
     void loadEdts();
     // Deliberately fires once on mount only, mirroring EdtsZone's own mount-once idiom.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Story 2.19 (AC3, I/O matrix "Restart"): loaded once at app mount, independent of whether
-  // the settings screen is ever opened — command-bar.tsx and edts-zone.tsx both read
-  // `store.settings` unconditionally, so the persisted values (not the defaults) must be live
-  // before either of them ever renders.
+  // Loaded once at app mount, whether or not the settings screen is ever opened —
+  // command-bar.tsx and edts-zone.tsx read `store.settings` unconditionally, so the persisted
+  // values (not the defaults) must be live before either renders.
   useEffect(() => {
     void loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Story 2.21 (I/O matrix "App restart after a boundary move"): loaded once at app mount,
-  // same mount-once idiom as loadSettings above — the EDTs zone reads `store.splitterRatios`
-  // unconditionally, so the persisted ratios (not the built-in defaults) must be live before
-  // it ever renders.
+  // Loaded once at app mount — the EDTs zone reads `store.splitterRatios` unconditionally, so
+  // the persisted ratios (not the built-in defaults) must be live before it renders.
   useEffect(() => {
     void loadSplitterRatios();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Story 5.4 (I/O matrix RESTART_PERSIST): loaded once at app mount, same mount-once idiom as
-  // loadSplitterRatios above.
+  // Loaded once at app mount, same idiom as loadSplitterRatios above.
   useEffect(() => {
     void loadFilterHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Story 2.13 (Boundaries): the active zone going `omitted` has no explanatory-message
-  // content to swap to in place — unlike a mere disable, force a fallback to Dashboard.
+  // The active zone going `omitted` has no explanatory message to swap to in place — unlike a
+  // mere disable, force a fallback to Dashboard.
   useEffect(() => {
     if (shouldFallbackToDashboard(activeZone, tabVisibility)) {
       setActiveZone('dashboard');
     }
   }, [activeZone, tabVisibility, setActiveZone]);
 
-  // Review patch (story 2.9): `q` can't reach onQuit while a zone dialog has captured
-  // input (see the zoneInputCaptured gate below) — a zone whose captured dialog has no
-  // cancel target of its own (the EDTs zone's forced, genuinely-empty-registry create
-  // prompt) calls `requestQuit()` instead. onQuit is only in scope here, at the
-  // composition root's boundary, so this effect is the handoff.
+  // `q` can't reach onQuit while a zone dialog has captured input (see the zoneInputCaptured
+  // gate below) — a captured dialog with no cancel target of its own (the EDTs zone's forced
+  // create prompt on an empty registry) calls `requestQuit()` instead. onQuit is only in scope
+  // here, at the composition root's boundary, so this effect is the handoff.
   useEffect(() => {
     if (quitRequested) {
       onQuit();
@@ -284,21 +262,17 @@ export function AppShell({
   useInput((input, key) => {
     const state = useStore.getState();
 
-    // Story 2.9: a zone-owned dialog/form (e.g. the EDTs zone's create/switch/modify
-    // flows) sets zoneInputCaptured while it owns the keystroke — every global shortcut,
-    // including `?` help, must not fire while it's set, the same way it's already gated
-    // for the zone-mnemonic/filter/command dispatch below.
-    // Story 6.9: the focused Routes right pane counts as captured straight from the store —
-    // the zone's own zoneInputCaptured effect lands one render later, and a keypress in
-    // between must not switch zones (or quit) mid-edit.
+    // A zone-owned dialog/form sets zoneInputCaptured while it owns the keystroke — no global
+    // shortcut, `?` help included, may fire while it's set. The focused Routes right pane
+    // counts as captured straight from the store: the zone's own zoneInputCaptured effect lands
+    // one render later, and a keypress in between must not switch zones (or quit) mid-edit.
     if (state.zoneInputCaptured || (state.activeZone === 'routes' && state.routesPaneFocus === 'detail')) {
       return;
     }
 
-    // Story 2.21: Ctrl+W resize-mode. Entering and dispatching within it both live under the
-    // same overlay exclusion as the zone-switch block below (Boundaries: "Ctrl+W under any
-    // overlay ... no-op"); entering additionally requires the EDTs zone to be active
-    // (shouldEnterResizeMode).
+    // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
+    // exclusion as the zone-switch block below; entering additionally requires the EDTs zone
+    // to be active (shouldEnterResizeMode).
     if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
       if (state.resizeMode !== null) {
         if (key.tab) {
@@ -315,9 +289,8 @@ export function AppShell({
           const current = zoneRatios[state.resizeMode.targetBoundary];
           void state.setSplitterRatio(state.resizeMode.zone, state.resizeMode.targetBoundary, current + step);
         }
-        // Every other key is inert while resize-mode owns input — Tab/arrows/Enter/Esc are
-        // its only live bindings (AC: "the targeted boundary recolors to accent, and same-key
-        // global shortcuts go inert").
+        // Every other key is inert while resize-mode owns input — Tab/arrows/Enter/Esc are its
+        // only live bindings.
         return;
       }
 
@@ -337,12 +310,9 @@ export function AppShell({
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
-    // Story 2.21 (deferred-work.md, tracked_by this story): resizeMode gates this block too —
-    // while it's active, arrows resize the targeted boundary (handled above) rather than
-    // switching zones, and every other shortcut here goes inert alongside it. In practice
-    // this is always true by the time execution reaches here (the resizeMode !== null branch
-    // above already returned), but the explicit check keeps this block's own guard
-    // self-documenting/defensive against future reordering.
+    // resizeMode gates this block too: while it's active, arrows resize the targeted boundary
+    // (handled above) instead of switching zones. The resizeMode !== null branch above already
+    // returned, so this is defensive against future reordering.
     if (
       !helpOpen &&
       !filterOpen &&
@@ -352,9 +322,9 @@ export function AppShell({
       !resetScreenOpen &&
       state.resizeMode === null
     ) {
-      // Story 2.13: the reachable-zone set (every zone minus whichever gated tab is
-      // currently 'omitted') gates both the mnemonic and the arrow-nav dispatch below —
-      // an omitted tab is never landed on either way; a disabled one stays reachable.
+      // The reachable-zone set (every zone minus whichever gated tab is currently 'omitted')
+      // gates both the mnemonic and the arrow-nav dispatch below — an omitted tab is never
+      // landed on either way; a disabled one stays reachable.
       const reachable = resolveReachableZones(state.tabVisibility);
       const zoneId = shouldSwitchZone(input, reachable);
       if (zoneId) {
@@ -362,24 +332,19 @@ export function AppShell({
         return;
       }
 
-      // Story 5.1 fix: while the Logs zone's pane grid owns Left/Right/Up/Down for sub-focus
-      // movement, this global Left/Right zone-switch must stay inert — otherwise every
-      // mounted `useInput` hook (Ink dispatches to all of them, not just the topmost) fires
-      // on the same keypress and the zone switches out from under the pane grid before its
-      // own handler's `setSubFocus` even matters.
-      // Story 6.7/6.9: the Routes right pane needs no gate here — while it holds focus it
-      // sets zoneInputCaptured (returned above), so its arrows never switch zones.
+      // While the Logs zone's pane grid owns Left/Right/Up/Down for sub-focus movement, this
+      // global Left/Right zone-switch stays inert — Ink dispatches to every mounted `useInput`
+      // hook, so the zone would otherwise switch out from under the pane grid. The Routes right
+      // pane needs no gate here: while focused it sets zoneInputCaptured (returned above).
       const arrowZoneId = state.logsPaneGridArrowsActive ? null : resolveZoneArrowSwitch(key, activeZone, reachable);
       if (arrowZoneId) {
         setActiveZone(arrowZoneId);
         return;
       }
 
-      // The Routes zone likewise owns `/` (its inline route filter).
-      // Story 5.2: the Logs zone owns `/` itself (its own global-filter editor) while it's
-      // the active zone — without this guard, this app-wide filter stub would also fire on
-      // the same keystroke (Ink dispatches to every mounted `useInput` hook), the same
-      // double-dispatch hazard already solved for arrow keys via `logsPaneGridArrowsActive`.
+      // The Routes and Logs zones own `/` themselves (route filter, global-filter editor) while
+      // active — without this guard, this app-wide filter stub would also fire on the same
+      // keystroke (Ink dispatches to every mounted `useInput` hook).
       if (activeZone !== 'logs' && activeZone !== 'routes' && shouldOpenFilter(input)) {
         setFilterOpen(true);
         return;
@@ -400,18 +365,14 @@ export function AppShell({
       setFilterOpen(false);
     }
 
-    // Esc always closes the registry screen, regardless of its internal phase (Boundaries:
-    // "closed via Esc, or after a register run" — no partial back-navigation between phases).
+    // Esc always closes the registry screen, regardless of its internal phase (no partial
+    // back-navigation between phases).
     if (registryScreenOpen && key.escape === true) {
       closeRegistryScreen();
     }
 
-    // Story 2.19 (amended 2026-08-28): Esc-close for the settings screen is no longer
-    // centralized here — it moved to SettingsScreen's own self-contained useInput (mirrors
-    // command-bar.tsx's own `onClose` pattern), because only that component knows whether the
-    // EDTs tab currently has a group drilled in (Esc should step back a level, not close the
-    // whole screen) or not (Esc should close). `closeSettingsScreen` is passed down as
-    // `onClose` below instead.
+    // The settings screen handles its own Esc (see `onClose` below): only it knows whether a
+    // group is drilled in (Esc steps back) or not (Esc closes).
   });
 
   return (

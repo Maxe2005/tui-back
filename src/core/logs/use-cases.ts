@@ -1,9 +1,5 @@
-// core/logs/use-cases: the Result<T> boundary (AD-2/AD-3) the TUI's logs slice calls, mirroring
-// how core/edt/{create,switch,modify}.ts sit between the store and their own stateful
-// dependency. LogsManager (index.ts) already returns Result<T> itself — these three functions
-// stay thin on purpose, giving the slice one canonical entry point per action (never calling
-// manager methods directly) exactly like the EDT slice never calls EdtRegistryPort methods
-// directly for create/switch/modify.
+// core/logs/use-cases: the Result<T> entry points the TUI's logs slice calls — one per action,
+// so the slice never calls LogsManager or DockerPort methods directly. Deliberately thin.
 import { ok, type Result } from '../result.js';
 import type { DockerPort, HealthState } from '../ports/docker.js';
 import type { LogsManager } from './index.js';
@@ -57,8 +53,8 @@ export interface GetServiceHealthParams {
   container: string;
 }
 
-// Story 5.3: thin Result<T> wrapper over DockerPort.getContainerHealth — keeps the TUI
-// slice off the raw port, same as subscribeLogs/clearLogs keep it off LogsManager methods.
+// Thin Result<T> wrapper over DockerPort.getContainerHealth — keeps the TUI slice off the raw
+// port, same as subscribeLogs/clearLogs keep it off LogsManager methods.
 export function getServiceHealth(params: GetServiceHealthParams): Promise<Result<HealthState>> {
   return params.docker.getContainerHealth(params.container);
 }
@@ -68,8 +64,8 @@ export interface RestartServiceParams {
   container: string;
 }
 
-// Story 5.3: thin Result<T> wrapper over DockerPort.restartContainer — developer-triggered
-// only, never called automatically (replaces check_health.sh's auto-restart).
+// Thin Result<T> wrapper over DockerPort.restartContainer — developer-triggered only, never
+// called automatically.
 export function restartService(params: RestartServiceParams): Promise<Result<void>> {
   return params.docker.restartContainer(params.container);
 }

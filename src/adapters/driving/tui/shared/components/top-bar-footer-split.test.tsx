@@ -21,7 +21,7 @@ const EDTS: EdtRegistryEntry[] = [
 ];
 
 describe('TopBar', () => {
-  it('renders the app name, active EDT topic, and chrome hints in one row (AC1)', async () => {
+  it('renders the app name, active EDT topic, and chrome hints in one row', async () => {
     const output = await renderToString(<TopBar activeEdt="edt-01hx2" edts={EDTS} />);
     expect(output).toContain('tui-back');
     expect(output).toContain('checkout-revamp');
@@ -48,7 +48,7 @@ describe('TopBar', () => {
 });
 
 describe('Footer', () => {
-  it('renders contextual keybinding hints on the permanent bottom row (AC1)', async () => {
+  it('renders contextual keybinding hints on the permanent bottom row', async () => {
     const output = await renderToString(<Footer />);
     expect(output).toContain('[?] help');
     expect(output).toContain('[q] quit');
@@ -68,14 +68,14 @@ describe('Footer', () => {
     expect(output).toContain('[?] help');
   });
 
-  it('omits the redundant [d/e/u/l/r/s] zone mnemonic, keeping [←→] zone in the default hints (UX-DR7, Story 2.20)', () => {
+  it('omits the redundant [d/e/u/l/r/s] zone mnemonic, keeping [←→] zone in the default hints (UX-DR7)', () => {
     expect(DEFAULT_FOOTER_HINTS).not.toContain('[d/e/u/l/r/s] zone');
     expect(DEFAULT_FOOTER_HINTS).toContain('[←→] zone');
   });
 });
 
 describe('resolveSplitFlex', () => {
-  it('defaults the split to ~2:3 list:detail (AC4)', () => {
+  it('defaults the split to ~2:3 list:detail', () => {
     expect(DEFAULT_LIST_RATIO).toBeCloseTo(2 / 5);
     const flex = resolveSplitFlex(DEFAULT_LIST_RATIO);
     expect(flex.list).toBeCloseTo(0.4);
@@ -95,7 +95,7 @@ describe('resolveSplitFlex', () => {
 });
 
 describe('ListDetailSplit', () => {
-  it('renders list and detail panes around a vertical splitter (AC4)', async () => {
+  it('renders list and detail panes around a vertical splitter', async () => {
     const output = await renderToString(
       <ListDetailSplit
         ratio={DEFAULT_LIST_RATIO}

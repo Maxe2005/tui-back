@@ -1,7 +1,6 @@
-// tui/store/slices/routes-slice: unit tests for story 6.1's Routes slice — store-level
-// coverage of repo-target resolution and the failure-vs-empty distinction, against fake
-// ports (AD-13). The zone's own render tests (routes-zone.test.tsx) cover the visible
-// states; core's list-routes.test.ts covers the gate itself.
+// tui/store/slices/routes-slice: store-level tests for repo-target resolution, the
+// failure-vs-empty distinction, per-route fires, tree states and body drafts, against fake
+// ports. The zone's render tests cover the visible states.
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { err, ok } from '../../../../../core/result.js';
 import type { DevAuthPort } from '../../../../../core/ports/dev-auth.js';
@@ -72,7 +71,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   };
 }
 
-describe('routes slice (story 6.1)', () => {
+describe('routes slice', () => {
   it('loads routes for the carrying repo into ready state', async () => {
     const store = createAppStore(fakeDeps());
 
@@ -198,9 +197,9 @@ describe('routes slice (story 6.1)', () => {
   });
 });
 
-// Story 6.9: the 6.2/6.7 fire coverage, migrated from the old global fire triple to the
-// per-route `responses` map (`fireRoute(routeKey, method, path, options?)`).
-describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
+// Fire coverage against the per-route `responses` map (`fireRoute(routeKey, method, path,
+// options?)`).
+describe('routes slice fireRoute', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -511,7 +510,7 @@ describe('routes slice fireRoute (stories 6.2, 6.9)', () => {
   });
 });
 
-describe('routes slice jsonTreeStates (story 6.7)', () => {
+describe('routes slice jsonTreeStates', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -625,7 +624,7 @@ describe('routes slice jsonTreeStates (story 6.7)', () => {
   });
 });
 
-describe('routes slice bodyDrafts (story 6.8)', () => {
+describe('routes slice bodyDrafts', () => {
   it('starts with no drafts and no edit errors', () => {
     const store = createAppStore(fakeDeps());
     expect(store.getState().bodyDrafts).toEqual({});

@@ -1,9 +1,6 @@
-// tui/zones/edts: story 2.9's async submit/confirm/force-switch paths and the
-// zoneInputCaptured gate are behavior only a real keypress can exercise — `renderToString`'s
-// fake stdin never emits data (see edts-zone.test.tsx and Design Notes). This file reuses
-// app-shell.alternate-screen.test.tsx's real-Ink-input technique (via
-// shared/test-support/fake-tty.ts) to drive genuine `useInput` round-trips through Ink's own
-// keypress parser — no pty required.
+// tui/zones/edts: real-keypress coverage (shared/test-support/fake-tty.ts) for what renderToString
+// cannot drive — async submit/confirm/force-switch paths, the zoneInputCaptured gate, the dialogs'
+// keystroke routing and the create wizard — through Ink's own keypress parser, no pty required.
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
@@ -54,7 +51,7 @@ async function type(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStrea
   }
 }
 
-// Story 2.37: Step 3 loads each selected service's branch lists on entry (never fetching).
+// Step 3 loads each selected service's branch lists on entry (never fetching).
 type ListsResult = Result<CreateCandidateBranches>;
 const readyBranches = async (): Promise<ListsResult> => ({ ok: true, data: { local: ['main', 'development'], remote: [] } });
 
@@ -83,7 +80,7 @@ function step3Store(
     edts: options.edts ?? [],
     edtsStatus: 'idle',
     activeEdt: null,
-    // Story 2.42: manifest fixtures — each service's manifest lists its own protected branches.
+    // Manifest fixtures — each service's manifest lists its own protected branches.
     edtsBranches: [
       { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main', protectedBranches: ['development', 'preprod', 'prod'] },
       { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: ['preprod', 'prod'] },
@@ -139,7 +136,7 @@ function mount(
   return { instance, stdout, stdin };
 }
 
-describe('EdtsZone real-keypress interactions (story 2.9)', () => {
+describe('EdtsZone real-keypress interactions', () => {
   it('a switch failure that is not the lock-block code stays in switch-confirm — never a silent return to the list', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });
@@ -183,11 +180,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await instance.waitUntilExit();
     }
   });
-  // Story 2.41: when a service outside the outgoing EDT is dirty, the switch dialog shows the
-  // two-panel resolution view. These fake switchEdt driving the exact same store fields
-  // (switchDirtyRepos / resolveSwitchDirtyRepos) edt-slice.ts's real onDirtyReposBeforeSwitch
-  // seam does — the real end-to-end wiring through core/edt/switch.ts is covered by
-  // edt-slice.test.ts; these are about the dialog's rendering and keystroke routing.
+  // When a service outside the outgoing EDT is dirty, the switch dialog shows the two-panel
+  // resolution view. These fakes drive the same store fields (switchDirtyRepos /
+  // resolveSwitchDirtyRepos) edt-slice.ts's real seam does — the end-to-end wiring through
+  // core/edt/switch.ts is covered by edt-slice.test.ts; these cover the dialog's rendering and
+  // keystroke routing.
   function resolutionStore(options: {
     activeTopic?: string | null;
     localBranches?: Record<string, string[]>;
@@ -248,7 +245,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     await settle(instance);
   }
 
-  it('story 2.41: the resolution view shows the intro, both panels and the footer; a global adopt proceeds with 2 adopt resolutions and shows the results', async () => {
+  it('the resolution view shows the intro, both panels and the footer; a global adopt proceeds with 2 adopt resolutions and shows the results', async () => {
     const { store, probe } = resolutionStore({
       results: [
         { service: 'svc-payments', outcome: 'adopted', detail: { code: 'adopted', message: 'ok', adoptedBranch: 'mon-topic' } },
@@ -299,7 +296,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.41: an Écraser strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
+  it('an Écraser strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
     const { store, probe } = resolutionStore();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -337,7 +334,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.41: Esc on the resolution view cancels the switch, touching nothing, and says so', async () => {
+  it('Esc on the resolution view cancels the switch, touching nothing, and says so', async () => {
     const { store, probe } = resolutionStore();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -368,7 +365,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.41: an invalid adopt target (already exists locally) is shown inline and blocks Ctrl+N', async () => {
+  it('an invalid adopt target (already exists locally) is shown inline and blocks Ctrl+N', async () => {
     const { store, probe } = resolutionStore({ localBranches: { '/repo/payments': ['development', 'mon-topic'] } });
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -387,7 +384,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.41: with no outgoing EDT only Écraser is offered, with an explanation', async () => {
+  it('with no outgoing EDT only Écraser is offered, with an explanation', async () => {
     const { store } = resolutionStore({ activeTopic: null });
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -479,11 +476,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.26 amendment: this scenario used to reach the branch-picker via Enter on the
-  // one *existing* member's still-checked row — no longer possible (that row now submits
-  // instead, see the dedicated amendment test below). Adapted to a not-yet-member candidate
-  // (svc-b), which stays branch-editable via Enter when freshly checked — the "drop a staged
-  // edit on uncheck" rule under test applies identically either way.
+  // Uses a not-yet-member candidate (svc-b), which stays branch-editable via Enter when freshly
+  // checked (an existing member's row submits instead) — the "drop a staged edit on uncheck"
+  // rule applies identically either way.
   it('drops a staged branch-edit for a member unchecked before submit — never sent to modifyEdt', async () => {
     const store = createAppStore();
     const active = edt({
@@ -504,9 +499,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Create new's pre-step for a brand-new name — mocked to succeed so the
-      // picker's staging actually commits (default "store not wired" would leave the picker
-      // open on a synthesized error instead).
+      // Create new's pre-step for a brand-new name — mocked to succeed so the picker's staging
+      // actually commits (default "store not wired" would leave the picker open on a synthesized
+      // error instead).
       createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyParams = params;
@@ -523,7 +518,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.tab);
       // Cursor -> row 1 (not-yet-member svc-b). Checking it auto-stages a suggested branch
       // ('main', the sole existing member's own branch); Enter then reopens the shared
-      // branch-picker (story 2.26) on that freshly-checked row (Create new, no "current
+      // branch-picker on that freshly-checked row (Create new, no "current
       // branch" to rename) so a custom value can be staged instead of the auto-suggestion.
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space);
@@ -553,13 +548,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.26 amendment: an already-a-member row is never branch-editable via checklist
-  // Enter any more — checked or not, the whole membership snapshot at dialog-open time is
-  // excluded (canEditMemberBranch's new originalMemberPaths guard). Enter on it must submit
-  // the form directly instead, closing the "practically unreachable submitModify" bug this
-  // amendment fixes. (Changing an existing member's own branch is still reachable — through
-  // the EDT SERVICES row's own "Change branch for this EDT" action, covered separately.)
-  it('Enter on an existing-member checklist row submits the form instead of opening the branch-picker (story 2.26 amendment)', async () => {
+  // An already-a-member row is never branch-editable via checklist Enter — checked or not, the
+  // whole membership snapshot at dialog-open time is excluded (canEditMemberBranch's
+  // originalMemberPaths guard), so Enter submits the form directly. (An existing member's branch
+  // is changed through the EDT SERVICES row's "Change branch for this EDT" action instead.)
+  it('Enter on an existing-member checklist row submits the form instead of opening the branch-picker', async () => {
     const store = createAppStore();
     const active = edt({
       ulid: 'active-ulid',
@@ -606,12 +599,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.26 amendment: the dialog title names the service a branch-picker session is open
-  // for, reverting to the plain title once the session closes — covers both ways a session
-  // can now open in Modify: a freshly-checked not-yet-member row (direct checklist Enter),
-  // and an existing member (the retry escape hatch, the only way left to reach one — see the
-  // amendment test above).
-  it('branch-picker title names the service for a freshly-checked candidate, reverting to MODIFY EDT on close (story 2.26 amendment)', async () => {
+  // The dialog title names the service a branch-picker session is open for, reverting to the
+  // plain title once the session closes — covering both ways a session opens in Modify: a
+  // freshly-checked not-yet-member row (direct checklist Enter), and an existing member (only via
+  // the retry action — see the test above).
+  it('branch-picker title names the service for a freshly-checked candidate, reverting to MODIFY EDT on close', async () => {
     const store = createAppStore();
     const active = edt({
       ulid: 'active-ulid',
@@ -655,7 +647,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('branch-picker title names the service for an existing member reopened via retry, reverting to MODIFY EDT on close (story 2.26 amendment)', async () => {
+  it('branch-picker title names the service for an existing member reopened via retry, reverting to MODIFY EDT on close', async () => {
     const store = createAppStore();
     const active = edt({
       ulid: 'active-ulid',
@@ -724,13 +716,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.26 amendment code review: the title's service lookup must fall through to
-  // `dialog.target.members.find(...)` when the branch-picker's repoPath belongs to an existing
-  // member that's absent from `candidates` (e.g. its repo became unreachable, or its manifest
-  // failed to load, so the current edtsBranches fetch never produced an entry for it) — never
-  // silently reverting to plain "MODIFY EDT" just because the `candidates.find(...)` branch
-  // came up empty. Modeled on the "reopened via retry" test above, but with svc-a deliberately
-  // missing from edtsBranches.
+  // The title's service lookup must fall through to `dialog.target.members.find(...)` when the
+  // branch-picker's repoPath belongs to an existing member absent from `candidates` (e.g. its
+  // repo became unreachable, or its manifest failed to load) — never silently reverting to plain
+  // "MODIFY EDT". Like the "reopened via retry" test above, with svc-a missing from edtsBranches.
   it('branch-picker title still names the service via the target.members fallback when the existing member is absent from candidates', async () => {
     const store = createAppStore();
     const active = edt({
@@ -794,10 +783,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.26 amendment: adapted to a not-yet-member candidate (svc-b) — Enter on the
-  // existing member (svc-a) no longer opens the branch-picker at all (see the dedicated
-  // amendment test above), so the empty-value validation is exercised via the still-reachable
-  // freshly-checked-row path instead (Create-new's own name field validates identically).
+  // Uses a not-yet-member candidate (svc-b): Enter on the existing member (svc-a) never opens
+  // the branch-picker, so the empty-value validation runs through the freshly-checked-row path
+  // (Create-new's name field validates identically).
   it('rejects an empty branch-edit value inline and keeps the dialog open — never reaches modifyEdt unvalidated', async () => {
     const store = createAppStore();
     const active = edt({
@@ -818,9 +806,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Create new's pre-step for a brand-new name — mocked to succeed so the
-      // valid retry value actually commits (default "store not wired" would leave the picker
-      // open on a synthesized error instead).
+      // Create new's pre-step for a brand-new name — mocked to succeed so the valid retry value
+      // actually commits (default "store not wired" would leave the picker open on a synthesized
+      // error instead).
       createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (): Promise<Result<ModifyEdtData>> => {
         modifyCalls += 1;
@@ -859,11 +847,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.24: checking a not-yet-member candidate in Modify auto-stages a suggested branch
-  // (the shared branch when every existing member agrees on one) — it flows straight through
-  // to modifyEdt's addMembers+setBranches without ever having to open the branch-edit
-  // sub-dialog by hand.
-  it('auto-stages a suggested branch when checking a not-yet-member candidate (story 2.24)', async () => {
+  // Checking a not-yet-member candidate in Modify auto-stages a suggested branch (the shared
+  // branch when every existing member agrees on one) — it flows straight through to modifyEdt's
+  // addMembers+setBranches without opening the picker by hand.
+  it('auto-stages a suggested branch when checking a not-yet-member candidate', async () => {
     const store = createAppStore();
     const active = edt({
       ulid: 'active-ulid',
@@ -910,10 +897,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.24: a newly-checked member's staged branch can still end up empty (e.g. an
-  // all-punctuation topic slugifies to '' and there are zero existing members to fall back
-  // to) — confirm must block inline, never reaching modifyEdt.
-  it('blocks confirm inline when a newly-checked member\'s auto-staged branch is empty (story 2.24)', async () => {
+  // A newly-checked member's staged branch can still end up empty (e.g. an all-punctuation topic
+  // slugifies to '' and there are zero existing members to fall back to) — confirm must block
+  // inline, never reaching modifyEdt.
+  it('blocks confirm inline when a newly-checked member\'s auto-staged branch is empty', async () => {
     const store = createAppStore();
     const active = edt({
       ulid: 'active-ulid',
@@ -979,7 +966,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
+      // Zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
       await type(instance, stdin, 'demo');
       await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select svc-a
@@ -992,8 +979,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.enter); // submit #2 — guarded by `submitting`
       expect(createCalls).toBe(1);
 
-      // Story 2.36: every key is inert while the submit is in flight — Esc would otherwise
-      // request a quit here (zero EDTs), and Ctrl+P would step back mid-submit.
+      // Every key is inert while the submit is in flight — Esc would otherwise request a quit
+      // here (zero EDTs), and Ctrl+P would step back mid-submit.
       await pressEscape(instance, stdin);
       await press(instance, stdin, KEYS.ctrlP);
       await press(instance, stdin, KEYS.ctrlLeft);
@@ -1012,7 +999,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.32: Left/Backspace edit the topic field at the caret through a real keypress round-trip, not always at the end', async () => {
+  it('Left/Backspace edit the topic field at the caret through a real keypress round-trip, not always at the end', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1026,18 +1013,17 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
+      // Zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
       await type(instance, stdin, 'abd'); // cursor trails at 3
       await press(instance, stdin, KEYS.left); // cursor -> 2
-      // Mid-string insert (I/O matrix): typing 'c' at cursor 2 in "abd" must produce "abcd" —
-      // if Left had stayed a no-op (pre-story behavior), this would append at the end instead,
-      // producing "abdc".
+      // Mid-string insert: typing 'c' at cursor 2 in "abd" must produce "abcd" — a no-op Left
+      // would append at the end instead, producing "abdc".
       await type(instance, stdin, 'c');
       expect(stdout.output).toContain('Nom: abcd');
       expect(stdout.output).not.toContain('Nom: abdc');
 
       await press(instance, stdin, KEYS.home); // cursor -> 0
-      await press(instance, stdin, KEYS.backspace); // cursor:0 -> no-op (I/O matrix)
+      await press(instance, stdin, KEYS.backspace); // cursor:0 -> no-op
       expect(stdout.output).toContain('Nom: abcd');
 
       await press(instance, stdin, KEYS.end); // cursor -> 4 (value.length)
@@ -1081,7 +1067,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('matrix: create with a duplicate topic — createEdt\'s rejection is surfaced inline, form stays open', async () => {
+  it('create with a duplicate topic — createEdt\'s rejection is surfaced inline, form stays open', async () => {
     const store = createAppStore();
     const createCalls: CreateEdtParams[] = [];
     store.setState({
@@ -1101,7 +1087,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
+      // Zero EDTs -> the create wizard auto-opens on Step 1, name-focused by default.
       await type(instance, stdin, 'demo');
       await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space); // select the one candidate member
@@ -1126,7 +1112,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.36 matrix: zero services checked blocks leaving Step 2 — inline message, no createEdt call', async () => {
+  it('zero services checked blocks leaving Step 2 — inline message, no createEdt call', async () => {
     const store = createAppStore();
     const createCalls: CreateEdtParams[] = [];
     store.setState({
@@ -1162,11 +1148,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Review patch (story 2.9): createEdt/switchEdt/modifyEdt are per-repo/per-member
-  // isolated — an overall ok:true result can still carry `results` rows with
-  // `outcome: 'failed'` (e.g. a candidate on a shared/protected branch). Every submit
-  // handler used to treat `result.ok` as unconditional full success and silently close the
-  // dialog without ever looking at `results`.
+  // createEdt/switchEdt/modifyEdt are per-repo/per-member isolated — an overall ok:true result
+  // can still carry `results` rows with `outcome: 'failed'` (e.g. a candidate on a
+  // shared/protected branch). Every submit handler must look at `results` rather than treat
+  // `result.ok` as full success and close the dialog.
   it('surfaces a per-member failure inline even though createEdt returned ok:true, instead of silently closing', async () => {
     const store = createAppStore();
     let loadCalls = 0;
@@ -1199,7 +1184,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // AC1: zero EDTs -> the create wizard auto-opens. Select both candidates.
+      // Zero EDTs -> the create wizard auto-opens. Select both candidates.
       await type(instance, stdin, 'demo');
       await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2 (services)
       await press(instance, stdin, KEYS.space);
@@ -1218,8 +1203,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       expect(stdout.output).toContain('svc-b');
       expect(stdout.output).toContain('shared/protected');
 
-      // Story 2.36 (review): the EDT already exists — nothing may re-submit or navigate away;
-      // the failure rows stay until acknowledged, and Enter closes the wizard.
+      // The EDT already exists — nothing may re-submit or navigate away; the failure rows stay
+      // until acknowledged, and Enter closes the wizard.
       expect(stdout.output).toContain('[Entrée/Esc] Fermer');
       await press(instance, stdin, KEYS.ctrlLeft);
       expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('shared/protected');
@@ -1234,8 +1219,8 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Story 2.37: Step 3 — global branch strategy & per-service overrides -------------------
-  it('story 2.37: Step 3 opens on Panel A (placeholder base, slug name, every row global); the default submit sends memberPlans only', async () => {
+  // Step 3 — global branch strategy & per-service overrides -------------------------------
+  it('Step 3 opens on Panel A (placeholder base, slug name, every row global); the default submit sends memberPlans only', async () => {
     const { store, createCalls, listCalls } = step3Store();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1275,7 +1260,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 matrix: a global base resolves live per service (local preferred, else origin/<x>); "introuvable" blocks Ctrl+N', async () => {
+  it('a global base resolves live per service (local preferred, else origin/<x>); "introuvable" blocks Ctrl+N', async () => {
     const { store, createCalls } = step3Store({
       lists: { '/repos/a': { local: ['main', 'rel'], remote: ['origin/rel'] }, '/repos/b': { local: ['development'], remote: ['origin/rel'] } },
     });
@@ -1313,7 +1298,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 matrix: the global name tracks Step 1 until edited; Ctrl+← keeps every decision', async () => {
+  it('the global name tracks Step 1 until edited; Ctrl+← keeps every decision', async () => {
     const { store, createCalls } = step3Store();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1350,7 +1335,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 matrix: "Configurer" box — a Perso row ignores Panel A; Ctrl+R reverts it to the global rule', async () => {
+  it('"Configurer" box — a Perso row ignores Panel A; Ctrl+R reverts it to the global rule', async () => {
     const { store, createCalls } = step3Store({ lists: { '/repos/a': { local: ['main'], remote: ['origin/dev'] }, '/repos/b': { local: ['development'], remote: [] } } });
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1405,7 +1390,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 matrix: Ctrl+R in the box puts the row back to [Créer (Global)] and closes the box', async () => {
+  it('Ctrl+R in the box puts the row back to [Créer (Global)] and closes the box', async () => {
     const { store } = step3Store({ lists: { '/repos/a': { local: ['main', 'feat/z'], remote: [] } } });
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1433,7 +1418,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 matrix: Existante / Renommer via the box — a remote pick with a rename reaches memberPlans as-is; protected names are refused inline', async () => {
+  it('Existante / Renommer via the box — a remote pick with a rename reaches memberPlans as-is; protected names are refused inline', async () => {
     const { store, createCalls } = step3Store({ lists: { '/repos/a': { local: ['main', 'prod'], remote: ['origin/w'] } } });
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1477,7 +1462,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37: Esc closes the innermost element first — box field, box, Panel A edit mode — then the wizard', async () => {
+  it('Esc closes the innermost element first — box field, box, Panel A edit mode — then the wizard', async () => {
     const { store, createCalls } = step3Store({ edts: [edt({ ulid: 'other-ulid', topic: 'other' })] });
     const { instance, stdout, stdin } = mount(store, { initialDialogKind: 'create' });
     try {
@@ -1516,7 +1501,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 (review): step navigation is inert while the box is open or a field is in edit — nothing unapplied is lost', async () => {
+  it('step navigation is inert while the box is open or a field is in edit — nothing unapplied is lost', async () => {
     const { store, createCalls } = step3Store();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1548,7 +1533,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       await press(instance, stdin, KEYS.ctrlN); // inert while Panel A edits
       expect(lastWizardFrame(stdout)).toContain('▶ 3. Branches ◀');
       await pressEscape(instance, stdin);
-      await press(instance, stdin, KEYS.ctrlN); // nothing open any more: advances
+      await press(instance, stdin, KEYS.ctrlN); // nothing open now: advances
       expect(lastWizardFrame(stdout)).toContain('▶ 4. Activation ◀');
       expect(createCalls).toHaveLength(0);
     } finally {
@@ -1557,7 +1542,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 (review): a Step 3 Esc-cancel decided in the state updater still reaches the zone — zero EDTs requests a quit', async () => {
+  it('a Step 3 Esc-cancel decided in the state updater still reaches the zone — zero EDTs requests a quit', async () => {
     const { store } = step3Store();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1576,7 +1561,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 (review): after a blocked Ctrl+N, editing the base clears the wizard message while the row keeps its own', async () => {
+  it('after a blocked Ctrl+N, editing the base clears the wizard message while the row keeps its own', async () => {
     const { store } = step3Store();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1597,7 +1582,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 (review): a list landing clears a stale "chargement des branches en cours" message', async () => {
+  it('a list landing clears a stale "chargement des branches en cours" message', async () => {
     let release: (() => void) | undefined;
     const { store } = step3Store({
       listCreateBranches: () =>
@@ -1622,7 +1607,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 (review): a rejected list load becomes a row error instead of loading forever', async () => {
+  it('a rejected list load becomes a row error instead of loading forever', async () => {
     const { store } = step3Store({
       listCreateBranches: async () => {
         throw new Error('spawn git ENOENT');
@@ -1638,7 +1623,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.37 matrix: a failed list load shows on the row, blocks Ctrl+N, and is retried on the next entry', async () => {
+  it('a failed list load shows on the row, blocks Ctrl+N, and is retried on the next entry', async () => {
     let attempts = 0;
     const { store, createCalls } = step3Store({
       listCreateBranches: async () => {
@@ -1672,7 +1657,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.36 matrix: a name taken by a loaded EDT (trimmed) shows "déjà pris" live and blocks Step 1; a case variant stays available', async () => {
+  it('a name taken by a loaded EDT (trimmed) shows "déjà pris" live and blocks Step 1; a case variant stays available', async () => {
     const store = createAppStore();
     let createCalls = 0;
     store.setState({
@@ -1715,7 +1700,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.36 (review): Step 4 re-checks the name — a clash appearing after Step 1 blocks the submit with the wizard message', async () => {
+  it('Step 4 re-checks the name — a clash appearing after Step 1 blocks the submit with the wizard message', async () => {
     const store = createAppStore();
     let createCalls = 0;
     store.setState({
@@ -1754,7 +1739,7 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  it('story 2.36 matrix: an empty (or blank) name blocks Step 1 with an inline message', async () => {
+  it('an empty (or blank) name blocks Step 1 with an inline message', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1778,10 +1763,9 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
     }
   });
 
-  // Review patch (story 2.9): the create prompt's Escape used to be unconditionally inert,
-  // reasoning the forced zero-EDT state has nothing to cancel to — but that also meant `q`
-  // (blocked by zoneInputCaptured) and Escape both did nothing, trapping the user with no
-  // way to quit short of Ctrl+C (which skips onQuit's lock release).
+  // The forced zero-EDT create prompt has nothing to cancel back to, and `q` is blocked by
+  // zoneInputCaptured — so Escape requests a quit, never leaving the user trapped short of
+  // Ctrl+C (which skips onQuit's lock release).
   it('Escape requests a quit when the create prompt is the forced, genuinely-empty-registry state', async () => {
     const store = createAppStore();
     store.setState({
@@ -1825,11 +1809,10 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
       loadEdtsBranches: async () => {},
     });
 
-    // `initialDialogKind: 'create'` (a test-only injection point, mirroring the smoke tests'
-    // own use of it) forces the dialog open despite `edts` being non-empty — the only way to
-    // reach this branch outside the partial-failure-after-create path covered above, since
-    // production never gives the populated view its own "new EDT" affordance yet
-    // (deferred-work.md).
+    // `initialDialogKind: 'create'` (a test-only injection point, like the smoke tests' use of
+    // it) forces the dialog open despite `edts` being non-empty — the only way to reach this
+    // branch outside the partial-failure-after-create path above, since the populated view lacks
+    // a "new EDT" affordance in this context.
     const { instance, stdin } = mount(store, { initialDialogKind: 'create' });
     try {
       await instance.waitUntilRenderFlush();
@@ -1846,11 +1829,11 @@ describe('EdtsZone real-keypress interactions (story 2.9)', () => {
 });
 
 // ==========================================================================================
-// Story 2.29 — delete an EDT (real-keypress coverage: toggling a member's disposition and
-// confirming/cancelling are only exercisable through a real Ink useInput round-trip).
+// Delete an EDT (real-keypress coverage: toggling a member's disposition and confirming/
+// cancelling are only exercisable through a real Ink useInput round-trip).
 // ==========================================================================================
 
-describe('EdtsZone real-keypress interactions (story 2.29, delete an EDT)', () => {
+describe('EdtsZone real-keypress interactions', () => {
   it('confirms deletion with the default (all "leave") dispositions when nothing is toggled', async () => {
     const store = createAppStore();
     const target = edt({
@@ -1993,8 +1976,8 @@ describe('EdtsZone real-keypress interactions (story 2.29, delete an EDT)', () =
     }
   });
 
-  // I/O matrix: "Delete the active EDT" -> rejected before any write, never auto-switched —
-  // only Escape is ever offered, Enter/Space are inert.
+  // Deleting the active EDT -> rejected before any write, never auto-switched — only Escape is
+  // ever offered, Enter/Space are inert.
   it('rejects the active EDT: Enter/Space are inert, only Escape closes the dialog', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'active-ulid', topic: 'demo' });
@@ -2026,8 +2009,8 @@ describe('EdtsZone real-keypress interactions (story 2.29, delete an EDT)', () =
       await instance.waitUntilRenderFlush();
 
       expect(deleteCalls).toBe(0);
-      // Never even fetches member statuses — there is nothing to disposition (Boundaries:
-      // "reject before any git/file write").
+      // Never even fetches member statuses — there is nothing to disposition (rejected before any
+      // git/file write).
       expect(statusCalls).toBe(0);
 
       await pressEscape(instance, stdin);
@@ -2040,13 +2023,13 @@ describe('EdtsZone real-keypress interactions (story 2.29, delete an EDT)', () =
 });
 
 // ==========================================================================================
-// Story 2.18 — active highlight, 3-way pane cycle, EDT SERVICES/OTHER SERVICES contextual
-// actions (real-keypress coverage: the Tab cycle, dialog opens, and async submits below are
-// only exercisable through a real Ink useInput round-trip — see the file header).
+// Active highlight, 3-way pane cycle, EDT SERVICES/OTHER SERVICES contextual actions
+// (real-keypress coverage: the Tab cycle, dialog opens, and async submits below are only
+// exercisable through a real Ink useInput round-trip — see the file header).
 // ==========================================================================================
 
-describe('EdtsZone real-keypress interactions (story 2.18)', () => {
-  it('Tab cycles edts -> edt-services -> other-services -> edts (AC: 3-way base-view cycle)', async () => {
+describe('EdtsZone real-keypress interactions', () => {
+  it('Tab cycles edts -> edt-services -> other-services -> edts (3-way base-view cycle)', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2155,8 +2138,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Pick existing over the repo's own real branch list is the simplest path
-      // to a plain 'set' outcome (no store-action pre-step, unlike Create new/Rename current).
+      // Pick existing over the repo's own real branch list is the simplest path to a plain 'set'
+      // outcome (no store-action pre-step, unlike Create new/Rename current).
       listBranches: async () => ({ ok: true, data: ['main-y'] }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyParams = params;
@@ -2194,7 +2177,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('Change branch for this EDT via Rename current reaches modifyEdt via renameBranches, not setBranches (story 2.26 verification gap)', async () => {
+  it('Change branch for this EDT via Rename current reaches modifyEdt via renameBranches, not setBranches', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2248,7 +2231,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('matrix: Change branch, empty value -> inline rejection, never reaches modifyEdt', async () => {
+  it('Change branch, empty value -> inline rejection, never reaches modifyEdt', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2352,10 +2335,10 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Pick existing (one Tab away from the picker's Create-new default, since
-      // Add-to-EDT never offers Rename current) over the repo's own real branch list lets this
-      // test confirm the pre-filled candidate with a single select+confirm — no store-action
-      // pre-step (no `createMemberBranch` mock needed) unlike Create-new's own path.
+      // Pick existing (one Tab away from the picker's Create-new default, since Add-to-EDT never
+      // offers Rename current) over the repo's own real branch list lets this test confirm the
+      // pre-filled candidate with a single select+confirm — no store-action pre-step (no
+      // `createMemberBranch` mock needed) unlike Create-new's own path.
       listBranches: async () => ({ ok: true, data: ['feature-y'] }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyParams = params;
@@ -2395,7 +2378,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('matrix: Add-to-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
+  it('Add-to-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {    const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     let loggedOutcome: string | undefined;
     const store = createAppStore();
     store.setState({
@@ -2489,10 +2472,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Review fix: submitRemoveFromEdt implements the same per-repo summarizeFailedResults
-  // partial-failure handling as submitAddToEdt above — this was previously only covered for
-  // Add-to-EDT.
-  it('matrix: Remove-from-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
+  // submitRemoveFromEdt has the same per-repo partial-failure handling as submitAddToEdt above.
+  it('Remove-from-EDT partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2546,9 +2527,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Review fix: submitServiceActionsBranchChange implements the same partial-failure
-  // handling too — previously only covered for Add-to-EDT.
-  it('matrix: Change-branch partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
+  // submitServiceActionsBranchChange has the same partial-failure handling too.
+  it('Change-branch partial failure surfaces inline via summarizeFailedResults, logged failed', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2604,13 +2584,10 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Story 2.27 code review (patch): the picker's "Create new" default base branch for
-  // service-actions' real git-write flow is this repo's own manifest-declared sharedBranch,
-  // never DEFAULT_BASE_BRANCH — asserts the actual `base` argument delivered to
-  // createMemberBranch, using a sharedBranch that differs from 'development' so this is
-  // distinguishable from the old hardcoded literal (every pre-existing fixture used
-  // 'development', identical to the literal, so a regression there wouldn't have failed any
-  // test).
+  // The picker's "Create new" default base branch for service-actions' real git-write flow is
+  // this repo's own manifest sharedBranch, never DEFAULT_BASE_BRANCH — asserts the `base`
+  // argument delivered to createMemberBranch, with a sharedBranch other than 'development' so it
+  // is distinguishable from the DEFAULT_BASE_BRANCH literal.
   it('service-actions Change-branch Create-new confirm-without-editing sends the manifest sharedBranch as base', async () => {
     const active = edt({
       ulid: 'active-ulid',
@@ -2660,15 +2637,14 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Story 2.25 -----------------------------------------------------------------------------
-  // "Assisted resolution" for the one registered failure code, branch-owned-by-other-edt —
-  // a per-repo structured line (never joined), an inline "[Enter] try a different branch"
-  // affordance, and confirming the reopened branch-edit re-runs the same submit function.
-  // Story 2.26 amendment: staged via a not-yet-member candidate (svc-b) rather than the
-  // existing svc-a — Enter on an already-a-member row no longer opens the branch-picker at
-  // all (see the dedicated amendment test above), but the retry mechanics under test here
-  // (findRetryableFailedRow, reopen-prefilled, re-submit) are identical either way.
-  it('matrix: branch-owned-by-other-edt in Modify shows "try a different branch"; retry reopens pre-filled and re-submits', async () => {
+  // Assisted resolution ---------------------------------------------------------------------
+  // "Assisted resolution" for the one registered failure code, branch-owned-by-other-edt — a
+  // per-repo structured line (never joined), an inline "[Enter] try a different branch"
+  // affordance, and confirming the reopened branch-edit re-runs the same submit function. Staged
+  // via a not-yet-member candidate (svc-b): Enter on an already-a-member row never opens the
+  // branch-picker, and the retry mechanics (findRetryableFailedRow, reopen-prefilled, re-submit)
+  // are identical either way.
+  it('branch-owned-by-other-edt in Modify shows "try a different branch"; retry reopens pre-filled and re-submits', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2688,8 +2664,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Create new's pre-step for a brand-new name — mocked to succeed so the
-      // picker's staging (and the retry's own re-staging) reaches modifyEdt at all.
+      // Create new's pre-step for a brand-new name — mocked to succeed so the picker's staging
+      // (and the retry's own re-staging) reaches modifyEdt at all.
       createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyCalls.push(params);
@@ -2777,10 +2753,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Story 2.26 amendment: staged via a not-yet-member candidate (svc-b) rather than the
-  // existing svc-a — see the comment on the branch-owned-by-other-edt matrix test above for
-  // why.
-  it('matrix: branch-exists in Modify shows "try a different name"; retry reopens pre-filled and re-submits (story 2.26, no prior end-to-end coverage)', async () => {
+  // Staged via a not-yet-member candidate (svc-b) rather than the existing svc-a — see the
+  // comment on the branch-owned-by-other-edt test above for why.
+  it('branch-exists in Modify shows "try a different name"; retry reopens pre-filled and re-submits', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2873,7 +2848,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('matrix: branch-owned-by-other-edt in service-actions "Change branch" shows the retry affordance; retry reopens pre-filled and re-submits', async () => {
+  it('branch-owned-by-other-edt in service-actions "Change branch" shows the retry affordance; retry reopens pre-filled and re-submits', async () => {
     const active = edt({
       ulid: 'active-ulid',
       topic: 'active-edt',
@@ -2892,8 +2867,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Create new's pre-step for a brand-new name — mocked to succeed so the
-      // picker's staging (and the retry's own re-staging) reaches modifyEdt at all.
+      // Create new's pre-step for a brand-new name — mocked to succeed so the picker's staging
+      // (and the retry's own re-staging) reaches modifyEdt at all.
       createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyCalls.push(params);
@@ -2958,7 +2933,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('matrix: branch-owned-by-other-edt in Add-to-EDT shows the retry affordance; the already-focused field re-submits on Enter', async () => {
+  it('branch-owned-by-other-edt in Add-to-EDT shows the retry affordance; the already-focused field re-submits on Enter', async () => {
     const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     const modifyCalls: ModifyEdtParams[] = [];
     const store = createAppStore();
@@ -2972,8 +2947,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      // Story 2.26: Create new's pre-step for the picker's default suggestion — mocked to
-      // succeed so the flow reaches modifyEdt, which is what actually rejects the name here.
+      // Create new's pre-step for the picker's default suggestion — mocked to succeed so the flow
+      // reaches modifyEdt, which is what actually rejects the name here.
       createMemberBranch: async () => ({ ok: true, data: undefined }),
       modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
         modifyCalls.push(params);
@@ -3031,12 +3006,11 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Never boundary: Create/Switch never wire the retry action, even for this exact code —
-  // resolveMemberBranch never passes edtId to assertAllowedBranch at create time, and
-  // switchActiveEdt carries no per-member branch override to retry into. Both still get the
-  // plain structured line, matching the "no registered action" treatment for an unregistered
-  // code (AC2).
-  it('matrix: branch-owned-by-other-edt inside a Create result renders a plain line — no retry affordance', async () => {
+  // Create/Switch never wire the retry action, even for this exact code — resolveMemberBranch
+  // never passes edtId to assertAllowedBranch at create time, and switchActiveEdt carries no
+  // per-member branch override to retry into. Both still get the plain structured line, the
+  // same "no registered action" treatment as an unregistered code.
+  it('branch-owned-by-other-edt inside a Create result renders a plain line — no retry affordance', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -3083,7 +3057,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  it('matrix: branch-owned-by-other-edt inside a Switch result renders a plain line — no retry affordance', async () => {
+  it('branch-owned-by-other-edt inside a Switch result renders a plain line — no retry affordance', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });
     const logged: Array<{ ulid: string; outcome: string; detail: string }> = [];
@@ -3126,8 +3100,8 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       expect(stdout.output).toContain('svc-a');
       expect(stdout.output).toContain('already registered as a different EDT');
       expect(stdout.output).not.toContain('[Enter] try a different branch');
-      // Story 2.41 review: the heading says failures happened, and the entry goes to the NEW
-      // active EDT's log as `failed`, carrying the failure.
+      // The heading says failures happened, and the entry goes to the NEW active EDT's log as
+      // `failed`, carrying the failure.
       expect(stdout.output).toContain('effectuée avec des échecs');
       await settle(instance);
       expect(logged).toEqual([{ ulid: 'target-ulid', outcome: 'failed', detail: expect.stringContaining('svc-a: Branch "other" is already registered') }]);
@@ -3137,8 +3111,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Review fix: no test previously exercised Escape/cancel for either new dialog, or backing
-  // out of the branch-edit sub-view via Escape.
+  // Escape/cancel for both dialogs, and backing out of the branch-edit sub-view via Escape.
   it('Escape cancels the EDT SERVICES contextual menu without calling modifyEdt', async () => {
     const active = edt({
       ulid: 'active-ulid',
@@ -3175,7 +3148,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       // the whole log would vacuously pass even if Escape did nothing — the menu's own
       // now-stale frame is still in there. Only the output *written since* Escape proves the
       // dialog is actually gone from the current render (same technique as the
-      // "rejects an empty branch-edit value inline" test in the story 2.9 suite above).
+      // "rejects an empty branch-edit value inline" test in the real-keypress suite above).
       const outputLengthBeforeEscape = stdout.output.length;
       await pressEscape(instance, stdin);
       const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
@@ -3224,7 +3197,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
 
       // Only the output *written since* Escape proves the menu is back in the *current*
       // render, not merely present somewhere earlier in the accumulated log (same technique
-      // as the story 2.9 suite's "rejects an empty branch-edit value inline" test above).
+      // as the real-keypress suite's "rejects an empty branch-edit value inline" test above).
       const outputLengthBeforeEscape = stdout.output.length;
       await pressEscape(instance, stdin);
       const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
@@ -3271,7 +3244,7 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
       await pressEscape(instance, stdin);
 
       expect(modifyCalls).toBe(0);
-      // Story 2.26: the picker's own async branches-fetch settling can still land a render
+      // The picker's own async branches-fetch settling can still land a render
       // shortly around the same time as Escape's, so — same technique as the Modify/
       // service-actions retry tests above — only the *last* rendered frame (not every write
       // since a captured point in time) can reliably tell whether the dialog is still showing.
@@ -3283,9 +3256,9 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
     }
   });
 
-  // Review fix: the `undefined` guards in the base-view Enter dispatch for EDT
-  // SERVICES/OTHER SERVICES (protecting against opening a dialog for a row that doesn't
-  // exist) were previously unverified — Enter on an empty pane must be a no-op.
+  // The `undefined` guards in the base-view Enter dispatch for EDT SERVICES/OTHER SERVICES
+  // (protecting against opening a dialog for a row that doesn't exist) — Enter on an empty pane
+  // must be a no-op.
   it('Enter on an empty EDT SERVICES pane is a no-op — never opens the contextual menu', async () => {
     const active = edt({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     const store = createAppStore();
@@ -3357,15 +3330,14 @@ describe('EdtsZone real-keypress interactions (story 2.18)', () => {
 });
 
 // ==========================================================================================
-// Story 2.30 — EDT quick-pick: edt-switch/edt-modify/edt-delete run with no argument now open
-// a shared filterable, arrow-navigable list instead of guessing a target (the old "first
-// non-active EDT" / focused-row fallbacks). Driven here exactly like the real command bar
-// drives it — setting `currentEdtAction` with the `target: 'select EDT'` sentinel the store's
-// openEdt*Dialog actions already produce (edt-slice.ts, untouched by this story) — so the
-// zone's own `currentEdtAction` effect is the thing under test, not a seeded dialog state.
+// EDT quick-pick: edt-switch/edt-modify/edt-delete with no argument open a shared filterable,
+// arrow-navigable list instead of guessing a target. Driven like the real command bar drives it —
+// setting `currentEdtAction` with the `target: 'select EDT'` sentinel the store's openEdt*Dialog
+// actions produce — so the zone's own `currentEdtAction` effect is the thing under test, not a
+// seeded dialog state.
 // ==========================================================================================
 
-describe('EdtsZone quick-pick dialog (story 2.30)', () => {
+describe('EdtsZone quick-pick dialog', () => {
   it('edt-switch with no argument opens quick-pick(switch), excluding the active EDT from the candidate pool', async () => {
     const active = edt({ ulid: 'active-ulid', topic: 'active-work', status: 'active' });
     const other = edt({ ulid: 'other-ulid', topic: 'other-work' });
@@ -3462,7 +3434,7 @@ describe('EdtsZone quick-pick dialog (story 2.30)', () => {
       // already use for a "this chrome is gone now" assertion.
       const rejectedFrame = stdout.output.slice(stdout.output.lastIndexOf('DELETE EDT'));
       expect(rejectedFrame).toContain('DELETE EDT');
-      // The existing story 2.29 rejection message — unchanged, just reached via the picker.
+      // The existing delete rejection message, reached via the picker.
       expect(rejectedFrame).toContain('active EDT');
       expect(rejectedFrame).toContain('cancel');
       expect(rejectedFrame).not.toContain('confirm');
@@ -3591,7 +3563,7 @@ describe('EdtsZone quick-pick dialog (story 2.30)', () => {
     }
   });
 
-  it('AC: a filter matching zero EDTs shows an explicit "No matching EDT" state, never a silently-empty list', async () => {
+  it('a filter matching zero EDTs shows an explicit "No matching EDT" state, never a silently-empty list', async () => {
     const other = edt({ ulid: 'other-ulid', topic: 'other-work' });
     const store = createAppStore();
     store.setState({
@@ -3720,7 +3692,7 @@ describe('EdtsZone quick-pick dialog (story 2.30)', () => {
   });
 });
 
-describe('EdtsZone edt-create-from (story 2.31)', () => {
+describe('EdtsZone edt-create-from', () => {
   const ROOT = edt({
     ulid: 'root-ulid',
     topic: 'feat-a',
@@ -3924,9 +3896,9 @@ describe('EdtsZone edt-create-from (story 2.31)', () => {
   });
 });
 
-// Story 2.38: the wizard's Step 4 — explicit activation. Two services (svc-a, svc-b); svc-a is
-// the new EDT's only member. Every log entry must go to the NEW EDT's ulid ('new-ulid').
-describe('EdtsZone create wizard Step 4 — activation & switch choice (story 2.38)', () => {
+// The wizard's Step 4 — explicit activation. Two services (svc-a, svc-b); svc-a is the new EDT's
+// only member. Every log entry must go to the NEW EDT's ulid ('new-ulid').
+describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
   const EXISTING = edt({ ulid: 'old-ulid', topic: 'old', members: [] });
   const NEW_ENTRY = edt({ ulid: 'new-ulid', topic: 'feat', members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'feat' }] });
   const BLOCKED: ActivateEdtData = { status: 'blocked', blocked: [{ service: 'svc-a', repoPath: '/repos/a', paths: ['a.ts', 'lib/b.ts'] }] };

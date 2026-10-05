@@ -1,8 +1,7 @@
-// tui/store/slices/edt-slice: unit tests for the switch dirty-repo seam (story 2.39 shape) —
-// the slice calls the real core/edt/switch.ts use-case against fake ports (AD-2 in-process),
-// so these verify the wiring (switchDirtyRepos raised/cleared, resolveSwitchDirtyRepos
-// resuming the paused core call) rather than re-testing switchActiveEdt's own matrix, already
-// covered in core/edt/switch.test.ts. Mirrors update-slice.test.ts's onUpdateBlocker tests.
+// tui/store/slices/edt-slice: unit tests for the switch dirty-repo seam — the slice calls the
+// real core/edt/switch.ts use-case against fake ports, so these verify the wiring (preview
+// raised/cleared, resolveSwitchDirtyRepos resuming the paused core call) rather than
+// re-testing switchActiveEdt itself. Mirrors update-slice.test.ts's onUpdateBlocker tests.
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -136,7 +135,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   };
 }
 
-describe('edt slice — switch dirty-repo seam (story 2.39)', () => {
+describe('edt slice — switch dirty-repo seam', () => {
   it('starts with no raised dirty preview', () => {
     const store = createAppStore(fakeDeps());
 
@@ -177,7 +176,7 @@ describe('edt slice — switch dirty-repo seam (story 2.39)', () => {
     expect(store.getState().activeEdt).toBe('target-ulid');
   });
 
-  it('a proceed payload carrying an adopt resolution (story 2.41) reaches core: branch created, repo adopted into the outgoing EDT', async () => {
+  it('a proceed payload carrying an adopt resolution reaches core: branch created, repo adopted into the outgoing EDT', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
@@ -254,7 +253,7 @@ function calls(fn: unknown): Array<unknown[]> {
   return (fn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
 }
 
-describe('edt slice — create wizard Step 3 wiring (story 2.37)', () => {
+describe('edt slice — create wizard Step 3 wiring', () => {
   it('listCreateBranches returns the local and remote-tracking lists through core', async () => {
     const deps = fakeDeps();
     (deps.git.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async () => ok(['main']));
@@ -297,7 +296,7 @@ describe('edt slice — create wizard Step 3 wiring (story 2.37)', () => {
   });
 });
 
-describe('edt slice — create never activates, activateEdt does (story 2.38)', () => {
+describe('edt slice — create never activates, activateEdt does', () => {
   it('createEdt never writes state.json nor flips the cached active pointer', async () => {
     const edtsBaseDir = await mkdtemp(join(tmpdir(), 'tui-back-edt-slice-'));
     try {

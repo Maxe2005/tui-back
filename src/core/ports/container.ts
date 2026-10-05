@@ -1,7 +1,5 @@
-// core/ports/container: the container port contract (story 3.1). Group update restarts
-// each member service's container after its pull/merge; the driven adapter owns how that
-// restart is executed (child_process against the container runtime). Core consumes the
-// contract without ever importing the adapter (AD-1).
+// core/ports/container: the container port contract. Group update restarts each member
+// service's container after its pull/merge; the driven adapter owns how the restart runs.
 import type { Result } from '../result.js';
 
 export interface ContainerPort {

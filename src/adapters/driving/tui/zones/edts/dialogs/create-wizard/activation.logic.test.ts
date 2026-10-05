@@ -1,5 +1,5 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.38 — Step 4's pure key reducer (radio, pause
-// panel, overwrite confirmation) and its helpers.
+// tui/zones/edts/dialogs/create-wizard: Step 4's pure key reducer (radio, pause panel, overwrite
+// confirmation) and its helpers.
 import { describe, expect, it } from 'vitest';
 import { initialActivationState, type ActivationState } from '../../edts-zone.logic.js';
 import { overwriteConfirmLines, overwriteFrom, reduceActivationKey } from './activation.logic.js';

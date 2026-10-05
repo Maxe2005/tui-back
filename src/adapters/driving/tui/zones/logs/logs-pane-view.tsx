@@ -1,6 +1,5 @@
-// tui/zones/logs: a single grid-pane's own rendering — extracted from logs-zone.tsx (refactor).
-// Purely presentational, mirroring FullscreenPane's own split: all keystroke handling stays in
-// LogsZone's own useInput (Code Map: never a component-owned useInput here).
+// tui/zones/logs: a single grid pane's rendering. Purely presentational — all keystroke handling
+// stays in LogsZone's useInput.
 import { Box, Text } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -50,10 +49,9 @@ export function LogsPaneView({
   const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
     computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
   );
-  // A pane with buffered lines that the current stdout/stderr/story-5.2 filters happen to
-  // hide entirely must read differently from "no lines have arrived yet" — otherwise a user
-  // who toggled off both stdout and stderr, or set an aggressive filter, is misleadingly told
-  // the stream itself is empty (review fix, story 5.1; extended to the new filter layer).
+  // A pane whose buffered lines the stdout/stderr toggles or filters hide entirely must read
+  // differently from "no lines have arrived yet" — otherwise a user who toggled off both streams,
+  // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   return (
     <Box
@@ -67,16 +65,16 @@ export function LogsPaneView({
       borderColor={focused ? colors.accent : colors.border}
       paddingX={1}
     >
-      {/* User-reported: always bold (not just when sub-focused) so a service name stands out
-          from its own log text at a glance, in a grid where several panes are visible at once. */}
+      {/* Always bold (not just when sub-focused) so a service name stands out from its own log
+          text at a glance, in a grid where several panes are visible at once. */}
       <Box flexDirection="row">
         <Box flexGrow={1} minWidth={0}>
           <Text bold color={focused ? colors.accent : colors.text} wrap="truncate-end">
             {service.service}
           </Text>
         </Box>
-        {/* Story 5.3: inline health badge next to the service's logs (glyph+color paired) +
-            the developer-triggered restart control's disabled state while restarting. */}
+        {/* Inline health badge next to the service's logs (glyph+color paired) + the restart
+            control's disabled state while restarting. */}
         <Box marginLeft={1}>
           <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
           <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>

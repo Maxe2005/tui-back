@@ -10,18 +10,16 @@ import {
 import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 import { renderToString } from './render-to-string.js';
 
-// Story 5.5: clampHelpOffset/resolveHelpWindow are now thin aliases for bounded-list.tsx's own
-// clampBoundedOffset/resolveBoundedWindow (the shared primitive every bounded surface in the
-// app reuses) — proves the extraction genuinely removed the duplicated window logic rather
-// than just renaming a second copy of it.
-describe('keybinding-help delegates to the shared bounded-list primitive (story 5.5)', () => {
+// clampHelpOffset/resolveHelpWindow are thin aliases for bounded-list.tsx's
+// clampBoundedOffset/resolveBoundedWindow, not a second copy of the window logic.
+describe('keybinding-help delegates to the shared bounded-list primitive', () => {
   it('clampHelpOffset/resolveHelpWindow are literally bounded-list.tsx\'s own exports', () => {
     expect(clampHelpOffset).toBe(clampBoundedOffset);
     expect(resolveHelpWindow).toBe(resolveBoundedWindow);
   });
 });
 
-describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
+describe('keybinding-help scroll window (UX-DR15)', () => {
   it('clamps negative and non-finite offsets to 0', () => {
     expect(clampHelpOffset(-3, 10)).toBe(0);
     expect(clampHelpOffset(Number.NaN, 10)).toBe(0);
@@ -51,7 +49,7 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
     expect(down.scrollOffset).toBe(1);
 
     const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    // Story 2.41 appended the switch resolution view's keys, its Esc row last.
+    // The switch resolution view's keys come last, its Esc row last of all.
     expect(atBottom.visible.at(-1)?.keys).toBe('Esc (switch resolution)');
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
@@ -60,9 +58,9 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
   });
 });
 
-// Story 2.7: canonical navigation contract — resolveHelpScroll reads key flags
-// (upArrow/downArrow/home/end) instead of input==='j'/'k', and j/k/g/G are inert.
-describe('resolveHelpScroll (story 2.7)', () => {
+// resolveHelpScroll reads key flags (upArrow/downArrow/home/end), never input==='j'/'k'; j/k/g/G
+// are inert.
+describe('resolveHelpScroll', () => {
   const noKey = { upArrow: false, downArrow: false, home: false, end: false, tab: false };
 
   it('moves the offset down on downArrow and up on upArrow', () => {
@@ -89,7 +87,7 @@ describe('resolveHelpScroll (story 2.7)', () => {
   });
 });
 
-describe('KeybindingHelp modal (AC2, AC3)', () => {
+describe('KeybindingHelp modal', () => {
   it('renders the keybinding list while open and nothing when closed', async () => {
     const store = createAppStore();
     let output = await renderToString(<KeybindingHelp useStore={store} />);
@@ -102,7 +100,7 @@ describe('KeybindingHelp modal (AC2, AC3)', () => {
     expect(output).toContain('Open the keybinding-help screen');
   });
 
-  it('renders only the visible slice of keybindings (AC3)', async () => {
+  it('renders only the visible slice of keybindings', async () => {
     const store = createAppStore();
     store.getState().openHelp();
     const output = await renderToString(

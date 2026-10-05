@@ -3,7 +3,7 @@ import { DimAnnotation } from './index.js';
 import { renderToString } from './render-to-string.js';
 
 describe('DimAnnotation', () => {
-  it('renders italic dim text (AC6)', async () => {
+  it('renders italic dim text', async () => {
     const output = await renderToString(
       <DimAnnotation text="This is supplementary information" />,
     );

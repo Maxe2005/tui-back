@@ -3,7 +3,7 @@ import { ModalDialog } from './index.js';
 import { renderToString } from './render-to-string.js';
 
 describe('ModalDialog', () => {
-  it('renders a box-drawn modal dialog with title (AC1)', async () => {
+  it('renders a box-drawn modal dialog with title', async () => {
     const output = await renderToString(
       <ModalDialog title="Test modal" onConfirm={() => {}} onCancel={() => {}} open />,
     );

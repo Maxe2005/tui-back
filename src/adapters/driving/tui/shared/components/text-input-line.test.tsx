@@ -47,7 +47,7 @@ describe('TextInputLine', () => {
     expect(output).toContain('[Enter] confirm');
   });
 
-  it('renders empty value with cursor and hint when focused (matrix: focused, empty value)', async () => {
+  it('renders empty value with cursor and hint when focused', async () => {
     const output = await renderToString(<TextInputLine label="Topic" value="" focused />);
     expect(output).toContain('Topic:');
     expect(output).toContain('[Enter] confirm');
@@ -59,17 +59,17 @@ describe('TextInputLine', () => {
   });
 });
 
-describe('TextInputLine cursor navigation (story 2.32)', () => {
-  it('renders the glyph after the last character when cursor is omitted (matrix: no cursor prop)', async () => {
+describe('TextInputLine cursor navigation', () => {
+  it('renders the glyph after the last character when cursor is omitted', async () => {
     const output = await renderToString(<TextInputLine label="Topic" value="abc" focused />);
     expect(output).toContain('Topic: abc');
   });
 
   it('renders the full value unchanged, mid-string cursor included, when reconstructed left to right', async () => {
     const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={2} focused />);
-    // Code review fix: assert the exact reconstructed "label: value" substring (order and
-    // completeness both), not three independent substring checks that would still pass on a
-    // scrambled or duplicated reassembly (e.g. "Topic: adbc" or "Topic: abccd").
+    // Assert the exact reconstructed "label: value" substring (order and completeness both), not
+    // three independent substring checks that would still pass on a scrambled or duplicated
+    // reassembly (e.g. "Topic: adbc" or "Topic: abccd").
     expect(output).toContain('Topic: abcd');
   });
 

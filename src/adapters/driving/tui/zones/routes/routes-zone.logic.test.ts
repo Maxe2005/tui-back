@@ -1,6 +1,6 @@
-// tui/zones/routes/logic: unit tests for story 6.1's pure Routes helpers — the
-// useInput callback itself is never invoked by any test (renderToString's fake stdin never
-// emits a keypress), so selection behavior is only verifiable through these functions.
+// tui/zones/routes/logic: unit tests for the pure Routes helpers — the useInput callback
+// itself is never invoked by any test (renderToString's fake stdin never emits a keypress), so
+// selection behavior is only verifiable through these functions.
 import { describe, expect, it } from 'vitest';
 import {
   formatFireError,
@@ -82,21 +82,21 @@ describe('formatRouteDetail', () => {
   });
 });
 
-describe('formatFireResult (story 6.2)', () => {
+describe('formatFireResult', () => {
   it('joins status, duration, and body into one Text-safe string', () => {
     expect(formatFireResult({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms\n\n{"id":1}');
   });
 });
 
-describe('formatFireStatus (story 6.7)', () => {
+describe('formatFireStatus', () => {
   it('keeps the status line while the body dump moves into the JsonTree', () => {
     expect(formatFireStatus({ status: 200, durationMs: 42, body: '{"id":1}' })).toBe('200 · 42ms · 8 B');
-    // Story 6.9: a body at core's cap marks the size as a lower bound.
+    // A body at core's cap marks the size as a lower bound.
     expect(formatFireStatus({ status: 200, durationMs: 1, body: 'x'.repeat(64 * 1024) })).toBe('200 · 1ms · ≥64.0 KB');
   });
 });
 
-describe('formatFireError (story 6.2)', () => {
+describe('formatFireError', () => {
   it('renders auth failures distinctly from generic failures', () => {
     expect(formatFireError('auth-unauthorized', 'rejected')).toContain('Auth failed');
     expect(formatFireError('auth-forbidden', 'denied')).toContain('Access forbidden');
@@ -116,7 +116,7 @@ describe('formatFireError (story 6.2)', () => {
   });
 });
 
-describe('resolveEnterFireTarget (story 6.2 review)', () => {
+describe('resolveEnterFireTarget', () => {
   const routes = [
     { method: 'GET', path: '/users' },
     { method: 'POST', path: '/users' },

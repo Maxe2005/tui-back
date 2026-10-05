@@ -1,8 +1,7 @@
-// tui/zones/routes: render tests (AD-13 — Ink smoke coverage) for story 2.13's `disabled`
-// explanatory message plus story 6.1's real list/detail content: spinner while loading,
-// the three visibly distinct failure/empty/not-activated states, and the route list itself
-// seeded straight into the store (renderToString performs one synchronous render pass, so
-// the mount-time loadRoutes effect is seeded around, not through).
+// tui/zones/routes: render tests for the `disabled` explanatory message and the real list/detail
+// content — spinner while loading, the three distinct failure/empty/not-activated states, and
+// the route list seeded straight into the store (renderToString renders once, so the mount-time
+// loadRoutes effect is seeded around, not through).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
@@ -16,7 +15,7 @@ describe('formatRoutesDisabledMessage', () => {
   });
 });
 
-describe('RoutesZone (story 2.13)', () => {
+describe('RoutesZone disabled state', () => {
   it('shows the explanatory message naming the carrying services when disabled', async () => {
     const store = createAppStore();
     store.setState({
@@ -32,7 +31,7 @@ describe('RoutesZone (story 2.13)', () => {
   });
 });
 
-describe('RoutesZone (story 6.1)', () => {
+describe('RoutesZone route list', () => {
   it('shows a spinner while routes are loading', async () => {
     const store = createAppStore();
     // One-shot render idiom (mirrors logs-zone.test.tsx): stub the mount-time loader so
@@ -106,9 +105,8 @@ describe('RoutesZone (story 6.1)', () => {
   });
 });
 
-// Story 6.9 migrated the 6.2/6.7/6.8 render coverage from the global fire triple to the
-// per-route `responses` map and the pane focus/tab state.
-describe('RoutesZone (stories 6.2, 6.9)', () => {
+// Render coverage of the per-route `responses` map and the pane focus/tab state.
+describe('RoutesZone fire and request pane', () => {
   function seedReadyRoutes(store: ReturnType<typeof createAppStore>) {
     store.setState({
       routesStatus: 'ready',
@@ -226,7 +224,7 @@ describe('RoutesZone (stories 6.2, 6.9)', () => {
   });
 });
 
-describe('RoutesZone (story 6.8)', () => {
+describe('RoutesZone body editor', () => {
   function seedBodyRoutes(store: ReturnType<typeof createAppStore>) {
     store.setState({
       routesStatus: 'ready',
@@ -259,7 +257,7 @@ describe('RoutesZone (story 6.8)', () => {
   });
 });
 
-describe('RoutesZone (story 6.7)', () => {
+describe('RoutesZone JsonTree', () => {
   function seedFiredJson(store: ReturnType<typeof createAppStore>, body = '{"id":1,"tags":["a"]}') {
     store.setState({
       routesStatus: 'ready',

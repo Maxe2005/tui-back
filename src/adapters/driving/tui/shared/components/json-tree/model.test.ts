@@ -89,7 +89,7 @@ describe('routeKeyFor', () => {
   });
 });
 
-describe('flattenJson (nested JSON matrix row)', () => {
+describe('flattenJson (nested JSON)', () => {
   const value = { data: { name: 'ada', age: 36, admin: true, nick: null, tags: ['x', 'y'] } };
 
   it('emits indented rows with {n}/[n] size hints and scalar display values', () => {
@@ -130,7 +130,7 @@ describe('flattenJson (nested JSON matrix row)', () => {
   });
 });
 
-describe('truncateStringValue (120-char matrix row)', () => {
+describe('truncateStringValue (120-char)', () => {
   it('truncates past 120 chars with … and leaves shorter strings alone', () => {
     expect(truncateStringValue('a'.repeat(120))).toBe('a'.repeat(120));
     expect(truncateStringValue('a'.repeat(121))).toBe(`${'a'.repeat(120)}…`);
@@ -155,7 +155,7 @@ describe('truncateStringValue (120-char matrix row)', () => {
   });
 });
 
-describe('fold/unfold (matrix row)', () => {
+describe('fold/unfold', () => {
   const value = { a: { b: { c: 1 } }, d: 2 };
 
   it('hides children while keeping the folded container row', () => {
@@ -186,7 +186,7 @@ describe('fold/unfold (matrix row)', () => {
   });
 });
 
-describe('depth levels (+/- matrix row)', () => {
+describe('depth levels (+/-)', () => {
   const value = { a: { b: { c: 1 } }, d: { e: 2 } };
 
   it('folds the deepest unfolded level first, then the next one up', () => {
@@ -225,7 +225,7 @@ describe('depth levels (+/- matrix row)', () => {
   });
 });
 
-describe('global hide (h matrix row)', () => {
+describe('global hide (h)', () => {
   const value = { tags: ['a'], nested: { tags: ['b'], other: 1 } };
 
   it('hides every line with the key name everywhere', () => {
@@ -245,7 +245,7 @@ describe('global hide (h matrix row)', () => {
   });
 });
 
-describe('allow-list (H matrix row)', () => {
+describe('allow-list (H)', () => {
   const value = { id: 1, name: 'x', nested: { id: 2, other: 3 }, list: [{ id: 3, z: 4 }] };
 
   it('shows only listed keys plus structural ancestors', () => {
@@ -264,7 +264,7 @@ describe('allow-list (H matrix row)', () => {
   });
 });
 
-describe('hide nulls + rule reducers (filter panel matrix row)', () => {
+describe('hide nulls + rule reducers (filter panel)', () => {
   const value = { a: null, b: 1, c: { d: null } };
 
   it('hides null lines but keeps their containers', () => {
@@ -341,7 +341,7 @@ describe('resolveTreeKeyAction', () => {
     expect(resolveTreeKeyAction('F', {})).toBe('toggle-panel');
   });
 
-  it('maps the story 6.8 edit keys while leaving Esc, digits, and Ctrl combos to the zone', () => {
+  it('maps the body-editor edit keys while leaving Esc, digits, and Ctrl combos to the zone', () => {
     expect(resolveTreeKeyAction('\r', {})).toBe('edit-value');
     expect(resolveTreeKeyAction('a', {})).toBe('add-entry');
     expect(resolveTreeKeyAction('A', {})).toBe('add-entry');
@@ -373,7 +373,7 @@ describe('resolveTreePanelKeyAction', () => {
   });
 });
 
-describe('classifyResponseBody (response classification matrix rows)', () => {
+describe('classifyResponseBody (response classification)', () => {
   it('treats empty bodies and empty objects/arrays as explicit empty states', () => {
     expect(classifyResponseBody('')).toEqual({ kind: 'empty', emptyKind: 'empty-body' });
     expect(classifyResponseBody('   ')).toEqual({ kind: 'empty', emptyKind: 'empty-body' });
@@ -448,7 +448,7 @@ describe('pruneJsonTreeStates', () => {
   });
 });
 
-describe('validateScalarText (scalar edit matrix row)', () => {
+describe('validateScalarText (scalar edit)', () => {
   it('accepts any string, including the empty string', () => {
     expect(validateScalarText('string', '12x')).toEqual({ ok: true, value: '12x' });
     expect(validateScalarText('string', '')).toEqual({ ok: true, value: '' });
@@ -537,7 +537,7 @@ describe('setValueAtPath (immutable scalar set)', () => {
   });
 });
 
-describe('addEntryAtPath (structural add matrix row)', () => {
+describe('addEntryAtPath (structural add)', () => {
   it('adds an object key defaulting to an empty string', () => {
     expect(addEntryAtPath({ a: 1 }, '', 'id')).toEqual({ ok: true, value: { a: 1, id: '' } });
   });
@@ -572,7 +572,7 @@ describe('addEntryAtPath (structural add matrix row)', () => {
   });
 });
 
-describe('removeEntryAtPath (delete matrix row)', () => {
+describe('removeEntryAtPath (delete)', () => {
   it('removes object keys and clamps callers re-derive selection afterwards', () => {
     expect(removeEntryAtPath({ a: 1, b: 2 }, 'a')).toEqual({ ok: true, value: { b: 2 } });
   });
@@ -588,7 +588,7 @@ describe('removeEntryAtPath (delete matrix row)', () => {
   });
 });
 
-describe('changeTypeAtPath (t cycle matrix row)', () => {
+describe('changeTypeAtPath (t cycle)', () => {
   it('re-parses string "3" to number 3', () => {
     expect(changeTypeAtPath({ v: '3' }, 'v')).toEqual({ ok: true, value: { v: 3 } });
   });
@@ -634,7 +634,7 @@ describe('resolveAddParentPath', () => {
   });
 });
 
-describe('parseRawJsonBuffer (raw valid/invalid matrix rows)', () => {
+describe('parseRawJsonBuffer (raw valid/invalid)', () => {
   it('replaces the body on valid JSON', () => {
     expect(parseRawJsonBuffer('{"a":1}')).toEqual({ ok: true, value: { a: 1 } });
   });
@@ -659,7 +659,7 @@ describe('parseRawJsonBuffer (raw valid/invalid matrix rows)', () => {
   });
 });
 
-describe('draft gating, seeding, and prune (bodyDrafts matrix rows)', () => {
+describe('draft gating, seeding, and prune (bodyDrafts)', () => {
   it('opens only for bodyExample or any bodyContentType', () => {
     expect(canEditRouteBody({ bodyExample: { a: 1 } })).toBe(true);
     expect(canEditRouteBody({ bodyExample: null })).toBe(true);

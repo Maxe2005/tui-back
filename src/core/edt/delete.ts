@@ -1,31 +1,8 @@
-// core/edt/delete: the core use-case for deleting an EDT (story 2.29). A developer can
-// remove a finished/abandoned EDT once it's no longer needed, choosing per-member whether to
-// leave that member's own branch as-is or delete it. Its per-member branches and the EDT
-// registry entry accumulate with no cleanup path otherwise.
-//
-// Boundaries (frozen intent):
-//   - The active EDT can never be deleted: rejected before any git/file write, with a clear
-//     message to switch away first — never auto-switched. state.json's activeEdt pointer is
-//     the authoritative source (never EdtRegistryEntry.status, which create.ts always sets to
-//     'active' for a brand-new entry regardless of any other EDT's own status — see
-//     edt-slice.ts's own comment on this exact point).
-//   - Per-member disposition ('leave' | 'delete') is caller-supplied (the TUI computes its
-//     own merged+clean defaults via resolveMemberDeleteStatuses below); any member this
-//     use-case isn't told about defaults to 'leave', the safe no-op.
-//   - A branch disposed 'delete' is never silently downgraded back to 'leave' because it
-//     looked risky (Boundaries) — this use-case always re-reads merge/clean status itself,
-//     right before deleting, to decide `git branch -d` (merged+clean) vs `-D` (force); it
-//     never trusts a caller's possibly-stale belief about either.
-// AD-8: every branch deletion is gated through the existing git.assertAllowedBranch safety
-//       adapter, unchanged — a branch also owned by a *different* EDT is refused per-branch
-//       (branch-owned-by-other-edt) without blocking the rest of the deletion or the
-//       registry-entry removal (per-member isolation, same philosophy as
-//       create.ts/modify.ts/switch.ts already use).
-// AD-9: only the final registry-entry removal + SQLite-file deletion is lock-held — per-repo
-//       git branch deletions run outside the lock, mirroring modify.ts's own step/lock split.
-// AD-7: completion always removes the registry entry and deletes the EDT's <ulid>.db file
-//       (and its edtDir, mirroring create.ts's own rollback() precedent — direct node:fs, no
-//       port method, per AD-1) — no soft-delete, no undo, ever.
+// core/edt/delete: deletes a non-active EDT, leaving or deleting each member's branch per the
+// caller's disposition (default 'leave'). Merge/clean status is re-read right before deleting
+// to pick `-d` vs `-D`; a branch owned by another EDT is refused per-branch without blocking
+// the rest. Only the registry-entry and SQLite-file removal is lock-held (AD-9); there is no
+// soft-delete and no undo.
 import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
@@ -70,8 +47,7 @@ export async function deleteEdt(params: DeleteEdtParams): Promise<Result<DeleteE
 
   const topic = params.topic.trim();
   if (topic === '') {
-    // Review fix (story 2.29): <topic> is positional on this subcommand (unlike
-    // modify/switch's --topic flag) — the usage text must match the real CLI syntax.
+    // <topic> is positional on this subcommand (unlike modify/switch's --topic flag).
     return err('missing-argument', 'Usage: tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]...');
   }
 
@@ -84,8 +60,8 @@ export async function deleteEdt(params: DeleteEdtParams): Promise<Result<DeleteE
     return err('edt-not-found', `No EDT with topic "${topic}" is registered`);
   }
 
-  // The active EDT can never be deleted — rejected before any git/file write below, and
-  // never auto-switched away from (Boundaries).
+  // The active EDT can never be deleted — rejected before any git/file write, and never
+  // auto-switched away from. state.json's pointer is authoritative, not the registry status.
   const active = await state.readActiveEdt();
   if (!active.ok) {
     return active;
@@ -97,12 +73,9 @@ export async function deleteEdt(params: DeleteEdtParams): Promise<Result<DeleteE
     );
   }
 
-  // Review fix (story 2.29): normalize both sides before comparing — mirrors
-  // assertAllowedBranch's own review-patch comment and modify.ts's setBranchesByPath
-  // convention. dispositions' keys are whatever shape the caller supplied (CLI flag value or
-  // TUI-supplied repoPath), not guaranteed to match member.repoPath byte-for-byte (trailing
-  // slash, relative segments, ...) — without this, a real disposition can silently fail to
-  // match and fall back to 'leave'.
+  // Normalize both sides before comparing: dispositions' keys come from a CLI flag or the TUI
+  // and may not match member.repoPath byte-for-byte (trailing slash, relative segments, ...) —
+  // without this, a real disposition can silently fall back to 'leave'.
   const dispositionsByPath = new Map(Object.entries(dispositions).map(([repoPath, disposition]) => [resolve(repoPath), disposition]));
 
   // Per-member branch disposition, outside the lock (mirrors modify.ts's own step/lock
@@ -127,9 +100,9 @@ export async function deleteEdt(params: DeleteEdtParams): Promise<Result<DeleteE
     return ok(undefined);
   });
   if (!removed.ok) {
-    // Review fix (story 2.29): the per-repo branch deletions above already ran (outside the
-    // lock, AD-9) by the time this registry write failed — attach what was actually done to
-    // git via ResultError's own details escape hatch, so the caller isn't left guessing.
+    // The per-repo branch deletions above already ran (outside the lock, AD-9) by the time
+    // this registry write failed — attach what was actually done to git in the error details
+    // so the caller isn't left guessing.
     return err(removed.error.code, removed.error.message, { partialResults: results });
   }
 
@@ -151,11 +124,9 @@ async function deleteMemberBranch(
     return { service: member.service, outcome: 'failed', detail: { code: allowed.error.code, message: allowed.error.message } };
   }
 
-  // Review fix (story 2.29): a member's branch may already be gone (deleted manually outside
-  // the tool) — isBranchMerged would error on a non-existent ref, reporting a spurious
-  // 'failed' for a disposition that has nothing left to do. Short-circuit to 'deleted'
-  // instead: the developer's intent (this branch should not exist afterwards) is already
-  // satisfied.
+  // A member's branch may already be gone (deleted manually outside the tool) — isBranchMerged
+  // would error on a non-existent ref, reporting a spurious 'failed'. Short-circuit to
+  // 'deleted': the developer's intent (this branch should not exist afterwards) is satisfied.
   const exists = await git.branchExistsLocally(member.repoPath, member.branch);
   if (!exists.ok) {
     return { service: member.service, outcome: 'failed', detail: { code: exists.error.code, message: exists.error.message } };
@@ -169,8 +140,8 @@ async function deleteMemberBranch(
     return { service: member.service, outcome: 'failed', detail: { code: loaded.error.code, message: loaded.error.message } };
   }
 
-  // Never trust a caller-supplied/stale merged+clean belief (Boundaries: "never silently
-  // downgraded ... because it looked risky") — re-read both, right before deciding -d vs -D.
+  // Never trust a caller-supplied/stale merged+clean belief: a 'delete' is never downgraded
+  // because it looked risky — re-read both, right before deciding -d vs -D.
   const merged = await git.isBranchMerged(member.repoPath, member.branch, loaded.data.sharedBranch);
   if (!merged.ok) {
     return { service: member.service, outcome: 'failed', detail: { code: merged.error.code, message: merged.error.message } };
@@ -188,20 +159,13 @@ async function deleteMemberBranch(
   return { service: member.service, outcome: 'deleted' };
 }
 
-// Story 2.29 (Design Notes — this is the fix for the "clean" signal a review caught in
-// attempt 1): a member's branch is dirty, for delete-disposition purposes, when EITHER:
-//   1. A stash tagged `tui-back:<edtUlid>` (this EDT's own ulid — the same tag switch.ts
-//      writes when switching *away* from this EDT) exists in repoPath — checked via
-//      git.hasStash, non-destructive (existence only, never pops).
-//   2. repoPath's *currently checked-out* branch equals member.branch AND
-//      git.hasUncommittedChanges(repoPath) is true — the one case where the working tree's
-//      state genuinely *is* this member's own.
-// If neither holds, the member's branch is clean. This never calls hasUncommittedChanges
-// blind against whatever repoPath happens to have checked out — the bug that let a
-// non-active member's clean/dirty signal reflect an unrelated EDT's own working tree.
-// Shared by both deleteMemberBranch (the -d/-D decision above) and
-// resolveMemberDeleteStatuses (the TUI's status/default-disposition display below) — same
-// logic, not two implementations (Design Notes).
+// A member's branch is dirty, for delete purposes, when EITHER:
+//   1. A stash tagged `tui-back:<edtUlid>` (the tag switch.ts writes when switching away from
+//      this EDT) exists in repoPath — existence only, never popped.
+//   2. repoPath's currently checked-out branch equals member.branch AND it has uncommitted
+//      changes — the one case where the working tree's state is this member's own.
+// hasUncommittedChanges is never called blind: whatever repoPath has checked out may belong to
+// an unrelated EDT. Shared by deleteMemberBranch and resolveMemberDeleteStatuses.
 async function isMemberBranchDirty(git: GitPort, edtUlid: string, member: EdtMember): Promise<Result<boolean>> {
   const stashed = await git.hasStash(member.repoPath, `tui-back:${edtUlid}`);
   if (!stashed.ok) {
@@ -240,10 +204,8 @@ function deleteEdtFiles(edtsBaseDir: string, ulid: string): void {
   }
 }
 
-// Story 2.29 — the TUI's per-member disposition-default computation (mirrors
-// core/edt/modify.ts's listMemberBranches thin-wrapper precedent: deps.git/manifest are
-// never called directly from the TUI layer, only through a core export). Also backs the
-// confirm dialog's rendered "branch, merge status, and uncommitted-work status" per member.
+// The TUI's per-member disposition defaults, and the confirm dialog's branch, merge status and
+// uncommitted-work status per member — exposed from core so the TUI never calls git directly.
 export interface MemberDeleteStatus {
   repoPath: string;
   service: string;
@@ -277,8 +239,7 @@ export async function resolveMemberDeleteStatuses(
       continue;
     }
     const merged = await git.isBranchMerged(member.repoPath, member.branch, loaded.data.sharedBranch);
-    // Same corrected clean-detection isMemberBranchDirty implements above — never two
-    // implementations of this rule (Design Notes).
+    // Same clean-detection rule as deleteMemberBranch (isMemberBranchDirty).
     const dirty = await isMemberBranchDirty(git, edtUlid, member);
     const statusError = !merged.ok ? merged.error.message : !dirty.ok ? dirty.error.message : undefined;
     out.push({
@@ -293,9 +254,9 @@ export async function resolveMemberDeleteStatuses(
   return out;
 }
 
-// Boundary: "defaults to Leave branch as-is, except a branch both merged into its sharedBranch
-// and clean, which defaults to Delete branch." A status-read failure always defaults to
-// 'leave' — the safe choice when merge/clean state couldn't be established.
+// Defaults to 'leave', except a branch both merged into its sharedBranch and clean, which
+// defaults to 'delete'. A status-read failure always defaults to 'leave' — the safe choice
+// when merge/clean state couldn't be established.
 export function defaultDispositionFor(status: Pick<MemberDeleteStatus, 'merged' | 'clean' | 'statusError'>): MemberDisposition {
   if (status.statusError !== undefined) {
     return 'leave';

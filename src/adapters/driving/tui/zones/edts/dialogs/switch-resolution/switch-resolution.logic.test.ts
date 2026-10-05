@@ -23,7 +23,7 @@ function repo(overrides: Partial<SwitchDirtyRepo> & Pick<SwitchDirtyRepo, 'servi
     currentBranch: 'development',
     currentBranchShared: true,
     sharedBranch: 'development',
-    // Story 2.42: manifest fixture — this repo's manifest lists preprod/prod as protected.
+    // Manifest fixture — this repo's manifest lists preprod/prod as protected.
     protectedBranches: ['preprod', 'prod'],
     owningEdtTopics: [],
     dirtyPaths: ['a.txt'],
@@ -62,8 +62,8 @@ function type(text: string): Array<[string, TextEditKey]> {
   return [...text].map((char) => [char, {}]);
 }
 
-describe('switch-resolution rows (story 2.41)', () => {
-  it('pins the AC footer verbatim', () => {
+describe('switch-resolution rows', () => {
+  it('pins the footer verbatim', () => {
     expect(SWITCH_RESOLUTION_FOOTER).toBe('[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch');
   });
 
@@ -101,7 +101,7 @@ describe('switch-resolution rows (story 2.41)', () => {
     const row = (branch: string, base = SHARED) => ({ repo: base, hasOutgoing: true, claims: [], plan: { kind: 'adopt' as const, branch, source: 'perso' as const } });
     expect(validateRow(row(''), lists)).toBe('Nom de branche requis');
     expect(validateRow(row('prod'), lists)).toBe('« prod » est protégée par le manifeste de svc-a');
-    // Story 2.42: a branch the repo's manifest does not list is not protected.
+    // A branch the repo's manifest does not list is not protected.
     expect(validateRow(row('prod', { ...SHARED, protectedBranches: [] }), lists)).toBeNull();
     expect(validateRow(row('taken'), lists)).toContain('existe déjà');
     expect(validateRow(row('fresh'), lists)).toBeNull();
@@ -139,7 +139,7 @@ describe('switch-resolution rows (story 2.41)', () => {
   });
 });
 
-describe('reduceSwitchResolutionKey (story 2.41)', () => {
+describe('reduceSwitchResolutionKey', () => {
   it('Ctrl+N with every row valid and none Écraser proceeds with exactly buildResolutions(rows)', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     const next = press(state, CTRL_N);
@@ -231,7 +231,7 @@ describe('reduceSwitchResolutionKey (story 2.41)', () => {
   });
 });
 
-describe('results & log detail (story 2.41)', () => {
+describe('results & log detail', () => {
   it('keeps the dialog open on anything beyond a plain switch and records adopted branches and discarded paths', () => {
     expect(needsResultsView([{ service: 'a', outcome: 'switched' }])).toBe(false);
     const results: SwitchEdtRepoResult[] = [

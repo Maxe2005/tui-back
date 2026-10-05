@@ -1,9 +1,6 @@
-// adapters/driven/container: the driven implementation of core's ContainerPort (story
-// 3.1). Restart is executed via node:child_process against the container runtime (`docker
-// restart <container>` by default) — no new npm dependency, per the spec's Ask-First
-// (dockerode now vs. later never triggered: this stays on child_process). The executable
-// is injectable so integration tests can stub it with a script on PATH. Core never imports
-// this adapter (AD-1).
+// adapters/driven/container: the driven implementation of core's ContainerPort. Restarts run
+// via node:child_process against the container runtime (`docker restart <container>` by
+// default), no dockerode. The executable is injectable so integration tests can stub it.
 import { spawnSync } from 'node:child_process';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
@@ -15,12 +12,10 @@ export function createContainerPort(executable = 'docker'): ContainerPort {
 }
 
 // `docker restart -- <container>` — the trailing `--` terminates option parsing so a
-// container value starting with `-` is never parsed as a flag (mirroring the git
-// adapter's own `--` disambiguation). Exit-code taxonomy mirrors the git adapter's
-// spawnFailureDetail convention: a missing binary (status === null) surfaces the spawn
-// cause, never a bare "undefined". An empty container name is rejected upfront — it can
-// never name a real container, so spawning the runtime with it would only produce a
-// confusing runtime error.
+// container value starting with `-` is never parsed as a flag. A missing binary
+// (status === null) surfaces the spawn cause, never a bare "undefined". An empty container
+// name is rejected upfront: it can never name a real container, and spawning the runtime with
+// it would only produce a confusing runtime error.
 export async function restartContainer(executable: string, container: string): Promise<Result<void>> {
   if (container.trim() === '') {
     return err('container-restart-error', 'Container name must not be empty');

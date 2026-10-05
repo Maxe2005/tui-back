@@ -16,7 +16,7 @@ import {
   type OverrideBoxState,
 } from './override-box.logic.js';
 
-// Story 2.42: svc-a's manifest fixture — it lists development/preprod/prod as protected.
+// svc-a's manifest fixture — it lists development/preprod/prod as protected.
 const CONTEXT: OverrideBoxContext = {
   service: 'svc-a',
   status: 'ready',
@@ -49,7 +49,7 @@ function typeInto(state: OverrideBoxState, text: string): OverrideBoxState {
   return current;
 }
 
-describe('openOverrideBox (story 2.37)', () => {
+describe('openOverrideBox', () => {
   it('a global row opens in "Créer nouvelle" pre-filled with its base and the global name', () => {
     const opened = openOverrideBox('/repos/a', { base: 'origin/rel', name: 'auth-flow' });
     expect(opened).toMatchObject({ mode: 'create', line: 'mode', editing: false, rename: false, error: null });
@@ -65,7 +65,7 @@ describe('openOverrideBox (story 2.37)', () => {
   });
 });
 
-describe('reduceOverrideBoxKey (story 2.37)', () => {
+describe('reduceOverrideBoxKey', () => {
   it('Space or Tab on the Mode line toggles the mode; lines follow the mode and the rename checkbox', () => {
     const toggled = updated(press(box(), ' '));
     expect(toggled.mode).toBe('existing');
@@ -139,17 +139,17 @@ describe('reduceOverrideBoxKey (story 2.37)', () => {
   });
 });
 
-describe('validateOverrideBox (story 2.37)', () => {
+describe('validateOverrideBox', () => {
   it('Protected: a protected new-branch name, or the service\'s own sharedBranch, is refused', () => {
     expect(validateOverrideBox(box({ name: { value: 'development', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('development', 'svc-a') });
     expect(validateOverrideBox(box({ name: { value: 'main', cursor: 0 } }), CONTEXT)).toEqual({ ok: false, error: protectedNameError('main', 'svc-a') });
   });
 
-  it('names the branch and the service\'s manifest, in French (story 2.42)', () => {
+  it('names the branch and the service\'s manifest, in French', () => {
     expect(protectedNameError('preprod', 'svc-a')).toBe('« preprod » est protégée par le manifeste de svc-a');
   });
 
-  it('a branch the service\'s manifest does not list is not protected (story 2.42)', () => {
+  it('a branch the service\'s manifest does not list is not protected', () => {
     const unlisted: OverrideBoxContext = { ...CONTEXT, protectedBranches: [] };
     expect(validateOverrideBox(box({ name: { value: 'preprod', cursor: 0 } }), unlisted)).toEqual({
       ok: true,

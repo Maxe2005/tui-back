@@ -1,9 +1,7 @@
-// adapters/driven/registry/schema: the zod schema for registry.yaml. A strict
-// { repos: string[] } map (not a bare list) so future fields (e.g. per-path annotations)
-// don't need a format migration — mirrors the manifest-schema conventions. Paths must be
-// absolute: the registry stores only absolute paths (register rejects relative ones), so
-// a hand-edited relative entry would otherwise be resolved against the process cwd —
-// nondeterministic output violating FR-1 idempotency.
+// adapters/driven/registry/schema: the zod schema for registry.yaml — a strict
+// { repos: string[] } map (not a bare list) so future fields need no format migration. Paths
+// must be absolute: a hand-edited relative entry would otherwise resolve against the process
+// cwd, making output nondeterministic (FR-1).
 import { z } from 'zod';
 import { isAbsolute } from 'node:path';
 

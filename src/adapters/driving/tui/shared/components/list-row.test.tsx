@@ -5,7 +5,7 @@ import { ListRow, resolveRowLayout } from './list-row.js';
 import { renderToString } from './render-to-string.js';
 
 describe('resolveRowLayout', () => {
-  it('resolves the unselected base row: transparent accent-bar column (AC2)', () => {
+  it('resolves the unselected base row: transparent accent-bar column', () => {
     expect(resolveRowLayout({ label: 'api-gateway' })).toEqual({
       barGlyph: ' ',
       marker: ' ',
@@ -18,7 +18,7 @@ describe('resolveRowLayout', () => {
     });
   });
 
-  it('resolves the selected row: surface-selected fill, solid accent bar, › marker (AC2)', () => {
+  it('resolves the selected row: surface-selected fill, solid accent bar, › marker', () => {
     expect(resolveRowLayout({ label: 'api-gateway', selected: true })).toEqual({
       barGlyph: '▌',
       marker: '›',
@@ -31,7 +31,7 @@ describe('resolveRowLayout', () => {
     });
   });
 
-  it('indents nested rows by the theme indent token (AC3)', () => {
+  it('indents nested rows by the theme indent token', () => {
     expect(resolveRowLayout({ label: 'micro-users', nested: true })).toEqual({
       barGlyph: ' ',
       marker: ' ',
@@ -45,8 +45,8 @@ describe('resolveRowLayout', () => {
     expect(spacing.indent).toBe(2);
   });
 
-  // Story 2.18, repurposed 2026-08-27 (Sprint Change Proposal): `emphasized` (whichever row
-  // drives a categorized split) is accent+bold, independent of `selected`.
+  // `emphasized` (whichever row drives a categorized split) is accent+bold, independent of
+  // `selected`.
   it('resolves an emphasized row: accent-colored, bold label — independent of selected', () => {
     expect(resolveRowLayout({ label: 'my-edt', emphasized: true })).toEqual({
       barGlyph: ' ',
@@ -73,9 +73,8 @@ describe('resolveRowLayout', () => {
     });
   });
 
-  // Story 2.18, repurposed 2026-08-27 (Sprint Change Proposal): `active` (the tool-wide active
-  // EDT) no longer touches label color/bold — it's a discreet suffix instead, decoupled from
-  // `emphasized`.
+  // `active` (the tool-wide active EDT) never touches label color/bold — it's a discreet suffix,
+  // decoupled from `emphasized`.
   it('resolves an active row: a discreet " active" suffix, label untouched', () => {
     expect(resolveRowLayout({ label: 'my-edt', active: true })).toEqual({
       barGlyph: ' ',
@@ -104,12 +103,12 @@ describe('resolveRowLayout', () => {
 });
 
 describe('ListRow', () => {
-  it('renders the label (AC2)', async () => {
+  it('renders the label', async () => {
     const output = await renderToString(<ListRow label="api-gateway" />);
     expect(output).toContain('api-gateway');
   });
 
-  it('renders the › marker and ▌ accent bar when selected (AC2)', async () => {
+  it('renders the › marker and ▌ accent bar when selected', async () => {
     const output = await renderToString(
       <ListRow label="api-gateway" selected />,
     );
@@ -117,12 +116,12 @@ describe('ListRow', () => {
     expect(output).toContain('▌');
   });
 
-  it('renders a nested row (AC3)', async () => {
+  it('renders a nested row', async () => {
     const output = await renderToString(<ListRow label="micro-users" nested />);
     expect(output).toContain('micro-users');
   });
 
-  it('renders the trailing metadata distinctly from the label (AC4)', async () => {
+  it('renders the trailing metadata distinctly from the label', async () => {
     const output = await renderToString(
       <ListRow label="api-gateway" meta="main ↑0 ↓0" />,
     );
@@ -130,13 +129,13 @@ describe('ListRow', () => {
     expect(output).toContain('main ↑0 ↓0');
   });
 
-  it('does not render a marker or accent bar when unselected (AC2)', async () => {
+  it('does not render a marker or accent bar when unselected', async () => {
     const output = await renderToString(<ListRow label="api-gateway" />);
     expect(output).not.toContain('›');
     expect(output).not.toContain('▌');
   });
 
-  it('renders the emphasized label (story 2.18) — no marker/accent-bar of its own when not also selected', async () => {
+  it('renders the emphasized label — no marker/accent-bar of its own when not also selected', async () => {
     const output = await renderToString(<ListRow label="my-edt" emphasized />);
     expect(output).toContain('my-edt');
     expect(output).not.toContain('›');
@@ -150,10 +149,9 @@ describe('ListRow', () => {
     expect(output).toContain('▌');
   });
 
-  // Story 2.18, repurposed 2026-08-27 (Sprint Change Proposal): `active` renders a discreet
-  // "• active" suffix, decoupled from `emphasized`/`selected`. The `•` glyph is required — see
-  // list-row.tsx's `active` prop doc: `colors.info` is a semantic status color and DESIGN.md
-  // mandates every status color be paired with a glyph, never carried by color alone.
+  // `active` renders a discreet "• active" suffix, decoupled from `emphasized`/`selected`. The
+  // `•` glyph is required: `colors.info` is a status color and DESIGN.md mandates every status
+  // color be paired with a glyph, never carried by color alone.
   it('renders the discreet "• active" suffix after the label', async () => {
     const output = await renderToString(<ListRow label="my-edt" active />);
     expect(output).toContain('my-edt • active');

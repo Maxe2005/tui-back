@@ -1,17 +1,8 @@
-// tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" (Story 2.37) — one global branch
-// rule for every selected service, then per-service exceptions.
-//   - Panel A "STRATÉGIE GLOBALE" (focused on entry): "Branche source par défaut" (empty = a
-//     dim `<shared-branch>` placeholder: each service uses its own manifest sharedBranch) and
-//     "Nom global de la branche" (the Step 1 slug until edited). `↑/↓` move between the two
-//     lines, `Enter` enters edit mode, `Esc` leaves it; on the base line any printable key
-//     also enters edit mode with that character typed.
-//   - Panel B "RÉSUMÉ ET EXCEPTIONS PAR SERVICE": a height-bounded table, one row per selected
-//     service (`Service | Mode | Base / Source | Branche cible`). `↑/↓` move the row cursor,
-//     `Enter` opens the "Configurer <service>" override box (override-box.tsx).
-//   - `Tab` switches panels. `Enter` never advances the wizard here; `Ctrl+N`/`Ctrl+→` do.
-//   - `Esc` closes the innermost element first: a field in edit, then the box, then Panel A's
-//     edit mode, then (reported as `cancel`) the whole wizard.
-// The key handling is a pure reducer over the dialog state (reduceBranchStepKey).
+// tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" — one global branch rule (Panel A: the
+// default source branch, empty meaning each service's own sharedBranch, and the global branch
+// name) then per-service exceptions (Panel B: a height-bounded table, Enter opens the
+// "Configurer <service>" box). Tab switches panels; Enter never advances the wizard here. Esc
+// closes the innermost element first. A pure reducer (reduceBranchStepKey) handles the keys.
 import { Box, Text, type Key } from 'ink';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
@@ -107,8 +98,8 @@ export function reduceBranchStepKey(
       const next = nextTextInputValue(branches[field], input, key);
       const nameChanged = field === 'globalName' && next.value !== branches.globalName.value;
       const touched = nameChanged ? true : branches.globalNameTouched;
-      // Story 2.31 (review): untouched seeded [Créer (Perso)] rows follow a global name edited
-      // here too, not only on Step 3 re-entry.
+      // Untouched seeded [Créer (Perso)] rows follow a global name edited here too, not only on
+      // Step 3 re-entry.
       const overrides = nameChanged
         ? refreshSeededNames(branches.overrides, branches.seededPaths, state.seedFromEdt, branches.globalName.value, next.value)
         : branches.overrides;

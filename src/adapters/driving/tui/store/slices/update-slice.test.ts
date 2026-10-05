@@ -169,11 +169,9 @@ describe('update slice', () => {
     expect(store.getState().runInProgress).toBe(false);
   });
 
-  // Review fix (story 3.6): exercises the real `set((state) => ({ ..., lastServiceOutcomes:
-  // mergeLastServiceOutcomes(...) }))` wiring through the actual runGroupUpdate flow —
-  // pure mergeLastServiceOutcomes unit tests and hand-seeded store.setState calls in zone
-  // render tests don't catch a bug in that wiring itself (e.g. the merge call dropped, or
-  // given the wrong arguments).
+  // Exercises the real `lastServiceOutcomes: mergeLastServiceOutcomes(...)` wiring through the
+  // actual runGroupUpdate flow — pure merge unit tests and hand-seeded zone render tests don't
+  // catch a bug in that wiring itself (e.g. the merge call dropped, or given wrong arguments).
   it('runGroupUpdate populates lastServiceOutcomes with the run\'s own per-service outcomes', async () => {
     const store = createAppStore(fakeDeps());
     expect(store.getState().lastServiceOutcomes).toEqual({});
@@ -472,7 +470,7 @@ describe('update slice', () => {
     expect(store.getState().updateBlocker).toBeNull();
   });
 
-  it('runGroupUpdate raises the blocker on a dirty repo and resumes on resolveUpdateBlocker (story 3.4)', async () => {
+  it('runGroupUpdate raises the blocker on a dirty repo and resumes on resolveUpdateBlocker', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
@@ -501,7 +499,7 @@ describe('update slice', () => {
     expect(store.getState().runInProgress).toBe(false);
   });
 
-  it('resolveUpdateBlocker with no raised blocker is a no-op, never a throw (story 3.4)', () => {
+  it('resolveUpdateBlocker with no raised blocker is a no-op, never a throw', () => {
     const store = createAppStore(fakeDeps());
 
     store.getState().resolveUpdateBlocker('cancel-repo');
@@ -510,7 +508,7 @@ describe('update slice', () => {
     expect(store.getState().updateStatus).toBe('idle');
   });
 
-  it('a throwing git write under a raised blocker settles as internal-error with the menu cleared (story 3.4)', async () => {
+  it('a throwing git write under a raised blocker settles as internal-error with the menu cleared', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
@@ -535,13 +533,11 @@ describe('update slice', () => {
   });
 });
 
-// Story 3.6: the Update zone's own service-list health poll — mirrors app-store.test.ts's
-// "logs slice: inline service health & restart (story 5.3)" describe block (that story's own
-// precedent for testing a slice's fire-and-forget poll-timer behavior against fake ports),
-// but against startUpdateHealthPolling/stopUpdateHealthPolling/updateServiceHealth instead of
-// subscribeLogsPane/logsPanes — this poll is Update-zone-owned and independent (Never: "no
-// shared subscription" with Logs zone's own poll).
-describe('update slice: service health polling (story 3.6)', () => {
+// The Update zone's own service-list health poll, tested against fake ports like the logs
+// slice's poll, but through startUpdateHealthPolling/stopUpdateHealthPolling/
+// updateServiceHealth — this poll is owned by the Update zone and shares nothing with the
+// Logs zone's.
+describe('update slice: service health polling', () => {
   // A real setTimeout macrotask flush, not fake timers — lets every pending microtask from
   // startUpdateHealthPolling's fire-and-forget pollServiceHealth chain (manifest.load then
   // getContainerHealth, each a resolved-async mock) settle before assertions run.
@@ -580,7 +576,7 @@ describe('update slice: service health polling (story 3.6)', () => {
     expect(store.getState().updateServiceHealth['/repo/b']).toBe('down');
   });
 
-  it('I/O matrix "Manifest load fails during health poll for a service": manifest.load failing leaves updateServiceHealth untouched (silent no-op)', async () => {
+  it('manifest.load failing during a health poll leaves updateServiceHealth untouched (silent no-op)', async () => {
     vi.useFakeTimers();
     try {
       const manifestLoad = vi.fn(async (repoPath: string) =>
@@ -673,10 +669,9 @@ describe('update slice: service health polling (story 3.6)', () => {
   });
 });
 
-// Story 3.7: the pre-run configuration screen's store state — opening pre-scoped to the
-// trigger, confirming with exactly the confirmed configuration, and rejecting while a run
-// is in flight.
-describe('update slice: pre-run configuration screen (story 3.7)', () => {
+// The pre-run configuration screen's store state — opening pre-scoped to the trigger,
+// confirming with exactly the confirmed configuration, and rejecting while a run is in flight.
+describe('update slice: pre-run configuration screen', () => {
   it('a confirmed single-service config records its selection on the run; an unconfigured run records none', async () => {
     const store = createAppStore(fakeDeps());
 
@@ -740,7 +735,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     });
   });
 
-  it('openUpdateConfig({service, repoPath}) opens a one-row draft for the pinned repo (story 3.9)', async () => {
+  it('openUpdateConfig({service, repoPath}) opens a one-row draft for the pinned repo', async () => {
     const store = createAppStore(fakeDeps());
 
     await store.getState().openUpdateConfig({ service: 'svc-b', repoPath: '/repo/b' });
@@ -1430,7 +1425,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(store.getState().serviceRestartInFlight).toEqual({});
   });
 
-  it('confirmUpdateConfig while a standalone restart is in flight stays open with the inline error (story 3.9)', async () => {
+  it('confirmUpdateConfig while a standalone restart is in flight stays open with the inline error', async () => {
     const deps = fakeDeps();
     const store = createAppStore(deps);
     await store.getState().openUpdateConfig('edt');
@@ -1450,7 +1445,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
   });
 });
 
-describe('live per-service run tracking (story 3.10)', () => {
+describe('live per-service run tracking', () => {
   async function waitForCondition(condition: () => boolean): Promise<void> {
     for (let i = 0; i < 200 && !condition(); i++) {
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -1681,10 +1676,10 @@ describe('live per-service run tracking (story 3.10)', () => {
   });
 });
 
-// Story 3.11: the `:update-service [name]` entry point — arg resolves to a pre-scoped
-// single-service config, no arg raises the zone-consumed selection request, and every
-// trigger honors the running/restart guards with no screen opened.
-describe('update slice: single-service command dialog (story 3.11)', () => {
+// The `:update-service [name]` entry point — an arg resolves to a pre-scoped single-service
+// config, no arg raises the zone-consumed selection request, and every trigger honors the
+// running/restart guards with no screen opened.
+describe('update slice: single-service command dialog', () => {
   describe('parseUpdateServiceArg', () => {
     it('returns null for a bare command with no argument', () => {
       expect(parseUpdateServiceArg('update-service')).toBeNull();

@@ -1,5 +1,5 @@
-// adapters/driven/modules/route-explorer/schema-example: pure unit tests (story 6.6) —
-// $ref resolution and skeleton generation, including the bounded/cycle-safe guarantees.
+// adapters/driven/modules/route-explorer/schema-example: pure unit tests — $ref resolution and
+// skeleton generation, including the bounded/cycle-safe guarantees.
 import { describe, expect, it } from 'vitest';
 import { dereference, generateExample, resolveLocalRef } from './schema-example.js';
 

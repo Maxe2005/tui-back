@@ -1,11 +1,7 @@
-// Story 2.9's AC6 ("no AppShell global shortcut fires while a zone dialog has captured
-// input") is implemented entirely inside AppShell's own `useInput` — a single `if
-// (state.zoneInputCaptured) { return; }` guard (app-shell.tsx). `renderToString`'s fake
-// stdin never emits a real keypress (app-shell.test.tsx, documented repo-wide), and the
-// EDTs-zone-only interaction tests (edts-zone.interaction.test.tsx) never mount AppShell
-// itself, so neither suite can observe whether a captured keystroke actually reaches (or is
-// blocked from) AppShell's global dispatch. This file reuses the same real-Ink-input
-// technique (shared/test-support/fake-tty.ts) to close that gap.
+// AppShell real-keypress tests: renderToString's fake stdin never emits a real keypress and
+// the zone interaction tests never mount AppShell, so only these tests (real Ink input via
+// shared/test-support/fake-tty.ts) observe whether a keystroke reaches, or is blocked from,
+// AppShell's global dispatch — e.g. the zoneInputCaptured gate.
 import { createElement } from 'react';
 import { render } from 'ink';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
@@ -25,11 +21,10 @@ import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
 
-// Mirrors app-store.test.ts's own fakeDeps/manifestFor exactly (story 2.13 review fix): the
-// mount-time/registry-close `loadTabVisibility()` effect is AppShell's sole production
-// activation path, but every other test in this file uses a deps-less `createAppStore()`,
-// where `loadTabVisibility()` only ever takes the `!deps` early-return branch — no test here
-// could otherwise tell that effect running correctly apart from it being deleted entirely.
+// Mirrors app-store.test.ts's fakeDeps/manifestFor: the mount-time/registry-close
+// `loadTabVisibility()` effect is AppShell's only production activation path, and a deps-less
+// `createAppStore()` only ever takes its `!deps` early return — so without wired deps no test
+// could tell that effect running apart from it being deleted.
 function manifestFor(repoPath: string): Manifest {
   const name = repoPath.split('/').pop();
   return {
@@ -172,7 +167,7 @@ async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.Re
   await instance.waitUntilRenderFlush();
 }
 
-describe('AppShell real-keypress interactions (story 2.9, AC6)', () => {
+describe('AppShell real-keypress interactions', () => {
   it('a typed "?" never opens the global help modal while zoneInputCaptured is set', async () => {
     const store = createAppStore();
     store.setState({ zoneInputCaptured: true });
@@ -235,7 +230,7 @@ describe('AppShell real-keypress interactions (story 2.9, AC6)', () => {
   });
 });
 
-describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
+describe('AppShell Left/Right zone-arrow navigation', () => {
   it('Right switches to the next zone in ZONES order', async () => {
     const store = createAppStore();
     const { instance, stdin } = mount(store);
@@ -364,7 +359,7 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
     }
   });
 
-  it('has no effect while the command bar is open (story 2.14)', async () => {
+  it('has no effect while the command bar is open', async () => {
     const store = createAppStore();
     store.getState().openCommandBar();
     const { instance, stdin } = mount(store);
@@ -389,7 +384,7 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
 
       await press(instance, stdin, KEYS.tab);
 
-      // Tab has no shell-level zone-switching effect either before or after this story.
+      // Tab has no shell-level zone-switching effect.
       expect(store.getState().activeZone).toBe('dashboard');
     } finally {
       instance.unmount();
@@ -398,15 +393,12 @@ describe('AppShell Left/Right zone-arrow navigation (story 2.12)', () => {
   });
 });
 
-describe('AppShell Logs zone pane-grid arrow ownership (story 5.1 review fix)', () => {
+describe('AppShell Logs zone pane-grid arrow ownership', () => {
   // Ink dispatches every keypress to every mounted `useInput` hook regardless of z-order —
-  // with the Logs zone active and its own pane-focus on the grid (Left/Right/Up/Down move
-  // sub-focus between panes there), the very same Left/Right keypress used to also reach
-  // this global Left/Right zone-switch (story 2.12) and switch the active zone out from
-  // under the grid before the user ever saw their sub-focus move. Neither
-  // logs-zone.interaction.test.tsx (mounts LogsZone alone, never AppShell) nor
-  // app-shell.test.tsx (renderToString's fake stdin never emits real keypresses) could catch
-  // this — only a real-keypress round-trip through both components together can.
+  // with the Logs zone active and its pane-focus on the grid (Left/Right/Up/Down move
+  // sub-focus between panes there), the same Left/Right keypress would also reach the global
+  // Left/Right zone-switch and switch the zone out from under the grid. Only a real-keypress
+  // round-trip through both components together can catch this.
   function seedLogsStore(overrides: Record<string, unknown> = {}) {
     const store = createAppStore();
     store.setState({
@@ -492,7 +484,7 @@ describe('AppShell Logs zone pane-grid arrow ownership (story 5.1 review fix)', 
   });
 });
 
-describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
+describe('AppShell Logs zone clear-pane shortcut', () => {
   // Real docker wiring (unlike seedLogsStore above, which uses a bare createAppStore() —
   // subscribeLogsPane no-ops without deps, so it never populates logsPanes with real lines)
   // is needed here to prove `c` actually wipes buffered lines without touching the stream.
@@ -592,7 +584,7 @@ describe('AppShell Logs zone clear-pane shortcut (story 5.1)', () => {
   });
 });
 
-describe('AppShell manifest-gated tab visibility (story 2.13)', () => {
+describe('AppShell manifest-gated tab visibility', () => {
   it('skips an omitted tab entirely during Right arrow-nav wrap traversal', async () => {
     const store = createAppStore();
     store.setState({
@@ -696,8 +688,8 @@ describe('AppShell manifest-gated tab visibility (story 2.13)', () => {
       await instance.waitUntilRenderFlush();
       expect(store.getState().activeZone).toBe('routes');
 
-      // A registry change (Story 2.11) drops the only carrying repo — routes flips omitted
-      // while it's still the active zone.
+      // A registry change drops the only carrying repo — routes flips omitted while it's still
+      // the active zone.
       store.setState({
         tabVisibility: {
           routes: { status: 'omitted', carryingServices: [] },
@@ -742,7 +734,7 @@ describe('AppShell manifest-gated tab visibility (story 2.13)', () => {
   });
 });
 
-describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid reworked by story 2.17)', () => {
+describe('AppShell command-entry bar (:)', () => {
   it('opens on : with an empty focused input and no list/grid until Tab is pressed', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
@@ -991,8 +983,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
       // The command ran (store-verifiable proof it actually executed, not just closed).
       expect(store.getState().registryScreenOpen).toBe(true);
-      // The bar itself closed too (commandBarOpen lives in the store since the review fix
-      // that moved it there so EdtsZone could also read it — see spec-2-14's Spec Change Log).
+      // The bar itself closed too (commandBarOpen lives in the store so EdtsZone can read it).
       expect(store.getState().commandBarOpen).toBe(false);
     } finally {
       instance.unmount();
@@ -1058,7 +1049,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('Enter inside the bar never leaks into EdtsZone\'s own key.return handler underneath it (review fix)', async () => {
+  it('Enter inside the bar never leaks into EdtsZone\'s own key.return handler underneath it', async () => {
     // Ink dispatches every keypress to every mounted useInput hook regardless of z-order —
     // with the EDTs zone active, a selected row, and pane-focus on its default 'edts' list,
     // EdtsZone's own key.return (openEdtAction(), which opens a dialog and flips
@@ -1069,7 +1060,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     // Deliberately no Tab press in this test: EdtsZone's own key.tab toggles its local
     // paneFocus to 'services' (also leaked without the gate, per the same root cause) —
     // that pane has no key.return handling at all, so a Tab immediately before Enter would
-    // incidentally mask the very leak this test exists to catch, regardless of the fix.
+    // incidentally mask the very leak this test exists to catch, regardless of the gate.
     // paneFocus itself has no store-observable footprint to assert against directly; the
     // isActive gate covers both leaks identically, and this test proves it via the one leak
     // (Enter -> openEdtAction -> zoneInputCaptured) that is store-observable.
@@ -1113,13 +1104,11 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('a keypress meant for the settings overlay (already open) never leaks into EdtsZone underneath it (story 2.19 review fix)', async () => {
-    // Confirmed in real usage: unlike the test above (which only checks the single Enter
-    // that *opens* an overlay), this checks a *later*, separate keypress typed once the
-    // overlay is already open — e.g. Tab/arrows cycling the settings screen's tab strip —
-    // which EdtsZone's `useInput` previously kept receiving underneath it, silently moving
-    // its own list selection/pane focus at the same time (isActive only checked
-    // `!commandBarOpen`, never `!settingsScreenOpen`).
+  it('a keypress meant for the settings overlay (already open) never leaks into EdtsZone underneath it', async () => {
+    // Unlike the test above (which only checks the single Enter that *opens* an overlay), this
+    // checks a *later*, separate keypress typed once the overlay is already open — e.g.
+    // Tab/arrows cycling the settings screen's tab strip — which must not reach EdtsZone's
+    // `useInput` and move its list selection/pane focus at the same time.
     const store = createAppStore();
     store.setState({
       activeZone: 'edts',
@@ -1155,7 +1144,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('a keypress meant for the registry overlay (already open) never leaks into EdtsZone underneath it (story 2.19 review fix)', async () => {
+  it('a keypress meant for the registry overlay (already open) never leaks into EdtsZone underneath it', async () => {
     const store = createAppStore();
     store.setState({
       activeZone: 'edts',
@@ -1189,7 +1178,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('Down from the input enters the grid at the top of the first column; Enter on the highlighted cell completes the query and returns focus to the input (story 2.17)', async () => {
+  it('Down from the input enters the grid at the top of the first column; Enter on the highlighted cell completes the query and returns focus to the input', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1219,7 +1208,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('a printable character typed while the grid is focused returns focus to the input, appends it, and collapses the grid (story 2.17)', async () => {
+  it('a printable character typed while the grid is focused returns focus to the input, appends it, and collapses the grid', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1244,7 +1233,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('backspace while the grid is focused returns focus to the input and applies the backspace, per the spec\'s Ask-First resolution (story 2.17)', async () => {
+  it('backspace while the grid is focused returns focus to the input and applies the backspace', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1271,7 +1260,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('the grid hides once live filtering narrows the match set to exactly one (story 2.17)', async () => {
+  it('the grid hides once live filtering narrows the match set to exactly one', async () => {
     const store = createAppStore();
     const { instance, stdin } = mount(store);
     try {
@@ -1295,7 +1284,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('Esc from grid focus closes the bar entirely without running anything (story 2.17)', async () => {
+  it('Esc from grid focus closes the bar entirely without running anything', async () => {
     const store = createAppStore();
     const { instance, stdin } = mount(store);
     try {
@@ -1314,11 +1303,10 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('Tab while the grid is focused is a no-op — it never leaks a literal tab character into the query (review fix)', async () => {
-    // Boundaries only defines Up/Down/Left/Right/Enter/printable/Esc for grid focus; Tab has
-    // no case there. Left unguarded, it previously fell through to the printable-character
-    // branch and got appended into the query as a literal '\t' (Ink reports Tab's raw input
-    // as that byte), corrupting the query and dropping out of the grid.
+  it('Tab while the grid is focused is a no-op — it never leaks a literal tab character into the query', async () => {
+    // Grid focus defines Up/Down/Left/Right/Enter/printable/Esc; unguarded, Tab would fall
+    // through to the printable-character branch and land in the query as a literal '\t' (Ink
+    // reports Tab's raw input as that byte), corrupting the query and dropping out of the grid.
     const store = createAppStore();
     const { instance, stdin } = mount(store);
     try {
@@ -1342,7 +1330,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('a non-Tab key between two Tab presses discards the pending double-Tab state, so the grid does not open early (review fix)', async () => {
+  it('a non-Tab key between two Tab presses discards the pending double-Tab state, so the grid does not open early', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1352,8 +1340,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
 
       await press(instance, stdin, KEYS.tab); // 1st Tab: arms pending
       // An intervening key that isn't Tab and doesn't disturb the query (gridVisible is still
-      // false at this point, so Down is a no-op) must discard the pending state per the
-      // Boundaries ("any other key ... discards the pending state").
+      // false at this point, so Down is a no-op) must discard the pending state.
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.tab); // this Tab must be treated as a fresh 1st press
 
@@ -1371,7 +1358,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
     }
   });
 
-  it('Up at the top row leaves the grid and returns focus to the input (story 2.17, real-keypress wiring check)', async () => {
+  it('Up at the top row leaves the grid and returns focus to the input (real-keypress wiring check)', async () => {
     const store = createAppStore();
     const { instance, stdin } = mount(store);
     try {
@@ -1409,16 +1396,11 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
       await press(instance, stdin, KEYS.tab); // reveal the full grid
 
       const lines = stdout.output.split('\n');
-      // Column 0 = [registry, edt-create], column 1 = [edt-switch, edt-modify], column 2 =
-      // [settings, quit] (maxRows=2). Row 0 of the grid renders column-0-row-0 and column-1-row-0
-      // on the SAME terminal line ("registry" + "edt-switch"); "edt-create" (column 0's row
-      // 1) lands on the NEXT line instead. A single-column-of-6 layout (the pre-2.19 default,
-      // maxRows=8) would instead put every command on its own line, with "edt-create"
-      // sharing no line with "registry" either way — the positive signal here is
-      // "edt-switch" sharing registry's line, which only maxRows=2 grouping produces.
-      // Story 2.31: `edt-create-from` widened the grid enough that Ink's flex layout now
-      // squeezes column 1's label ("edt-switc"), so the positive signal is column 2's row 0
-      // ("edt-delete") sharing registry's line instead — equally only possible with maxRows=2.
+      // Columns are filled column-major with maxRows=2, so row 0 of the grid puts several
+      // columns' first commands on the SAME terminal line, while a single-column layout would
+      // put every command on its own line. Ink's flex layout squeezes column 1's label
+      // ("edt-switc"), so the positive signal is column 2's row 0 ("edt-delete") sharing
+      // registry's line — only possible with maxRows=2.
       const registryLine = lines.find((line) => line.includes('registry'));
       expect(registryLine).toBeDefined();
       expect(registryLine).toContain('edt-delete');
@@ -1430,7 +1412,7 @@ describe('AppShell command-entry bar (:) (story 2.14, Tab-completion grid rework
   });
 });
 
-describe('AppShell settings screen (:settings) (story 2.19)', () => {
+describe('AppShell settings screen (:settings)', () => {
   it('opens on the General tab via the registered `settings` command — never a raw keypress', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
@@ -1483,7 +1465,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Esc closes it (AC4) — nothing to discard', async () => {
+  it('Esc closes it — nothing to discard', async () => {
     const store = createAppStore();
     store.getState().openSettingsScreen();
     const { instance, stdin } = mount(store);
@@ -1500,7 +1482,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Tab/Left/Right cycle General -> EDTs -> Command Palette -> General (AC1)', async () => {
+  it('Tab/Left/Right cycle General -> EDTs -> Command Palette -> General', async () => {
     const store = createAppStore();
     store.getState().openSettingsScreen();
     const { instance, stdin, stdout } = mount(store);
@@ -1509,8 +1491,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
       expect(stdout.output).toContain("Enable 'q' to quit");
 
       await press(instance, stdin, KEYS.tab);
-      // Amended 2026-08-28: the EDTs tab now opens on its group list, not the flat checkbox
-      // list — AC6.
+      // The EDTs tab opens on its group list, not a flat checkbox list.
       expect(stdout.output).toContain('Hint visibility');
       expect(stdout.output).toContain('Recent action types');
 
@@ -1525,7 +1506,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('never cycles tabs while a group is drilled into on the EDTs tab (AC1 amended, AC6)', async () => {
+  it('never cycles tabs while a group is drilled into on the EDTs tab', async () => {
     const store = createAppStore();
     store.getState().openSettingsScreen();
     const { instance, stdin, stdout } = mount(store);
@@ -1546,7 +1527,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Esc steps back to the EDTs tab group list without closing the screen, then closes on the next Esc (AC6, amended Boundaries)', async () => {
+  it('Esc steps back to the EDTs tab group list without closing the screen, then closes on the next Esc', async () => {
     const store = createAppStore();
     store.getState().openSettingsScreen();
     const { instance, stdin, stdout } = mount(store);
@@ -1589,7 +1570,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Up/Down on the Command Palette tab adjusts gridMaxRows live and persists via updateSettings (I/O matrix "Adjust grid rows")', async () => {
+  it('Up/Down on the Command Palette tab adjusts gridMaxRows live and persists via updateSettings', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1617,12 +1598,10 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  // Amended 2026-09-20: the Logs tab moved from a flat row cursor to a group list (mirrors the
-  // EDTs tab's own group-list precedent) — fixes the settings modal overflowing its viewport
-  // (border/title corruption, overlapping rows) when all six fields rendered as one flat list.
-  // Up/Down now navigates between groups; Enter drills into a group; Left/Right adjusts the
+  // The Logs tab is a group list (like the EDTs tab) so the modal never overflows its
+  // viewport: Up/Down navigates between groups, Enter drills into one, Left/Right adjusts the
   // one numeric field a drilled-in group holds.
-  it('Left/Right on the Logs tab\'s default "Buffer size" group adjusts settings.logs.bufferSize live and persists via updateSettings (story 5.1 AC: "new stream afterward uses the new buffer size"; regrouped 2026-09-20)', async () => {
+  it('Left/Right on the Logs tab\'s default "Buffer size" group adjusts settings.logs.bufferSize live and persists via updateSettings', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1656,7 +1635,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Space on the Logs tab\'s "Start with history" group (reached via one Down from "Buffer size") toggles settings.logs.startWithHistory live and persists via updateSettings, independently of bufferSize (review fix; regrouped 2026-09-20)', async () => {
+  it('Space on the Logs tab\'s "Start with history" group (reached via one Down from "Buffer size") toggles settings.logs.startWithHistory live and persists via updateSettings, independently of bufferSize', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1697,9 +1676,9 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  // Story 5.4: end-to-end coverage of the two new fields and the clear actions, real-keypress
+  // End-to-end coverage of the filter-history fields and the clear actions, real-keypress
   // driven (mirrors the two tests just above).
-  it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists (regrouped 2026-09-20)', async () => {
+  it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1730,7 +1709,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists (regrouped 2026-09-20)', async () => {
+  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists', async () => {
     const store = createAppStore(fakeDeps());
     store.getState().commitFilterHistoryEntry({ scope: 'global', repoPath: null, mode: 'text' }, 'g-text');
     store.getState().commitFilterHistoryEntry({ scope: 'pane', repoPath: '/repo/a', mode: 'text' }, 'a-text');
@@ -1768,7 +1747,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Space on a "Hint visibility" checkbox row toggles that hint into settings.edts.hiddenActionHints and persists (I/O matrix "Toggle hidden hint")', async () => {
+  it('Space on a "Hint visibility" checkbox row toggles that hint into settings.edts.hiddenActionHints and persists', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1796,7 +1775,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  it('Enter on the EDTs tab\'s group list drills into "Recent action types"; Space toggles a type into settings.edts.hiddenActionTypes and persists (AC5, AC6)', async () => {
+  it('Enter on the EDTs tab\'s group list drills into "Recent action types"; Space toggles a type into settings.edts.hiddenActionTypes and persists', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1829,10 +1808,8 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
     }
   });
 
-  // Story 5.2 (Code Map): "app-shell.tsx:352 -- guard shouldOpenFilter dispatch with
-  // activeZone !== 'logs', same precedent as logsPaneGridArrowsActive" — the Logs zone now
-  // owns `/` itself (its own global-filter editor), so this app-wide stub must go inert while
-  // it's the active zone, the same double-dispatch hazard already solved for arrow keys.
+  // The Logs zone owns `/` itself (its global-filter editor), so this app-wide stub must go
+  // inert while it's the active zone — the same double-dispatch hazard as the arrow keys.
   it('the global "/" filter stub opens normally outside the Logs zone', async () => {
     const store = createAppStore();
     const { instance, stdin, stdout } = mount(store);
@@ -1866,7 +1843,7 @@ describe('AppShell settings screen (:settings) (story 2.19)', () => {
   });
 });
 
-describe('AppShell tabVisibility load activation (story 2.13 review fix)', () => {
+describe('AppShell tabVisibility load activation', () => {
   it('loads real tabVisibility from wired deps on mount — reflected in store state and the rendered tab bar', async () => {
     const manifest: ManifestPort = {
       load: vi.fn(async (path: string) => ok({ ...manifestFor(path), modules: { 'route-explorer': {} } })),
@@ -1938,7 +1915,7 @@ describe('AppShell tabVisibility load activation (story 2.13 review fix)', () =>
   });
 });
 
-describe('AppShell edts load activation (story 2.20)', () => {
+describe('AppShell edts load activation', () => {
   it('resolves the active EDT topic in the top bar from a wired mount-time loadEdts(), without ever visiting the EDTs zone', async () => {
     const edtRegistry: EdtRegistryPort = {
       add: vi.fn(async () => ok(undefined)),
@@ -1992,12 +1969,9 @@ describe('AppShell edts load activation (story 2.20)', () => {
   });
 });
 
-// Review fix (story 2.21, finding 5): no existing test mounts AppShell with a
-// StatePort.readSplitterRatios stub returning a non-null persisted map and asserts the store
-// reflects it post-mount — every other test in this file stubs it as ok(null). Mirrors
-// 'AppShell edts load activation' above and 'AppShell tabVisibility load activation'
-// (flushAsyncLoad idiom) for the mount-time loadSplitterRatios() effect specifically.
-describe('AppShell splitterRatios load activation (story 2.21)', () => {
+// Mounts AppShell with a StatePort.readSplitterRatios stub returning a non-null persisted map
+// and asserts the store reflects it post-mount (every other test here stubs it as ok(null)).
+describe('AppShell splitterRatios load activation', () => {
   it('resolves store.splitterRatios from a wired mount-time loadSplitterRatios(), independent of which zone renders first', async () => {
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok(null)),
@@ -2028,8 +2002,8 @@ describe('AppShell splitterRatios load activation (story 2.21)', () => {
   });
 });
 
-describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
-  it('Ctrl+W is a no-op on a non-EDTs zone (Boundaries: "a no-op elsewhere")', async () => {
+describe('AppShell Ctrl+W resize-mode', () => {
+  it('Ctrl+W is a no-op on a non-EDTs zone', async () => {
     const store = createAppStore();
     store.getState().setActiveZone('dashboard');
     const { instance, stdin } = mount(store);
@@ -2078,7 +2052,7 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
     }
   });
 
-  it('a second Ctrl+W while resize-mode is already active is a no-op (review fix, finding 7)', async () => {
+  it('a second Ctrl+W while resize-mode is already active is a no-op', async () => {
     const store = createAppStore();
     store.getState().setActiveZone('edts');
     const { instance, stdin } = mount(store);
@@ -2106,7 +2080,7 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
     }
   });
 
-  it('Tab cycles the targeted boundary across all 3, wrapping back to 0 — and never touches EdtsZone\'s own paneFocus (review fix, finding 6)', async () => {
+  it('Tab cycles the targeted boundary across all 3, wrapping back to 0 — and never touches EdtsZone\'s own paneFocus', async () => {
     // A populated, successfully-loaded EDT so the detail pane's "Topic: ..." line
     // (formatEdtDetail, unique to the EDT-selector's own detail content — never rendered by
     // either services pane) is a reliable, plain-text signal for "paneFocus is still 'edts'".
@@ -2275,9 +2249,9 @@ describe('AppShell Ctrl+W resize-mode (story 2.21)', () => {
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
     };
-    // A non-empty EDT registry: an empty one auto-opens the EDTs zone's create dialog (AC1),
-    // which sets zoneInputCaptured — that would swallow the Ctrl+W-driven resize keypress
-    // below before it ever reaches AppShell's resize-mode dispatch.
+    // A non-empty EDT registry: an empty one auto-opens the EDTs zone's create dialog, which
+    // sets zoneInputCaptured — that would swallow the Ctrl+W-driven resize keypress below
+    // before it ever reaches AppShell's resize-mode dispatch.
     const edtRegistry: EdtRegistryPort = {
       add: vi.fn(async () => ok(undefined)),
       list: vi.fn(async () =>
@@ -2556,13 +2530,12 @@ describe('AppShell reset screen (:reset)', () => {
   });
 });
 
-describe('AppShell Routes right-pane key ownership (stories 6.7, 6.9)', () => {
-  // Same double-dispatch hazard as the Logs pane grid (story 5.1): Ink dispatches every
-  // keypress to every mounted `useInput` hook, so the tree's own Left/Right fold keys
-  // would also reach the global Left/Right zone-switch and leave the Routes zone before
-  // the fold ever mattered. Story 6.9: the focused pane captures the keyboard, which also
-  // keeps zone mnemonics (`d`, `e`, `l`…) inert mid-edit. Only a real-keypress round-trip
-  // through both components together can prove the gate.
+describe('AppShell Routes right-pane key ownership', () => {
+  // Same double-dispatch hazard as the Logs pane grid: Ink dispatches every keypress to every
+  // mounted `useInput` hook, so the tree's own Left/Right fold keys would also reach the
+  // global Left/Right zone-switch. The focused pane captures the keyboard, which also keeps
+  // zone mnemonics (`d`, `e`, `l`…) inert mid-edit. Only a real-keypress round-trip through
+  // both components together can prove the gate.
   function seedRoutesStore() {
     const store = createAppStore();
     store.setState({

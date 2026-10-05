@@ -1,8 +1,6 @@
-// tui/zones/update: story 3.7 — unit tests for the pre-run configuration screen's pure
-// logic (draft construction, row toggling, branch editing, confirm gating, keystroke
-// reducer). The useInput dispatcher itself is never invoked here (the shared harness's
-// fake stdin never emits data — the edts-zone convention) — keystroke behavior is verified
-// through resolveUpdateConfigKey directly.
+// tui/zones/update: unit tests for the pre-run configuration screen's pure logic (draft
+// construction, row toggling, branch editing, confirm gating, keystroke reducer). renderToString
+// never drives useInput, so keystroke behavior is verified through resolveUpdateConfigKey.
 import { describe, expect, it } from 'vitest';
 import {
   beginUpdateConfigBranchEdit,

@@ -24,7 +24,7 @@ function dialog(branches: Partial<BranchStepState> = {}): CreateDialogState {
   };
 }
 
-describe('BranchStepView — Panel B cells (story 2.37 review)', () => {
+describe('BranchStepView — Panel B cells', () => {
   it('truncates long service names and branch refs to BRANCH_MAX_WIDTH', async () => {
     const output = await renderToString(
       <BranchStepView
@@ -53,7 +53,7 @@ describe('BranchStepView — Panel B cells (story 2.37 review)', () => {
   });
 });
 
-describe('reduceBranchStepKey (story 2.37 review)', () => {
+describe('reduceBranchStepKey', () => {
   const CANDS = [{ path: '/repos/a', service: 'svc-a', sharedBranch: 'main', protectedBranches: [] }];
   const editingName = (): CreateDialogState => dialog({ globalLine: 'name', editing: true, globalName: { value: 'demo', cursor: 4 } });
 
@@ -67,7 +67,7 @@ describe('reduceBranchStepKey (story 2.37 review)', () => {
     expect(moved.branches.globalName.cursor).toBe(0);
   });
 
-  it('editing the global name in Panel A carries untouched seeded rows along, never edited ones (story 2.31)', () => {
+  it('editing the global name in Panel A carries untouched seeded rows along, never edited ones', () => {
     const seed = {
       ulid: 'root',
       topic: 'root',
@@ -130,7 +130,7 @@ describe('reduceBranchStepKey (story 2.37 review)', () => {
   });
 });
 
-describe('createBranchStepHandlers — decisions against the latest state (story 2.37 review)', () => {
+describe('createBranchStepHandlers — decisions against the latest state', () => {
   it('Enter then Esc queued in one batch enter and leave edit mode — the Esc never cancels', () => {
     // React applies queued updaters lazily and in order; both keys are handled before either
     // updater runs (keys arriving in one input chunk), so nothing may be decided up front.

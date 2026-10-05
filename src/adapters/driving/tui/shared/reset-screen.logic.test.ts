@@ -1,5 +1,5 @@
-// tui/shared/reset-screen.logic: I/O matrix rows SERVICES_FORCES_EDTS, NOTHING_CHECKED,
-// WRONG_WORD and ESC of spec-reset-command.md, against the pure state machine.
+// tui/shared/reset-screen.logic: the pure state machine — Services forcing EDTs, nothing
+// checked, a wrong confirmation word, and Esc.
 import { describe, expect, it } from 'vitest';
 import {
   createResetScreenState,

@@ -21,7 +21,7 @@ import { ZONES, type ZoneId } from './zones/zones.js';
 import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
 import { renderToString } from './shared/components/render-to-string.js';
 
-describe('help-open decision helpers (AC2, AC3)', () => {
+describe('help-open decision helpers', () => {
   it('opens help on ? only', () => {
     expect(shouldOpenHelp('?')).toBe(true);
     expect(shouldOpenHelp('j')).toBe(false);
@@ -39,7 +39,7 @@ describe('help-open decision helpers (AC2, AC3)', () => {
 describe('AppShell', () => {
   const onQuit = () => {};
 
-  it('shows the top bar, six-zone tab bar, and footer simultaneously (AC1)', async () => {
+  it('shows the top bar, six-zone tab bar, and footer simultaneously', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).toContain('tui-back');
@@ -49,13 +49,13 @@ describe('AppShell', () => {
     expect(output).toContain('[/] filter');
   });
 
-  it('never mounts the command bar on initial render — commandBarOpen defaults closed (story 2.14)', async () => {
+  it('never mounts the command bar on initial render — commandBarOpen defaults closed', async () => {
     const store = createAppStore();
     const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('COMMAND');
   });
 
-  it('still renders its full chrome (top bar, zone tabs, footer) once the root height is bound to the terminal rows (story 2.8)', async () => {
+  it('still renders its full chrome (top bar, zone tabs, footer) once the root height is bound to the terminal rows', async () => {
     // render-to-string.ts pins the test harness's stdout to a fixed 40-row size, mirroring
     // Ink's own useWindowSize() height binding on AppShell's root Box — this guards against
     // that height binding clipping content off the bottom of a real, shorter terminal.
@@ -69,7 +69,7 @@ describe('AppShell', () => {
     expect(output).toContain('[q] quit');
   });
 
-  it('shows a glyph+counter badge while the developer is elsewhere and clears it once the zone is visited (AC3)', async () => {
+  it('shows a glyph+counter badge while the developer is elsewhere and clears it once the zone is visited', async () => {
     const store = createAppStore();
     store.getState().addZoneEvent('logs');
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
@@ -80,18 +80,14 @@ describe('AppShell', () => {
     expect(output).not.toContain('●1');
   });
 
-  it('mounts a placeholder screen for every zone at its tab — none missing or unreachable (AC6)', async () => {
+  it('mounts a placeholder screen for every zone at its tab — none missing or unreachable', async () => {
     const store = createAppStore();
     for (const zone of ZONES) {
       store.getState().setActiveZone(zone.id);
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
-      // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
-      // (see edts-zone.test.tsx for its own coverage). Story 3.1: same for Update
-      // (see update-zone.test.tsx). Story 5.1: Logs is likewise real content now (see
-      // logs-zone.test.tsx). Story 6.1: Routes is likewise real content now (see
-      // routes-zone.test.tsx) — every other zone is still the placeholder these two
-      // literal strings come from.
+      // EDTs, Update, Logs and Routes render real content (covered by their own zone tests);
+      // every other zone is still the placeholder these two literal strings come from.
       if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
@@ -99,7 +95,7 @@ describe('AppShell', () => {
     }
   });
 
-  it('opens the repo registry screen from the store (reachable only via the `registry` command inside the `:` command bar, story 2.14) and hides it again', async () => {
+  it('opens the repo registry screen from the store (reachable only via the `registry` command inside the `:` command bar) and hides it again', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('REPO REGISTRY');
@@ -114,7 +110,7 @@ describe('AppShell', () => {
     expect(output).not.toContain('REPO REGISTRY');
   });
 
-  it('opens the keybinding-help modal from the store and hides it again (AC2, AC3)', async () => {
+  it('opens the keybinding-help modal from the store and hides it again', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('KEYBINDINGS');
@@ -130,7 +126,7 @@ describe('AppShell', () => {
     expect(output).not.toContain('KEYBINDINGS');
   });
 
-  it('shows the launch banner on every Dashboard visit, including after switching away and back (story 2.16)', async () => {
+  it('shows the launch banner on every Dashboard visit, including after switching away and back', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
@@ -162,7 +158,7 @@ describe('AppShell', () => {
       expect(shouldSwitchZone('x')).toBeNull();
     });
 
-    describe('reachable-set gating (story 2.13)', () => {
+    describe('reachable-set gating', () => {
       it('shouldSwitchZone returns null for an omitted zone\'s mnemonic — never lands on it', () => {
         const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
         expect(shouldSwitchZone('r', reachable)).toBeNull();
@@ -184,7 +180,7 @@ describe('AppShell', () => {
       });
     });
 
-    describe('shouldFallbackToDashboard (story 2.13)', () => {
+    describe('shouldFallbackToDashboard', () => {
       function tabVisibility(overrides: Partial<ResolveTabVisibilityData> = {}): ResolveTabVisibilityData {
         return {
           routes: { status: 'enabled', carryingServices: [] },
@@ -223,7 +219,7 @@ describe('AppShell', () => {
       expect(shouldOpenFilter('j')).toBe(false);
     });
 
-    describe('resolveZoneArrowSwitch (story 2.12)', () => {
+    describe('resolveZoneArrowSwitch', () => {
       it('resolves rightArrow to the next zone in ZONES order', () => {
         expect(resolveZoneArrowSwitch({ rightArrow: true }, 'dashboard')).toBe('edts');
         expect(resolveZoneArrowSwitch({ rightArrow: true }, 'edts')).toBe('update');
@@ -247,7 +243,7 @@ describe('AppShell', () => {
       });
     });
 
-    describe('resize-mode dispatch helpers (story 2.21, Ctrl+W)', () => {
+    describe('resize-mode dispatch helpers (Ctrl+W)', () => {
       describe('shouldEnterResizeMode', () => {
         it('is true for ctrl+w while the EDTs zone is active', () => {
           expect(shouldEnterResizeMode('w', { ctrl: true }, 'edts')).toBe(true);
@@ -261,7 +257,7 @@ describe('AppShell', () => {
           expect(shouldEnterResizeMode('q', { ctrl: true }, 'edts')).toBe(false);
         });
 
-        it('is false while any other zone is active (Boundaries: "a no-op elsewhere")', () => {
+        it('is false while any other zone is active', () => {
           for (const zone of ZONES) {
             if (zone.id === 'edts') {
               continue;
@@ -356,7 +352,7 @@ it('shouldQuit returns true for q', () => {
         commandBarOpen: false,
         openCommandBar: () => {},
         closeCommandBar: () => {},
-        // Story 2.19
+        // Settings
         settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
@@ -406,7 +402,7 @@ it('shouldQuit returns true for q', () => {
         setLogsPaneGridArrowsActive: () => {},
         quitRequested: false,
         requestQuit: () => {},
-        // Story 2.15: EDT action state
+        // EDT action state
         currentEdtAction: null,
         setCurrentEdtAction: () => {},
         edtActionLog: [],
@@ -418,7 +414,7 @@ it('shouldQuit returns true for q', () => {
         openEdtDeleteDialog: () => {},
         openEdtCreateFromDialog: () => {},
         logEdtAction: async () => {},
-        // Story 3.1: Update zone run state
+        // Update zone run state
         updateStatus: 'idle',
         updateResults: [],
         updateNote: null,
@@ -431,10 +427,10 @@ it('shouldQuit returns true for q', () => {
         updateBlocker: null,
         resolveUpdateBlocker: () => {},
         runGroupUpdate: async () => {},
-        // Story 3.7: pre-run configuration screen state
+        // Pre-run configuration screen state
         updateConfig: null,
         openUpdateConfig: async () => {},
-        // Story 3.11: single-service command entry point + service quick-pick state
+        // Single-service command entry point + service quick-pick state
         openUpdateServiceDialog: async () => {},
         updateServiceSelectRequest: false,
         clearUpdateServiceSelectionRequest: () => {},
@@ -444,20 +440,20 @@ it('shouldQuit returns true for q', () => {
         setUpdateConfig: () => {},
         closeUpdateConfig: () => {},
         confirmUpdateConfig: async () => {},
-        // Story 3.9: per-service standalone restart in-flight map + runner
+        // Per-service standalone restart in-flight map + runner
         serviceRestartInFlight: {},
         runServiceRestart: async () => {},
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
-        // Story 3.6: Update zone service-list health poll + last-outcome map
+        // Update zone service-list health poll + last-outcome map
         updateServiceHealth: {},
         lastServiceOutcomes: {},
         startUpdateHealthPolling: () => {},
         stopUpdateHealthPolling: () => {},
-        // Story 3.10: live per-service run tracking + issue log
+        // Live per-service run tracking + issue log
         liveServicePhase: {},
         liveServiceIssues: {},
-        // Story 5.1: Logs zone state
+        // Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],
         logsFullscreenTarget: null,
@@ -476,7 +472,7 @@ it('shouldQuit returns true for q', () => {
         clearLogsPane: () => {},
         setLogsPaneScrollOffset: () => {},
         stopAllLogsPanes: () => {},
-        // Story 5.4: filter-history state
+        // Filter-history state
         filterHistory: {},
         loadFilterHistory: async () => {},
         commitFilterHistoryEntry: () => {},
@@ -493,13 +489,13 @@ it('shouldQuit returns true for q', () => {
         closeResetScreen: () => {},
         dismissResetNotice: () => {},
         runReset: async () => {},
-        // Story 6.1: Routes zone state
+        // Routes zone state
         routesRepoPath: null,
         routes: null,
         routesStatus: 'idle',
         routesError: null,
         loadRoutes: async () => {},
-        // Story 6.2/6.9: Routes zone fire state (per route) and right-pane focus/tab
+        // Routes zone fire state (per route) and right-pane focus/tab
         fireRoute: async () => {},
         requestDrafts: {},
         responses: {},
@@ -513,10 +509,10 @@ it('shouldQuit returns true for q', () => {
         setRoutesFilter: () => {},
         routesSelected: 0,
         setRoutesSelected: () => {},
-        // Story 6.7: JsonTree session state
+        // JsonTree session state
         jsonTreeStates: {},
         updateJsonTreeState: () => {},
-        // Story 6.8: body-draft session state
+        // Body-draft session state
         bodyDrafts: {},
         bodyEditErrors: {},
         ensureBodyDraft: () => {},

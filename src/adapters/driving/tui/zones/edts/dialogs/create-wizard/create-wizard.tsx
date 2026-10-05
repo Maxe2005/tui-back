@@ -1,21 +1,8 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.36 — the create-EDT wizard modal, replacing the
-// flat CREATE EDT dialog (Stories 2.9/2.22/2.27) behind the same `edt-create` / zero-EDT entry
-// points. A breadcrumb shows where the developer is and what's decided; each step opens with a
-// short intro; step navigation is explicit:
-//   - Ctrl+→ / Ctrl+N: next step, only if the current step is valid (else its inline error)
-//   - Ctrl+← / Ctrl+P: back one step, always, state kept
-//   - Tab: moves within the current step only; Enter: advances on Steps 1-2, is Step 3's own
-//     edit/configure key (Story 2.37), confirms on Step 4
-//   - Esc: closes the innermost open element first (Step 3: a field in edit, the override box,
-//     Panel A's edit mode), else cancels with nothing written — or requests quit when no EDT
-//     exists yet (nothing to cancel back to)
-//
-// Story 2.37: Step 3's rows become Story 2.35's `memberPlans` on submit. Story 2.38: Step 4
-// makes activation explicit — a first EDT is created then activated through activateEdt (with
-// the pause panel on files at risk: Retry / Overwrite / Esc); a later EDT is created then either
-// handed to the protected switch dialog ("switch now") or left inactive ("create without
-// switching"). Every action-log entry goes to the NEW EDT's ulid. The pure logic lives in
-// wizard.logic.ts and activation.logic.ts.
+// tui/zones/edts/dialogs/create-wizard: the create-EDT wizard modal (Nom -> Services -> Branches
+// -> Activation) behind `edt-create` and the zero-EDT prompt. Ctrl+→/Ctrl+N advances only from a
+// valid step, Ctrl+←/Ctrl+P goes back keeping state; Esc closes the innermost element first, else
+// cancels with nothing written (or requests quit when no EDT exists yet). Every action-log entry
+// goes to the NEW EDT's ulid; pure logic lives in wizard.logic.ts and activation.logic.ts.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
@@ -69,12 +56,12 @@ export type CreateWizardDeps = {
   focusedEdt: EdtRegistryEntry | undefined;
   edtsRows: readonly EdtRegistryEntry[];
   candidates: readonly ServiceBranchDivergence[];
-  // Story 2.37: Step 3's per-service branch lists (local + remote-tracking, never fetched).
+  // Step 3's per-service branch lists (local + remote-tracking, never fetched).
   listCreateBranches: AppState['listCreateBranches'];
-  // Story 2.38: the first EDT's explicit activation (core/edt/activate.ts, via the store).
+  // The first EDT's explicit activation (core/edt/activate.ts, via the store).
   activateEdtAction: AppState['activateEdt'];
-  // Story 2.38: "switch now" — replaces the wizard with the switch dialog on the new EDT and
-  // runs the protected switch at once (the zone resolves the entry from the reloaded store).
+  // "Switch now" — replaces the wizard with the switch dialog on the new EDT and runs the
+  // protected switch at once (the zone resolves the entry from the reloaded store).
   startSwitch: (created: { ulid: string; topic: string }) => void;
 };
 
@@ -89,20 +76,20 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     patchCreate((prev) => ({ ...extra, activation: { ...prev.activation, ...patch } }));
   }
 
-  // Story 2.38: create, then branch on Step 4's choice. A total create failure has no new EDT,
-  // so nothing is logged; every other outcome is logged to the new EDT's ulid.
+  // Create, then branch on Step 4's choice. A total create failure has no new EDT, so nothing is
+  // logged; every other outcome is logged to the new EDT's ulid.
   async function submitCreate(current: CreateDialogState) {
     if (current.submitting || current.activation.created !== null) {
       return;
     }
-    // Review patch (story 2.9): reject an empty topic inline rather than letting it reach
-    // createEdt, whose `missing-argument` error is a raw CLI usage string.
+    // Reject an empty topic inline rather than letting it reach createEdt, whose
+    // `missing-argument` error is a raw CLI usage string.
     if (current.topic.trim() === '') {
       patchCreate(() => ({ error: 'Topic must not be empty' }));
       return;
     }
-    // Story 2.37: Step 3's rows become Story 2.35's memberPlans, one per member. confirmStep4
-    // already re-ran canAdvance(3), so a null here is only a defensive guard.
+    // Step 3's rows become memberPlans, one per member. confirmStep4 already re-ran canAdvance(3),
+    // so a null here is only a defensive guard.
     const memberPlans = buildMemberPlans(buildStep3Rows(current, deps.candidates));
     if (memberPlans === null) {
       const check = canAdvance(3, current, deps.edtsRows, deps.candidates);
@@ -118,13 +105,13 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     }
     const created = { ulid: result.data.ulid, topic: result.data.topic };
     const memberCount = current.selectedMembers.length;
-    // Story 2.31: a seeded create names its root EDT in every log detail.
+    // A seeded create names its root EDT in every log detail.
     const rootTopic = current.seedFromEdt?.topic;
     // Awaited (not fire-and-forget) so the store's `edts` holds the new EDT before the switch
     // handoff resolves it, and `edtsRows` reflects it for Escape's cancel-vs-quit choice.
     await deps.loadEdts();
     void deps.loadEdtsBranches();
-    // Story 2.25: structured per-repo rows (FailedResultList); create never wires a retry.
+    // Structured per-repo rows (FailedResultList); create never wires a retry.
     const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
     if (failedRows.length > 0) {
       // Never activate after a partial-failure create: the EDT stays inactive.
@@ -152,8 +139,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     await deps.logEdtAction(created.ulid, 'create', 'success', describeCreateForLog(current.topic.trim(), memberCount, 'stay', rootTopic));
   }
 
-  // Story 2.38: the first EDT's activation (and every Retry/Overwrite after a pause) — only ever
-  // activateEdt, never createEdt again.
+  // The first EDT's activation (and every Retry/Overwrite after a pause) — only ever activateEdt,
+  // never createEdt again.
   async function runActivation(
     created: { ulid: string; topic: string },
     memberCount: number,
@@ -206,8 +193,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     await deps.logEdtAction(created.ulid, 'create', failedRows.length > 0 ? 'failed' : 'success', parts.join(' — '));
   }
 
-  // Story 2.38: runs the decision Step 4's reducer raised (the zone's effect calls this once per
-  // decision, outside any state updater).
+  // Runs the decision Step 4's reducer raised (the zone's effect calls this once per decision,
+  // outside any state updater).
   function dispatchActivationDecision(current: CreateDialogState) {
     const { decision, created, blocked } = current.activation;
     if (decision === null || created === null) {
@@ -241,8 +228,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return { ...base, formFocus: 'members' };
     }
     if (target === 3) {
-      // Story 2.31: root members gone from the pool are dropped first (non-empty pool only),
-      // then the seeded wizard's inherited rows are seeded/refreshed.
+      // Root members gone from the pool are dropped first (non-empty pool only), then the seeded
+      // wizard's inherited rows are seeded/refreshed.
       const selectedMembers = pruneToCandidates(base.selectedMembers, deps.candidates);
       return {
         ...base,
@@ -250,11 +237,11 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
         branches: enterBranchStep(base.branches, base.topic, selectedMembers, base.seedFromEdt),
       };
     }
-    // Story 2.38: a first EDT is one created while no EDT exists — captured on entering Step 4.
+    // A first EDT is one created while no EDT exists — captured on entering Step 4.
     return { ...base, activation: initialActivationState(deps.edtsRows.length === 0) };
   }
 
-  // Story 2.37: loads each queued (`pending`) service's lists once. Flipped to `loading` first
+  // Loads each queued (`pending`) service's lists once. Flipped to `loading` first
   // so the zone's effect never queues the same path twice; a result is applied only while that
   // path is still `loading` in a create dialog (a closed/reopened wizard drops it).
   function loadPendingBranchLists(paths: readonly string[]) {
@@ -338,8 +325,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     deps.setDialog((prev) => (prev.kind === 'create' && prev.step > 1 && !isStep3Busy(prev) ? enterStep(prev, (prev.step - 1) as WizardStep) : prev));
   }
 
-  // Review patch (story 2.9): with an EDT list to go back to, Escape cancels; with none (the
-  // forced zero-EDT prompt) it requests a quit instead of leaving no way out short of Ctrl+C.
+  // With an EDT list to go back to, Escape cancels; with none (the forced zero-EDT prompt) it
+  // requests a quit instead of leaving no way out short of Ctrl+C.
   function cancel() {
     if (deps.edtsRows.length > 0) {
       close();
@@ -348,7 +335,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     deps.requestQuit();
   }
 
-  // Story 2.37 (review): runs a cancel Step 3 requested from inside its state updater (see
+  // Runs a cancel Step 3 requested from inside its state updater (see
   // CreateDialogState.cancelRequested). The flag is lowered first so a quit request (the
   // wizard stays open) can be raised again by the next Esc.
   function handleCancelRequest() {
@@ -369,8 +356,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       }
       return;
     }
-    // Story 2.38: once created, Step 4 owns every key (pause panel, overwrite confirmation) —
-    // reduced against the latest state; a decision it raises runs from the zone's effect.
+    // Once created, Step 4 owns every key (pause panel, overwrite confirmation) — reduced against
+    // the latest state; a decision it raises runs from the zone's effect.
     if (current.activation.created !== null) {
       deps.setDialog((prev) =>
         prev.kind === 'create' ? { ...prev, activation: reduceActivationKey(prev.activation, input, key) } : prev,
@@ -378,8 +365,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       return;
     }
     const nav = resolveWizardNavKey(input, key);
-    // Story 2.37 (review): innermost-first — step navigation is inert while Step 3's box is
-    // open or a field is in edit (goNext/goBack re-check this against the latest state).
+    // Innermost-first — step navigation is inert while Step 3's box is open or a field is in edit
+    // (goNext/goBack re-check this against the latest state).
     if (nav !== null && isStep3Busy(current)) {
       return;
     }
@@ -391,8 +378,8 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       goBack();
       return;
     }
-    // Story 2.37: Step 3 owns every other key — Enter edits/configures (never advances), Esc
-    // closes its innermost element first and only then cancels the wizard.
+    // Step 3 owns every other key — Enter edits/configures (never advances), Esc closes its
+    // innermost element first and only then cancels the wizard.
     if (current.step === 3) {
       branchStep.handleBranchStepInput(input, key);
       return;
@@ -417,7 +404,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
       handleServicesStepInput(deps.setDialog, deps.candidates, current, input, key);
       return;
     }
-    // Story 2.38: Step 4's radio (Space/↑↓).
+    // Step 4's radio (Space/↑↓).
     if (current.step === 4) {
       deps.setDialog((prev) =>
         prev.kind === 'create' ? { ...prev, activation: reduceActivationKey(prev.activation, input, key) } : prev,
@@ -448,7 +435,7 @@ export function CreateWizardView({
   candidateState: CandidateListState;
   edtsRows: readonly EdtRegistryEntry[];
   maxRows: number;
-  // Story 2.37: Step 3's Panel B table height budget (NFR-7).
+  // Step 3's Panel B table height budget (NFR-7).
   maxVisibleRows: number;
 }) {
   const breadcrumb = buildBreadcrumb(dialog, edtsRows, candidates);

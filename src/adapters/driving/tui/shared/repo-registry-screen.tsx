@@ -1,19 +1,8 @@
-// tui/shared/repo-registry-screen: story 2.11 — a TUI overlay front-end over Story 1.5's
-// existing scan/register use-cases (AD-6). Not a 7th ZoneId/tab (zones/zones.ts's closed
-// union stays unchanged) — an overlay in the same family as the command/filter/help
-// ModalDialog overlays, opened/closed via app-store's registryScreenOpen flag so both the
-// `registry` command inside Story 2.14's `:` command bar and Dashboard's empty-registry
-// prompt can trigger it (`:` itself never opens this screen directly, story 2.14).
-// Story 2.33 adds "Clean stale entries" (Ctrl+L from the root-input screen): classify
-// unreachable/manifest-not-found registry entries and, list-then-confirm, remove the
-// confirmed ones — reusing this same screen's checkbox-list/results rendering pattern
-// rather than a new component (Boundaries).
-//
-// Testability convention (render-to-string.tsx): the shared renderToString harness's fake
-// stdin never emits data, so a useInput callback itself is never invoked by any test in this
-// repo — every key-handling decision below is a pure, directly-testable function; useInput
-// only interprets the raw Ink Key and dispatches the pure result (mirrors edts-zone.tsx's
-// resolveSelectionDirection/moveSelection and keybinding-help.tsx's resolveHelpScroll).
+// tui/shared/repo-registry-screen: an overlay (not a zone tab) over the scan/register
+// use-cases, opened via the store's registryScreenOpen flag by the `registry` command or
+// Dashboard's empty-registry prompt. Ctrl+L opens "Clean stale entries": classify
+// unreachable/manifest-not-found entries and remove the confirmed ones. Every key decision is a
+// pure function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
 import { Box, Text, useInput, type Key } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
@@ -32,11 +21,11 @@ import {
 } from '../store/app-store.js';
 import type { ScanResult } from '../../../../core/ports/registry.js';
 
-// Static manifest-creation guidance (Boundaries & Constraints: "always shown alongside
-// scan/register controls — never gated to first launch only"). Field names mirror Story
-// 1.4's zod schema (adapters/driven/manifest/schema.ts): service, container, modules,
-// optional migrationCommand (absent = no migrations to run), optional sharedBranch
-// (default development), optional protectedBranches (Story 2.42).
+// Static manifest-creation guidance, always shown alongside the scan/register controls — never
+// gated to first launch only. Field names mirror the manifest zod schema
+// (adapters/driven/manifest/schema.ts): service, container, modules, optional migrationCommand
+// (absent = no migrations to run), optional sharedBranch (default development), optional
+// protectedBranches.
 export const MANIFEST_GUIDANCE_LINES: readonly string[] = [
   'A repo is managed once it has a root .tui-back.yaml declaring service, container,',
   'and modules (migrationCommand is optional — omit it if the service has no migrations;',
@@ -54,19 +43,17 @@ export type RegistryScreenPhase =
   | 'candidates'
   | 'registering'
   | 'results'
-  // Story 2.33: mirrors scanning/candidates/results above, but for the "Clean stale
-  // entries" action — deliberately three states, not the scan flow's five, since
-  // classifyStaleRegistry never walks a filesystem tree (a quick registry/manifest read, not
-  // a scan) so loading/error/empty all fold into the single 'clean-candidates' phase and are
-  // told apart inside its own render block instead.
+  // The "Clean stale entries" action's phases — three, not the scan flow's five:
+  // classifyStaleRegistry is a quick registry/manifest read, not a filesystem walk, so
+  // loading/error/empty all fold into 'clean-candidates' and are told apart inside its render
+  // block.
   | 'clean-candidates'
   | 'cleaning'
   | 'clean-results';
 
-// Pure phase derivation from the store's registry-screen fields — the I/O matrix's states
-// (scanning, distinct empty-vs-error, candidates, registering, results, and story 2.33's
-// clean-candidates/cleaning/clean-results) read off store data alone, never off transient
-// local component state.
+// Pure phase derivation from the store's registry-screen fields — scanning, distinct
+// empty-vs-error, candidates, registering, results, and the clean-candidates/cleaning/
+// clean-results phases read off store data alone, never off transient component state.
 export function resolveRegistryScreenPhase(store: {
   registryScanStatus: 'idle' | 'loading' | 'error';
   registryScanResult: ScanResult | null;
@@ -123,8 +110,8 @@ export function backspaceRootInput(current: string): string {
   return current.slice(0, -1);
 }
 
-// Candidate-list cursor movement (Story 1.9's checkbox-list-item is a static row; the
-// screen owns which row is currently highlighted for Space/navigation).
+// Candidate-list cursor movement (checkbox-list-item is a static row; the screen owns which row
+// is highlighted for Space/navigation).
 export type CandidateDirection = 'up' | 'down';
 
 export function moveCandidateCursor(current: number, direction: CandidateDirection, length: number): number {
@@ -135,8 +122,8 @@ export function moveCandidateCursor(current: number, direction: CandidateDirecti
   return Math.min(Math.max(next, 0), length - 1);
 }
 
-// Space toggles the highlighted candidate's checked state — checkbox-list-item's existing
-// semantics (keybindings.ts:26-33): Space toggles, Enter confirms the whole selection.
+// Space toggles the highlighted candidate's checked state — checkbox-list-item's semantics:
+// Space toggles, Enter confirms the whole selection.
 export function toggleCandidateSelection(selected: ReadonlySet<string>, path: string): Set<string> {
   const next = new Set(selected);
   if (next.has(path)) {
@@ -147,10 +134,9 @@ export function toggleCandidateSelection(selected: ReadonlySet<string>, path: st
   return next;
 }
 
-// Story 2.33: clean candidates render pre-checked (Design Notes/sprint-change-proposal —
-// unlike scan/register's own candidates, which start unchecked). Tracking the *excluded*
-// set rather than the *selected* one gives that "everything checked by default" behavior
-// for free, with no seed/effect needed: an empty exclusion set already means "all selected".
+// Clean candidates render pre-checked (unlike scan/register's candidates, which start
+// unchecked). Tracking the *excluded* set rather than the *selected* one gives "everything
+// checked by default" for free: an empty exclusion set already means "all selected".
 export function toggleCleanCandidateExclusion(excluded: ReadonlySet<string>, path: string): Set<string> {
   const next = new Set(excluded);
   if (next.has(path)) {
@@ -223,9 +209,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
 
   useInput((input, key) => {
     if (phase === 'root-input') {
-      // Ctrl+L: "Clean stale entries" (Boundaries — story 2.33) — never a plain "l"
-      // keypress, which must stay available as ordinary root-path text (mirrors
-      // branch-picker.tsx's own Ctrl+R precedent).
+      // Ctrl+L: "Clean stale entries" — never a plain "l" keypress, which must stay available
+      // as ordinary root-path text (like branch-picker.tsx's Ctrl+R).
       if (key.ctrl && input.toLowerCase() === 'l') {
         void scanRegistryStaleEntries();
         return;
@@ -338,12 +323,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
             {candidates.map((path, index) => {
               const highlighted = index === clampedCursor;
               return (
-                // review patch: checkbox-list-item.tsx's own `selected` prop is accepted but
-                // never read by its layout function, so it has no visible effect on its own —
-                // the highlighted (arrow-navigable) row must still be visually distinguishable
-                // without modifying that shared component (spec boundary: reuse as-is). A
-                // `›` cursor glyph, matching list-row.tsx's own selection-marker convention,
-                // is rendered here as a sibling column instead.
+                // checkbox-list-item.tsx's own `selected` prop has no visible effect, so the
+                // highlighted (arrow-navigable) row gets a `›` cursor glyph as a sibling column,
+                // matching list-row.tsx's selection marker, without modifying the shared
+                // component.
                 <Box key={path} flexDirection="row">
                   <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
                   <CheckboxListItem
@@ -393,8 +376,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 {registryCleanScanError ? <DimAnnotation text={registryCleanScanError} /> : null}
               </Box>
             ) : staleCandidates.length === 0 ? (
-              // Matrix: "No candidates ... explicit result, never silent" — a distinct,
-              // visible state, same convention as the scan flow's own 'empty' phase.
+              // Zero candidates is an explicit, visible state, never silent — same convention
+              // as the scan flow's own 'empty' phase.
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>No stale registry entries found.</Text>
                 {registryCleanErrors.length > 0 ? (
@@ -425,9 +408,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                   );
                 })}
                 {registryCleanErrors.length > 0 ? (
-                  // Review fix: a path that couldn't even be checked (registry.exists()
-                  // errored) is never silently dropped — reported here, distinct from the
-                  // removable candidate list above, never gating or blocking it.
+                  // A path that couldn't even be checked (registry.exists() errored) is never
+                  // silently dropped — reported here, distinct from the removable candidate list
+                  // above, never gating or blocking it.
                   <DimAnnotation
                     text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
                       .map((error) => `${error.path} (${error.code})`)

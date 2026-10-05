@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isProtectedBranch } from './shared-branches.js';
 
-describe('isProtectedBranch (story 2.42, manifest-defined set)', () => {
+describe('isProtectedBranch (manifest-defined set)', () => {
   it('protects every branch the manifest lists', () => {
     const manifest = { sharedBranch: 'main', protectedBranches: ['preprod', 'prod'] };
     expect(isProtectedBranch('preprod', manifest)).toBe(true);

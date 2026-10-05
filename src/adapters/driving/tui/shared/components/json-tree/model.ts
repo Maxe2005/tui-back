@@ -1,9 +1,7 @@
-// tui/shared/components/json-tree/model: story 6.7 — the JsonTree's pure core (no
-// Ink/React imports): path normalization, JSON flattening with fold + filter rules,
-// fold/rule reducers, tree-local key dispatch, response classification, and
-// viewport-budget helpers. The thin Ink view (json-tree.tsx) renders the visible rows
-// through BoundedList; per-route session state lives in the routes slice; this module
-// never touches the store and never parses anything but a fire-result body string.
+// tui/shared/components/json-tree/model: the JsonTree's pure core (no Ink/React): path
+// normalization, JSON flattening with fold + filter rules, fold/rule reducers, tree-local key
+// dispatch, response classification, viewport-budget helpers, and the body-edit layer. It never
+// touches the store and never parses anything but a fire-result body string.
 export const MAX_BODY_CHARS = 64 * 1024;
 export const MAX_STRING_CHARS = 120;
 export const MAX_JSON_TREE_STATES = 50;
@@ -407,12 +405,10 @@ export function moveTreeSelection(selected: number, rowCount: number, viewport: 
   }
 }
 
-// Tree-local key dispatch (story 6.7 deliberately does not extend the shared
-// `NavigationKey` contract — arrows/Home/End/PgUp/PgDn are interpreted here, inside the
-// tree, from the raw Ink key flags). Story 6.8 extends it with the edit keys (`Enter`
-// edit, `a`/`d`/`t`/`r`): the 6.7 response tree ignores them (its zone branch never
-// applies them), while the 6.8 body editor applies them. Returns null for keys the tree
-// does not own (Esc, digits, Ctrl combos): the zone swallows those while focused
+// Tree-local key dispatch (the shared `NavigationKey` contract is deliberately not extended —
+// arrows/Home/End/PgUp/PgDn are interpreted here from the raw Ink key flags), plus the edit
+// keys (`Enter` edit, `a`/`d`/`t`/`r`), which only the body editor applies. Returns null for
+// keys the tree does not own (Esc, digits, Ctrl combos): the zone swallows those while focused
 // without acting.
 export type TreeKeyFlags = {
   upArrow?: boolean;
@@ -574,7 +570,6 @@ export function formatTreeStatusLine(hiddenCount: number, activeRuleCount: numbe
 }
 
 // Rule rows visible at once in the filter panel; past this the panel windows through
-// Rule rows visible at once in the filter panel; past this the panel windows through
 // BoundedList like every other list (the cursor still reaches every rule).
 export const PANEL_VISIBLE_RULE_ROWS = 10;
 
@@ -614,16 +609,10 @@ export function pruneJsonTreeStates(
   return pruned;
 }
 
-// Story 6.8 — the JsonTree edit layer (pure, no Ink/React imports): immutable ops over a
-// JSON body draft (`setValue`/`addEntry`/`removeEntry`/`changeType`), scalar validators,
-// concrete-path parsing, raw-buffer parsing with line/column, draft seeding/gating, and
-// the editor status line. Drafts live in the routes slice as `bodyDrafts`
-// (`Record<routeKey, unknown>`, session-only, same 50-entry LRU prune as the tree
-// states); per-path scalar errors live beside them as `bodyEditErrors`
-// (`Record<routeKey, Record<concretePath, BodyEditError>>`) so an invalid entry renders
-// in error color without ever coercing the stored text. The entry keeps the scalar kind
-// the value had before the error, so fixing the text re-validates against the original
-// kind instead of the stored string.
+// The edit layer: immutable ops over a JSON body draft (`setValue`/`addEntry`/`removeEntry`/
+// `changeType`), scalar validators, concrete-path parsing, raw-buffer parsing with line/column,
+// draft seeding/gating, and the editor status line. Per-path scalar errors keep the scalar kind
+// the value had before the error, so fixing the text re-validates against the original kind.
 
 export const MAX_BODY_DRAFTS = 50;
 
@@ -1043,8 +1032,8 @@ export function parseRawJsonBuffer(text: string): RawParseResult {
 
 export type EditableRoute = { bodyExample?: unknown; bodyContentType?: string };
 
-// The editor opens for a route carrying `bodyExample` or any `bodyContentType`
-// (non-JSON bodies start empty, per 6.6); routes with neither stay inert with no hint.
+// The editor opens for a route carrying `bodyExample` or any `bodyContentType` (non-JSON
+// bodies start empty); routes with neither stay inert with no hint.
 export function canEditRouteBody(route: EditableRoute): boolean {
   if (route.bodyExample !== undefined) {
     return true;
@@ -1063,8 +1052,8 @@ function cloneJsonValue(value: unknown): unknown {
   }
 }
 
-// Lazy per-route seed: a deep clone of the 6.6 `bodyExample`, or `undefined` (empty —
-// press `r`) when the route carries only a content type.
+// Lazy per-route seed: a deep clone of the route's `bodyExample`, or `undefined` (empty — press
+// `r`) when the route carries only a content type.
 export function seedBodyDraft(route: EditableRoute): unknown {
   return route.bodyExample === undefined ? undefined : cloneJsonValue(route.bodyExample);
 }

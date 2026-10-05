@@ -1,9 +1,7 @@
-// tui/shared/keys: the Ctrl+→ / Ctrl+N (next) · Ctrl+← / Ctrl+P (back) navigation key,
-// generalized from the EDT create wizard's step navigation (story 2.36) so the Routes
-// right pane's sub-tabs (story 6.9) share the exact same convention. Ink delivers
-// Ctrl+letter as `input === '<letter>'` with `key.ctrl: true`, and Ctrl+Arrow (xterm's
-// `\x1b[1;5C`/`D`) as the arrow flag with `key.ctrl: true`. Ctrl+N/Ctrl+P are the fallbacks
-// for terminals that never send the ctrl modifier on arrow keys.
+// tui/shared/keys: the Ctrl+→ / Ctrl+N (next) · Ctrl+← / Ctrl+P (back) navigation key shared by
+// the EDT create wizard and the Routes right pane's sub-tabs. Ink delivers Ctrl+letter as
+// `input === '<letter>'` with `key.ctrl: true`, and Ctrl+Arrow as the arrow flag with
+// `key.ctrl: true`; Ctrl+N/Ctrl+P cover terminals that never send ctrl on arrow keys.
 
 export type TabNavKey = {
   ctrl?: boolean;
