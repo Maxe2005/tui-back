@@ -826,7 +826,6 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       </Box>
                     </Box>
                   ))}
-                  <DimAnnotation text="Info only — not selectable." />
                 </Box>
               ) : null}
 

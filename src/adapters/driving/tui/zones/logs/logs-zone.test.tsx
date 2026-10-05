@@ -400,7 +400,6 @@ describe('LogsZone', () => {
     expect(output).toContain('SERVICES WITHOUT CONTAINER');
     // The narrow list column word-wraps long lines — normalize before matching text.
     const flat = output.replace(/\s+/g, ' ');
-    expect(flat).toContain('Info only — not selectable.');
     expect(flat).toContain('no container');
     // Each container-less service renders exactly once (the info-only row), never additionally
     // in its old membership list; the member's departure empties the EDT-members list.
