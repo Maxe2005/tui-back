@@ -118,6 +118,9 @@ export interface GroupUpdateSelectionItem {
   service: string;
   repoPath?: string;
   sourceBranch?: string;
+  // Per-service overrides of the run-wide toggles; undefined follows the run-wide value.
+  runMigrations?: boolean;
+  cleanRestart?: boolean;
 }
 
 export interface GroupUpdateParams {
@@ -282,7 +285,7 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
   // reported). Reads only (manifest loads for service-name matching, local branch
   // checks); no git write, no migration, no restart below this point runs for an
   // excluded service — or at all when the selection rejects the run outright.
-  let targets: { repoPath: string; sourceBranch: string | undefined }[] = paths.map((repoPath) => ({
+  let targets: { repoPath: string; sourceBranch: string | undefined; runMigrations?: boolean; cleanRestart?: boolean }[] = paths.map((repoPath) => ({
     repoPath,
     sourceBranch: undefined,
   }));
@@ -331,8 +334,8 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         undefined,
         params.onUpdateBlocker,
         effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
-        runMigrations,
-        cleanRestart,
+        target.runMigrations ?? runMigrations,
+        target.cleanRestart ?? cleanRestart,
         params.onPhase,
       );
       results.push(outcome.row);
@@ -375,14 +378,14 @@ async function narrowAllTargets(
   manifest: ManifestPort,
   paths: readonly string[],
   selection: readonly GroupUpdateSelectionItem[],
-): Promise<{ service: string; repoPath: string; sourceBranch: string | undefined }[]> {
+): Promise<{ service: string; repoPath: string; sourceBranch: string | undefined; runMigrations?: boolean; cleanRestart?: boolean }[]> {
   const services = new Map<string, string>();
   for (const repoPath of paths) {
     const loaded = await manifest.load(repoPath);
     services.set(repoPath, loaded.ok ? loaded.data.service : serviceFallback(repoPath));
   }
   const seen = new Set<string>();
-  const targets: { service: string; repoPath: string; sourceBranch: string | undefined }[] = [];
+  const targets: { service: string; repoPath: string; sourceBranch: string | undefined; runMigrations?: boolean; cleanRestart?: boolean }[] = [];
   for (const repoPath of paths) {
     const item = matchSelectionItem(selection, { service: services.get(repoPath) ?? serviceFallback(repoPath), repoPath });
     if (item === undefined) {
@@ -393,7 +396,13 @@ async function narrowAllTargets(
       continue;
     }
     seen.add(key);
-    targets.push({ service: services.get(repoPath) ?? serviceFallback(repoPath), repoPath, sourceBranch: item.sourceBranch });
+    targets.push({
+      service: services.get(repoPath) ?? serviceFallback(repoPath),
+      repoPath,
+      sourceBranch: item.sourceBranch,
+      ...(item.runMigrations !== undefined ? { runMigrations: item.runMigrations } : {}),
+      ...(item.cleanRestart !== undefined ? { cleanRestart: item.cleanRestart } : {}),
+    });
   }
   return targets;
 }
@@ -436,13 +445,19 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
   // is taken — deselected services are excluded entirely (never touched, never
   // reported). Reads only (a local branch check per custom sourceBranch); the
   // unexpected-branch gate and assertAllowedBranch gating below are unchanged.
-  let configured: { member: (typeof active.members)[number]; sourceBranch: string | undefined }[] | null = null;
+  type ConfiguredMember = {
+    member: (typeof active.members)[number];
+    sourceBranch: string | undefined;
+    runMigrations?: boolean;
+    cleanRestart?: boolean;
+  };
+  let configured: ConfiguredMember[] | null = null;
   if (selection !== undefined) {
     if (selection.length === 0) {
       return err('no-services-selected', 'No services selected — select at least one service before confirming.');
     }
     const seenSelection = new Set<string>();
-    const kept: { member: (typeof active.members)[number]; sourceBranch: string | undefined }[] = [];
+    const kept: ConfiguredMember[] = [];
     for (const member of active.members) {
       const key = resolve(member.repoPath);
       if (seenSelection.has(key)) {
@@ -453,7 +468,12 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
       if (item === undefined) {
         continue;
       }
-      kept.push({ member, sourceBranch: item.sourceBranch });
+      kept.push({
+        member,
+        sourceBranch: item.sourceBranch,
+        ...(item.runMigrations !== undefined ? { runMigrations: item.runMigrations } : {}),
+        ...(item.cleanRestart !== undefined ? { cleanRestart: item.cleanRestart } : {}),
+      });
     }
     if (kept.length === 0) {
       return err('no-services-selected', `None of the selected services are members of EDT "${active.topic}" — nothing to update.`);
@@ -478,7 +498,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
       const shortlist =
         configured !== null
           ? configured
-          : active.members.map((member) => ({ member, sourceBranch: undefined as string | undefined }));
+          : active.members.map((member): ConfiguredMember => ({ member, sourceBranch: undefined }));
       const enlisted = shortlist.filter(({ member }) => {
         const key = resolve(member.repoPath);
         if (seen.has(key)) {
@@ -488,7 +508,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
         return true;
       });
       const results: GroupUpdateRepoResult[] = [];
-      for (const { member, sourceBranch } of enlisted) {
+      for (const { member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart } of enlisted) {
         // Story 3.4: `cancel-run` stops the loop but still returns `ok` with rows so far.
         const outcome = await updateMember(
           manifest,
@@ -500,8 +520,8 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
           member,
           params.onUpdateBlocker,
           sourceBranch,
-          runMigrations,
-          cleanRestart,
+          memberMigrations ?? runMigrations,
+          memberCleanRestart ?? cleanRestart,
           params.onPhase,
         );
         results.push(outcome.row);
