@@ -19,15 +19,18 @@ import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 // 'updating' (a run currently targets this service), 'migrating' (the run's live phase for this
 // service is the migrate step) and 'error' (derived from the last completed run's outcome, not
 // raw health — a container can report `up` immediately after a failed migration).
-export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'error';
+// 'no-container' is the TUI-side state for a service whose manifest declares no Docker
+// runtime — dim, never the down treatment.
+export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'error' | 'no-container';
 
 // Precedence: a run currently targeting this service wins ('updating', or 'migrating' during the
 // live migrate phase — outranking even a stale 'error' from a previous run); otherwise a
 // standalone clean restart in flight wins ('restarting'); otherwise a failed last outcome
 // outranks raw health (a container can report `up` right after a failed migration — the old
-// process is still running); otherwise raw health passes through unchanged.
+// process is still running); otherwise a container-less service reads 'no-container';
+// otherwise raw health passes through unchanged.
 export function deriveUpdateServiceStatus(
-  health: HealthState,
+  health: HealthState | 'no-container',
   lastOutcome: GroupUpdateRepoResult['outcome'] | undefined,
   isTargetedByRunningRun: boolean,
   isRestarting = false,
@@ -46,6 +49,9 @@ export function deriveUpdateServiceStatus(
   }
   if (lastOutcome === 'failed') {
     return 'error';
+  }
+  if (health === 'no-container') {
+    return 'no-container';
   }
   return health;
 }

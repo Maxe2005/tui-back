@@ -15,6 +15,7 @@ const ALL_STATES = [
   'updating',
   'migrating',
   'error',
+  'no-container',
 ] as const;
 
 describe('STATUS_BADGES', () => {
@@ -53,6 +54,9 @@ describe('STATUS_BADGES', () => {
     expect(STATUS_BADGES.updating).toEqual({ glyph: '⇄', color: colors.info });
     expect(STATUS_BADGES.migrating).toEqual({ glyph: '⇒', color: colors.info });
     expect(STATUS_BADGES.error).toEqual({ glyph: '✖', color: colors.error });
+    // Dim hollow like down, but dimmed rather than red — "no runtime" is not "runtime down".
+    expect(STATUS_BADGES['no-container']).toEqual({ glyph: '○', color: colors['text-dim'] });
+    expect(STATUS_BADGES['no-container'].color).not.toBe(STATUS_BADGES.down.color);
     const newGlyphs = [STATUS_BADGES.restarting.glyph, STATUS_BADGES.updating.glyph, STATUS_BADGES.migrating.glyph];
     expect(new Set(newGlyphs).size).toBe(newGlyphs.length);
     expect(STATUS_BADGES.restarting.glyph).not.toBe(STATUS_BADGES['in-progress'].glyph);
@@ -86,6 +90,7 @@ describe('StatusBadge', () => {
     ['updating', '⇄'],
     ['migrating', '⇒'],
     ['error', '✖'],
+    ['no-container', '○'],
   ] as const)('renders the %s glyph via Ink', async (state, glyph) => {
     const output = await renderToString(<StatusBadge state={state} />);
     expect(output).toContain(glyph);

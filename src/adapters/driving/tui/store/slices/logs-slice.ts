@@ -26,7 +26,9 @@ export type LogsPaneData = {
   // Live Docker health for this pane's container (never persisted — read on poll only) plus
   // whether a developer-triggered `docker restart` is in flight for this pane (gates the R
   // control + the no-op guard). Defaults: `down` (not yet proven up) and `false`.
-  health: HealthState;
+  // `no-container` is the TUI-side state for a manifest without `container` — set without
+  // ever touching Docker, and such a pane never subscribes, polls, or restarts.
+  health: HealthState | 'no-container';
   restarting: boolean;
   // How many lines back from the tail this pane is currently scrolled — 0 means "pinned to
   // the live tail". Purely local UI state (never mirrored from LogsManager); bumped by
@@ -41,6 +43,9 @@ function emptyPane(repoPath: string, service: string): LogsPaneData {
 // Per-pane health poll cadence — on subscribe plus an interval, cleared on unsubscribe. Never
 // resubscribes the log stream itself.
 export const LOGS_HEALTH_POLL_INTERVAL_MS = 5000;
+// Listed-row health poll cadence — one shared timer covering every listed row (mirroring
+// update-slice.ts), not one timer per pane. Same 5s by convention, not by coupling.
+export const LOGS_LISTED_HEALTH_POLL_INTERVAL_MS = 5000;
 
 export type LogsSlice = {
   // repoPaths currently checked in the EDT-members list / the other-services list — any
@@ -63,6 +68,25 @@ export type LogsSlice = {
   toggleLogsOtherSelection: (repoPath: string) => void;
   selectAllLogsEdtServices: (repoPaths: readonly string[]) => void;
   deselectAllLogsEdtServices: () => void;
+  selectAllLogsOtherServices: (repoPaths: readonly string[]) => void;
+  deselectAllLogsOtherServices: () => void;
+  // Per-row container presence, keyed by repoPath — true exactly when that row's manifest
+  // positively resolved without a `container`. Absent means unknown (not yet loaded, or the
+  // load failed); such rows stay in their membership list and never enter the info-only
+  // third section. Resolved async, cached, never blocks the first render.
+  logsNoContainer: Record<string, boolean>;
+  // Resolves presence for every given repoPath whose answer is not cached yet — one
+  // manifest.load per uncached row, failures left absent for a later retry.
+  resolveLogsContainerPresence: (repoPaths: readonly string[]) => void;
+  // Listed-row health for the list badges, keyed by repoPath — covers every listed row, not
+  // just subscribed panes (whose own logsPanes[repoPath].health stays the pane source of
+  // truth). Missing reads as `down` at render, like the Update zone's own map.
+  logsListedHealth: Record<string, HealthState | 'no-container'>;
+  // Starts (or restarts, on a changed row list) a one-shot-then-interval poll of every given
+  // repoPath's container health — like startUpdateHealthPolling, one poll cycle covers every
+  // row at once rather than one timer per pane.
+  startLogsListedHealthPolling: (repoPaths: readonly string[]) => void;
+  stopLogsListedHealthPolling: () => void;
   openLogsFullscreen: (repoPath: string, serviceName: string) => void;
   closeLogsFullscreen: () => void;
   // Resolves repoPath's manifest-declared container and starts (or, if already subscribed,
@@ -185,6 +209,8 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
     // One poll cycle for a single pane — resolves the manifest-declared container,
     // inspects it, and updates the badge only on success. Any failure (manifest load fails,
     // inspect errors, docker unreachable) keeps last-known health and never crashes the view.
+    // A manifest without `container` records the no-container state, stops its own timer,
+    // and never reaches Docker.
     async function pollPaneHealth(repoPath: string): Promise<void> {
       if (!deps) {
         return;
@@ -194,6 +220,17 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       }
       const manifestResult = await deps.manifest.load(repoPath);
       if (!manifestResult.ok) {
+        return;
+      }
+      if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
+        stopHealthPolling(repoPath);
+        set((state) => {
+          const current = state.logsPanes[repoPath];
+          if (!current || current.health === 'no-container') {
+            return {};
+          }
+          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, health: 'no-container' as const } } };
+        });
         return;
       }
       const healthResult = await getServiceHealth({ docker: deps.docker, container: manifestResult.data.container });
@@ -240,9 +277,115 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       }
     }
 
+    // One shared poll timer for every currently-listed row (not one per repoPath, unlike the
+    // pane timers above) — restarted whenever the listed rows change so a service that
+    // appears/disappears is picked up without leaking a stale timer.
+    let listedHealthPollTimer: ReturnType<typeof setInterval> | null = null;
+    let listedPollingRepoPaths: readonly string[] = [];
+
+    // Resolves one row's container presence without blocking — cached, so a repeated call
+    // for an already-known row never reloads its manifest. A failed load leaves the row
+    // absent (unknown), never recorded as either answer.
+    const pendingPresence = new Set<string>();
+    async function resolveContainerPresence(repoPath: string): Promise<void> {
+      if (!deps) {
+        return;
+      }
+      if (repoPath in get().logsNoContainer || pendingPresence.has(repoPath)) {
+        return;
+      }
+      pendingPresence.add(repoPath);
+      try {
+        const manifestResult = await deps.manifest.load(repoPath);
+        if (!manifestResult.ok) {
+          return;
+        }
+        // Keyed idempotent write: even a superseded resolve records this path's current
+        // manifest truth, and the next polling retarget prunes rows that left the list.
+        const withoutContainer = manifestResult.data.container === undefined || manifestResult.data.container.trim() === '';
+        set((state) => {
+          if (state.logsNoContainer[repoPath] === withoutContainer) {
+            return {};
+          }
+          return { logsNoContainer: { ...state.logsNoContainer, [repoPath]: withoutContainer } };
+        });
+      } finally {
+        pendingPresence.delete(repoPath);
+      }
+    }
+
+    // One poll cycle for a single listed row — like pollPaneHealth above, but writing the
+    // row-health map instead of a pane entry, so badges render for rows that were never
+    // subscribed. A manifest without `container` records no-container (presence and health)
+    // and never reaches Docker; any failure keeps last-known health and never crashes.
+    async function pollListedRowHealth(repoPath: string): Promise<void> {
+      if (!deps) {
+        return;
+      }
+      // A positively-resolved container-less row never reloads its manifest here — the
+      // presence cache already answered.
+      if (get().logsNoContainer[repoPath] === true) {
+        set((state) => {
+          if (state.logsListedHealth[repoPath] === 'no-container') {
+            return {};
+          }
+          return { logsListedHealth: { ...state.logsListedHealth, [repoPath]: 'no-container' as const } };
+        });
+        return;
+      }
+      const manifestResult = await deps.manifest.load(repoPath);
+      if (!manifestResult.ok) {
+        return;
+      }
+      if (!listedPollingRepoPaths.includes(repoPath)) {
+        return;
+      }
+      const container = manifestResult.data.container;
+      if (container === undefined || container.trim() === '') {
+        set((state) => ({
+          logsNoContainer: state.logsNoContainer[repoPath] === true ? state.logsNoContainer : { ...state.logsNoContainer, [repoPath]: true },
+          logsListedHealth:
+            state.logsListedHealth[repoPath] === 'no-container'
+              ? state.logsListedHealth
+              : { ...state.logsListedHealth, [repoPath]: 'no-container' as const },
+        }));
+        return;
+      }
+      set((state) => {
+        if (state.logsNoContainer[repoPath] === false) {
+          return {};
+        }
+        return { logsNoContainer: { ...state.logsNoContainer, [repoPath]: false } };
+      });
+      // Manifest values are schema-trimmed, but a ManifestPort is any implementation —
+      // never hand Docker a padded name.
+      const healthResult = await getServiceHealth({ docker: deps.docker, container: container.trim() });
+      if (!healthResult.ok) {
+        return;
+      }
+      if (!listedPollingRepoPaths.includes(repoPath)) {
+        return;
+      }
+      const health = healthResult.data;
+      set((state) => {
+        if (state.logsListedHealth[repoPath] === health) {
+          return {};
+        }
+        return { logsListedHealth: { ...state.logsListedHealth, [repoPath]: health } };
+      });
+    }
+
+    function pollAllListed(repoPaths: readonly string[]): void {
+      for (const repoPath of repoPaths) {
+        void pollListedRowHealth(repoPath);
+      }
+    }
+
     return {
       logsEdtSelected: [],
       logsOtherSelected: [],
+      logsNoContainer: {},
+      logsListedHealth: {},
       logsFullscreenTarget: null,
       logsFullscreenServiceName: null,
       logsPanes: {},
@@ -261,6 +404,59 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         })),
       selectAllLogsEdtServices: (repoPaths) => set({ logsEdtSelected: [...repoPaths] }),
       deselectAllLogsEdtServices: () => set({ logsEdtSelected: [] }),
+      selectAllLogsOtherServices: (repoPaths) => set({ logsOtherSelected: [...repoPaths] }),
+      deselectAllLogsOtherServices: () => set({ logsOtherSelected: [] }),
+      resolveLogsContainerPresence: (repoPaths) => {
+        for (const repoPath of repoPaths) {
+          void resolveContainerPresence(repoPath);
+        }
+      },
+      startLogsListedHealthPolling: (repoPaths) => {
+        listedPollingRepoPaths = [...repoPaths];
+        // Stale rows (renamed/unregistered since the last retarget) leave both maps so
+        // a removed service can neither badge nor resurface from cache.
+        set((state) => {
+          const wanted = new Set(repoPaths);
+          const logsNoContainer: Record<string, boolean> = {};
+          const logsListedHealth: Record<string, HealthState | 'no-container'> = {};
+          for (const path of Object.keys(state.logsNoContainer)) {
+            if (wanted.has(path)) {
+              logsNoContainer[path] = state.logsNoContainer[path];
+            }
+          }
+          for (const path of Object.keys(state.logsListedHealth)) {
+            if (wanted.has(path)) {
+              logsListedHealth[path] = state.logsListedHealth[path];
+            }
+          }
+          return { logsNoContainer, logsListedHealth };
+        });
+        if (listedPollingRepoPaths.length === 0) {
+          if (listedHealthPollTimer !== null) {
+            clearInterval(listedHealthPollTimer);
+            listedHealthPollTimer = null;
+          }
+          return;
+        }
+        pollAllListed(listedPollingRepoPaths);
+        if (listedHealthPollTimer !== null) {
+          clearInterval(listedHealthPollTimer);
+        }
+        listedHealthPollTimer = setInterval(() => {
+          pollAllListed(listedPollingRepoPaths);
+        }, LOGS_LISTED_HEALTH_POLL_INTERVAL_MS);
+        const unrefable = listedHealthPollTimer as unknown as { unref?: () => void };
+        if (typeof unrefable.unref === 'function') {
+          unrefable.unref();
+        }
+      },
+      stopLogsListedHealthPolling: () => {
+        if (listedHealthPollTimer !== null) {
+          clearInterval(listedHealthPollTimer);
+          listedHealthPollTimer = null;
+        }
+        listedPollingRepoPaths = [];
+      },
       openLogsFullscreen: (repoPath, serviceName) => set({ logsFullscreenTarget: repoPath, logsFullscreenServiceName: serviceName }),
       closeLogsFullscreen: () => set({ logsFullscreenTarget: null, logsFullscreenServiceName: null }),
 
@@ -271,13 +467,10 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         set((state) => ({
           logsPanes: { ...state.logsPanes, [repoPath]: state.logsPanes[repoPath] ?? emptyPane(repoPath, service) },
         }));
-        // Health polling starts with the subscription (per pane, on subscribe plus
-        // a ~5s interval). Idempotent — a second subscribe for an already-polling pane (e.g.
-        // fullscreen opened on an already-selected row) never starts a second timer.
-        startHealthPolling(repoPath);
         if (logsManager.isSubscribed(repoPath)) {
           // Already streaming (e.g. a fullscreen preview opened on an already-selected row) —
           // nothing new to start.
+          startHealthPolling(repoPath);
           return;
         }
         const manifestResult = await deps.manifest.load(repoPath);
@@ -291,8 +484,28 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
               },
             },
           }));
+          // Health polling starts with the subscription (per pane, on subscribe plus
+          // a ~5s interval). Idempotent — a second subscribe for an already-polling pane (e.g.
+          // fullscreen opened on an already-selected row) never starts a second timer.
+          startHealthPolling(repoPath);
           return;
         }
+        if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
+          // No Docker runtime for this service — the pane degrades explicitly (no
+          // subscription, no health timer, no docker call), and the zone renders the
+          // no-container state with no restart control.
+          set((state) => ({
+            logsPanes: {
+              ...state.logsPanes,
+              [repoPath]: { ...(state.logsPanes[repoPath] ?? emptyPane(repoPath, service)), health: 'no-container' as const },
+            },
+          }));
+          return;
+        }
+        // Health polling starts with the subscription (per pane, on subscribe plus
+        // a ~5s interval). Idempotent — a second subscribe for an already-polling pane (e.g.
+        // fullscreen opened on an already-selected row) never starts a second timer.
+        startHealthPolling(repoPath);
         const bufferSize = get().settings.logs.bufferSize;
         const mirror = () => {
           const entry = logsManager.getEntry(repoPath);
@@ -377,6 +590,28 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           });
           return;
         }
+        if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
+          // The zone hides the restart control for such panes — this is the second line of
+          // defense, never a second docker call.
+          set((state) => {
+            const current = state.logsPanes[repoPath];
+            if (!current) {
+              return {};
+            }
+            return {
+              logsPanes: {
+                ...state.logsPanes,
+                [repoPath]: {
+                  ...current,
+                  restarting: false,
+                  health: 'no-container' as const,
+                  streamError: { code: 'no-container', message: 'No container — nothing to restart' },
+                },
+              },
+            };
+          });
+          return;
+        }
         const restartResult = await restartService({ docker: deps.docker, container: manifestResult.data.container });
         if (!restartResult.ok) {
           // Failure surfaces inline on the pane; the badge keeps last-known health.
@@ -444,6 +679,22 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
               logsPanes: {
                 ...state.logsPanes,
                 [repoPath]: { ...current, streamError: { code: manifestResult.error.code, message: manifestResult.error.message } },
+              },
+            };
+          });
+          return;
+        }
+        if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
+          // No stream exists for this pane, so there is no older history to fetch either.
+          set((state) => {
+            const current = state.logsPanes[repoPath];
+            if (!current) {
+              return {};
+            }
+            return {
+              logsPanes: {
+                ...state.logsPanes,
+                [repoPath]: { ...current, health: 'no-container' as const },
               },
             };
           });

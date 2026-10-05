@@ -9,7 +9,7 @@ import type { RegistryPort } from '../ports/registry.js';
 export interface ManagedRepo {
   path: string;
   service: string;
-  container: string;
+  container: string | null;
   sharedBranch: string;
   moduleIds: string[];
 }
@@ -52,10 +52,13 @@ export async function listRepos(
 
     const loaded = await manifest.load(path);
     if (loaded.ok) {
+      // A blank container is as absent as a missing one (the loader rejects blanks, but a
+      // ManifestPort is any implementation) — downstream treats both as `no container`.
+      const rawContainer = loaded.data.container;
       repos.push({
         path,
         service: loaded.data.service,
-        container: loaded.data.container,
+        container: rawContainer !== undefined && rawContainer.trim() !== '' ? rawContainer : null,
         sharedBranch: loaded.data.sharedBranch,
         moduleIds: Object.keys(loaded.data.modules ?? {}).sort(),
       });

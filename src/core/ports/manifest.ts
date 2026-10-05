@@ -5,7 +5,7 @@ import type { Result } from '../result.js';
 
 export interface Manifest {
   service: string;
-  container: string;
+  container?: string;
   migrationCommand?: string;
   restartCommands?: string[];
   sharedBranch: string;

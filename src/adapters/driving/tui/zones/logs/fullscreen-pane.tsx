@@ -8,10 +8,12 @@ import { colors, spacing } from '../../shared/theme/theme.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import {
   computeLineRowCount,
+  formatHealthLabel,
   formatLogFilterSpec,
   formatLogLine,
   healthBadgeState,
   isDefaultLogFilterSpec,
+  isRestartingDisplay,
   resolveEffectiveLines,
   sliceVisibleWindow,
   type LogFilterSpec,
@@ -56,6 +58,9 @@ export function FullscreenPane({
   // differently from "no lines have arrived yet" — otherwise a user who toggled off both streams,
   // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
+  const paneHealth = pane?.health ?? 'down';
+  const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
+  const noContainer = paneHealth === 'no-container';
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
       <Box flexDirection="row">
@@ -64,13 +69,15 @@ export function FullscreenPane({
             {serviceName ?? 'Logs'}
           </Text>
         </Box>
-        {/* Inline health badge + restart disabled state, mirroring the grid pane header. */}
+        {/* Inline health badge + restart disabled state, mirroring the grid pane header. A
+            manifest without `container` shows the dim no-container state with no restart
+            control at all. */}
         <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
-          <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>
+          <StatusBadge state={healthBadgeState(displayHealth)} />
+          <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
         </Box>
-        {pane?.restarting || (pane?.health ?? 'down') === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restarting…</Text>
+        {noContainer ? null : displayHealth === 'restarting' ? (
+          <Text color={colors['text-dim']}> [R] restart requested — re-verifying…</Text>
         ) : (
           <Text color={colors['text-dim']}> [R] restart</Text>
         )}
@@ -85,7 +92,9 @@ export function FullscreenPane({
       {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
-          <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
+          <Text color={colors['text-dim']}>
+            {noContainer ? 'No container — no logs' : allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}
+          </Text>
         ) : null}
         {windowLines.map((line, index) => (
           <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>

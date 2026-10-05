@@ -811,6 +811,18 @@ describe('deriveUpdateServiceStatus', () => {
     expect(deriveUpdateServiceStatus('up', undefined, false, false, 'migrating')).toBe('up');
     expect(deriveUpdateServiceStatus('up', 'failed', false, false, 'migrating')).toBe('error');
   });
+
+  it('a service without a declared container reads no-container, never down', () => {
+    expect(deriveUpdateServiceStatus('no-container', undefined, false)).toBe('no-container');
+    expect(deriveUpdateServiceStatus('no-container', 'updated', false)).toBe('no-container');
+    expect(deriveUpdateServiceStatus('no-container', 'skipped', false)).toBe('no-container');
+  });
+
+  it('a live run or a failed outcome still outranks the no-container state', () => {
+    expect(deriveUpdateServiceStatus('no-container', undefined, true)).toBe('updating');
+    expect(deriveUpdateServiceStatus('no-container', undefined, false, true)).toBe('restarting');
+    expect(deriveUpdateServiceStatus('no-container', 'failed', false)).toBe('error');
+  });
 });
 
 describe('partitionUpdateServiceRows', () => {

@@ -69,6 +69,23 @@ function seedStore(overrides: Record<string, unknown> = {}) {
 }
 
 describe('LogsZone real-keypress interactions', () => {
+  it('mounting resolves container presence and polls the listed rows, unmount stops polling', async () => {
+    const store = seedStore();
+    const resolveLogsContainerPresence = vi.fn();
+    const startLogsListedHealthPolling = vi.fn();
+    const stopLogsListedHealthPolling = vi.fn();
+    store.setState({ resolveLogsContainerPresence, startLogsListedHealthPolling, stopLogsListedHealthPolling });
+    const { instance } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(resolveLogsContainerPresence).toHaveBeenCalledWith(['/repos/api-gateway', '/repos/route-explorer']);
+      expect(startLogsListedHealthPolling).toHaveBeenCalledWith(['/repos/api-gateway', '/repos/route-explorer']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+    expect(stopLogsListedHealthPolling).toHaveBeenCalled();
+  });
   it('Tab cycles focus edt-list -> other-list -> panes -> edt-list (Space toggles the currently-focused list)', async () => {
     const store = seedStore();
     const { instance, stdin } = mount(store);
@@ -991,8 +1008,12 @@ describe('LogsZone real-keypress interactions', () => {
       const { instance, stdin, stdout } = mount(store);
       try {
         await instance.waitUntilRenderFlush();
-        // The control renders its disabled state while a restart is in flight.
-        expect(stdout.output).toContain('restarting…');
+        // The control renders its disabled state while a restart is in flight. The exact
+        // wording is locked in the logic unit tests; the grid interleaves columns when
+        // wrapping, so here assert the distinctive new token while the bare state is gone.
+        const flat = stdout.output.replace(/\s+/g, ' ');
+        expect(flat).toContain('re-verifying');
+        expect(flat).not.toContain('restarting');
         await press(instance, stdin, KEYS.tab); // edt-list -> other-list
         await press(instance, stdin, KEYS.tab); // other-list -> panes
 
@@ -1083,6 +1104,94 @@ describe('LogsZone real-keypress interactions', () => {
 
       await press(instance, stdin, '\x01');
 
+      expect(store.getState().logsEdtSelected).toEqual([]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Ctrl+A on the other-services list toggles only that list, then a second press deselects all', async () => {
+    const store = seedStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+
+      await press(instance, stdin, '\x01');
+      expect(store.getState().logsOtherSelected.sort()).toEqual(['/repos/api-gateway', '/repos/route-explorer']);
+
+      await press(instance, stdin, '\x01');
+
+      expect(store.getState().logsOtherSelected).toEqual([]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Ctrl+A is scoped to the focused list — each toggle leaves the other list untouched', async () => {
+    const store = seedStore({
+      edts: [
+        {
+          ulid: 'active-ulid',
+          topic: 'active-edt',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'active',
+          members: [{ service: 'api-gateway', repoPath: '/repos/api-gateway', branch: 'main' }],
+        },
+      ],
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        service({ service: 'api-gateway', path: '/repos/api-gateway', isMember: true }),
+        service({ service: 'route-explorer', path: '/repos/route-explorer', isMember: false }),
+      ],
+      logsOtherSelected: ['/repos/route-explorer'],
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // paneFocus defaults to 'edt-list'.
+      await press(instance, stdin, '\x01');
+      expect(store.getState().logsEdtSelected).toEqual(['/repos/api-gateway']);
+      expect(store.getState().logsOtherSelected).toEqual(['/repos/route-explorer']);
+
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+      await press(instance, stdin, '\x01');
+      expect(store.getState().logsOtherSelected).toEqual([]);
+      expect(store.getState().logsEdtSelected).toEqual(['/repos/api-gateway']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the without-container section is never selectable — Space and Ctrl+A cannot reach it', async () => {
+    const store = seedStore({
+      edtsBranches: [
+        service({ service: 'api-gateway', path: '/repos/api-gateway' }),
+        service({ service: 'shared-types', path: '/repos/shared-types' }),
+      ],
+      logsNoContainer: { '/repos/shared-types': true },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // edt-list -> other-list (only api-gateway is selectable)
+
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().logsOtherSelected).toEqual(['/repos/api-gateway']);
+
+      // Ctrl+A toggles the selectable list only — the info-only row is never affected.
+      await press(instance, stdin, '\x01');
+      expect(store.getState().logsOtherSelected).toEqual([]);
+      await press(instance, stdin, '\x01');
+      expect(store.getState().logsOtherSelected).toEqual(['/repos/api-gateway']);
+
+      // Cursor movement across the selectable list never lands on the info-only row.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().logsOtherSelected).toEqual([]);
       expect(store.getState().logsEdtSelected).toEqual([]);
     } finally {
       instance.unmount();

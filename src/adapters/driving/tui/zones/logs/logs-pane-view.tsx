@@ -9,10 +9,12 @@ import { colors } from '../../shared/theme/theme.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import {
   computeLineRowCount,
+  formatHealthLabel,
   formatLogFilterSpec,
   formatLogLine,
   healthBadgeState,
   isDefaultLogFilterSpec,
+  isRestartingDisplay,
   resolveEffectiveLines,
   sliceVisibleWindow,
   type LogFilterSpec,
@@ -53,6 +55,12 @@ export function LogsPaneView({
   // differently from "no lines have arrived yet" — otherwise a user who toggled off both streams,
   // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
+  // A manifest without `container` has no stream at all — the badge goes dim (never down)
+  // and the restart control is absent entirely. A requested restart reads explicitly until
+  // the re-verifying poll lands, never as the bare state.
+  const paneHealth = pane?.health ?? 'down';
+  const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
+  const noContainer = paneHealth === 'no-container';
   return (
     <Box
       flexDirection="column"
@@ -76,11 +84,11 @@ export function LogsPaneView({
         {/* Inline health badge next to the service's logs (glyph+color paired) + the restart
             control's disabled state while restarting. */}
         <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
-          <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>
+          <StatusBadge state={healthBadgeState(displayHealth)} />
+          <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
         </Box>
-        {pane?.restarting || (pane?.health ?? 'down') === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restarting…</Text>
+        {noContainer ? null : displayHealth === 'restarting' ? (
+          <Text color={colors['text-dim']}> [R] restart requested — re-verifying…</Text>
         ) : (
           <Text color={colors['text-dim']}> [R]</Text>
         )}
@@ -95,7 +103,9 @@ export function LogsPaneView({
       {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
-          <Text color={colors['text-dim']}>{allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}</Text>
+          <Text color={colors['text-dim']}>
+            {noContainer ? 'No container — no logs' : allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}
+          </Text>
         ) : null}
         {windowLines.map((line, index) => (
           <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>

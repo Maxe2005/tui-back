@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { HealthState } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -43,6 +44,7 @@ import {
   DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
   filterVisibleLines,
+  formatHealthLabel,
   healthBadgeState,
   historyEntryLabel,
   isAtOldestLine,
@@ -50,6 +52,7 @@ import {
   isDefaultLogFilterSpec,
   isPaneEngagedInGlobalFilter,
   isPaneWrapped,
+  isRestartingDisplay,
   isSelectAllKey,
   isWrapAllLogsKey,
   LIST_COLUMN_WIDTH,
@@ -65,6 +68,7 @@ import {
   resolveVisibilityToggleKey,
   setPaneGlobalFilterEngagement,
   setPaneLogFilter,
+  splitNoContainerRows,
   toggleAllPanesWrapFlag,
   toggleFilterMode,
   toggleGlobalFilterEngagement,
@@ -92,6 +96,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const toggleLogsOtherSelection = useStore((state) => state.toggleLogsOtherSelection);
   const selectAllLogsEdtServices = useStore((state) => state.selectAllLogsEdtServices);
   const deselectAllLogsEdtServices = useStore((state) => state.deselectAllLogsEdtServices);
+  const selectAllLogsOtherServices = useStore((state) => state.selectAllLogsOtherServices);
+  const deselectAllLogsOtherServices = useStore((state) => state.deselectAllLogsOtherServices);
+  const logsNoContainer = useStore((state) => state.logsNoContainer);
+  const logsListedHealth = useStore((state) => state.logsListedHealth);
+  const resolveLogsContainerPresence = useStore((state) => state.resolveLogsContainerPresence);
+  const startLogsListedHealthPolling = useStore((state) => state.startLogsListedHealthPolling);
+  const stopLogsListedHealthPolling = useStore((state) => state.stopLogsListedHealthPolling);
   const logsFullscreenTarget = useStore((state) => state.logsFullscreenTarget);
   const logsFullscreenServiceName = useStore((state) => state.logsFullscreenServiceName);
   const openLogsFullscreen = useStore((state) => state.openLogsFullscreen);
@@ -123,12 +134,34 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Container presence and listed-row health follow the listed rows — one manifest.load per
+  // uncached row, badges for rows that were never subscribed. `services`/`servicesStatus`
+  // are stable store references, so this refires only on a real reload, never per render.
+  useEffect(() => {
+    const listed = servicesStatus === 'error' ? [] : (services ?? []);
+    const paths = listed.map((row) => row.path);
+    resolveLogsContainerPresence(paths);
+    startLogsListedHealthPolling(paths);
+  }, [services, servicesStatus, resolveLogsContainerPresence, startLogsListedHealthPolling]);
+  useEffect(() => () => stopLogsListedHealthPolling(), [stopLogsListedHealthPolling]);
+
   const rows = servicesStatus === 'error' ? [] : (services ?? []);
   const focusedEdt = (edts ?? []).find((entry) => entry.ulid === activeEdtUlid);
   // Any manifest service can be streamed, not only active-EDT members — the partition is against
   // the tool-wide *active* EDT (not a selected row, unlike edts-zone's use of this function),
-  // since the Logs zone has no EDT selector of its own.
-  const { edtServices, otherServices } = partitionServicesByEdtMembership(rows, focusedEdt);
+  // since the Logs zone has no EDT selector of its own. Container-less rows leave both
+  // selectable lists for the info-only section below (presence resolves async in the store,
+  // so they render in their membership list until then — never blocked on the load).
+  const { edtServices, otherServices, withoutContainerServices } = useMemo(() => {
+    const partitioned = partitionServicesByEdtMembership(rows, focusedEdt);
+    const edt = splitNoContainerRows(partitioned.edtServices, logsNoContainer);
+    const other = splitNoContainerRows(partitioned.otherServices, logsNoContainer);
+    return {
+      edtServices: edt.selectable,
+      otherServices: other.selectable,
+      withoutContainerServices: [...edt.withoutContainer, ...other.withoutContainer],
+    };
+  }, [rows, focusedEdt, logsNoContainer]);
 
   const [paneFocus, setPaneFocus] = useState<LogsPaneFocus>('edt-list');
   const [edtCursor, setEdtCursor] = useState(0);
@@ -152,6 +185,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
 
   const clampedEdtCursor = edtServices.length === 0 ? 0 : Math.min(edtCursor, edtServices.length - 1);
   const clampedOtherCursor = otherServices.length === 0 ? 0 : Math.min(otherCursor, otherServices.length - 1);
+
+  // Every listed row carries a badge — its subscribed pane's health, else the listed-row
+  // poll's value, else `down` (the Update zone's missing-reads-as-down precedent). A
+  // requested restart reads explicitly, never as the bare state.
+  function displayHealthFor(repoPath: string): HealthState | 'no-container' {
+    const pane = logsPanes[repoPath];
+    const rowHealth = pane?.health ?? logsListedHealth[repoPath] ?? 'down';
+    return isRestartingDisplay(pane?.restarting ?? false, rowHealth) ? 'restarting' : rowHealth;
+  }
 
   // Active panes render in a stable order (EDT-list selections first, then other-list ones) so
   // `subFocus`'s index keeps a consistent meaning as selections change.
@@ -486,13 +528,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           return;
         }
         // Developer-triggered restart for this fullscreen pane's service — disabled while
-        // restarting (no-op here; the slice guards too). Uppercase `R` only: lowercase `r` is the
+        // restarting (no-op here; the slice guards too). A container-less pane has no restart
+        // control at all. Uppercase `R` only: lowercase `r` is the
         // global Routes-zone mnemonic (AppShell exact-matches it whenever zoneInputCaptured is
         // false, and Ink forwards every keypress to all mounted useInput hooks), so accepting `r`
         // here would both restart a container and switch zones on one keypress.
         if (input === 'R') {
           const pane = logsPanes[logsFullscreenTarget];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting') {
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container') {
             void restartLogsPane(logsFullscreenTarget);
           }
           return;
@@ -591,6 +634,17 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       }
 
       if (paneFocus === 'other-list') {
+        // Ctrl+A is scoped to the focused list only — the EDT-members list, the third
+        // section, and the other list's own unselected rows are never touched from here.
+        if (isSelectAllKey(input, key)) {
+          const otherPaths = otherServices.map((service) => service.path);
+          if (resolveSelectAllToggle(otherPaths, logsOtherSelected) === 'select-all') {
+            selectAllLogsOtherServices(otherPaths);
+          } else {
+            deselectAllLogsOtherServices();
+          }
+          return;
+        }
         const jump = resolveSelectionJump(key);
         if (jump !== null) {
           setOtherCursor(jumpSelection(jump, otherServices.length));
@@ -663,13 +717,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       }
       // Developer-triggered restart for the sub-focused grid pane's service — disabled while
       // restarting (no-op; the slice's guard is the second line of defense against a concurrent
-      // `docker restart`). Uppercase `R` only — lowercase `r` is the global Routes-zone mnemonic
+      // `docker restart`). A container-less pane has no restart control at all. Uppercase `R`
+      // only — lowercase `r` is the global Routes-zone mnemonic
       // (see the fullscreen branch above for why accepting it would double-dispatch).
       if (input === 'R') {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
           const pane = logsPanes[focused.path];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting') {
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container') {
             void restartLogsPane(focused.path);
           }
         }
@@ -719,17 +774,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 maxVisibleRows={edtListMaxVisibleRows}
                 cursorIndex={paneFocus === 'edt-list' ? clampedEdtCursor : undefined}
                 renderItem={(service, index) => {
-                  const paneHealth = logsPanes[service.path]?.health ?? null;
+                  const displayHealth = displayHealthFor(service.path);
                   return (
                     <Box key={service.path} flexDirection="row">
                       <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
-                      {paneHealth !== null ? (
-                        <Box marginLeft={1}>
-                          <StatusBadge state={healthBadgeState(paneHealth)} />
-                          <Text color={colors['text-dim']}> {paneHealth}</Text>
-                        </Box>
-                      ) : null}
+                      <Box marginLeft={1}>
+                        <StatusBadge state={healthBadgeState(displayHealth)} />
+                        <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+                      </Box>
                     </Box>
                   );
                 }}
@@ -744,21 +797,38 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 maxVisibleRows={otherListMaxVisibleRows}
                 cursorIndex={paneFocus === 'other-list' ? clampedOtherCursor : undefined}
                 renderItem={(service, index) => {
-                  const paneHealth = logsPanes[service.path]?.health ?? null;
+                  const displayHealth = displayHealthFor(service.path);
                   return (
                     <Box key={service.path} flexDirection="row">
                       <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
-                      {paneHealth !== null ? (
-                        <Box marginLeft={1}>
-                          <StatusBadge state={healthBadgeState(paneHealth)} />
-                          <Text color={colors['text-dim']}> {paneHealth}</Text>
-                        </Box>
-                      ) : null}
+                      <Box marginLeft={1}>
+                        <StatusBadge state={healthBadgeState(displayHealth)} />
+                        <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+                      </Box>
                     </Box>
                   );
                 }}
               />
+
+              {/* Info-only: every registry service whose manifest declares no container, from
+                  either membership list. No cursor, no checkbox, no Tab stop, no Ctrl+A —
+                  presence resolves async in the store, so this appears once known. */}
+              {withoutContainerServices.length > 0 ? (
+                <Box flexDirection="column" marginTop={spacing['section-gap']}>
+                  <Text color={colors['text-dim']}>SERVICES WITHOUT CONTAINER</Text>
+                  {withoutContainerServices.map((service) => (
+                    <Box key={service.path} flexDirection="row">
+                      <Text color={colors['text-dim']}> {service.service}</Text>
+                      <Box marginLeft={1}>
+                        <StatusBadge state={healthBadgeState('no-container')} />
+                        <Text color={colors['text-dim']}> {formatHealthLabel('no-container')}</Text>
+                      </Box>
+                    </Box>
+                  ))}
+                  <DimAnnotation text="Info only — not selectable." />
+                </Box>
+              ) : null}
 
               {/* Hidden while the filter editor is open: every hint here is a services-list or
                   editor-opening key, all inert once the editor captures input. Rendered anyway,

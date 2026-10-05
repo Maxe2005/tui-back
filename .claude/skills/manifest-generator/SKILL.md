@@ -39,7 +39,7 @@ The skill walks the repo and extracts values for each manifest field:
 | Field | Source | Fallback |
 |-------|--------|----------|
 | `service` | `package.json` `name` field, or repo basename | `"unknown-service"` |
-| `container` | `docker-compose.yml` service names (first service), or `null` | `null` |
+| `container` | `docker-compose.yml` service names (first service); omitted when undetected | (key omitted) |
 | `migrationCommand` | `package.json` `scripts.[migrate]` or `migrate`, or `db:migrate` | `null` |
 | `sharedBranch` | Default: `"development"` (never prompt, always default) | `"development"` |
 | `protectedBranches` | Default: `[development, preprod, prod]` (never prompt; the developer edits it to match the service's branching model) | `[development, preprod, prod]` |
@@ -49,7 +49,7 @@ The skill walks the repo and extracts values for each manifest field:
 
 1. **`service`**: Read `package.json` (if present) and use the `name` field. If no `package.json`, use the repo directory basename, trimmed of trailing `/` and `-invalid` chars.
 
-2. **`container`**: Read `docker-compose.yml` (if present at repo root). If the file exists and has a `services` top-level key, use the first service name found. If no docker-compose file, set to `null`.
+2. **`container`**: Read `docker-compose.yml` (if present at repo root). If the file exists and has a `services` top-level key, use the first service name found. If no docker-compose file or no service matches, omit the `container` key entirely — never emit `null` or an empty value (the schema rejects both).
 
 3. **`migrationCommand`**: Read `package.json` `scripts` field. Look for any of: `migrate`, `db:migrate`, `migration`. Use the first found value. If none, set to `null`.
 
@@ -65,7 +65,9 @@ A `.tui-back.yaml` file written at the repo root, with this structure:
 
 ```yaml
 service: <detected-or-unknown>
-container: <detected-or-null>
+# `container`: uncomment and fill in only when a compose service matches;
+# omit the line entirely when undetected (never `null` or empty)
+# container: <detected>
 migrationCommand: <detected-or-null>
 sharedBranch: development
 protectedBranches: [development, preprod, prod]

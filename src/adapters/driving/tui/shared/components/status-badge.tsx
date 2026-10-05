@@ -16,7 +16,10 @@ export type StatusBadgeState =
   | 'restarting'
   | 'updating'
   | 'migrating'
-  | 'error';
+  | 'error'
+  // A managed service with no Docker runtime (manifest omits `container`) — dim by design,
+  // never the down/error treatment.
+  | 'no-container';
 
 export const STATUS_BADGES = Object.freeze({
   up: { glyph: '●', color: colors.success },
@@ -37,6 +40,8 @@ export const STATUS_BADGES = Object.freeze({
   // vocabularies (a generic action outcome vs. the Update zone's per-service status set),
   // not because they need to look different.
   error: { glyph: '✖', color: colors.error },
+  // Hollow like down but dimmed rather than red — "no runtime" is not "runtime down".
+  'no-container': { glyph: '○', color: colors['text-dim'] },
 } as const);
 
 export function StatusBadge({ state }: { state: StatusBadgeState }) {
