@@ -33,7 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-10-01
+last_updated: 2026-10-05
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -118,9 +118,13 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: backlog
-  4-1-publish-a-new-shared-types-version: backlog
-  4-2-see-propagation-status: backlog
-  4-3-propagate-to-chosen-services: backlog
+  # Rewritten 2026-10-05 (sprint-change-proposal-2026-10-05.md). Starts after Epic 7; 4-4/4-5 also need Epic 3 merged into devlopment.
+  4-1-shared-types-modules-manifest-parameters: backlog
+  4-2-propagate-a-version-to-chosen-services: backlog
+  4-3-publish-a-new-shared-types-version: backlog
+  4-4-smart-group-update-shared-types-first: backlog
+  4-5-auto-resolve-shared-types-only-merge-conflicts: backlog
+  4-6-declared-version-drift-view: backlog
   epic-4-retrospective: optional
 
   epic-5: in-progress

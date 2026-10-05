@@ -58,9 +58,9 @@ This is also a craft project — part of its value is the experience of designin
 - **UJ-3. Max publishes and propagates a new `shared-types` version.**
   - **Persona + context:** Max just added a field to a shared DTO and needs every affected service on the new contract.
   - **Entry state:** EDT active with the services that consume the changed type.
-  - **Path:** Max publishes the new version through the tool, which runs `shared-types`'s own `npm run v` (FR-13); the tool shows which EDT member services are already on it (FR-14); Max triggers propagation for the ones that aren't (FR-15).
+  - **Path:** Max publishes the new version through the tool, which runs `shared-types`'s own `npm run v` (FR-13); Max enters the version and chooses the consuming services, and the tool rewrites their dependency line, optionally installs/clean-restarts and commits (FR-15); during a group update this is automatic (FR-30, FR-31). *(amended 2026-10-05)*
   - **Climax:** Without checking a single `package.json` by hand, Max sees every relevant service now on the new version.
-  - **Resolution:** Max reviews and commits the dependency bump per service himself — the tool staged it, but never committed on his behalf.
+  - **Resolution:** Max reviews the per-service commit made by the tool (only `package.json`/`package-lock.json`); nothing is ever pushed. *(amended 2026-10-05)*
 
 - **UJ-4. Max hits a merge conflict during a group update.**
   - **Persona + context:** Max runs a group update (UJ-1) and one service has diverged beyond a simple lockfile change.
@@ -324,40 +324,50 @@ When configuring an EDT-scoped group update, a developer can set the merge sourc
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
-**Description:** Absorbs `shared-types`'s existing one-command release script and closes the "no repo-by-repo manual check" gap. Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation status/action (FR-14/FR-15) is active only on repos whose manifest declares them a `shared-types-consumer`.
+**Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.
 
 **Functional Requirements:**
 
-#### FR-13: Publish a new `shared-types` version
+#### FR-13: Publish a new `shared-types` version *(amended 2026-10-05)*
 
-A developer can publish a new `shared-types` version through the tool, which runs the `shared-types` repo's existing `npm run v` script — a sequential bump → build → publish → push.
-
-**Consequences (testable):**
-- A failure at any step of `npm run v` is surfaced with which step failed, not just a generic error, instead of leaving the developer to re-read raw script output.
-- After a fix, the developer can re-trigger the publish without the tool treating the prior failed attempt as success; the tool re-verifies before marking the version published — the same detect → fix → re-verify guarantee as FR-11/FR-12, applied here too.
-- A re-trigger after a partial failure (e.g. publish/push failed after bump and build already succeeded) resumes from the failed step rather than restarting from bump, avoiding a duplicate version bump or a publish conflict on an already-published version.
-- On success, the tool immediately offers propagation to the active EDT's eligible consumer members (one, several, or all) in the same flow, chaining into FR-15 — no separate manual step to go find the propagate action. Propagation remains independently triggerable later too (e.g. a newly added consumer catching up).
-- Publish is offered only when the active EDT includes the `shared-types` repo itself as a member, identified via a `shared-types-source` manifest module (distinct from `shared-types-consumer`).
-
-#### FR-14: See propagation status without a manual check
-
-The tool shows, for the active EDT's member services that declare themselves a `shared-types` consumer, whether they're on the version most recently published from the active EDT's own `shared-types` branch — without the developer checking any repo by hand.
+A developer can publish a new `shared-types` version through the tool, which runs the source repo's publish command (default `npm run v` — a sequential bump → build → publish → push; the push of the `shared-types` repo itself is done by that script).
 
 **Consequences (testable):**
-- Propagation status for every EDT-member service that declares itself a `shared-types` consumer is shown without the developer running `npm ls`/checking `package.json` by hand.
-- The "latest" version is resolved by walking the active EDT's `shared-types` branch's git ancestry (tags/commits reachable from its tip) — **never** by comparing against the single highest version number across all branches. Version numbers are globally unique but published independently per branch, so the global maximum can be functionally unrelated to the active branch's own lineage (e.g. global latest = 660, but the version actually relevant to this branch = 613, because 614–660 were published from unrelated branches).
-- Status reflects the branch-relevant latest version, resolved live via git ancestry at view time — never cached.
-- A member service that doesn't declare `shared-types-consumer` in its manifest is omitted from this view.
-- Unavailable when the active EDT doesn't include the `shared-types` repo itself as a member (see FR-13's `shared-types-source` gating).
+- A failure at any step is surfaced with which step failed, not just a generic error.
+- A re-trigger after a partial failure resumes from the failed step rather than restarting from bump, avoiding a duplicate version bump or a publish conflict on an already-published version.
+- On completion the new version is read from the source repo's `package.json` and **verified on the npm registry** before being marked published; a prior failed attempt is never treated as success.
+- On success the tool offers to chain into FR-15 with the published version pre-filled, or to stop. Propagation remains independently triggerable later.
+- Publish is offered only when the active EDT includes the repo declaring `shared-types-source` as a member.
+- Manifest parameters: `shared-types-source` takes `publishCommand` (default `npm run v`) and `packageName` (default `@ianord/shared-types`).
 
-#### FR-15: Propagate to chosen services
+#### FR-14: See declared-version drift *(amended 2026-10-05 — niche, optional)*
 
-A developer can propagate the new version to some or all of the active EDT's eligible member services in one action.
+The tool shows, for the active EDT's `shared-types-consumer` member services, the `shared-types` version declared in their `package.json` compared with the version declared by the `shared-types` source repo on the active EDT's branch.
 
 **Consequences (testable):**
-- The tool stages the dependency bump (package.json/lockfile) and installs it per service.
-- The tool never commits or pushes any staged change without that developer's explicit approval, per the git constraints — propagation prepares the change, it does not finalize it.
-- A propagation failure on one service (e.g., install error) is independently retriable and doesn't block the others.
+- The comparison reads declared versions from `package.json` files only. No git-ancestry walk is performed and nothing is cached. (The 2026-08-24 ancestry-based resolution is superseded.)
+- A member service that doesn't declare `shared-types-consumer` is omitted; unavailable when the active EDT doesn't include the source repo.
+- An out-of-sync consumer offers a one-key jump into FR-15 with the source version pre-filled.
+
+#### FR-15: Propagate a version to chosen services *(amended 2026-10-05)*
+
+A developer enters a `shared-types` version and applies it to some or all of the active EDT's `shared-types-consumer` member services in one action.
+
+**Consequences (testable):**
+- The version field is pre-filled with `0.1.`, always editable; the version's existence on the registry is verified before execution.
+- Per selected service, only the dependency line in `package.json` is rewritten (manifest parameters `dependency`, default `@ianord/shared-types`, and `packageJsonPath`, default `package.json`), preserving all other formatting.
+- The developer then chooses, as independent toggles, `npm i`, a clean restart (the manifest recipe, FR-26) and a commit; a commit happens after the install/restart if they are chosen.
+- A commit stages **only** `package.json` and `package-lock.json`, never anything else, with a message that identifies the tool as the author of the operation. **No push ever happens for a consumer service.**
+- A consumer on a protected or shared branch goes through the existing git safety gate (AD-8). A consumer whose `package.json` or `package-lock.json` already has uncommitted changes is skipped with an explicit reason; other dirty files do not block it and are never staged.
+- A failure on one service is independently retriable and doesn't block the others.
+
+#### FR-30: Smart group update (added 2026-10-05, Sprint Change Proposal)
+
+When a group update (or a single-service update of the source repo) covers the `shared-types-source` repo, it is processed first; after its merge — always, or only if the merge changed something, per a setting in the update configuration — a new version is published (FR-13), propagated to the EDT's consumers and committed (FR-15, commit on, push never), before the remaining services are updated. A failure in this phase pauses the run with an explicit choice (retry, skip, abort).
+
+#### FR-31: Auto-resolve `shared-types`-only merge conflicts (added 2026-10-05, Sprint Change Proposal)
+
+When a consumer's update merge conflicts and the only conflicting hunk in `package.json` is the `shared-types` dependency line, the tool resolves it to the EDT's current value, takes `package-lock.json` from the EDT side and regenerates it with `npm i`, stages the lockfile if it changed and completes the merge. Any other conflicting hunk, or any conflict in another file, is left to the user through FR-11's assisted resolution.
 
 ---
 
@@ -477,7 +487,7 @@ A developer's saved requests (FR-21) form one global library, not siloed per EDT
 These are trust bars every Must-scope capability already has to satisfy, not features to prioritize (carried forward verbatim from the brief's Non-Negotiable Constraints):
 
 - Only local repo copies are ever touched — never a remote or deployed environment.
-- No commit or push happens without explicit developer approval, at the moment it happens (applies directly to FR-11's guided resolution and FR-15's propagation, both of which stage but never finalize a change).
+- No commit or push happens without explicit developer approval, at the moment it happens (applies directly to FR-11's guided resolution; FR-15's propagation commits only when the developer ticks the commit option, and FR-30 only when the developer enabled the smart-update setting — never a push of a consumer commit; amended 2026-10-05).
 - Git write access is limited to the developer's own feature/fix branches.
 - `development`, preprod, and prod are read-only to the tool.
 - An EDT must never register a shared branch as its own (FR-7).
@@ -539,7 +549,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 - **SM-1**: Session start is one guided action (switch/create EDT → group update completes) instead of a manual multi-step sequence, every time. Validates FR-4, FR-6, FR-10.
 - **SM-2**: Zero forgotten-service incidents — no service silently left out of date after a group update. Target: 0 per month, observed over real use. Validates FR-10.
 - **SM-3**: Every merge/migration failure encountered during a group update is resolved through the tool's guided flow, without the developer dropping to a separate terminal. Validates FR-11, FR-12.
-- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-14, FR-15.
+- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30 (FR-14 is niche).
 - **SM-5**: The trace → fix → resume loop (fire a saved route request, see the relevant logs, get back to coding) stays fast enough not to break flow. Validates FR-20, FR-21, FR-22, FR-23.
 - **SM-6**: Zero incidents of a non-member service breaking EDT work because it was left on a stray branch — branch state for every managed repo is always visible and correct. Validates FR-8, FR-9.
 
