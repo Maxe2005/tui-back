@@ -13,6 +13,15 @@ export const UPDATE_SERVICE_MENU_ITEMS = Object.freeze([
 
 export type UpdateServiceMenuValue = (typeof UPDATE_SERVICE_MENU_ITEMS)[number]['value'];
 
+export type ServiceMenuItem = (typeof UPDATE_SERVICE_MENU_ITEMS)[number];
+
+// The visible rows for one service: the restart row is offered only when a restart exists
+// for it — a container-less service without a declared recipe has nothing to run, so the
+// menu degrades to update/cancel instead of reporting a failure for a known no-op.
+export function visibleServiceMenuItems(restartAvailable: boolean): readonly ServiceMenuItem[] {
+  return restartAvailable ? UPDATE_SERVICE_MENU_ITEMS : UPDATE_SERVICE_MENU_ITEMS.filter((item) => item.value !== 'restart');
+}
+
 export type ServiceMenuKey = {
   upArrow?: boolean;
   downArrow?: boolean;
@@ -24,8 +33,13 @@ export type ServiceMenuKey = {
 
 export type ServiceMenuStep = { type: 'move'; cursor: number } | { type: 'choose'; choice: UpdateServiceMenuValue } | { type: 'ignore' };
 
-export function resolveServiceMenuKey(input: string, key: ServiceMenuKey, cursor: number): ServiceMenuStep {
-  const length = UPDATE_SERVICE_MENU_ITEMS.length;
+export function resolveServiceMenuKey(
+  input: string,
+  key: ServiceMenuKey,
+  cursor: number,
+  items: readonly ServiceMenuItem[] = UPDATE_SERVICE_MENU_ITEMS,
+): ServiceMenuStep {
+  const length = Math.max(items.length, 1);
   if (key.home === true) {
     return { type: 'move', cursor: 0 };
   }
@@ -39,7 +53,7 @@ export function resolveServiceMenuKey(input: string, key: ServiceMenuKey, cursor
     return { type: 'move', cursor: Math.min(length - 1, cursor + 1) };
   }
   if (key.return === true) {
-    const item = UPDATE_SERVICE_MENU_ITEMS[cursor];
+    const item = items[cursor];
     if (item === undefined) {
       return { type: 'ignore' };
     }
@@ -72,11 +86,20 @@ export function resolveServiceMenuChoice(choice: UpdateServiceMenuValue, target:
   return { type: 'dismiss' };
 }
 
-export function UpdateServiceMenuDialog({ service, cursor }: { service: string; cursor: number }) {  return (
+export function UpdateServiceMenuDialog({
+  service,
+  cursor,
+  items = UPDATE_SERVICE_MENU_ITEMS,
+}: {
+  service: string;
+  cursor: number;
+  items?: readonly ServiceMenuItem[];
+}) {
+  return (
     <ModalDialog title={UPDATE_SERVICE_MENU_TITLE} open onConfirm={() => {}} onCancel={() => {}}>
       <Box flexDirection="column">
         <Text color={colors.text}>{service}</Text>
-        {UPDATE_SERVICE_MENU_ITEMS.map((item, index) => (
+        {items.map((item, index) => (
           <ListRow key={item.value} label={item.label} selected={index === cursor} />
         ))}
       </Box>

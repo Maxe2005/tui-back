@@ -135,6 +135,7 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Mid-merge/mid-rebase | Detected as its own distinct state — surfaced explicitly before the guided menu applies, separate from an ordinary dirty-lockfile state (FR-11). |
 | Migration failure (Assisted resolution) | An instance of the glossary's Assisted resolution mechanic (detect → auto-fix-known-safe-or-guided-menu → re-verify): per-service failure detail (service, migration, error output), marked unresolved until re-verified (FR-27), with a re-trigger action that re-verifies success before the service is marked caught up; doesn't block other services' already-succeeded updates in the same run (FR-12). |
 | Per-service quick actions | From any service's row, independent of any run: a clean-restart trigger (FR-26), or an update-this-service trigger that opens the same configuration screen pre-scoped to that one service (FR-25). Rejected if that service already has an action running (FR-10's second-run rule, applied per-service). |
+| Last-run detail | After a run, each service's detail reports what really happened: an advancing merge shows +N/−M lines and F files, an unchanged HEAD shows "already up to date", the migrate phase shows "ran (<command>)" with an output excerpt or "none" when absent/disabled — session-only, replaced by the next run (FR-30, added 2026-10-05). |
 | Quit mid-run | Pressing `q` while a group update is in progress requires explicit confirmation before quitting, consistent with FR-6's EDT-switch-blocked-during-update precedent; if confirmed, the next launch surfaces that run as interrupted and offers to resume it, mirroring the EDTs zone's "Interrupted update" state above. Applies equally to shared-types publish/propagation (see shared-types below). |
 
 **Logs**
@@ -145,8 +146,9 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Filtered | Service / free-text-regex / level filter applied without interrupting the stream (FR-17). |
 | Invalid filter | A regex that doesn't compile is rejected with an inline error, never silently ignored (FR-17). |
 | Service down / crashed mid-stream | Shown as such inline; the tool attempts automatic reconnection when the service returns (FR-16). |
-| Health: up / down / restarting | Visible inline with the log view itself — no separate health check step (FR-18). |
+| Health: up / down / restarting | Visible inline with the log view itself — no separate health check step (FR-18). Every row carries its badge, cursor or not; a restarting service states explicitly that a restart was requested and the container state is being re-verified (amended 2026-10-05). |
 | Restart in progress | The restart control disables itself on the already-restarting service — never triggers a second concurrent restart (FR-18). |
+| Without-container group | Every container-less registry service (members included) in an info-only section: greyed, unselectable, skipped by Tab and Ctrl+A; Ctrl+A toggles the focused list only (FR-29, added 2026-10-05). |
 
 **Routes**
 | State | Treatment |
@@ -192,8 +194,9 @@ The canonical keybinding contract for downstream implementation:
 - `Space` — toggle (multi-select / checkbox-list-item).
 - `Enter` — confirm, always — opens a row, confirms a modal, confirms a multi-select — identical effect regardless of whether the action was reached by keyboard or mouse.
 - `Esc` — cancel, always — closes a modal, exits splitter resize-mode, clears an active filter.
-- `Tab` — cycle — between fields in a form, or between resizable boundaries in a multi-splitter zone.
+- `Tab` — cycle — between fields in a form, or between resizable boundaries in a multi-splitter zone. `Shift+Tab` always moves back wherever `Tab` moves forward (added 2026-10-05, FR-31).
 - `Ctrl+W` — enter keyboard resize-mode on the active splitter; arrow keys resize; `Tab` cycles the active boundary; `Enter`/`Esc` exits.
+- Focus navigation (added 2026-10-05, FR-31) — every zone declares its focus movement through one shared primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help are generated from those declarations.
 - `/` — open filter within the current zone.
 - `:` — open the command-entry bar (Story 2.14, amended 2026-08-25 Sprint Change Proposal): type a registered command name, `Tab` autocompletes on a single match, `Enter` runs an exact match, `Esc` cancels.
 - `?` — open the dedicated keybinding-palette/help screen: every key in the app plus its description, beyond what the contextual footer-hint shows.

@@ -176,14 +176,22 @@ export type UpdateSlice = {
   // final `{service, outcome, detail?}` row merges into `lastServiceOutcomes` (never into the
   // group run's `updateResults`). Contention surfaces as `update-already-running`.
   runServiceRestart: (repoPath: string) => Promise<void>;
+  // Whether the row-local action menu should offer a restart for this repo: a service with a
+  // container always qualifies (the standalone path falls back to the plain container
+  // restart), while a container-less one qualifies only with a declared `restartCommands`
+  // recipe. Fail-open (an unloadable manifest still offers it) so the choice itself reports
+  // the load failure instead of hiding the row silently. The zone calls this when opening
+  // the menu — never a driven port directly from a component.
+  describeServiceRestart: (repoPath: string) => Promise<{ restartAvailable: boolean }>;
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
   // Live per-service container health for the Update zone's always-visible service list —
   // keyed by repoPath, independent of the Logs zone's `logsPanes[*].health`. A repoPath with
   // no entry yet (poll in flight, or never started) reads as `down`, until the first poll
-  // resolves.
-  updateServiceHealth: Record<string, HealthState>;
+  // resolves. `no-container` is the TUI-side state for a manifest without `container` —
+  // recorded without ever polling Docker for the service.
+  updateServiceHealth: Record<string, HealthState | 'no-container'>;
   // The last completed run's per-service outcome, keyed by `service` (results
   // carry no repoPath) — merged, never wholesale-replaced, by runGroupUpdate's success
   // branch below, so a partial-scope run never drops another service's earlier outcome.
@@ -241,13 +249,23 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // One poll cycle for a single service — resolves its manifest-declared container and
     // inspects it, updating the badge only on success. Like logs-slice.ts's pollPaneHealth, any
     // failure (manifest load fails, inspect errors, docker unreachable) keeps last-known health
-    // and never crashes the view.
+    // and never crashes the view. A manifest without `container` records the no-container
+    // state and never reaches Docker.
     async function pollServiceHealth(repoPath: string): Promise<void> {
       if (!deps) {
         return;
       }
       const manifestResult = await deps.manifest.load(repoPath);
       if (!manifestResult.ok) {
+        return;
+      }
+      if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
+        set((state) => {
+          if (state.updateServiceHealth[repoPath] === 'no-container') {
+            return {};
+          }
+          return { updateServiceHealth: { ...state.updateServiceHealth, [repoPath]: 'no-container' as const } };
+        });
         return;
       }
       const healthResult = await getServiceHealth({ docker: deps.docker, container: manifestResult.data.container });
@@ -914,6 +932,19 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateUlid: null,
           });
         }
+      },
+      describeServiceRestart: async (repoPath: string) => {
+        if (!deps) {
+          return { restartAvailable: true };
+        }
+        const loaded = await deps.manifest.load(repoPath);
+        if (!loaded.ok) {
+          return { restartAvailable: true };
+        }
+        if (loaded.data.container !== undefined && loaded.data.container.trim() !== '') {
+          return { restartAvailable: true };
+        }
+        return { restartAvailable: (loaded.data.restartCommands?.length ?? 0) > 0 };
       },
       runServiceRestart: async (repoPath: string) => {
         if (!deps || !deps.container || !deps.restart) {

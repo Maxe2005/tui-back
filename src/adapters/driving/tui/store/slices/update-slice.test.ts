@@ -662,6 +662,26 @@ describe('update slice: service health polling', () => {
     }
   });
 
+  it('a manifest without container records no-container and never polls docker for the service', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const getContainerHealth = vi.fn(async () => ok('up' as const));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth), manifest }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a']);
+    await flushPolls();
+
+    expect(getContainerHealth).not.toHaveBeenCalled();
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('no-container');
+  });
+
   it('startUpdateHealthPolling on an unwired store is a no-op, never a throw', () => {
     const store = createAppStore();
 
@@ -1239,6 +1259,61 @@ describe('update slice: pre-run configuration screen', () => {
 
     expect(store.getState().lastServiceOutcomes['svc-b']).toMatchObject({ service: 'svc-b', outcome: 'failed' });
     expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ service: 'svc-a', outcome: 'failed' });
+  });
+
+  it('runServiceRestart on a container-less service without a recipe merges the no-container row and touches neither restart path', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const container: ContainerPort = { restart: vi.fn(async () => ok(undefined)) };
+    const restart: RestartPort = { run: vi.fn(async () => ok({ output: '' })) };
+    const store = createAppStore(fakeDeps({ manifest, container, restart }));
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({
+      service: 'svc-a',
+      outcome: 'failed',
+      detail: { code: 'no-container' },
+    });
+    expect(container.restart).not.toHaveBeenCalled();
+    expect(restart.run).not.toHaveBeenCalled();
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('describeServiceRestart offers the restart for a container-less service only with a declared recipe', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/plain') {
+          return ok({ service: 'plain', container: 'ctr-plain', sharedBranch: 'development', modules: {} });
+        }
+        if (repoPath === '/repo/recipe') {
+          return ok({ service: 'recipe', restartCommands: ['npm ci'], sharedBranch: 'development', modules: {} });
+        }
+        if (repoPath === '/repo/bare') {
+          return ok({ service: 'bare', sharedBranch: 'development', modules: {} });
+        }
+        return err('manifest-not-found', 'gone');
+      }),
+    };
+    const store = createAppStore(fakeDeps({ manifest }));
+
+    await expect(store.getState().describeServiceRestart('/repo/plain')).resolves.toEqual({ restartAvailable: true });
+    await expect(store.getState().describeServiceRestart('/repo/recipe')).resolves.toEqual({ restartAvailable: true });
+    await expect(store.getState().describeServiceRestart('/repo/bare')).resolves.toEqual({ restartAvailable: false });
+    await expect(store.getState().describeServiceRestart('/repo/gone')).resolves.toEqual({ restartAvailable: true });
+  });
+
+  it('describeServiceRestart on an unwired store offers the restart, never a throw', async () => {
+    const store = createAppStore();
+
+    await expect(store.getState().describeServiceRestart('/repo/a')).resolves.toEqual({ restartAvailable: true });
   });
 
   it('a second trigger on the same service while its restart runs is rejected update-already-running', async () => {

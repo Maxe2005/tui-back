@@ -8,6 +8,7 @@ import {
   UPDATE_SERVICE_MENU_TITLE,
   resolveServiceMenuChoice,
   resolveServiceMenuKey,
+  visibleServiceMenuItems,
   UpdateServiceMenuDialog,
 } from './update-service-menu-dialog.js';
 
@@ -39,6 +40,20 @@ describe('UPDATE_SERVICE_MENU_ITEMS / resolveServiceMenuKey', () => {
 
   it('ignores Enter on an out-of-range cursor', () => {
     expect(resolveServiceMenuKey('', { return: true }, 9)).toEqual({ type: 'ignore' });
+  });
+
+  it('drops the restart row when no restart is available, keeping update/cancel order', () => {
+    expect(visibleServiceMenuItems(true).map((item) => item.value)).toEqual(['update', 'restart', 'cancel']);
+    expect(visibleServiceMenuItems(false).map((item) => item.value)).toEqual(['update', 'cancel']);
+  });
+
+  it('navigates and chooses within the visible rows when the restart row is hidden', () => {
+    const items = visibleServiceMenuItems(false);
+    expect(resolveServiceMenuKey('', { downArrow: true }, 1, items)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveServiceMenuKey('', { end: true }, 0, items)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveServiceMenuKey('', { return: true }, 0, items)).toEqual({ type: 'choose', choice: 'update' });
+    expect(resolveServiceMenuKey('', { return: true }, 1, items)).toEqual({ type: 'choose', choice: 'cancel' });
+    expect(resolveServiceMenuKey('', { return: true }, 2, items)).toEqual({ type: 'ignore' });
   });
 });
 
@@ -82,6 +97,16 @@ describe('UpdateServiceMenuDialog rendering', () => {  it('renders the modal tit
     for (const item of UPDATE_SERVICE_MENU_ITEMS) {
       expect(output).toContain(item.label);
     }
+  });
+
+  it('renders only update/cancel for a container-less service without a recipe', async () => {
+    const output = await renderToString(
+      createElement(UpdateServiceMenuDialog, { service: 'svc-lib', cursor: 0, items: visibleServiceMenuItems(false) }),
+    );
+
+    expect(output).toContain('Update this service');
+    expect(output).toContain('Cancel');
+    expect(output).not.toContain('Clean restart');
   });
 });
 

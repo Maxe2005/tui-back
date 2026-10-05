@@ -2344,6 +2344,126 @@ describe('groupUpdate — clean-restart recipe', () => {
   });
 });
 
+describe('groupUpdate — services without a declared container', () => {
+  const RECIPE = ['npm ci', 'docker compose up -d --build'];
+
+  function containerLessManifest(service: string, restartCommands?: string[]): Manifest {
+    return {
+      service,
+      migrationCommand: 'npm run migration:run',
+      ...(restartCommands !== undefined ? { restartCommands } : {}),
+      sharedBranch: 'development',
+      modules: {},
+    };
+  }
+
+  it('a container-less service without a recipe skips the restart with a repo-naming row, never failed, and the container port is never called', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+    const restart = fakeRestart();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? ok(containerLessManifest('svc-a')) : ok(manifestFor(repoPath.split('/').pop() ?? repoPath)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, git, container, restart }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'no-container' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    if (result.ok) {
+      expect(result.data.results[0].detail?.message).toContain('/repo/a');
+    }
+    // Pull/merge and migrations still ran for the container-less service — only the restart
+    // phase was skipped.
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(container.restart)).toEqual([['ctr-b']]);
+    expect(calls(restart.run)).toHaveLength(0);
+  });
+
+  it('a container-less service with a declared recipe runs the recipe when clean-restart is on', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok(containerLessManifest(repoPath.split('/').pop() ?? repoPath, RECIPE)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, container, cleanRestart: true }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(restart.run)).toEqual([
+      ['/repo/a', 'npm ci'],
+      ['/repo/a', 'docker compose up -d --build'],
+      ['/repo/b', 'npm ci'],
+      ['/repo/b', 'docker compose up -d --build'],
+    ]);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('a container-less service with a declared recipe still skips when clean-restart is off', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok(containerLessManifest(repoPath.split('/').pop() ?? repoPath, RECIPE)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, container, cleanRestart: false }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'no-container' } },
+          { service: 'svc-b', outcome: 'skipped', detail: { code: 'no-container' } },
+        ],
+      },
+    });
+    expect(calls(restart.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('a failing recipe on a container-less service fails the row like any other recipe failure', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart({
+      run: vi.fn(async () => err('restart-failed', 'compose up blew up')),
+    });
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok(containerLessManifest(repoPath.split('/').pop() ?? repoPath, RECIPE)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, container, cleanRestart: true }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'failed', detail: { code: 'restart-failed' } },
+        ],
+      },
+    });
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+});
+
 describe('groupUpdate — live per-service phase tracking', () => {
   function recordPhases() {
     const seen: Array<[string, UpdatePhase]> = [];

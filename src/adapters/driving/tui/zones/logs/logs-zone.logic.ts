@@ -9,17 +9,67 @@ import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 import { spacing } from '../../shared/theme/theme.js';
 
 // HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
-// `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never color alone; accent is
+// `⣾`/info (StatusBadge's `in-progress`). A service with no Docker runtime is its own dim
+// state, never the down treatment. Glyph+color always paired, never color alone; accent is
 // never a health color. Shared by every place a health badge renders (list rows, grid panes,
 // fullscreen pane).
-export function healthBadgeState(health: HealthState): StatusBadgeState {
+export function healthBadgeState(health: HealthState | 'no-container'): StatusBadgeState {
+  if (health === 'no-container') {
+    return 'no-container';
+  }
   if (health === 'restarting') {
     return 'in-progress';
   }
   return health;
 }
 
-// Tab cycles EDT list -> other list -> panes.
+// The text next to a health badge — the raw state except the container-less service, which
+// reads as words rather than a kebab-case code, and a restarting service, which names both
+// halves of what is happening (a restart was requested, the container is being re-verified)
+// instead of the bare state.
+export function formatHealthLabel(health: HealthState | 'no-container'): string {
+  if (health === 'no-container') {
+    return 'no container';
+  }
+  if (health === 'restarting') {
+    return 'restart requested — re-verifying';
+  }
+  return health;
+}
+
+// True when a row or pane must read as restarting — either the slice's in-flight restart flag
+// or docker itself reporting the state. One predicate so list rows and pane headers agree.
+// A container-less row never restarts, so it never reads as restarting either.
+export function isRestartingDisplay(restarting: boolean, health: HealthState | 'no-container'): boolean {
+  if (health === 'no-container') {
+    return false;
+  }
+  return restarting || health === 'restarting';
+}
+
+// Splits an already-partitioned selectable list into the rows that stay selectable and the
+// container-less rows that move to the info-only third section. Presence unknown (manifest
+// still loading or unloadable) stays selectable — only a positively-resolved no-container
+// row ever leaves its membership list.
+export function splitNoContainerRows(
+  services: readonly ServiceBranchDivergence[],
+  noContainerByPath: Readonly<Record<string, boolean>>,
+): { selectable: ServiceBranchDivergence[]; withoutContainer: ServiceBranchDivergence[] } {
+  const selectable: ServiceBranchDivergence[] = [];
+  const withoutContainer: ServiceBranchDivergence[] = [];
+  for (const service of services) {
+    if (noContainerByPath[service.path] === true) {
+      withoutContainer.push(service);
+    } else {
+      selectable.push(service);
+    }
+  }
+  return { selectable, withoutContainer };
+}
+
+// Tab cycles EDT list -> other list -> panes. The info-only without-container section is
+// never a Tab stop — it has no focus state by design, so this cycle skips it by construction
+// and the focus type stays unchanged.
 export type LogsPaneFocus = 'edt-list' | 'other-list' | 'panes';
 
 export function cycleLogsPaneFocus(current: LogsPaneFocus): LogsPaneFocus {

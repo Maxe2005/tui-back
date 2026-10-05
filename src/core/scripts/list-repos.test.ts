@@ -142,6 +142,49 @@ describe('listRepos', () => {
   });
 
 
+  it('exposes a missing container as null in the JSON data', async () => {
+    const path = '/m/lib';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'shared-types',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        repos: [{ path, service: 'shared-types', container: null, sharedBranch: 'development', moduleIds: [] }],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
+  it('exposes a blank container as null, like a missing one', async () => {
+    const path = '/m/blank';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'svc',
+          container: '   ',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.repos[0].container).toBeNull();
+  });
+
   it('surfaces a failing manifest as an errors entry, not a crash and not a silent skip', async () => {
     const bad = '/m/bad';
     const registry = fakeRegistry({

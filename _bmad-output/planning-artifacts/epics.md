@@ -45,6 +45,8 @@ FR-28 (added 2026-10-01, Sprint Change Proposal): Merge source from another EDT 
 FR-30 (added 2026-10-05, Sprint Change Proposal): Smart group update — `shared-types` is processed first, then published, propagated and committed, per an update-configuration setting.
 FR-31 (added 2026-10-05, Sprint Change Proposal): Auto-resolve merge conflicts limited to the `shared-types` dependency line.
 FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed services — `container` optional in the manifest; restart/health/logs degrade to an explicit "no container" state.
+FR-30 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/migration detail in Update, session-only.
+FR-31 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
 
 ### NonFunctional Requirements
 
@@ -118,7 +120,7 @@ UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
 UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
 UX-DR35 (added 2026-10-01, Sprint Change Proposal, Story 7.3): Every zone builds its layout through one shared zone-layout contract declaring its panes and the boundaries between them (orientation, default ratio, min/max); the contract provides splitter rendering, accent recoloring when targeted, Ctrl+W resize-mode, Tab boundary cycling and per-zone persisted ratios — no zone hand-rolls a split.
-UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason.
+UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason. Amended 2026-10-05 (Sprint Change Proposal, Story 7.7): Shift+Tab always reverses Tab; every zone declares focus movement through one shared navigation primitive (H/V arrows, Tab/Shift+Tab, Ctrl+N/P per zone).
 UX-DR10 amended 2026-10-01: resize-mode is available in every zone (UX-DR35), not only the EDTs zone.
 UX-DR19 amended 2026-10-01: see EXPERIENCE.md State Patterns › Dashboard (container status + branches + divergence per member, working-tree alerts, quick actions, registry health, operation in progress).
 UX-DR21 amended 2026-10-01: adds the merge-source strategy states (FR-28).
@@ -154,6 +156,8 @@ FR-21: Epic 6 - Save, customize, and re-fire a request
 FR-22: Epic 6 - See response and relevant logs together
 FR-23: Epic 6 - Manage the saved-request library across EDTs
 FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
+FR-30: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
+FR-31: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
 ## Epic List
 
@@ -190,9 +194,9 @@ A developer can discover a repo's routes, fire a request with automatic dev-mode
 ### Epic 7: TUI Consistency, Dashboard & Code Hygiene
 > Added 2026-10-01 (Sprint Change Proposal `sprint-change-proposal-2026-10-01.md`).
 
-A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary), support for services that have no container, and a codebase whose comments explain the code rather than its history.
-**FRs covered:** FR-29 (plus completion of UX-DR10, UX-DR19)
-**Implementation notes:** AD-17 (comment convention), AD-4 amendment, UX-DR35, UX-DR36. Story 7.1 runs first, while no other story branch is in flight.
+A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
+**FRs covered:** FR-29, FR-30, FR-31 (plus completion of UX-DR10, UX-DR19)
+**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.4 → 7.5/7.6.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 
@@ -2959,6 +2963,16 @@ As a developer, I want to register and manage a service that has no Docker conta
 
 **Implementation notes:** make the type optional first and let `tsc` enumerate every dereference. Architecture AD-4/AD-16 amendments in this proposal apply.
 
+> Amended 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`, graft C1 — implement on the still-open story branch before the epic merge):
+
+**Given** the Logs zone listing services **When** rendered **Then** an info-only "services without container" section groups every container-less registry service (members included): greyed, unselectable, excluded from Tab order and Ctrl+A.
+
+**Given** focus on "active edt members" or "other services" **When** Ctrl+A **Then** the select-all toggle applies to the focused list only.
+
+**Given** any service row with known health **When** rendered **Then** its up/down/restarting/no-container badge is visible with or without cursor.
+
+**Given** a restarting service **When** displayed **Then** the state explicitly reports "restart requested → container state re-verified" (exact treatment at spec: post-restart poll + label), not the bare `restarting` badge.
+
 ### Story 7.3: Shared Zone Layout Contract & `Ctrl+W` Resize in Every Zone (UX-DR35)
 
 As a developer, I want to resize the panes of whichever zone I'm in with `Ctrl+W`, and have every zone built from the same layout contract, so that resizing works everywhere and new panes get it for free.
@@ -3032,5 +3046,37 @@ As a developer, I want the Dashboard to warn me about anything needing attention
 **Given** the registry **When** summarized **Then** a section shows registered-repo count and counts of invalid manifests, unreachable repos and listing issues (Story 2.34's classification), with a shortcut to `:registry`; all-clear shows a single success line.
 
 **Given** an operation holds a lock (update, migration, switch, …) **When** the Dashboard renders **Then** a line names the operation and its progress, and quick actions that would conflict are disabled with the reason.
+
+### Story 7.7: Shared Focus-Navigation Component (FR-31)
+
+> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`). Runs before Story 7.4 so the alignment phase consumes its primitive.
+
+As a developer, I want one shared navigation primitive so Tab/Shift+Tab move focus the same way in every zone, with Shift+Tab always reversing Tab.
+
+**Acceptance Criteria:**
+
+**Given** the `focus-navigation` primitive **When** Tab advances **Then** Shift+Tab retreats everywhere Tab navigates (lists, sub-zones, panes).
+
+**Given** the per-zone mode declaration **When** configured **Then** each zone uses H/V arrows, Tab/Shift+Tab, or Ctrl+N/P with no ad-hoc Tab handler left.
+
+**Given** all zones migrated **When** rendered **Then** footer and `?` reflect the active bindings from the same declarations.
+
+### Story 7.8: Update Per-Service Last-Run Detail (FR-30)
+
+> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`). Parallelizable with the 7.2 graft; session-only, independent of 7.5's persisted datum.
+
+As a developer, after a group update I want the detail pane to report per service what really happened, so I trust the run without re-checking by hand.
+
+**Acceptance Criteria:**
+
+**Given** a successful merge with unchanged HEAD **When** shown **Then** "already up to date", never a diffstat.
+
+**Given** an advancing merge **When** shown **Then** +N/−M lines and F files (via the GitPort diff capability).
+
+**Given** the migrate phase ran **When** shown **Then** "ran (<command>)" plus an output excerpt; when absent/disabled, "migrations: none".
+
+**Given** a new run finishes **When** it lands **Then** it replaces the previous detail (session-only, never persisted).
+
+**Given** the CLI **When** a run ends **Then** the same details ride the JSON line.
 
 **Given** a zone has a pending background event **When** on the Dashboard **Then** its tab shows the counter badge (UX-DR19 background-event state).

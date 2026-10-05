@@ -343,6 +343,26 @@ describe('tui-back list-repos (black-box)', () => {
     expect(parsed.data.repos[0].moduleIds).toEqual([]);
   });
 
+  it('lists a container-less repo with container null in the JSON envelope', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(false);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    await writeFile(
+      join(repo, '.tui-back.yaml'),
+      ['service: shared-types', 'sharedBranch: development', 'modules: {}', ''].join('\n'),
+    );
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['list-repos'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.repos).toEqual([
+      { path: repo, service: 'shared-types', container: null, sharedBranch: 'development', moduleIds: [] },
+    ]);
+  });
+
   it('surfaces a manifest with a non-empty modules map as an unknown-module error', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);

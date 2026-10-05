@@ -621,3 +621,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-12-update-merge-source-from-another-edt.md`
   summary: The panels hook still reads the draft from props, so two keys delivered before a re-render can act on a stale draft (view and box are already read from refs).
   evidence: Edge-case review of story 3.12; the pre-existing simple config dialog has the same limitation, so a store-level `getState()` read would fix both.
+
+## Deferred from: review of 7-2-container-less-managed-services (2026-10-05)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-2-container-less-managed-services.md`
+  summary: Optional manifest fields use two conventions — `migrationCommand` documents a `null` fallback while `container` (since 7.2) omits the key — and the zod schema rejects explicit `null` for both.
+  evidence: `.agents/skills/manifest-generator/SKILL.md` still instructs `migrationCommand: null` when undetected, but `z.string().trim().min(1).optional()` in `src/adapters/driven/manifest/schema.ts` rejects `null`; normalizing (nullish handling or doc alignment) is pre-existing debt surfaced, not caused, by 7.2. Surfaced by blind-hunter review layer.

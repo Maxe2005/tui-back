@@ -22,6 +22,16 @@ function manifestFor(service: string, restartCommands?: string[]): Manifest {
   };
 }
 
+function manifestWithoutContainer(service: string, restartCommands?: string[]): Manifest {
+  return {
+    service,
+    migrationCommand: 'npm run migration:run',
+    ...(restartCommands !== undefined ? { restartCommands } : {}),
+    sharedBranch: 'development',
+    modules: {},
+  };
+}
+
 function fakeManifest(loaded: Manifest | null, code = 'manifest-not-found'): ManifestPort {
   return {
     load: vi.fn(async (repoPath: string) =>
@@ -188,6 +198,33 @@ describe('serviceRestart — standalone single-service clean restart', () => {
       ok: true,
       data: { service: 'a (/repo/a)', outcome: 'failed', detail: { code: 'manifest-invalid' } },
     });
+  });
+
+  it('a container-less service without a recipe fails with the no-container code and touches neither port', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+
+    const result = await serviceRestart(makeParams({ manifest: fakeManifest(manifestWithoutContainer('svc-a')), container, restart }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { service: 'svc-a', outcome: 'failed', detail: { code: 'no-container' } },
+    });
+    expect(calls(restart.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('a container-less service with a declared recipe runs the recipe, never the plain restart', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+
+    const result = await serviceRestart(
+      makeParams({ manifest: fakeManifest(manifestWithoutContainer('svc-a', ['npm ci'])), container, restart }),
+    );
+
+    expect(result).toMatchObject({ ok: true, data: { service: 'svc-a', outcome: 'updated' } });
+    expect(calls(restart.run)).toEqual([['/repo/a', 'npm ci']]);
+    expect(calls(container.restart)).toHaveLength(0);
   });
 
   it('a blank repoPath is rejected invalid-argument before anything starts', async () => {
