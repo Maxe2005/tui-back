@@ -2963,7 +2963,7 @@ As a developer, I want to register and manage a service that has no Docker conta
 
 **Implementation notes:** make the type optional first and let `tsc` enumerate every dereference. Architecture AD-4/AD-16 amendments in this proposal apply.
 
-> Amended 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`, graft C1 — implement on the still-open story branch before the epic merge):
+> Amended 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`, graft C1 — implement on the still-open story branch before the epic merge):
 
 **Given** the Logs zone listing services **When** rendered **Then** an info-only "services without container" section groups every container-less registry service (members included): greyed, unselectable, excluded from Tab order and Ctrl+A.
 
@@ -3049,7 +3049,7 @@ As a developer, I want the Dashboard to warn me about anything needing attention
 
 ### Story 7.7: Shared Focus-Navigation Component (FR-31)
 
-> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`). Runs before Story 7.4 so the alignment phase consumes its primitive.
+> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Runs before Story 7.4 so the alignment phase consumes its primitive.
 
 As a developer, I want one shared navigation primitive so Tab/Shift+Tab move focus the same way in every zone, with Shift+Tab always reversing Tab.
 
@@ -3063,7 +3063,7 @@ As a developer, I want one shared navigation primitive so Tab/Shift+Tab move foc
 
 ### Story 7.8: Update Per-Service Last-Run Detail (FR-30)
 
-> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`). Parallelizable with the 7.2 graft; session-only, independent of 7.5's persisted datum.
+> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Parallelizable with the 7.2 graft; session-only, independent of 7.5's persisted datum.
 
 As a developer, after a group update I want the detail pane to report per service what really happened, so I trust the run without re-checking by hand.
 
