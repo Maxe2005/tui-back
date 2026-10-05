@@ -286,24 +286,32 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
     // Resolves one row's container presence without blocking — cached, so a repeated call
     // for an already-known row never reloads its manifest. A failed load leaves the row
     // absent (unknown), never recorded as either answer.
+    const pendingPresence = new Set<string>();
     async function resolveContainerPresence(repoPath: string): Promise<void> {
       if (!deps) {
         return;
       }
-      if (repoPath in get().logsNoContainer) {
+      if (repoPath in get().logsNoContainer || pendingPresence.has(repoPath)) {
         return;
       }
-      const manifestResult = await deps.manifest.load(repoPath);
-      if (!manifestResult.ok) {
-        return;
-      }
-      const withoutContainer = manifestResult.data.container === undefined || manifestResult.data.container.trim() === '';
-      set((state) => {
-        if (state.logsNoContainer[repoPath] === withoutContainer) {
-          return {};
+      pendingPresence.add(repoPath);
+      try {
+        const manifestResult = await deps.manifest.load(repoPath);
+        if (!manifestResult.ok) {
+          return;
         }
-        return { logsNoContainer: { ...state.logsNoContainer, [repoPath]: withoutContainer } };
-      });
+        // Keyed idempotent write: even a superseded resolve records this path's current
+        // manifest truth, and the next polling retarget prunes rows that left the list.
+        const withoutContainer = manifestResult.data.container === undefined || manifestResult.data.container.trim() === '';
+        set((state) => {
+          if (state.logsNoContainer[repoPath] === withoutContainer) {
+            return {};
+          }
+          return { logsNoContainer: { ...state.logsNoContainer, [repoPath]: withoutContainer } };
+        });
+      } finally {
+        pendingPresence.delete(repoPath);
+      }
     }
 
     // One poll cycle for a single listed row — like pollPaneHealth above, but writing the
@@ -314,8 +322,22 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       if (!deps) {
         return;
       }
+      // A positively-resolved container-less row never reloads its manifest here — the
+      // presence cache already answered.
+      if (get().logsNoContainer[repoPath] === true) {
+        set((state) => {
+          if (state.logsListedHealth[repoPath] === 'no-container') {
+            return {};
+          }
+          return { logsListedHealth: { ...state.logsListedHealth, [repoPath]: 'no-container' as const } };
+        });
+        return;
+      }
       const manifestResult = await deps.manifest.load(repoPath);
       if (!manifestResult.ok) {
+        return;
+      }
+      if (!listedPollingRepoPaths.includes(repoPath)) {
         return;
       }
       const container = manifestResult.data.container;
@@ -335,8 +357,13 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         }
         return { logsNoContainer: { ...state.logsNoContainer, [repoPath]: false } };
       });
-      const healthResult = await getServiceHealth({ docker: deps.docker, container });
+      // Manifest values are schema-trimmed, but a ManifestPort is any implementation —
+      // never hand Docker a padded name.
+      const healthResult = await getServiceHealth({ docker: deps.docker, container: container.trim() });
       if (!healthResult.ok) {
+        return;
+      }
+      if (!listedPollingRepoPaths.includes(repoPath)) {
         return;
       }
       const health = healthResult.data;
@@ -386,6 +413,31 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       },
       startLogsListedHealthPolling: (repoPaths) => {
         listedPollingRepoPaths = [...repoPaths];
+        // Stale rows (renamed/unregistered since the last retarget) leave both maps so
+        // a removed service can neither badge nor resurface from cache.
+        set((state) => {
+          const wanted = new Set(repoPaths);
+          const logsNoContainer: Record<string, boolean> = {};
+          const logsListedHealth: Record<string, HealthState | 'no-container'> = {};
+          for (const path of Object.keys(state.logsNoContainer)) {
+            if (wanted.has(path)) {
+              logsNoContainer[path] = state.logsNoContainer[path];
+            }
+          }
+          for (const path of Object.keys(state.logsListedHealth)) {
+            if (wanted.has(path)) {
+              logsListedHealth[path] = state.logsListedHealth[path];
+            }
+          }
+          return { logsNoContainer, logsListedHealth };
+        });
+        if (listedPollingRepoPaths.length === 0) {
+          if (listedHealthPollTimer !== null) {
+            clearInterval(listedHealthPollTimer);
+            listedHealthPollTimer = null;
+          }
+          return;
+        }
         pollAllListed(listedPollingRepoPaths);
         if (listedHealthPollTimer !== null) {
           clearInterval(listedHealthPollTimer);

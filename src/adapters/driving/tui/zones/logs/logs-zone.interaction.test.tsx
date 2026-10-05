@@ -69,6 +69,23 @@ function seedStore(overrides: Record<string, unknown> = {}) {
 }
 
 describe('LogsZone real-keypress interactions', () => {
+  it('mounting resolves container presence and polls the listed rows, unmount stops polling', async () => {
+    const store = seedStore();
+    const resolveLogsContainerPresence = vi.fn();
+    const startLogsListedHealthPolling = vi.fn();
+    const stopLogsListedHealthPolling = vi.fn();
+    store.setState({ resolveLogsContainerPresence, startLogsListedHealthPolling, stopLogsListedHealthPolling });
+    const { instance } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(resolveLogsContainerPresence).toHaveBeenCalledWith(['/repos/api-gateway', '/repos/route-explorer']);
+      expect(startLogsListedHealthPolling).toHaveBeenCalledWith(['/repos/api-gateway', '/repos/route-explorer']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+    expect(stopLogsListedHealthPolling).toHaveBeenCalled();
+  });
   it('Tab cycles focus edt-list -> other-list -> panes -> edt-list (Space toggles the currently-focused list)', async () => {
     const store = seedStore();
     const { instance, stdin } = mount(store);

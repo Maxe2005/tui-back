@@ -84,6 +84,10 @@ describe('isRestartingDisplay', () => {
     expect(isRestartingDisplay(false, 'down')).toBe(false);
     expect(isRestartingDisplay(false, 'no-container')).toBe(false);
   });
+
+  it('is false for a container-less row even with a stale restart flag', () => {
+    expect(isRestartingDisplay(true, 'no-container')).toBe(false);
+  });
 });
 
 describe('splitNoContainerRows', () => {

@@ -1,135 +1,93 @@
 ---
-title: 'Story 7.2: Container-less Managed Services (FR-29)'
+title: 'Story 7.2 (graft C1): Logs without-container grouping, scoped Ctrl+A, always-visible health'
 type: 'feature'
 created: '2026-10-05'
 status: 'done'
-baseline_commit: 'cccf0d7758238a0da9663fbf41a5875d9a3eb404'
+baseline_commit: 'c9cf072c62f828100fa5359719fbc2377c2cdc8e'
 review_loop_iteration: 0
 context:
   - '{project-root}/AGENTS.md'
-  - '{project-root}/_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
 ## Intent
 
-**Problem:** A managed repo must declare a Docker `container` today (`Manifest.container: string`, zod `min(1)`), so libraries and non-dockerized services (e.g. `shared-types`) cannot be registered, updated, or shown without faking a container name.
+**Problem:** The Logs zone still shows container-less services mixed into the two selectable lists (or not at all), Ctrl+A only toggles the EDT-members list, health badges appear only on subscribed rows, and `restarting` does not say what is happening.
 
-**Approach:** Make `container` optional end to end: manifests without it validate and register; group update runs pull/merge and migrations normally and skips only the restart phase (or runs the clean-restart recipe); every health/logs/restart surface shows an explicit "no container" state and never touches Docker for such a service.
+**Approach:** Add an info-only "services without container" section covering every such registry service; scope Ctrl+A to the focused selectable list; extend the existing health poll to every listed row so badges render everywhere; make a restarting row state explicitly that a restart was requested and the container is being re-verified. Prior 7.2 work (optional container end to end) is done and committed — this graft only changes Logs presentation and selection.
 
 ## Boundaries & Constraints
 
-**Always:** Make the type optional first and let `tsc` enumerate every dereference; every core use-case returns `Result<T>` with kebab-case codes; `ContainerPort`/`DockerPort` are never called with an empty or absent name; AD-17 comment rule (short present-tense headers, no story references); imports stay first in each file; branch `story-7-2-container-less-managed-services` from `epic-7-tui-consistency-dashboard-code-hygiene`, conventional commits with `(story 7.2)`; verify with `npm test && npm run typecheck && npm run depcheck`.
+**Always:** Result<T> with kebab-case codes in core; never call DockerPort/ContainerPort for a container-less service; AD-17 comment rule; imports first per file; lists render immediately and never block on manifest loads (presence resolves async); follow the Update zone precedent (missing health reads as `down`); verify with `npm test && npm run typecheck && npm run depcheck`; conventional commits with `(story 7.2)` on the open story branch.
 
-**Ask First:** TTY rendering of a null container (generic envelope prints JSON `null`, not `—`, see Design Notes); whether to create a `service-restart` CLI subcommand (none exists today — recommendation: no, keep the `no-container` contract at core/TUI level only).
+**Ask First:** None — defaults delegated; any new terminal-indistinguishability (à la Ctrl+Shift+A) found is reported, not worked around.
 
-**Never:** Add a `service-restart` CLI subcommand unless the human picks it; widen `DockerPort`/`HealthState` in core (the "no container" display state stays TUI-side); add per-command TTY formatting (the envelope stays generic); touch Dashboard summary (Story 7.5) or the zone-layout contract (Story 7.3); change any git/migration behavior.
+**Never:** Make the third section selectable, focusable, or Tab-reachable; change DockerPort/HealthState in core; persist anything new (no state-port change); touch the Update zone, the Dashboard, or the zone-layout contract (Story 7.3); rework the Ctrl+A toggle semantics (indistinguishable Ctrl+Shift+A stays a toggle).
 
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| Register without container | manifest omits `container` | validates, repo registers like any other | N/A |
-| Empty container | `container: ""` | rejected | validation error naming the field |
-| Explicit null container | `container: null` | rejected | validation error naming the field (skill omits the key instead) |
-| Update, recipe declared | container-less, `cleanRestart` on, `restartCommands` non-empty | recipe runs in order; success → `updated` | recipe failure → `failed`/`restart-failed`, same as today |
-| Update, no recipe | container-less, `cleanRestart` off or no `restartCommands` | `skipped` with `no container` detail | never `failed`; `ContainerPort.restart` never called |
-| Standalone restart, no recipe | container-less via `serviceRestart` | `failed` row with code `no-container` | TUI hides plain restart for such services |
-| List repos | registry contains a container-less repo | `container: null` in JSON data | N/A |
-| Logs select | container-less service selected | no subscription, pane shows "No container — no logs"; restart control absent | N/A |
-| Health badges | Update zone, Logs zone, any badge | dim glyph + "no container" text, never "down" | docker never polled for the service |
+| Third group | registry holds container-less services (members or not) | info-only greyed section, unselectable, skipped by Tab and Ctrl+A | manifest unloadable → row stays in its membership list, never in the third group |
+| Scoped Ctrl+A | focus on EDT-members / other-services + Ctrl+A | toggles select-all of the focused list only | third group never affected |
+| Health everywhere | any listed row, subscribed or not | badge visible (polled value, else `down` default like Update) | poll failure keeps last-known, never crashes |
+| Explicit restarting | pane restarting flag or health `restarting` | row/pane states restart-requested + re-verifying, not bare `restarting` | N/A |
+| R on third group | keypress on info-only row | impossible (row unfocusable); slice guard stays second line of defense | N/A |
 
 </frozen-after-approval>
 
 ## Code Map
 
-- `src/core/ports/manifest.ts:6-16` -- `Manifest.container: string` becomes `container?: string`.
-- `src/adapters/driven/manifest/schema.ts:12-16` -- `container: z.string().trim().min(1)` gains `.optional()`; absent → `undefined`.
-- `src/core/scripts/list-repos.ts:9-15,55-61` -- `ManagedRepo.container: string` becomes `string | null`; map `undefined` → `null`.
-- `src/core/scripts/group-update.ts:526-566` (`RestartStepInput`, `runRestartStep`) -- `containerName: string | undefined`; recipe branch unchanged; absent container with no applicable recipe returns `err('no-container', ...)` without calling the port.
-- `src/core/scripts/group-update.ts:807-814` (restart phase in `updateWithLoadedManifest`) -- map the `no-container` error to a `skipped` row (detail names the repo), not `failed`.
-- `src/core/scripts/service-restart.ts:55-65` -- passes `containerName` through (always `cleanRestart: true`); `no-container` propagates as the `failed` row code.
-- `src/core/logs/use-cases.ts` -- unchanged (params keep `container: string`); slices guard before calling.
-- `src/adapters/driving/tui/store/slices/logs-slice.ts:195-213,283-337,340-407,434-452` -- `pollPaneHealth`, `subscribeLogsPane`, `restartLogsPane`, `loadOlderLogsPane`: when the loaded manifest has no container, set the pane's no-container state and return before any docker/manager call; no health timer for such panes.
-- `src/adapters/driving/tui/store/slices/update-slice.ts:235-254,859-949` -- `pollServiceHealth` skips docker and records no-container; `runServiceRestart` path honors the core `no-container` failure; plain-restart menus hide it, clean restart offered only with declared `restartCommands`.
-- `src/adapters/driving/tui/zones/update/update-zone.logic.ts:18-30` + `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts:11-15` -- badge mapping for the new TUI-side `no-container` state (dim glyph + text, never the down treatment).
-- `.agents/skills/manifest-generator/SKILL.md` + `assets/template.md` -- omit `container` when no compose service matches instead of emitting `null`.
-- `src/core/edt/create.ts:172-174` -- placeholder manifest keeps a `container` value (still valid under the optional schema); no change needed unless typecheck says otherwise.
-- Tests: `src/adapters/driven/manifest/index.test.ts` (omit/empty/null cases), `src/core/scripts/group-update.test.ts` (skip + recipe paths), `src/core/scripts/service-restart.test.ts` (`no-container`), `src/core/scripts/list-repos.test.ts` (`null`), slice tests for the guards.
+- `src/adapters/driving/tui/zones/logs/logs-zone.tsx:127-170` -- rows source, EDT-membership partition, cursors, active-pane order; `:559-620` list key branches (Ctrl+A only in edt-list); `:495-500,:671-680` R guards; `:710-764` the two list renders.
+- `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts:35-43` -- `cycleLogsPaneFocus` (Tab order; third group is skipped, focus type unchanged); `:291-311` Ctrl+A resolver + select-all toggle.
+- `src/adapters/driving/tui/store/slices/logs-slice.ts:20-41,192-229,265-278` -- pane type, health poll, EDT-only select-all actions; add other-list select-all pair + per-row container-presence resolution (manifest.load per row, async, cached in store — rows carry no container today).
+- `src/core/edt/list.ts:20-40` (`ServiceBranchDivergence`) -- read-only; has no container field and must not gain one for this graft.
+- `src/adapters/driving/tui/zones/logs/logs-pane-view.tsx:59-91` + `fullscreen-pane.tsx:60-92` -- pane badges; row badges reuse `healthBadgeState`/`formatHealthLabel` (`logs-zone.logic.ts:16-30`).
+- `src/adapters/driving/tui/store/slices/update-slice.ts:235-257` -- the poll-every-row precedent (missing reads as down) to mirror.
+- Tests: `logs-zone.logic.test.ts` (badge/cycle/Ctrl+A), `logs-zone.test.tsx` (render), `logs-zone.interaction.test.tsx:1058-1080` (Ctrl+A toggle pattern to mirror for other-list).
 
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `src/core/ports/manifest.ts` -- make `container` optional -- unlocks every layer via typecheck.
-- [x] `src/adapters/driven/manifest/schema.ts` -- accept absent `container`, keep rejecting empty/null -- manifests validate.
-- [x] `src/core/scripts/list-repos.ts` -- expose `container: string | null` -- CLI JSON carries `null`.
-- [x] `src/core/scripts/group-update.ts` -- recipe-or-skip restart for absent container; `skipped` row with `no container` -- update never fails on it.
-- [x] `src/core/scripts/service-restart.ts` -- propagate `no-container` as the failed-row code -- TUI has a stable contract.
-- [x] `src/adapters/driving/tui/store/slices/logs-slice.ts` -- no-container pane state, no subscribe/poll/restart -- Logs zone degrades explicitly.
-- [x] `src/adapters/driving/tui/store/slices/update-slice.ts` -- no-container health + restart gating -- Update/EDT actions degrade explicitly.
-- [x] TUI zone logic + badges -- render the dim "no container" state -- never shown as "down".
-- [x] `.agents/skills/manifest-generator/` -- omit `container` when undetectable -- generated manifests load.
-- [x] Tests for every I/O-matrix row -- locks FR-29 behavior per layer (AD-13).
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- `7-2-container-less-managed-services: in-progress` → `done` on completion.
+- [x] `src/adapters/driving/tui/store/slices/logs-slice.ts` -- resolve per-row container presence (async, cached) + other-list select-all pair + extend health polling to listed-but-unsubscribed rows -- third group data without blocking render.
+- [x] `src/adapters/driving/tui/zones/logs/logs-zone.tsx` -- render the info-only third section; scope Ctrl+A per focused list; badges on every row; explicit restarting label -- the visible graft.
+- [x] `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts` -- Tab cycle skips the info-only group; per-list select-all toggle -- no focus-model change.
+- [x] Tests for every I/O-matrix row (logic + render + interaction mirror) -- locks the graft per AD-13.
+- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 7.2 stays `in-progress` until merge.
 
 **Acceptance Criteria:**
-- Given a manifest without `container`, when loaded, then it validates and the repo registers, updates, and displays like any other except for container-dependent phases.
-- Given any group update including a container-less service, when the restart phase is reached, then the recipe runs if asked and declared, else a `skipped` row with `no container` — never `failed`, and `ContainerPort.restart` is never called (assert via fake port in tests).
-- Given the Logs zone with a container-less service selected, when rendered, then no subscription exists and the pane shows the explicit no-container state with no restart control.
-- Given any health surface, when showing a container-less service, then it shows the dim no-container state and docker is never polled for it.
-
-## Design Notes
-
-TTY rendering: the CLI envelope (`adapters/driving/cli/envelope.ts`) is generic — TTY prints pretty JSON, so `container: null` surfaces as `"container": null`, not `—`. Rendering `—` would need per-command human formatting, which the envelope deliberately avoids. Recommendation: accept `null` on both branches (deviation from the proposal's `—`, recorded here); the JSON contract is what scripts consume.
+- Given container-less services in the registry, when the Logs zone renders, then they appear only in a greyed info-only section: no cursor, no Space, no Enter, no Tab stop, no Ctrl+A effect.
+- Given focus on either selectable list, when Ctrl+A, then only that list toggles.
+- Given any listed row, when health is known or defaulted, then its badge is visible without subscription.
+- Given a restarting service, when displayed, then row and pane state restart-requested plus re-verifying.
 
 ## Verification
 
 **Commands:**
-- `npm test` -- expected: all pass, including the new omit/empty/null, skip, recipe, and slice-guard tests.
-- `npm run typecheck` -- expected: clean; every missed dereference surfaces here first.
-- `npm run depcheck` -- expected: clean; no new cross-layer imports (imports stay first per file).
+- `npm test` -- expected: all pass, including third-group, scoped-Ctrl+A, badge-everywhere, and restarting tests.
+- `npm run typecheck` -- expected: clean.
+- `npm run depcheck` -- expected: clean; no cross-zone imports (reuse within the Logs zone only).
 
 ## Suggested Review Order
 
-**Core contract: optional container, skip-not-fail restart**
+**Presence and polling in the slice**
 
-- Restart step returns `no-container` without touching the port; recipe still runs when declared
-  [`group-update.ts:556`](../../../src/core/scripts/group-update.ts#L556)
+- Per-row presence resolves async and cached, with an in-flight set and stale writes contained
+  [`logs-slice.ts:289`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L289)
 
-- The `no-container` error maps to a `skipped` row, never `failed`
-  [`group-update.ts:814`](../../../src/core/scripts/group-update.ts#L814)
+- Listed-row poll short-circuits on known container-less, trims before Docker, prunes on retarget
+  [`logs-slice.ts:313`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L313)
 
-- `container` becomes optional on the Manifest port
-  [`manifest.ts:8`](../../../src/core/ports/manifest.ts#L8)
+**Visible graft in the zone**
 
-- Schema accepts absence, still rejects empty and null
-  [`schema.ts:16`](../../../src/adapters/driven/manifest/schema.ts#L16)
+- Third section renders from the same split as the selectable lists; Ctrl+A is focus-scoped
+  [`logs-zone.tsx:155`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L155)
 
-- Missing or blank container surfaces as `null` in list data
-  [`list-repos.ts:57`](../../../src/core/scripts/list-repos.ts#L57)
+- Every row badges via pane, listed poll, then down default; restarting reads explicitly
+  [`logs-zone.tsx:189`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L189)
 
-**TUI degradation: explicit state, Docker never polled**
+**Pure helpers**
 
-- Health poll records no-container without reaching Docker
-  [`update-slice.ts:252`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L252)
-
-- Menu asks the store, never a driven port, whether restart applies
-  [`update-slice.ts:877`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L877)
-
-- Subscribe path degrades before any timer, stream, or poll starts
-  [`logs-slice.ts:312`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L312)
-
-- Dim badge entry shared by every no-container surface
-  [`status-badge.tsx:44`](../../../src/adapters/driving/tui/shared/components/status-badge.tsx#L44)
-
-- Restart row drops from the menu when no restart exists
-  [`update-service-menu-dialog.tsx:21`](../../../src/adapters/driving/tui/zones/update/update-service-menu-dialog.tsx#L21)
-
-**Peripherals**
-
-- Skill template comments out `container` instead of emitting `null`
-  [`template.md`](../../../.agents/skills/manifest-generator/assets/template.md)
-
-- Black-box CLI asserts `container: null` in the JSON envelope
-  [`tui-back.e2e.test.ts:346`](../../../src/bin/tui-back.e2e.test.ts#L346)
+- No-container never reads as restarting; single split predicate for both lists
+  [`logs-zone.logic.ts:42`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L42)

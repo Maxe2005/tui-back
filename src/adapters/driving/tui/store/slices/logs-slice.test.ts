@@ -352,4 +352,43 @@ describe('logs slice: listed-row health polling', () => {
       vi.useRealTimers();
     }
   });
+
+  it('retargeting prunes stale rows from both maps, and an empty list leaves no keys behind', async () => {
+    const store = createAppStore(fakeDeps({ manifest: manifestWithContainer() }));
+
+    store.getState().startLogsListedHealthPolling(['/repo/a']);
+    await flush();
+    expect(store.getState().logsListedHealth['/repo/a']).toBe('up');
+
+    store.getState().startLogsListedHealthPolling(['/repo/b']);
+    await flush();
+    expect('/repo/a' in store.getState().logsListedHealth).toBe(false);
+    expect('/repo/a' in store.getState().logsNoContainer).toBe(false);
+    expect(store.getState().logsListedHealth['/repo/b']).toBe('up');
+
+    store.getState().startLogsListedHealthPolling([]);
+    await flush();
+    expect(store.getState().logsListedHealth).toEqual({});
+    expect(store.getState().logsNoContainer).toEqual({});
+    store.getState().stopLogsListedHealthPolling();
+  });
+
+  it('a positively-resolved container-less row never reloads its manifest on later ticks', async () => {
+    const manifestLoad = vi.fn(async (repoPath: string) =>
+      ok({ service: repoPath.split('/').pop() ?? repoPath, sharedBranch: 'development', modules: {} }),
+    );
+    const manifest: ManifestPort = { load: manifestLoad };
+    const store = createAppStore(fakeDeps({ manifest }));
+
+    store.getState().resolveLogsContainerPresence(['/repo/lib']);
+    await flush();
+    expect(store.getState().logsNoContainer['/repo/lib']).toBe(true);
+    const loadsAfterResolve = manifestLoad.mock.calls.length;
+
+    store.getState().startLogsListedHealthPolling(['/repo/lib']);
+    await flush();
+    expect(manifestLoad.mock.calls.length).toBe(loadsAfterResolve);
+    expect(store.getState().logsListedHealth['/repo/lib']).toBe('no-container');
+    store.getState().stopLogsListedHealthPolling();
+  });
 });

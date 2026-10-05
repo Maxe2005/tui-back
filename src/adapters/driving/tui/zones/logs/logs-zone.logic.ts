@@ -39,7 +39,11 @@ export function formatHealthLabel(health: HealthState | 'no-container'): string 
 
 // True when a row or pane must read as restarting — either the slice's in-flight restart flag
 // or docker itself reporting the state. One predicate so list rows and pane headers agree.
+// A container-less row never restarts, so it never reads as restarting either.
 export function isRestartingDisplay(restarting: boolean, health: HealthState | 'no-container'): boolean {
+  if (health === 'no-container') {
+    return false;
+  }
   return restarting || health === 'restarting';
 }
 

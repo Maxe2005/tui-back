@@ -152,16 +152,16 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // since the Logs zone has no EDT selector of its own. Container-less rows leave both
   // selectable lists for the info-only section below (presence resolves async in the store,
   // so they render in their membership list until then — never blocked on the load).
-  const { edtServices, otherServices } = useMemo(() => {
+  const { edtServices, otherServices, withoutContainerServices } = useMemo(() => {
     const partitioned = partitionServicesByEdtMembership(rows, focusedEdt);
     const edt = splitNoContainerRows(partitioned.edtServices, logsNoContainer);
     const other = splitNoContainerRows(partitioned.otherServices, logsNoContainer);
-    return { edtServices: edt.selectable, otherServices: other.selectable };
+    return {
+      edtServices: edt.selectable,
+      otherServices: other.selectable,
+      withoutContainerServices: [...edt.withoutContainer, ...other.withoutContainer],
+    };
   }, [rows, focusedEdt, logsNoContainer]);
-  const withoutContainerServices = useMemo(
-    () => rows.filter((row) => logsNoContainer[row.path] === true),
-    [rows, logsNoContainer],
-  );
 
   const [paneFocus, setPaneFocus] = useState<LogsPaneFocus>('edt-list');
   const [edtCursor, setEdtCursor] = useState(0);

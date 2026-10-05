@@ -243,6 +243,36 @@ describe('LogsZone', () => {
     expect(output).not.toContain('ACTIVE EDT MEMBERS');
   });
 
+  it('renders a restarting fullscreen pane with the explicit label, never the bare state', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsFullscreenTarget: '/repos/route-explorer',
+      logsPanes: {
+        '/repos/route-explorer': {
+          repoPath: '/repos/route-explorer',
+          service: 'route-explorer',
+          lines: [],
+          streamError: null,
+          noMoreHistory: false,
+          scrollOffset: 0,
+          health: 'up',
+          restarting: true,
+        },
+      },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('re-verifying');
+  });
+
   it('renders one inline health badge glyph per pane state: up → ●, down → ○, restarting → ⣾', async () => {
     function pane(path: string, name: string, health: 'up' | 'down' | 'restarting') {
       return {
