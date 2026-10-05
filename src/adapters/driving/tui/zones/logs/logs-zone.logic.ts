@@ -24,12 +24,48 @@ export function healthBadgeState(health: HealthState | 'no-container'): StatusBa
 }
 
 // The text next to a health badge — the raw state except the container-less service, which
-// reads as words rather than a kebab-case code.
+// reads as words rather than a kebab-case code, and a restarting service, which names both
+// halves of what is happening (a restart was requested, the container is being re-verified)
+// instead of the bare state.
 export function formatHealthLabel(health: HealthState | 'no-container'): string {
-  return health === 'no-container' ? 'no container' : health;
+  if (health === 'no-container') {
+    return 'no container';
+  }
+  if (health === 'restarting') {
+    return 'restart requested — re-verifying';
+  }
+  return health;
 }
 
-// Tab cycles EDT list -> other list -> panes.
+// True when a row or pane must read as restarting — either the slice's in-flight restart flag
+// or docker itself reporting the state. One predicate so list rows and pane headers agree.
+export function isRestartingDisplay(restarting: boolean, health: HealthState | 'no-container'): boolean {
+  return restarting || health === 'restarting';
+}
+
+// Splits an already-partitioned selectable list into the rows that stay selectable and the
+// container-less rows that move to the info-only third section. Presence unknown (manifest
+// still loading or unloadable) stays selectable — only a positively-resolved no-container
+// row ever leaves its membership list.
+export function splitNoContainerRows(
+  services: readonly ServiceBranchDivergence[],
+  noContainerByPath: Readonly<Record<string, boolean>>,
+): { selectable: ServiceBranchDivergence[]; withoutContainer: ServiceBranchDivergence[] } {
+  const selectable: ServiceBranchDivergence[] = [];
+  const withoutContainer: ServiceBranchDivergence[] = [];
+  for (const service of services) {
+    if (noContainerByPath[service.path] === true) {
+      withoutContainer.push(service);
+    } else {
+      selectable.push(service);
+    }
+  }
+  return { selectable, withoutContainer };
+}
+
+// Tab cycles EDT list -> other list -> panes. The info-only without-container section is
+// never a Tab stop — it has no focus state by design, so this cycle skips it by construction
+// and the focus type stays unchanged.
 export type LogsPaneFocus = 'edt-list' | 'other-list' | 'panes';
 
 export function cycleLogsPaneFocus(current: LogsPaneFocus): LogsPaneFocus {

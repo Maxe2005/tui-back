@@ -22,6 +22,7 @@ import {
   isClearAllLogsKey,
   isPaneEngagedInGlobalFilter,
   isPaneWrapped,
+  isRestartingDisplay,
   isSelectAllKey,
   isWrapAllLogsKey,
   movePaneSubFocus,
@@ -35,6 +36,7 @@ import {
   setPaneGlobalFilterEngagement,
   setPaneLogFilter,
   sliceVisibleWindow,
+  splitNoContainerRows,
   toggleAllPanesWrapFlag,
   toggleFilterMode,
   toggleGlobalFilterEngagement,
@@ -59,8 +61,68 @@ describe('healthBadgeState / formatHealthLabel', () => {
   it('labels the container-less service in words, never as a kebab-case code', () => {
     expect(formatHealthLabel('up')).toBe('up');
     expect(formatHealthLabel('down')).toBe('down');
-    expect(formatHealthLabel('restarting')).toBe('restarting');
     expect(formatHealthLabel('no-container')).toBe('no container');
+  });
+
+  it('a restarting service names the request and the re-verification, never the bare state', () => {
+    expect(formatHealthLabel('restarting')).toBe('restart requested — re-verifying');
+  });
+});
+
+describe('isRestartingDisplay', () => {
+  it('is true for the in-flight restart flag even while docker still reports the old health', () => {
+    expect(isRestartingDisplay(true, 'up')).toBe(true);
+    expect(isRestartingDisplay(true, 'down')).toBe(true);
+  });
+
+  it('is true for docker-reported restarting without the flag', () => {
+    expect(isRestartingDisplay(false, 'restarting')).toBe(true);
+  });
+
+  it('is false otherwise, including the container-less state', () => {
+    expect(isRestartingDisplay(false, 'up')).toBe(false);
+    expect(isRestartingDisplay(false, 'down')).toBe(false);
+    expect(isRestartingDisplay(false, 'no-container')).toBe(false);
+  });
+});
+
+describe('splitNoContainerRows', () => {
+  function row(path: string) {
+    return {
+      service: path.split('/').pop() ?? path,
+      path,
+      isMember: false,
+      sharedBranch: 'development',
+      protectedBranches: [],
+      branch: 'main',
+      ahead: 0,
+      behind: 0,
+      status: 'current' as const,
+    };
+  }
+
+  it('moves only positively-resolved container-less rows out of the selectable list', () => {
+    const services = [row('/repos/a'), row('/repos/lib'), row('/repos/c')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, { '/repos/lib': true });
+
+    expect(selectable.map((entry) => entry.path)).toEqual(['/repos/a', '/repos/c']);
+    expect(withoutContainer.map((entry) => entry.path)).toEqual(['/repos/lib']);
+  });
+
+  it('keeps rows with unknown or failed presence (absent) and known-with-container (false) selectable', () => {
+    const services = [row('/repos/a'), row('/repos/b')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, { '/repos/a': false });
+
+    expect(selectable.map((entry) => entry.path)).toEqual(['/repos/a', '/repos/b']);
+    expect(withoutContainer).toEqual([]);
+  });
+
+  it('returns everything selectable against an empty presence map (first render, loads in flight)', () => {
+    const services = [row('/repos/a')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, {});
+
+    expect(selectable).toEqual(services);
+    expect(withoutContainer).toEqual([]);
   });
 });
 
@@ -69,6 +131,11 @@ describe('cycleLogsPaneFocus', () => {
     expect(cycleLogsPaneFocus('edt-list')).toBe('other-list');
     expect(cycleLogsPaneFocus('other-list')).toBe('panes');
     expect(cycleLogsPaneFocus('panes')).toBe('edt-list');
+  });
+
+  it('never yields an info-only focus — the without-container section is skipped by construction', () => {
+    const foci = new Set([cycleLogsPaneFocus('edt-list'), cycleLogsPaneFocus('other-list'), cycleLogsPaneFocus('panes')]);
+    expect(foci).toEqual(new Set(['other-list', 'panes', 'edt-list']));
   });
 });
 
