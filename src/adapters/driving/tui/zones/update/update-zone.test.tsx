@@ -81,7 +81,7 @@ const INTERRUPTED_EDTS = [
   },
 ];
 
-// Story 3.6: the Update zone's own always-visible service-list fixtures.
+// The Update zone's always-visible service-list fixtures.
 const ACTIVE_EDT = {
   ulid: 'edt-1',
   topic: 'demo',
@@ -131,7 +131,7 @@ describe('formatUpdateRow', () => {
     ).toBe('✖ svc-a — failed (git-pull-error): line one line two line three');
   });
 
-  it('surfaces the story 3.2 migrate phase: a migration-failed row names the command and its error output', () => {
+  it('surfaces the migrate phase: a migration-failed row names the command and its error output', () => {
     expect(
       formatUpdateRow({
         service: 'svc-a',
@@ -217,7 +217,7 @@ describe('shouldConfirmQuit / resolveQuitConfirm', () => {
   });
 });
 
-describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
+describe('shouldOpenAllConfirm / resolveAllConfirm', () => {
   it('opens the confirm gate on a/A while idle/done/error, never mid-run', () => {
     expect(shouldOpenAllConfirm('a', 'idle')).toBe(true);
     expect(shouldOpenAllConfirm('A', 'done')).toBe(true);
@@ -236,7 +236,7 @@ describe('shouldOpenAllConfirm / resolveAllConfirm (story 3.3)', () => {
   });
 });
 
-describe('resolveUpdateTrigger (story 3.7, menu in 3.9)', () => {
+describe('resolveUpdateTrigger (a / Enter)', () => {
   it('opens the all-repos config on a/A while idle/done/error', () => {
     expect(resolveUpdateTrigger('a', {}, 'idle')).toBe('open-all-config');
     expect(resolveUpdateTrigger('A', {}, 'done')).toBe('open-all-config');
@@ -280,7 +280,7 @@ describe('resolveUpdateTrigger (story 3.7, menu in 3.9)', () => {
   });
 });
 
-describe('shouldOpenEdtConfig / shouldOpenSingleConfig (story 3.11)', () => {
+describe('shouldOpenEdtConfig / shouldOpenSingleConfig', () => {
   it('opens the edt-scoped config on g/G while idle/done/error, never mid-run', () => {
     expect(shouldOpenEdtConfig('g', 'idle')).toBe(true);
     expect(shouldOpenEdtConfig('G', 'done')).toBe(true);
@@ -302,7 +302,7 @@ describe('shouldOpenEdtConfig / shouldOpenSingleConfig (story 3.11)', () => {
   });
 });
 
-describe('resolveUpdateTrigger (story 3.11: g/p)', () => {
+describe('resolveUpdateTrigger (g / p)', () => {
   it('opens the edt-scoped config on g/G while idle/done/error', () => {
     expect(resolveUpdateTrigger('g', {}, 'idle')).toBe('open-edt-config');
     expect(resolveUpdateTrigger('G', {}, 'done')).toBe('open-edt-config');
@@ -331,7 +331,7 @@ describe('resolveUpdateTrigger (story 3.11: g/p)', () => {
 
 // Filtering itself is shared/components/filterable-pick-list.tsx's (covered by its own test
 // file) — what stays service-specific is how a candidate becomes a pick item.
-describe('toServicePickItems (story 3.11)', () => {
+describe('toServicePickItems', () => {
   it('labels each item by service name, with the repo path as searchable secondary text and key', () => {
     const dupes = [
       { service: 'svc', repoPath: '/repo/a' },
@@ -353,7 +353,7 @@ describe('toServicePickItems (story 3.11)', () => {
   });
 });
 
-describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey (story 3.4)', () => {
+describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey', () => {
   it('offers exactly the four bounded choices in menu order', () => {
     expect(UPDATE_BLOCKER_MENU_ITEMS.map((item) => item.value)).toEqual(['stash', 'edited', 'cancel-repo', 'cancel-run']);
   });
@@ -385,7 +385,7 @@ describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey (story 3.4)', () => 
   });
 });
 
-describe('launchEditor (story 3.4)', () => {
+describe('launchEditor', () => {
   const originalEditor = process.env.EDITOR;
 
   afterEach(() => {
@@ -487,7 +487,7 @@ describe('tokenizeCommandLine', () => {
   });
 });
 
-describe('formatBlockerBody (story 3.4)', () => {
+describe('formatBlockerBody', () => {
   it('names the service, path, and kind for every blocker kind', () => {
     expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' })).toContain('/repo/a');
     expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' })).toContain('conflict');
@@ -666,8 +666,8 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('✔ svc-a — updated');
     expect(output).toContain('✖ svc-b — failed (merge-conflict): conflict');
     expect(output).toContain('1 updated, 0 skipped, 1 failed');
-    // Story 3.9: Enter opens the row-local service menu — the follow-up hint promises
-    // the menu, never a direct re-run.
+    // Enter opens the row-local service menu — the follow-up hint promises the menu, never a
+    // direct re-run.
     expect(output).toContain(UPDATE_IDLE_PROMPT);
     expect(output).not.toContain('to run again');
   });
@@ -713,7 +713,7 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain('No active EDT');
     expect(output).toContain('no-active-edt');
-    // Story 3.9: the retry hint promises the service-actions menu, never a direct retry.
+    // The retry hint promises the service-actions menu, never a direct retry.
     expect(output).toContain(UPDATE_IDLE_PROMPT);
     expect(output).not.toContain('to try again');
   });
@@ -770,7 +770,7 @@ describe('UpdateZone rendering', () => {
   });
 });
 
-describe('deriveUpdateServiceStatus (story 3.6, restarting in 3.9)', () => {
+describe('deriveUpdateServiceStatus', () => {
   it('a run currently targeting the service always wins, regardless of health or a stale failed outcome', () => {
     expect(deriveUpdateServiceStatus('down', 'failed', true)).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true)).toBe('updating');
@@ -795,25 +795,25 @@ describe('deriveUpdateServiceStatus (story 3.6, restarting in 3.9)', () => {
     expect(deriveUpdateServiceStatus('up', 'skipped', false)).toBe('up');
   });
 
-  it('a targeted service in its migrate phase derives migrating — the first producer of the reserved glyph (story 3.10)', () => {
+  it('a targeted service in its migrate phase derives migrating', () => {
     expect(deriveUpdateServiceStatus('up', undefined, true, false, 'migrating')).toBe('migrating');
     expect(deriveUpdateServiceStatus('down', 'failed', true, false, 'migrating')).toBe('migrating');
   });
 
-  it('a targeted service in any other live phase still derives updating (story 3.10)', () => {
+  it('a targeted service in any other live phase still derives updating', () => {
     expect(deriveUpdateServiceStatus('up', undefined, true, false, 'pulling')).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging')).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true, false, 'restarting')).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true, false, undefined)).toBe('updating');
   });
 
-  it('a live phase never leaks into the status when no run targets the service (story 3.10)', () => {
+  it('a live phase never leaks into the status when no run targets the service', () => {
     expect(deriveUpdateServiceStatus('up', undefined, false, false, 'migrating')).toBe('up');
     expect(deriveUpdateServiceStatus('up', 'failed', false, false, 'migrating')).toBe('error');
   });
 });
 
-describe('partitionUpdateServiceRows (story 3.6)', () => {
+describe('partitionUpdateServiceRows', () => {
   it('orders active-EDT members first, then the rest, tagging isMember on each row', () => {
     const rows = partitionUpdateServiceRows([SERVICE_B, SERVICE_A], ACTIVE_EDT);
 
@@ -830,7 +830,7 @@ describe('partitionUpdateServiceRows (story 3.6)', () => {
   });
 });
 
-describe('formatServiceOutcomeDetail (story 3.6)', () => {
+describe('formatServiceOutcomeDetail', () => {
   it('renders "idle" when no outcome has ever targeted this service', () => {
     expect(formatServiceOutcomeDetail(undefined)).toBe('idle');
   });
@@ -848,7 +848,7 @@ describe('formatServiceOutcomeDetail (story 3.6)', () => {
   });
 });
 
-describe('formatLiveServiceDetail (story 3.10)', () => {
+describe('formatLiveServiceDetail', () => {
   it('renders the current step with no issues', () => {
     expect(formatLiveServiceDetail('pulling', [])).toBe('step: pulling');
     expect(formatLiveServiceDetail('migrating', [])).toBe('step: migrating');
@@ -884,7 +884,7 @@ describe('formatLiveServiceDetail (story 3.10)', () => {
   });
 });
 
-describe('mergeLastServiceOutcomes (story 3.6)', () => {
+describe('mergeLastServiceOutcomes', () => {
   it('merges new results in without dropping an existing service outside this run\'s scope', () => {
     const current = { 'svc-b': { service: 'svc-b', outcome: 'updated' as const } };
 
@@ -948,7 +948,7 @@ describe('isServiceTargetedByRun', () => {
 // clobber it out from under it (mirrors edts-zone.test.tsx's own noopLoad precedent).
 const noopLoad = async () => {};
 
-describe('UpdateZone service-list shell rendering (story 3.6)', () => {
+describe('UpdateZone service-list shell rendering', () => {
   it('idle: every service carries a glyph (health fallback down until the first poll resolves), selected detail shows idle', async () => {
     const store = createAppStore();
     store.setState({
@@ -964,8 +964,7 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
 
     expect(output).toContain('svc-a');
     expect(output).toContain('svc-b');
-    // No health poll has resolved yet — the I/O matrix's "glyph falls back to down" —
-    // rendered as StatusBadge's down glyph.
+    // No health poll has resolved yet, so the glyph falls back to StatusBadge's down glyph.
     expect(output).toContain('○');
     // The first row (svc-a, the EDT member) is selected by default; no run has ever
     // targeted it, so the detail pane reads "idle".
@@ -987,11 +986,10 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
     const lines = output.split('\n');
 
-    // Review fix: isolate each service's own *list row* line (identified by its unique
-    // meta text "+0/-0", which only the list row — not the running-members spinner line
-    // that also mentions the service name — carries) so a bug that marks every row
-    // 'updating' regardless of scope (e.g. isTargeted collapsed to bare `updateStatus ===
-    // 'running'`) would actually fail this test.
+    // Isolate each service's own *list row* line (identified by its unique meta text "+0/-0",
+    // which only the list row — not the running-members spinner line that also mentions the
+    // service name — carries) so a bug that marks every row 'updating' regardless of scope (e.g.
+    // isTargeted collapsed to bare `updateStatus === 'running'`) fails this test.
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
     const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
     expect(svcARow).toBeDefined();
@@ -1083,14 +1081,11 @@ describe('UpdateZone service-list shell rendering (story 3.6)', () => {
   });
 });
 
-// Review fix (story 3.6): every render test above uses `createAppStore()` with no deps, under
-// which `pollServiceHealth` early-returns (`if (!deps) return;`) regardless of which
-// path/service values the mount effect passed it — so a bug that polled by `row.service`
-// instead of `row.path` (a plausible slip, since `updateServiceHealth[row.path]` reads by
-// path) would silently render every row stuck on the `down` fallback with zero test
-// failures. This block wires real (fake-port) deps into the store — mirroring
-// update-slice.test.ts's own story-3.6 health-polling fakeDeps — and mounts UpdateZone with
-// a real Ink render loop so the mount effect's fire-and-forget poll chain actually runs.
+// Every render test above uses a deps-less `createAppStore()`, under which `pollServiceHealth`
+// early-returns whatever path it is given — so a poll keyed by `row.service` instead of
+// `row.path` (`updateServiceHealth[row.path]` reads by path) would leave every row on the `down`
+// fallback with zero failures. This block wires real (fake-port) deps, like update-slice.test.ts's
+// health-polling fakeDeps, and mounts UpdateZone with a real Ink render loop.
 function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   const registry: RegistryPort = {
     list: vi.fn(async () => ok([])),
@@ -1187,7 +1182,7 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
   };
 }
 
-describe('UpdateZone health-poll wiring against real (fake-port) deps (story 3.6)', () => {
+describe('UpdateZone health-poll wiring against real (fake-port) deps', () => {
   it('polls each row by its own repoPath (never by service name) and the rendered row reflects the resolved health glyph', async () => {
     // manifest.load resolves repoPath -> container ('ctr-a' for /repo/a, 'ctr-b' for
     // /repo/b); getContainerHealth reports 'up' only for 'ctr-a'. If the poll effect were
@@ -1250,7 +1245,7 @@ describe('UpdateZone health-poll wiring against real (fake-port) deps (story 3.6
   });
 });
 
-describe('UpdateZone live per-service detail (story 3.10)', () => {
+describe('UpdateZone live per-service detail', () => {
   it('running with the selected service targeted shows its live step plus the issue log instead of the last outcome', async () => {
     const store = createAppStore();
     store.setState({

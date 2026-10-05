@@ -1,12 +1,7 @@
-// core/routes/list-routes: the list-routes use-case (AD-2) — list the routes a repo's
-// active route-explorer module discovers. A repo offers routes iff its manifest activates
-// `route-explorer` (AD-4, FR-19): the gate is the manifest's own `modules` map, never a
-// hardcoded repo name, so a future repo activates route exploration manifest-only with no
-// core change. Manifest load failures propagate verbatim; a repo without the module is a
-// named `route-exploration-not-activated` rejection, never an empty list; a scanner
-// failure propagates as `route-scan-failed` (never rendered as empty downstream); a
-// successful scan — even a zero-route one — is `ok`. Thrown errors (a buggy scanner)
-// propagate to dispatch.ts's `internal-error` mapping, same as every other use-case.
+// core/routes/list-routes: lists the routes a repo's route-explorer module discovers. The gate
+// is the manifest's own `modules` map, never a hardcoded repo name. A repo without the module
+// is `route-exploration-not-activated`, never an empty list; a scanner failure is
+// `route-scan-failed`; a successful scan — even a zero-route one — is `ok`.
 import { ROUTES_MODULE_ID } from '../edt/resolve-tab-visibility.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { Route, RouteScannerPort } from '../ports/route-scanner.js';

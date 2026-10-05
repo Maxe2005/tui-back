@@ -1,20 +1,8 @@
-// shared/components/branch-picker: story 2.26 — replaces the plain-text-field `branchEdit`
-// sub-dialog (BranchEditState in edts-zone.tsx) at the EDT zone's 3 non-creation branch-entry
-// points (Modify's per-member branch step, Service-actions' "Change branch for this EDT",
-// Add-to-EDT) with a 3-way explicit mode switch: Pick existing (browse `listBranches`) /
-// Create new (default; base branch + name, both filterable) / Rename current (only where the
-// entry point already has a member branch to rename).
-//
-// Follows this codebase's established split (edts-zone.tsx's own Design Notes): every
-// keystroke behavior is a standalone pure function, unit-tested directly — `handleBranchPickerKey`
-// is this component's single reducer, called from edts-zone.tsx's own `useInput` dispatcher
-// (never a component-owned `useInput`, keeping the "thin dispatcher over pure functions"
-// convention this file already established). `BranchPicker` itself only ever renders, exactly
-// like `TextInputLine`/`FailedResultList` — it never captures input.
-//
-// A second filterable-list *component* was explicitly ruled out (Boundaries: "one widget, two
-// call sites") — `matchBranchesByPrefix` plus the inline list rendering below is reused for
-// both Create-new's base-branch candidates and Pick-existing's target-branch candidates.
+// shared/components/branch-picker: the EDT zone's branch-entry picker with an explicit 3-way
+// mode switch — Pick existing (shared branch autocomplete) / Create new (default; base branch +
+// name, prefix-filtered) / Rename current (only when the entry point has a member branch).
+// `handleBranchPickerKey` is the pure reducer edts-zone.tsx's useInput calls; `BranchPicker`
+// only renders and never captures input.
 import { Box, Text } from 'ink';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
@@ -23,9 +11,9 @@ import { BranchAutocompleteInput, clampAutocompletePickCursor, handleBranchAutoc
 
 export type BranchPickerMode = 'pick-existing' | 'create-new' | 'rename-current';
 
-// Boundaries: "Mode switch defaults to Create new" — Tab cycles Pick existing -> Create new ->
-// Rename current -> (back to) Pick existing, skipping Rename current entirely when the entry
-// point has no current member branch to rename (Add-to-EDT).
+// Mode switch defaults to Create new — Tab cycles Pick existing -> Create new -> Rename current
+// -> (back to) Pick existing, skipping Rename current when the entry point has no current
+// member branch to rename (Add-to-EDT).
 export function cycleBranchPickerMode(mode: BranchPickerMode, hasCurrentBranch: boolean): BranchPickerMode {
   const order: BranchPickerMode[] = hasCurrentBranch
     ? ['pick-existing', 'create-new', 'rename-current']
@@ -35,8 +23,7 @@ export function cycleBranchPickerMode(mode: BranchPickerMode, hasCurrentBranch: 
   return order[(safeIdx + 1) % order.length];
 }
 
-// Case-insensitive prefix match — same convention as commands.ts's matchCommands (Boundaries:
-// "Filtering is case-insensitive prefix match, same convention as matchCommands").
+// Case-insensitive prefix match — same convention as commands.ts's matchCommands.
 export function matchBranchesByPrefix(query: string, branches: readonly string[]): string[] {
   const needle = query.toLowerCase();
   return branches.filter((branch) => branch.toLowerCase().startsWith(needle));
@@ -56,7 +43,7 @@ export type BranchPickerOutcome =
 export type BranchPickerRenameSub = {
   oldName: string;
   value: string;
-  // Story 2.32: value's own caret position — mirrors every other field's paired cursor here.
+  // value's own caret position — mirrors every other field's paired cursor here.
   cursor: number;
   error: string | null;
 };
@@ -67,24 +54,23 @@ export type BranchPickerState = {
   currentBranch: string;
   // Create new
   baseBranch: string;
-  // Story 2.32: baseBranch's own caret position.
+  // baseBranch's own caret position.
   baseBranchCursor: number;
   baseFocused: boolean; // true: base-branch field focused; false: name field focused
   nameValue: string;
-  // Story 2.32: nameValue's own caret position.
+  // nameValue's own caret position.
   nameValueCursor: number;
   nameSubListOpen: boolean;
   nameSubListCursor: number;
   // Pick existing
   pickQuery: string;
-  // Story 2.32: pickQuery's own caret position — named distinctly from `pickCursor` below
-  // (Boundaries: "new cursor names must not collide with existing cursor row-selection
-  // fields ... BranchPickerState.pickCursor").
+  // pickQuery's own caret position — named distinctly from the `pickCursor` row selection
+  // below.
   pickQueryCursor: number;
   pickCursor: number;
   // Pick-existing's row-rename sub-view, and Rename current's own (only) field — same shape,
-  // since "Rename current" is defined as "the exact pick-then-rename mechanism ... pre-selected
-  // onto that member's own registered branch, skipping the picking step" (Boundaries).
+  // since Rename current is the same pick-then-rename mechanism pre-selected onto the member's
+  // own registered branch.
   renameSub: BranchPickerRenameSub | null;
   error: string | null;
 };
@@ -115,9 +101,8 @@ export function createBranchPickerState(params: {
 }
 
 // Reopens the picker pre-filled with a collided value after a `branch-exists`/
-// `branch-owned-by-other-edt` failure (I/O matrix: "Reopens the relevant field, re-submits").
-// Story 2.32: a programmatic overwrite — the reopened field's cursor resets to the collided
-// value's length (Always: "Programmatic value overwrites ... reset cursor to value.length").
+// `branch-owned-by-other-edt` failure. A programmatic overwrite: the reopened field's cursor
+// resets to the collided value's length.
 export function applyBranchPickerRetry(
   state: BranchPickerState,
   retry: { field: 'create-name' | 'rename'; value: string; oldName?: string },
@@ -137,12 +122,10 @@ export function applyBranchPickerRetry(
   };
 }
 
-// A minimal, local re-implementation of edts-zone.tsx's nextTextInputValue (deliberately not
-// imported from there: edts-zone.tsx imports this module, and this module must never import
-// back from it — a cycle). Same defensive behavior: every non-character key is filtered out
-// before it ever reaches the value. Story 2.32: retargeted to `{value, cursor}` in/out, in
-// lockstep with nextTextInputValue's own retargeting — Left/Right/Home/End now move `cursor`
-// (clamped to [0, value.length]) and Backspace/Delete/typed-char apply at `cursor`.
+// A minimal local text interpreter, deliberately not imported from edts-zone: edts-zone.tsx
+// imports this module, and importing back would close a cycle. Every non-character key is
+// filtered out before it reaches the value; Left/Right/Home/End move `cursor` (clamped to
+// [0, value.length]) and Backspace/Delete/typed-char apply at `cursor`.
 type TextEditKey = {
   backspace?: boolean;
   delete?: boolean;
@@ -163,9 +146,8 @@ type TextEditState = { value: string; cursor: number };
 
 function applyTextInput(current: TextEditState, input: string, key: TextEditKey): TextEditState {
   const { value, cursor } = current;
-  // Code review fix: ctrl/meta must stay fully inert even when combined with an arrow/Home/
-  // End/Backspace/Delete flag — checked first, mirroring edts-zone.logic.ts's own
-  // nextTextInputValue fix, so Ctrl/Meta+<key> never moves or edits the caret here either.
+  // Ctrl/meta stay fully inert even combined with an arrow/Home/End/Backspace/Delete flag —
+  // checked first, so Ctrl/Meta+<key> never moves or edits the caret.
   if (key.ctrl || key.meta) {
     return current;
   }
@@ -286,9 +268,8 @@ function handleCreateNewKey(
       const idx = matches.indexOf(state.baseBranch);
       const nextIdx = ((idx === -1 ? 0 : idx) + dir + matches.length) % matches.length;
       const nextBaseBranch = matches[nextIdx];
-      // Story 2.32: cycling through suggestions is a programmatic overwrite — the caret jumps
-      // to the new value's end (Always: "Programmatic value overwrites ... reset cursor to
-      // value.length"), same as every other suggestion/retry reseed in this file.
+      // Cycling through suggestions is a programmatic overwrite — the caret jumps to the new
+      // value's end, like every other suggestion/retry reseed in this file.
       return { type: 'update', state: { ...state, baseBranch: nextBaseBranch, baseBranchCursor: nextBaseBranch.length } };
     }
     const editedBase = applyTextInput({ value: state.baseBranch, cursor: state.baseBranchCursor }, input, key);
@@ -361,9 +342,9 @@ function handlePickExistingKey(
     };
   }
 
-  // Ctrl+R: the row's secondary "rename" action (Boundaries) — never a plain "r" keypress,
-  // which must stay available as ordinary filter text. Handled before the shared reducer
-  // (which keeps every Ctrl/Meta combo inert), over the shared substring match list.
+  // Ctrl+R: the row's secondary "rename" action — never a plain "r" keypress, which must stay
+  // available as ordinary filter text. Handled before the shared reducer (which keeps every
+  // Ctrl/Meta combo inert), over the shared substring match list.
   const sharedMatches = matchBranchesBySubstring(state.pickQuery, branches);
   if (key.ctrl && input.toLowerCase() === 'r') {
     const highlighted = sharedMatches[clampAutocompletePickCursor(state.pickCursor, sharedMatches.length)];
@@ -448,20 +429,17 @@ export type BranchPickerProps = {
   // own). Only the pick-existing filter reads it (via BranchAutocompleteInput); create-new /
   // rename-current never do.
   maxRows: number;
-  // Code review (story 2.27): Create-EDT's base-branch step repurposes "Create new" mode's Name
-  // field to mean "the base branch itself" — that session never creates a new branch (see
-  // create-wizard/step-branches.tsx's applyBaseBranchOutcome), so the mode's own nested "base to create the
-  // new branch from" sub-field is dead chrome there. When true, hides that nested field and
-  // relabels the remaining one "Base branch" instead of "Name" — but only while it isn't
-  // focused, so the already-accepted Tab-cycle rough edge (baseFocused resets to true) still
-  // falls back to the original, fully-functional two-field render rather than a focus with
-  // nothing shown. Every other call site omits this prop and is unaffected.
+  // Create-EDT's base-branch step repurposes "Create new" mode's Name field to mean "the base
+  // branch itself" — that session never creates a branch (see create-wizard/step-branches.tsx's
+  // applyBaseBranchOutcome), so the nested "base to create from" field is dead chrome there.
+  // When true, hides that field and relabels the remaining one "Base branch" — but only while
+  // it isn't focused, so the Tab-cycle (baseFocused resets to true) still falls back to the
+  // full two-field render rather than a focus with nothing shown.
   hideNestedBaseField?: boolean;
 };
 
-// The create-new base-branch candidate list (Boundaries: create-new stays prefix-matched
-// and untouched by the autocomplete adoption). Pick-existing no longer uses this widget —
-// it hosts the shared BranchAutocompleteInput below instead.
+// The create-new base-branch candidate list (create-new stays prefix-matched). Pick-existing
+// uses the shared BranchAutocompleteInput below instead.
 function FilterableBranchList({ matches, highlightedIndex }: { matches: readonly string[]; highlightedIndex: number }) {
   if (matches.length === 0) {
     return null;

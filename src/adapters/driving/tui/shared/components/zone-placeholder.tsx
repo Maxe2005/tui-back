@@ -17,8 +17,8 @@ export function ZonePlaceholder({
   useStore = useAppStore,
 }: ZonePlaceholderProps) {
   const zone = ZONES.find((candidate) => candidate.id === zoneId);
-  // Story 2.21: splitterRatios[zoneId] widened to a per-boundary array — every non-EDTs zone
-  // has exactly one boundary (its list<->detail split), always index 0.
+  // splitterRatios[zoneId] is a per-boundary array — every non-EDTs zone has exactly one
+  // boundary (its list<->detail split), always index 0.
   const ratio = useStore((state) => state.splitterRatios[zoneId][0]);
   if (!zone) {
     return null;

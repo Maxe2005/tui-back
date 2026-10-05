@@ -1,6 +1,5 @@
-// core/scripts/reset-tool: unit tests against fake ports (AD-13) and a real tmp edtsBaseDir —
-// I/O matrix rows ALL, HISTORY_ONLY, EMPTY_STATE, LOCK_HELD of spec-reset-command.md, plus the
-// services ⇒ edts rule.
+// core/scripts/reset-tool: unit tests against fake ports and a real tmp edtsBaseDir — the
+// all-categories, history-only, empty-state and lock-held cases, plus the services ⇒ edts rule.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';

@@ -1,19 +1,14 @@
-// tui/zones/shared-types: story 2.13 layers a `disabled`-status explanatory message in
-// front of the pre-existing ZonePlaceholder stub (idiom: edts-zone.tsx:71-84's
-// labelled-lines message style) — the real shared-types content itself is Epic 4's
-// concern; this story only ever reaches `disabled` via injected port fixtures
-// (module-registry.ts stays empty in real usage, so this zone is `omitted` — unreachable —
-// today).
+// tui/zones/shared-types: a `disabled`-status explanatory message in front of the
+// ZonePlaceholder stub — the real shared-types content does not exist yet, so in practice the
+// zone is `omitted` and unreachable.
 import { Box, Text } from 'ink';
 import { SHARED_TYPES_MODULE_IDS } from '../../../../../core/edt/resolve-tab-visibility.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ZonePlaceholder } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 
-// The spec's own example ("which imports the `shared-types-source` module") names the
-// source id specifically — the singular-carrier phrasing follows that lead; the plural
-// phrasing (module identity ambiguous across multiple carriers) names both ids generically
-// instead.
+// The singular-carrier phrasing names the source id specifically; the plural phrasing (module
+// identity ambiguous across several carriers) names both ids generically instead.
 const [SOURCE_MODULE_ID] = SHARED_TYPES_MODULE_IDS;
 
 export function formatSharedTypesDisabledMessage(carryingServices: string[]): string {

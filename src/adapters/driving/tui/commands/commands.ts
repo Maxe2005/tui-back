@@ -1,15 +1,7 @@
-// tui/commands/commands: story 2.14 — a small, static, in-memory command registry (name →
-// handler) that the `:` command-entry bar (shared/command-bar.tsx) dispatches against.
-// Boundaries & Constraints: "static, in-memory list in adapters/driving/tui ... no core/port
-// change, no new port/adapter" (mirrors Story 2.11's own rule). The one registered command,
-// `registry`, reaches the store through the same call Dashboard's own empty-registry prompt
-// already makes — `useStore.getState().openRegistryScreen()` — never a direct `core/ports`
-// import. `run` takes the store as a parameter (rather than closing over the module-level
-// `useAppStore` singleton) so it dispatches against whichever store instance the bar was
-// mounted with — the same dependency-injection convention every other tui/shared component
-// in this codebase already follows (see RepoRegistryScreen's `useStore` prop).
-// Story 2.15: adds `edt-create`, `edt-switch`, `edt-modify` commands that open the same
-// dialogs Story 2.9 already implements (coexisting with Enter-key shortcuts).
+// tui/commands/commands: the static, in-memory command registry (name → handler) the `:`
+// command bar (shared/command-bar.tsx) dispatches against — no core/port involvement. `run`
+// takes the store as a parameter (rather than closing over the `useAppStore` singleton) so
+// it dispatches against whichever store instance the bar was mounted with.
 import type { AppStore } from '../store/app-store.js';
 import type { ZoneId } from '../zones/zones.js';
 
@@ -49,14 +41,13 @@ export const COMMANDS: readonly Command[] = [
     run: (useStore, fullQuery) => useStore.getState().openEdtDeleteDialog(fullQuery),
     zoneId: 'edts',
   },
-  // Story 2.31: `edt-create-from [topic]` — the creation wizard seeded from a root EDT.
+  // `edt-create-from [topic]` — the creation wizard seeded from a root EDT.
   {
     name: 'edt-create-from',
     run: (useStore, fullQuery) => useStore.getState().openEdtCreateFromDialog(fullQuery),
     zoneId: 'edts',
   },
-  // Story 2.19: the settings screen is reachable exclusively through this registered
-  // command (mirrors `registry`'s own precedent) — never bound to a raw keypress.
+  // The settings screen is reachable only through this command, never a raw keypress.
   {
     name: 'settings',
     run: (useStore) => useStore.getState().openSettingsScreen(),
@@ -83,10 +74,9 @@ export const COMMANDS: readonly Command[] = [
       }
     },
   },
-  // Story 3.11: the three update commands — each opens the story 3.7 config screen
-  // pre-scoped to its own targets, never starting an unconfigured run. The bar's
-  // runCommand() activates the Update zone first (zoneId above); the run itself only
-  // dispatches through the store (this file's DI convention).
+  // The three update commands — each opens the pre-run config screen pre-scoped to its own
+  // targets, never starting an unconfigured run. runCommand() activates the Update zone first
+  // (zoneId above); the run itself only dispatches through the store.
   {
     name: 'update-edt',
     zoneId: 'update',
@@ -122,8 +112,8 @@ export function matchCommands(
   return commands.filter((command) => command.name.toLowerCase().startsWith(needle));
 }
 
-// Exact, case-insensitive name match — the only thing Enter is ever allowed to run
-// (Boundaries: "never execute a command on a non-exact, ambiguous, or partial Enter match").
+// Exact, case-insensitive name match — the only thing Enter is ever allowed to run: never a
+// non-exact, ambiguous or partial match.
 export function findExactCommand(
   query: string,
   commands: readonly Command[] = COMMANDS,

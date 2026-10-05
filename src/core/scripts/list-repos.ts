@@ -1,9 +1,7 @@
-// core/scripts/list-repos: the list-repos use-case (AD-2) — turn the registered paths
-// into managed repo identities. A registered path is: managed (exists + valid manifest),
-// unreachable (path gone from disk — reported, never a crash), silently unmanaged
-// (exists but no .tui-back.yaml), or an error entry (manifest fails to load/validate —
-// surfaced, never hidden, per AD-3's spirit). Output preserves registry-file order so
-// two runs with no intervening change are byte-identical (FR-1).
+// core/scripts/list-repos: turns the registered paths into managed repo identities. A path is
+// managed (exists + valid manifest), unreachable (gone from disk — reported, never a crash),
+// silently unmanaged (no .tui-back.yaml), or an error entry (manifest fails to load/validate —
+// surfaced, never hidden). Output keeps registry-file order so reruns are identical (FR-1).
 import { err, ok, type Result } from '../result.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
@@ -62,7 +60,7 @@ export async function listRepos(
         moduleIds: Object.keys(loaded.data.modules ?? {}).sort(),
       });
     } else if (loaded.error.code === 'manifest-not-found') {
-      // genuinely unmanaged — silently skipped (AC3)
+      // genuinely unmanaged — silently skipped
     } else {
       errors.push({ path, code: loaded.error.code, message: loaded.error.message });
     }

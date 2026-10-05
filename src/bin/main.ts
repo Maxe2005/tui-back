@@ -1,12 +1,7 @@
-// CLI entrypoint (AD-2/AD-3): the one umbrella binary's composition root. Builds the
-// production subcommand registry from the driven ports (RegistryPort over the XDG-resolved
-// registry.yaml, ManifestPort over loadManifest, EdtRegistryPort over the XDG-resolved
-// edts.yaml) and hands argv off to the dispatcher — the same mechanism every subcommand
-// plugs into (AD-2), and the same use-cases a future TUI will call in-process.
-//
-// No explicit process.exit() here: calling it right after stdout.write() does not
-// guarantee the write is flushed when stdout is a pipe/non-TTY. Setting exitCode and
-// letting the script end naturally lets Node drain stdout before exiting.
+// CLI entrypoint: the umbrella binary's composition root. Builds the production subcommand
+// registry from the driven ports and hands argv to the dispatcher. No explicit process.exit():
+// calling it right after stdout.write() does not guarantee the write is flushed when stdout
+// is a pipe, so exitCode is set and the script ends naturally.
 import { join } from 'node:path';
 import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
@@ -30,10 +25,9 @@ const manifest = { load: loadManifest };
 const edtsBaseDir = join(xdg.dataDir, 'edts');
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
-// Story 2.4: the git adapter is wired with the EdtRegistryPort so assertAllowedBranch can
-// resolve AD-8's cross-EDT half (a branch already registered as a *different* EDT's own
-// branch for a repo) when a call site passes an edtId — switchActiveEdt is the first such
-// call site; create.ts's existing (no-edtId) calls are unaffected.
+// The git adapter is wired with the EdtRegistryPort so assertAllowedBranch can apply AD-8's
+// cross-EDT half (a branch already registered as a *different* EDT's own branch for a repo)
+// when a call site passes an edtId.
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
@@ -41,34 +35,29 @@ const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 
-// Per-resource advisory lock directory lives under XDG_STATE_HOME/tui-back/locks (AD-7's
-// transient-state tier). The lock dir is created lazily inside the lock adapter on first
-// acquire (only register/reset/edt-create acquire), so read-only commands never write state
-// and an unwritable state dir surfaces as a Result error rather than a startup crash. The
-// registry file path is the resource key state-mutating use-cases (register/reset) lock on,
-// so concurrent CLI runs are serialized instead of racing the registry read-modify-write;
-// `edt create` locks on the EDT registry file the same way.
+// Per-resource advisory lock directory under XDG_STATE_HOME/tui-back/locks. The lock adapter
+// creates it lazily on first acquire, so read-only commands never write state and an
+// unwritable state dir surfaces as a Result error rather than a startup crash. The registry
+// file path is the resource key register/reset lock on, so concurrent CLI runs serialize
+// instead of racing the read-modify-write; `edt create` locks on the EDT registry file.
 const lockDir = join(xdg.stateDir, 'locks');
 const lock = createLockPort(lockDir);
-// AD-3's own isTTY (stdout-only) governs output rendering (human text vs. one JSON line).
-// Review fix (story 2.33): the *interactive-prompt* gate `registry clean` uses is a
-// different, stricter question — can we actually read a y/N answer back? — so it also
-// requires stdin to be a TTY. Piped/redirected stdin with a TTY stdout (e.g. a wrapper
-// script) must never let the CLI block on (or silently misread) an `rl.question()` prompt
-// with nothing live on the other end.
+// isTTY (stdout-only) governs output rendering (human text vs. one JSON line). The
+// interactive-prompt gate `registry clean` uses is stricter — can a y/N answer be read back?
+// — so it also requires stdin to be a TTY: piped stdin with a TTY stdout (e.g. a wrapper
+// script) must never let the CLI block on, or misread, an `rl.question()` prompt.
 const isTTY = process.stdout.isTTY === true;
 const interactiveIsTTY = isTTY && process.stdin.isTTY === true;
-// Story 6.1: the route-explorer module's scanner, resolved out of the statically compiled
-// module registry by manifest module id (AD-5) — manifests only ever select this key,
-// never supply code. The lookup cannot fail in practice (registry and key are compiled
-// together); the throw is a loud programmer-error signal, raised before any stdout output
-// so the AD-3 envelope contract is unaffected.
+// The route-explorer module's scanner, resolved out of the statically compiled module registry
+// by manifest module id (AD-5) — manifests only select this key, never supply code. The lookup
+// cannot fail in practice (registry and key are compiled together); the throw is a loud
+// programmer-error signal, raised before any stdout output so the envelope is unaffected.
 const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
 if (routeExplorer === undefined) {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
-// Story 6.2: the fire-request use-case needs the module's auth port alongside its
-// scanner — same static-registry reasoning as the scanner lookup above.
+// The fire-request use-case needs the module's auth port alongside its scanner — same
+// static-registry reasoning as the scanner lookup above.
 if (routeExplorer.auth === undefined) {
   throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
 }

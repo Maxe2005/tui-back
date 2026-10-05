@@ -1,30 +1,12 @@
-// shared/components/branch-autocomplete-input: the single shared branch-choosing input every
-// existing-branch field reuses (BranchPicker's pick-existing mode, update-config's branch
-// editor). A text field (rendered via TextInputLine, never reimplemented) plus a bounded
-// substring-filtered dropdown plus an exact-match validity signal.
-//
-// Split convention (branch-picker.tsx's own precedent): every keystroke behavior is a
-// standalone pure function, unit-tested directly — `handleBranchAutocompleteKey` is this
-// component's single reducer, called from the host dialog's own `useInput` dispatcher (never
-// a component-owned `useInput`). `BranchAutocompleteInput` itself only ever renders.
-//
-// Text editing reuses shared/components/text-edit.ts's `nextTextInputValue` interpreter (never
-// a forked copy, and never via edts-zone.logic — that path would close an import cycle:
-// autocomplete -> edts-zone.logic -> branch-picker -> autocomplete): `Left`/`Right`/`Home`/
-// `End`/typing/`Backspace`/`Delete` move or edit the caret through it, and `pickCursor` resets to 0 only when the filter value actually changed (the
-// same caret-move-preserves-highlight fix branch-picker.tsx carries). `Up`/`Down` never touch
-// the caret; `Left`/`Right` never touch the highlight; Ctrl/Meta combos stay inert.
-//
-// The reducer never commits by itself: the first `Enter` on a non-empty list is always
-// `insert` (the highlighted branch, editing continues), so host dialogs keep their own commit
-// semantics (a second `Enter` commits). With zero matches `Enter` is a `commit-through` for
-// the parent to handle. Filtering is case-insensitive substring; validity compares the
-// trimmed text case-sensitively (git branch names are case-sensitive).
-//
-// Status is never color-alone (DESIGN.md §Colors): validity always ships its glyph (`✔`/`✖`)
-// with its status color (`success`/`error`), and the dropdown highlight always ships its `›`
-// marker with the accent color.
+// shared/components/branch-autocomplete-input: the shared branch-choosing input — a text field
+// (TextInputLine) plus a bounded, case-insensitive substring dropdown and an exact-match
+// validity glyph (`✔`/`✖`, never color alone). `handleBranchAutocompleteKey` is the pure reducer
+// the host dialog's useInput calls; the first Enter on a non-empty list inserts the highlighted
+// branch, so the host keeps its own commit semantics.
 import { Box, Text } from 'ink';
+// Text editing goes through shared/components/text-edit.ts directly, never edts-zone.logic:
+// that path would close an import cycle (autocomplete -> edts-zone.logic -> branch-picker ->
+// autocomplete).
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
@@ -77,8 +59,8 @@ export function resolveBranchAutocompleteValidity(
 }
 
 // The dropdown's own windowing: a maxRows-capped slice plus the overflow count for the
-// `… N more` line. Deliberately no scrolling window (spec's Ask First) — when pickCursor runs
-// past the visible slice, no row highlights rather than the window following it.
+// `… N more` line. Deliberately no scrolling window — when pickCursor runs past the visible
+// slice, no row highlights rather than the window following it.
 export function resolveBranchAutocompleteDropdown(
   matches: readonly string[],
   maxRows: number,

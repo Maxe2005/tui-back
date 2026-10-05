@@ -1,10 +1,6 @@
-// adapters/driven/docker/index.logic: pure, adapter-independent line-parsing/merge logic used
-// by index.ts (story 5.1 review fix — extracted so it is directly unit-testable without a live
-// docker daemon; index.test.ts's real-docker suite is `describe.skipIf(!dockerAvailable)`, so
-// without this split none of this logic ran at all in a sandboxed/CI environment with no
-// reachable daemon). Mirrors how logs-zone.logic.ts was split out of logs-zone.tsx in this same
-// story: index.ts itself still owns every actual `spawn`/`spawnSync` call; this module only
-// transforms text those calls already produced.
+// adapters/driven/docker/index.logic: pure line-parsing/merge logic for index.ts, kept apart so
+// it is unit-testable without a live docker daemon. index.ts owns every actual spawn call;
+// this module only transforms the text those calls produced.
 import type { HealthState, LogLine, LogStreamTag } from '../../../core/ports/docker.js';
 
 function stripTrailingCr(line: string): string {
@@ -32,8 +28,7 @@ export function createLineSplitter(onFullLine: (line: string) => void): (chunk: 
 
 // Docker's `--timestamps` flag prepends an RFC3339Nano timestamp + one space to every line —
 // used on both the live tail and the older-lines fetch so every LogLine carries docker's own
-// timestamp (Boundaries: "Each buffered line carries a timestamp"), never a fabricated
-// receipt-time one, whenever docker actually provides it.
+// timestamp, never a fabricated receipt-time one, whenever docker actually provides it.
 export function splitTimestampedLine(rawLine: string, stream: LogStreamTag): LogLine {
   const spaceIndex = rawLine.indexOf(' ');
   if (spaceIndex === -1) {
@@ -55,18 +50,16 @@ export function parseTimestampedOutput(raw: string, stream: LogStreamTag): LogLi
 
 // Docker demuxes stdout/stderr separately when captured like this, so `--tail <count>` is
 // applied independently to each pipe — the merged, chronologically-sorted result can hold up to
-// 2x count lines. Trims back down to the most recent `count` after merging+sorting (review fix
-// — the un-trimmed merge previously escaped as-is).
+// 2x count lines. Trims back down to the most recent `count` after merging+sorting.
 export function mergeSortAndTrimLogs(stdoutLines: readonly LogLine[], stderrLines: readonly LogLine[], count: number): LogLine[] {
   const merged = [...stdoutLines, ...stderrLines].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   return merged.slice(-count);
 }
 
-// Story 5.3: maps `docker inspect --format '{{.State.Running}} {{.State.Restarting}}'` output
-// to HealthState — container missing/inspect fails is handled by the caller (index.ts maps a
-// non-zero inspect to `down` without ever calling this); a spawn-level failure never reaches
-// here either. `State.Restarting` true → `restarting`; `State.Running` true → `up`;
-// otherwise → `down`. Pure so it's directly unit-testable without a live daemon.
+// Maps `docker inspect --format '{{.State.Running}} {{.State.Restarting}}'` output to
+// HealthState. A missing container or failed inspect is handled by the caller (index.ts maps a
+// non-zero inspect to `down` without calling this). `State.Restarting` true → `restarting`;
+// `State.Running` true → `up`; otherwise → `down`.
 export function mapInspectToHealthState(running: boolean, restarting: boolean): HealthState {
   if (restarting) {
     return 'restarting';

@@ -1,23 +1,17 @@
-// tui/zones/logs: the LogsZone's pure, non-React logic (story 5.1) — pane-focus cycling, grid
-// layout math, sub-focus navigation, scroll-offset math, and stream-visibility toggles. Mirrors
-// edts-zone.logic.ts's own split (that file's header explains why: every keystroke behavior a
-// standalone pure function, unit-tested directly, with `useInput` staying a thin dispatcher).
-//
-// List navigation (resolveSelectionDirection/moveSelection/resolveSelectionJump/jumpSelection,
-// toggleMemberSelection) and the EDT-membership partition (partitionServicesByEdtMembership)
-// are generic, already-exported pure functions with no EDT-specific coupling — reused as-is
-// from edts-zone.logic.ts rather than re-implemented here (Code Map: "reuse
-// partitionServicesByEdtMembership shape").
+// tui/zones/logs: the LogsZone's pure, non-React logic — pane-focus cycling, grid layout math,
+// sub-focus navigation, scroll-offset math, stream-visibility toggles, the two-tier filter and
+// filter-history recall. Every keystroke behavior is a pure function, unit-tested directly; the
+// generic list navigation and EDT-membership partition are reused from edts-zone.logic.ts.
 import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 import { spacing } from '../../shared/theme/theme.js';
 
-// Story 5.3: HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error,
-// `restarting` → `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never
-// color alone; accent is never a health color (StatusBadge as-is, no change). Shared by every
-// place a health badge renders (list rows, grid panes, fullscreen pane).
+// HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
+// `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never color alone; accent is
+// never a health color. Shared by every place a health badge renders (list rows, grid panes,
+// fullscreen pane).
 export function healthBadgeState(health: HealthState): StatusBadgeState {
   if (health === 'restarting') {
     return 'in-progress';
@@ -25,7 +19,7 @@ export function healthBadgeState(health: HealthState): StatusBadgeState {
   return health;
 }
 
-// Boundaries: "Tab cycles EDT list -> other list -> panes".
+// Tab cycles EDT list -> other list -> panes.
 export type LogsPaneFocus = 'edt-list' | 'other-list' | 'panes';
 
 export function cycleLogsPaneFocus(current: LogsPaneFocus): LogsPaneFocus {
@@ -38,11 +32,10 @@ export function cycleLogsPaneFocus(current: LogsPaneFocus): LogsPaneFocus {
   return 'edt-list';
 }
 
-// Design Notes: "picks the squarest rows x cols grid fitting n panes (ceil(sqrt(n)) columns)
-// within the terminal's available area". 0 panes is a degenerate 0x0 grid — the zone renders
-// its own empty-state message instead of any grid cell in that case, never calling this with
-// a non-positive width/height either (both default to 1 here purely so the arithmetic below
-// stays total for a pathological caller).
+// Picks the squarest rows x cols grid fitting n panes (ceil(sqrt(n)) columns) within the
+// terminal's available area. 0 panes is a degenerate 0x0 grid — the zone renders its own
+// empty-state message instead, never calling this with a non-positive width/height either (both
+// default to 1 here purely so the arithmetic stays total for a pathological caller).
 export type GridLayout = {
   rows: number;
   cols: number;
@@ -66,11 +59,9 @@ export function computeGridLayout(paneCount: number, width: number, height: numb
   };
 }
 
-// Reserves a fixed-width left column for the two lists — this zone has no persisted/resizable
-// splitter ratio (unlike every ListDetailSplit-based zone): the spec's Code Map/Design Notes
-// never mention one, and the grid's own auto-resize (computeGridLayout) already absorbs
-// whatever width remains. Also referenced directly by logs-zone.tsx's own JSX (the list
-// column's fixed `width`).
+// Reserves a fixed-width left column for the two lists — this zone has no resizable splitter
+// ratio (unlike the ListDetailSplit-based zones); the grid's auto-resize (computeGridLayout)
+// absorbs whatever width remains. Also used directly by logs-zone.tsx's list column `width`.
 export const LIST_COLUMN_WIDTH = 32;
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, this zone's own list headers/
 // hints) subtracted from the raw window size before computeGridLayout ever sees it — an
@@ -84,34 +75,27 @@ const PANE_CHROME_ROWS = 3;
 // actually take (see computeLineRowCount).
 const GRID_PANE_CHROME_COLS = 4;
 
-// User-reported review fix: CHROME_ROWS/PANE_CHROME_ROWS/GRID_PANE_CHROME_COLS above are only
-// ever rough guesses (their own comments say so) — real chrome varies per pane (an optional
-// streamError or "no more history" line adds a row; Yoga's flex-grow rounding hands some grid
-// rows one more terminal row than a plain `floor(height / rows)` division would). Guessing wrong
-// used to leave a permanent gap at the bottom of every pane, worst in wrap mode (its per-line
-// row-cost estimate in computeLineRowCount compounds the same guesswork). `useElementSize`
-// measures the pane's own content box for real, post-render, via Ink's `measureElement` — the
-// estimate above only seeds the very first paint (before Yoga has computed a layout to
-// measure), and every commit after that self-corrects to the pane's true row/column budget.
+// CHROME_ROWS/PANE_CHROME_ROWS/GRID_PANE_CHROME_COLS above are rough guesses — real chrome varies
+// per pane (an optional streamError or "no more history" line adds a row; Yoga's flex-grow
+// rounding hands some grid rows one more terminal row than `floor(height / rows)`). They only
+// seed the first paint: `useElementSize` then measures each pane's content box for real, so the
+// pane never keeps a gap at the bottom.
 
-// Story 5.4: the filter-history grid browser's own layout budget — mirrors command-bar.tsx's
-// MODAL_CHROME_WIDTH/MIN_GRID_WIDTH (a `ModalDialog`'s own chrome plus a safety margin) since
-// this grid renders inside the same LogFilterEditor `ModalDialog`.
+// The filter-history grid browser's layout budget — mirrors command-bar.tsx's
+// MODAL_CHROME_WIDTH/MIN_GRID_WIDTH (a `ModalDialog`'s chrome plus a safety margin) since this
+// grid renders inside the LogFilterEditor `ModalDialog`.
 const HISTORY_GRID_CHROME_WIDTH = 6;
 const HISTORY_GRID_MIN_WIDTH = 10;
-// Story 5.5: the history grid browser's own available-*height* budget — ModalDialog's chrome
-// (double border top/bottom + padding top/bottom + title row + "──" separator = 6 rows) plus
-// this editor's own fixed rows above the grid (TextInputLine + Level line + the hint line
-// below the grid = 3 rows); a rough estimate mirrors CHROME_ROWS/PANE_CHROME_ROWS above ("an
-// approximation is fine here" — same precedent). The optional inline-error line is
-// deliberately not subtracted, so this budget stays slightly generous rather than short
-// whenever a regex draft is currently invalid.
+// The history grid browser's available-*height* budget — ModalDialog's chrome (double border
+// top/bottom + padding top/bottom + title row + "──" separator = 6 rows) plus the editor's fixed
+// rows around the grid (TextInputLine + Level line + the hint line below = 3 rows). An
+// approximation, like CHROME_ROWS; the optional inline-error line is deliberately not subtracted,
+// so the budget stays slightly generous rather than short while a regex draft is invalid.
 const HISTORY_GRID_CHROME_ROWS = 9;
 const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
-// Story 5.5: rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar,
-// footer, and the "LOGS" title row above it) — the list column and the pane grid are row
-// siblings sharing the exact same vertical extent, so this reuses the same estimate as
-// PANE_CHROME_ROWS' own sibling, CHROME_ROWS, above.
+// Rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar, footer, and the
+// "LOGS" title row) — the list column and the pane grid are row siblings sharing the same
+// vertical extent, so this reuses CHROME_ROWS' estimate.
 const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
 
 export type LogsLayoutInput = {
@@ -138,11 +122,9 @@ export type LogsLayout = {
   hintsMaxVisibleRows: number;
 };
 
-// Extracted from logs-zone.tsx (refactor): every terminal-row/column budget the zone's own
-// render derives from the live window size — the pane grid, the fullscreen preview, the
-// filter-history grid browser, and the two service lists' own BoundedList windows (Story 5.5,
-// OVERFLOW_LOGS_LISTS/OVERFLOW_HISTORY_GRID). Kept as one pure function (rather than several
-// loose `const`s in the component body) so the whole budget stays unit-testable against a given
+// Every terminal-row/column budget the zone's render derives from the live window size — the
+// pane grid, the fullscreen preview, the filter-history grid browser, and the two service lists'
+// BoundedList windows. One pure function so the whole budget is unit-testable against a given
 // terminal size without mounting Ink.
 export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   const gridAvailableWidth = Math.max(input.windowColumns - LIST_COLUMN_WIDTH - spacing['pane-padding-x'], 20);
@@ -152,36 +134,30 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   const paneContentWidth = Math.max(layout.cellWidth - GRID_PANE_CHROME_COLS, 1);
   const fullscreenVisibleLines = Math.max(input.windowRows - CHROME_ROWS, 3);
   const fullscreenContentWidth = Math.max(input.windowColumns - spacing['pane-padding-x'] * 2, 1);
-  // Story 5.4: the history grid browser's own available width, mirroring command-bar.tsx's
-  // own `availableWidth` computation (this grid renders inside the same ModalDialog chrome).
+  // The history grid browser's available width, mirroring command-bar.tsx's `availableWidth`
+  // computation (this grid renders inside the same ModalDialog chrome).
   const historyGridAvailableWidth = Math.max(input.windowColumns - HISTORY_GRID_CHROME_WIDTH, HISTORY_GRID_MIN_WIDTH);
-  // Story 5.5: same idea, vertically — the grid's own visible-rows budget (I/O matrix
-  // OVERFLOW_HISTORY_GRID), recalculated live off useWindowSize() on every resize.
+  // Same idea, vertically — the grid's visible-rows budget, recalculated live off
+  // useWindowSize() on every resize.
   const historyGridAvailableHeight = Math.max(input.windowRows - HISTORY_GRID_CHROME_ROWS, HISTORY_GRID_MIN_VISIBLE_ROWS);
 
-  // Story 5.5 (EDITOR_OPEN_BEHIND_CONTENT): LogFilterEditor renders as a sibling *below* the
-  // "LOGS" + list/grid block, not a true overlay (Ink has no absolute positioning) — while it's
-  // open, its own rendered rows compete for the same terminal-row budget the list column's
-  // BoundedLists were computed against. The hints panel already goes away entirely while the
-  // editor is open (the pre-existing 5.4 focus-hidden fix), but the two *service* lists don't —
-  // so this estimates the editor's own footprint (its fixed chrome/rows, plus the history-grid
-  // browser's own rows when that's open too, mirroring `historyGridAvailableHeight`'s own
-  // budget) and reserves that much off the list column's budget in addition to the header rows,
-  // so the two together still never exceed the terminal.
+  // LogFilterEditor renders as a sibling *below* the "LOGS" + list/grid block, not a true overlay
+  // (Ink has no absolute positioning) — while open, its rows compete for the row budget the list
+  // column's BoundedLists use. The hints panel hides while the editor is open, but the two service
+  // lists don't, so this reserves the editor's own footprint (its fixed rows, plus the history
+  // grid's rows when open) off the list column's budget so the two never exceed the terminal.
   const filterEditorReservedRows = !input.filterEditorOpen
     ? 0
     : HISTORY_GRID_CHROME_ROWS + (!input.historyGridOpen ? 0 : Math.min(input.filterHistoryGridMaxRows, historyGridAvailableHeight));
-  // Story 5.5 (OVERFLOW_LOGS_LISTS): the list column's own total row budget — a row sibling of
-  // the pane grid, so it reuses gridAvailableHeight. Handed out top-down (EDT list, then OTHER
-  // list, then the hints panel) so a section shorter than its share leaves more room for the
-  // ones rendered after it; each BoundedList below only ever consumes what its own content
-  // actually needs (NO_OVERFLOW: nothing changes when everything already fits).
+  // The list column's own total row budget — a row sibling of the pane grid, so it reuses
+  // gridAvailableHeight. Handed out top-down (EDT list, then OTHER list, then the hints panel) so
+  // a section shorter than its share leaves more room for the ones after it; each BoundedList
+  // only consumes what its content needs.
   const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - filterEditorReservedRows, 3);
   const edtListMaxVisibleRows = listsContentBudget;
-  // Review fix: an empty list still renders a 1-row placeholder ("No active EDT."/"No services
-  // in the active EDT."/"No other managed services.") instead of the BoundedList's own 0 rows —
-  // `Math.min(list.length, …)` was 0 for an empty list, under-counting what that section
-  // actually consumes and leaving whatever renders after it 1 row over budget.
+  // An empty list still renders a 1-row placeholder ("No active EDT."/"No services in the active
+  // EDT."/"No other managed services."), so it counts as 1 row, not the BoundedList's 0 —
+  // otherwise whatever renders after it would be 1 row over budget.
   const edtListConsumedRows = input.edtServiceCount === 0 ? 1 : Math.min(input.edtServiceCount, edtListMaxVisibleRows);
   const otherListMaxVisibleRows = Math.max(1, listsContentBudget - edtListConsumedRows);
   const otherListConsumedRows = input.otherServiceCount === 0 ? 1 : Math.min(input.otherServiceCount, otherListMaxVisibleRows);
@@ -201,10 +177,10 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   };
 }
 
-// Boundaries: "arrows ... move ... pane sub-focus" while paneFocus === 'panes' — 2D movement
-// over the same row-major index order the grid renders panes in (index = row * cols + col).
-// Clamped at every edge (never wraps): moving left from column 0, or past the last real pane
-// on a short trailing grid row, is a no-op in that direction.
+// Arrows move pane sub-focus while paneFocus === 'panes' — 2D movement over the same row-major
+// index order the grid renders panes in (index = row * cols + col). Clamped at every edge (never
+// wraps): moving left from column 0, or past the last real pane on a short trailing grid row, is
+// a no-op in that direction.
 export type PaneMoveDirection = 'up' | 'down' | 'left' | 'right';
 
 export function movePaneSubFocus(current: number, direction: PaneMoveDirection, cols: number, paneCount: number): number {
@@ -231,10 +207,9 @@ export function movePaneSubFocus(current: number, direction: PaneMoveDirection, 
   return Math.min(Math.max(next, 0), paneCount - 1);
 }
 
-// Boundaries: "Selection change ... sub-focus moves to the nearest remaining pane" — clamping
-// the old index into the new (smaller) pane count lands on the same index when it still
-// exists, or the new last pane otherwise; both read as "the nearest remaining one" for a
-// stably-ordered pane list.
+// When the selection changes, sub-focus moves to the nearest remaining pane — clamping the old
+// index into the new (smaller) pane count lands on the same index when it still exists, or the
+// new last pane otherwise.
 export function reindexPaneSubFocus(currentIndex: number, newPaneCount: number): number {
   if (newPaneCount === 0) {
     return 0;
@@ -242,9 +217,9 @@ export function reindexPaneSubFocus(currentIndex: number, newPaneCount: number):
   return Math.min(Math.max(currentIndex, 0), newPaneCount - 1);
 }
 
-// Boundaries: "Ctrl+Up/Ctrl+Down scroll the sub-focused pane". `offset` counts lines back from
-// the live tail (0 == pinned to the tail); scrolling up increases it, capped at
-// `lineCount - 1` (the oldest currently-buffered line) — never negative, never past the top.
+// Ctrl+Up/Ctrl+Down scroll the sub-focused pane. `offset` counts lines back from the live tail
+// (0 == pinned to the tail); scrolling up increases it, capped at `lineCount - 1` (the oldest
+// buffered line) — never negative, never past the top.
 export function adjustScrollOffset(current: number, direction: 'up' | 'down', lineCount: number): number {
   if (lineCount === 0) {
     return 0;
@@ -253,27 +228,19 @@ export function adjustScrollOffset(current: number, direction: 'up' | 'down', li
   return Math.min(Math.max(next, 0), lineCount - 1);
 }
 
-// I/O matrix SCROLLBACK_RELOAD: "User scrolls a pane to its oldest buffered line" — the
-// trigger for fetching more history. True once the offset can't go any further up without
-// more lines existing to scroll into. A genuinely empty pane (lineCount === 0) counts as
-// vacuously "at the oldest line" too — this is the pane's *normal* starting state (the live
-// tail deliberately starts empty, per DockerPort's `--since now`), so without this branch
-// Ctrl+Up could never trigger the very first scrollback fetch a freshly opened, currently
-// quiet service needs (review fix: previously always false for an empty pane, silently
-// eating the keypress).
+// The trigger for fetching more history: true once the offset can't go further up without more
+// lines to scroll into. A genuinely empty pane (lineCount === 0) counts as "at the oldest line"
+// too — it is the pane's *normal* starting state (the live tail starts empty, DockerPort's
+// `--since now`), so otherwise Ctrl+Up could never trigger a quiet service's first fetch.
 export function isAtOldestLine(offset: number, lineCount: number): boolean {
   return lineCount === 0 || offset >= lineCount - 1;
 }
 
-// Boundaries: "scroll position preserved" after a scrollback reload — but that only makes
-// sense when there was already visible content anchoring the viewport. A pane that started
-// genuinely empty has no prior viewport to preserve; pinning it back to offset 0 instead
-// shows the newest lines of whatever history was just fetched, rather than the previous
-// formula's `currentOffset + appended` overshooting straight past every line just loaded
-// (review fix — see isAtOldestLine's own header for why an empty pane reaches this at all).
-// `newLineCount` (the manager's own post-fetch `entry.lines.length`) is taken alongside
-// `appended` — not `appended` alone — as a defensive upper bound against a live line arriving
-// from the tail while the older-lines fetch was still in flight.
+// The scroll position is preserved after a scrollback reload only when visible content already
+// anchored the viewport. A pane that started genuinely empty pins to offset 0 instead, showing
+// the newest of the just-fetched history rather than overshooting past every line just loaded.
+// `newLineCount` (the manager's post-fetch `entry.lines.length`) bounds the result too, in case a
+// live line arrived from the tail while the older-lines fetch was in flight.
 export function resolvePostLoadScrollOffset(currentOffset: number, beforeCount: number, appended: number, newLineCount: number): number {
   if (beforeCount === 0) {
     return 0;
@@ -299,11 +266,8 @@ export function resolvePaneScrollDirection(key: PaneScrollKey): 'up' | 'down' | 
   return null;
 }
 
-// Review fix: fullscreen has no sub-focus grid to disambiguate from (there's only ever the
-// one pane), so the Ctrl requirement above was never actually load-bearing there — it was
-// just inherited by reusing resolvePaneScrollDirection for both views. Plain Up/Down is
-// simpler and reads fine with nothing else in fullscreen contending for those keys; ctrl is
-// accepted too (never rejected) so existing Ctrl+Up/Down muscle memory still works.
+// Fullscreen has no sub-focus grid to disambiguate from (only one pane), so plain Up/Down scroll
+// it; ctrl is accepted too so Ctrl+Up/Down muscle memory still works.
 export function resolveFullscreenScrollDirection(key: { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean }): 'up' | 'down' | null {
   if (key.upArrow) {
     return 'up';
@@ -314,16 +278,11 @@ export function resolveFullscreenScrollDirection(key: { ctrl?: boolean; upArrow?
   return null;
 }
 
-// Boundaries (amended, user-reported review fix): originally "Ctrl+A / Ctrl+Shift+A
-// select/deselect all EDT-list services" — Ctrl+Shift+A turned out unreachable on virtually
-// every real terminal. A `Ctrl+letter` combo is delivered over the wire as a single control
-// byte (0x01-0x1A) that carries no shift information at all — confirmed against Ink's own
-// parser (parse-keypress.js's ctrl+letter branch sets `key.ctrl` but never `key.shift`), so
-// Ctrl+A and Ctrl+Shift+A are indistinguishable there; only a terminal that both supports and
-// negotiates the newer Kitty keyboard protocol could tell them apart, and this app doesn't
-// even opt into that protocol (bin/tui.ts's `render()` call). Ctrl+A now toggles instead: one
-// reliable shortcut that flips to deselect-all once everything is already selected, rather
-// than needing a second, unreachable one.
+// Ctrl+A toggles select-all/deselect-all for the EDT list. A `Ctrl+letter` combo arrives as a
+// single control byte (0x01-0x1A) with no shift information — Ink's parse-keypress.js sets
+// `key.ctrl` but never `key.shift` on that branch — so Ctrl+Shift+A is indistinguishable from
+// Ctrl+A unless the Kitty keyboard protocol is negotiated, which this app doesn't opt into
+// (bin/tui.ts's `render()`). One reliable shortcut flips to deselect-all once all are selected.
 type SelectAllKey = { ctrl?: boolean };
 
 export function isSelectAllKey(input: string, key: SelectAllKey): boolean {
@@ -341,12 +300,9 @@ export function resolveSelectAllToggle(allPaths: readonly string[], selected: re
   return isAllSelected ? 'deselect-all' : 'select-all';
 }
 
-// User-reported: 'c'/'w' (clear/wrap) previously applied globally — clearing or re-wrapping
-// every open pane at once, even ones the user wasn't looking at. Ctrl+C/Ctrl+W mirror
-// isSelectAllKey's own Ctrl+letter shape to apply the same action to every active pane at
-// once, on demand, while the bare key stays scoped to whichever single pane is sub-focused
-// (or fullscreen). Requires ctrl for the same reason isSelectAllKey does: unambiguous,
-// intentional "do this everywhere" gesture distinct from the single-pane key.
+// Ctrl+C/Ctrl+W apply clear/wrap to every active pane at once, while the bare `c`/`w` stay scoped
+// to the sub-focused (or fullscreen) pane. Ctrl is required for the same reason isSelectAllKey
+// uses it: an unambiguous, intentional "do this everywhere" gesture.
 type LogsCtrlKey = { ctrl?: boolean };
 
 export function isClearAllLogsKey(input: string, key: LogsCtrlKey): boolean {
@@ -357,18 +313,11 @@ export function isWrapAllLogsKey(input: string, key: LogsCtrlKey): boolean {
   return key.ctrl === true && input.toLowerCase() === 'w';
 }
 
-// Boundaries: "the zone can toggle timestamp/stdout/stderr visibility ... independently (t/o/p)
-// without reconnecting the stream" — a pure display filter over the already-buffered lines,
-// never touching the subscription itself.
-// `stderr` was originally bound to 'e' — changed to 'p' (review fix) since 'e' collides with
-// the Edts zone's own tab mnemonic (zones.ts): pressing it while in the Logs zone toggled
-// stderr here *and* switched AppShell's active zone to Edts on the same keypress, for the
-// same "every mounted useInput hook gets the same event" reason documented on
-// logsPaneGridArrowsActive in navigation-slice.ts.
-//
-// `wrap` (the 'w' key) used to live here too, toggling a single shared flag applied to every
-// pane. User-reported: wrap is now per-pane (see togglePaneWrapFlag/toggleAllPanesWrapFlag
-// below) since a single shared flag couldn't express "wrap just the pane I'm looking at".
+// Toggles timestamp/stdout/stderr visibility independently (t/o/p) without reconnecting the
+// stream — a pure display filter over the already-buffered lines. stderr is `p`, not `e`: `e` is
+// the EDTs zone's tab mnemonic, and every mounted useInput hook receives the same keypress, so it
+// would also switch zones (see logsPaneGridArrowsActive in navigation-slice.ts). Wrap is per pane
+// (togglePaneWrapFlag/toggleAllPanesWrapFlag below), not a flag here.
 export type VisibilityToggle = 'timestamp' | 'stdout' | 'stderr';
 
 export function resolveVisibilityToggleKey(input: string): VisibilityToggle | null {
@@ -399,9 +348,7 @@ export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityT
 export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true };
 
 // Per-pane wrap/truncate state, keyed by repoPath — a pane absent from the map defaults to
-// truncate (matching the grid view's existing, deliberate `truncate-end` choice; fullscreen
-// previously wrapped by default only because no `wrap` prop was ever passed there, not
-// because of any documented Design Notes decision).
+// truncate, matching the grid view's deliberate `truncate-end`.
 export const DEFAULT_PANE_WRAP = false;
 
 export function isPaneWrapped(wrapByPath: Readonly<Record<string, boolean>>, repoPath: string | null): boolean {
@@ -423,11 +370,9 @@ export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityF
   return lines.filter((line) => (line.stream === 'stdout' ? flags.showStdout : flags.showStderr));
 }
 
-// Story 5.2: two-tier text/regex/level filter over already-buffered lines — a pure,
-// render-time transform layered on top of filterVisibleLines above (never touches the
-// subscription). See logs-zone.tsx's own `filterEditor` state for how these compose with the
-// UI (Design Notes: "compileLogFilter recomputes on every editor keystroke ... so the inline
-// regex error appears/clears live").
+// The two-tier text/regex/level filter over already-buffered lines — a pure, render-time
+// transform layered on top of filterVisibleLines above (never touches the subscription).
+// compileLogFilter runs on every editor keystroke, so the inline regex error appears/clears live.
 export type LogFilterMode = 'text' | 'regex';
 export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
 
@@ -439,19 +384,18 @@ export type LogFilterSpec = {
 
 export const DEFAULT_LOG_FILTER: LogFilterSpec = { mode: 'text', query: '', level: null };
 
-// Extracted from logs-zone.tsx (refactor): shared by the filter-editor commit/cancel paths and
-// every pane's "pane filter: on" annotation — a spec deep-equal to DEFAULT_LOG_FILTER (empty
-// query, no level restriction, either mode) is a no-op filter and must never be stored as an
-// explicit paneFilters[repoPath] entry (that would leave the annotation/hasOwnFilter check
-// seeing a filter that isn't actually filtering anything).
+// Shared by the filter-editor commit/cancel paths and every pane's "pane filter: on" annotation —
+// a spec deep-equal to DEFAULT_LOG_FILTER (empty query, no level restriction, either mode) is a
+// no-op filter and must never be stored as an explicit paneFilters[repoPath] entry (the
+// annotation/hasOwnFilter check would see a filter that isn't filtering anything).
 export function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
   return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
 }
 
-// Boundaries: "Level filtering has no source field (LogLine has no level) — matched via a
-// text heuristic (ERROR|WARN|INFO|DEBUG, case-insensitive) against line.text". Only the
-// *first* matching token counts — real log lines never carry more than one level tag, and
-// picking the first keeps this a total, order-independent function of the raw text.
+// Level filtering has no source field (LogLine has no level), so it uses a text heuristic
+// (ERROR|WARN|INFO|DEBUG, case-insensitive) against line.text. Only the *first* matching token
+// counts — real log lines never carry more than one level tag, and picking the first keeps this
+// a total, order-independent function of the raw text.
 const LOG_LEVEL_PATTERN = /\b(ERROR|WARN|INFO|DEBUG)\b/i;
 
 export function detectLogLevel(text: string): LogLevel | null {
@@ -459,11 +403,9 @@ export function detectLogLevel(text: string): LogLevel | null {
   return match === null ? null : (match[1].toUpperCase() as LogLevel);
 }
 
-// Boundaries: "An invalid regex ... shows an inline error in the editor and is never applied
-// ... never throws into the render tree" — `compileLogFilter` is the one place a malformed
-// pattern is ever allowed to throw (RegExp's own constructor), caught here and turned into a
-// typed failure the caller (the editor) surfaces as text, rather than letting it escape into
-// the render tree.
+// An invalid regex shows an inline error in the editor and is never applied, never thrown into
+// the render tree — `compileLogFilter` is the one place a malformed pattern may throw (RegExp's
+// constructor), caught here and turned into a typed failure the editor surfaces as text.
 export type CompiledLogFilter = { ok: true; test: (line: LogLine) => boolean } | { ok: false; error: string };
 
 export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
@@ -491,16 +433,11 @@ export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
   };
 }
 
-// Extracted from logs-zone.tsx (refactor): the filter editor's own commit decision, shared by
-// every draft-mutating keystroke (Tab, Ctrl+←/→, ↑/↓ history browse, Backspace/Delete, typed
-// characters, and the grid recall). Story 5.2 (Design Notes): "compileLogFilter recomputes on
-// every editor keystroke (not just submit) so the inline regex error appears/clears live". The
-// draft itself always advances (so typed characters/level cycles are never lost); which of
-// `globalFilter`/`paneFilterUpdate` is non-null tells the caller (logs-zone.tsx) which piece of
-// committed state to update — at most one of them ever is, and neither is when the draft fails
-// to compile (Boundaries: "the previously-active filter ... stays in effect" on an invalid
-// regex) — the caller only ever needs to setFilterEditor(result.editor) plus, conditionally,
-// one of those two updates.
+// The filter editor's commit decision, shared by every draft-mutating keystroke (Tab, Ctrl+←/→,
+// ↑/↓ history browse, Backspace/Delete, typed characters, and the grid recall). The draft always
+// advances (typed characters/level cycles are never lost); at most one of
+// `globalFilter`/`paneFilterUpdate` is non-null, telling the caller which committed state to
+// update — and neither is when the draft fails to compile, so the previously-active filter stays.
 export type FilterEditorDraftResult = {
   editor: FilterEditorState;
   globalFilter: LogFilterSpec | null;
@@ -518,18 +455,14 @@ export function resolveFilterEditorDraft(next: FilterEditorState): FilterEditorD
   }
   const repoPath = next.repoPath;
   if (repoPath === null) {
-    // Review fix: `scope === 'pane' && repoPath === null` is currently unreachable
-    // (openPaneFilterEditor always sets repoPath) but the type still permits it — rather than
-    // silently discarding a compiled spec with no feedback, surface it as an editor error.
+    // `scope === 'pane' && repoPath === null` is unreachable today (openPaneFilterEditor always
+    // sets repoPath) but the type permits it — surface it as an editor error rather than silently
+    // discarding a compiled spec.
     return { editor: { ...next, error: 'no pane targeted' }, globalFilter: null, paneFilterUpdate: null };
   }
-  // Review fix: committing a vacuous spec (deep-equal to DEFAULT_LOG_FILTER, e.g. after
-  // backspacing the query back to empty) as an explicit paneFilters[repoPath] entry left a
-  // no-op-but-present key — both the "pane filter: on" annotation and
-  // resolveFilterClearTarget's `hasOwnFilter` check key off entry *presence*, not content, so
-  // the pane kept reading as filtered even though its effective filter was a no-op. `null`
-  // instead removes the key exactly like the explicit-clear path (Escape / resolveFilterClearTarget)
-  // already does.
+  // A vacuous spec (deep-equal to DEFAULT_LOG_FILTER, e.g. after backspacing the query to empty)
+  // removes the key, exactly like the explicit-clear path: the "pane filter: on" annotation and
+  // resolveFilterClearTarget's `hasOwnFilter` check key off entry *presence*, not content.
   return {
     editor: { ...next, error: null },
     globalFilter: null,
@@ -537,13 +470,10 @@ export function resolveFilterEditorDraft(next: FilterEditorState): FilterEditorD
   };
 }
 
-// Boundaries: "A pane's effective filter is (engaged ? global : pass) AND (own ?? pass)" —
-// `global`/`own` are already resolved by the caller to `null` for whichever half of that
-// formula should pass everything (a disengaged pane passes `null` for `global`; a pane with
-// no own filter passes `null` for `own`). A spec that fails to compile is treated as
-// pass-through rather than thrown or silently hiding every line — defensive only, since the
-// zone (logs-zone.tsx) never commits an uncompilable spec into either `global`/`own` state in
-// the first place (compileLogFilter's own error path stops that at the editor).
+// A pane's effective filter is (engaged ? global : pass) AND (own ?? pass) — `global`/`own` are
+// already resolved by the caller to `null` for whichever half should pass everything. A spec that
+// fails to compile is treated as pass-through rather than thrown or silently hiding every line —
+// defensive only, since the zone never commits an uncompilable spec.
 export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec | null, own: LogFilterSpec | null): LogLine[] {
   const globalFilter = global !== null ? compileLogFilter(global) : null;
   const ownFilter = own !== null ? compileLogFilter(own) : null;
@@ -558,10 +488,9 @@ export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec
   });
 }
 
-// Extracted from logs-zone.tsx (refactor): shared by LogsPaneView and FullscreenPane (both
-// call applyLogFilters the same way, right after filterVisibleLines, same layer 5.1's
-// stdout/stderr toggle already lives on). Boundaries: "A pane's effective filter is
-// (engaged ? global : pass) AND (own ?? pass)".
+// Shared by LogsPaneView and FullscreenPane (both call applyLogFilters right after
+// filterVisibleLines, the layer the stdout/stderr toggle lives on). A pane's effective filter is
+// (engaged ? global : pass) AND (own ?? pass).
 export function resolveEffectiveLines(
   pane: { lines: readonly LogLine[] } | undefined,
   visibility: VisibilityFlags,
@@ -576,8 +505,7 @@ export function resolveEffectiveLines(
 }
 
 // Per-pane engagement with the global filter, keyed by repoPath — mirrors isPaneWrapped/
-// togglePaneWrapFlag's own shape, but defaults to `true` (Boundaries: "one global ... every
-// pane is engaged with by default"), the inverse of wrap's own untouched-pane default.
+// togglePaneWrapFlag's shape, but defaults to `true` (every pane is engaged by default).
 export const DEFAULT_PANE_GLOBAL_FILTER_ENGAGED = true;
 
 export function isPaneEngagedInGlobalFilter(engagedByPath: Readonly<Record<string, boolean>>, repoPath: string | null): boolean {
@@ -632,20 +560,19 @@ export function toggleFilterMode(mode: LogFilterMode): LogFilterMode {
   return mode === 'text' ? 'regex' : 'text';
 }
 
-// A short human-readable rendering of a filter spec, e.g. `text "boom"`, `regex (any) [ERROR]`
-// — used on the pane/fullscreen annotations so a user can tell *what* is filtering a pane
-// without reopening its editor (user-reported: the boolean "pane filter: on" annotation alone
-// didn't say what the filter actually was).
+// A short human-readable rendering of a filter spec, e.g. `text "boom"`, `regex (any) [ERROR]` —
+// used on the pane/fullscreen annotations so a user can tell *what* is filtering a pane without
+// reopening its editor.
 export function formatLogFilterSpec(spec: LogFilterSpec): string {
   const queryPart = spec.query === '' ? '(any)' : `"${spec.query}"`;
   const levelPart = spec.level !== null ? ` [${spec.level}]` : '';
   return `${spec.mode} ${queryPart}${levelPart}`;
 }
 
-// Boundaries: "Escape, when no editor is open: if a pane is sub-focused in the grid (not
-// fullscreen), clears that pane's own filter if set, else disengages it from the global
-// filter; if no pane is sub-focused (list-focus), clears the global filter entirely." Pure
-// resolver — logs-zone.tsx's useInput dispatches the returned target to the right setter.
+// Escape, when no editor is open: on a sub-focused grid pane (not fullscreen), clears that pane's
+// own filter if set, else disengages it from the global filter; with no pane sub-focused
+// (list-focus), clears the global filter entirely. A pure resolver — logs-zone.tsx's useInput
+// dispatches the returned target.
 export type FilterClearTarget =
   | { scope: 'pane-own'; repoPath: string }
   | { scope: 'pane-disengage'; repoPath: string }
@@ -669,14 +596,9 @@ export function formatLogLine(line: LogLine, showTimestamps: boolean): string {
 // computeLineRowCount) so a wrapped multi-row line "spends" more of the budget than a
 // truncated single-row one.
 //
-// User-reported review fix: this used to just slice the last N *lines* regardless of how many
-// terminal *rows* they'd render as. That was fine in truncate mode (1 line == 1 row) but wrong
-// under wrap: switching truncate -> wrap could render more rows than the pane had (silently
-// clipped by the pane's own `overflow="hidden"`), and wrap -> truncate collapsed the same N
-// lines into far fewer rows than the pane's height, leaving a blank gap at the bottom until a
-// scroll happened to pick a different (but still fixed-count) window. Sizing the window by
-// actual row cost keeps the pane always filled edge-to-edge, in both modes, on every toggle —
-// no scroll needed to "recalculate".
+// Sizing the window by row cost (not line count) keeps the pane filled edge-to-edge in both
+// truncate and wrap mode, on every toggle: a fixed line count overflows the pane under wrap and
+// leaves a blank gap after switching back to truncate.
 export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBudget: number, getRowCount: (line: T) => number = () => 1): T[] {
   if (lines.length === 0 || rowBudget <= 0) {
     return [];
@@ -704,21 +626,10 @@ export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBu
 // How many terminal rows a single formatted log line will actually render as. Truncated lines
 // (wrap === false) always cost exactly 1 row (Ink's `truncate-end` never wraps).
 //
-// User-reported review fix: wrapped lines used to cost `ceil(text.length / width)` — a naive
-// character count that assumes every character occupies one visible column. Real log lines
-// routinely carry ANSI colour escapes (docker/compose output is colourized by default), whose
-// bytes count toward `.length` but occupy zero terminal columns; a heavily-coloured line could
-// read as needing 2-3x the rows it actually renders as. That inflated cost made
-// sliceVisibleWindow stop selecting lines far short of the pane's real budget, leaving a large
-// blank gap at the bottom in wrap mode specifically (truncate mode's fixed 1-row cost was never
-// affected) that persisted no matter how far back the user scrolled. Word-wrapping itself also
-// isn't just `ceil(length / width)` — it can't split mid-word, so it costs a few rows more than
-// that division implies even for plain ASCII text.
-//
-// Delegating to `wrap-ansi` with the exact same options Ink's own Text component uses for
-// `wrap="wrap"` (see ink/build/wrap-text.js) makes this an exact match rather than another
-// approximation: same ANSI-aware width accounting, same word-break rules, same hard-wrap
-// fallback for a single token wider than the pane.
+// Wrapped lines delegate to `wrap-ansi` with the exact options Ink's own Text uses for
+// `wrap="wrap"` (ink/build/wrap-text.js): ANSI escapes occupy zero columns (docker output is
+// colourized by default) and word-wrap can't split mid-word, so `ceil(length / width)` would
+// misestimate and leave a blank gap at the bottom of wrapped panes. This matches exactly.
 export function computeLineRowCount(text: string, width: number, wrap: boolean): number {
   if (!wrap) {
     return 1;
@@ -727,15 +638,13 @@ export function computeLineRowCount(text: string, width: number, wrap: boolean):
   return wrapAnsi(text, safeWidth, { trim: false, hard: true }).split('\n').length;
 }
 
-// Boundaries: "Any manifest service can be streamed, not only active-EDT members" — a service
-// row identity, kept minimal (only what a pane/subscription needs) rather than reusing the
-// full ServiceBranchDivergence shape everywhere.
+// Any manifest service can be streamed, not only active-EDT members — a service row identity,
+// kept minimal (only what a pane/subscription needs) rather than reusing ServiceBranchDivergence.
 export type LogsServiceRow = Pick<ServiceBranchDivergence, 'service' | 'path'>;
 
-// Story 5.4: filter history recall. Each exact (scope, mode) combination — global-text,
-// global-regex, and per-service-text/per-service-regex for every manifest service path — owns
-// its own independent, persisted list of committed query strings (Boundaries: "one independent
-// list per exact (scope, mode) key"). `repoPath` is only meaningful for `scope: 'pane'`.
+// Filter history recall. Each exact (scope, mode) combination — global-text, global-regex, and
+// per-service-text/per-service-regex for every manifest service path — owns its own independent,
+// persisted list of committed query strings. `repoPath` is only meaningful for `scope: 'pane'`.
 export type FilterHistoryKey = { scope: 'global' | 'pane'; repoPath: string | null; mode: LogFilterMode };
 
 // The flat string key StatePort.readFilterHistory/writeFilterHistory persists each list under
@@ -747,16 +656,11 @@ export function filterHistoryKeyString(key: FilterHistoryKey): string {
   return key.scope === 'global' ? `global:${key.mode}` : `service:${key.repoPath}:${key.mode}`;
 }
 
-// I/O matrix HISTORY_PUSH/DEDUP_TOP: front-pushes `query` onto `history`, moving it to the
-// front instead of duplicating it when it's already the current top entry, then trims to
-// `maxSize`. Pure — the caller (the logs store slice) is responsible for only calling this on
-// an actual commit (Enter, compiles, non-empty) and for persisting the result.
-//
-// User-reported: when `dedupEverywhere` is true (settings.logs.filterHistoryDedup), any
-// previous occurrence of `query` — not just the top entry — is removed first and the query
-// moves to the front, so each filter exists at most once per list. When false/omitted, the
-// legacy DEDUP_TOP-only behavior applies (a non-top duplicate is front-pushed as a second
-// instance).
+// Front-pushes `query` onto `history`, moving it to the front instead of duplicating it when it's
+// already the top entry, then trims to `maxSize`. Pure — the caller (the logs store slice) only
+// calls this on an actual commit (Enter, compiles, non-empty) and persists the result. With
+// `dedupEverywhere` (settings.logs.filterHistoryDedup), any previous occurrence is removed first,
+// so each filter exists at most once per list; otherwise only a top-entry repeat is deduped.
 export function pushFilterHistoryEntry(
   history: readonly string[],
   query: string,
@@ -774,45 +678,35 @@ export type FilterHistoryBrowseState = { index: number; savedDraft: string };
 
 export type FilterHistoryBrowseResult = { query: string; browsing: FilterHistoryBrowseState | null };
 
-// Extracted from logs-zone.tsx (refactor): the filter editor's in-progress draft — `/` opens
-// one with scope 'global', `f` with scope 'pane' (repoPath set to whichever pane owns it).
-// `error` mirrors whatever compileLogFilter last returned for this exact draft (Design Notes:
-// recomputed live on every keystroke, never just on submit) — it never blocks the draft from
-// being edited further, it only blocks that particular (mode, query, level) combination from
-// being committed into `globalFilter`/`paneFilters` (see logs-zone.tsx's applyFilterEditorDraft).
+// The filter editor's in-progress draft — `/` opens one with scope 'global', `f` with scope
+// 'pane' (repoPath set to the owning pane). `error` mirrors compileLogFilter's last result for
+// this exact draft (recomputed on every keystroke) — it never blocks further editing, only
+// committing that (mode, query, level) into `globalFilter`/`paneFilters`.
 export type FilterEditorState = {
   scope: 'global' | 'pane';
   repoPath: string | null;
   mode: LogFilterMode;
   query: string;
-  // Story 2.32-style cursor adoption: the caret position within `query`, threaded through to
-  // TextInputLine exactly like edts-zone.logic.ts's `nextTextInputValue`/`TextInputState`
-  // convention (reused directly below). Every programmatic overwrite of `query` (open, history
-  // recall, arrow-browse) resets this to `query.length`, matching that convention's Boundary.
+  // The caret position within `query`, threaded to TextInputLine like edts-zone.logic.ts's
+  // `nextTextInputValue`/`TextInputState`. Every programmatic overwrite of `query` (open, history
+  // recall, arrow-browse) resets this to `query.length`.
   cursor: number;
   level: LogLevel | null;
   error: string | null;
-  // Review fix: the spec that was in effect for this scope at the moment the editor opened —
-  // restored verbatim on Escape (a true cancel) so a reused widget whose own hint text reads
-  // "[Enter] confirm  [Esc] cancel" actually behaves that way, instead of Escape and Enter both
-  // just closing the editor and leaving whatever last compiled cleanly while typing applied.
+  // The spec in effect for this scope when the editor opened — restored verbatim on Escape, so the
+  // "[Enter] confirm  [Esc] cancel" hint behaves as a true cancel.
   preOpen: LogFilterSpec;
-  // Story 5.4: non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh
-  // open and whenever the draft is untouched/browsing has ended (snapped back to the draft, or
-  // walked past the most-recent entry). See resolveHistoryBrowseUp/Down just above.
+  // Non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh open and
+  // whenever browsing has ended (snapped back to the draft, or walked past the most-recent entry).
+  // See resolveHistoryBrowseUp/Down just above.
   browsing: FilterHistoryBrowseState | null;
 };
 
-// I/O matrix ARROW_UP_OLDEST: `↑` on an untouched draft recalls the most-recent entry
-// (preserving the draft as `savedDraft`); further `↑` walks older entries; `↑` already at the
-// oldest entry is a no-op (Boundaries). An empty history is a no-op too — nothing to recall.
-//
-// User-reported: the editor opens pre-filled with the currently-active filter, which is
-// usually also the history's most-recent entry — recalling it first forces two `↑` presses
-// before any different value appears. Any history entry equal to the draft being browsed
-// from is therefore skipped: on a fresh `↑` the most-recent entry is skipped when it equals
-// the current query, and while already browsing, entries equal to `savedDraft` are skipped
-// when walking older. Skipping past the end is a no-op.
+// `↑` on an untouched draft recalls the most-recent entry (preserving the draft as `savedDraft`);
+// further `↑` walks older entries; `↑` at the oldest entry (or on an empty history) is a no-op.
+// The editor opens pre-filled with the active filter, usually also the most-recent entry, so any
+// entry equal to the draft being browsed from is skipped (the most-recent one on a fresh `↑`
+// when it equals the query; entries equal to `savedDraft` while walking older).
 export function resolveHistoryBrowseUp(
   currentQuery: string,
   browsing: FilterHistoryBrowseState | null,
@@ -841,14 +735,10 @@ export function resolveHistoryBrowseUp(
   return { query: history[nextIndex]!, browsing: { index: nextIndex, savedDraft: browsing.savedDraft } };
 }
 
-// I/O matrix ARROW_DOWN_PAST_RECENT: `↓` while browsing walks back toward the draft; one more
-// `↓` past the most-recent entry (index 0) restores the original draft exactly and ends
-// browsing. Only ever called while already browsing (Boundaries: "↓ on an untouched draft ...
-// opens a ... grid browser" instead — see logs-zone.tsx's own dispatch).
-//
-// Mirrors the `↑` skip above: entries equal to `savedDraft` are never shown on the way back
-// down either — walking onto one restores the draft directly (ending browsing) instead of
-// displaying the same text twice.
+// `↓` while browsing walks back toward the draft; one more `↓` past the most-recent entry
+// (index 0) restores the original draft exactly and ends browsing. Only called while browsing (on
+// an untouched draft, `↓` opens the grid browser instead). Like `↑`, entries equal to `savedDraft`
+// are skipped — walking onto one restores the draft directly instead of showing the text twice.
 export function resolveHistoryBrowseDown(
   browsing: FilterHistoryBrowseState,
   history: readonly string[],
@@ -863,10 +753,9 @@ export function resolveHistoryBrowseDown(
   return { query: history[prevIndex]!, browsing: { index: prevIndex, savedDraft: browsing.savedDraft } };
 }
 
-// Extracted from logs-zone.tsx (refactor): the filter-history grid browser's own `getLabel`
-// callback for command-bar.ts's generalized grid primitives (which operate over arbitrary
-// entries, not just plain strings) — history entries are plain strings already, so this is the
-// identity function. Shared by LogsZone's own useInput dispatch and LogFilterEditor's render.
+// The filter-history grid's `getLabel` for command-bar.tsx's generic grid primitives — history
+// entries are plain strings, so this is the identity function. Shared by LogsZone's useInput and
+// LogFilterEditor's render.
 export function historyEntryLabel(entry: string): string {
   return entry;
 }

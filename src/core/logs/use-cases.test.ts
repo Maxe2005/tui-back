@@ -73,7 +73,7 @@ function fakeDocker(overrides: Partial<DockerPort> = {}): DockerPort {
   );
 }
 
-describe('getServiceHealth (story 5.3)', () => {
+describe('getServiceHealth', () => {
   it('delegates to docker.getContainerHealth with the container, forwarding its Result as-is', async () => {
     const docker = fakeDocker({ getContainerHealth: vi.fn(async () => ok('restarting' as const)) });
 
@@ -95,7 +95,7 @@ describe('getServiceHealth (story 5.3)', () => {
   });
 });
 
-describe('restartService (story 5.3)', () => {
+describe('restartService', () => {
   it('delegates to docker.restartContainer with the container, forwarding its Result as-is', async () => {
     const docker = fakeDocker();
 

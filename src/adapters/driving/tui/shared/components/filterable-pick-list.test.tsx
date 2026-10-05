@@ -1,9 +1,6 @@
-// shared/components/filterable-pick-list: pure-reducer-first tests (branch-autocomplete-input
-// precedent) plus render-to-string coverage. The shared renderToString harness's fake stdin
-// never emits data, so no component-owned useInput exists to exercise — every keystroke
-// behavior is covered as a pure function instead (handleFilterablePickListKey), with render
-// tests asserting the row style, the scrolling indicators and the two distinct empty lines.
-// Each describe block names the spec's I/O & Edge-Case Matrix row it covers.
+// shared/components/filterable-pick-list: pure-reducer tests (handleFilterablePickListKey
+// covers every keystroke, since renderToString's fake stdin never emits keys) plus render
+// coverage of the row style, the scrolling indicators and the two distinct empty lines.
 import { describe, it, expect } from 'vitest';
 import {
   FILTERABLE_PICK_LIST_MAX_ROWS,
@@ -37,7 +34,7 @@ describe('createFilterablePickListState', () => {
   });
 });
 
-describe('matchPickItemsBySubstring (matrix: "Filter as you type", "Secondary text match")', () => {
+describe('matchPickItemsBySubstring', () => {
   it('matches by substring, not prefix, case-insensitively', () => {
     expect(labels(matchPickItemsBySubstring('api', ITEMS))).toEqual(['alpha-api', 'beta-api']);
     expect(labels(matchPickItemsBySubstring('API', ITEMS))).toEqual(['alpha-api', 'beta-api']);
@@ -68,7 +65,7 @@ describe('clampPickListCursor', () => {
   });
 });
 
-describe('handleFilterablePickListKey — filter as you type (matrix: "Filter as you type")', () => {
+describe('handleFilterablePickListKey — filter as you type', () => {
   it('typing narrows the list and resets the highlight to the first row', () => {
     const result = handleFilterablePickListKey(stateWith({ cursor: 2 }), ITEMS, 'a', {});
     expect(result).toEqual({ type: 'update', state: { query: 'a', queryCursor: 1, cursor: 0 } });
@@ -80,7 +77,7 @@ describe('handleFilterablePickListKey — filter as you type (matrix: "Filter as
   });
 });
 
-describe('handleFilterablePickListKey — navigate (matrix: "Navigate")', () => {
+describe('handleFilterablePickListKey — navigate', () => {
   it('Down/Up move the highlight, clamped at both ends', () => {
     const down = handleFilterablePickListKey(stateWith(), ITEMS, '', { downArrow: true });
     expect(down).toEqual({ type: 'update', state: stateWith({ cursor: 1 }) });
@@ -115,7 +112,7 @@ describe('handleFilterablePickListKey — navigate (matrix: "Navigate")', () => 
   });
 });
 
-describe('handleFilterablePickListKey — caret editing (matrix: "Caret editing")', () => {
+describe('handleFilterablePickListKey — caret editing', () => {
   const state = stateWith({ query: 'api', queryCursor: 3, cursor: 1 });
 
   it('Left/Right/Home/End move the caret inside the filter text and keep the highlight', () => {
@@ -187,7 +184,7 @@ describe('handleFilterablePickListKey — caret editing (matrix: "Caret editing"
   });
 });
 
-describe('handleFilterablePickListKey — select and cancel (matrix: "Select", "Cancel")', () => {
+describe('handleFilterablePickListKey — select and cancel', () => {
   it('Enter hands the highlighted item of the filtered list back to the host', () => {
     const state = stateWith({ query: 'api', queryCursor: 3, cursor: 1 });
     expect(handleFilterablePickListKey(state, ITEMS, '', { return: true })).toEqual({ type: 'select', item: ITEMS[1] });
@@ -205,7 +202,7 @@ describe('handleFilterablePickListKey — select and cancel (matrix: "Select", "
   });
 });
 
-describe('handleFilterablePickListKey — genuinely empty pool (matrix: "Genuinely empty pool")', () => {
+describe('handleFilterablePickListKey — genuinely empty pool', () => {
   it('Enter is a no-op and Esc still closes', () => {
     const state = stateWith();
     expect(handleFilterablePickListKey(state, [], '', { return: true })).toEqual({ type: 'update', state });
@@ -243,13 +240,13 @@ describe('FilterablePickList render', () => {
     expect(output).not.toContain('Nothing to select');
   });
 
-  it('shows a distinct line when the pool itself is empty (matrix: "Genuinely empty pool")', async () => {
+  it('shows a distinct line when the pool itself is empty', async () => {
     const output = await renderToString(<FilterablePickList {...copy} state={stateWith()} items={[]} />);
     expect(output).toContain('Nothing to select');
     expect(output).not.toContain('No match');
   });
 
-  it('bounds a long list with scrolling indicators and keeps the highlight visible (matrix: "Long list")', async () => {
+  it('bounds a long list with scrolling indicators and keeps the highlight visible', async () => {
     const many = Array.from({ length: 20 }, (_, index) => item(`svc-${String(index).padStart(2, '0')}`));
 
     const top = await renderToString(<FilterablePickList {...copy} state={stateWith()} items={many} />);

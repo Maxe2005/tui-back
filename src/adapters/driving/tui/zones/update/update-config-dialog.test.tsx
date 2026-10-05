@@ -1,7 +1,6 @@
-// tui/zones/update: story 3.7 — Ink smoke coverage for the pre-run configuration screen:
-// every targeted service pre-selected with its branch, the two toggles, the inline error,
-// and the branch editor all render (per the epic context, TUI screens get smoke-tests only;
-// the behavior behind every row is unit-tested in update-config-dialog.test.ts).
+// tui/zones/update: Ink smoke coverage for the pre-run configuration screen — every targeted
+// service pre-selected with its branch, the two toggles, the inline error and the branch editor
+// render; the behavior behind every row is unit-tested in update-config-dialog.test.ts.
 import { describe, expect, it } from 'vitest';
 import { UpdateConfigDialog, UPDATE_CONFIG_HINTS, UPDATE_CONFIG_TITLE_ALL, UPDATE_CONFIG_TITLE_EDT } from './update-config-dialog.js';
 import { createUpdateConfigDraft, toggleUpdateConfigRow, type UpdateConfigDraft } from './update-config-dialog.logic.js';

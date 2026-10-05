@@ -1,15 +1,8 @@
-// adapters/driven/lock: the driven implementation of core's LockPort (AD-9). A reusable,
-// cross-process advisory lock that serializes cooperating tool processes writing the same
-// resource, using the atomic mkdir strategy (D-lock-2): mkdir on the lock dir succeeds for
-// exactly one process (EEXIST for everyone else) with no filesystem race on networked FS,
-// no runtime dependency, and releases by removing the dir. The adapter owns fs/paths (AD-1);
-// core only consumes the contract through withActionLock (../locking.ts).
-//
-// Contention policy (D-lock-3): serialize-with-timeout + reject-on-stale-wait. A waiter busily
-// retries (retryDelayMs≈50) up to a deadline (timeoutMs≈5000); if the holder is still alive at
-// the deadline it returns an `action-in-progress` Result (never a throw), honouring AC4's
-// "serialized or rejected" wording. A holder whose recorded pid is no longer alive is stale and
-// is reclaimed so a crashed/killed CLI cannot wedge every future action forever.
+// adapters/driven/lock: the driven implementation of core's LockPort (AD-9) — a cross-process
+// advisory lock via atomic mkdir (exactly one process wins, EEXIST for the rest; no runtime
+// dependency). A waiter retries until a deadline, then returns `action-in-progress` (never a
+// throw). A holder whose recorded pid is dead is stale and reclaimed, so a crashed CLI cannot
+// wedge every future action.
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
@@ -50,11 +43,10 @@ export function createLockPort(lockDir: string, options: LockOptions = {}): Lock
 }
 
 /**
- * Non-blocking, stat-only liveness check (story 2.4): no mkdir, no retry/wait, no reclaim —
- * a pure read. Reuses isStale()'s exact staleness rule (dead recorded pid, or a missing/
- * corrupt owner file old enough that a finalizing winner is out of the question) so peek()
- * and acquire() agree on what counts as "still held" without duplicating that logic.
- * Exported separately (mirroring acquireLock) so tests can drive it directly.
+ * Non-blocking, stat-only liveness check: no mkdir, no retry/wait, no reclaim — a pure read.
+ * Reuses isStale()'s exact staleness rule (dead recorded pid, or a missing/corrupt owner file
+ * old enough that a finalizing winner is out of the question) so peek() and acquire() agree on
+ * what counts as "still held". Exported separately (like acquireLock) so tests can drive it.
  */
 export async function peekLock(lockDir: string, resourceKey: string): Promise<Result<{ locked: boolean }>> {
   if (resourceKey.trim().length === 0) {

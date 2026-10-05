@@ -1,26 +1,7 @@
-// tui/zones/routes: story 6.1 builds the real Routes content over story 2.13's
-// `disabled`-status explanatory message (kept as-is below): a resizable list/detail split
-// of the repo's discovered routes (list rows reuse the shared ListRow, rendered through
-// BoundedList), driven by the store's routes slice (core/routes/list-routes.ts in-process,
-// AD-2). Scan-in-progress shows the shared Spinner (first frame ⣾); scan-failure,
-// genuinely-empty, and not-activated are three visibly distinct states — a failure is
-// never rendered as an empty list. Pure formatting/selection logic lives in
-// routes-zone.logic.ts; this file holds the Ink component only.
-//
-// Story 6.2: Enter fires the selected route; the detail pane shows the fired response.
-// Story 6.7: a fired JSON body renders as a navigable JsonTree (fold, depth levels,
-// session key filters) with per-route session state from the slice; firing focuses the
-// tree (its keys own the keyboard while focused), Esc returns focus to the list.
-// Non-JSON bodies fall back to scrollable raw text with their reason, empty bodies to an
-// explicit empty state — never a partial tree. The tree lives in the detail Box next to
-// (never inside) DetailPane, which keeps the status line.
-//
-// Story 6.9: the right pane is a focusable pane with Request / Response sub-tabs. `Enter`
-// on the list moves the focus to its Request tab (Params, Query, Headers, Body sections —
-// the request step is mandatory, the list never fires); `Ctrl+R` fires the draft and the
-// pane switches to Response. Drafts and responses are per route (store), so the pane
-// always reflects the list cursor's route. While the pane holds focus it captures the
-// keyboard from AppShell (zone mnemonics, arrows, `q`… stay inert mid-edit); `Esc`
+// tui/zones/routes: the Routes zone — a resizable list/detail split of the repo's discovered
+// routes (BoundedList of ListRows) with an inline filter, and a focusable right pane with
+// Request / Response sub-tabs. `Enter` opens the Request tab (the list never fires); `Ctrl+R`
+// fires the draft. While the pane holds focus it captures the keyboard from AppShell; `Esc`
 // unwinds sub-editors, then Response → Request, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
@@ -171,16 +152,16 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // auto-focuses the rule list: arrows act immediately, no activation keypress needed.
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [panelCursor, setPanelCursor] = useState(0);
-  // Story 6.9: the Request tab's transient UI — active section, row cursor, inline row
-  // editors and the last fire-block reason. Drafts live in the store (per route).
+  // The Request tab's transient UI — active section, row cursor, inline row editors and the
+  // last fire-block reason. Drafts live in the store (per route).
   const [section, setSection] = useState<RequestSection>('params');
   const [rowCursor, setRowCursor] = useState(0);
   const [rowEdit, setRowEdit] = useState<{ section: RequestRowSection; index: number; input: TextInputState } | null>(null);
   const [rowAddPrompt, setRowAddPrompt] = useState<{ section: 'query' | 'headers'; input: TextInputState; error: string | null } | null>(null);
   const [fireBlock, setFireBlock] = useState<string | null>(null);
-  // Story 6.8: the request-body editor's transient inline/raw UI. Drafts, folds, and
-  // filters live in the store (per-route, session-only), so a revisit restores them
-  // together; only the text buffers are zone-local.
+  // The request-body editor's transient inline/raw UI. Drafts, folds and filters live in the
+  // store (per route, session-only), so a revisit restores them together; only the text
+  // buffers are zone-local.
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
   const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
@@ -197,8 +178,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
 
-  // Story 6.9: the pane always reflects the list cursor's route (the cursor cannot move
-  // while the pane holds focus), with its own draft and last response.
+  // The pane always reflects the list cursor's route (the cursor cannot move while the pane
+  // holds focus), with its own draft and last response.
   const paneRoute = resolveEnterFireTarget(visibleRoutes, selected) ?? null;
   const paneRouteKey = paneRoute === null ? null : routeKeyFor(paneRoute.method, paneRoute.path);
   const paneResponse = paneRouteKey === null ? undefined : responses[paneRouteKey];
@@ -248,13 +229,11 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const treeViewport = resolveTreeListBudget(treeTotalBudget, filterPanelOpen, treeRuleList.length);
   const rawViewport = resolveTreeListBudget(treeTotalBudget, false, 0);
 
-  // Story 6.8: the editor draft + its tree frame. The draft is the store's per-route
-  // `bodyDrafts` entry (`undefined` = empty, press `r`); folds/filters/selection reuse
-  // the route's existing `jsonTreeStates` entry, so body, filters, and folds restore
-  // together on revisit. Hidden lines are purely visual — still sent.
-  // Story 6.9: the body editor is the pane route's Body section; its tree state lives
-  // under bodyTreeKey (apart from the response tree). Before the pane first opens a
-  // route, the preview shows the seed without storing it.
+  // The editor draft + its tree frame. The draft is the store's per-route `bodyDrafts` entry
+  // (`undefined` = empty, press `r`); its tree state lives under bodyTreeKey (apart from the
+  // response tree), so body, filters and folds restore together on revisit. Hidden lines are
+  // purely visual — still sent. Before the pane first opens a route, the preview shows the seed
+  // without storing it.
   const editorRouteKey = paneHasBody ? paneRouteKey : null;
   const editorRoute = editorRouteKey === null ? null : paneRoute;
   const editorHasDraft = editorRouteKey !== null && Object.prototype.hasOwnProperty.call(bodyDrafts, editorRouteKey);
@@ -316,9 +295,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     return clampTreeSelection(previous.selected, nextRows.length);
   };
 
-  // Story 6.8 editor plumbing. Drafts and error maps are read live from the store at
-  // apply time (never the render closure), so two composed updates in one tick compute
-  // from the latest state instead of a stale draft.
+  // Editor plumbing. Drafts and error maps are read live from the store at apply time (never the
+  // render closure), so two composed updates in one tick compute from the latest state instead
+  // of a stale draft.
   const amendEditorTreeState = (recipe: (live: JsonTreeState) => JsonTreeState | null) => {
     if (editorRouteKey === null) {
       return;
@@ -363,8 +342,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     setPanelCursor(0);
   };
 
-  // Story 6.9: `Enter` (or `e`, straight to Body) moves the focus into the pane on its
-  // Request tab, seeding the route's drafts lazily. Nothing is fired.
+  // `Enter` (or `e`, straight to Body) moves the focus into the pane on its Request tab, seeding
+  // the route's drafts lazily. Nothing is fired.
   const openPaneForRoute = (route: NonNullable<typeof paneRoute>, forcedSection?: RequestSection) => {
     const key = routeKeyFor(route.method, route.path);
     const seed = seedRequestDraft(route);
@@ -868,8 +847,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   useEffect(() => {
     void loadRoutes();
-    // Deliberately fires once on mount only — a re-render never re-triggers a fetch of its
-    // own (Design Notes: "refreshed on-demand ... not cached indefinitely").
+    // Deliberately fires once on mount only — a re-render never re-triggers a fetch of its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -948,9 +926,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setFilter(next);
         return;
       }
-      // Story 6.9: while the right pane holds focus it owns the keyboard (AppShell is
-      // captured too). Open sub-editors own every key first; then Ctrl+R fires, Ctrl+→/N
-      // and Ctrl+←/P switch sub-tabs (no wrap), and each tab handles the rest.
+      // While the right pane holds focus it owns the keyboard (AppShell is captured too). Open
+      // sub-editors own every key first; then Ctrl+R fires, Ctrl+→/N and Ctrl+←/P switch
+      // sub-tabs (no wrap), and each tab handles the rest.
       if (paneFocused) {
         if (editorOpen) {
           if (rawEditor !== null) {
@@ -1078,8 +1056,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               return;
             }
             if (filterPanelOpen) {
-              // Same auto-owning rule list as the 6.7 response panel, over the editor's
-              // own folds/filters (revisit restores them together with the draft).
+              // Same auto-owning rule list as the response panel, over the editor's own
+              // folds/filters (revisit restores them together with the draft).
               if (key.upArrow === true) {
                 setPanelCursor((prev) => clampTreeSelection(prev - 1, editorRuleList.length));
                 return;
@@ -1167,8 +1145,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           }
           return;
         }
-        // Response tab: Esc closes the rules panel first, then returns to Request (the
-        // draft is intact there); the tree/raw keys follow the 6.7 model.
+        // Response tab: Esc closes the rules panel first, then returns to Request (the draft is
+        // intact there); the tree/raw keys follow the tree model.
         if (key.escape === true) {
           if (filterPanelOpen) {
             setFilterPanelOpen(false);
@@ -1250,9 +1228,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         applyTreeAction(action);
         return;
       }
-      // Story 6.8/6.9: `e` opens the pane straight on the Body section for a route that
-      // carries a body (an example or any content type — non-JSON starts empty); routes
-      // with neither stay inert with no hint.
+      // `e` opens the pane straight on the Body section for a route that carries a body (an
+      // example or any content type — non-JSON starts empty); routes with neither stay inert
+      // with no hint.
       if (input === 'e' || input === 'E') {
         const target = resolveEnterFireTarget(visibleRoutes, selected);
         if (target !== undefined && canEditRouteBody(target)) {
@@ -1272,8 +1250,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setSelected(0);
         return;
       }
-      // Story 6.9: Enter opens the route's Request tab — the request step is mandatory,
-      // the list never fires directly.
+      // Enter opens the route's Request tab — the request step is mandatory, the list never
+      // fires directly.
       if (key.return === true) {
         const target = resolveEnterFireTarget(visibleRoutes, selected);
         if (target !== undefined) {
@@ -1357,8 +1335,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       : focusedEditable
         ? '[enter] request  [/ f] filter  [e] edit body  [home/end] jump'
         : '[enter] request  [/ f] filter  [home/end] jump';
-  // Story 6.9: the pane owns its shortcut line at its bottom while it holds focus; the
-  // keys shared by both tabs lead it.
+  // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
+  // tabs lead it.
   const paneKeys = '[ctrl+r] fire · [ctrl+←→] tab';
   const treeHint = !treeActive
     ? null
@@ -1369,9 +1347,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         : filterPanelOpen
           ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
           : `[esc] request · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level · ${paneKeys}`;
-  // Story 6.8: footer hints reflect editor focus — the sub-editor owns its line while
-  // open, the tree mode lists the edit keys. `[a]` only shows when an add target exists
-  // (UX-DR7: never hint an inert key — scalar roots and empty drafts take `r`).
+  // Footer hints reflect editor focus — the sub-editor owns its line while open, the tree mode
+  // lists the edit keys. `[a]` only shows when an add target exists (UX-DR7: never hint an
+  // inert key — scalar roots and empty drafts take `r`).
   const editorSelectedRow = editorOpen ? editorRows[clampedEditorSelected] : undefined;
   const editorCanAdd =
     editorSelectedRow !== undefined && editorDraft !== undefined && resolveAddParentPath(editorDraft, editorSelectedRow.path) !== null;

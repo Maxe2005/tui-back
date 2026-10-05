@@ -4,7 +4,7 @@ import { CheckboxListItem, resolveCheckboxItemLayout } from './index.js';
 import { renderToString } from './render-to-string.js';
 
 describe('resolveCheckboxItemLayout', () => {
-  it('resolves the unchecked row (AC3)', () => {
+  it('resolves the unchecked row', () => {
     expect(resolveCheckboxItemLayout({ label: 'api-gateway' })).toEqual({
       boxGlyph: '[ ]',
       labelColor: colors.text,
@@ -34,7 +34,7 @@ describe('resolveCheckboxItemLayout', () => {
 });
 
 describe('CheckboxListItem', () => {
-  it('renders the unchecked state (AC2)', async () => {
+  it('renders the unchecked state', async () => {
     const output = await renderToString(<CheckboxListItem label="api-gateway" />);
     expect(output).toContain('[ ]');
   });
@@ -51,7 +51,7 @@ describe('CheckboxListItem', () => {
     expect(output).toContain('api-gateway');
   });
 
-  it('renders trailing metadata distinctly from the label (AC4)', async () => {
+  it('renders trailing metadata distinctly from the label', async () => {
     const output = await renderToString(
       <CheckboxListItem label="api-gateway" meta="main ↑0 ↓0" />,
     );
@@ -59,7 +59,7 @@ describe('CheckboxListItem', () => {
     expect(output).toContain('main ↑0 ↓0');
   });
 
-  it('does not render a marker or accent bar when unselected (AC2)', async () => {
+  it('does not render a marker or accent bar when unselected', async () => {
     const output = await renderToString(<CheckboxListItem label="api-gateway" />);
     expect(output).not.toContain('[x]');
   });

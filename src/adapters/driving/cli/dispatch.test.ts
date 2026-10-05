@@ -14,11 +14,9 @@ import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
 
-// Story 2.33 review fix: `registry clean`'s interactive TTY branch (subcommands.ts's
-// runRegistryClean) drives a real `node:readline/promises` prompt — mocked here so the
-// list-then-confirm flow itself is exercised under test instead of only ever being covered
-// manually (the e2e suite's spawnSync stdin is never a real TTY, same limitation this file's
-// own header already notes for the fullscreen TUI).
+// `registry clean`'s interactive TTY branch drives a real `node:readline/promises` prompt —
+// mocked here so the list-then-confirm flow is exercised under test (the e2e suite's
+// spawnSync stdin is never a real TTY).
 vi.mock('node:readline/promises', () => ({
   createInterface: vi.fn(),
 }));
@@ -263,7 +261,7 @@ describe('subcommand registry guards', () => {
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
 
-  it('edts (story 2.6) rejects excess arguments and otherwise runs the divergence use-case', async () => {
+  it('edts rejects excess arguments and otherwise runs the divergence use-case', async () => {
     const subcommands = buildTestSubcommands();
     const edts = subcommands.find((subcommand) => subcommand.name === 'edts');
     if (!edts) throw new Error('expected edts subcommand');
@@ -275,7 +273,7 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: true, data: { services: [], unreachable: [], errors: [] } });
   });
 
-  it('list-routes (story 6.1) rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
+  it('list-routes rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
     const subcommands = buildTestSubcommands();
     const listRoutesCmd = subcommands.find((subcommand) => subcommand.name === 'list-routes');
     if (!listRoutesCmd) throw new Error('expected list-routes subcommand');
@@ -294,7 +292,7 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
-  it('fire-request (story 6.2) rejects missing/bad-arity/blank arguments and otherwise delegates to the use-case', async () => {
+  it('fire-request rejects missing/bad-arity/blank arguments and otherwise delegates to the use-case', async () => {
     const subcommands = buildTestSubcommands();
     const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
     if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
@@ -317,7 +315,7 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
-  it('fire-request (story 6.9) parses --body/--query/--header and rejects malformed flags', async () => {
+  it('fire-request parses --body/--query/--header and rejects malformed flags', async () => {
     const subcommands = buildTestSubcommands();
     const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
     if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
@@ -346,7 +344,7 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
-  it('fire-request (story 6.9) sends the parsed flags as the request body, query and headers', async () => {
+  it('fire-request sends the parsed flags as the request body, query and headers', async () => {
     const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response('ok', { status: 200 }));
     vi.stubGlobal('fetch', fetch);
     try {
@@ -413,9 +411,9 @@ describe('subcommand registry guards', () => {
     expect(notFound).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
   });
 
-  // Review fix (story 2.29): three previously-silent --branches mistakes now reject with
-  // invalid-argument instead of resolving to a surprising default.
-  describe('edt delete --branches validation (story 2.29 review fixes)', () => {
+  // --branches mistakes reject with invalid-argument instead of resolving to a surprising
+  // default.
+  describe('edt delete --branches validation', () => {
     function fakeEdtRegistryWithTarget(): EdtRegistryPort {
       const target = {
         ulid: 'ulid-1',
@@ -531,7 +529,7 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.3) gates the all-repos mode behind confirmation, rejecting unknown flags', async () => {
+  it('update gates the all-repos mode behind confirmation, rejecting unknown flags', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
@@ -550,7 +548,7 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.3) runs the all-repos scope with --all --yes in any order', async () => {
+  it('update runs the all-repos scope with --all --yes in any order', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
@@ -565,7 +563,7 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.1) fails with no-active-edt when no EDT is active', async () => {
+  it('update fails with no-active-edt when no EDT is active', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
@@ -575,7 +573,7 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
   });
 
-  describe('registry clean (story 2.33)', () => {
+  describe('registry clean', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
       if (!registry) throw new Error('expected registry subcommand');
@@ -616,7 +614,7 @@ describe('subcommand registry guards', () => {
       expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
-    it('rejects a --path value that looks like another flag instead of silently consuming it as a literal path (review fix)', async () => {
+    it('rejects a --path value that looks like another flag instead of silently consuming it as a literal path', async () => {
       const registry = findRegistry(buildTestSubcommands());
 
       const looksLikeYes = await registry.run(['clean', '--yes', '--path', '--yes']);
@@ -626,7 +624,7 @@ describe('subcommand registry guards', () => {
       expect(looksLikePath).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
-    it('rejects an empty-string --path value instead of silently resolving it to cwd (review fix)', async () => {
+    it('rejects an empty-string --path value instead of silently resolving it to cwd', async () => {
       const registry = findRegistry(buildTestSubcommands());
 
       const empty = await registry.run(['clean', '--yes', '--path', '']);
@@ -636,7 +634,7 @@ describe('subcommand registry guards', () => {
       expect(blank).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
-    it('de-duplicates the same resolved path given via multiple --path flags, never a duplicate outcome row (review fix)', async () => {
+    it('de-duplicates the same resolved path given via multiple --path flags, never a duplicate outcome row', async () => {
       const remove = vi.fn(async () => ok(undefined));
       const registryPort: RegistryPort = {
         list: async () => ok([]),
@@ -654,7 +652,7 @@ describe('subcommand registry guards', () => {
       expect(remove).toHaveBeenCalledTimes(1);
     });
 
-    it('AC4: --yes --path <p1> --path <p2> removes each path via RegistryPort.remove, one path failing never blocking the other', async () => {
+    it('--yes --path <p1> --path <p2> removes each path via RegistryPort.remove, one path failing never blocking the other', async () => {
       const remove = vi.fn(async (path: string) =>
         path === '/repo/bad' ? err('registry-write-error', 'disk full') : ok(undefined),
       );
@@ -734,7 +732,7 @@ describe('subcommand registry guards', () => {
       }
     });
 
-    it('surfaces a path that could not even be checked in `errors`, never silently dropped (review fix)', async () => {
+    it('surfaces a path that could not even be checked in `errors`, never silently dropped', async () => {
       const registryPort: RegistryPort = {
         list: async () => ok(['/repo/gone', '/repo/unknown']),
         add: async () => ok(undefined),
@@ -760,7 +758,7 @@ describe('subcommand registry guards', () => {
     });
   });
 
-  describe('registry clean — interactive TTY flow (story 2.33 review fix)', () => {
+  describe('registry clean — interactive TTY flow', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
       if (!registry) throw new Error('expected registry subcommand');

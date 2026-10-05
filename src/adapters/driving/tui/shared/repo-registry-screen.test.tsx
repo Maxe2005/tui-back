@@ -1,14 +1,7 @@
-// tui/shared/repo-registry-screen: render tests (AD-13 — Ink smoke coverage) for story
-// 2.11's registry screen, covering every I/O-matrix row: root-input, scanning, distinct
-// empty-vs-error scan outcomes, candidate multi-select, registering, and per-path register
-// outcomes (registered/already-registered/failed) — plus the pure key-handling functions
-// driving root-text entry and candidate navigation/selection (the shared renderToString
-// harness's fake stdin never emits data, so useInput itself is never exercised by a test —
-// see render-to-string.ts and edts-zone.test.tsx for the established convention).
-// Story 2.33 extends coverage with the "Clean stale entries" action's own I/O-matrix rows:
-// stale-candidate listing (pre-checked, with the EDT-member note), the distinct
-// zero-candidates and scan-error states folded into the same 'clean-candidates' phase, the
-// 'cleaning' in-flight state, and per-path removed/failed outcomes.
+// tui/shared/repo-registry-screen: render tests for the registry screen — root input,
+// scanning, distinct empty-vs-error scan outcomes, candidate multi-select, registering,
+// per-path outcomes, and the "Clean stale entries" flow — plus the pure key-handling functions
+// (renderToString's fake stdin never emits keys, so useInput itself is never exercised).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
@@ -79,7 +72,7 @@ describe('resolveRegistryScreenPhase', () => {
     ).toBe('results');
   });
 
-  it('is clean-candidates while the stale-entry classification is in flight (story 2.33)', () => {
+  it('is clean-candidates while the stale-entry classification is in flight', () => {
     expect(resolveRegistryScreenPhase({ ...base, registryCleanScanStatus: 'loading' })).toBe('clean-candidates');
   });
 
@@ -171,7 +164,7 @@ describe('toggleCandidateSelection', () => {
   });
 });
 
-describe('toggleCleanCandidateExclusion (story 2.33)', () => {
+describe('toggleCleanCandidateExclusion', () => {
   it('excludes a not-yet-excluded path and re-includes an already-excluded one, without mutating the input set', () => {
     const original = new Set<string>();
     const excluded = toggleCleanCandidateExclusion(original, '/repos/a');
@@ -186,8 +179,8 @@ describe('toggleCleanCandidateExclusion (story 2.33)', () => {
 // Every render test below seeds registry-screen state directly via store.setState (the
 // established convention — see edts-zone.test.tsx). resetRegistryScreen is a synchronous
 // set(), so unlike EdtsZone's loadEdtsBranches it needs no stub to avoid racing seeded state.
-describe('RepoRegistryScreen (story 2.11)', () => {
-  it('always shows the static manifest-creation guidance, in every phase — never gated to first launch (AC1)', async () => {
+describe('RepoRegistryScreen', () => {
+  it('always shows the static manifest-creation guidance, in every phase — never gated to first launch', async () => {
     const store = createAppStore();
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     for (const line of MANIFEST_GUIDANCE_LINES) {
@@ -209,7 +202,7 @@ describe('RepoRegistryScreen (story 2.11)', () => {
     expect(output).toContain('Scanning');
   });
 
-  it('shows a distinct scan-failure state with its error detail — never indistinguishable from "nothing found" (matrix)', async () => {
+  it('shows a distinct scan-failure state with its error detail — never indistinguishable from "nothing found"', async () => {
     const store = createAppStore();
     store.setState({ registryScanStatus: 'error', registryScanError: 'Scan root not found: /nope' });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
@@ -226,7 +219,7 @@ describe('RepoRegistryScreen (story 2.11)', () => {
     expect(output).not.toContain('Scan failed');
   });
 
-  it('lists every scan candidate as a checkbox-list-item, unchecked, first one highlighted (AC3, UX-DR9)', async () => {
+  it('lists every scan candidate as a checkbox-list-item, unchecked, first one highlighted (UX-DR9)', async () => {
     const store = createAppStore();
     store.setState({
       registryScanStatus: 'idle',
@@ -238,9 +231,9 @@ describe('RepoRegistryScreen (story 2.11)', () => {
     expect(output).toContain('[ ]');
     expect(output).toContain('Space to toggle, Enter to register the selection.');
 
-    // review patch: checkbox-list-item.tsx's own `selected` prop has no visible effect on
-    // its own, so the highlighted (arrow-navigable, first) row must carry its own visible
-    // distinction — present on that row's line, absent from every other candidate's line.
+    // checkbox-list-item.tsx's own `selected` prop has no visible effect on its own, so the
+    // highlighted (arrow-navigable, first) row must carry its own visible distinction —
+    // present on that row's line, absent from every other candidate's line.
     const lines = output.split('\n');
     const highlightedLine = lines.find((line) => line.includes('/repos/api-gateway'));
     const otherLine = lines.find((line) => line.includes('/repos/route-explorer'));
@@ -258,7 +251,7 @@ describe('RepoRegistryScreen (story 2.11)', () => {
     expect(output).toContain('Registering');
   });
 
-  it('reports every selected path\'s outcome — registered / already-registered / failed (AC4)', async () => {
+  it('reports every selected path\'s outcome — registered / already-registered / failed', async () => {
     const store = createAppStore();
     store.setState({
       registryRegisterResults: [
@@ -285,11 +278,11 @@ describe('RepoRegistryScreen (story 2.11)', () => {
   });
 });
 
-// Story 2.33: "Clean stale entries" — classify (never write) then remove only the confirmed
-// paths. Covers the matrix's stale-candidate rows (unreachable/manifest-not-found, the
-// EDT-member note), the distinct zero-candidates and scan-error states folded into
-// 'clean-candidates', 'cleaning', and clean-results' per-path removed/failed outcomes.
-describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
+// "Clean stale entries" — classify (never write), then remove only the confirmed paths: the
+// stale-candidate rows (unreachable/manifest-not-found, the EDT-member note), the distinct
+// zero-candidates and scan-error states folded into 'clean-candidates', 'cleaning', and the
+// per-path removed/failed outcomes.
+describe('RepoRegistryScreen — Clean stale entries', () => {
   it('shows a scanning indicator while classification is in flight', async () => {
     const store = createAppStore();
     store.setState({ registryCleanScanStatus: 'loading' });
@@ -306,7 +299,7 @@ describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
     expect(output).not.toContain('No stale registry entries found');
   });
 
-  it('shows a distinct "no stale entries" state when classification finds zero candidates — never silent (matrix)', async () => {
+  it('shows a distinct "no stale entries" state when classification finds zero candidates — never silent', async () => {
     const store = createAppStore();
     store.setState({ registryCleanScanStatus: 'idle', registryCleanCandidates: [] });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
@@ -314,7 +307,7 @@ describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
     expect(output).not.toContain('Scan failed');
   });
 
-  it('lists every stale candidate pre-checked, with its reason, and an EDT-member note when applicable (AC3, AC6)', async () => {
+  it('lists every stale candidate pre-checked, with its reason, and an EDT-member note when applicable', async () => {
     const store = createAppStore();
     store.setState({
       registryCleanScanStatus: 'idle',
@@ -329,13 +322,13 @@ describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
     expect(output).toContain('/repos/unmanaged');
     expect(output).toContain('manifest-not-found');
     expect(output).toContain('[member of EDT: my-topic]');
-    // Pre-checked by default — unlike scan/register's own candidates (Design Notes).
+    // Pre-checked by default — unlike scan/register's own candidates.
     expect(output).toContain('[x]');
     expect(output).not.toContain('[ ]');
     expect(output).toContain('Space to toggle, Enter to remove the selection.');
   });
 
-  it('reports a path that could not even be checked, alongside the candidate list — never silently dropped (review fix)', async () => {
+  it('reports a path that could not even be checked, alongside the candidate list — never silently dropped', async () => {
     const store = createAppStore();
     store.setState({
       registryCleanScanStatus: 'idle',
@@ -372,7 +365,7 @@ describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
     expect(output).toContain('Removing stale entries');
   });
 
-  it('reports every confirmed path\'s outcome — removed / failed (AC4/AC5)', async () => {
+  it('reports every confirmed path\'s outcome — removed / failed', async () => {
     const store = createAppStore();
     store.setState({
       registryCleanResults: [

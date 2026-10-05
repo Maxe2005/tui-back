@@ -3,7 +3,7 @@ import type { ResolveTabVisibilityData } from '../../../../core/edt/resolve-tab-
 import { ZONES, isZoneId, nextZoneId, zoneGatedStatus, resolveReachableZones, ALL_ZONE_IDS } from './zones.js';
 
 describe('zones metadata', () => {
-  it('defines exactly the six navigation zones (AC6)', () => {
+  it('defines exactly the six navigation zones', () => {
     expect(ZONES.map((zone) => zone.id)).toEqual([
       'dashboard',
       'edts',
@@ -14,7 +14,7 @@ describe('zones metadata', () => {
     ]);
   });
 
-  it('assigns a unique mnemonic to each zone (AC1)', () => {
+  it('assigns a unique mnemonic to each zone', () => {
     const mnemonics = ZONES.map((zone) => zone.mnemonic);
     expect(new Set(mnemonics).size).toBe(ZONES.length);
   });
@@ -34,7 +34,7 @@ describe('zones metadata', () => {
   });
 });
 
-describe('nextZoneId (story 2.12)', () => {
+describe('nextZoneId', () => {
   it('moves forward to the next zone in ZONES order', () => {
     expect(nextZoneId('dashboard', 1)).toBe('edts');
     expect(nextZoneId('edts', 1)).toBe('update');
@@ -68,7 +68,7 @@ function tabVisibility(overrides: Partial<ResolveTabVisibilityData> = {}): Resol
   };
 }
 
-describe('zoneGatedStatus (story 2.13)', () => {
+describe('zoneGatedStatus', () => {
   it('reads routes/shared-types status straight from tabVisibility', () => {
     const visibility = tabVisibility({
       routes: { status: 'disabled', carryingServices: ['api-gateway'] },
@@ -89,7 +89,7 @@ describe('zoneGatedStatus (story 2.13)', () => {
   });
 });
 
-describe('resolveReachableZones (story 2.13)', () => {
+describe('resolveReachableZones', () => {
   it('includes every zone when nothing is omitted', () => {
     expect(resolveReachableZones(tabVisibility())).toEqual(ALL_ZONE_IDS);
   });
@@ -105,7 +105,7 @@ describe('resolveReachableZones (story 2.13)', () => {
   });
 });
 
-describe('nextZoneId reachable-set param (story 2.13)', () => {
+describe('nextZoneId reachable-set param', () => {
   it('skips an omitted tab entirely during wrap traversal', () => {
     const reachable = new Set<(typeof ZONES)[number]['id']>(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
     expect(nextZoneId('logs', 1, reachable)).toBe('shared-types');
@@ -117,7 +117,7 @@ describe('nextZoneId reachable-set param (story 2.13)', () => {
     expect(nextZoneId('logs', 1, reachable)).toBe('routes');
   });
 
-  it('defaults to every zone when no reachable set is passed, unchanged from story 2.12', () => {
+  it('defaults to every zone when no reachable set is passed', () => {
     expect(nextZoneId('dashboard', 1)).toBe('edts');
     expect(nextZoneId('dashboard', -1)).toBe('shared-types');
   });

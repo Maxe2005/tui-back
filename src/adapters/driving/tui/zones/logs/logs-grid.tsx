@@ -1,6 +1,6 @@
-// tui/zones/logs: the active-panes grid — extracted from logs-zone.tsx (refactor). Lays panes
-// out row-major over `layout.cols` and renders one LogsPaneView per pane; purely presentational,
-// all keystroke handling stays in LogsZone's own useInput.
+// tui/zones/logs: the active-panes grid. Lays panes out row-major over `layout.cols` and renders
+// one LogsPaneView per pane; purely presentational, all keystroke handling stays in LogsZone's
+// useInput.
 import { Box } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { LogsPaneData } from '../../store/app-store.js';

@@ -288,7 +288,7 @@ describe('scanRoot', () => {
 });
 
 describe('removeRegistry', () => {
-  it('removes a present path, leaving the others untouched (AC1, story 2.33)', async () => {
+  it('removes a present path, leaving the others untouched', async () => {
     const root = await tempRoot();
     const file = join(root, 'registry.yaml');
     await addRegistry(file, '/m/a');
@@ -300,7 +300,7 @@ describe('removeRegistry', () => {
     expect(parse(await readFile(file, 'utf8'))).toEqual({ repos: ['/m/b'] });
   });
 
-  it('is a no-op success for a path that is not registered (AC1, story 2.33)', async () => {
+  it('is a no-op success for a path that is not registered', async () => {
     const root = await tempRoot();
     const file = join(root, 'registry.yaml');
     await addRegistry(file, '/m/a');
@@ -311,7 +311,7 @@ describe('removeRegistry', () => {
     expect(parse(await readFile(file, 'utf8'))).toEqual({ repos: ['/m/a'] });
   });
 
-  it('is a no-op success against a registry file that does not exist yet, without creating the config dir (review fix)', async () => {
+  it('is a no-op success against a registry file that does not exist yet, without creating the config dir', async () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'registry.yaml');
 

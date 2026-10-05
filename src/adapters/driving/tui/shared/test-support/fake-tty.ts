@@ -1,10 +1,6 @@
-// tui/shared/test-support/fake-tty: the fake-TTY stdout/stdin pair originally built inline
-// in app-shell.alternate-screen.test.tsx (story 2.8) to drive Ink's real interactive
-// machinery without a pty (the repo has no pty lib — see that file's header comment).
-// Extracted here (story 2.9) so every test that needs a real Ink `useInput` round-trip
-// reuses the exact same fakes rather than re-declaring them per file, per this story's own
-// Design Notes ("reusing app-shell.alternate-screen.test.tsx's ... technique (don't
-// duplicate its setup)").
+// tui/shared/test-support/fake-tty: a fake-TTY stdout/stdin pair that drives Ink's real
+// interactive machinery (alternate screen, resize, real useInput keypresses) without a pty, so
+// every real-keypress test shares the same fakes.
 import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 
@@ -36,9 +32,9 @@ export class FakeTtyStdout extends Writable {
   }
 }
 
-// A resize/alt-screen-only fake stdin (story 2.8's original use): reports isTTY but never
-// actually emits input data — `read()` always returns null, so Ink's readable-stream input
-// pipeline never has bytes to parse. Fine for tests that only exercise mount/unmount/resize.
+// A resize/alt-screen-only fake stdin: reports isTTY but never emits input data — `read()`
+// always returns null, so Ink's input pipeline never has bytes to parse. Fine for tests that
+// only exercise mount/unmount/resize.
 export function fakeTtyStdin(): NodeJS.ReadStream {
   const stdin = new EventEmitter() as unknown as NodeJS.ReadStream;
   Object.assign(stdin, {
@@ -54,11 +50,10 @@ export function fakeTtyStdin(): NodeJS.ReadStream {
   return stdin;
 }
 
-// Story 2.9: a *real* keypress-capable fake stdin. Ink's `App` component attaches a
-// `'readable'` listener and pulls bytes via `stdin.read()`/`stdin.setEncoding('utf8')` —
-// exactly what a real `node:stream.PassThrough` already implements, so `stdin.write(...)`
-// with a raw escape sequence or literal character round-trips through Ink's own keypress
-// parser (`parse-keypress.js`) into a real `useInput` callback invocation, no pty required.
+// A *real* keypress-capable fake stdin. Ink's `App` attaches a `'readable'` listener and pulls
+// bytes via `stdin.read()`/`stdin.setEncoding('utf8')` — exactly what a `node:stream.PassThrough`
+// implements, so `stdin.write(...)` with a raw escape sequence or character round-trips through
+// Ink's keypress parser (`parse-keypress.js`) into a real `useInput` callback.
 export function fakeInteractiveTtyStdin(): NodeJS.ReadStream {
   const stdin = new PassThrough();
   Object.assign(stdin, {
@@ -85,24 +80,24 @@ export const KEYS = {
   right: '\x1b[C',
   home: '\x1b[H',
   end: '\x1b[F',
-  // Story 6.7: PgUp/PgDn (CSI `5~`/`6~`, decoded by ink's parse-keypress.js into
-  // `key.pageUp`/`key.pageDown`) — the JsonTree pages by its own viewport, tree-locally.
+  // PgUp/PgDn (CSI `5~`/`6~`, decoded by ink's parse-keypress.js into `key.pageUp`/
+  // `key.pageDown`).
   pageUp: '\x1b[5~',
   pageDown: '\x1b[6~',
-  // Story 2.21: Ctrl+letter comes over the wire as its codepoint-1..26 control byte
-  // (ink's parse-keypress.js) — Ctrl+W is 'w' (0x77) - 'a' (0x61) + 1 = 0x17.
+  // Ctrl+letter comes over the wire as its codepoint-1..26 control byte (ink's
+  // parse-keypress.js) — Ctrl+W is 'w' (0x77) - 'a' (0x61) + 1 = 0x17.
   ctrlW: '\x17',
-  // Story 5.2 (review fix): Ctrl+Left/Right (unlike Ctrl+letter) is a CSI sequence with an
-  // explicit modifier parameter — xterm's own encoding, `5` = 1 + ctrl's bit (4) — which ink's
-  // parse-keypress.js decodes into `key.ctrl: true` alongside `key.leftArrow`/`key.rightArrow`.
+  // Ctrl+Left/Right (unlike Ctrl+letter) is a CSI sequence with an explicit modifier parameter —
+  // xterm's encoding, `5` = 1 + ctrl's bit (4) — which ink's parse-keypress.js decodes into
+  // `key.ctrl: true` alongside `key.leftArrow`/`key.rightArrow`.
   ctrlLeft: '\x1b[1;5D',
   ctrlRight: '\x1b[1;5C',
-  // Story 2.36: the create wizard's Ctrl+N / Ctrl+P step-navigation fallbacks ('n' = 0x0e,
-  // 'p' = 0x10, same codepoint-1..26 encoding as ctrlW above).
+  // The create wizard's Ctrl+N / Ctrl+P step-navigation fallbacks ('n' = 0x0e, 'p' = 0x10, same
+  // codepoint-1..26 encoding as ctrlW above).
   ctrlN: '\x0e',
   ctrlP: '\x10',
-  // Story 2.37: the create wizard's override-box revert ('r' = 0x12).
+  // The create wizard's override-box revert ('r' = 0x12).
   ctrlR: '\x12',
-  // Story 2.41: the switch discard confirmation's explicit confirm key ('e' = 0x05).
+  // The switch discard confirmation's explicit confirm key ('e' = 0x05).
   ctrlE: '\x05',
 } as const;

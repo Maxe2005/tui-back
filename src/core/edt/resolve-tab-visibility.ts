@@ -1,16 +1,8 @@
-// core/edt/resolve-tab-visibility: story 2.13 — computes each manifest-gated zone tab's
-// visibility status (`omitted`/`disabled`/`enabled`) by cross-referencing every *registered*
-// repo's manifest module ids (core/scripts/list-repos.ts's registry-wide `moduleIds` scan)
-// against *active-EDT* membership (mirrors core/edt/list.ts:75-89's active-EDT-member-path
-// resolution) — no duplicated manifest loop, no duplicated active-EDT resolution.
-//
-// `Routes` gates on `route-explorer`; `shared-types` gates on `shared-types-source` OR
-// `shared-types-consumer` (either counts, for both omission and disabled) — per the spec's
-// Boundaries & Constraints. `module-registry.ts` stays empty (human-confirmed scope): these
-// module ids are matched only against whatever a manifest happens to declare, never
-// validated against the compiled-in module registry here — real usage keeps both gated
-// zones `omitted` until Epic 4/6 register real modules; `disabled`/`enabled` are exercised
-// only via injected port fixtures in tests.
+// core/edt/resolve-tab-visibility: computes each manifest-gated zone tab's status
+// (`omitted`/`disabled`/`enabled`) from every registered repo's manifest module ids against
+// active-EDT membership. `Routes` gates on `route-explorer`; `shared-types` on
+// `shared-types-source` OR `shared-types-consumer`. Module ids are matched as declared, never
+// validated against the compiled-in module registry.
 import { resolve } from 'node:path';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { ManifestPort } from '../ports/manifest.js';
@@ -37,12 +29,10 @@ export interface ResolveTabVisibilityData {
   sharedTypes: GatedTabVisibility;
 }
 
-// The single source of truth for the pre-load / unwired-store default (Boundaries: "default
-// reachable state") — both gated tabs render 'enabled', never 'omitted' (which would hide,
-// then re-show, a tab once the real load resolves) and never 'disabled' (which would falsely
-// dim a tab before its real status is known). Shared by app-store.ts (the pre-load store
-// default) and zone-tab-bar.tsx (the default for callers that don't care about
-// manifest-gating) so the literal is defined once.
+// The pre-load / unwired-store default: both gated tabs render 'enabled', never 'omitted'
+// (which would hide, then re-show, a tab once the real load resolves) and never 'disabled'
+// (which would falsely dim a tab before its real status is known). Shared by app-store.ts and
+// zone-tab-bar.tsx so the literal is defined once.
 export const DEFAULT_TAB_VISIBILITY: ResolveTabVisibilityData = {
   routes: { status: 'enabled', carryingServices: [] },
   sharedTypes: { status: 'enabled', carryingServices: [] },
@@ -65,8 +55,8 @@ export async function resolveTabVisibility(
     return listed;
   }
 
-  // Mirrors core/edt/list.ts:75-89 exactly: resolve the active EDT's member repo paths
-  // purely to decide disabled-vs-enabled below — never to source a branch/identity value.
+  // Same resolution as core/edt/list.ts: the active EDT's member repo paths, used only to
+  // decide disabled-vs-enabled below — never to source a branch/identity value.
   const activeUlid = await state.readActiveEdt();
   if (!activeUlid.ok) {
     return activeUlid;

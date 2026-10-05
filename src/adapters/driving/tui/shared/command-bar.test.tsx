@@ -1,8 +1,6 @@
-// tui/shared/command-bar: unit coverage for the pure key-handling functions driving the
-// story 2.14 command bar's text entry and Tab-autocomplete, extended by story 2.17's
-// double-Tab grid browser (the shared renderToString harness's fake stdin never emits data,
-// so useInput itself is never exercised by a test — see render-to-string.ts and
-// repo-registry-screen.test.tsx for the established convention). Real-keypress coverage of the
+// tui/shared/command-bar: unit coverage for the pure key-handling functions behind the command
+// bar's text entry, Tab-autocomplete and double-Tab grid browser (renderToString's fake stdin
+// never emits data, so useInput itself is never exercised here). Real-keypress coverage of the
 // bar mounted inside AppShell lives in app-shell.interaction.test.tsx.
 import { describe, it, expect } from 'vitest';
 import type { Command } from '../commands/commands.js';
@@ -54,7 +52,7 @@ const edtCreate: Command = { name: 'edt-create', run: () => {} };
 const edtSwitch: Command = { name: 'edt-switch', run: () => {} };
 const edtModify: Command = { name: 'edt-modify', run: () => {} };
 
-describe('resolveTabAutocomplete (I/O matrix: Autocomplete single/ambiguous/none)', () => {
+describe('resolveTabAutocomplete (single/ambiguous/none)', () => {
   it("completes the query to the single match's full name", () => {
     expect(resolveTabAutocomplete('reg', [registry])).toBe('registry');
   });
@@ -86,7 +84,7 @@ describe('longestCommonPrefix', () => {
   });
 });
 
-describe('resolveTabPress (I/O matrix: Tab at maximal prefix, 1st/2nd press, elapse/interrupt/change)', () => {
+describe('resolveTabPress (Tab at maximal prefix, 1st/2nd press, elapse/interrupt/change)', () => {
   it('delegates to resolveTabAutocomplete on a single match', () => {
     const result = resolveTabPress('reg', [registry], null, 1000);
     expect(result).toEqual({ kind: 'complete', value: 'registry' });
@@ -136,7 +134,7 @@ describe('resolveTabPress (I/O matrix: Tab at maximal prefix, 1st/2nd press, ela
     expect(result).toEqual({ kind: 'pending', state: { query: 'edt-', at: 1001 } });
   });
 
-  it('re-arms instead of showing the grid if the clock appears to have moved backwards since the pending press (review fix)', () => {
+  it('re-arms instead of showing the grid if the clock appears to have moved backwards since the pending press', () => {
     // now < pending.at (e.g. an NTP/system-clock adjustment) must not be misread as "within
     // the window" by a naive `now - pending.at <= window` check, which a negative delta would
     // satisfy.
@@ -235,12 +233,10 @@ describe('layoutCommandGrid', () => {
     expect(layout.truncated.right).toBe(false);
   });
 
-  // Story 5.5: vertical pagination on top of the existing horizontal truncation/scroll
-  // (UX-DR30) — used by logs-zone.tsx's filter-history grid browser (I/O matrix
-  // OVERFLOW_HISTORY_GRID). Every pre-5.5 call above omits `verticalWindow`, so `rowScrollOffset`
-  // stays 0 and `truncated.top`/`.bottom` stay undefined there — asserted once more explicitly
-  // here as the story's own no-behavior-change guard for every existing caller.
-  describe('vertical pagination (story 5.5)', () => {
+  // Vertical pagination on top of the horizontal truncation/scroll — used by logs-zone.tsx's
+  // filter-history grid browser. A call without `verticalWindow` keeps `rowScrollOffset` at 0
+  // and `truncated.top`/`.bottom` undefined, asserted explicitly here for existing callers.
+  describe('vertical pagination', () => {
     it('is a no-op (rowScrollOffset: 0, no top/bottom truncation) when no verticalWindow is given', () => {
       const matches = [registry, reload, edtCreate];
       const layout = layoutCommandGrid(matches, 8, 200, (c) => c.name, 0);
@@ -264,9 +260,9 @@ describe('layoutCommandGrid', () => {
       expect(layout.rowScrollOffset).toBe(0);
       expect(layout.truncated.top).toBe(false);
       expect(layout.truncated.bottom).toBe(true);
-      // Review fix: 4 items + the "more below" indicator line LogFilterEditor renders around
-      // the grid = exactly 5 — a full 5 rows of *content* here would overshoot the budget once
-      // that indicator line is counted (it used to, before this fix).
+      // 4 items + the "more below" indicator line LogFilterEditor renders around the grid =
+      // exactly 5 — a full 5 rows of *content* would overshoot the budget once that indicator
+      // line is counted.
       expect(layout.columns[0]).toHaveLength(4);
       expect(layout.columns[0]?.[0]?.name).toBe('cmd-0');
     });
@@ -279,11 +275,9 @@ describe('layoutCommandGrid', () => {
       expect(layout.columns[0]?.some((c) => c.name === 'cmd-19')).toBe(true);
     });
 
-    // Review fix: `applyVerticalWindow` used to slice every column to the full `maxVisibleRows`
-    // and let the caller (LogFilterEditor) render the `▲`/`▼` indicator lines as *additional*
-    // siblings around that — so the grid's real footprint was `maxVisibleRows + up to 2`, over
-    // budget by design. Asserts the invariant across a spread of budgets/cursor positions,
-    // mirroring bounded-list.test.tsx's own "never renders more total rows" guard.
+    // The indicator lines count toward the budget: the grid's footprint, indicators included,
+    // must never exceed `maxVisibleRows`. Asserted across a spread of budgets/cursor positions,
+    // mirroring bounded-list.test.tsx's "never renders more total rows" guard.
     it('never renders more total rows (column content + top/bottom indicators) than maxVisibleRows', () => {
       const single: Command[] = Array.from({ length: 30 }, (_, i) => ({ name: `cmd-${i}`, run: () => {} }));
       for (const maxVisibleRows of [1, 2, 3, 6]) {
@@ -366,7 +360,7 @@ describe('commandAtGridCursor', () => {
   });
 });
 
-describe('runCommand (story 3.11)', () => {
+describe('runCommand', () => {
   function fakeStore(calls: string[]) {
     return {
       getState: () => ({

@@ -1,5 +1,5 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.37 — the "Configurer <service>" override
-// box's Ink view. Its state, key reducer and Apply validation live in override-box.logic.ts.
+// tui/zones/edts/dialogs/create-wizard: the "Configurer <service>" override box's Ink view. Its
+// state, key reducer and Apply validation live in override-box.logic.ts.
 import { Box, Text } from 'ink';
 import {
   BranchAutocompleteInput,

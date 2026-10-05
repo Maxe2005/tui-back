@@ -1,7 +1,6 @@
-// core/edt/resolve-tab-visibility: unit tests against fake ports (AD-13 core layer) —
-// every I/O-matrix row of story 2.13: registry-wide omission, active-EDT-scoped disable,
-// enablement, either shared-types module id counting, and error propagation from the two
-// reused resolution paths (listRepos, active-EDT-member resolution).
+// core/edt/resolve-tab-visibility: unit tests against fake ports — registry-wide omission,
+// active-EDT-scoped disable, enablement, either shared-types module id counting, and error
+// propagation from the two reused resolution paths (listRepos, active-EDT-member resolution).
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';

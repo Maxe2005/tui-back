@@ -1,8 +1,6 @@
-// tui/zones/shared-types: render tests (AD-13 — Ink smoke coverage) for story 2.13's
-// `disabled` explanatory message, plus the unaffected `enabled`/`omitted` fallthrough to the
-// existing ZonePlaceholder stub (module-registry.ts stays empty in real usage — `disabled`
-// is only ever exercised here via a directly-seeded store fixture, per the spec's
-// Boundaries).
+// tui/zones/shared-types: render tests for the `disabled` explanatory message, plus the
+// `enabled`/`omitted` fallthrough to the ZonePlaceholder stub (`disabled` is only reachable
+// here through a directly-seeded store fixture).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
@@ -22,7 +20,7 @@ describe('formatSharedTypesDisabledMessage', () => {
   });
 });
 
-describe('SharedTypesZone (story 2.13)', () => {
+describe('SharedTypesZone', () => {
   it('shows the explanatory message naming the carrying repo when disabled', async () => {
     const store = createAppStore();
     store.setState({

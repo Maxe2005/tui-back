@@ -1,7 +1,6 @@
-// tui/zones/logs: real-keypress interactions (story 5.1) — `renderToString`'s fake stdin
-// never emits data (see logs-zone.test.tsx), so Tab/Space/Enter/Escape/Ctrl+A's actual
-// dispatch through a real `useInput` round-trip is only observable here, reusing
-// edts-zone.interaction.test.tsx's own fake-tty technique (shared/test-support/fake-tty.ts).
+// tui/zones/logs: real-keypress interactions — renderToString's fake stdin never emits data, so
+// Tab/Space/Enter/Escape/Ctrl+A's dispatch through a real `useInput` round-trip is only
+// observable here (shared/test-support/fake-tty.ts).
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
@@ -69,8 +68,8 @@ function seedStore(overrides: Record<string, unknown> = {}) {
   return store;
 }
 
-describe('LogsZone real-keypress interactions (story 5.1)', () => {
-  it('AC: Tab cycles focus edt-list -> other-list -> panes -> edt-list (Space toggles the currently-focused list)', async () => {
+describe('LogsZone real-keypress interactions', () => {
+  it('Tab cycles focus edt-list -> other-list -> panes -> edt-list (Space toggles the currently-focused list)', async () => {
     const store = seedStore();
     const { instance, stdin } = mount(store);
     try {
@@ -104,7 +103,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  it('AC: Enter on an unselected list row opens an ad hoc fullscreen preview without changing selection; Escape closes it, selection unchanged', async () => {
+  it('Enter on an unselected list row opens an ad hoc fullscreen preview without changing selection; Escape closes it, selection unchanged', async () => {
     const subscribeLogsPane = vi.fn(async () => {});
     const unsubscribeLogsPane = vi.fn();
     const store = seedStore({ subscribeLogsPane, unsubscribeLogsPane });
@@ -122,8 +121,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
 
       await pressEscape(instance, stdin);
       expect(store.getState().logsFullscreenTarget).toBeNull();
-      // I/O matrix FULLSCREEN_PREVIEW: "Escape stops that ad hoc stream and returns, selection
-      // unchanged".
+      // Escape stops that ad hoc stream and returns, selection unchanged.
       expect(store.getState().logsOtherSelected).toEqual([]);
       expect(unsubscribeLogsPane).toHaveBeenCalledWith('/repos/api-gateway');
     } finally {
@@ -132,7 +130,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  it('I/O matrix SELECTION_CHANGE: deselecting a service stops its stream and removes its pane entry', async () => {
+  it('deselecting a service stops its stream and removes its pane entry', async () => {
     const subscribeLogsPane = vi.fn(async () => {});
     const unsubscribeLogsPane = vi.fn();
     const store = seedStore({ subscribeLogsPane, unsubscribeLogsPane });
@@ -160,8 +158,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2: `/` opens the global-filter editor from any Logs-zone focus (Boundaries).
-  it('AC: "/" opens the global filter editor from list focus, and typed characters update the draft live', async () => {
+  // `/` opens the global-filter editor from any Logs-zone focus.
+  it('"/" opens the global filter editor from list focus, and typed characters update the draft live', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -178,8 +176,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (Boundaries): "f (bare, sub-focused grid pane or fullscreen pane) opens a
-  // filter-editor modal for that pane's own filter" — never reachable from list focus.
+  // `f` (bare, on a sub-focused grid pane or fullscreen pane) opens that pane's own filter
+  // editor — never reachable from list focus.
   it('"f" opens a pane\'s own filter editor only once a pane is sub-focused in the grid — never from list focus', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -198,8 +196,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
 
       await press(instance, stdin, 'f');
       expect(stdout.output).toContain('PANE LOG FILTER');
-      // User-reported: the pane editor's title names which service it's editing, so it's
-      // never ambiguous which pane a "PANE LOG FILTER" popup belongs to.
+      // The pane editor's title names which service it's editing, so it's never ambiguous which
+      // pane a "PANE LOG FILTER" popup belongs to.
       expect(stdout.output).toContain('PANE LOG FILTER — api-gateway');
     } finally {
       instance.unmount();
@@ -207,8 +205,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (Boundaries): "g ... toggles that one pane's engagement with the global
-  // filter" — reflected back via the pane's own "global filter: off" annotation.
+  // `g` toggles that one pane's engagement with the global filter — reflected back via the
+  // pane's own "global filter: off" annotation.
   it('"g" toggles the sub-focused pane\'s engagement with the global filter', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -226,8 +224,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (Boundaries): "Escape ... if a pane is sub-focused in the grid ... else
-  // disengages it from the global filter" (I/O matrix ESCAPE_PANE, no-own-filter branch).
+  // Escape on a sub-focused pane with no own filter disengages it from the global filter.
   it('Escape disengages the sub-focused pane from the global filter when it has no own filter set', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -245,9 +242,9 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (Design Notes): "compileLogFilter recomputes on every editor keystroke ... so
-  // the inline regex error appears/clears live" — Tab switches the open editor into regex
-  // mode, then a malformed pattern surfaces the inline error rather than throwing.
+  // The filter recompiles on every editor keystroke, so the inline regex error appears/clears
+  // live — Tab switches the open editor into regex mode, then a malformed pattern surfaces the
+  // inline error rather than throwing.
   it('the filter editor switches to regex mode via Tab, and a malformed pattern shows an inline error instead of throwing', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -266,9 +263,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (user-reported): Ctrl+Left/Right cycle the editor's level restriction — Ctrl
-  // disambiguates it from a bare arrow, which a text cursor would otherwise claim (no
-  // dedicated Boundaries key binding is named for this — see logs-zone.logic.ts's
+  // Ctrl+Left/Right cycle the editor's level restriction — Ctrl disambiguates it from a bare
+  // arrow, which the text caret owns (see logs-zone.logic.ts's
   // cycleFilterLevel/LOG_FILTER_LEVEL_CYCLE).
   it('the filter editor cycles its level restriction with Ctrl+Right/Ctrl+Left', async () => {
     const store = seedStore();
@@ -285,8 +281,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       await press(instance, stdin, KEYS.ctrlRight);
       expect(stdout.output).toContain('Level: WARN');
 
-      // Review fix: this test's own name promised Right *and* Left, but only ever pressed
-      // Right — Left must cycle the same restriction backward (WARN -> ERROR).
+      // Left cycles the same restriction backward (WARN -> ERROR).
       await press(instance, stdin, KEYS.ctrlLeft);
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
       expect(lastFrame).toContain('Level: ERROR');
@@ -296,9 +291,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // User-reported: bare Left/Right used to cycle the level restriction, colliding with where a
-  // text cursor would naturally live — now they're the TextInputLine caret (Ctrl+Left/Right
-  // above is the only remaining binding for the level restriction) and never touch it.
+  // Bare Left/Right are the TextInputLine caret (Ctrl+Left/Right above is the only binding for
+  // the level restriction) and never touch it.
   it('bare Left/Right no longer cycle the level restriction or alter the query', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -319,9 +313,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // App-wide cursor adoption (mirrors story 2.32's TextInputLine/nextTextInputValue contract):
-  // the filter editor's query field now supports real caret navigation and mid-string
-  // insert/delete instead of always appending/removing at the end.
+  // The filter editor's query field supports real caret navigation and mid-string insert/delete
+  // (the shared TextInputLine/nextTextInputValue contract).
   it('Left/Home move the caret so a typed character inserts mid-string rather than appending', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -402,8 +395,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
   });
 
   // A pure caret move while browsing history must not snap the draft back — only typing/
-  // Backspace does that (mirrors the EDT-zone regression already proven for `branchNamesTouched`
-  // never flipping on a cursor-only move).
+  // Backspace does that.
   it('Left/Right while browsing a recalled history entry moves the caret without snapping back to the draft', async () => {
     const store = seedStore({ filterHistory: { 'global:text': ['recalled'] } });
     const { instance, stdin, stdout } = mount(store);
@@ -430,10 +422,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (Design Notes): "Both editors share one component and validation" — the editor's
-  // own text-capture must never let '/', 'f', 'g' fall through to the global shortcuts they'd
-  // otherwise trigger (open global editor / open pane editor / toggle global engagement)
-  // (review fix: no existing test proved this).
+  // The editor's text capture must never let '/', 'f', 'g' fall through to the global shortcuts
+  // they'd otherwise trigger (open global editor / open pane editor / toggle global engagement).
   it('typing "/", "f", "g" while the editor is open appends them to the query rather than triggering global shortcuts', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -455,9 +445,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2: Escape while the editor is open is a true cancel — TextInputLine's own hint
-  // text ("[Enter] confirm  [Esc] cancel") must actually mean what it says (review fix: Escape
-  // and Enter used to be handled identically, so neither ever reverted anything).
+  // Escape while the editor is open is a true cancel — TextInputLine's own hint text
+  // ("[Enter] confirm  [Esc] cancel") must mean what it says.
   it('Escape while the filter editor is open reverts the pane filter to what it was before the edit', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -482,8 +471,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2: Enter is a true confirm — it must keep whatever was last committed while
-  // editing, unlike Escape just above.
+  // Enter is a true confirm — it keeps whatever was last committed while editing, unlike Escape
+  // just above.
   it('Enter while the filter editor is open keeps the edit and closes the editor', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -507,8 +496,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2: no test previously proved Escape/Enter actually closes the modal and hands
-  // keystroke dispatch back to the rest of the zone (review fix).
+  // Escape/Enter close the modal and hand keystroke dispatch back to the rest of the zone.
   it('Escape closes the open filter editor and normal zone dispatch resumes', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -532,10 +520,9 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2 (review fix): the "pane filter: ..." annotation and resolveFilterClearTarget's
-  // hasOwnFilter check both key off entry *presence* in paneFilters, not content — committing a
-  // vacuous draft (query backspaced to empty) must remove the entry, not leave a no-op-but-
-  // present one behind.
+  // The "pane filter: ..." annotation and resolveFilterClearTarget's hasOwnFilter check both key
+  // off entry *presence* in paneFilters, not content — committing a vacuous draft (query
+  // backspaced to empty) must remove the entry, not leave a no-op-but-present one behind.
   it('backspacing a pane filter\'s query back to empty removes the "pane filter: ..." annotation', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
@@ -566,9 +553,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.2: proves the filter actually narrows what's rendered, not just its own draft
-  // text echo (review fix — the only existing test that types into the editor only ever
-  // checked TextInputLine's own value echo, never pane content).
+  // The filter actually narrows what's rendered, not just its own draft text echo.
   it('the global filter editor narrows rendered log lines end-to-end', async () => {
     const subscribeLogsPane = vi.fn(async () => {});
     const unsubscribeLogsPane = vi.fn();
@@ -610,9 +595,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       expect(lastFrame).toContain('banana line');
       expect(lastFrame).not.toContain('apple line');
       expect(lastFrame).not.toContain('cherry line');
-      // User-reported: an engaged pane with an active global filter shows what that filter
-      // actually is, not just a boolean — so a pane's own annotation and the editor draft
-      // never disagree about what's being applied.
+      // An engaged pane with an active global filter shows what that filter actually is, not
+      // just a boolean — so a pane's own annotation and the editor draft never disagree.
       expect(lastFrame).toContain('global filter: text "banana"');
     } finally {
       instance.unmount();
@@ -620,9 +604,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.4: filter history recall.
-  describe('filter history recall (story 5.4)', () => {
-    it('I/O matrix HISTORY_PUSH: Enter on a compiled, non-empty draft pushes the query onto the store\'s filterHistory', async () => {
+  describe('filter history recall', () => {
+    it('Enter on a compiled, non-empty draft pushes the query onto the store\'s filterHistory', async () => {
       const store = seedStore();
       const { instance, stdin } = mount(store);
       try {
@@ -639,7 +622,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('I/O matrix DEDUP_TOP: committing the same query as the current top entry moves it to front without duplicating', async () => {
+    it('committing the same query as the current top entry moves it to front without duplicating', async () => {
       const store = seedStore();
       const { instance, stdin } = mount(store);
       try {
@@ -700,7 +683,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
         lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('Text: oldest');
 
-        // I/O matrix ARROW_UP_OLDEST: already at the oldest entry — a further ↑ is a no-op.
+        // Already at the oldest entry — a further ↑ is a no-op.
         await press(instance, stdin, KEYS.up);
         lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('Text: oldest');
@@ -710,7 +693,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('I/O matrix ARROW_DOWN_PAST_RECENT: ↓ while browsing walks back toward the draft, restoring it exactly one ↓ past the most-recent entry', async () => {
+    it('↓ while browsing walks back toward the draft, restoring it exactly one ↓ past the most-recent entry', async () => {
       const store = seedStore({ filterHistory: { 'global:text': ['newest', 'older'] } });
       const { instance, stdin, stdout } = mount(store);
       try {
@@ -734,7 +717,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('I/O matrix SNAP_BACK_TYPE: a printable character while browsing snaps back to the draft with that keystroke applied on top', async () => {
+    it('a printable character while browsing snaps back to the draft with that keystroke applied on top', async () => {
       const store = seedStore({ filterHistory: { 'global:text': ['recalled'] } });
       const { instance, stdin, stdout } = mount(store);
       try {
@@ -753,7 +736,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('SNAP_BACK_TYPE also applies to Backspace while browsing', async () => {
+    it('the snap-back also applies to Backspace while browsing', async () => {
       const store = seedStore({ filterHistory: { 'global:text': ['recalled'] } });
       const { instance, stdin, stdout } = mount(store);
       try {
@@ -773,7 +756,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('I/O matrix GRID_OPEN_ESC: ↓ on an untouched draft opens a grid listing the full history, then Esc closes the whole editor', async () => {
+    it('↓ on an untouched draft opens a grid listing the full history, then Esc closes the whole editor', async () => {
       const store = seedStore({ filterHistory: { 'global:text': ['alpha', 'beta'] } });
       const { instance, stdin, stdout } = mount(store);
       try {
@@ -828,7 +811,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('the pane-scoped editor keys its own history separately from the global editor and other services (Boundaries: one independent list per exact scope+mode key)', async () => {
+    it('the pane-scoped editor keys its own history separately from the global editor and other services (one independent list per exact scope+mode key)', async () => {
       const store = seedStore({
         filterHistory: {
           'global:text': ['global-entry'],
@@ -854,10 +837,9 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    // Review fix: text/regex are two distinct (scope, mode) history lists — Tab mid-recall
-    // must reset `browsing`, or the next ↑/↓ reuses the old mode's stale index against the new
-    // mode's (different) history list.
-    it('review fix: Tab mid-recall resets browsing, so the next ↑ recalls from the new mode\'s history rather than reusing the old mode\'s stale index', async () => {
+    // Text and regex are two distinct (scope, mode) history lists — Tab mid-recall must reset
+    // `browsing`, or the next ↑/↓ reuses the old mode's stale index against the new mode's list.
+    it('Tab mid-recall resets browsing, so the next ↑ recalls from the new mode\'s history rather than reusing the old mode\'s stale index', async () => {
       const store = seedStore({
         filterHistory: {
           'global:text': ['text-newest', 'text-older'],
@@ -877,9 +859,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
         lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('Regex:');
 
-        // Without the fix, this ↑ would reuse the old (index: 0) browsing state against the
-        // regex history, walking to its *second* entry ("regex-older") instead of recalling
-        // fresh from the top.
+        // A stale browsing state (index: 0) reused against the regex history would walk to its
+        // *second* entry ("regex-older") instead of recalling fresh from the top.
         await press(instance, stdin, KEYS.up);
         lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('Regex: regex-newest');
@@ -889,8 +870,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    // Review fix: proves the grid-browser key block's unconditional `return` actually keeps
-    // typing/Tab/Backspace from leaking into the query underneath while the grid is open.
+    // The grid-browser key block's unconditional `return` keeps typing/Tab/Backspace from
+    // leaking into the query underneath while the grid is open.
     it('typing, Tab, or Backspace while the history grid is open is a no-op — the draft and open grid stay unchanged', async () => {
       const store = seedStore({ filterHistory: { 'global:text': ['alpha', 'beta'] } });
       const { instance, stdin, stdout } = mount(store);
@@ -918,8 +899,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    // Review fix (Acceptance Criteria): history browsing is a pure editor-draft transform —
-    // it must never touch the Docker subscription an already-active pane owns.
+    // History browsing is a pure editor-draft transform — it must never touch the Docker
+    // subscription an already-active pane owns.
     it('arrow-recall and grid-browse never call subscribeLogsPane/unsubscribeLogsPane again for an already-open pane', async () => {
       const subscribeLogsPane = vi.fn(async () => {});
       const unsubscribeLogsPane = vi.fn();
@@ -954,8 +935,8 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     });
   });
 
-  // Story 5.3: `R` on a sub-focused grid pane restarts that one pane's service.
-  describe('inline service health & restart (story 5.3)', () => {
+  // `R` on a sub-focused grid pane restarts that one pane's service.
+  describe('inline service health & restart', () => {
     function paneFor(path: string, overrides: Record<string, unknown> = {}) {
       const name = path.split('/').pop() ?? path;
       return {
@@ -998,7 +979,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    it('"R" is a no-op while that pane is already restarting (disabled control, I/O matrix RESTART_NOOP)', async () => {
+    it('"R" is a no-op while that pane is already restarting (disabled control)', async () => {
       const restartLogsPane = vi.fn(async () => {});
       const store = seedStore({
         subscribeLogsPane: vi.fn(async () => {}),
@@ -1074,11 +1055,10 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     });
   });
 
-  it('Ctrl+A selects every row currently in the EDT-members list, then a second press deselects all (review fix: replaces the unreachable Ctrl+Shift+A)', async () => {
-    // A `Ctrl+letter` combo is a single control byte at the wire level — it never carries
-    // shift information (confirmed against Ink's own parser), so Ctrl+A and Ctrl+Shift+A were
-    // indistinguishable on virtually every real terminal, making the old, separate
-    // deselect-all shortcut unreachable in practice (user-reported). Ctrl+A now toggles.
+  it('Ctrl+A selects every row currently in the EDT-members list, then a second press deselects all', async () => {
+    // A `Ctrl+letter` combo is a single control byte at the wire level — it never carries shift
+    // information (Ink's parser), so Ctrl+A and Ctrl+Shift+A are indistinguishable on virtually
+    // every real terminal. One Ctrl+A toggles instead.
     const store = seedStore({
       edts: [
         {
@@ -1110,12 +1090,10 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
     }
   });
 
-  // Story 5.5: bounds the filter-history grid browser's own vertical extent to the terminal's
-  // actual row count (I/O matrix OVERFLOW_HISTORY_GRID/RESIZE_LIVE) — mirrors the grid's
-  // existing horizontal truncation/scroll, recomputed live off useWindowSize() on every resize
-  // rather than a value fixed at mount.
-  describe('history grid vertical pagination (story 5.5)', () => {
-    it('OVERFLOW_HISTORY_GRID & RESIZE_LIVE: the grid gains a "more below" indicator once the terminal shrinks below its row count, and loses it again once the terminal grows back', async () => {
+  // Bounds the filter-history grid browser's vertical extent to the terminal's actual row count,
+  // like its horizontal truncation/scroll, recomputed live off useWindowSize() on every resize.
+  describe('history grid vertical pagination', () => {
+    it('the grid gains a "more below" indicator once the terminal shrinks below its row count, and loses it again once the terminal grows back', async () => {
       const history = Array.from({ length: 10 }, (_, i) => `entry-${i}`);
       const store = seedStore({ filterHistory: { 'global:text': history } });
       const { instance, stdin, stdout } = mount(store);
@@ -1152,13 +1130,11 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    // Review fix: `GridCursor.row` is an absolute index into the *full* (unsliced) column —
-    // `historyGridCursor` and `commandAtGridCursor`'s own lookup both use the full
-    // `groupCommandsByColumn` output, never the vertically-windowed `layoutCommandGrid` result
-    // (that's only ever built for rendering) — so scrolling the grid down must never change
-    // which entry Enter actually recalls. Exactly 8 entries keeps every one of them in a single
-    // column (default filterHistoryGridMaxRows), so ↓ presses move the cursor within that one
-    // column; shrinking the terminal forces rowScrollOffset > 0 partway through.
+    // `GridCursor.row` is an absolute index into the *full* (unsliced) column — the lookup uses
+    // `groupCommandsByColumn`, never the vertically-windowed `layoutCommandGrid` result (built
+    // only for rendering) — so scrolling the grid down must never change which entry Enter
+    // recalls. Exactly 8 entries keeps every one in a single column (default
+    // filterHistoryGridMaxRows); shrinking the terminal forces rowScrollOffset > 0 partway.
     it('recalls the correct entry after scrolling the grid past rowScrollOffset > 0, not an off-by-rowScrollOffset one', async () => {
       const history = Array.from({ length: 8 }, (_, i) => `entry-${i}`);
       const store = seedStore({ filterHistory: { 'global:text': history } });
@@ -1192,12 +1168,10 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    // Review fix: a column's display width used to be computed from `gridLayout.columns` —
-    // already vertically sliced — so its widest entry scrolling out of view (via the second
-    // column's own row navigation) shrank the column and misaligned every column after it. Two
-    // columns of 5 rows each (filterHistoryGridMaxRows: 5), the widest entry pinned to column
-    // 0's own top row: scrolling column 0 down until that entry is no longer visible must not
-    // move where column 1's entries start.
+    // A column's display width comes from the full column, so its widest entry scrolling out of
+    // view must not shrink it or misalign the columns after it. Two columns of 5 rows each
+    // (filterHistoryGridMaxRows: 5), the widest entry pinned to column 0's top row: scrolling
+    // column 0 down past it must not move where column 1's entries start.
     it('keeps a column\'s display width stable as its own vertical scroll changes (column 1 never shifts)', async () => {
       const history = ['LONGLONGLONGLONGLONGLONG', 'e1', 'e2', 'e3', 'e4', 'f5', 'f6', 'f7', 'f8', 'f9'];
       const store = seedStore({ filterHistory: { 'global:text': history } });
@@ -1237,14 +1211,10 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
       }
     });
 
-    // I/O matrix EDITOR_OPEN_BEHIND_CONTENT: the editor renders as a sibling *below* the
-    // "LOGS" + list/grid block (Ink has no absolute positioning), so its own rows compete with
-    // the still-mounted service lists/hints panel/pane grid for the same terminal-row budget.
-    // Seeds enough services that the lists would overflow on their own, then opens the global
-    // filter editor and asserts the combined frame still respects both halves of story 5.4's
-    // and this story's own contracts: the hints panel stays hidden (5.4's focus-fix, not
-    // undone) and the service list behind the editor is still bounded rather than dumping
-    // every row now that the editor's own body is also competing for rows.
+    // The editor renders as a sibling *below* the "LOGS" + list/grid block (Ink has no absolute
+    // positioning), so its rows compete with the still-mounted service lists/hints/grid for the
+    // same row budget. With enough services to overflow, opening the global filter editor must
+    // keep the hints panel hidden and the service list behind the editor bounded.
     it('EDITOR_OPEN_BEHIND_CONTENT: opening the filter editor over an overflowing services list keeps the hints panel hidden and the list itself bounded', async () => {
       const store = seedStore({
         edtsBranches: Array.from({ length: 60 }, (_, i) => service({ service: `svc-${i}`, path: `/repos/svc-${i}` })),
@@ -1254,8 +1224,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
         await instance.waitUntilRenderFlush();
 
         // Before the editor opens: an overflowing OTHER SERVICES list already shows the
-        // story's own bounded-window indicator (regression guard for the scenario the editor
-        // is about to be opened on top of).
+        // bounded-window indicator.
         let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
         expect(lastFrame).toContain('more below');
 
@@ -1263,8 +1232,7 @@ describe('LogsZone real-keypress interactions (story 5.1)', () => {
         lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
         expect(lastFrame).toContain('GLOBAL LOG FILTER');
 
-        // 5.4's existing focus-hidden-while-editing fix survives this story's changes: none of
-        // the services-list keybinding hints render while the editor owns input.
+        // None of the services-list keybinding hints render while the editor owns input.
         expect(lastFrame).not.toContain('[Space] toggle');
         expect(lastFrame).not.toContain('[Ctrl+A] toggle all');
 

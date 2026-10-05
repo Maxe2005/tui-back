@@ -1,16 +1,8 @@
-// tui/zones/update: story 3.7 — pure logic for the pre-run configuration screen (the
-// shared modal every group-update trigger opens before any git/docker action). Service
-// checklist pre-selected per trigger scope, per-service source branch defaulting to the
-// manifest `sharedBranch`, plus two run-wide toggles (migrate ON, clean restart OFF)
-// applied uniformly to every selected service. Deselecting a service excludes it
-// entirely; confirming with zero selected is rejected inline and the screen stays open.
-//
-// The same split as every other zone: every keystroke behavior below is a standalone pure
-// function, unit-tested directly — the zone's `useInput` callback stays a thin dispatcher.
-// Checkbox toggling reuses `toggleMemberSelection` and blank-branch rejection reuses
-// `validateBranchEditValue` (the edts-zone.logic.ts patterns from the Code Map); branch-field
-// editing hosts the shared autocomplete reducer (text via shared/components/text-edit.ts's
-// `nextTextInputValue`, never reimplemented).
+// tui/zones/update: pure logic for the pre-run configuration screen every group-update trigger
+// opens before any git/docker action — a service checklist pre-selected per trigger scope, a
+// per-service source branch defaulting to the manifest `sharedBranch`, and two run-wide toggles
+// (migrate ON, clean restart OFF). Deselecting excludes a service entirely; confirming with
+// zero selected is rejected inline. Every keystroke behavior is a pure, unit-tested function.
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../core/scripts/group-update.js';
 import type { TextEditKey, TextInputState } from '../../shared/components/text-edit.js';
 import {
@@ -60,8 +52,8 @@ export interface UpdateConfigRowInput {
   sourceBranch: string;
 }
 
-// Every targeted service starts pre-selected with its branch pre-filled; migrate ON and
-// clean restart OFF (the Ask-First defaults — never anything else without renegotiation).
+// Every targeted service starts pre-selected with its branch pre-filled; migrate ON and clean
+// restart OFF — deliberate defaults.
 export function createUpdateConfigDraft(scope: GroupUpdateScope, rows: readonly UpdateConfigRowInput[]): UpdateConfigDraft {
   return {
     scope,

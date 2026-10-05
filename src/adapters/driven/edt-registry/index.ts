@@ -1,9 +1,7 @@
 // adapters/driven/edt-registry: the driven implementation of core's EdtRegistryPort.
- // Persists created-EDT entries to XDG_CONFIG_HOME/tui-back/edts.yaml — a dedicated file,
- // not registry.yaml (repo paths), mirroring adapters/driven/registry/index.ts's read/parse/
- // validate/append shape.
- // Story 2.15: adds action log methods that read/write to each EDT's SQLite database
- // (edtsBaseDir/<ulid>.db) — the action_log table is created on-demand.
+ // Persists created-EDT entries to XDG_CONFIG_HOME/tui-back/edts.yaml (a dedicated file, not
+ // registry.yaml), and the optional action log to each EDT's SQLite database
+ // (edtsBaseDir/<ulid>.db), whose action_log table is created on demand.
  import { readFile, writeFile } from 'node:fs/promises';
  import { dirname, join } from 'node:path';
  import { parse, stringify } from 'yaml';
@@ -18,9 +16,8 @@
    return join(xdg.configDir, 'edts.yaml');
  }
  
- // Story 2.15: createEdtRegistryPort now accepts edtsBaseDir to access per-EDT SQLite databases
- // for action logging. The port still manages edts.yaml for EDT metadata; the SQLite dbs
- // (one per EDT at edtsBaseDir/<ulid>.db) hold the action_log table.
+ // edtsBaseDir locates the per-EDT SQLite databases (edtsBaseDir/<ulid>.db) that hold the
+ // action_log table; edts.yaml holds the EDT metadata.
  export function createEdtRegistryPort(edtRegistryFile: string, edtsBaseDir: string): EdtRegistryPort {
    return {
      add: (entry) => addEdtRegistryEntry(edtRegistryFile, entry),
@@ -104,9 +101,9 @@
    return ok(undefined);
  }
  
- // Story 2.5: read/find/replace/write one entry in place, mirroring setEdtStatus's shape.
- // Used by modifyEdt to apply topic and/or members changes under the per-resource advisory lock
- // (AD-9). Fails with edt-not-found if ulid isn't registered.
+ // Read/find/replace/write one entry in place, mirroring setEdtStatus's shape. Used by
+ // modifyEdt under the per-resource advisory lock (AD-9). Fails with edt-not-found if ulid
+ // isn't registered.
  async function updateEdtEntry(edtRegistryFile: string, ulid: string, patch: { topic?: string; members?: EdtMember[] }): Promise<Result<void>> {
    const ensured = await ensureEdtRegistryDir(edtRegistryFile);
    if (!ensured.ok) {
@@ -141,9 +138,9 @@
    return ok(undefined);
  }
  
- // Story 2.29: read/find/filter/write, mirroring updateEdtEntry's shape — removes ulid's entry
-// entirely (no soft-delete/undo, per the story's Boundaries). Fails with edt-not-found if
-// ulid isn't registered, without writing anything.
+ // Read/find/filter/write, mirroring updateEdtEntry's shape — removes ulid's entry entirely
+// (no soft-delete/undo). Fails with edt-not-found if ulid isn't registered, without writing
+// anything.
 async function removeEdtRegistryEntry(edtRegistryFile: string, ulid: string): Promise<Result<void>> {
   const ensured = await ensureEdtRegistryDir(edtRegistryFile);
   if (!ensured.ok) {
@@ -170,8 +167,8 @@ async function removeEdtRegistryEntry(edtRegistryFile: string, ulid: string): Pr
   return ok(undefined);
 }
 
-// Story 2.4: read/find/replace/write, mirroring addEdtRegistryEntry's shape above. Used to
- // flip an EDT's status (active/inactive/interrupted) during a switch.
+// Read/find/replace/write, mirroring addEdtRegistryEntry's shape above. Used to flip an
+ // EDT's status (active/inactive/interrupted) during a switch.
  async function setEdtStatus(edtRegistryFile: string, ulid: string, status: EdtStatus): Promise<Result<void>> {
    const ensured = await ensureEdtRegistryDir(edtRegistryFile);
    if (!ensured.ok) {
@@ -200,8 +197,7 @@ async function removeEdtRegistryEntry(edtRegistryFile: string, ulid: string): Pr
    return ok(undefined);
  }
  
- // Story 2.15: logs an action to the EDT's SQLite action_log table.
- // Creates the table if it doesn't exist.
+ // Logs an action to the EDT's SQLite action_log table, creating the table if needed.
  async function logEdtAction(
    edtsBaseDir: string,
    ulid: string,
@@ -237,7 +233,7 @@ async function removeEdtRegistryEntry(edtRegistryFile: string, ulid: string): Pr
    }
  }
  
- // Story 2.15: retrieves the action log for an EDT (most recent first, limited).
+ // Retrieves the action log for an EDT (most recent first, limited).
  async function getEdtActionLog(
    edtsBaseDir: string,
    ulid: string,

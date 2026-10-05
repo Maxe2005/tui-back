@@ -1,7 +1,6 @@
-// tui/store/slices: the Update zone's group-update run state (story 3.1). Calls the same
-// core/scripts/group-update.ts use-case the CLI's `tui-back update` wraps, in-process
-// (AD-2, never by shelling out to the CLI). Extracted as a slice factory combined with the
-// other slices into the one Zustand store (AD-10).
+// tui/store/slices: the Update zone's group-update run state. Calls the same
+// core/scripts/group-update.ts use-case the CLI's `tui-back update` wraps, in-process (AD-2,
+// never by shelling out to the CLI).
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import {
@@ -28,10 +27,9 @@ import {
 } from '../../zones/update/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
-// Story 3.11: parses the optional service argument off `:update-service <name>` (mirrors
-// openEdtSwitchDialog's own query-arg parsing in edt-slice.ts): the command name is the
-// first whitespace-separated token, everything after it is the service name. Returns null
-// when no argument was given (the zone-selection / quick-pick path).
+// Parses the optional service argument off `:update-service <name>` (like
+// openEdtSwitchDialog's query parsing): the command name is the first whitespace-separated
+// token, everything after it is the service name. Returns null when no argument was given.
 export function parseUpdateServiceArg(fullQuery: string): string | null {
   const parts = fullQuery.trim().split(/\s+/);
   if (parts.length <= 1) {
@@ -43,12 +41,12 @@ export function parseUpdateServiceArg(fullQuery: string): string | null {
 
 export type UpdateRunStatus = 'idle' | 'running' | 'done' | 'error';
 
-// Story 3.6: the Update zone's own health-poll cadence — independent of Logs zone's
-// LOGS_HEALTH_POLL_INTERVAL_MS (Never: "no shared subscription"), same 5s cadence by
-// convention rather than by coupling.
+// The Update zone's own health-poll cadence — independent of the Logs zone's
+// LOGS_HEALTH_POLL_INTERVAL_MS (no shared subscription); the same 5s by convention, not
+// coupling.
 export const UPDATE_HEALTH_POLL_INTERVAL_MS = 5000;
 
-// Story 3.7: per-run overrides threaded from the confirmed pre-run configuration into
+// Per-run overrides threaded from the confirmed pre-run configuration into
 // the core use-case. Undefined fields fall back to the full default selection (no filter),
 // migrate ON, and clean restart OFF — the same configuration the CLI passes explicitly.
 export type UpdateRunOptions = {
@@ -57,10 +55,9 @@ export type UpdateRunOptions = {
   cleanRestart?: boolean;
 };
 
-// Story 3.7: the pre-run configuration target — an EDT/all scope, or a single service
-// pre-scoped for story 3.9's reuse (`repoPath` disambiguates duplicate service names;
-// without it the service is resolved through the active EDT first, then every managed
-// repo).
+// The pre-run configuration target — an EDT/all scope, or a single service (`repoPath`
+// disambiguates duplicate service names; without it the service is resolved through the
+// active EDT first, then every managed repo).
 export type OpenUpdateConfigTarget = GroupUpdateScope | { service: string; repoPath?: string };
 
 export type UpdateSlice = {
@@ -84,14 +81,14 @@ export type UpdateSlice = {
   // over-reports a narrowed run: a single-service update is scoped `edt`/`all` but
   // targets one service, so the zone's per-row `updating` status reads this too.
   updateSelection: GroupUpdateSelectionItem[] | null;
-  // Story 3.4: the currently raised resolution blocker (null when no repo is waiting).
+  // The currently raised resolution blocker (null when no repo is waiting).
   // Core's `onUpdateBlocker` seam sets this and waits; the Update zone renders the bounded
   // four-choice modal menu over it, and this dispatch carries the developer's choice back
   // to the waiting run. Every git write still goes through the core use-case (AD-1) — the
   // driving side owns only menu rendering and the editor process.
   updateBlocker: UpdateBlocker | null;
   resolveUpdateBlocker: (choice: UpdateBlockerChoice) => void;
-  // Story 3.10: the live per-service run tracking. `liveServicePhase` holds the current
+  // The live per-service run tracking. `liveServicePhase` holds the current
   // step core's `onPhase` observer reported per service (cleared when the run lands);
   // `liveServiceIssues` holds the per-service issue log — a blocker firing appends an
   // unresolved entry, the next phase for that service flips its unresolved entries to
@@ -107,7 +104,7 @@ export type UpdateSlice = {
   // `update-already-running` so double-Enter gives feedback instead of silence.
   // `scope` defaults to `'edt'` (bare update); `'all'` runs the all-repos maintenance mode.
   runGroupUpdate: (scope?: GroupUpdateScope, opts?: UpdateRunOptions) => Promise<void>;
-  // Story 3.7: the pre-run configuration screen's store state. Null when no screen is
+  // The pre-run configuration screen's store state. Null when no screen is
   // open; otherwise the draft the zone renders (rows pre-selected per scope, branches
   // pre-filled from each manifest `sharedBranch`, migrate ON, clean restart OFF). Opened
   // by every group-update trigger before any git/docker action runs — the run itself
@@ -119,25 +116,23 @@ export type UpdateSlice = {
   // (no-active-edt, edt-not-found, service-not-found) — the screen never opens in those
   // cases, so no git/docker action ever runs unconfigured.
   openUpdateConfig: (target: OpenUpdateConfigTarget) => Promise<void>;
-  // Story 3.11: the `:update-service [name]` entry point (mirrors openEdtSwitchDialog's
-  // query-arg contract in edt-slice.ts). With a name, it resolves straight to that
-  // service's pre-scoped single-service config (`service-not-found` when unknown, no
-  // screen). Without one, it raises `updateServiceSelectRequest` for the Update zone to
-  // consume — the zone pre-scopes to its highlighted row when one is selected, else opens
-  // the filterable service quick-pick below. The running/restart guards match
-  // openUpdateConfig's, so no trigger ever opens a screen mid-run.
+  // The `:update-service [name]` entry point (like openEdtSwitchDialog's query-arg contract).
+  // With a name, it resolves straight to that service's pre-scoped single-service config
+  // (`service-not-found` when unknown, no screen). Without one, it raises
+  // `updateServiceSelectRequest` for the Update zone to consume — the zone pre-scopes to its
+  // highlighted row when one is selected, else opens the filterable service quick-pick below.
+  // The running/restart guards match openUpdateConfig's, so no trigger opens a screen mid-run.
   openUpdateServiceDialog: (fullQuery: string) => Promise<void>;
-  // Story 3.11: set by openUpdateServiceDialog's no-arg path; consumed once by the Update
+  // Set by openUpdateServiceDialog's no-arg path; consumed once by the Update
   // zone's effect (selection → pinned config, else the quick-pick), which clears it via
   // clearUpdateServiceSelectionRequest. A plain boolean (not a counter): a second no-arg
   // command while one request is still unconsumed is the same intent, never a queue.
   updateServiceSelectRequest: boolean;
   clearUpdateServiceSelectionRequest: () => void;
-  // Story 3.11: the filterable service quick-pick's candidates (the no-arg
-  // `:update-service` fallback when the Update zone has no row selected, mirroring story
-  // 2.30's no-arg `edt-switch` pick). Null when the pick is closed. Filter text and cursor
-  // stay zone-local useState (only cross-visit state belongs in the slice); confirming a
-  // row calls the existing openUpdateConfig({service, repoPath}) directly.
+  // The filterable service quick-pick's candidates (the no-arg `:update-service` fallback when
+  // the Update zone has no row selected). Null when the pick is closed. Filter text and cursor
+  // stay zone-local useState (only cross-visit state belongs in the slice); confirming a row
+  // calls openUpdateConfig({service, repoPath}) directly.
   updateServicePick: { service: string; repoPath: string }[] | null;
   // Builds the pick candidates from every managed repo (the openAllReposConfig posture:
   // unmanaged paths silently skipped; any other load failure still lists a row under its
@@ -159,43 +154,39 @@ export type UpdateSlice = {
   // is actually in flight: a quit-confirm racing completion must never mark a healthy,
   // already-finished EDT interrupted. Never throws when unwired or when no run ever
   // targeted an EDT.
-  // Story 3.9: per-service standalone clean-restart in-flight map, keyed by resolved
+  // Per-service standalone clean-restart in-flight map, keyed by resolved
   // repoPath (the core `service:<resolved-repoPath>` lock identity). Checked alongside the
   // global `updateStatus === 'running'` guard in both directions: a group run never starts
   // while any standalone restart is in flight, and a standalone restart never starts while
   // a group run (or the same service's own restart) is in flight. Serialization stays per
   // service — a different idle service stays triggerable while one restarts.
   serviceRestartInFlight: Record<string, 'restart'>;
-  // Runs story 3.9's standalone single-service clean restart in-process (recipe or plain
-  // fallback, core-side decision). The row shows `restarting` while the map holds its
-  // repoPath; the final `{service, outcome, detail?}` row merges into `lastServiceOutcomes`
-  // (never into the group run's `updateResults`). Contention surfaces as
-  // `update-already-running`, nothing started.
+  // Runs the standalone single-service clean restart in-process (recipe or plain fallback,
+  // core-side decision). The row shows `restarting` while the map holds its repoPath; the
+  // final `{service, outcome, detail?}` row merges into `lastServiceOutcomes` (never into the
+  // group run's `updateResults`). Contention surfaces as `update-already-running`.
   runServiceRestart: (repoPath: string) => Promise<void>;
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
-  // Story 3.6: live per-service container health for the Update zone's always-visible
-  // service list — keyed by repoPath, independent of Logs zone's own `logsPanes[*].health`
-  // (Never: "no shared subscription"). A repoPath with no entry yet (poll still in flight,
-  // or never started) is treated as `down` by the zone (matches Logs zone's own
-  // emptyPane default, and the I/O matrix's "glyph falls back to down until the first
-  // health poll resolves").
+  // Live per-service container health for the Update zone's always-visible service list —
+  // keyed by repoPath, independent of the Logs zone's `logsPanes[*].health`. A repoPath with
+  // no entry yet (poll in flight, or never started) reads as `down`, until the first poll
+  // resolves.
   updateServiceHealth: Record<string, HealthState>;
-  // Story 3.6: the last completed run's per-service outcome, keyed by `service` (results
+  // The last completed run's per-service outcome, keyed by `service` (results
   // carry no repoPath) — merged, never wholesale-replaced, by runGroupUpdate's success
   // branch below, so a partial-scope run never drops another service's earlier outcome.
   lastServiceOutcomes: Record<string, GroupUpdateRepoResult>;
   // Starts (or restarts, on a changed service list) a one-shot-then-interval poll of every
-  // given repoPath's container health — mirrors logs-slice.ts's pollPaneHealth/
-  // startHealthPolling pattern, but one poll cycle covers every service in `edtsBranches`
-  // at once rather than one timer per pane (Code Map: "polls every service ... on
-  // mount/unmount, independent of Logs zone's pane subscriptions").
+  // given repoPath's container health — like logs-slice.ts's pollPaneHealth/
+  // startHealthPolling, but one poll cycle covers every service in `edtsBranches` at once
+  // rather than one timer per pane.
   startUpdateHealthPolling: (repoPaths: readonly string[]) => void;
   stopUpdateHealthPolling: () => void;
 };
 
-// Story 3.10: appends an unresolved issue entry for a service, deduped — a re-presented
+// Appends an unresolved issue entry for a service, deduped — a re-presented
 // menu for the same still-blocked kind (core loops the seam until re-verification passes)
 // must not stack duplicate rows; the single entry flips to resolved once the run resumes.
 function appendLiveIssue(
@@ -210,7 +201,7 @@ function appendLiveIssue(
   return { ...issues, [service]: [...existing, issue] };
 }
 
-// Story 3.10: marks a service's unresolved entries resolved — called when core emits the
+// Marks a service's unresolved entries resolved — called when core emits the
 // service's next phase, which only happens after a passing re-verification (a failed
 // re-verify re-presents the menu instead of advancing the pipeline).
 function resolveLiveIssues(issues: Record<string, ServiceIssue[]>, service: string): Record<string, ServiceIssue[]> {
@@ -222,26 +213,25 @@ function resolveLiveIssues(issues: Record<string, ServiceIssue[]>, service: stri
 }
 
 export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], UpdateSlice> {
-  // Story 3.4: the pending seam promise's resolver — installed when core raises a blocker,
+  // The pending seam promise's resolver — installed when core raises a blocker,
   // consumed when the zone menu dispatches a choice. Held in closure, never in Zustand
   // state (a function is non-serializable, and set() replacements must not drop it).
   let pendingBlockerResolve: ((choice: UpdateBlockerChoice) => void) | null = null;
-  // Story 3.6: one shared poll timer for every currently-tracked service (not one per
+  // One shared poll timer for every currently-tracked service (not one per
   // repoPath, unlike logs-slice.ts) — restarted whenever the tracked list changes so a
   // service that appears/disappears from `edtsBranches` is picked up without leaking a
   // stale timer. Held in closure, mirrors logs-slice.ts's own healthPollTimers convention.
   let healthPollTimer: ReturnType<typeof setInterval> | null = null;
   let pollingRepoPaths: readonly string[] = [];
-  // Story 3.11: the service quick-pick's generation — bumped on every open and every
+  // The service quick-pick's generation — bumped on every open and every
   // close so a slow enumeration from an earlier open can never pop the pick open after
   // the user already cancelled (or re-opened). Held in closure, never in Zustand state.
   let servicePickGeneration = 0;
   return (set, get) => {
-    // Story 3.6: one poll cycle for a single service — resolves its manifest-declared
-    // container and inspects it, updating the badge only on success. Mirrors
-    // logs-slice.ts's own pollPaneHealth: any failure (manifest load fails, inspect
-    // errors, docker unreachable) keeps last-known health and never crashes the view (I/O
-    // matrix: "silent per-poll no-op, mirrors existing Logs-zone precedent").
+    // One poll cycle for a single service — resolves its manifest-declared container and
+    // inspects it, updating the badge only on success. Like logs-slice.ts's pollPaneHealth, any
+    // failure (manifest load fails, inspect errors, docker unreachable) keeps last-known health
+    // and never crashes the view.
     async function pollServiceHealth(repoPath: string): Promise<void> {
       if (!deps) {
         return;
@@ -269,7 +259,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       }
     }
 
-    // Story 3.7: resolves one repo's branch default for the config screen — the manifest
+    // Resolves one repo's branch default for the config screen — the manifest
     // `sharedBranch`, falling back to the schema default (`development`) when the manifest
     // fails to load so the row still renders and the run itself reports the load failure
     // as that service's `failed` row.
@@ -298,7 +288,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       });
     }
 
-    // Story 3.7: pre-scopes the screen to the active EDT's members (deduped by resolved
+    // Pre-scopes the screen to the active EDT's members (deduped by resolved
     // repoPath, first wins — the core use-case's own rule).
     async function openEdtConfig(): Promise<void> {
       if (!deps) {
@@ -347,7 +337,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       openConfigDraft('edt', rows);
     }
 
-    // Story 3.11: the managed-repo enumeration shared by openAllReposConfig and
+    // The managed-repo enumeration shared by openAllReposConfig and
     // openUpdateServicePick (one definition so the all-repos config and the service
     // quick-pick can never list different services): the list-repos posture — unmanaged
     // paths silently skipped; any other load failure still yields a row under its
@@ -390,7 +380,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       return { ok: true, rows };
     }
 
-    // Story 3.7: pre-scopes the screen to every managed repo (the list-repos posture:
+    // Pre-scopes the screen to every managed repo (the list-repos posture:
     // unmanaged paths silently skipped; any other load failure still renders a row under
     // its path-basename service so the run reports it instead of dropping it silently).
     async function openAllReposConfig(): Promise<void> {
@@ -408,10 +398,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       openConfigDraft('all', enumerated.rows);
     }
 
-    // Story 3.7: the reusable pre-scoped entry point (story 3.9's single-service update
-    // reuses it): exactly one row. An explicit `repoPath` pins the repo directly;
-    // otherwise the service resolves through the active EDT's members first, then every
-    // managed repo. The run scope follows where the service was found.
+    // The reusable pre-scoped entry point (the single-service update reuses it): exactly one
+    // row. An explicit `repoPath` pins the repo directly; otherwise the service resolves
+    // through the active EDT's members first, then every managed repo. The run scope follows
+    // where the service was found.
     async function openSingleServiceConfig(service: string, repoPath?: string): Promise<void> {
       if (!deps) {
         return;
@@ -549,7 +539,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateScope: scope,
           updateSelection: opts.selection ?? null,
           updateBlocker: null,
-          // Story 3.10: a fresh run starts with a fresh live view — stale phases and
+          // A fresh run starts with a fresh live view — stale phases and
           // resolved/unresolved entries from the previous run never leak into this one.
           liveServicePhase: {},
           liveServiceIssues: {},
@@ -571,16 +561,15 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             lock: deps.lock,
             registry: deps.registry,
             scope,
-            // Story 3.7: the confirmed pre-run configuration (or the full defaults when the
+            // The confirmed pre-run configuration (or the full defaults when the
             // run started without a screen — selection omitted, migrate ON, clean OFF).
             ...(opts.selection !== undefined ? { selection: opts.selection } : {}),
             ...(opts.runMigrations !== undefined ? { runMigrations: opts.runMigrations } : {}),
             ...(opts.cleanRestart !== undefined ? { cleanRestart: opts.cleanRestart } : {}),
-            // Story 3.4: the TUI backs the assisted-resolution seam — core pauses the run on
-            // each dirty/conflicted repo and waits here while the zone's modal menu collects
-            // the developer's choice (stash / open in editor / cancel repo / cancel run).
-            // Story 3.10: raising the menu also appends the live issue-log entry (unresolved
-            // until the run re-verifies and moves on).
+            // The TUI backs the assisted-resolution seam — core pauses the run on each
+            // dirty/conflicted repo and waits here while the zone's modal menu collects the
+            // developer's choice (stash / open in editor / cancel repo / cancel run). Raising the
+            // menu also appends the live issue-log entry (unresolved until the run moves on).
             onUpdateBlocker: async (blocker) => {
               set((state) => ({
                 updateBlocker: blocker,
@@ -594,7 +583,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 pendingBlockerResolve = resolve;
               });
             },
-            // Story 3.10: the TUI backs the live-phase observer — core reports each
+            // The TUI backs the live-phase observer — core reports each
             // service's current step at its phase boundaries. The next phase for a service
             // implies its re-verification passed, so its unresolved entries flip to
             // resolved here (a failed re-verify never advances the pipeline).
@@ -607,7 +596,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           });
           if (result.ok) {
             set((state) => {
-              // Story 3.10: a migration failure ends its service mid-run while the run
+              // A migration failure ends its service mid-run while the run
               // continues — core reports it only in the final rows, so the unresolved
               // `migration-failed` entries are derived here at completion (the detail pane
               // itself reverts to the final-outcome view; the entries stay inspectable in
@@ -629,11 +618,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 updateTopic: result.data.topic,
                 updateUlid: result.data.ulid,
                 updateScope: result.data.scope,
-                // Story 3.10: the live step clears with the run — revisiting a covered
-                // service shows the final per-service outcome (the 3.6 idle view).
+                // The live step clears with the run — revisiting a covered service shows the
+                // final per-service outcome.
                 liveServicePhase: {},
                 liveServiceIssues,
-                // Story 3.6: merged, never wholesale-replaced — a partial-scope run (a single
+                // Merged, never wholesale-replaced — a partial-scope run (a single
                 // EDT) must never drop another service's earlier outcome.
                 lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, result.data.results),
               };
@@ -643,7 +632,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               updateStatus: 'error',
               updateError: result.error.message,
               updateErrorCode: result.error.code,
-              // Story 3.10: a top-level rejection ran nothing — no live state survives it.
+              // A top-level rejection ran nothing — no live state survives it.
               liveServicePhase: {},
               liveServiceIssues: {},
             });
@@ -899,7 +888,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           set({ updateStatus: 'idle', updateError: null, updateErrorCode: null });
         }
         set((state) => ({ serviceRestartInFlight: { ...state.serviceRestartInFlight, [key]: 'restart' as const } }));
-        // Story 3.10: the standalone path reports through the same live-phase channel —
+        // The standalone path reports through the same live-phase channel —
         // the emitted service name is captured so only this service's key is cleared below
         // (a group run can never be in flight alongside, per the guards above).
         let restartService: string | null = null;
@@ -914,10 +903,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               restartService = service;
               set((state) => {
                 const liveServicePhase = { ...state.liveServicePhase, [service]: phase };
-                // Story 3.10 review fix: a standalone restart opens with a fresh issue
-                // log for its service — stale group-run entries never render under its
-                // live step. The use-case emits exactly once (at the restart boundary),
-                // so resetting on emission is start-scoped, never mid-run.
+                // A standalone restart opens with a fresh issue log for its service — stale
+                // group-run entries never render under its live step. The use-case emits
+                // exactly once (at the restart boundary), so resetting on emission is
+                // start-scoped, never mid-run.
                 if (state.liveServiceIssues[service] === undefined) {
                   return { liveServicePhase };
                 }
@@ -948,7 +937,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             }
             const next = { ...state.serviceRestartInFlight };
             delete next[key];
-            // Story 3.10: the standalone live step clears with its action.
+            // The standalone live step clears with its action.
             if (restartService === null || state.liveServicePhase[restartService] === undefined) {
               return { serviceRestartInFlight: next };
             }

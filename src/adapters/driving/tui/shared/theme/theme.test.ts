@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { colors, spacing, typography, rounded, theme } from './theme.js';
 
 describe('theme colors', () => {
-  it('exposes every color token at the exact hex value from DESIGN.md (AC1)', () => {
+  it('exposes every color token at the exact hex value from DESIGN.md', () => {
     expect(colors).toEqual({
       background: '#1c1b1f',
       surface: '#232228',
@@ -25,7 +25,7 @@ describe('theme colors', () => {
     expect(colors.info).toBe('#4f80a8');
   });
 
-  it('accent is not a status color and differs from warning (AC4)', () => {
+  it('accent is not a status color and differs from warning', () => {
     const statusColors: ReadonlySet<string> = new Set([
       colors.success,
       colors.error,
@@ -38,7 +38,7 @@ describe('theme colors', () => {
 });
 
 describe('theme spacing', () => {
-  it('exposes the character-cell scale as named constants (AC2)', () => {
+  it('exposes the character-cell scale as named constants', () => {
     expect(spacing).toEqual({
       '0': 0,
       '1': 1,
@@ -67,14 +67,14 @@ describe('theme typography', () => {
     expect(typography['active-tab'].bold).toBe(true);
   });
 
-  it('defines the disabled-tab role: dim + strikethrough, never bold (story 2.13)', () => {
+  it('defines the disabled-tab role: dim + strikethrough, never bold', () => {
     expect(typography['disabled-tab'].bold).toBe(false);
     expect(typography['disabled-tab'].strikethrough).toBe(true);
   });
 });
 
 describe('theme rounded', () => {
-  it('renders every corner at 0px — no rounding anywhere (AC3)', () => {
+  it('renders every corner at 0px — no rounding anywhere', () => {
     expect(Object.values(rounded).every((value) => value === 0)).toBe(true);
   });
 });

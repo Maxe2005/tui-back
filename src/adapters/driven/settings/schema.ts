@@ -1,7 +1,7 @@
-// adapters/driven/settings/schema: the zod schema for settings.yaml (Story 2.19). Mirrors
-// adapters/driven/manifest/schema.ts's `.strict()` + field-naming-error convention: every
-// top-level and nested key is optional and defaults to DEFAULT_SETTINGS' value, so an empty
-// file (`{}` or a missing section) parses to the full default shape rather than failing.
+// adapters/driven/settings/schema: the zod schema for settings.yaml — `.strict()` with
+// field-naming errors, like the manifest schema. Every top-level and nested key is optional
+// and defaults to DEFAULT_SETTINGS' value, so an empty file (`{}` or a missing section) parses
+// to the full default shape rather than failing.
 import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
@@ -23,9 +23,9 @@ export const settingsSchema: z.ZodType<Settings> = z
     general: z
       .object({
         quitShortcutEnabled: z.boolean().optional().default(DEFAULT_SETTINGS.general.quitShortcutEnabled),
-        // Additive optional-with-default field (the hiddenActionTypes lesson below): a
-        // settings.yaml written before this field existed has a `general:` block without
-        // it, which must default to '' rather than failing the whole file back to defaults.
+        // Optional-with-default like every field added later: a settings.yaml written before
+        // this field existed has a `general:` block without it, which must default to '' rather
+        // than failing the whole file back to defaults.
         editorCommand: z.string().optional().default(DEFAULT_SETTINGS.general.editorCommand),
       })
       .strict()
@@ -41,21 +41,15 @@ export const settingsSchema: z.ZodType<Settings> = z
     edts: z
       .object({
         hiddenActionHints: z.array(z.string()).optional().default(DEFAULT_SETTINGS.edts.hiddenActionHints),
-        // Field added 2026-08-28 (Sprint Change Proposal): must stay optional-with-default, not
-        // required — a settings.yaml written by the pre-amendment code has an `edts:` block
-        // with `hiddenActionHints` only, no `hiddenActionTypes` key at all. Requiring it here
-        // made that pre-existing, otherwise-valid file fail validation as a whole (confirmed in
-        // real usage: it fell back to every default, silently discarding the developer's
-        // existing hiddenActionHints and commandPalette.gridMaxRows customizations too, not
-        // just the missing field), which is exactly the file header's own "every top-level and
-        // nested key is optional... so ... parses to the full default shape rather than
-        // failing" convention this violated.
+        // Must stay optional-with-default, never required: an older settings.yaml has an
+        // `edts:` block with `hiddenActionHints` only. Requiring this key fails that whole
+        // otherwise-valid file and silently discards every customization (hiddenActionHints,
+        // commandPalette.gridMaxRows, ...) back to defaults.
         hiddenActionTypes: z.array(z.string()).optional().default(DEFAULT_SETTINGS.edts.hiddenActionTypes),
-        // Branch autocomplete dropdown row count: additive optional-with-default numeric field
-        // (same hiddenActionTypes lesson as above) — a settings.yaml written before this field
-        // existed has an `edts:` block without this key, which must default to 5 rather than
-        // failing the whole file back to every default. Out-of-range/hand-edited values fail
-        // validation as a unit, falling back to every default with a field-naming warning.
+        // Branch autocomplete dropdown row count: optional-with-default for the same reason —
+        // an older `edts:` block without this key must default to 5. Out-of-range/hand-edited
+        // values fail validation as a unit, falling back to every default with a field-naming
+        // warning.
         branchDropdownMaxRows: z
           .number()
           .int()
@@ -67,20 +61,16 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.edts),
-    // Story 5.1: keeps a corrupt/out-of-range settings.yaml non-blocking (existing guarantee).
-    // Per this file's own `.strict()` + `.default()`-per-top-level-key convention, an invalid
-    // `logs.bufferSize` does not just reset this `logs` block — the whole top-level `.strict()`
-    // object fails validation as one unit, so *every* top-level key (commandPalette, edts, logs)
-    // falls back to DEFAULT_SETTINGS, exactly like an invalid commandPalette.gridMaxRows or an
-    // unknown top-level field does elsewhere in this schema (see index.test.ts's "falls back to
-    // defaults with a field-naming warning..." tests, all of which assert the *entire*
-    // DEFAULT_SETTINGS, not just one block).
+    // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
+    // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
+    // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's
+    // field-naming-warning tests assert the entire DEFAULT_SETTINGS).
     logs: z
       .object({
         bufferSize: z.number().int().min(MIN_LOG_BUFFER_SIZE).max(MAX_LOG_BUFFER_SIZE),
         startWithHistory: z.boolean().optional().default(DEFAULT_SETTINGS.logs.startWithHistory),
-        // Story 5.4: same optional-with-default convention as startWithHistory above — a
-        // pre-5.4 settings.yaml's `logs:` block predates both fields entirely.
+        // Optional-with-default like startWithHistory above — an older settings.yaml's `logs:`
+        // block predates both fields.
         filterHistorySize: z
           .number()
           .int()

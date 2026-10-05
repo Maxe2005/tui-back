@@ -1,7 +1,6 @@
-// core/edt/activate: unit tests against fake ports (AD-13 core layer) — every core-level row of
-// story 2.38's I/O matrix: clean first activation, harmless dirt, at-risk pause with zero
-// checkouts, retry, confirmed overwrite (and a new at-risk path re-blocking), per-repo failure
-// isolation, and the refusal when an active EDT already exists.
+// core/edt/activate: unit tests against fake ports — clean first activation, harmless dirt,
+// at-risk pause with zero checkouts, retry, confirmed overwrite (and a new at-risk path
+// re-blocking), per-repo failure isolation, and the refusal when an active EDT already exists.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { err, ok } from '../result.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';

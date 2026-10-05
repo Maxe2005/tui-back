@@ -1,13 +1,8 @@
-// tui/zones/dashboard: render tests (AD-13 — Ink smoke coverage) for story 2.11's
-// empty-registry prompt, checked before any other Dashboard content, and left untouched
-// (existing ZonePlaceholder fallback) when the registry is non-empty.
-//
-// checkRegistryEmpty is stubbed to a no-op in every test that seeds a specific
-// registryEmpty/registryEmptyStatus combination directly: DashboardZone's mount effect
-// always fires the store's real checkRegistryEmpty(), and an unwired createAppStore()
-// (no deps) makes that real call unconditionally set registryEmptyStatus to 'error' — left
-// un-stubbed, that would clobber a seeded 'idle'/registryEmpty combination out from under the
-// test on every single render (same reasoning as edts-zone.test.tsx's noopLoad).
+// tui/zones/dashboard: render tests for the empty-registry prompt (checked before any other
+// Dashboard content) and the ZonePlaceholder fallback. checkRegistryEmpty is stubbed in tests
+// that seed a registryEmpty/registryEmptyStatus combination: the mount effect always calls it,
+// and on an unwired store the real call sets registryEmptyStatus to 'error', clobbering the
+// seeded state (same reasoning as edts-zone.test.tsx's noopLoad).
 import { createElement } from 'react';
 import { Readable, Writable } from 'node:stream';
 import { render } from 'ink';
@@ -47,8 +42,8 @@ function fakeStdin(): NodeJS.ReadStream {
   return stdin as unknown as NodeJS.ReadStream;
 }
 
-describe('DashboardZone (story 2.11)', () => {
-  it('shows the "no repos registered yet" prompt when the registry is confirmed empty (AC1)', async () => {
+describe('DashboardZone', () => {
+  it('shows the "no repos registered yet" prompt when the registry is confirmed empty', async () => {
     const store = createAppStore();
     store.setState({ registryEmpty: true, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
@@ -62,7 +57,7 @@ describe('DashboardZone (story 2.11)', () => {
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain('DASHBOARD');
-    // story 2.16: banner is permanent — shows above the placeholder content too, not just the
+    // The banner is permanent — shows above the placeholder content too, not just the
     // empty-registry prompt.
     for (const line of BANNER_LINES) {
       expect(output).toContain(line);
@@ -75,15 +70,14 @@ describe('DashboardZone (story 2.11)', () => {
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).toContain('DASHBOARD');
-    // story 2.16: banner is permanent — shows above the placeholder content too, even before
-    // the registry check has resolved.
+    // The banner is permanent — shows above the placeholder content too, even before the
+    // registry check has resolved.
     for (const line of BANNER_LINES) {
       expect(output).toContain(line);
     }
   });
 
-  // review patch: a registry.list() failure was previously invisible — registryEmptyStatus
-  // flipped to 'error' but nothing rendered a branch for it.
+  // A registry.list() failure must render its own error branch, never stay invisible.
   it('shows an explicit error message when the registry check itself fails — never silently falls back to the placeholder or a stale prompt', async () => {
     const store = createAppStore();
     store.setState({
@@ -95,7 +89,7 @@ describe('DashboardZone (story 2.11)', () => {
     expect(output).toContain(REGISTRY_CHECK_ERROR_MESSAGE);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).not.toContain('DASHBOARD');
-    // story 2.16: banner is permanent — shows above the error message too.
+    // The banner is permanent — shows above the error message too.
     for (const line of BANNER_LINES) {
       expect(output).toContain(line);
     }
@@ -123,14 +117,11 @@ describe('DashboardZone (story 2.11)', () => {
     expect(output).toContain(EMPTY_REGISTRY_MESSAGE);
   });
 
-  // review patch (regression guard): every test above mounts+unmounts a fresh instance per
-  // renderToString() call, which would still pass even if the effect's dependency array were
-  // reduced back to `[]` (mount fires regardless). The real bug this guards is the *common*
-  // flow — opening the registry screen from Dashboard and closing it again without ever
-  // switching zones, which never remounts DashboardZone at all. Keeping one Ink instance
-  // mounted across a registryScreenOpen flip (rather than calling renderToString twice) is
-  // the only way to actually exercise that path.
-  it('re-checks the registry emptiness whenever registryScreenOpen flips, on the same mounted instance, without a remount (AC3 regression guard)', async () => {
+  // Every test above mounts a fresh instance, which would still pass with a mount-only effect.
+  // The common flow — opening the registry screen from Dashboard and closing it without
+  // switching zones — never remounts DashboardZone, so this keeps one Ink instance mounted
+  // across a registryScreenOpen flip.
+  it('re-checks the registry emptiness whenever registryScreenOpen flips, on the same mounted instance, without a remount', async () => {
     let calls = 0;
     const store = createAppStore();
     store.setState({

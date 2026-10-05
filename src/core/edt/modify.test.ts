@@ -1,9 +1,5 @@
-// adapters/driven/edt-registry: integration tests against real temp files (AD-13 driven
-// layer). The schema is strict on purpose — story 2.2 evolved the entry shape in place
-// (AD-7), replacing the 2.1 single `branch` placeholder with `topic` + per-member
-// `members: [...]`. No real 2.1-shape data exists (verified at review time), so a legacy
-// 2.1 entry is intentionally rejected as edt-registry-invalid-format rather than migrated;
-// a migration decision is tracked separately.
+// core/edt/modify: unit tests against fake ports — adding/removing members, setting and
+// renaming member branches, the lock-held edts.yaml write, and the branch-picker helpers.
 import { describe, expect, it, vi, type Mock, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -70,7 +66,7 @@ function makeMockGit(): any {
       const branch = repoPath.endsWith('-shared') ? 'development' : 'feature-x';
       return ok(branch);
     },
-    // Story 2.42: a manifest fixture — emulates every repo's manifest declaring
+    // A manifest fixture — emulates every repo's manifest declaring
     // `sharedBranch: development` and `protectedBranches: [preprod, prod]`.
     assertAllowedBranch: async (repoPath: string, branchName: string, edtId?: string) => {
       if (edtId !== undefined && MANIFEST_PROTECTED_BRANCHES.includes(branchName)) {
@@ -98,10 +94,10 @@ function resetEdtStore() {
   testEdtStore.clear();
 }
 
-describe('modifyEdt — unit / matrix', () => {
+describe('modifyEdt — unit', () => {
   resetEdtStore();
 
-  it('adds a member with a matching setBranches entry (story 2.24: no silent currentBranch default)', async () => {
+  it('adds a member with a matching setBranches entry (no silent currentBranch default)', async () => {
     resetEdtStore();
     // Pre-register an EDT
     const file = await makeRegistryFile();
@@ -139,21 +135,20 @@ describe('modifyEdt — unit / matrix', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // Story 2.24: the requested branch wins — never the repo's currentBranch (the mock's
-      // currentBranch would have returned 'feature-x' for this path; the assertion here
-      // proves step 1 never even called it).
+      // The requested branch wins — never the repo's currentBranch (the mock's currentBranch
+      // would have returned 'feature-x' for this path; the assertion here proves step 1 never
+      // even called it).
       expect(result.data?.results).toHaveLength(1);
       expect(result.data?.results[0].outcome).toBe('added');
       expect(result.data?.results[0].newBranch).toBe('feature-requested');
     }
-    // Story 2.24: step 3's promotion actually reaches the persisted registry entry (not just
-    // the returned `results` — Story 2.9's addedMembers/branchChanges plumbing).
+    // Step 3's promotion reaches the persisted registry entry, not just the returned `results`.
     expect(updateCalls).toHaveLength(1);
     const persistedMembers = (updateCalls[0]!.patch as { members: Array<{ repoPath: string; branch: string }> }).members;
     expect(persistedMembers).toEqual([{ service: 'service-some-repo', repoPath: '/repos/some-repo', branch: 'feature-requested' }]);
   });
 
-  it('fails an addMembers entry with no matching setBranches entry (story 2.24: branch-required, no silent currentBranch default)', async () => {
+  it('fails an addMembers entry with no matching setBranches entry (branch-required, no silent currentBranch default)', async () => {
     resetEdtStore();
     const git = makeMockGit();
     const manifest = makeMockManifest();
@@ -198,7 +193,7 @@ describe('modifyEdt — unit / matrix', () => {
     expect(checkoutSpy).not.toHaveBeenCalled();
   });
 
-  it('isolates a branch-collision failure from an unrelated successful add in the same call (story 2.24)', async () => {
+  it('isolates a branch-collision failure from an unrelated successful add in the same call', async () => {
     resetEdtStore();
     const git = makeMockGit();
     const manifest = makeMockManifest();
@@ -287,7 +282,7 @@ describe('modifyEdt — unit / matrix', () => {
   });
 
     resetEdtStore();
-  it('rejects adding a member whose requested branch is claimed/shared, isolated per-repo (story 2.24)', async () => {
+  it('rejects adding a member whose requested branch is claimed/shared, isolated per-repo', async () => {
     resetEdtStore();
     testEdtStore.set('01JTEST000000000000003', {
       topic: 'demo',
@@ -316,9 +311,9 @@ describe('modifyEdt — unit / matrix', () => {
       topic: 'demo',
       addMembers: ['/repos/test-shared'],
       removeMembers: [],
-      // Story 2.24: matches, so step 1 defers to step 3 instead of failing with
-      // branch-required — the requested branch ('development') is what actually gets
-      // gated, isolated as a per-repo failure rather than aborting the whole call.
+      // Matches, so step 1 defers to step 3 instead of failing with branch-required — the
+      // requested branch ('development') is what actually gets gated, isolated as a per-repo
+      // failure rather than aborting the whole call.
       setBranches: [{ repoPath: '/repos/test-shared', branch: 'development' }],
       renameTo: undefined,
     });
@@ -445,8 +440,7 @@ describe('modifyEdt — unit / matrix', () => {
   });
 });
 
-// Story 2.26 --------------------------------------------------------------------------------
-describe('modifyEdt — renameBranches (story 2.26)', () => {
+describe('modifyEdt — renameBranches', () => {
   it('renames an existing member\'s own currently-registered branch and records the change', async () => {
     resetEdtStore();
     const renameCalls: Array<{ repoPath: string; oldName: string; newName: string }> = [];
@@ -630,7 +624,7 @@ describe('modifyEdt — renameBranches (story 2.26)', () => {
   });
 });
 
-describe('createMemberBranch (story 2.26)', () => {
+describe('createMemberBranch', () => {
   it('delegates straight to git.createBranch', async () => {
     const calls: Array<{ repoPath: string; branchName: string; baseBranch: string }> = [];
     const git: any = {
@@ -655,7 +649,7 @@ describe('createMemberBranch (story 2.26)', () => {
   });
 });
 
-describe('renameMemberBranch (story 2.26)', () => {
+describe('renameMemberBranch', () => {
   it('delegates straight to git.renameBranch', async () => {
     const calls: Array<{ repoPath: string; oldName: string; newName: string }> = [];
     const git: any = {
@@ -680,7 +674,7 @@ describe('renameMemberBranch (story 2.26)', () => {
   });
 });
 
-describe('listMemberBranches (story 2.26)', () => {
+describe('listMemberBranches', () => {
   it('delegates straight to git.listBranches', async () => {
     const git: any = { listBranches: async (repoPath: string) => ok(repoPath === '/repos/a' ? ['development', 'feature-x'] : []) };
 
@@ -690,7 +684,7 @@ describe('listMemberBranches (story 2.26)', () => {
   });
 });
 
-describe('addMemberUnderLock (story 2.39)', () => {
+describe('addMemberUnderLock', () => {
   const base = { ulid: '01JOUT', topic: 'out', createdAt: '2026-09-28T00:00:00.000Z', status: 'active' as const };
   const existing: EdtMember = { service: 'a', repoPath: '/repos/a', branch: 'feat/a' };
   type RegistryPatch = { topic?: string; members?: EdtMember[] };
