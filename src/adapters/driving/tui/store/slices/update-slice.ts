@@ -26,6 +26,8 @@ import {
   applyMergeStrategy,
   confirmUpdateConfigDraft,
   createUpdateConfigDraft,
+  type ConfigLayout,
+  type UpdateConfigRowInput,
   type UpdateConfigDraft,
 } from '../../zones/update/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
@@ -282,11 +284,23 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // fails to load so the row still renders and the run itself reports the load failure
     // as that service's `failed` row.
     async function resolveBranchDefault(repoPath: string): Promise<string> {
-      if (!deps) {
-        return 'development';
+      return (await resolveRowManifest(repoPath)).sourceBranch;
+    }
+
+    // What one row needs from its manifest: the shared branch plus whether the migration
+    // command and the clean-restart recipe are declared (an undeclared action never runs).
+    async function resolveRowManifest(
+      repoPath: string,
+    ): Promise<{ sourceBranch: string; migrationDeclared: boolean; recipeDeclared: boolean }> {
+      const loaded = deps ? await deps.manifest.load(repoPath) : null;
+      if (loaded === null || !loaded.ok) {
+        return { sourceBranch: 'development', migrationDeclared: true, recipeDeclared: true };
       }
-      const loaded = await deps.manifest.load(repoPath);
-      return loaded.ok ? loaded.data.sharedBranch : 'development';
+      return {
+        sourceBranch: loaded.data.sharedBranch,
+        migrationDeclared: (loaded.data.migrationCommand?.trim() ?? '') !== '',
+        recipeDeclared: (loaded.data.restartCommands?.length ?? 0) > 0,
+      };
     }
 
     function failConfigOpen(code: string, message: string): void {
@@ -298,8 +312,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // (`updateResults`, `lastServiceOutcomes`) is kept — only the banner fields reset.
     function openConfigDraft(
       scope: GroupUpdateScope,
-      rows: { service: string; repoPath: string; sourceBranch: string }[],
-      options?: { mergePanel?: boolean },
+      rows: UpdateConfigRowInput[],
+      options?: { layout?: ConfigLayout },
     ): void {
       set({
         updateConfig: createUpdateConfigDraft(scope, rows, options),
@@ -346,17 +360,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       });
       const rows = [];
       for (const member of members) {
-        rows.push({
-          service: member.service,
-          repoPath: member.repoPath,
-          sourceBranch: await resolveBranchDefault(member.repoPath),
-        });
+        rows.push({ service: member.service, repoPath: member.repoPath, ...(await resolveRowManifest(member.repoPath)) });
       }
       if (rows.length === 0) {
         failConfigOpen('no-services-selected', `EDT "${active.topic}" has no member services — nothing to update.`);
         return;
       }
-      openConfigDraft('edt', rows, { mergePanel: true });
+      openConfigDraft('edt', rows, { layout: 'edt-panels' });
     }
 
     // Story 3.11: the managed-repo enumeration shared by openAllReposConfig and
@@ -397,7 +407,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           rows.push({ service: base !== undefined && base !== '' ? base : repoPath, repoPath, sourceBranch: 'development' });
           continue;
         }
-        rows.push({ service: loaded.data.service, repoPath, sourceBranch: loaded.data.sharedBranch });
+        rows.push({ service: loaded.data.service, repoPath, ...(await resolveRowManifest(repoPath)) });
       }
       return { ok: true, rows };
     }
@@ -417,7 +427,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
         return;
       }
-      openConfigDraft('all', enumerated.rows);
+      openConfigDraft('all', enumerated.rows, { layout: 'all-panels' });
     }
 
     // Story 3.7: the reusable pre-scoped entry point (story 3.9's single-service update

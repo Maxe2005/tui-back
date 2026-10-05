@@ -16,9 +16,7 @@ import {
   isCleanRestartRow,
   isMigrateRow,
   updateConfigRowCount,
-  type MergeStrategy,
   type UpdateConfigDraft,
-  type UpdateConfigRow,
   type UpdateConfigViewState,
 } from './update-config-dialog.logic.js';
 
@@ -27,44 +25,6 @@ export const UPDATE_CONFIG_TITLE_ALL = 'CONFIGURE ALL-REPOS UPDATE';
 export const UPDATE_CONFIG_HINTS = '[Space] toggle  [e]/[Enter] edit branch  [y] start run  [Esc] cancel';
 export const UPDATE_CONFIG_MIGRATE_LABEL = 'Run migrations';
 export const UPDATE_CONFIG_CLEAN_LABEL = 'Clean restart';
-export const MERGE_PANEL_TITLE = 'MERGE SOURCE';
-export const MERGE_PANEL_HINTS = '[Tab] panel/table  [Ctrl+R] reset manual row to strategy';
-
-const SOURCE_ERROR_TEXT = { 'not-in-edt': 'not in', 'branch-not-found': 'branch not found' } as const;
-
-function rowSourceMeta(row: UpdateConfigRow, strategy: MergeStrategy): string {
-  if (row.sourceError !== undefined) {
-    return row.repoPath;
-  }
-  const suffix = row.origin === 'manual' ? ' [Manual]' : row.origin === 'edt' && strategy.kind === 'edt' ? ` ← ${strategy.topic}` : '';
-  return `${row.repoPath} ← ${row.sourceBranch}${suffix}`;
-}
-
-function sourceErrorLabel(row: UpdateConfigRow, strategy: MergeStrategy): string {
-  const topic = strategy.kind === 'edt' ? strategy.topic : '';
-  return row.sourceError === 'not-in-edt' ? `✖ ${SOURCE_ERROR_TEXT['not-in-edt']} ${topic}` : `✖ ${SOURCE_ERROR_TEXT['branch-not-found']}`;
-}
-
-// The global merge-source panel: a two-option radio over the strategy. The accent bar and
-// marker show the panel cursor only while the panel owns the keys.
-function MergePanel({ draft, focused, panelCursor }: { draft: UpdateConfigDraft; focused: boolean; panelCursor: number }) {
-  const fromEdt = draft.strategy.kind === 'edt';
-  const options = [
-    { selected: !fromEdt, text: 'Shared branches' },
-    { selected: fromEdt, text: `From EDT: ${draft.strategy.kind === 'edt' ? draft.strategy.topic : '<none>'}` },
-  ];
-  return (
-    <Box flexDirection="column">
-      <Text color={focused ? colors.accent : colors['text-dim']}>{MERGE_PANEL_TITLE}</Text>
-      {options.map((option, index) => (
-        <Text key={option.text} color={focused && index === panelCursor ? colors.accent : colors.text}>
-          {focused && index === panelCursor ? '› ' : '  '}
-          {option.selected ? '(•)' : '( )'} {option.text}
-        </Text>
-      ))}
-    </Box>
-  );
-}
 
 // One focusable row: the zone cursor treatment (accent bar + `›` marker +
 // surface-selected fill, the `resolveRowLayout` vocabulary every list in the app shares)
@@ -119,21 +79,16 @@ export function UpdateConfigDialog({
   return (
     <ModalDialog title={draft.scope === 'all' ? UPDATE_CONFIG_TITLE_ALL : UPDATE_CONFIG_TITLE_EDT} open onConfirm={() => {}} onCancel={() => {}}>
       <Text color={colors['text-dim']}>{scopeLine}</Text>
-      {draft.mergePanel ? <MergePanel draft={draft} focused={view.focus === 'panel'} panelCursor={view.panelCursor ?? 0} /> : null}
       {draft.rows.length === 0 ? <Text color={colors['text-dim']}>No services to configure.</Text> : null}
       {draft.rows.map((row, index) => {
-        const focused = index === cursor && view.editing === null && view.focus !== 'panel';
+        const focused = index === cursor && view.editing === null;
         const editingThis = view.editing !== null && index === cursor;
         // Keyed by path + index (the results-list convention): duplicate service names
         // share one repoPath-shaped identity, and React must never drop a same-named row.
         return (
           <Box key={`${row.repoPath}:${index}`} flexDirection="column">
-            <ConfigRow focused={focused || editingThis} checked={row.selected} label={row.service} meta={rowSourceMeta(row, draft.strategy)} />
-            {row.sourceError !== undefined ? (
-              <Box paddingLeft={4}>
-                <Text color={colors.error}>{sourceErrorLabel(row, draft.strategy)}</Text>
-              </Box>
-            ) : null}
+            <ConfigRow focused={focused || editingThis} checked={row.selected} label={row.service} meta={`${row.repoPath} ← ${row.sourceBranch}`} />
+
             {editingThis && view.editing !== null ? (
               <Box paddingLeft={4}>
                 <BranchAutocompleteInput
@@ -150,20 +105,19 @@ export function UpdateConfigDialog({
         );
       })}
       <ConfigRow
-        focused={isMigrateRow(draft, cursor) && view.editing === null && view.focus !== 'panel'}
+        focused={isMigrateRow(draft, cursor) && view.editing === null}
         checked={draft.runMigrations}
         label={UPDATE_CONFIG_MIGRATE_LABEL}
         meta="all selected services"
       />
       <ConfigRow
-        focused={isCleanRestartRow(draft, cursor) && view.editing === null && view.focus !== 'panel'}
+        focused={isCleanRestartRow(draft, cursor) && view.editing === null}
         checked={draft.cleanRestart}
         label={UPDATE_CONFIG_CLEAN_LABEL}
         meta="all selected services"
       />
       {draft.error !== null ? <Text color={colors.error}>{draft.error}</Text> : null}
       <Text color={colors['text-dim']}>{UPDATE_CONFIG_HINTS}</Text>
-      {draft.mergePanel ? <Text color={colors['text-dim']}>{MERGE_PANEL_HINTS}</Text> : null}
     </ModalDialog>
   );
 }

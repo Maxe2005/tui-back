@@ -701,13 +701,13 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(store.getState().updateConfig).toEqual({
       scope: 'edt',
       rows: [
-        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true },
-        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true },
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true, migrationDeclared: true, recipeDeclared: false, migrations: 'follow', cleanRestart: 'follow' },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true, migrationDeclared: true, recipeDeclared: false, migrations: 'follow', cleanRestart: 'follow' },
       ],
       runMigrations: true,
       cleanRestart: false,
       error: null,
-      mergePanel: true,
+      layout: 'edt-panels',
       strategy: { kind: 'shared' },
     });
     // Opening the screen runs no git/docker action and starts no run.
@@ -1176,7 +1176,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
       runMigrations: true,
       cleanRestart: false,
       error: null,
-      mergePanel: false,
+      layout: 'simple',
       strategy: { kind: 'shared' },
     })).not.toThrow();
     expect(store.getState().updateConfig).toBeNull();
@@ -1951,6 +1951,6 @@ describe('update slice: merge source from another EDT', () => {
   it('does not offer the panel on a single-service config', async () => {
     const store = createAppStore(depsWithSibling());
     await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
-    expect(store.getState().updateConfig!.mergePanel).toBe(false);
+    expect(store.getState().updateConfig!.layout).toBe('simple');
   });
 });

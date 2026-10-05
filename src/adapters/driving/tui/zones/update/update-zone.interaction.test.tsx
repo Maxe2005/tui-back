@@ -720,7 +720,7 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'g');
-      await waitForOutput(instance, stdout, 'Active EDT members');
+      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
 
       expect(store.getState().updateConfig).toMatchObject({
         scope: 'edt',
@@ -730,6 +730,28 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
         ],
       });
       expect(store.getState().updateStatus).toBe('idle');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Tab moves to the table, Enter opens the service box and Esc closes it without changes', async () => {
+    const store = storeWithTwoMembers();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'g');
+      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
+      await press(instance, stdin, '\t');
+      await press(instance, stdin, '\r');
+      await waitForOutput(instance, stdout, 'Configurer svc-a');
+      await press(instance, stdin, '\u001b');
+      await waitForOutput(instance, stdout, 'RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+
+      expect(store.getState().updateConfig).not.toBeNull();
+      expect(store.getState().updateConfig?.rows.every((row) => row.origin === 'shared')).toBe(true);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

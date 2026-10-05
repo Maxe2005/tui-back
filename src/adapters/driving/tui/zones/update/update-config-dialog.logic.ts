@@ -45,14 +45,31 @@ export interface UpdateConfigRow {
   sharedBranch: string;
   origin: MergeSourceOrigin;
   // Set while a from-EDT row cannot resolve; blocks the run only when the row is selected.
-  sourceError?: MergeSourceError;
+  sourceError?: RowSourceError;
   selected: boolean;
+  // What the manifest declares: an undeclared action can never run, whatever is asked.
+  migrationDeclared: boolean;
+  recipeDeclared: boolean;
+  // Per-service answers to the two run-wide toggles.
+  migrations: ToggleOverride;
+  cleanRestart: ToggleOverride;
 }
+
+export type RowSourceError = MergeSourceError | 'no-edt-chosen';
+export type ToggleOverride = 'follow' | 'off' | 'on';
 
 // Where non-manual rows take their source from: each manifest `sharedBranch`, or the
 // branch recorded for the service in another EDT. `resolved` is that EDT's resolution,
 // kept so a manual row can be reset without re-reading git.
-export type MergeStrategy = { kind: 'shared' } | { kind: 'edt'; ulid: string; topic: string; resolved: MergeSourceRow[] };
+export type MergeStrategy =
+  | { kind: 'shared' }
+  // From EDT selected but no EDT picked yet: every row is blocked until one is.
+  | { kind: 'edt-pending' }
+  | { kind: 'edt'; ulid: string; topic: string; resolved: MergeSourceRow[] };
+
+// `simple`: the plain checklist (single-service config). `edt-panels`/`all-panels`: the two
+// panels — the merge-source lines exist only in EDT scope.
+export type ConfigLayout = 'simple' | 'edt-panels' | 'all-panels';
 
 // The store-owned draft (live run state lives in Zustand): the run `scope`, one row per
 // targeted service, the two run-wide toggles, and the current inline `error` (null when
@@ -64,8 +81,7 @@ export interface UpdateConfigDraft {
   runMigrations: boolean;
   cleanRestart: boolean;
   error: string | null;
-  // Only the EDT-scoped config over every member offers a merge-source strategy.
-  mergePanel: boolean;
+  layout: ConfigLayout;
   strategy: MergeStrategy;
 }
 
@@ -73,6 +89,8 @@ export interface UpdateConfigRowInput {
   service: string;
   repoPath: string;
   sourceBranch: string;
+  migrationDeclared?: boolean;
+  recipeDeclared?: boolean;
 }
 
 // Every targeted service starts pre-selected with its branch pre-filled; migrate ON and
@@ -80,15 +98,26 @@ export interface UpdateConfigRowInput {
 export function createUpdateConfigDraft(
   scope: GroupUpdateScope,
   rows: readonly UpdateConfigRowInput[],
-  options: { mergePanel?: boolean } = {},
+  options: { layout?: ConfigLayout } = {},
 ): UpdateConfigDraft {
   return {
     scope,
-    rows: rows.map((row) => ({ ...row, sharedBranch: row.sourceBranch, origin: 'shared', selected: true })),
+    rows: rows.map((row) => ({
+      service: row.service,
+      repoPath: row.repoPath,
+      sourceBranch: row.sourceBranch,
+      sharedBranch: row.sourceBranch,
+      origin: 'shared',
+      selected: true,
+      migrationDeclared: row.migrationDeclared ?? true,
+      recipeDeclared: row.recipeDeclared ?? true,
+      migrations: 'follow',
+      cleanRestart: 'follow',
+    })),
     runMigrations: true,
     cleanRestart: false,
     error: null,
-    mergePanel: options.mergePanel === true,
+    layout: options.layout ?? 'simple',
     strategy: { kind: 'shared' },
   };
 }
@@ -108,6 +137,9 @@ function followStrategy(row: UpdateConfigRow, strategy: MergeStrategy): UpdateCo
   const { sourceError: _dropped, ...rest } = row;
   if (strategy.kind === 'shared') {
     return { ...rest, sourceBranch: row.sharedBranch, origin: 'shared' };
+  }
+  if (strategy.kind === 'edt-pending') {
+    return { ...rest, sourceBranch: '', origin: 'edt', sourceError: 'no-edt-chosen' };
   }
   const resolved = strategy.resolved.find((candidate) => candidate.repoPath === row.repoPath);
   return {
@@ -269,7 +301,13 @@ export function confirmUpdateConfigDraft(
     ok: true,
     config: {
       scope: draft.scope,
-      selection: selected.map((row) => ({ service: row.service, repoPath: row.repoPath, sourceBranch: row.sourceBranch })),
+      selection: selected.map((row) => ({
+        service: row.service,
+        repoPath: row.repoPath,
+        sourceBranch: row.sourceBranch,
+        ...(row.migrations !== 'follow' ? { runMigrations: row.migrations === 'on' } : {}),
+        ...(row.cleanRestart !== 'follow' ? { cleanRestart: row.cleanRestart === 'on' } : {}),
+      })),
       runMigrations: draft.runMigrations,
       cleanRestart: draft.cleanRestart,
     },
@@ -282,14 +320,7 @@ export function confirmUpdateConfigDraft(
 export interface UpdateConfigViewState {
   cursor: number;
   editing: BranchAutocompleteState | null;
-  // Which half of the screen owns the keys (table when absent) and which strategy option
-  // the panel cursor sits on (0 = shared branches, 1 = from EDT). Only meaningful while
-  // the draft shows the merge-source panel.
-  focus?: 'panel' | 'table';
-  panelCursor?: number;
 }
-
-export const MERGE_PANEL_OPTION_COUNT = 2;
 
 export function clampUpdateConfigCursor(draft: UpdateConfigDraft, cursor: number): number {
   const count = updateConfigRowCount(draft);
@@ -323,10 +354,6 @@ export type UpdateConfigStep =
   | { type: 'commit-edit' }
   | { type: 'cancel-edit' }
   | { type: 'confirm' }
-  | { type: 'switch-focus' }
-  | { type: 'panel-move'; panelCursor: number }
-  | { type: 'panel-activate'; panelCursor: number }
-  | { type: 'reset-row' }
   | { type: 'cancel' }
   | { type: 'ignore' };
 
@@ -367,20 +394,11 @@ export function resolveUpdateConfigKey(
     }
     return { type: 'edit', editing: stepUpdateConfigBranchEdit(view.editing, input, key, branches) };
   }
-  if (key.ctrl === true && input === 'r' && view.focus !== 'panel' && draft.rows[view.cursor]?.origin === 'manual') {
-    return { type: 'reset-row' };
-  }
   if (key.ctrl === true || key.meta === true) {
     return { type: 'ignore' };
   }
   if (key.escape === true) {
     return { type: 'cancel' };
-  }
-  if (draft.mergePanel && key.tab === true) {
-    return { type: 'switch-focus' };
-  }
-  if (draft.mergePanel && view.focus === 'panel') {
-    return resolvePanelKey(input, key, view.panelCursor ?? 0);
   }
   const count = updateConfigRowCount(draft);
   // `resolveSelectionJump`/`resolveSelectionDirection` read Ink's required-boolean
@@ -415,18 +433,3 @@ export function resolveUpdateConfigKey(
   return { type: 'ignore' };
 }
 
-// Panel focus: the two strategy options behave like a short radio list — arrows move,
-// Enter/Space activate the option under the cursor, `y` still starts the run.
-function resolvePanelKey(input: string, key: UpdateConfigInputKey, panelCursor: number): UpdateConfigStep {
-  if (key.upArrow === true || key.downArrow === true) {
-    const next = key.downArrow === true ? panelCursor + 1 : panelCursor - 1;
-    return { type: 'panel-move', panelCursor: Math.min(Math.max(next, 0), MERGE_PANEL_OPTION_COUNT - 1) };
-  }
-  if (key.return === true || input === ' ') {
-    return { type: 'panel-activate', panelCursor };
-  }
-  if (input === 'y' || input === 'Y') {
-    return { type: 'confirm' };
-  }
-  return { type: 'ignore' };
-}

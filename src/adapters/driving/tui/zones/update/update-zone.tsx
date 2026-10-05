@@ -50,12 +50,11 @@ import {
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
-import { MergeEdtPickDialog, toMergeEdtPickItems } from './merge-edt-pick-dialog.js';
+import { UpdateConfigPanels } from './update-config-panels.js';
+import { useUpdateConfigPanels } from './use-update-config-panels.js';
 import {
-  applyMergeStrategy,
   beginUpdateConfigBranchEdit,
   clampUpdateConfigCursor,
-  resetUpdateConfigRow,
   commitUpdateConfigBranchEdit,
   resolveUpdateConfigKey,
   toggleUpdateConfigRow,
@@ -362,6 +361,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
   const listMergeSourceEdts = useStore((state) => state.listMergeSourceEdts);
   const chooseMergeSourceEdt = useStore((state) => state.chooseMergeSourceEdt);
+  const listBranchesForConfig = useStore((state) => state.listBranches);
   // Story 3.11: the no-arg `:update-service` handoff (zone selection → pinned config,
   // else the filterable quick-pick) plus the pick's own open candidates.
   const updateServiceSelectRequest = useStore((state) => state.updateServiceSelectRequest);
@@ -423,9 +423,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // the shared autocomplete state; its branch source lives in the two states below,
   // fetched once per edit (mirroring the EDT zone's own fetch-once-per-session effect).
   const [configCursor, setConfigCursor] = useState(0);
-  const [configFocus, setConfigFocus] = useState<'panel' | 'table'>('table');
-  const [configPanelCursor, setConfigPanelCursor] = useState(0);
-  const [mergeEdtPick, setMergeEdtPick] = useState<{ ulid: string; topic: string }[] | null>(null);
   const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
   const [configBranches, setConfigBranches] = useState<string[]>([]);
   const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -434,6 +431,18 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // candidate list itself is store state so the `:update-service` command can open it from
   // any zone). The shape and every transition are the shared FilterablePickList's.
   const [pickState, setPickState] = useState<FilterablePickListState>(createFilterablePickListState);
+  const windowSizeForConfig = useWindowSize();
+  const configPanels = useUpdateConfigPanels({
+    draft: updateConfig,
+    windowRows: windowSizeForConfig.rows,
+    dropdownMax: branchDropdownMaxRows,
+    setUpdateConfig,
+    closeUpdateConfig,
+    confirmUpdateConfig,
+    listMergeSourceEdts,
+    chooseMergeSourceEdt,
+    listBranches: listBranchesForConfig,
+  });
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -517,9 +526,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   useEffect(() => {
     if (isUpdateConfigOpen) {
       setConfigCursor(0);
-      setConfigFocus('table');
-      setConfigPanelCursor(0);
-      setMergeEdtPick(null);
       setConfigEditing(null);
       setConfigBranches([]);
       setConfigBranchesStatus('loading');
@@ -617,27 +623,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // keystroke — the run starts only through its confirm path, with exactly the
       // confirmed configuration.
       if (updateConfig !== null) {
-        // The EDT quick-pick sits on top of the config: it owns every key until it closes.
-        if (mergeEdtPick !== null) {
-          const pickItems = toMergeEdtPickItems(mergeEdtPick);
-          const result = handleFilterablePickListKey(pickState, pickItems, input, key);
-          if (result.type === 'update') {
-            setPickState((previous) => {
-              const latest = handleFilterablePickListKey(previous, pickItems, input, key);
-              return latest.type === 'update' ? latest.state : previous;
-            });
-            return;
-          }
-          setMergeEdtPick(null);
-          if (result.type === 'select') {
-            void chooseMergeSourceEdt(result.item.value.ulid);
-          }
+        if (updateConfig.layout !== 'simple') {
+          configPanels.handleKey(input, key);
           return;
         }
         const step = resolveUpdateConfigKey(
           input,
           key,
-          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing, focus: configFocus, panelCursor: configPanelCursor },
+          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing},
           updateConfig,
           configBranches,
         );
@@ -665,20 +658,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           }
         } else if (step.type === 'cancel-edit') {
           setConfigEditing(null);
-        } else if (step.type === 'switch-focus') {
-          setConfigFocus((current) => (current === 'panel' ? 'table' : 'panel'));
-        } else if (step.type === 'panel-move') {
-          setConfigPanelCursor(step.panelCursor);
-        } else if (step.type === 'panel-activate') {
-          setConfigPanelCursor(step.panelCursor);
-          if (step.panelCursor === 0) {
-            setUpdateConfig(applyMergeStrategy(updateConfig, { kind: 'shared' }));
-          } else {
-            setPickState(createFilterablePickListState());
-            void listMergeSourceEdts().then((candidates) => setMergeEdtPick(candidates));
-          }
-        } else if (step.type === 'reset-row') {
-          setUpdateConfig(resetUpdateConfigRow(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor)));
         } else if (step.type === 'confirm') {
           void confirmUpdateConfig();
         } else if (step.type === 'cancel') {
@@ -950,16 +929,27 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
-      {updateConfig !== null ? (
+      {updateConfig !== null && updateConfig.layout !== 'simple' ? (
+        <UpdateConfigPanels
+          draft={updateConfig}
+          view={configPanels.view}
+          budget={configPanels.budget}
+          edtState={configPanels.edtField}
+          edtTopics={configPanels.edtTopics}
+          edtStatus={configPanels.edtStatus}
+          box={configPanels.box}
+          boxContext={configPanels.boxContext}
+        />
+      ) : null}
+      {updateConfig !== null && updateConfig.layout === 'simple' ? (
         <UpdateConfigDialog
           draft={updateConfig}
-          view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing, focus: configFocus, panelCursor: configPanelCursor }}
+          view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
           branches={configBranches}
           branchesStatus={configBranchesStatus}
           maxRows={branchDropdownMaxRows}
         />
       ) : null}
-      {mergeEdtPick !== null ? <MergeEdtPickDialog state={pickState} candidates={mergeEdtPick} /> : null}
       {serviceMenu !== null ? <UpdateServiceMenuDialog service={serviceMenu.service} cursor={serviceMenuCursor} /> : null}
       {/* Story 3.11: the no-arg `:update-service` fallback — a filterable service
           quick-pick (the story 2.30 no-arg `edt-switch` mirror). Confirming a row opens
