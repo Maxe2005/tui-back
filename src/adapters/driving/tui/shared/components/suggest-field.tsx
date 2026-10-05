@@ -51,7 +51,7 @@ export function SuggestField({
   return (
     <Box flexDirection="column">
       <Text wrap="truncate-end">
-        <Text color={labelColor}>{label.padEnd(labelWidth)} </Text>
+        {label !== '' ? <Text color={labelColor}>{label.padEnd(labelWidth)} </Text> : null}
         {editing ? (
           <>
             <Text color={colors.text}>{before}</Text>
