@@ -25,6 +25,9 @@ container: <chaîne non vide>
 # Optionnel
 migrationCommand: <chaîne non vide>   # omettre la clé si aucune commande
 
+# Optionnel — recette de « clean restart » (commandes shell exécutées dans l'ordre)
+restartCommands: [<chaîne non vide>, ...]
+
 # Optionnel — valeur par défaut "development" si la clé est absente
 sharedBranch: <chaîne non vide>
 
@@ -66,6 +69,43 @@ modules:
   données (ex. `docker exec my-service npx prisma migrate deploy`).
 - **Note** : la valeur `null` n'est **pas** acceptée par le schéma ; pour
   indiquer l'absence de commande, il faut omettre entièrement la clé.
+
+### `restartCommands` (optionnel)
+
+- **Type** : `string[]`
+- **Validation** : tableau de `trim().min(1)` — chaque entrée est rognée et
+  doit être non vide. Une valeur qui n'est pas une liste (ex.
+  `restartCommands: "make restart"`) ou une entrée vide/blanche provoque un
+  échec `manifest-validation-failed`.
+- **Comportement si absent** : `undefined` (un tableau vide `[]` est accepté et
+  équivaut à l'absence de recette).
+- **Rôle** : recette de **clean restart** du service. Au lieu du simple
+  redémarrage du conteneur (`container`), `tui-back` exécute ces commandes
+  l'une après l'autre (ex. `docker compose down`, `docker compose up -d --build`).
+- **Exécution** : chaque commande est passée à `sh -c "<commande>"`, avec le
+  **dépôt du service comme répertoire courant**. Elle est non interactive (pas
+  de TTY ni de stdin, sortie capturée) et peut donc contenir des pipes, `&&`,
+  des variables, etc. Les commandes tournent dans l'ordre déclaré et
+  l'exécution **s'arrête à la première qui échoue** (code de sortie ≠ 0) : les
+  suivantes ne sont pas lancées et l'erreur `restart-failed` nomme le dépôt, la
+  commande et sa sortie d'erreur.
+- **Quand la recette est-elle utilisée ?**
+
+  | Contexte | Comportement |
+  |-----------|----------------|
+  | Mise à jour d'un groupe (EDT) dans le TUI, option **Clean restart** cochée (paramètre global, surchargeable par service dans le tableau) | La recette s'exécute à la place du redémarrage simple du conteneur. |
+  | Même mise à jour, **Clean restart** décoché | Redémarrage simple du conteneur ; `restartCommands` est ignoré. |
+  | Menu d'un service (zone Update) → **Clean restart** (restart standalone d'un seul service) | La recette s'exécute toujours (le mode clean est implicite). |
+  | Mise à jour via la CLI (`tui-back update …`) | Clean restart **toujours désactivé** (pas de flag dédié) : `restartCommands` est ignoré, redémarrage simple du conteneur. |
+
+- **Repli** : si le clean restart est demandé mais que `restartCommands` est
+  absent ou vide, `tui-back` retombe **silencieusement** sur le redémarrage
+  simple du conteneur. Dans le tableau de configuration du TUI, la colonne
+  *Restart* affiche alors `basic (no recipe)` au lieu de `clean`.
+- **Exclusivité** : pour un même service et une même action, soit la recette
+  s'exécute, soit le redémarrage du conteneur — jamais les deux.
+- **Sécurité** : ce sont des commandes shell arbitraires lues dans le
+  dépôt ; ne les ajouter que dans des manifestes de confiance.
 
 ### `sharedBranch` (optionnel, avec valeur par défaut)
 
@@ -208,6 +248,9 @@ Comportement du tir :
 service: api-gateway
 container: api-gateway
 migrationCommand: docker exec api-gateway npx prisma migrate deploy
+restartCommands:
+  - docker compose down
+  - docker compose up -d --build
 sharedBranch: development
 protectedBranches: [development, preprod, prod]
 modules:
@@ -233,7 +276,8 @@ sharedBranch: master
 modules: {}
 ```
 
-(`migrationCommand` omis, `sharedBranch` explicite ici mais pourrait aussi
+(`migrationCommand` et `restartCommands` omis — le clean restart retombe alors
+sur le redémarrage simple du conteneur —, `sharedBranch` explicite ici mais pourrait aussi
 être omis pour hériter de `"development"`. `protectedBranches` omis : seule
 `master` est protégée.)
 
@@ -254,6 +298,9 @@ Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
 - Schéma Zod : `src/adapters/driven/manifest/schema.ts`
 - Type `Manifest` : `src/core/ports/manifest.ts`
 - Loader : `src/adapters/driven/manifest/index.ts`
+- Clean restart (recette `restartCommands`) : `src/core/scripts/group-update.ts` (`runRestartStep`),
+  `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,
+  `src/adapters/driven/restart/index.ts`
 - Registre des modules : `src/adapters/driven/modules/module-registry.ts`
 - Scanner `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
 - Auth session cookie : `src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`
