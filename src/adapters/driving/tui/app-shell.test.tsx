@@ -443,6 +443,7 @@ it('shouldQuit returns true for q', () => {
         // Per-service standalone restart in-flight map + runner
         serviceRestartInFlight: {},
         runServiceRestart: async () => {},
+        describeServiceRestart: async () => ({ restartAvailable: true }),
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
         // Update zone service-list health poll + last-outcome map

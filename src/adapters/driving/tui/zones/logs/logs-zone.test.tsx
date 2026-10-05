@@ -174,6 +174,42 @@ describe('LogsZone', () => {
     expect(output).toContain('Docker is unavailable for container "ctr-route-explorer"');
   });
 
+  it('renders a container-less pane with the no-container badge, no restart hint, and the no-logs empty state', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'shared-types', path: '/repos/shared-types' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsOtherSelected: ['/repos/shared-types'],
+      logsPanes: {
+        '/repos/shared-types': {
+          repoPath: '/repos/shared-types',
+          service: 'shared-types',
+          lines: [],
+          streamError: null,
+          noMoreHistory: false,
+          scrollOffset: 0,
+          health: 'no-container',
+          restarting: false,
+        },
+      },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('No container — no logs');
+    expect(output).toContain('no container');
+    // The pane header carries no restart control (the global hints list still
+    // advertises the key; the per-pane press is guarded).
+    expect(output).not.toMatch(/no container\s*\[R\]/);
+    expect(output).not.toContain('[R] restarting');
+    expect(output).not.toContain('Waiting for logs');
+  });
+
   it('renders the fullscreen preview view in place of the grid when logsFullscreenTarget is set', async () => {
     const store = createAppStore();
     store.setState({

@@ -43,6 +43,7 @@ import {
   DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
   filterVisibleLines,
+  formatHealthLabel,
   healthBadgeState,
   historyEntryLabel,
   isAtOldestLine,
@@ -486,13 +487,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           return;
         }
         // Developer-triggered restart for this fullscreen pane's service — disabled while
-        // restarting (no-op here; the slice guards too). Uppercase `R` only: lowercase `r` is the
+        // restarting (no-op here; the slice guards too). A container-less pane has no restart
+        // control at all. Uppercase `R` only: lowercase `r` is the
         // global Routes-zone mnemonic (AppShell exact-matches it whenever zoneInputCaptured is
         // false, and Ink forwards every keypress to all mounted useInput hooks), so accepting `r`
         // here would both restart a container and switch zones on one keypress.
         if (input === 'R') {
           const pane = logsPanes[logsFullscreenTarget];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting') {
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container') {
             void restartLogsPane(logsFullscreenTarget);
           }
           return;
@@ -663,13 +665,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       }
       // Developer-triggered restart for the sub-focused grid pane's service — disabled while
       // restarting (no-op; the slice's guard is the second line of defense against a concurrent
-      // `docker restart`). Uppercase `R` only — lowercase `r` is the global Routes-zone mnemonic
+      // `docker restart`). A container-less pane has no restart control at all. Uppercase `R`
+      // only — lowercase `r` is the global Routes-zone mnemonic
       // (see the fullscreen branch above for why accepting it would double-dispatch).
       if (input === 'R') {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
           const pane = logsPanes[focused.path];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting') {
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container') {
             void restartLogsPane(focused.path);
           }
         }
@@ -727,7 +730,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       {paneHealth !== null ? (
                         <Box marginLeft={1}>
                           <StatusBadge state={healthBadgeState(paneHealth)} />
-                          <Text color={colors['text-dim']}> {paneHealth}</Text>
+                          <Text color={colors['text-dim']}> {formatHealthLabel(paneHealth)}</Text>
                         </Box>
                       ) : null}
                     </Box>
@@ -752,7 +755,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       {paneHealth !== null ? (
                         <Box marginLeft={1}>
                           <StatusBadge state={healthBadgeState(paneHealth)} />
-                          <Text color={colors['text-dim']}> {paneHealth}</Text>
+                          <Text color={colors['text-dim']}> {formatHealthLabel(paneHealth)}</Text>
                         </Box>
                       ) : null}
                     </Box>

@@ -13,7 +13,7 @@ export function createManifestSchema(known: ReadonlySet<string>): z.ZodType<Mani
   return z
     .object({
       service: z.string().trim().min(1),
-      container: z.string().trim().min(1),
+      container: z.string().trim().min(1).optional(),
       migrationCommand: z.string().trim().min(1).optional(),
       restartCommands: z.array(z.string().trim().min(1)).optional(),
       sharedBranch: z.string().min(1).optional().default('development'),

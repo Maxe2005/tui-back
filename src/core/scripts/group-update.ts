@@ -526,7 +526,7 @@ export async function markGroupUpdateInterrupted(
 export interface RestartStepInput {
   container: ContainerPort;
   restart: RestartPort;
-  containerName: string;
+  containerName: string | undefined;
   restartCommands: string[] | undefined;
   repoPath: string;
   cleanRestart: boolean;
@@ -552,6 +552,9 @@ export async function runRestartStep(input: RestartStepInput): Promise<Result<vo
       }
     }
     return ok(undefined);
+  }
+  if (containerName === undefined || containerName.trim() === '') {
+    return err('no-container', `Repo ${repoPath} declares no container — nothing to restart`);
   }
   const restarted = await container.restart(containerName);
   if (!restarted.ok) {
@@ -808,6 +811,16 @@ async function updateWithLoadedManifest(
   // (which also emits the `restarting` phase).
   const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });
   if (!restarted.ok) {
+    if (restarted.error.code === 'no-container') {
+      return {
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: 'no-container', message: `Repo ${repoPath} declares no container — restart skipped` },
+        },
+        cancelRun: false,
+      };
+    }
     return failedOutcome(service, restarted.error);
   }
 

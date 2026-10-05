@@ -84,6 +84,45 @@ describe('loadManifest', () => {
     }
   });
 
+  it('loads a manifest omitting container as having no Docker runtime', async () => {
+    const repo = await tempRepo(['service: shared-types', 'modules: {}'].join('\n'));
+
+    const result = await loadManifest(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.container).toBeUndefined();
+    }
+  });
+
+  it.each([['""'], ['"   "']])('rejects a present-but-blank container (%s) naming the field', async (entry) => {
+    const repo = await tempRepo(['service: shared-types', `container: ${entry}`, 'modules: {}'].join('\n'));
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('container'),
+      },
+    });
+  });
+
+  it('rejects an explicit null container naming the field (omit the key instead)', async () => {
+    const repo = await tempRepo(['service: shared-types', 'container: null', 'modules: {}'].join('\n'));
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('container'),
+      },
+    });
+  });
+
   it('loads a manifest omitting migrationCommand as having no migrations', async () => {
     const repo = await tempRepo(
       ['service: route-explorer', 'container: route-explorer', 'modules: {}'].join('\n'),

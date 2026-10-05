@@ -34,7 +34,7 @@ import {
   resolveEditorCommand,
 } from './update-zone.logic.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
-import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
+import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import {
   beginUpdateConfigBranchEdit,
@@ -341,6 +341,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const closeUpdateServicePick = useStore((state) => state.closeUpdateServicePick);
   const serviceRestartInFlight = useStore((state) => state.serviceRestartInFlight);
   const runServiceRestart = useStore((state) => state.runServiceRestart);
+  const describeServiceRestart = useStore((state) => state.describeServiceRestart);
   const markUpdateInterrupted = useStore((state) => state.markUpdateInterrupted);
   const activeEdt = useStore((state) => state.activeEdt);
   const edts = useStore((state) => state.edts);
@@ -382,6 +383,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // state belongs in update-slice.ts). Null when no menu is open.
   const [serviceMenu, setServiceMenu] = useState<{ service: string; repoPath: string } | null>(null);
   const [serviceMenuCursor, setServiceMenuCursor] = useState(0);
+  // Whether the open menu offers the restart row — resolved from the row's manifest when the
+  // menu opens (a container-less service without a recipe has nothing to restart). Defaults
+  // to offered so the menu never flickers rows away before the lookup lands.
+  const [serviceMenuRestartAvailable, setServiceMenuRestartAvailable] = useState(true);
   // The service list's selection cursor — zone-local UI state (only cross-visit/cross-run state
   // belongs in update-slice.ts).
   const [serviceCursor, setServiceCursor] = useState(0);
@@ -409,6 +414,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const serviceRows = partitionUpdateServiceRows(rows, focusedEdt);
   const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
   const selectedServiceRow = serviceRows[clampedServiceCursor];
+  // The open row-local menu's visible rows — the restart row drops out for a container-less
+  // service without a recipe (see describeServiceRestart), and the cursor clamps with it so
+  // a row that arrived while browsing never points past the last visible item.
+  const serviceMenuItems = visibleServiceMenuItems(serviceMenuRestartAvailable);
+  const clampedServiceMenuCursor = Math.min(serviceMenuCursor, serviceMenuItems.length - 1);
 
   // This run's currently-targeted services — an all-repos run targets every listed service; an
   // EDT-scoped run only the active EDT's members (the same `runningMembers` the spinner below
@@ -644,7 +654,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // Enter chooses, Esc cancels. Update routes to the config screen pre-scoped to that single
       // service; clean restart runs the standalone single-service use-case for that repo alone.
       if (serviceMenu !== null) {
-        const step = resolveServiceMenuKey(input, key, serviceMenuCursor);
+        const menuItems = visibleServiceMenuItems(serviceMenuRestartAvailable);
+        const step = resolveServiceMenuKey(input, key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems);
         if (step.type === 'move') {
           setServiceMenuCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -699,7 +710,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       }
       if (trigger === 'open-service-menu') {
         if (selectedServiceRow !== undefined) {
-          setServiceMenu({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+          const target = { service: selectedServiceRow.service, repoPath: selectedServiceRow.path };
+          setServiceMenu(target);
+          // Offered until the manifest says otherwise — a slow lookup must never hide the
+          // row, only a confirmed container-less-without-recipe manifest does.
+          setServiceMenuRestartAvailable(true);
+          void describeServiceRestart(target.repoPath).then(({ restartAvailable }) => {
+            setServiceMenuRestartAvailable(restartAvailable);
+          });
         }
       }
     },
@@ -771,6 +789,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 return (
                   <Box key={row.path} flexDirection="row">
                     <StatusBadge state={status} />
+                    {status === 'no-container' ? (
+                      <Box marginLeft={1}>
+                        <Text color={colors['text-dim']}>no container</Text>
+                      </Box>
+                    ) : null}
                     <Box marginLeft={1} flexGrow={1} minWidth={0}>
                       <ListRow label={row.service} meta={formatServiceMeta(row)} selected={index === clampedServiceCursor} />
                     </Box>
@@ -867,7 +890,9 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           maxRows={branchDropdownMaxRows}
         />
       ) : null}
-      {serviceMenu !== null ? <UpdateServiceMenuDialog service={serviceMenu.service} cursor={serviceMenuCursor} /> : null}
+      {serviceMenu !== null ? (
+        <UpdateServiceMenuDialog service={serviceMenu.service} cursor={clampedServiceMenuCursor} items={serviceMenuItems} />
+      ) : null}
       {/* The no-arg `:update-service` fallback — a filterable service quick-pick. Confirming a
           row opens the config pre-scoped to that one service; Esc closes with nothing opened. */}
       {updateServicePick !== null ? <UpdateServicePickDialog state={pickState} candidates={updateServicePick} /> : null}

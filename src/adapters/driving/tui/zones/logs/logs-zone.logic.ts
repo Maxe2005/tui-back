@@ -9,14 +9,24 @@ import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 import { spacing } from '../../shared/theme/theme.js';
 
 // HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
-// `⣾`/info (StatusBadge's `in-progress`). Glyph+color always paired, never color alone; accent is
+// `⣾`/info (StatusBadge's `in-progress`). A service with no Docker runtime is its own dim
+// state, never the down treatment. Glyph+color always paired, never color alone; accent is
 // never a health color. Shared by every place a health badge renders (list rows, grid panes,
 // fullscreen pane).
-export function healthBadgeState(health: HealthState): StatusBadgeState {
+export function healthBadgeState(health: HealthState | 'no-container'): StatusBadgeState {
+  if (health === 'no-container') {
+    return 'no-container';
+  }
   if (health === 'restarting') {
     return 'in-progress';
   }
   return health;
+}
+
+// The text next to a health badge — the raw state except the container-less service, which
+// reads as words rather than a kebab-case code.
+export function formatHealthLabel(health: HealthState | 'no-container'): string {
+  return health === 'no-container' ? 'no container' : health;
 }
 
 // Tab cycles EDT list -> other list -> panes.

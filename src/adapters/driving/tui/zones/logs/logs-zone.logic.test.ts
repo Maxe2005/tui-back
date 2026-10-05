@@ -14,8 +14,10 @@ import {
   cycleLogsPaneFocus,
   detectLogLevel,
   filterVisibleLines,
+  formatHealthLabel,
   formatLogFilterSpec,
   formatLogLine,
+  healthBadgeState,
   isAtOldestLine,
   isClearAllLogsKey,
   isPaneEngagedInGlobalFilter,
@@ -45,6 +47,22 @@ import {
   type FilterHistoryKey,
   type LogFilterSpec,
 } from './logs-zone.logic.js';
+
+describe('healthBadgeState / formatHealthLabel', () => {
+  it('passes raw health through and reads the container-less service as its own dim state', () => {
+    expect(healthBadgeState('up')).toBe('up');
+    expect(healthBadgeState('down')).toBe('down');
+    expect(healthBadgeState('restarting')).toBe('in-progress');
+    expect(healthBadgeState('no-container')).toBe('no-container');
+  });
+
+  it('labels the container-less service in words, never as a kebab-case code', () => {
+    expect(formatHealthLabel('up')).toBe('up');
+    expect(formatHealthLabel('down')).toBe('down');
+    expect(formatHealthLabel('restarting')).toBe('restarting');
+    expect(formatHealthLabel('no-container')).toBe('no container');
+  });
+});
 
 describe('cycleLogsPaneFocus', () => {
   it('cycles edt-list -> other-list -> panes -> edt-list', () => {
