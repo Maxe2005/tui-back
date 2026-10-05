@@ -14,7 +14,7 @@ Three changes from day-to-day use after Story 7.2 (container-less services) land
 | # | Change | Category |
 |---|--------|----------|
 | C1 | **Logs third group + scoped Ctrl+A + always-visible health + explicit restarting.** Container-less services get an info-only "services without container" section (all registry services, greyed, unselectable, Tab-excluded); Ctrl+A toggles the focused list; health badges render on every row; the `restarting` state is made explicit. | New requirement (grows FR-29), grafted to 7.2 |
-| C2 | **Per-service last-run detail in Update (session-only).** Merge vs already-up-to-date (+N/−M lines, F files), migrations ran vs none (+command/output excerpt), kept in memory and replaced by the next run. | New requirement (FR-30) |
+| C2 | **Per-service last-run detail in Update (session-only).** Merge vs already-up-to-date (+N/−M lines, F files), migrations ran vs none (+command/output excerpt), kept in memory and replaced by the next run. | New requirement (FR-32) |
 | C3 | **Shared focus-navigation component.** Shift+Tab reverses Tab everywhere; each zone declares its mode (H/V arrows, Tab/Shift+Tab, Ctrl+N/P) through one primitive instead of hand-rolled handlers. Runs before 7.4 so alignment consumes it. | UX debt + new requirement |
 
 **Evidence gathered (2026-10-05):**
@@ -39,7 +39,7 @@ Three changes from day-to-day use after Story 7.2 (container-less services) land
 | 2.3 Remaining epics | [x] | Epics 2–6 unaffected; 7.3 notes Logs third-list compat (no rework) |
 | 2.4 Obsolete/new epics | [x] | None obsoleted; none created |
 | 2.5 Ordering | [x] | 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.4 → 7.5/7.6 |
-| 3.1 PRD | [!] | FR-29 amended; new FR-30 (C2) + FR-31 (C3) |
+| 3.1 PRD | [!] | FR-29 amended; new FR-32 (C2) + FR-33 (C3) |
 | 3.2 Architecture | [!] | GitPort extended (C2, AD-16); shared nav primitive (C3, 7.3-adjacent) |
 | 3.3 UX | [!] | UX-DR22, UX-DR21 amended; UX-DR36 amended + nav contract |
 | 3.4 Other artifacts | [!] | `sprint-status.yaml`; story-7.2 epic merge delayed |
@@ -57,8 +57,8 @@ Three changes from day-to-day use after Story 7.2 (container-less services) land
 | Artifact | Section | Change |
 |----------|---------|--------|
 | PRD | FR-29 | +1 consequence (C1: info-only third group, scoped Ctrl+A, always-visible health, explicit restarting) |
-| PRD | §new | **FR-30**: per-service last-run merge/migration detail, session-only |
-| PRD | §new | **FR-31**: Shift+Tab reverses Tab everywhere; one configurable focus-navigation primitive |
+| PRD | §new | **FR-32**: per-service last-run merge/migration detail, session-only |
+| PRD | §new | **FR-33**: Shift+Tab reverses Tab everywhere; one configurable focus-navigation primitive |
 | Architecture | AD-16/GitPort | New method (e.g. `diffStat`) for merge +/−/files; HEAD comparison for up-to-date detection |
 | Architecture | TUI shared | Nav primitive contract + interface note with 7.3's layout contract |
 | EXPERIENCE.md | State Patterns › Logs | Third-group row (greyed, unselectable, Tab-excluded) |
@@ -122,10 +122,10 @@ Three changes from day-to-day use after Story 7.2 (container-less services) land
   container state is being re-verified. (Amended 2026-10-05, Sprint Change Proposal.)
 ```
 
-**4.1.b: New FR-30 (C2)**
+**4.1.b: New FR-32 (C2)**
 
 ```
-#### FR-30: Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal)
+#### FR-32: Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal)
 
 After a group update, the Update zone's detail pane reports per service what really
 happened: a successful merge that advanced the branch shows +N/−M lines and F files;
@@ -140,10 +140,10 @@ The detail lives in memory only — the next run replaces it, a restart drops it
 - CLI parity (FR-1): the same details ride the JSON line additively.
 ```
 
-**4.1.c: New FR-31 (C3)**
+**4.1.c: New FR-33 (C3)**
 
 ```
-#### FR-31: Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal)
+#### FR-33: Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal)
 
 Wherever Tab advances focus, Shift+Tab moves it back. Every zone declares its focus
 movement through one shared navigation primitive (configurable per zone: H/V arrows,

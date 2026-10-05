@@ -122,7 +122,7 @@ A managed repo's manifest may omit its container: the service is still fully man
 - Container-only actions (plain restart, logs restart control) are hidden or disabled with an explanation for such a service.
 - In the Logs zone, services without a container appear in an info-only "services without container" section covering every such registry service (members included): greyed, unselectable, excluded from Tab order and from Ctrl+A. Ctrl+A toggles the focused list only (active EDT members / other services). Every service row shows its health badge (up/down/restarting/no container) whether or not the cursor is on it, and a restarting service states explicitly that a restart was requested and the container state is being re-verified. (Amended 2026-10-05, Sprint Change Proposal.)
 
-#### FR-31: Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal)
+#### FR-33: Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal)
 
 Wherever Tab advances focus, Shift+Tab moves it back. Every zone declares its focus movement through one shared navigation primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help reflect the active bindings.
 
@@ -325,7 +325,7 @@ When configuring an EDT-scoped group update, a developer can set the merge sourc
 - A per-service manual choice survives later changes of the global strategy until the developer resets it to the global rule.
 - CLI parity (FR-1): `tui-back update --from-edt <topic>` applies the same resolution non-interactively and fails (no git write) listing every unresolved service.
 
-#### FR-30: Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal)
+#### FR-32: Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal)
 
 After a group update, the Update zone's detail pane reports per service what really happened: a successful merge that advanced the branch shows +N/−M lines and F files; a successful merge with an unchanged HEAD shows "already up to date"; the migrate phase shows "ran (<command>)" with an output excerpt, or "none" when absent/disabled. The detail lives in memory only — the next run replaces it, a restart drops it.
 

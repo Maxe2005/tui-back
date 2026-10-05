@@ -45,8 +45,8 @@ FR-28 (added 2026-10-01, Sprint Change Proposal): Merge source from another EDT 
 FR-30 (added 2026-10-05, Sprint Change Proposal): Smart group update — `shared-types` is processed first, then published, propagated and committed, per an update-configuration setting.
 FR-31 (added 2026-10-05, Sprint Change Proposal): Auto-resolve merge conflicts limited to the `shared-types` dependency line.
 FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed services — `container` optional in the manifest; restart/health/logs degrade to an explicit "no container" state.
-FR-30 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/migration detail in Update, session-only.
-FR-31 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
+FR-32 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/migration detail in Update, session-only.
+FR-33 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
 
 ### NonFunctional Requirements
 
@@ -156,8 +156,8 @@ FR-21: Epic 6 - Save, customize, and re-fire a request
 FR-22: Epic 6 - See response and relevant logs together
 FR-23: Epic 6 - Manage the saved-request library across EDTs
 FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
-FR-30: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
-FR-31: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
+FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
+FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
 ## Epic List
 
@@ -195,7 +195,7 @@ A developer can discover a repo's routes, fire a request with automatic dev-mode
 > Added 2026-10-01 (Sprint Change Proposal `sprint-change-proposal-2026-10-01.md`).
 
 A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
-**FRs covered:** FR-29, FR-30, FR-31 (plus completion of UX-DR10, UX-DR19)
+**FRs covered:** FR-29, FR-32, FR-33 (plus completion of UX-DR10, UX-DR19)
 **Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.4 → 7.5/7.6.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
@@ -3047,7 +3047,7 @@ As a developer, I want the Dashboard to warn me about anything needing attention
 
 **Given** an operation holds a lock (update, migration, switch, …) **When** the Dashboard renders **Then** a line names the operation and its progress, and quick actions that would conflict are disabled with the reason.
 
-### Story 7.7: Shared Focus-Navigation Component (FR-31)
+### Story 7.7: Shared Focus-Navigation Component (FR-33)
 
 > Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Runs before Story 7.4 so the alignment phase consumes its primitive.
 
@@ -3061,7 +3061,7 @@ As a developer, I want one shared navigation primitive so Tab/Shift+Tab move foc
 
 **Given** all zones migrated **When** rendered **Then** footer and `?` reflect the active bindings from the same declarations.
 
-### Story 7.8: Update Per-Service Last-Run Detail (FR-30)
+### Story 7.8: Update Per-Service Last-Run Detail (FR-32)
 
 > Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Parallelizable with the 7.2 graft; session-only, independent of 7.5's persisted datum.
 

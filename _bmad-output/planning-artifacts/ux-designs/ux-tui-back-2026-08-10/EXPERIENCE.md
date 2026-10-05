@@ -196,7 +196,7 @@ The canonical keybinding contract for downstream implementation:
 - `Esc` — cancel, always — closes a modal, exits splitter resize-mode, clears an active filter.
 - `Tab` — cycle — between fields in a form, or between resizable boundaries in a multi-splitter zone. `Shift+Tab` always moves back wherever `Tab` moves forward (added 2026-10-05, FR-31).
 - `Ctrl+W` — enter keyboard resize-mode on the active splitter; arrow keys resize; `Tab` cycles the active boundary; `Enter`/`Esc` exits.
-- Focus navigation (added 2026-10-05, FR-31) — every zone declares its focus movement through one shared primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help are generated from those declarations.
+- Focus navigation (added 2026-10-05, FR-33) — every zone declares its focus movement through one shared primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help are generated from those declarations.
 - `/` — open filter within the current zone.
 - `:` — open the command-entry bar (Story 2.14, amended 2026-08-25 Sprint Change Proposal): type a registered command name, `Tab` autocompletes on a single match, `Enter` runs an exact match, `Esc` cancels.
 - `?` — open the dedicated keybinding-palette/help screen: every key in the app plus its description, beyond what the contextual footer-hint shows.

@@ -11,11 +11,11 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - Story 7.1: Source Comment Hygiene (AD-17)
 - Story 7.2: Container-less Managed Services (FR-29) + C1 graft (2026-10-05): info-only "services without container" Logs group (all registry, greyed/unselectable/Tab-excluded), focus-scoped Ctrl+A, health badge on every row, explicit restarting
 - Story 7.3: Shared Zone Layout Contract & `Ctrl+W` Resize in Every Zone (UX-DR35)
-- Story 7.7: Shared Focus-Navigation Component (FR-31) — before 7.4; Shift+Tab reverses Tab everywhere via one per-zone configurable primitive
+- Story 7.7: Shared Focus-Navigation Component (FR-33) — before 7.4; Shift+Tab reverses Tab everywhere via one per-zone configurable primitive
 - Story 7.4: Interaction Consistency Audit & Alignment (UX-DR36)
 - Story 7.5: Dashboard — Workspace Summary & Last-Update Persistence (UX-DR19)
 - Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
-- Story 7.8: Update Per-Service Last-Run Detail (FR-30, session-only) — parallelizable with the 7.2 graft
+- Story 7.8: Update Per-Service Last-Run Detail (FR-32, session-only) — parallelizable with the 7.2 graft
 
 ## Requirements & Constraints
 
