@@ -20,9 +20,13 @@ import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { mergeLastServiceOutcomes, type ServiceIssue } from '../../zones/update/update-zone.logic.js';
+import { loadMergeSourcesFromEdt } from '../../../../../core/scripts/resolve-merge-sources.js';
 import {
+  applyMergeStrategy,
   confirmUpdateConfigDraft,
   createUpdateConfigDraft,
+  type ConfigLayout,
+  type UpdateConfigRowInput,
   type UpdateConfigDraft,
 } from '../../zones/update/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
@@ -149,6 +153,12 @@ export type UpdateSlice = {
   // screen stays open; otherwise the screen closes and the run starts immediately with
   // exactly that configuration, no further prompt.
   confirmUpdateConfig: () => Promise<void>;
+  // The EDTs the merge-source quick-pick offers: every registered EDT except the one being
+  // updated. Empty when unwired or the registry cannot be read.
+  listMergeSourceEdts: () => Promise<{ ulid: string; topic: string }[]>;
+  // Re-resolves the open draft's rows from the chosen EDT's recorded member branches. A
+  // vanished EDT leaves the draft untouched and reports inline.
+  chooseMergeSourceEdt: (ulid: string) => Promise<void>;
   // Marks the run's EDT `interrupted` after an abandoned run (quit-mid-run confirmation)
   // and refreshes `edts` so the next idle render offers a re-run — but only while a run
   // is actually in flight: a quit-confirm racing completion must never mark a healthy,
@@ -264,11 +274,24 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // fails to load so the row still renders and the run itself reports the load failure
     // as that service's `failed` row.
     async function resolveBranchDefault(repoPath: string): Promise<string> {
-      if (!deps) {
-        return 'development';
+      return (await resolveRowManifest(repoPath)).sourceBranch;
+    }
+
+    // What one row needs from its manifest: the shared branch plus whether the migration
+    // command and the clean-restart recipe are declared (an undeclared action never runs).
+    async function resolveRowManifest(
+      repoPath: string,
+    ): Promise<{ sourceBranch: string; migrationDeclared: boolean; recipeDeclared: boolean }> {
+      const loaded = deps ? await deps.manifest.load(repoPath) : null;
+      if (loaded === null || !loaded.ok) {
+        // Unreadable manifest: claim nothing (the run reports the load failure on its own row).
+      return { sourceBranch: 'development', migrationDeclared: false, recipeDeclared: false };
       }
-      const loaded = await deps.manifest.load(repoPath);
-      return loaded.ok ? loaded.data.sharedBranch : 'development';
+      return {
+        sourceBranch: loaded.data.sharedBranch,
+        migrationDeclared: (loaded.data.migrationCommand?.trim() ?? '') !== '',
+        recipeDeclared: (loaded.data.restartCommands?.length ?? 0) > 0,
+      };
     }
 
     function failConfigOpen(code: string, message: string): void {
@@ -278,9 +301,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // Opens the screen over a clean banner: a stale `done`/`error` outcome from the previous
     // run must not linger underneath the new configuration. Per-run history
     // (`updateResults`, `lastServiceOutcomes`) is kept — only the banner fields reset.
-    function openConfigDraft(scope: GroupUpdateScope, rows: { service: string; repoPath: string; sourceBranch: string }[]): void {
+    function openConfigDraft(
+      scope: GroupUpdateScope,
+      rows: UpdateConfigRowInput[],
+      options?: { layout?: ConfigLayout },
+    ): void {
       set({
-        updateConfig: createUpdateConfigDraft(scope, rows),
+        updateConfig: createUpdateConfigDraft(scope, rows, options),
         updateStatus: 'idle',
         updateError: null,
         updateErrorCode: null,
@@ -324,17 +351,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       });
       const rows = [];
       for (const member of members) {
-        rows.push({
-          service: member.service,
-          repoPath: member.repoPath,
-          sourceBranch: await resolveBranchDefault(member.repoPath),
-        });
+        rows.push({ service: member.service, repoPath: member.repoPath, ...(await resolveRowManifest(member.repoPath)) });
       }
       if (rows.length === 0) {
         failConfigOpen('no-services-selected', `EDT "${active.topic}" has no member services — nothing to update.`);
         return;
       }
-      openConfigDraft('edt', rows);
+      openConfigDraft('edt', rows, { layout: 'edt-panels' });
     }
 
     // The managed-repo enumeration shared by openAllReposConfig and
@@ -375,7 +398,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           rows.push({ service: base !== undefined && base !== '' ? base : repoPath, repoPath, sourceBranch: 'development' });
           continue;
         }
-        rows.push({ service: loaded.data.service, repoPath, sourceBranch: loaded.data.sharedBranch });
+        rows.push({ service: loaded.data.service, repoPath, ...(await resolveRowManifest(repoPath)) });
       }
       return { ok: true, rows };
     }
@@ -395,7 +418,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
         return;
       }
-      openConfigDraft('all', enumerated.rows);
+      openConfigDraft('all', enumerated.rows, { layout: 'all-panels' });
     }
 
     // The reusable pre-scoped entry point (the single-service update reuses it): exactly one
@@ -799,6 +822,42 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         set({ updateConfig: draft });
+      },
+      listMergeSourceEdts: async () => {
+        if (!deps) {
+          return [];
+        }
+        const [active, listed] = await Promise.all([deps.state.readActiveEdt(), deps.edtRegistry.list()]);
+        // Without a readable active EDT the one being updated could be offered as its own
+        // source, so nothing is offered.
+        if (!listed.ok || !active.ok) {
+          return [];
+        }
+        return listed.data.filter((entry) => entry.ulid !== active.data).map((entry) => ({ ulid: entry.ulid, topic: entry.topic }));
+      },
+      chooseMergeSourceEdt: async (ulid: string) => {
+        const draft = get().updateConfig;
+        if (!deps || draft === null) {
+          return;
+        }
+        const [listed, active] = await Promise.all([deps.edtRegistry.list(), deps.state.readActiveEdt()]);
+        const source = listed.ok ? listed.data.find((entry) => entry.ulid === ulid) : undefined;
+        if (source === undefined) {
+          set({ updateConfig: { ...draft, error: "L'EDT choisi n'existe plus." } });
+          return;
+        }
+        if (!active.ok || source.ulid === active.data) {
+          set({ updateConfig: { ...draft, error: "Un EDT ne peut pas être sa propre source de merge." } });
+          return;
+        }
+        const resolved = await loadMergeSourcesFromEdt(deps.git, draft.rows, source);
+        const current = get().updateConfig;
+        // The resolution is dropped when the screen closed, changed layout or went back to
+        // shared branches while git was being read — the developer's newer choice wins.
+        if (!resolved.ok || current === null || current.layout !== draft.layout || current.strategy.kind === 'shared') {
+          return;
+        }
+        set({ updateConfig: applyMergeStrategy(current, { kind: 'edt', ulid, topic: source.topic, resolved: resolved.data }) });
       },
       closeUpdateConfig: () => {
         set({ updateConfig: null });

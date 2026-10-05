@@ -617,3 +617,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs.md`
   summary: Scanner-seeded query/header rows (including required ones) can be deleted with d and there is no "reset to seed" action to bring them back within the session.
   evidence: removeRequestRow ignores row.required and addRequestRow creates rows with required false; likely belongs with 6.3's saved-request editing.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-12-update-merge-source-from-another-edt.md`
+  summary: The panels hook still reads the draft from props, so two keys delivered before a re-render can act on a stale draft (view and box are already read from refs).
+  evidence: Edge-case review of story 3.12; the pre-existing simple config dialog has the same limitation, so a store-level `getState()` read would fix both.

@@ -36,6 +36,8 @@ import {
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
+import { UpdateConfigPanels } from './update-config-panels.js';
+import { useUpdateConfigPanels } from './use-update-config-panels.js';
 import {
   beginUpdateConfigBranchEdit,
   clampUpdateConfigCursor,
@@ -330,8 +332,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
   const updateConfig = useStore((state) => state.updateConfig);
   const openUpdateConfig = useStore((state) => state.openUpdateConfig);
-  const setUpdateConfig = useStore((state) => state.setUpdateConfig);  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
+  const setUpdateConfig = useStore((state) => state.setUpdateConfig);
+  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
   const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
+  const listMergeSourceEdts = useStore((state) => state.listMergeSourceEdts);
+  const chooseMergeSourceEdt = useStore((state) => state.chooseMergeSourceEdt);
   // The no-arg `:update-service` handoff (zone selection → pinned config, else the filterable
   // quick-pick) plus the pick's own open candidates.
   const updateServiceSelectRequest = useStore((state) => state.updateServiceSelectRequest);
@@ -396,6 +401,18 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
   const [pickState, setPickState] = useState<FilterablePickListState>(createFilterablePickListState);
+  const windowSizeForConfig = useWindowSize();
+  const configPanels = useUpdateConfigPanels({
+    draft: updateConfig,
+    windowRows: windowSizeForConfig.rows,
+    dropdownMax: branchDropdownMaxRows,
+    setUpdateConfig,
+    closeUpdateConfig,
+    confirmUpdateConfig,
+    listMergeSourceEdts,
+    chooseMergeSourceEdt,
+    listBranches: listBranchesAction,
+  });
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -569,6 +586,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // While the pre-run configuration screen is open it owns every keystroke — the run starts
       // only through its confirm path, with exactly the confirmed configuration.
       if (updateConfig !== null) {
+        if (updateConfig.layout !== 'simple') {
+          configPanels.handleKey(input, key);
+          return;
+        }
         const step = resolveUpdateConfigKey(
           input,
           key,
@@ -858,7 +879,19 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
-      {updateConfig !== null ? (
+      {updateConfig !== null && updateConfig.layout !== 'simple' ? (
+        <UpdateConfigPanels
+          draft={updateConfig}
+          view={configPanels.view}
+          budget={configPanels.budget}
+          edtState={configPanels.edtField}
+          edtTopics={configPanels.edtTopics}
+          edtStatus={configPanels.edtStatus}
+          box={configPanels.box}
+          boxContext={configPanels.boxContext}
+        />
+      ) : null}
+      {updateConfig !== null && updateConfig.layout === 'simple' ? (
         <UpdateConfigDialog
           draft={updateConfig}
           view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
