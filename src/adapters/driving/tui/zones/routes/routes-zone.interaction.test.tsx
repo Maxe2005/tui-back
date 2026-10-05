@@ -202,7 +202,7 @@ describe('RoutesZone route filter', () => {
   });
 });
 
-describe('RoutesZone JsonTree (story 6.7)', () => {
+describe('RoutesZone JsonTree', () => {
   // Tree tests render tall (30 rows): the response tree + filter panel + both hint
   // lines need room — the shared 14-row stress viewport clips detail content, which is
   // correct bounded behavior but makes frame assertions meaningless.
@@ -322,7 +322,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('[n] hide nulls');
       expect(store.getState().routesPaneTab).toBe('response');
-      // Story 6.9: Esc on Response returns to the Request tab, not to the list.
+      // Esc on Response returns to the Request tab, not to the list.
       await pressEscape(instance, stdin);
       expect(store.getState().routesPaneTab).toBe('request');
       expect(store.getState().routesPaneFocus).toBe('detail');
@@ -343,7 +343,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
       expect(store.getState().zoneInputCaptured).toBe(false);
       await press(instance, stdin, KEYS.down);
       expect(store.getState().routesSelected).toBe(1);
-      // Story 6.9: Enter opens the Request tab — it never fires; Ctrl+R does.
+      // Enter opens the Request tab — it never fires; Ctrl+R does.
       await press(instance, stdin, KEYS.enter);
       expect(fireRoute).not.toHaveBeenCalled();
       expect(store.getState().routesPaneFocus).toBe('detail');
@@ -416,7 +416,7 @@ describe('RoutesZone JsonTree (story 6.7)', () => {
     }
   });
 
-describe('RoutesZone body editor (story 6.8)', () => {
+describe('RoutesZone body editor', () => {
   const EDITOR_KEY = 'POST /users';
 
   function seedEditor(fireRoute: () => Promise<void> = async () => {}) {
@@ -683,7 +683,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
       expect(frame).not.toContain('"adaX"');
       expect(frame).toContain('1 line hidden — still sent');
       expect(draftOf(store)).toMatchObject({ name: 'adaX' });
-      // Story 6.9: the body tree keeps its own state, apart from the response tree.
+      // The body tree keeps its own state, apart from the response tree.
       expect(store.getState().jsonTreeStates[`${EDITOR_KEY} #body`]).toMatchObject({ hiddenKeys: ['name'] });
       expect(store.getState().jsonTreeStates[EDITOR_KEY]).toBeUndefined();
     } finally {
@@ -865,7 +865,7 @@ describe('RoutesZone body editor (story 6.8)', () => {
   });
 });
 
-describe('RoutesZone JsonTree panel cursor (story 6.7 trailing)', () => {
+describe('RoutesZone JsonTree panel cursor', () => {
   it('navigates panel rules with a cursor and removes the highlighted one with Space', async () => {
     const store = seedTree();
     const { instance, stdout, stdin } = mount(store, 30);
@@ -891,11 +891,11 @@ describe('RoutesZone JsonTree panel cursor (story 6.7 trailing)', () => {
     }
   });
 });
-// Closes describe('RoutesZone JsonTree (story 6.7)') — the story 6.8 block above is
-// nested inside it and shares its seedTree/mount helpers.
+// Closes describe('RoutesZone JsonTree') — the body editor block above is nested inside it and
+// shares its seedTree/mount helpers.
 });
 
-describe('RoutesZone request step & sub-tabs (story 6.9)', () => {
+describe('RoutesZone request step & sub-tabs', () => {
   function seedWorkbench(fireRoute: (...args: unknown[]) => Promise<void> = async () => {}) {
     const store = createAppStore();
     store.setState({

@@ -4,10 +4,9 @@ import * as path from 'node:path';
 
 // node:fs's ESM namespace can't be spied on directly with vi.spyOn ("Module namespace is
 // not configurable in ESM"), so mock the module itself, keeping real behavior for every
-// export but wrapping the fs calls that would indicate a filesystem touch — both the writes
-// this module cares about and the reads it must also avoid — so we can assert on them.
-// Wrapping the read side too means a future edit that reaches for e.g. readFileSync/statSync
-// can't silently break resolveXdgPaths()'s "pure, side-effect-free" contract (AC4) unnoticed.
+// export but wrapping the fs calls that would indicate a filesystem touch — both writes and
+// reads — so a future edit that reaches for e.g. readFileSync/statSync can't silently break
+// resolveXdgPaths()'s "pure, side-effect-free" contract unnoticed.
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
@@ -30,7 +29,7 @@ beforeEach(() => {
 });
 
 describe('resolveXdgPaths', () => {
-  it('uses $XDG_*_HOME/tui-back when XDG_CONFIG_HOME/XDG_DATA_HOME/XDG_STATE_HOME are set (AC1)', () => {
+  it('uses $XDG_*_HOME/tui-back when XDG_CONFIG_HOME/XDG_DATA_HOME/XDG_STATE_HOME are set', () => {
     const fakeConfig = path.join(os.tmpdir(), 'fake-config');
     const fakeData = path.join(os.tmpdir(), 'fake-data');
     const fakeState = path.join(os.tmpdir(), 'fake-state');
@@ -52,7 +51,7 @@ describe('resolveXdgPaths', () => {
     expect(result.cacheDir).toBe(path.join(fakeCache, 'tui-back'));
   });
 
-  it('falls back to the XDG-specified defaults when none are set (AC2)', () => {
+  it('falls back to the XDG-specified defaults when none are set', () => {
     const fakeHome = '/home/fake-user';
 
     const result = resolveXdgPaths({}, fakeHome);
@@ -101,7 +100,7 @@ describe('resolveXdgPaths', () => {
     expect(result.cacheDir).toBe(path.join(fakeHome, '.cache', 'tui-back'));
   });
 
-  it('resolves cacheDir without ever touching the filesystem (AC4)', () => {
+  it('resolves cacheDir without ever touching the filesystem', () => {
     const result = resolveXdgPaths({}, '/home/fake-user');
 
     expect(result.cacheDir).toBe(path.join('/home/fake-user', '.cache', 'tui-back'));
@@ -136,7 +135,7 @@ describe('ensureXdgDir', () => {
     }
   });
 
-  it('creates the directory (and missing parents) when it does not exist yet (AC3)', () => {
+  it('creates the directory (and missing parents) when it does not exist yet', () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tui-back-xdg-test-'));
     const target = path.join(tmpRoot, 'nested', 'dir');
 
@@ -147,7 +146,7 @@ describe('ensureXdgDir', () => {
     expect(fs.existsSync(target)).toBe(true);
   });
 
-  it('is idempotent — calling it again on the same path does not throw (AC3)', () => {
+  it('is idempotent — calling it again on the same path does not throw', () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tui-back-xdg-test-'));
     const target = path.join(tmpRoot, 'nested', 'dir');
 

@@ -61,14 +61,14 @@ const EXPECTED = [
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 32 canonical bindings in documented order (AC2, story 2.12; wizard keys, stories 2.36/2.37/2.38; switch resolution keys, story 2.41)', () => {
+  it('lists exactly the 32 canonical bindings in documented order', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),
     );
   });
 
-  it('carries the canonical description per binding (AC2)', () => {
+  it('carries the canonical description per binding', () => {
     expect(KEYBINDINGS.map((entry) => entry.description)).toEqual(
       EXPECTED.map(([, description]) => description),
     );

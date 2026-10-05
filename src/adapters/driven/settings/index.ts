@@ -1,13 +1,8 @@
-// adapters/driven/settings: the driven implementation of core's SettingsPort (Story 2.19).
-// Persists per-user tool preferences to XDG_CONFIG_HOME/tui-back/settings.yaml, reusing
-// Story 1.2's XDG resolution + ensureXdgDir, mirroring adapters/driven/registry/index.ts's
-// read/parse/validate flow (listRegistry) almost exactly.
-//
-// The one deliberate divergence from registry/manifest: a missing file, empty file, invalid
-// YAML, or a zod validation failure are ALL `ok` results here, never `err` — every one of
-// them falls back to DEFAULT_SETTINGS, the last three carrying a non-blocking `warning`
-// string. Design Notes: "unlike registry/manifest, a failed settings load must never block
-// the screen from opening". Only a genuine I/O error (permission denied, etc.) is an `err`.
+// adapters/driven/settings: the driven implementation of core's SettingsPort — per-user
+// preferences in XDG_CONFIG_HOME/tui-back/settings.yaml. Unlike registry/manifest, a missing
+// file, empty file, invalid YAML or a zod failure is always `ok`, falling back to
+// DEFAULT_SETTINGS (the last three with a non-blocking `warning`): a failed load must never
+// block the settings screen. Only a genuine I/O error is an `err`.
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parse, stringify } from 'yaml';
@@ -34,7 +29,7 @@ export async function loadSettings(settingsFile: string): Promise<Result<Setting
     content = await readFile(settingsFile, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      // Missing file (first run): defaults used silently, no warning (I/O matrix "Missing file").
+      // Missing file (first run): defaults used silently, no warning.
       return ok({ settings: DEFAULT_SETTINGS, warning: null });
     }
     const detail = error instanceof Error ? error.message : String(error);

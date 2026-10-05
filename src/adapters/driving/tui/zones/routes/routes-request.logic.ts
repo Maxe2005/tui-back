@@ -1,8 +1,7 @@
-// tui/zones/routes/request logic: story 6.9 — the Request tab's pure model (path/query/
-// header rows seeded from the 6.6 scanner parameters, the fire-block rules, and the
-// FireRequestOptions build), kept Ink-free and unit-tested like routes-zone.logic.ts.
-// The body itself stays the 6.8 `bodyDrafts` entry; this file only decides whether and
-// how it travels.
+// tui/zones/routes/request logic: the Request tab's pure model — path/query/header rows seeded
+// from the scanner's parameters, the fire-block rules, and the FireRequestOptions build. The
+// body itself stays the route's `bodyDrafts` entry; this file only decides whether and how it
+// travels.
 import type { Route, RouteParameter } from '../../../../../core/ports/route-scanner.js';
 import type { FireRequestOptions } from '../../../../../core/routes/fire-request.js';
 import { canEditRouteBody } from '../../shared/components/json-tree/model.js';
@@ -28,7 +27,7 @@ export const MAX_REQUEST_DRAFTS = 50;
 export const MAX_ROUTE_RESPONSES = 50;
 
 // The body editor's JsonTree state lives under its own key so its folds/selection never
-// trample the same route's response tree (both are alive per route since 6.9).
+// trample the same route's response tree (both are alive per route).
 export function bodyTreeKey(routeKey: string): string {
   return `${routeKey} #body`;
 }
@@ -123,8 +122,8 @@ function sentRows(rows: readonly RequestRow[]): Record<string, string> | undefin
   return record;
 }
 
-// What actually travels: empty query/header values are not sent; the body only for a
-// route that carries one (6.8 gating), with a defined draft, on a method that allows it.
+// What actually travels: empty query/header values are not sent; the body only for a route
+// that carries one, with a defined draft, on a method that allows it.
 export function buildFireRequest(
   route: Pick<Route, 'method' | 'path' | 'bodyExample' | 'bodyContentType'>,
   draft: RequestDraft,

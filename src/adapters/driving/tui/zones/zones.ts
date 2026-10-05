@@ -60,14 +60,12 @@ export function isZoneId(value: string): value is ZoneId {
   return ZONES.some((zone) => zone.id === value);
 }
 
-// The full zone-id set — the default `reachable` param below, and the baseline every
-// gated-tab computation narrows away from (Story 2.13: only 'omitted' ever removes a zone
-// from this set; 'disabled' stays reachable).
+// The full zone-id set — the default `reachable` param below, and the baseline every gated-tab
+// computation narrows away from (only 'omitted' removes a zone; 'disabled' stays reachable).
 export const ALL_ZONE_IDS: ReadonlySet<ZoneId> = new Set(ZONES.map((zone) => zone.id));
 
-// Story 2.13: only `routes`/`shared-types` are manifest-gated; every other zone is always
-// 'enabled' — there is no tabVisibility entry for it because it can never be
-// omitted/disabled.
+// Only `routes`/`shared-types` are manifest-gated; every other zone is always 'enabled' — there
+// is no tabVisibility entry for it because it can never be omitted/disabled.
 export function zoneGatedStatus(
   zoneId: ZoneId,
   tabVisibility: ResolveTabVisibilityData,
@@ -81,23 +79,20 @@ export function zoneGatedStatus(
   return 'enabled';
 }
 
-// The reachable-zone set `nextZoneId`/`shouldSwitchZone` narrow wrap-nav/mnemonic dispatch
-// to (Story 2.13): all zones minus whichever gated tab(s) are currently 'omitted' —
-// 'disabled' tabs stay reachable (landed on, never skipped).
+// The reachable-zone set `nextZoneId`/`shouldSwitchZone` narrow wrap-nav/mnemonic dispatch to:
+// all zones minus whichever gated tab(s) are currently 'omitted' — 'disabled' tabs stay
+// reachable (landed on, never skipped).
 export function resolveReachableZones(tabVisibility: ResolveTabVisibilityData): ReadonlySet<ZoneId> {
   return new Set(
     ZONES.filter((zone) => zoneGatedStatus(zone.id, tabVisibility) !== 'omitted').map((zone) => zone.id),
   );
 }
 
-// Story 2.12: wrap-arithmetic over the full `ZONES` order, kept as its own pure function
-// (mirrors shouldSwitchZone's lookup shape in app-shell.tsx). Story 2.13 adds the optional
-// `reachable` param (defaults to every zone, preserving 2.12's original behavior): wrap
-// traversal only ever considers zones in this set, so an omitted tab is skipped entirely
-// while a disabled one (still in the set) can be landed on. `current` itself is expected to
-// always be in `reachable` in practice (AppShell falls back off an omitted active zone
-// immediately — see shouldFallbackToDashboard) but a defensive fallback to the first
-// reachable zone covers the case where it momentarily isn't.
+// Wrap-arithmetic over `ZONES` order, restricted to `reachable` (defaults to every zone), so an
+// omitted tab is skipped while a disabled one can be landed on. `current` should always be in
+// `reachable` (AppShell falls back off an omitted active zone — see
+// shouldFallbackToDashboard); a defensive fallback to the first reachable zone covers the
+// moment it isn't.
 export function nextZoneId(
   current: ZoneId,
   direction: 1 | -1,

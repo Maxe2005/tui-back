@@ -1,15 +1,7 @@
-// tui/zones/edts/dialogs: the DELETE EDT confirm dialog — extracted following the
-// switch-dialog.tsx precedent (confirm dialog, not a form) plus modify-dialog.tsx's per-member
-// CheckboxListItem checklist (here: a "delete this branch?" checklist rather than membership).
-// story 2.29.
-//
-// Two states this dialog never has a normal confirm for:
-//   - `rejected`: opened directly against the active EDT (edts-zone.tsx enforces the
-//     reject-if-active check at open time, before this component ever mounts with anything to
-//     disposition) — only the error message + [Esc] cancel render, no member list, no Enter.
-//   - `memberRows === null`: the per-member merge/clean statuses are still being fetched
-//     (edts-zone.tsx's own effect, mirroring the branch-picker's fetch-on-open convention) —
-//     a brief "Loading member status…" line stands in, Esc still cancels.
+// tui/zones/edts/dialogs: the DELETE EDT confirm dialog with a per-member "delete this branch?"
+// checklist. Two states have no confirm: `rejected` (opened against the active EDT — only the
+// error and [Esc] render) and `memberRows === null` (the merge/clean statuses are still being
+// fetched; a loading line stands in, Esc still cancels).
 import { Box, Text, type Key } from 'ink';
 import type { AppState } from '../../../store/app-store.js';
 import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
@@ -42,9 +34,8 @@ export type DeleteDialogDeps = {
 
 export function createDeleteDialogHandlers(deps: DeleteDialogDeps) {
   // Fetches the per-member merge/clean statuses once, when the dialog opens with
-  // memberRows === null (mirrors the branch-picker's own "fetched on open, not continuously
-  // re-synced" convention — see edts-zone.tsx). Never fired for a `rejected` dialog: there is
-  // nothing to disposition when delete was already refused at open time.
+  // memberRows === null (fetched on open, not continuously re-synced). Never fired for a
+  // `rejected` dialog: there is nothing to disposition when delete was already refused.
   async function loadMemberStatuses(current: DeleteDialogState) {
     const statuses = await deps.resolveMemberDeleteStatusesAction(current.target.ulid, current.target.members);
     deps.setDialog((prev) =>
@@ -67,10 +58,9 @@ export function createDeleteDialogHandlers(deps: DeleteDialogDeps) {
     if (result.ok) {
       void deps.loadEdts();
       void deps.loadEdtsBranches();
-      // Story 2.25: structured rows, reused here for delete's own per-branch collision
-      // reporting. Never a "try a different branch" retry action for delete, though — there is
-      // no branch-edit sub-dialog to retry into, so stripAssistedActionCodes (the same helper
-      // switch-dialog.tsx uses for the same reason) enforces "no registered action" here too.
+      // Structured rows for delete's per-branch collision reporting — but never a "try a
+      // different branch" retry: there is no branch-edit sub-dialog to retry into, so
+      // stripAssistedActionCodes (as in switch-dialog.tsx) enforces "no registered action".
       const failedRows = stripAssistedActionCodes(summarizeFailedResults(result.data.results));
       if (failedRows.length > 0) {
         // The EDT record and its SQLite file are already gone by the time any per-branch
@@ -94,8 +84,8 @@ export function createDeleteDialogHandlers(deps: DeleteDialogDeps) {
       }
       return;
     }
-    // Boundary: a rejected (active-EDT) dialog never offers a confirm affordance — Esc above
-    // is the only way out. Still-loading (memberRows === null) is likewise inert beyond Esc.
+    // A rejected (active-EDT) dialog never offers a confirm affordance — Esc above is the only
+    // way out. Still-loading (memberRows === null) is likewise inert beyond Esc.
     if (current.rejected || current.memberRows === null || current.submitting) {
       return;
     }

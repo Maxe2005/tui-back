@@ -63,7 +63,7 @@ function makeParams(overrides: Partial<ServiceRestartParams> = {}): ServiceResta
   };
 }
 
-describe('serviceRestart — standalone single-service clean restart (story 3.9)', () => {
+describe('serviceRestart — standalone single-service clean restart', () => {
   it('with a declared recipe runs each command in order in the repo cwd, never the plain restart', async () => {
     const container = fakeContainer();
     const restart = fakeRestart();
@@ -224,7 +224,7 @@ describe('serviceRestart — standalone single-service clean restart (story 3.9)
     expect(serviceRestartLockKey('/repo/a')).toBe('service:/repo/a');
   });
 
-  it('emits the restarting phase once through the shared channel (story 3.10)', async () => {
+  it('emits the restarting phase once through the shared channel', async () => {
     const seen: Array<[string, UpdatePhase]> = [];
     const onPhase = vi.fn((service: string, phase: UpdatePhase) => {
       seen.push([service, phase]);

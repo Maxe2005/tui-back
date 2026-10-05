@@ -4,8 +4,8 @@ beforeAll(() => {
   process.env.FORCE_COLOR = '1';
 });
 
-describe('ZoneTabBar rendered styling (AC2/AC3)', () => {
-  it('applies the accent background and bold to the active tab only (AC2)', async () => {
+describe('ZoneTabBar rendered styling', () => {
+  it('applies the accent background and bold to the active tab only', async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { ZoneTabBar } = await import('./zone-tab-bar.js');
     const output = await renderToString(
@@ -25,7 +25,7 @@ describe('ZoneTabBar rendered styling (AC2/AC3)', () => {
     expect(output).toContain('\u001b[1m');
   });
 
-  it('renders the pending-event badge in the zone status color (AC3)', async () => {
+  it('renders the pending-event badge in the zone status color', async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { ZoneTabBar } = await import('./zone-tab-bar.js');
     const output = await renderToString(

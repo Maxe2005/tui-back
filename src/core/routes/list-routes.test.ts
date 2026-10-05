@@ -1,5 +1,5 @@
-// core/routes/list-routes: unit tests against fake ports (AD-13) — no real manifests,
-// no real OpenAPI specs. Covers the spec's I/O & Edge-Case Matrix row by row.
+// core/routes/list-routes: unit tests against fake ports — no real manifests, no real OpenAPI
+// specs.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '../result.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
@@ -28,7 +28,7 @@ const ROUTES: Route[] = [
   { method: 'POST', path: '/users', summary: 'Create a user' },
 ];
 
-describe('listRoutes (story 6.1 I/O matrix)', () => {
+describe('listRoutes', () => {
   it('lists every route the scanner discovers when the manifest activates route-explorer', async () => {
     const manifest = fakeManifest(async () => ok(manifestWithModules({ 'route-explorer': {} })));
     const scanner = fakeScanner(async () => ok(ROUTES));

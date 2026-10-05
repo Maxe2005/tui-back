@@ -50,7 +50,7 @@ describe('matchBranchesByPrefix', () => {
 });
 
 describe('createBranchPickerState', () => {
-  it('defaults to Create new, pre-filled with the suggestion (Boundaries: "defaults to Create new")', () => {
+  it('defaults to Create new, pre-filled with the suggestion', () => {
     const state = createBranchPickerState({
       suggestedName: 'feature-suggested',
       defaultBaseBranch: 'development',
@@ -61,14 +61,14 @@ describe('createBranchPickerState', () => {
     expect(state.nameValue).toBe('feature-suggested');
     expect(state.baseBranch).toBe('development');
     expect(state.baseFocused).toBe(true);
-    // Story 2.32: every field's caret starts at its own seeded value's end.
+    // Every field's caret starts at its own seeded value's end.
     expect(state.nameValueCursor).toBe('feature-suggested'.length);
     expect(state.baseBranchCursor).toBe('development'.length);
     expect(state.pickQueryCursor).toBe(0);
   });
 });
 
-describe('handleBranchPickerKey — cursor navigation (story 2.32)', () => {
+describe('handleBranchPickerKey — cursor navigation', () => {
   it('Left/Right/Home/End move the name field caret; typing inserts at the caret', () => {
     const state = baseState({ baseFocused: false, nameValue: 'abd', nameValueCursor: 2 });
     const typed = handleBranchPickerKey(state, [], [], 'c', {});
@@ -91,16 +91,15 @@ describe('handleBranchPickerKey — cursor navigation (story 2.32)', () => {
       expect(end.state.nameValueCursor).toBe(3);
     }
 
-    // Left/Right-at-boundary clamp (unchanged from before).
+    // Left/Right-at-boundary clamp.
     const left = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'ab', nameValueCursor: 0 }), [], [], '', { leftArrow: true });
     expect(left.type).toBe('update');
     if (left.type === 'update') {
       expect(left.state.nameValueCursor).toBe(0);
     }
 
-    // Code review fix: the title promises Left/Right both move the caret — a real decrement
-    // from a non-zero position (Left) and a real mid-string advance (Right), not just the
-    // already-at-0 clamp above.
+    // Left/Right both really move the caret — a decrement from a non-zero position (Left) and a
+    // mid-string advance (Right), not just the already-at-0 clamp above.
     const leftFromMid = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'abcd', nameValueCursor: 3 }), [], [], '', { leftArrow: true });
     expect(leftFromMid.type).toBe('update');
     if (leftFromMid.type === 'update') {
@@ -141,7 +140,7 @@ describe('handleBranchPickerKey — mode cycling (Tab)', () => {
     expect(result.type).toBe('update');
     if (result.type === 'update') {
       expect(result.state.mode).toBe('rename-current');
-      // Pre-selected onto the current branch, skipping the picking step (Boundaries).
+      // Pre-selected onto the current branch, skipping the picking step.
       expect(result.state.renameSub).toEqual({ oldName: 'main', value: 'main', cursor: 4, error: null });
     }
   });
@@ -364,7 +363,7 @@ describe('applyBranchPickerRetry', () => {
     expect(retried.mode).toBe('create-new');
     expect(retried.baseFocused).toBe(false);
     expect(retried.nameValue).toBe('feature-collided');
-    // Story 2.32: a programmatic overwrite resets the caret to the reopened value's end.
+    // A programmatic overwrite resets the caret to the reopened value's end.
     expect(retried.nameValueCursor).toBe('feature-collided'.length);
   });
 

@@ -7,27 +7,20 @@ import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
 import { runRestartStep, type GroupUpdateRepoResult, type OnUpdatePhase } from './group-update.js';
 
-// core/scripts/service-restart: the standalone single-service clean restart (story 3.9).
-// Runs story 3.8's recipe-or-fallback for exactly one service — the manifest's
-// `restartCommands` recipe in order when declared, else today's plain container restart —
-// and returns its `{service, outcome, detail?}` row for the last-outcome view. One
-// service's failure never blocks or rolls back others (there are no others).
-//
-// Locking: a per-service `service:<resolved-repoPath>` key via `withActionLock` (beside
-// `GROUP_UPDATE_LOCK_KEY`), matching `matchSelectionItem`'s path-first identity, so a
-// second trigger on the same service serializes as `update-already-running`. Cross-scope
-// exclusion (group run vs standalone, either direction) lives in the TUI store's own
-// in-flight map — core only backstops same-service contention here. Restart decision
-// stays core-side via the shared `runRestartStep`: never both ports for one action.
+// core/scripts/service-restart: the standalone single-service clean restart — the same
+// recipe-or-fallback as group update, for exactly one service, returning its row. Locks a
+// per-service `service:<resolved-repoPath>` key so a second trigger on the same service is
+// `update-already-running`; cross-scope exclusion (group run vs standalone) lives in the TUI
+// store's in-flight map.
 export interface ServiceRestartParams {
   manifest: ManifestPort;
   container: ContainerPort;
   restart: RestartPort;
   lock: LockPort;
   repoPath: string;
-  // Story 3.10: the same live-phase observer the group update threads through
-  // `runRestartStep` — absent by default; the TUI store backs it with its live phase map
-  // so the standalone path reports `restarting` through the identical channel.
+  // The same live-phase observer the group update threads through `runRestartStep` — absent
+  // by default; the TUI store backs it so this path reports `restarting` through the same
+  // channel.
   onPhase?: OnUpdatePhase;
 }
 

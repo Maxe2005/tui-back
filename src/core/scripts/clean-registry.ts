@@ -1,31 +1,8 @@
-// core/scripts/clean-registry: story 2.33 — classify registered paths into stale
-// candidates and remove confirmed ones. Two exported functions, deliberately split
-// (Code Map): classifyStaleRegistry never writes anything (safe to call as often as a
-// screen/CLI wants, e.g. to re-list after a partial removal); removeStaleRegistryEntries
-// only ever touches the exact paths it's given — it never re-classifies, so a caller (CLI
-// --yes --path, or the TUI's confirmed checkbox selection) fully owns which paths are
-// removed (Boundaries: "never automatic/silent").
-//
-// classifyStaleRegistry mirrors list-repos.ts's own exists()/manifest.load() walk
-// (Code Map) but keeps only the two reasons this story's Boundaries name as stale:
-// - unreachable: registry.exists(path) -> false (the repo dir is gone).
-// - manifest-not-found: manifest.load(path) fails with exactly that code (repo exists, no
-//   .tui-back.yaml — genuinely unmanaged, same condition list-repos.ts silently skips).
-// Any other manifest-load error (invalid YAML, unknown-module, schema failure, ...) is left
-// alone — that's Story 2.28's manifest-validation territory, never this story's to prune.
-// A registry.exists() error is left alone too (inconclusive, not evidence of staleness).
-//
-// memberOfEdts is a display-only note (Design Notes): every EdtRegistryEntry whose
-// members[].repoPath matches the candidate path, by topic. It never gates removal and
-// edts.yaml is never written by this use-case or by removeStaleRegistryEntries — an EDT
-// whose member's registry entry disappears is already handled by switchActiveEdt's existing
-// repo-not-registered failed-row path (Story 2.4 review patch).
-//
-// Review fix (story 2.33): a registry.exists() error used to be silently swallowed (treated
-// identically to "not stale, leave alone" — zero signal to the caller that the path
-// couldn't even be checked). Mirrors list-repos.ts's own RegistryEntryError bucket instead —
-// an inconclusive path is reported in `errors`, distinct from both `candidates` and from a
-// path that's genuinely healthy.
+// core/scripts/clean-registry: classifies registered paths into stale candidates (unreachable,
+// or no .tui-back.yaml) and removes confirmed ones. classifyStaleRegistry never writes;
+// removeStaleRegistryEntries only touches the exact paths it's given, so the caller owns what
+// is removed. Other manifest errors and inconclusive exists() checks are never pruned.
+// memberOfEdts is a display-only note — edts.yaml is never written here.
 import { withActionLock } from '../locking.js';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { LockPort } from '../ports/lock.js';
@@ -46,8 +23,8 @@ export interface StaleRegistryEntry {
 
 export interface ClassifyStaleRegistryData {
   candidates: StaleRegistryEntry[];
-  // Review fix (story 2.33): paths whose staleness couldn't be determined at all (a
-  // registry.exists() error) — never silently dropped, never treated as evidence either way.
+  // Paths whose staleness couldn't be determined at all (a registry.exists() error) — never
+  // silently dropped, never treated as evidence either way.
   errors: RegistryEntryError[];
 }
 
@@ -99,8 +76,8 @@ type ClassifyOneResult =
 async function classifyOne(registry: RegistryPort, manifest: ManifestPort, path: string): Promise<ClassifyOneResult> {
   const exists = await registry.exists(path);
   if (!exists.ok) {
-    // Inconclusive, not evidence of staleness — reported in `errors`, never silently
-    // dropped (review fix) and never guessed at as either stale or healthy.
+    // Inconclusive, not evidence of staleness — reported in `errors`, never silently dropped
+    // and never guessed at as either stale or healthy.
     return { kind: 'error', code: exists.error.code, message: exists.error.message };
   }
   if (!exists.data) {
@@ -132,10 +109,9 @@ export interface RemoveStaleRegistryEntriesParams {
   registryResourceKey: string;
 }
 
-// Per-path isolation (Boundaries): one path's registry.remove failure never blocks the
-// others — mirrors create.ts/switch.ts/delete.ts's own per-repo isolation convention, one
-// `removed`/`failed` outcome row per path. removeRegistry itself is `add`'s read-modify-write
-// shape, so removing an already-unregistered path is a no-op success -> `removed`.
+// Per-path isolation: one path's registry.remove failure never blocks the others — one
+// `removed`/`failed` outcome row per path. Removing an already-unregistered path is a no-op
+// success -> `removed`.
 export async function removeStaleRegistryEntries(
   params: RemoveStaleRegistryEntriesParams,
   paths: string[],

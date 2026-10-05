@@ -1,9 +1,7 @@
-// Story 2.21 review-pattern note: mirrors edts-zone.styles.test.tsx's own rationale exactly —
-// without FORCE_COLOR=1 set *before* ink/chalk are first imported, Ink emits no ANSI codes at
-// all, so a color assertion would vacuously pass either way. Isolated to its own file (every
-// import here is dynamic, inside each test) so no other suite's plain-text `toContain`
-// assertions risk matching raw escape sequences instead, and so this file's own top-level
-// import of `splitter.tsx`/`render-to-string.tsx` never runs before FORCE_COLOR is set.
+// Without FORCE_COLOR=1 set *before* ink/chalk are first imported, Ink emits no ANSI codes, so
+// a color assertion would vacuously pass. Isolated in its own file with dynamic imports inside
+// each test, so no other suite's plain-text assertions see raw escape sequences and nothing
+// here imports Ink before FORCE_COLOR is set.
 import { describe, it, expect, beforeAll } from 'vitest';
 
 beforeAll(() => {
@@ -19,7 +17,7 @@ function ansiFg(hex: string): string {
   return `${String.fromCharCode(0x1b)}[38;2;${r};${g};${b}m`;
 }
 
-describe('Splitter targeted styling (story 2.21, AC: "the targeted boundary recolors to accent")', () => {
+describe('Splitter targeted styling (the targeted boundary recolors to accent)', () => {
   it('renders colors.border, not colors.accent, when targeted is omitted (the default)', async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { Splitter } = await import('./splitter.js');

@@ -1,8 +1,5 @@
-// tui/shared/settings-screen: story 2.19 tests, mirroring repo-registry-screen.test.tsx's
-// pure-function-first convention. renderToString's fake stdin never emits data, so useInput
-// itself is never exercised here — every key-handling decision is covered as a pure function
-// instead (nextSettingsTab, adjustGridMaxRows/parseGridMaxRowsDigit, moveHintCursor/
-// toggleHiddenHint), plus render-level smoke coverage of every tab body (AC1/AC2).
+// tui/shared/settings-screen: pure-function tests for every key-handling decision
+// (renderToString's fake stdin never emits keys) plus render smoke coverage of every tab body.
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
@@ -49,7 +46,7 @@ import {
   toggleHiddenHint,
 } from './settings-screen.js';
 
-describe('nextSettingsTab (AC1)', () => {
+describe('nextSettingsTab', () => {
   it('cycles General -> EDTs -> Command Palette -> Logs -> General going forward', () => {
     expect(nextSettingsTab('general', 1)).toBe('edts');
     expect(nextSettingsTab('edts', 1)).toBe('command-palette');
@@ -103,7 +100,7 @@ describe('clampGridMaxRows / adjustGridMaxRows', () => {
   });
 });
 
-describe('parseGridMaxRowsDigit (I/O matrix "Adjust grid rows")', () => {
+describe('parseGridMaxRowsDigit', () => {
   it('parses a single digit 1-9 as the new value', () => {
     expect(parseGridMaxRowsDigit('5')).toBe(5);
     expect(parseGridMaxRowsDigit('9')).toBe(9);
@@ -120,7 +117,7 @@ describe('parseGridMaxRowsDigit (I/O matrix "Adjust grid rows")', () => {
   });
 });
 
-describe('clampLogBufferSize / adjustLogBufferSize (story 5.1)', () => {
+describe('clampLogBufferSize / adjustLogBufferSize', () => {
   it('clamps to the minimum', () => {
     expect(clampLogBufferSize(0)).toBe(MIN_LOG_BUFFER_SIZE);
     expect(clampLogBufferSize(-5)).toBe(MIN_LOG_BUFFER_SIZE);
@@ -141,7 +138,7 @@ describe('clampLogBufferSize / adjustLogBufferSize (story 5.1)', () => {
   });
 });
 
-describe('parseLogBufferSizeDigit (story 5.1)', () => {
+describe('parseLogBufferSizeDigit', () => {
   it('parses a single digit 1-9 as a x100 preset', () => {
     expect(parseLogBufferSizeDigit('5')).toBe(500);
     expect(parseLogBufferSizeDigit('1')).toBe(100);
@@ -155,7 +152,7 @@ describe('parseLogBufferSizeDigit (story 5.1)', () => {
   });
 });
 
-describe('clampFilterHistorySize / adjustFilterHistorySize (story 5.4)', () => {
+describe('clampFilterHistorySize / adjustFilterHistorySize', () => {
   it('clamps to the minimum', () => {
     expect(clampFilterHistorySize(0)).toBe(MIN_FILTER_HISTORY_SIZE);
     expect(clampFilterHistorySize(-5)).toBe(MIN_FILTER_HISTORY_SIZE);
@@ -176,7 +173,7 @@ describe('clampFilterHistorySize / adjustFilterHistorySize (story 5.4)', () => {
   });
 });
 
-describe('clampFilterHistoryGridMaxRows / adjustFilterHistoryGridMaxRows (story 5.4)', () => {
+describe('clampFilterHistoryGridMaxRows / adjustFilterHistoryGridMaxRows', () => {
   it('clamps to the minimum and maximum', () => {
     expect(clampFilterHistoryGridMaxRows(0)).toBe(MIN_FILTER_HISTORY_GRID_MAX_ROWS);
     expect(clampFilterHistoryGridMaxRows(1000)).toBe(MAX_FILTER_HISTORY_GRID_MAX_ROWS);
@@ -190,7 +187,7 @@ describe('clampFilterHistoryGridMaxRows / adjustFilterHistoryGridMaxRows (story 
   });
 });
 
-describe('parseFilterHistoryGridMaxRowsDigit (story 5.4)', () => {
+describe('parseFilterHistoryGridMaxRowsDigit', () => {
   it('parses a single digit 1-9 as the new value', () => {
     expect(parseFilterHistoryGridMaxRowsDigit('5')).toBe(5);
   });
@@ -263,7 +260,7 @@ describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared 
   });
 });
 
-describe('LOGS_SETTINGS_GROUPS (amended 2026-09-20)', () => {
+describe('LOGS_SETTINGS_GROUPS', () => {
   it('lists exactly the six Logs-tab groups, in this order', () => {
     expect(LOGS_SETTINGS_GROUPS.map((group) => group.id)).toEqual([
       'buffer-size',
@@ -310,26 +307,26 @@ describe('toggleHiddenHint', () => {
 });
 
 describe('HIDEABLE_ACTION_HINTS', () => {
-  it('lists exactly the three PaneFocus hint tokens story 2.18 emits — never invented ids', () => {
+  it('lists exactly the three PaneFocus hint tokens the EDTs zone emits — never invented ids', () => {
     expect(HIDEABLE_ACTION_HINTS.map((token) => token.id)).toEqual(['edts', 'edt-services', 'other-services']);
   });
 });
 
-describe('HIDEABLE_ACTION_TYPES (amended 2026-08-28, AC5)', () => {
+describe('HIDEABLE_ACTION_TYPES', () => {
   it('lists exactly the three EdtActionLogEntry[\'actionType\'] values — never invented ids', () => {
     expect(HIDEABLE_ACTION_TYPES.map((token) => token.id)).toEqual(['create', 'switch', 'modify']);
   });
 });
 
-describe('SETTINGS_GROUPS (amended 2026-08-28, AC6)', () => {
+describe('SETTINGS_GROUPS', () => {
   it('lists exactly the three EDTs-tab settings groups, in this order', () => {
     expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types', 'branch-dropdown-rows']);
     expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types', 'Branch dropdown rows']);
   });
 });
 
-describe('SettingsScreen (story 2.19)', () => {
-  it('opens on the General tab, rendering the tab strip and the quit-shortcut toggle (AC1, AC2)', async () => {
+describe('SettingsScreen', () => {
+  it('opens on the General tab, rendering the tab strip and the quit-shortcut toggle', async () => {
     const store = createAppStore();
     const output = await renderToString(<SettingsScreen useStore={store} />);
     expect(output).toContain('SETTINGS');
@@ -397,7 +394,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edt-services']);
   });
 
-  it('reflects hidden action types from the store for the EDTs tab data path (amended 2026-08-28, AC5)', () => {
+  it('reflects hidden action types from the store for the EDTs tab data path', () => {
     const store = createAppStore();
     store.setState({
       settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
@@ -405,7 +402,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['modify']);
   });
 
-  it('renders the live gridMaxRows value and hint on the Command Palette tab (AC1)', async () => {
+  it('renders the live gridMaxRows value and hint on the Command Palette tab', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12 } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" />);
@@ -414,7 +411,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Up/Down to adjust, or type a digit (1-9).');
   });
 
-  it('renders the live bufferSize value and hints when drilled into the "Buffer size" group (story 5.1, regrouped 2026-09-20)', async () => {
+  it('renders the live bufferSize value and hints when drilled into the "Buffer size" group', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="buffer-size" />);
@@ -424,7 +421,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('Applies to new streams only');
   });
 
-  it('renders the startWithHistory checkbox when drilled into the "Start with history" group, checked/unchecked to match the live setting (review fix, regrouped 2026-09-20)', async () => {
+  it('renders the startWithHistory checkbox when drilled into the "Start with history" group, checked/unchecked to match the live setting', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } } });
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
@@ -438,7 +435,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(checkedLine).toContain('[x]');
   });
 
-  it('opens the EDTs tab on its group list, not a checkbox list (AC6)', async () => {
+  it('opens the EDTs tab on its group list, not a checkbox list', async () => {
     const store = createAppStore();
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
     expect(output).toContain('Hint visibility');
@@ -448,7 +445,7 @@ describe('SettingsScreen (story 2.19)', () => {
     }
   });
 
-  it('drilled into "Hint visibility", renders every hideable hint as a checkbox row, checked where hidden (I/O matrix "Toggle hidden hint")', async () => {
+  it('drilled into "Hint visibility", renders every hideable hint as a checkbox row, checked where hidden', async () => {
     const store = createAppStore();
     store.setState({
       settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
@@ -466,7 +463,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(visibleLine).toContain('[ ]');
   });
 
-  it('drilled into "Recent action types", renders create/switch/modify as a checkbox row, checked where hidden (amended 2026-08-28, AC5)', async () => {
+  it('drilled into "Recent action types", renders create/switch/modify as a checkbox row, checked where hidden', async () => {
     const store = createAppStore();
     store.setState({
       settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
@@ -484,9 +481,8 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(visibleLine).toContain('[ ]');
   });
 
-  // Amended 2026-09-20: the Logs tab's regroup, fixing the settings modal overflowing its
-  // viewport (border/title corruption, overlapping rows) when all six fields rendered as one
-  // flat list — mirrors the EDTs tab's group-list precedent (Design Notes there).
+  // The Logs tab's group list keeps the modal from overflowing its viewport, like the EDTs
+  // tab's.
   it('opens the Logs tab on its group list, not a field list', async () => {
     const store = createAppStore();
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" />);
@@ -503,7 +499,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(firstGroupLine).toContain('›');
   });
 
-  it('renders the live filterHistorySize value when drilled into the "Filter history size" group (story 5.4, regrouped 2026-09-20)', async () => {
+  it('renders the live filterHistorySize value when drilled into the "Filter history size" group', async () => {
     const store = createAppStore();
     store.setState({
       settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12, filterHistoryDedup: true } },
@@ -513,7 +509,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(output).toContain('30');
   });
 
-  it('renders the live filterHistoryGridMaxRows value when drilled into the "Filter history grid" group (story 5.4, regrouped 2026-09-20)', async () => {
+  it('renders the live filterHistoryGridMaxRows value when drilled into the "Filter history grid" group', async () => {
     const store = createAppStore();
     store.setState({
       settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 30, filterHistoryGridMaxRows: 12, filterHistoryDedup: true } },
@@ -546,7 +542,7 @@ describe('SettingsScreen (story 2.19)', () => {
     expect(clearGlobalLine).toContain('›');
   });
 
-  it('drilled into "clear a service\'s history", lists every manifest service from edtsBranches (Boundaries: drilled into a list of manifest services)', async () => {
+  it('drilled into "clear a service\'s history", lists every manifest service from edtsBranches', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranches: [

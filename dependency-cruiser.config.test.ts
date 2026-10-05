@@ -1,14 +1,11 @@
 // Regression test for `.dependency-cruiser.cjs`'s `no-core-to-adapters` rule.
-//
-// Context (see deferred-work.md, "Deferred from: dev of story-1-2..."): this project's
-// tsconfig.json mandates NodeNext-style relative imports (`./foo.js` resolving to `./foo.ts`),
-// which dependency-cruiser@18.2.0 cannot resolve — it flags the edge `couldNotResolve: true`
-// and records only the raw unresolved specifier (e.g. `../adapters/thing.js`) in `resolved`.
-// An anchored `to: { path: '^src/adapters(/|$)' }` pattern never matches that unresolved,
-// non-`src/`-prefixed text, so a real core->adapters boundary violation went undetected for
-// the entire lifetime of that pattern. This test locks in that the *current* rule (imported
-// directly from `.dependency-cruiser.cjs`, not a copy, so it can't silently drift out of sync)
-// actually catches that violation shape, and doesn't falsely flag a benign same-boundary import.
+// This project's tsconfig.json mandates NodeNext-style relative imports ("./foo.js" → "./foo.ts").
+// dependency-cruiser@18.2.0 cannot resolve these, flagging `couldNotResolve: true` and recording
+// only the raw unresolved specifier (e.g. "../adapters/thing.js") in `resolved`.
+// An anchored `to: { path: '^src/adapters(/|$)' }` pattern never matches this shape,
+// allowing real core→adapters boundary violations to go undetected.
+// This test verifies the current rule catches such violations and doesn't falsely flag
+// benign same-boundary imports.
 import { describe, it, expect, afterEach } from 'vitest';
 import { cruise } from 'dependency-cruiser';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';

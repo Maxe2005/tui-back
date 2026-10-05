@@ -1,24 +1,8 @@
-// tui/zones/edts/dialogs/switch-resolution: Story 2.41 — the SWITCH EDT resolution view's draft
-// state, pure key reducer and row helpers (unit-tested directly), kept apart from its Ink view
-// (switch-resolution-view.tsx) the same way the create wizard keeps wizard.logic.ts apart from
-// its steps. The draft lives in the dialog state only, never in core: the core switch is parked
-// on the edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
-// `cancel`.
-//
-// The view mirrors the create wizard's Step 3 (Story 2.37):
-//   - Panel A "STRATÉGIE GLOBALE" (focused on open): "Action par défaut" — `(•) Adopter dans
-//     <outgoing topic>  ( ) Écraser` (`Space`/`←→`) — and, when Adopter, "Nom global de la
-//     branche" (pre-filled with the outgoing topic's slug; touched-flag convention of Story
-//     2.22), applied to every row whose repo sits on a SHARED branch. With no outgoing EDT only
-//     Écraser is offered.
-//   - Panel B "SERVICES CONCERNÉS": one row per dirty state-2/3 service; `↑/↓` move, `Enter`
-//     opens the "Configurer <service>" box (Action Adopter/Écraser + an always-editable
-//     "Branche"); `[ Appliquer ]` makes the row Perso (or Écraser), `Ctrl+R` returns it to the
-//     global strategy.
-//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Écraser row it first opens
-//     the discard confirmation (files per service, default Retour, `Ctrl+E` confirms).
-//   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation);
-//     on the main view it cancels the whole switch.
+// tui/zones/edts/dialogs/switch-resolution: the SWITCH EDT resolution view's draft state, pure
+// key reducer and row helpers, kept apart from its Ink view (switch-resolution-view.tsx). The
+// draft lives in the dialog state only, never in core: the core switch is parked on the
+// edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
+// `cancel`. The layout mirrors the create wizard's Step 3 (see the main reducer below).
 import { resolve } from 'node:path';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
@@ -35,9 +19,9 @@ export type ResolutionOverride = { kind: 'adopt'; branch: string } | { kind: 'di
 // A row's effective plan: `override ?? global`.
 export type RowPlan = { kind: 'adopt'; branch: string; source: 'global' | 'perso' } | { kind: 'discard'; source: 'global' | 'perso' };
 
-// Story 2.41 review: the branches OTHER EDTs (every one but the outgoing EDT) register for a
-// repo, keyed by resolved repoPath — plain data computed once when the view opens. Adopting
-// onto such a branch would steal it from that EDT (the git gate rejects it anyway).
+// The branches OTHER EDTs (every one but the outgoing EDT) register for a repo, keyed by resolved
+// repoPath — plain data computed once when the view opens. Adopting onto such a branch would
+// steal it from that EDT (the git gate rejects it anyway).
 export type EdtBranchClaim = { branch: string; topic: string };
 export type OtherEdtBranches = Readonly<Record<string, readonly EdtBranchClaim[]>>;
 
@@ -168,8 +152,7 @@ export function claimOf(branch: string, claims: readonly EdtBranchClaim[]): EdtB
 }
 
 // The branch a global (or box-prefilled) adopt targets: the global name when the repo sits on a
-// shared branch or on a branch another EDT registers for it (story 2.41 review), its current
-// branch otherwise.
+// shared branch or on a branch another EDT registers for it, its current branch otherwise.
 export function globalAdoptTarget(repo: SwitchDirtyRepo, globalName: string, claims: readonly EdtBranchClaim[] = []): string {
   return repo.currentBranchShared || claimOf(repo.currentBranch, claims) !== undefined ? globalName.trim() : repo.currentBranch;
 }
@@ -257,7 +240,7 @@ export function validateAdoptBranch(
   if (name === '') {
     return OVERRIDE_BOX_ERRORS.nameRequired;
   }
-  // Story 2.42: the repo's own manifest-defined set (protectedBranches ∪ sharedBranch).
+  // The repo's own manifest-defined set (protectedBranches ∪ sharedBranch).
   if (isProtectedTarget(name, { sharedBranch: repo.sharedBranch, protectedBranches: repo.protectedBranches })) {
     return protectedNameError(name, repo.service);
   }
@@ -287,8 +270,8 @@ export function buildResolutions(rows: readonly ResolutionRow[]): Record<string,
     if (row.plan.kind === 'adopt') {
       resolutions[row.repo.repoPath] = { kind: 'adopt', branch: row.plan.branch };
     } else {
-      // Story 2.41 review: pins the discard to the files the confirmation listed — core
-      // refuses it if the fresh capture holds anything else.
+      // Pins the discard to the files the confirmation listed — core refuses it if the fresh
+      // capture holds anything else.
       const paths = row.repo.dirtyPaths;
       resolutions[row.repo.repoPath] = paths !== undefined ? { kind: 'discard', confirmedPaths: [...paths] } : { kind: 'discard' };
     }
@@ -413,6 +396,17 @@ export function reduceResolutionBoxKey(
 }
 
 // ---- The main reducer ----------------------------------------------------------------------
+//   - Panel A "STRATÉGIE GLOBALE" (focused on open): the default action, Adopter dans <outgoing
+//     topic> or Écraser (`Space`/`←→`), plus, when Adopter, the global branch name (pre-filled
+//     with the outgoing topic's slug) applied to every row on a SHARED branch. With no outgoing
+//     EDT only Écraser is offered.
+//   - Panel B "SERVICES CONCERNÉS": one row per dirty state-2/3 service; `Enter` opens the
+//     "Configurer <service>" box, `[ Appliquer ]` makes the row Perso (or Écraser), `Ctrl+R`
+//     returns it to the global strategy.
+//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Écraser row it first opens
+//     the discard confirmation (files per service, default Retour, `Ctrl+E` confirms).
+//   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation); on
+//     the main view it cancels the whole switch.
 
 function withRowsChanged(prev: SwitchResolutionState, next: SwitchResolutionState): SwitchResolutionState {
   const changed =
@@ -552,7 +546,7 @@ export function needsResultsView(results: readonly SwitchEdtRepoResult[]): boole
   return results.some((row) => row.outcome !== 'switched');
 }
 
-// The action-log detail: adopted branches and discarded paths (Story 2.41).
+// The action-log detail: adopted branches and discarded paths.
 export function describeSwitchForLog(targetTopic: string, forced: boolean, results: readonly SwitchEdtRepoResult[]): string {
   const parts = [`Switched to EDT "${targetTopic}"${forced ? ' (forced)' : ''}`];
   const adopted = results

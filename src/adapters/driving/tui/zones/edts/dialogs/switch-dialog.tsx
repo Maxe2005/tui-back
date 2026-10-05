@@ -1,7 +1,6 @@
-// tui/zones/edts/dialogs: the SWITCH EDT confirm dialog — extracted from edts-zone.tsx (see
-// that file's header for why). A confirm/force-confirm/cancel prompt; story 2.41 adds the
-// dirty-service resolution view (switch-resolution/) shown while the core switch is parked on
-// the edt-slice seam, and a per-repo results summary kept open after an adopt/discard/failure.
+// tui/zones/edts/dialogs: the SWITCH EDT confirm dialog — a confirm/force-confirm/cancel prompt,
+// the dirty-service resolution view (switch-resolution/) shown while the core switch is parked
+// on the edt-slice seam, and a per-repo results summary kept open after an adopt/discard/failure.
 import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../core/edt/switch.js';
@@ -29,10 +28,10 @@ export type SwitchDialogDeps = {
   logEdtAction: AppState['logEdtAction'];
   setCurrentEdtAction: AppState['setCurrentEdtAction'];
   focusedEdt: EdtRegistryEntry | undefined;
-  // The dirty-repo seam (edt-slice.ts) — non-null while switchEdtAction is paused waiting for
-  // a SwitchDirtyReposChoice on the batch of dirty repos (story 2.39). Owned by the store (not local dialog state) for the same reason
-  // UpdateSlice's updateBlocker is: the seam callback that sets it lives inside the store
-  // action, not this component.
+  // The dirty-repo seam (edt-slice.ts) — non-null while switchEdtAction is paused waiting for a
+  // SwitchDirtyReposChoice on the batch of dirty repos. Owned by the store (not local dialog
+  // state), like UpdateSlice's updateBlocker: the seam callback that sets it lives inside the
+  // store action, not this component.
   switchDirtyRepos: AppState['switchDirtyRepos'];
   resolveSwitchDirtyRepos: AppState['resolveSwitchDirtyRepos'];
 };
@@ -48,15 +47,14 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
     if (result.ok) {
       void deps.loadEdts();
       void deps.loadEdtsBranches();
-      // Story 2.25: structured rows — Never boundary: switchActiveEdt carries no per-member
-      // branch override, so no row here ever gets a retry action wired, even one whose code
-      // happens to be branch-owned-by-other-edt (AC2's "no registered action" treatment).
+      // Structured rows — switchActiveEdt carries no per-member branch override, so no row here
+      // ever gets a retry action wired, even one whose code is branch-owned-by-other-edt.
       // stripAssistedActionCodes enforces that at render time too, not just in the key
       // dispatcher.
       const { results } = result.data;
       const failedRows = stripAssistedActionCodes(summarizeFailedResults(results));
-      // Story 2.41: the entry goes to the NEW active EDT's log and records the adopted branches
-      // and discarded paths alongside any failure.
+      // The entry goes to the NEW active EDT's log and records the adopted branches and discarded
+      // paths alongside any failure.
       const detail = describeSwitchForLog(current.target.topic, force, results);
       if (needsResultsView(results)) {
         // Adopted/discarded/failed rows keep the dialog open on the results summary.
@@ -86,7 +84,7 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   }
 
   function handleSwitchDialogInput(current: SwitchDialogState, input: string, key: Key) {
-    // Story 2.41: the results summary is read-only — Enter/Esc close it.
+    // The results summary is read-only — Enter/Esc close it.
     if (current.results !== undefined) {
       if (key.return || key.escape) {
         deps.setDialog({ kind: 'none' });
@@ -126,10 +124,10 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
     }
   }
 
-  // Story 2.41: hands the resolution view's decision (proceed with the resolutions, or cancel)
-  // to the parked core switch. The zone's effect calls it once per decision; the draft stays in
-  // place (the reducer ignores keys once decided) until the switch result clears it, so the
-  // view's initializing effect can never re-open it for the same seam.
+  // Hands the resolution view's decision (proceed with the resolutions, or cancel) to the parked
+  // core switch. The zone's effect calls it once per decision; the draft stays in place (the
+  // reducer ignores keys once decided) until the switch result clears it, so the view's
+  // initializing effect can never re-open it for the same seam.
   function dispatchResolutionDecision(current: SwitchDialogState) {
     const decision = current.resolution?.decision;
     if (decision === undefined || decision === null) {
@@ -138,10 +136,9 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
     deps.resolveSwitchDirtyRepos(decision);
   }
 
-  // Story 2.38: the create wizard's "switch now" handoff — replaces whatever dialog is open with
-  // the switch dialog on `target` and runs the protected switch at once (no extra confirm: the
-  // wizard's Enter was it). Its blocked prompt, resolution view, results and logging (2.41)
-  // then apply unchanged.
+  // The create wizard's "switch now" handoff — replaces whatever dialog is open with the switch
+  // dialog on `target` and runs the protected switch at once (no extra confirm: the wizard's
+  // Enter was it). Its blocked prompt, resolution view, results and logging then apply unchanged.
   function startSwitch(target: EdtRegistryEntry) {
     const dialog = initialSwitchDialog(target);
     deps.setDialog(dialog);
@@ -151,8 +148,8 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   return { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch };
 }
 
-// Story 2.41: the per-repo outcome summary of a switch that adopted, discarded or failed
-// something — failures render through the shared FailedResultList.
+// The per-repo outcome summary of a switch that adopted, discarded or failed something —
+// failures render through the shared FailedResultList.
 function resultLabel(row: SwitchEdtRepoResult): string | null {
   switch (row.outcome) {
     case 'adopted':

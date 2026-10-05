@@ -1,9 +1,6 @@
 // tui/store/slices: the repo registry screen — scan a root for `.tui-back.yaml`-carrying
-// candidates, register the selected ones, the empty-registry check Dashboard uses for its
-// onboarding prompt (story 2.11), and — story 2.33 — classify/remove stale registry entries
-// ("Clean stale entries" action). Extracted from app-store.ts (see that file's header for
-// why) — a StateCreator factory combined with the other slices into one Zustand store
-// (AD-10: still exactly one store/one hook).
+// candidates, register the selected ones, the empty-registry check behind Dashboard's
+// onboarding prompt, and classifying/removing stale registry entries.
 import type { StateCreator } from 'zustand';
 import type { ScanResult } from '../../../../../core/ports/registry.js';
 import { registerRepo } from '../../../../../core/scripts/register.js';
@@ -17,9 +14,9 @@ import {
 } from '../../../../../core/scripts/clean-registry.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
-// Story 2.11: a per-path register outcome, classified by snapshotting registry.list()
-// before registering and diffing against it — registerRepo/registry.add are idempotent and
-// never signal new-vs-existing on their own (see adapters/driven/registry/index.ts:78-98).
+// A per-path register outcome, classified by snapshotting registry.list() before registering
+// and diffing against it — registerRepo/registry.add are idempotent and never signal
+// new-vs-existing on their own.
 export type RegistryOutcome = 'registered' | 'already-registered' | 'failed';
 
 export type RegistryRegisterResult = {
@@ -29,10 +26,8 @@ export type RegistryRegisterResult = {
 };
 
 export type RegistrySlice = {
-  // Story 2.11: repo registry screen — reachable exclusively via the `registry` command
-  // inside Story 2.14's `:` command bar, and auto-offered from Dashboard's empty-registry
-  // prompt (a single store-level open/close flag, not local AppShell state, so both call
-  // sites can trigger it).
+  // Repo registry screen — reachable only via the `registry` command and Dashboard's
+  // empty-registry prompt (a store-level open/close flag so both call sites can trigger it).
   registryScreenOpen: boolean;
   openRegistryScreen: () => void;
   closeRegistryScreen: () => void;
@@ -62,16 +57,15 @@ export type RegistrySlice = {
   registryRegisterStatus: 'idle' | 'loading';
   registryRegisterResults: RegistryRegisterResult[] | null;
   registerRegistryCandidates: (paths: string[]) => Promise<void>;
-  // Story 2.33: "Clean stale entries" — classify (never write), then remove only the
-  // confirmed paths (list-then-confirm, never automatic/silent). registryCleanCandidates:
-  // null = not scanned yet this screen session; a `[]` result is the distinct "no stale
-  // entries" state (mirrors registryScanResult's own null-vs-empty-array convention).
+  // "Clean stale entries" — classify (never write), then remove only the confirmed paths
+  // (list-then-confirm, never automatic/silent). registryCleanCandidates: null = not scanned
+  // yet this screen session; a `[]` result is the distinct "no stale entries" state.
   registryCleanScanStatus: 'idle' | 'loading' | 'error';
   registryCleanScanError: string | null;
   registryCleanCandidates: StaleRegistryEntry[] | null;
-  // Review fix: paths whose staleness couldn't even be checked (a registry.exists() error) —
-  // reported alongside candidates, never silently dropped. Always `[]` once a classify has
-  // resolved successfully with nothing inconclusive, never left stale/undefined.
+  // Paths whose staleness couldn't even be checked (a registry.exists() error) — reported
+  // alongside candidates, never silently dropped. Always `[]` once a classify has resolved
+  // successfully with nothing inconclusive, never left stale/undefined.
   registryCleanErrors: RegistryEntryError[];
   scanRegistryStaleEntries: () => Promise<void>;
   // registryCleanResults: null = not removed yet this screen session; populated once, one
@@ -174,9 +168,9 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
       }
       const sessionId = get().registrySessionId;
       set({ registryRegisterStatus: 'loading' });
-      // Design Notes: registerRepo/registry.add are idempotent and never signal
-      // new-vs-existing — classify by snapshotting registry.list() *before* registering,
-      // then diffing each canonicalized outcome against that snapshot.
+      // registerRepo/registry.add are idempotent and never signal new-vs-existing — classify
+      // by snapshotting registry.list() *before* registering, then diffing each canonicalized
+      // outcome against that snapshot.
       const before = await deps.registry.list();
       if (!before.ok) {
         // A failed snapshot must never be silently treated as an empty registry — that would

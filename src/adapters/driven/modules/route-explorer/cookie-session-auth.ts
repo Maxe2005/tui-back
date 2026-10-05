@@ -1,21 +1,8 @@
-// adapters/driven/modules/route-explorer/cookie-session-auth: the `route-explorer`
-// DevAuthPort implementation (story 6.2, AD-5) — this backend's only auth module. The
-// service owns token issuance: the module calls `GET {baseUrl}{authPath}` (default
-// `/auth/me`), stores the response's `Set-Cookie` value, and core attaches it as a
-// `Cookie` header on every fired request. No local JWT minting, no `jose` dependency.
-//
-// Manifest config shape (all optional): `baseUrl` (required in practice — fire-request
-// rejects a missing one before this module is ever consulted, but a direct call still
-// degrades to `auth-endpoint-failed` rather than throwing), `authPath` (default
-// `/auth/me`), `sessionTtlSec` (default `300`). The scanner ignores these keys; this
-// module ignores the scanner's `openapi*`/`spec*` keys. One manifest source only (AD-4).
-//
-// Sessions are cached per baseUrl + authPath (both derive from the repo's own manifest
-// config, so each repo resolves its own entry and multi-repo firing needs no manual
-// re-auth) with TTL minus refresh skew (30s at the default TTL, shrinking for short
-// TTLs so they still hit cache); `forceRefresh` bypasses the cache. An endpoint
-// non-2xx, a network failure, or a missing `Set-Cookie` is a named `auth-endpoint-failed`
-// with `details.reason` — never a throw. The cookie never appears in any message.
+// adapters/driven/modules/route-explorer/cookie-session-auth: the `route-explorer` DevAuthPort.
+// The service owns token issuance: `GET {baseUrl}{authPath}` (default `/auth/me`) yields a
+// `Set-Cookie` the module caches per baseUrl + authPath for `sessionTtlSec` (default 300)
+// minus a refresh skew. Endpoint non-2xx, network failure or a missing `Set-Cookie` is
+// `auth-endpoint-failed` with `details.reason`, never a throw; the cookie is never logged.
 import { err, ok, type Result } from '../../../../core/result.js';
 import type { DevAuthOptions, DevAuthSession, DevAuthPort } from '../../../../core/ports/dev-auth.js';
 

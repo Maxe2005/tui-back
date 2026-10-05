@@ -1,11 +1,8 @@
-// tui/zones/update: story 3.7 — the pre-run configuration screen. A `ModalDialog`-hosted
-// list reusing the `CheckboxListItem` (`[x]`/`[ ]`) checklist pattern plus `TextInputLine`
-// branch fields: one row per targeted service (pre-selected, branch pre-filled from the
-// manifest `sharedBranch`), then the two run-wide toggles (migrate, clean restart). The
-// component only ever renders — every keystroke is interpreted by
-// update-config-dialog.logic.ts and dispatched from update-zone.tsx's own `useInput`
-// (the zone convention), with the keyboard cursor + branch edit held in zone-local
-// `useState` and the draft itself in the Zustand store.
+// tui/zones/update: the pre-run configuration screen — a ModalDialog listing one CheckboxListItem
+// row per targeted service (pre-selected, branch pre-filled from the manifest `sharedBranch`),
+// then the migrate and clean-restart toggles. It only renders: keystrokes are interpreted by
+// update-config-dialog.logic.ts from update-zone.tsx's useInput, the cursor and branch edit
+// live in zone-local state, the draft in the store.
 import { Box, Text } from 'ink';
 import { colors } from '../../shared/theme/theme.js';
 import { BranchAutocompleteInput, type BranchAutocompleteStatus } from '../../shared/components/branch-autocomplete-input.js';

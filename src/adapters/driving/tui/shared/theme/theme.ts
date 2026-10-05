@@ -21,10 +21,10 @@ export const colors = Object.freeze({
 // column widths in `ch`; section-gap is one blank ROW between logical groups
 // and chrome-row is one chrome ROW — row counts, not `ch` (DESIGN.md
 // §Layout & Spacing).
-// Story 6.7: the JsonTree's scalar type colors — a closed mapping over the existing
-// palette (no new hues): strings read success, numbers info, booleans warning,
-// nulls text-dim, keys text. Kept beside (not inside) `theme` like detail-pane's
-// SUMMARY_LINE_COLORS, so the aggregate shape the theme tests pin stays untouched.
+// The JsonTree's scalar type colors — a closed mapping over the existing palette (no new hues):
+// strings read success, numbers info, booleans warning, nulls text-dim, keys text. Kept beside
+// (not inside) `theme` like detail-pane's SUMMARY_LINE_COLORS, so the aggregate shape the theme
+// tests pin stays untouched.
 export const jsonTreeColors = Object.freeze({
   key: colors.text,
   string: colors.success,
@@ -58,10 +58,10 @@ export const typography = Object.freeze({
   label: Object.freeze({ bold: false }),
   'dim-wink': Object.freeze({ italic: true }),
   'active-tab': Object.freeze({ bold: true }),
-  // Story 2.13: a manifest-gated zone tab (Routes/shared-types) whose module exists
-  // somewhere in the registry but has no active-EDT member — text-dim + strikethrough
-  // (never bold, never accent-filled), per DESIGN.md's disabled-state convention. No new
-  // color: colors['text-dim'] carries it, this token only adds the strikethrough/weight.
+  // A manifest-gated zone tab (Routes/shared-types) whose module exists somewhere in the
+  // registry but has no active-EDT member — text-dim + strikethrough (never bold, never
+  // accent-filled), per DESIGN.md's disabled-state convention. No new color: colors['text-dim']
+  // carries it, this token only adds the strikethrough/weight.
   'disabled-tab': Object.freeze({ bold: false, strikethrough: true }),
 } as const);
 

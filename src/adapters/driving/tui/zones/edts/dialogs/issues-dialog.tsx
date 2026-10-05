@@ -1,8 +1,7 @@
-// tui/zones/edts/dialogs: the read-only "SERVICE LISTING ISSUES" dialog (story 2.34) — opened
-// with `i` from the issues summary line, closed by Esc/Enter. Unlike every other dialog in
-// this zone it carries no payload of its own and submits nothing, so it gets no
-// createXDialogHandlers factory (edts-zone.tsx's useInput closes it inline) — just a view,
-// fed unreachable/errors straight from the zone's own store selectors.
+// tui/zones/edts/dialogs: the read-only "SERVICE LISTING ISSUES" dialog — opened with `i` from
+// the issues summary line, closed by Esc/Enter. It carries no payload and submits nothing, so it
+// has no createXDialogHandlers factory (edts-zone.tsx's useInput closes it inline) — just a
+// view fed straight from the zone's store selectors.
 import { Box, Text } from 'ink';
 import type { BranchDivergenceEntryError } from '../../../../../../core/edt/list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';

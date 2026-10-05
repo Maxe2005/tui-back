@@ -1,27 +1,8 @@
-// adapters/driven/state: the driven implementation of core's StatePort (AD-10, AD-7).
-// Persists the active-EDT pointer to XDG_STATE_HOME/tui-back/state.json — JSON, not YAML
-// (unlike registry.yaml/edts.yaml), per the story's Code Map. Mirrors
-// adapters/driven/edt-registry/index.ts's read/parse/validate shape: ENOENT reads as "no
-// active EDT yet" (ok(null)), never an error — a fresh machine has no state.json until the
-// first switch writes one.
-//
-// Story 2.21: adds `readSplitterRatios`/`writeSplitterRatios`, sharing the same file. Both
-// fields (`activeEdt`, `splitterRatios`) must coexist on disk — `readStateFile`/`writeStateFile`
-// below are the shared read-parse-validate and read-merge-write helpers every read/write goes
-// through, so writing one field never clobbers the other (fixes the pre-2.21 `writeActiveEdt`,
-// which overwrote the whole file with only `{ activeEdt }`).
-//
-// Review fix (story 2.21): every write now runs inside `withWriteLock` (a per-stateFile
-// promise chain) so a `writeActiveEdt` and a `writeSplitterRatios` racing each other can never
-// each read a stale pre-the-other's-write snapshot and clobber it — each write's own
-// read-merge-write now runs as one atomic step relative to every other write against the same
-// file. A genuine I/O error surfaced while reading the existing file inside a write (a real
-// `state-read-error`, distinct from the two corruption codes below) is propagated to the
-// caller rather than silently treated as "nothing there yet". A validation failure isolated to
-// one top-level field (e.g. a corrupt `splitterRatios`) no longer fails reading the other,
-// unrelated field — `readActiveEdt`/`readSplitterRatios` each fall back to a best-effort
-// single-field extraction from the raw parsed JSON when the whole-file schema validation
-// fails elsewhere.
+// adapters/driven/state: the driven implementation of core's StatePort — state.json under
+// XDG_STATE_HOME (JSON, not YAML). ENOENT reads as "nothing yet" (ok(null)). Every write is a
+// read-merge-write serialized per file, so writing one field never clobbers another; a read
+// I/O error inside a write is propagated, never written over. A field failing validation is
+// recovered on its own, so one corrupt field never blocks reading the others.
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
@@ -51,13 +32,11 @@ export function createStatePort(stateFile: string): StatePort {
   };
 }
 
-// Review fix (story 2.21): one promise chain per state file, module-scoped — a real process
-// only ever has one `stateFile` path in practice (XDG_STATE_HOME/tui-back/state.json), so this
-// is effectively a per-process write lock, but keyed by path so unrelated files (e.g. many
-// `createStatePort` calls against distinct tmp files across a test run) never serialize
-// against each other unnecessarily. Every write (the whole read-merge-write, not just the
-// final `writeStateFile` call) goes through this so two concurrent writers against the same
-// file never each read a pre-the-other's-write snapshot.
+// One promise chain per state file, module-scoped — a real process only has one `stateFile`
+// in practice, so this is effectively a per-process write lock, but keyed by path so distinct
+// tmp files across a test run never serialize against each other. Every write (the whole
+// read-merge-write, not just the final `writeStateFile` call) goes through this so two
+// concurrent writers against the same file never each read a pre-the-other's-write snapshot.
 const writeLocks = new Map<string, Promise<unknown>>();
 
 function withWriteLock<T>(stateFile: string, fn: () => Promise<T>): Promise<T> {
@@ -176,8 +155,8 @@ function extractSplitterRatios(raw: unknown): Result<Record<string, number[]> | 
   return ok(result.data);
 }
 
-// Symmetric to extractSplitterRatios (story 5.4): recovers `filterHistory` alone when it's
-// `activeEdt` or `splitterRatios` that failed the whole-file validation.
+// Symmetric to extractSplitterRatios: recovers `filterHistory` alone when it's `activeEdt` or
+// `splitterRatios` that failed the whole-file validation.
 function extractFilterHistory(raw: unknown): Result<Record<string, string[]> | undefined> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return err('state-invalid-format', 'Invalid state file: expected a JSON object');
@@ -192,9 +171,8 @@ function extractFilterHistory(raw: unknown): Result<Record<string, string[]> | u
   return ok(result.data);
 }
 
-// The shared read-merge-write step: writes the full `StateFileShape`, letting
-// `JSON.stringify` drop an `undefined` `splitterRatios`/`filterHistory` (pre-2.21/pre-5.4
-// shape) rather than writing a spurious key.
+// The shared read-merge-write step: writes the full `StateFileShape`, letting `JSON.stringify`
+// drop an `undefined` `splitterRatios`/`filterHistory` rather than writing a spurious key.
 async function writeStateFile(stateFile: string, data: StateFileShape): Promise<Result<void>> {
   const ensured = await ensureStateDir(stateFile);
   if (!ensured.ok) {
@@ -231,10 +209,10 @@ async function writeActiveEdt(stateFile: string, ulid: string | null): Promise<R
     // `{ activeEdt }`.
     const current = await readStateFile(stateFile);
     if (!current.ok && current.error.code === 'state-read-error') {
-      // Review fix (story 2.21): a genuine I/O error reading the existing file — unlike
-      // corruption (state-invalid-json/state-invalid-format, where there is nothing left to
-      // preserve anyway), there may be perfectly good data here that a transient read failure
-      // just couldn't see. Propagate rather than silently writing over it as if it were empty.
+      // A genuine I/O error reading the existing file — unlike corruption
+      // (state-invalid-json/state-invalid-format, where there is nothing left to preserve),
+      // good data may be there that a transient read failure just couldn't see. Propagate
+      // rather than silently writing over it as if it were empty.
       return current as Result<void>;
     }
     const existing = current.ok ? current.data : null;

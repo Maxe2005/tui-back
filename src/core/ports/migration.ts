@@ -1,8 +1,6 @@
-// core/ports/migration: the migration port contract (story 3.2). Group update runs each
-// member service's manifest-declared `migrationCommand` after its pull/merge and before
-// its container restart; the driven adapter owns how that command is executed
-// (non-interactive child_process spawn with captured stdout/stderr). Core consumes the
-// contract without ever importing the adapter (AD-1).
+// core/ports/migration: the migration port contract. Group update runs each member service's
+// manifest-declared `migrationCommand` after its pull/merge and before its container restart;
+// the driven adapter owns how the command is spawned.
 import type { Result } from '../result.js';
 
 export interface MigrationPort {

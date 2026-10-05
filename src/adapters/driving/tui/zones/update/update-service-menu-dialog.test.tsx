@@ -11,7 +11,7 @@ import {
   UpdateServiceMenuDialog,
 } from './update-service-menu-dialog.js';
 
-describe('UPDATE_SERVICE_MENU_ITEMS / resolveServiceMenuKey (story 3.9)', () => {
+describe('UPDATE_SERVICE_MENU_ITEMS / resolveServiceMenuKey', () => {
   it('offers Update this service, Clean restart, and Cancel in menu order', () => {
     expect(UPDATE_SERVICE_MENU_ITEMS.map((item) => item.value)).toEqual(['update', 'restart', 'cancel']);
   });
@@ -42,7 +42,7 @@ describe('UPDATE_SERVICE_MENU_ITEMS / resolveServiceMenuKey (story 3.9)', () => 
   });
 });
 
-describe('resolveServiceMenuChoice (story 3.9)', () => {
+describe('resolveServiceMenuChoice', () => {
   const target = { service: 'svc-a', repoPath: '/repo/a' };
 
   it('routes update to the pre-scoped config with that row’s exact service and repoPath', () => {
@@ -74,7 +74,7 @@ describe('resolveServiceMenuChoice (story 3.9)', () => {
   });
 });
 
-describe('UpdateServiceMenuDialog rendering (story 3.9)', () => {  it('renders the modal title, the service name, and all three choices', async () => {
+describe('UpdateServiceMenuDialog rendering', () => {  it('renders the modal title, the service name, and all three choices', async () => {
     const output = await renderToString(createElement(UpdateServiceMenuDialog, { service: 'svc-a', cursor: 0 }));
 
     expect(output).toContain(UPDATE_SERVICE_MENU_TITLE);
@@ -99,7 +99,7 @@ const SERVICE_A = {
 
 const noopLoad = async () => {};
 
-describe('UpdateZone restarting row (story 3.9)', () => {
+describe('UpdateZone restarting row', () => {
   it('a service with a standalone restart in flight shows the restarting glyph, never updating or down', async () => {
     const store = createAppStore();
     store.setState({

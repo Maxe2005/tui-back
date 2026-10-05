@@ -1,6 +1,6 @@
-// tui/zones/edts/dialogs/create-wizard: Step 1 "Nom" (Story 2.36) — one autofocused
-// TextInputLine for the EDT name, with its availability re-checked on every keystroke
-// (checkNameAvailability: trimmed, case-sensitive, against the loaded EDT list).
+// tui/zones/edts/dialogs/create-wizard: Step 1 "Nom" — one autofocused TextInputLine for the EDT
+// name, with its availability re-checked on every keystroke (checkNameAvailability: trimmed,
+// case-sensitive, against the loaded EDT list).
 import { Box, Text, type Key } from 'ink';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';

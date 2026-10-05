@@ -1,31 +1,8 @@
-// tui/shared/components/bounded-list: story 5.5 — the shared scrollable-window primitive that
-// replaces the reported-live/inspection-confirmed unbounded-list corruption pattern (Logs
-// zone's two service lists, its always-visible hints panel, LogFilterEditor's body, and the
-// EDTs zone's two service lists all used to render an unbounded number of rows; when their
-// combined content exceeded the terminal's actual row count, Ink's diff-render desynced from
-// the real terminal cursor and corrupted already-painted lines).
-//
-// `resolveBoundedWindow`/`clampBoundedOffset` are keybinding-help.tsx's own
-// `resolveHelpWindow`/`clampHelpOffset`, extracted verbatim (same slice-based windowing,
-// generic over `T`) so every bounded surface in the app shares one implementation instead of
-// each reimplementing it — keybinding-help.tsx now re-exports these two names as thin aliases
-// (Code Map: "no behavior change for keybinding-help.tsx itself").
-//
-// `BoundedList<T>` is the thin, stateless component every other touched surface renders
-// through: given `items`/`renderItem`/`maxVisibleRows` (a *total* row budget that already
-// includes room for the indicator lines below), it slices to what fits and renders a subtle
-// dim "more above"/"more below" line — glyph+text, never color alone, matching the closed
-// status-badge convention (Design Notes) — whenever the window is scrolled away from either
-// end; nothing renders when everything already fits (NO_OVERFLOW: identical to before this
-// story). An optional `cursorIndex` (a list's own currently-selected/focused row) keeps that
-// row inside the visible window by centering the window on it once scrolling is unavoidable —
-// callers with no such concept (e.g. the static hints panel) omit it and the window simply
-// anchors to the top, only ever growing a "more below" indicator.
-//
-// Scroll state is never owned here (mirrors keybinding-help.tsx's own scrollOffset living in
-// KeybindingHelp, not ModalDialog) — every render recomputes the window fresh from
-// `items`/`maxVisibleRows`/`cursorIndex`, which callers derive live from Ink's `useWindowSize()`
-// on every resize (never a value computed once at mount).
+// tui/shared/components/bounded-list: the shared scrollable-window primitive. Any list that
+// can outgrow the terminal renders through it: Ink's diff-render desyncs from the real cursor
+// and corrupts painted lines when content exceeds the terminal's rows. `maxVisibleRows` is a
+// total budget including the dim "more above/below" lines; `cursorIndex` keeps a selected row
+// visible. Scroll state is never owned here — callers recompute it from useWindowSize().
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
 import { colors } from '../theme/theme.js';
@@ -62,17 +39,12 @@ export type BoundedListVisibility<T> = {
 // The component's own windowing on top of resolveBoundedWindow: `maxVisibleRows` is a *total*
 // row budget (items + indicator lines), not an item-only count.
 //
-// Review fix: the original two-pass version floored `itemRows` at 1 on *both* passes, which
-// let the function overshoot its own budget whenever `maxVisibleRows` was 1 or 2 — it could
-// return 1 visible item plus *both* indicators (3 rows for a budget of 1). It also reused the
-// first pass's `rawOffset` after shrinking `itemRows` on the second pass, which could leave the
-// window not even containing `cursorIndex` anymore (the row a caller asked to keep visible).
-// Both are fixed by (a) recomputing `rawOffset` against whichever `itemRows` is actually used,
-// and (b) a final affordability pass that only ever grants an indicator a row that's actually
-// left in the budget once `visible.length` is settled — this is what provably guarantees
+//
+// Two passes, then an affordability guard: `rawOffset` is recomputed against whichever
+// `itemRows` is actually used (so the window keeps `cursorIndex`), and an indicator only gets a
+// row that is still left once `visible.length` is settled. That guarantees
 // `visible.length + (hasMoreAbove?1:0) + (hasMoreBelow?1:0) <= maxVisibleRows` for every
-// `maxVisibleRows >= 0`, not just the common case, since `itemRows` never exceeds `totalBudget`
-// on either pass.
+// `maxVisibleRows >= 0`, including the extreme 1/2-row budgets.
 export function resolveBoundedVisibility<T>(
   items: readonly T[],
   maxVisibleRows: number,
@@ -136,7 +108,7 @@ export function resolveBoundedVisibility<T>(
 export type BoundedListProps<T> = {
   items: readonly T[];
   // Total row budget for this list, indicator lines included — callers derive it live from
-  // useWindowSize() (Boundaries: "recalculates its visible window live ... on every resize").
+  // useWindowSize() so it follows every resize.
   maxVisibleRows: number;
   // Renders one row; the returned element carries its own `key` (every existing call site
   // already keys its rows this way — e.g. `<Box key={service.path} ...>`).

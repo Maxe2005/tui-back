@@ -1,11 +1,7 @@
-// core/edt/switch: unit tests against fake ports (AD-13 core layer) — every I/O-matrix row of
-// story 2.4 plus the validation-ordering and per-repo-isolation guarantees. Real git/fs
-// behavior lives in adapters/driven/git|lock|edt-registry|state's own tests and the black-box
-// e2e; here only the use-case's orchestration is exercised: target resolution, the no-op
-// idempotency short-circuit, the outgoing-lock peek/--force gate, the target-driven
-// destination, stash-tag symmetry, and per-repo failure isolation. Story 2.39: the three-state
-// classification against the OUTGOING EDT, the zero-write pre-flight, the resolution seam,
-// and the adopt/discard resolutions (every row of the spec's I/O matrix).
+// core/edt/switch: unit tests against fake ports — target resolution, the no-op idempotency
+// short-circuit, the outgoing-lock peek/--force gate, the target-driven destination, stash-tag
+// symmetry, per-repo failure isolation, the three-state classification against the OUTGOING
+// EDT, the zero-write pre-flight, the resolution seam, and the adopt/discard resolutions.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { ok, err } from '../result.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
@@ -246,8 +242,8 @@ describe('switchActiveEdt — happy path (target member + non-members)', () => {
     expect(calls(git.restoreStash)).toEqual([['/repo/a', 'tui-back:target-ulid']]);
 
     // c (state 1, not a target member): stashed under the OUTGOING tag for its return, landed
-    // on its shared branch, and never popped here (D1 gone). b (clean non-member) likewise
-    // lands on the shared branch.
+    // on its shared branch, and never popped here. b (clean non-member) likewise lands on the
+    // shared branch.
     expect(calls(git.stashSave)).toEqual([['/repo/c', 'tui-back:outgoing-ulid']]);
     expect(calls(git.checkout)).toContainEqual(['/repo/b', 'development']);
     expect(calls(git.checkout)).toContainEqual(['/repo/c', 'development']);
@@ -507,7 +503,7 @@ describe('switchActiveEdt — first-ever switch (no outgoing)', () => {
 });
 
 describe('switchActiveEdt — state.json write failure', () => {
-  it('surfaces a writeActiveEdt failure as the overall result, keeping the per-repo results as error details (review)', async () => {
+  it('surfaces a writeActiveEdt failure as the overall result, keeping the per-repo results as error details', async () => {
     const state = fakeState({
       readActiveEdt: vi.fn(async () => ok('outgoing-ulid')),
       writeActiveEdt: vi.fn(async () => err('state-write-error', 'disk full')),
@@ -527,7 +523,7 @@ describe('switchActiveEdt — state.json write failure', () => {
   });
 });
 
-describe('switchActiveEdt — edts.yaml write under lock (AD-9, review)', () => {
+describe('switchActiveEdt — edts.yaml write under lock (AD-9)', () => {
   it('writes the target/outgoing status flips inside the per-resource action lock', async () => {
     const lock = fakeLock();
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
@@ -551,7 +547,7 @@ describe('switchActiveEdt — edts.yaml write under lock (AD-9, review)', () => 
   });
 });
 
-describe('switchActiveEdt — setStatus failure is surfaced, not swallowed (review)', () => {
+describe('switchActiveEdt — setStatus failure is surfaced, not swallowed', () => {
   it('reports a failed setStatus(target, active) as a `results` row while state.json still succeeded', async () => {
     const edtRegistry = fakeEdtRegistry({
       list: vi.fn(async () => ok([TARGET, OUTGOING])),
@@ -596,7 +592,7 @@ describe('switchActiveEdt — setStatus failure is surfaced, not swallowed (revi
   });
 });
 
-describe('switchActiveEdt — target member deregistered from RegistryPort (review)', () => {
+describe('switchActiveEdt — target member deregistered from RegistryPort', () => {
   it('reports a target member no longer in the managed-repo registry as `failed`, never silently skipped', async () => {
     // '/repo/a' is a target member but registry.list() no longer includes it.
     const registry = fakeRegistry(['/repo/b', '/repo/c']);
@@ -616,7 +612,7 @@ describe('switchActiveEdt — target member deregistered from RegistryPort (revi
 });
 
 
-// ---- Story 2.39 -------------------------------------------------------------------------------
+// ---- Dirty-repo classification and resolutions --------------------------------------------
 
 const WRITE_METHODS = ['stashSave', 'restoreStash', 'checkout', 'createBranch', 'deleteBranch', 'discardAll', 'discardPaths', 'fetch', 'renameBranch'] as const;
 
@@ -634,7 +630,7 @@ function callOrder(fn: unknown, predicate: (args: unknown[]) => boolean = () => 
 
 const OTHER = edtEntry('other-ulid', 'other-topic', [member('svc-b', '/repo/b', 'feat/b-other')], 'inactive');
 
-describe('classifySwitchRepos (story 2.39)', () => {
+describe('classifySwitchRepos', () => {
   it('classifies against the OUTGOING EDT, destination still target-driven', () => {
     const outgoing = edtEntry('outgoing-ulid', 'outgoing-topic', [member('svc-a', '/repo/a', 'feat/a-out'), member('svc-c', '/repo/c/', 'feat/c')]);
     const target = edtEntry('target-ulid', 'target-topic', [member('svc-a', '/repo/a', 'feat/a'), member('svc-d', '/repo/d', 'feat/d')]);
@@ -663,7 +659,7 @@ describe('classifySwitchRepos (story 2.39)', () => {
   });
 });
 
-describe('switchActiveEdt — pre-flight for dirty state-2/3 repos (story 2.39)', () => {
+describe('switchActiveEdt — pre-flight for dirty state-2/3 repos', () => {
   it('an unresolved dirty non-member refuses the switch with details, zero git writes, state untouched', async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b' || repoPath === '/repo/c')),
@@ -750,7 +746,7 @@ describe('switchActiveEdt — pre-flight for dirty state-2/3 repos (story 2.39)'
   });
 });
 
-describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () => {
+describe('switchActiveEdt — the dirty-repo resolution seam', () => {
   it('is never invoked when every repo is clean', async () => {
     const onDirtyReposBeforeSwitch = vi.fn(async () => ({ kind: 'cancel' as const }));
 
@@ -859,7 +855,7 @@ describe('switchActiveEdt — the dirty-repo resolution seam (story 2.39)', () =
   });
 });
 
-describe('switchActiveEdt — seam row facts for the TUI dialog (story 2.41)', () => {
+describe('switchActiveEdt — seam row facts for the TUI dialog', () => {
   it('carries the manifest sharedBranch and a read-only expanded dirtyPaths snapshot on state-2/3 rows only', async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath !== '/repo/a')),
@@ -878,7 +874,7 @@ describe('switchActiveEdt — seam row facts for the TUI dialog (story 2.41)', (
     expectZeroWrites(git);
   });
 
-  it("carries the manifest's protectedBranches and flags a current branch it lists as shared (story 2.42)", async () => {
+  it("carries the manifest's protectedBranches and flags a current branch it lists as shared", async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
       currentBranch: vi.fn(async () => ok('preprod')),
@@ -895,7 +891,7 @@ describe('switchActiveEdt — seam row facts for the TUI dialog (story 2.41)', (
     expect(row).toMatchObject({ repoPath: '/repo/b', protectedBranches: ['preprod'], currentBranchShared: true });
   });
 
-  it('does not flag a formerly implicit branch the manifest does not list (story 2.42)', async () => {
+  it('does not flag a formerly implicit branch the manifest does not list', async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
       currentBranch: vi.fn(async () => ok('prod')),
@@ -925,7 +921,7 @@ describe('switchActiveEdt — seam row facts for the TUI dialog (story 2.41)', (
   });
 });
 
-describe('switchActiveEdt — adopt resolution (story 2.39)', () => {
+describe('switchActiveEdt — adopt resolution', () => {
   function adoptSetup(gitOverrides: Partial<GitPort> = {}, registryOverrides: Partial<EdtRegistryPort> = {}) {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
@@ -1064,7 +1060,7 @@ describe('switchActiveEdt — adopt resolution (story 2.39)', () => {
   });
 });
 
-describe('switchActiveEdt — discard confirmedPaths (story 2.41 review)', () => {
+describe('switchActiveEdt — discard confirmedPaths', () => {
   function discardWith(captured: string[], confirmedPaths?: string[]) {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
@@ -1113,7 +1109,7 @@ describe('switchActiveEdt — discard confirmedPaths (story 2.41 review)', () =>
   });
 });
 
-describe('switchActiveEdt — discard resolution (story 2.39)', () => {
+describe('switchActiveEdt — discard resolution', () => {
   it('captures the expanded dirty paths, discards, checks out: outcome discarded with detail.discardedPaths', async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
@@ -1130,7 +1126,7 @@ describe('switchActiveEdt — discard resolution (story 2.39)', () => {
         detail: { code: 'discarded', message: 'Discarded 2 uncommitted path(s)', discardedPaths: ['a.txt', 'newdir/b.txt'] },
       });
     }
-    // Once read-only by the pre-flight (story 2.41 `dirtyPaths`), once to capture before the discard.
+    // Once read-only by the pre-flight (`dirtyPaths`), once to capture before the discard.
     expect(calls(git.listDirtyPaths)).toEqual([
       ['/repo/b', { expandUntracked: true }],
       ['/repo/b', { expandUntracked: true }],
@@ -1197,7 +1193,7 @@ describe('switchActiveEdt — discard resolution (story 2.39)', () => {
   });
 });
 
-describe('switchActiveEdt — state-1 stash safety (story 2.39)', () => {
+describe('switchActiveEdt — state-1 stash safety', () => {
   it('a checkout failure after an auto-stash restores the stash before reporting `failed`', async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/c')),
@@ -1233,7 +1229,7 @@ describe('switchActiveEdt — state-1 stash safety (story 2.39)', () => {
   });
 });
 
-describe('switchActiveEdt — review patches (story 2.39)', () => {
+describe('switchActiveEdt — failure reporting and resolution edge cases', () => {
   it('a discard on a target member whose own branch is missing fails before touching the repo', async () => {
     const git = fakeGit({
       hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),

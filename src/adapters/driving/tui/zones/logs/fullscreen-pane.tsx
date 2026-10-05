@@ -1,6 +1,5 @@
-// tui/zones/logs: the single-pane fullscreen preview — extracted from logs-zone.tsx (refactor).
-// Purely presentational, mirroring LogsPaneView's own split: all keystroke handling stays in
-// LogsZone's own useInput (Code Map: never a component-owned useInput here).
+// tui/zones/logs: the single-pane fullscreen preview. Purely presentational — all keystroke
+// handling stays in LogsZone's useInput.
 import { Box, Text } from 'ink';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
@@ -32,10 +31,10 @@ export function FullscreenPane({
   ownFilter,
 }: {
   repoPath: string;
-  // Captured directly at the point fullscreen was opened (store's logsFullscreenServiceName)
-  // rather than re-derived via a live `rows.find(...)` lookup, which can miss (e.g. a
-  // transient services-list load error while the preview is open) and silently fall back to a
-  // bare "Logs" label right when the user needs the service name most (review fix).
+  // Captured when fullscreen was opened (store's logsFullscreenServiceName) rather than
+  // re-derived via a live `rows.find(...)` lookup, which can miss (e.g. a transient services-list
+  // load error while the preview is open) and fall back to a bare "Logs" label right when the
+  // user needs the service name most.
   serviceName: string | null;
   pane: LogsPaneData | undefined;
   visibility: VisibilityFlags;
@@ -53,10 +52,9 @@ export function FullscreenPane({
   const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
     computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
   );
-  // A pane with buffered lines that the current stdout/stderr/story-5.2 filters happen to
-  // hide entirely must read differently from "no lines have arrived yet" — otherwise a user
-  // who toggled off both stdout and stderr, or set an aggressive filter, is misleadingly told
-  // the stream itself is empty (review fix, story 5.1; extended to the new filter layer).
+  // A pane whose buffered lines the stdout/stderr toggles or filters hide entirely must read
+  // differently from "no lines have arrived yet" — otherwise a user who toggled off both streams,
+  // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
@@ -66,8 +64,7 @@ export function FullscreenPane({
             {serviceName ?? 'Logs'}
           </Text>
         </Box>
-        {/* Story 5.3: inline health badge + restart disabled state, mirroring the grid pane
-            header above. */}
+        {/* Inline health badge + restart disabled state, mirroring the grid pane header. */}
         <Box marginLeft={1}>
           <StatusBadge state={healthBadgeState(pane?.health ?? 'down')} />
           <Text color={colors['text-dim']}> {pane?.health ?? 'down'}</Text>

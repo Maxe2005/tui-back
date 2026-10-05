@@ -1,10 +1,7 @@
-// adapters/driven/git: integration tests against real temp git repos (AD-13 driven layer).
-// node:child_process is deliberately not mocked — this adapter's whole contract is how the
-// real `git` binary's exit codes/stderr surface as Result errors, and that the shared-branch
-// gate fires before any `git` invocation. The "before any git" property is verified two ways:
-// a shared target that does not exist stays absent afterwards (no creation ran), and a
-// manifest-only directory that is NOT a git repository still gets the gate error rather than
-// a git failure (any git invocation there would have failed as "not a git repository").
+// adapters/driven/git: integration tests against real temp git repos; child_process is not
+// mocked. The gate firing "before any git" is checked two ways: a protected target that does
+// not exist stays absent, and a manifest-only directory that is NOT a git repository still
+// gets the gate error rather than a "not a git repository" failure.
 import { describe, expect, it, afterEach } from 'vitest';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -63,7 +60,7 @@ function runGit(dir: string, args: string[]): { status: number | null; stdout: s
   return spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
 }
 
-// Story 2.42: the protected set is manifest-defined, so the fixture manifest declares
+// The protected set is manifest-defined, so the fixture manifest declares
 // `protectedBranches: [preprod, prod]` by default (alongside the defaulted `development`
 // sharedBranch); pass `protectedBranches: null` to omit the line entirely.
 async function makeGitRepo(
@@ -142,7 +139,7 @@ describe('assertAllowedBranch', () => {
     }
   });
 
-  it("names the branch and the service's manifest in the rejection (story 2.42)", async () => {
+  it("names the branch and the service's manifest in the rejection", async () => {
     const repo = await makeGitRepo();
 
     const result = await assertAllowedBranch(manifest, repo, 'preprod');
@@ -153,7 +150,7 @@ describe('assertAllowedBranch', () => {
     });
   });
 
-  it('allows a formerly implicit branch when the manifest does not list it (story 2.42)', async () => {
+  it('allows a formerly implicit branch when the manifest does not list it', async () => {
     const repo = await makeGitRepo('main', null);
 
     for (const formerlyImplicit of ['development', 'preprod', 'prod']) {
@@ -165,7 +162,7 @@ describe('assertAllowedBranch', () => {
     });
   });
 
-  it('allows prod with no protectedBranches line and the default development sharedBranch (story 2.42)', async () => {
+  it('allows prod with no protectedBranches line and the default development sharedBranch', async () => {
     const repo = await makeGitRepo(undefined, null);
 
     expect(await assertAllowedBranch(manifest, repo, 'prod')).toEqual({ ok: true, data: undefined });
@@ -201,8 +198,8 @@ describe('assertAllowedBranch', () => {
   });
 });
 
-// Story 2.4: AD-8's cross-EDT half — passed only when both edtId and edtRegistry are given;
-// omitting either preserves the pre-2.4 shared-branch-only behavior exactly (covered above).
+// AD-8's cross-EDT half — applied only when both edtId and edtRegistry are given; omitting
+// either keeps the shared-branch-only behavior (covered above).
 function fakeEdtRegistry(entries: EdtRegistryEntry[]): EdtRegistryPort {
   return {
     add: async () => ok(undefined),
@@ -223,7 +220,7 @@ function edtEntry(ulid: string, repoPath: string, branch: string): EdtRegistryEn
   };
 }
 
-describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
+describe('assertAllowedBranch — cross-EDT gate (AD-8)', () => {
   it('rejects a branch already registered as a different EDT\'s own branch for this repo', async () => {
     const repo = await makeGitRepo();
     const edtRegistry = fakeEdtRegistry([edtEntry('edt-other', repo, 'feat/shared-name')]);
@@ -261,7 +258,7 @@ describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
     expect(result).toEqual({ ok: true, data: undefined });
   });
 
-  it('detects a conflict even when the registry\'s stored repoPath differs in formatting (trailing slash, review)', async () => {
+  it('detects a conflict even when the registry\'s stored repoPath differs in formatting (trailing slash)', async () => {
     const repo = await makeGitRepo();
     // Same repo, unresolved trailing-slash form — as if it were stored at EDT-creation time
     // in a shape that doesn't byte-match the caller's already-resolve()'d repoPath.
@@ -272,7 +269,7 @@ describe('assertAllowedBranch — cross-EDT gate (story 2.4, AD-8)', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'branch-owned-by-other-edt' } });
   });
 
-  it('skips the cross-EDT check entirely when edtId/edtRegistry are omitted (pre-2.4 behavior)', async () => {
+  it('skips the cross-EDT check entirely when edtId/edtRegistry are omitted (shared-branch gate only)', async () => {
     const repo = await makeGitRepo();
 
     const result = await assertAllowedBranch(manifest, repo, 'feat/ordinary');
@@ -431,10 +428,10 @@ describe('currentBranch', () => {
   });
 });
 
-// Story 2.6 (FR-9) — real clone/origin pairs so upstream tracking (branch.<name>.remote/
-// merge, @{u}) is exercised for real, not faked. `git clone` auto-configures the cloned
-// repo's initial branch to track the matching origin branch, so a bare clone is already the
-// "in sync, upstream configured" baseline every other case builds from.
+// Real clone/origin pairs so upstream tracking (branch.<name>.remote/merge, @{u}) is exercised
+// for real, not faked. `git clone` auto-configures the cloned repo's initial branch to track
+// the matching origin branch, so a bare clone is already the "in sync, upstream configured"
+// baseline every other case builds from.
 async function makeOriginAndClone(): Promise<{ origin: string; clone: string }> {
   const origin = await makeGitRepo();
   const clone = await mkdtemp(join(tmpdir(), 'tui-back-git-ahead-behind-clone-'));
@@ -515,13 +512,11 @@ describe('aheadBehind', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'git-ahead-behind-error' } });
   });
 
-  // Review patch: `git config --get`'s documented exit-code taxonomy is 0 = found, 1 = key
-  // genuinely not set — every OTHER status (including a real spawn/git failure) must never
-  // be folded into "not configured" the way it silently was before this patch. A shim `git`
-  // binary that fails only the `config --get` subcommand (forwarding every other subcommand
-  // to the real binary) exercises the exact "config read itself failed" branch for real,
-  // distinct from both the "key genuinely unset" case above and the ENOENT/status===null
-  // case the "spawn failure diagnostics" block below covers for other methods.
+  // `git config --get`'s exit-code taxonomy is 0 = found, 1 = key genuinely not set — every
+  // OTHER status (including a real spawn/git failure) must never be folded into "not
+  // configured". A shim `git` binary that fails only the `config --get` subcommand
+  // (forwarding every other subcommand to the real binary) exercises the "config read itself
+  // failed" branch for real.
   it('surfaces a real git-config read failure as unknown-offline, never a silent no-upstream', async () => {
     const { clone } = await makeOriginAndClone();
     const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
@@ -589,9 +584,9 @@ describe('deleteBranch', () => {
     expect(branchExists(repo, 'feat/x')).toBe(false);
   });
 
-  // Story 2.29: force: false selects `git branch -d`, which refuses to delete a branch not
-  // yet merged into the current HEAD — surfaced as a controlled git-delete-branch-error,
-  // never a throw, and the ref survives untouched.
+  // force: false selects `git branch -d`, which refuses to delete a branch not yet merged
+  // into the current HEAD — surfaced as a controlled git-delete-branch-error, never a throw,
+  // and the ref survives untouched.
   it('force: false (-d) refuses to delete an unmerged branch, leaving the ref intact', async () => {
     const repo = await makeGitRepo();
     expect(runGit(repo, ['checkout', '-b', 'feat/unmerged']).status).toBe(0);
@@ -659,7 +654,7 @@ describe('deleteBranch', () => {
   });
 });
 
-// Story 2.29 — local-only ancestor check backing the EDT-delete use-case's -d/-D decision.
+// Local-only ancestor check backing the EDT-delete use-case's -d/-D decision.
 describe('isBranchMerged', () => {
   it('reports true when branchName is an ancestor of into (merged, no divergent commits)', async () => {
     const repo = await makeGitRepo();
@@ -691,7 +686,7 @@ describe('isBranchMerged', () => {
   });
 });
 
-// Story 2.4 — Moves the working tree onto an existing local branch.
+// Moves the working tree onto an existing local branch.
 describe('checkoutBranch', () => {
   it('moves the working tree onto an existing branch', async () => {
     const repo = await makeGitRepo();
@@ -712,7 +707,7 @@ describe('checkoutBranch', () => {
   });
 });
 
-// Story 2.4 — `git status --porcelain` is non-empty iff the working tree is dirty.
+// `git status --porcelain` is non-empty iff the working tree is dirty.
 describe('hasUncommittedChanges', () => {
   it('reports false for a clean working tree', async () => {
     const repo = await makeCleanGitRepo();
@@ -746,8 +741,7 @@ describe('hasUncommittedChanges', () => {
   });
 });
 
-// Story 2.4 — stashSave/restoreStash: message-tagged (not stack-position), tracked +
-// untracked (`-u`).
+// stashSave/restoreStash: message-tagged (not stack-position), tracked + untracked (`-u`).
 describe('stashSave / restoreStash', () => {
   it('stashes tracked + untracked changes and restores them by message match', async () => {
     const repo = await makeGitRepo();
@@ -807,11 +801,9 @@ describe('stashSave / restoreStash', () => {
   });
 });
 
-// Story 2.29 — hasStash: the non-destructive existence check backing the EDT-delete
-// use-case's corrected clean-detection (Design Notes: a member's own `tui-back:<edtUlid>`
-// stash signals real uncommitted work belonging to that member, independent of whatever the
-// repo's working tree currently has checked out). Built on the same findStashRef
-// list-and-match logic restoreStash already used — never pops anything.
+// hasStash: the non-destructive existence check behind EDT delete's clean detection (a
+// member's own `tui-back:<edtUlid>` stash signals real uncommitted work, whatever the repo
+// currently has checked out). Same list-and-match logic as restoreStash; never pops.
 describe('hasStash', () => {
   it('reports true when a stash tagged with the given tag exists, without popping it', async () => {
     const repo = await makeGitRepo();
@@ -845,7 +837,7 @@ describe('hasStash', () => {
   });
 });
 
-// Story 2.4 — reuses showRef's exit-code taxonomy.
+// Reuses showRef's exit-code taxonomy.
 describe('branchExistsLocally', () => {
   it('reports true for an existing branch', async () => {
     const repo = await makeGitRepo();
@@ -869,8 +861,8 @@ describe('branchExistsLocally', () => {
   });
 });
 
-// Story 2.4 — fetches a branch from origin into a same-named local branch, never checking it
-// out. Only ever used for a non-member repo's manifest sharedBranch when missing locally.
+// Fetches a branch from origin into a same-named local branch, never checking it out. Only
+// ever used for a non-member repo's manifest sharedBranch when missing locally.
 async function makeGitRepoOriginAndClone(): Promise<{ origin: string; clone: string }> {
   const origin = await makeGitRepo();
   expect(runGit(origin, ['branch', 'feat/remote-only']).status).toBe(0);
@@ -898,7 +890,7 @@ describe('listBranches', () => {
       expect(result.data).toContain('development');
       expect(result.data).toContain('feat/local-only');
       // Never a remote-tracking ref, even one that exists (origin/development, set up by the
-      // clone) — Boundaries: "listBranches stays local-only, mirrors branchExistsLocally".
+      // clone): listBranches is local-only, like branchExistsLocally.
       expect(result.data.some((branch) => branch.includes('origin/'))).toBe(false);
     }
   });
@@ -972,7 +964,7 @@ describe('renameBranch', () => {
     expect(branchExists(repo, 'feat/old')).toBe(true);
   });
 
-  it('rejects an oldName that is a shared/protected branch before any git invocation (story 2.35)', async () => {
+  it('rejects an oldName that is a shared/protected branch before any git invocation', async () => {
     const repo = await makeGitRepo();
 
     const result = await renameBranch(manifest, repo, 'development', 'feat/renamed');
@@ -982,7 +974,7 @@ describe('renameBranch', () => {
     expect(branchExists(repo, 'feat/renamed')).toBe(false);
   });
 
-  it('rejects an oldName equal to the repo manifest sharedBranch (story 2.35)', async () => {
+  it('rejects an oldName equal to the repo manifest sharedBranch', async () => {
     const repo = await makeGitRepo('staging');
     expect(runGit(repo, ['branch', 'staging']).status).toBe(0);
 
@@ -993,8 +985,8 @@ describe('renameBranch', () => {
   });
 });
 
-// Story 2.35 — a clone of makeGitRepoOriginAndClone's origin carries no manifest (origin's
-// .tui-back.yaml is untracked, so it is never cloned); the gated writes below need one.
+// A clone of makeGitRepoOriginAndClone's origin carries no manifest (origin's .tui-back.yaml
+// is untracked, so it is never cloned); the gated writes below need one.
 async function makeManagedClone(): Promise<{ origin: string; clone: string }> {
   const pair = await makeGitRepoOriginAndClone();
   await writeFile(
@@ -1013,7 +1005,7 @@ function upstreamOf(dir: string, branch: string): string | null {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-describe('listRemoteBranches (story 2.35)', () => {
+describe('listRemoteBranches', () => {
   it('lists remote-tracking refs as <remote>/<branch>, excluding the symbolic <remote>/HEAD', async () => {
     const { clone } = await makeGitRepoOriginAndClone();
     expect(remoteRefExists(clone, 'origin/HEAD')).toBe(true);
@@ -1028,7 +1020,7 @@ describe('listRemoteBranches (story 2.35)', () => {
     }
   });
 
-  it('keeps a real branch whose name ends in /HEAD, dropping only the symbolic origin/HEAD (review)', async () => {
+  it('keeps a real branch whose name ends in /HEAD, dropping only the symbolic origin/HEAD', async () => {
     const origin = await makeGitRepo();
     expect(runGit(origin, ['branch', 'release/HEAD']).status).toBe(0);
     const clone = await mkdtemp(join(tmpdir(), 'tui-back-git-clone-head-'));
@@ -1074,7 +1066,7 @@ describe('listRemoteBranches (story 2.35)', () => {
   });
 });
 
-describe('createTrackingBranch (story 2.35)', () => {
+describe('createTrackingBranch', () => {
   it('creates a local branch tracking the remote ref, without checking it out', async () => {
     const { clone } = await makeManagedClone();
 
@@ -1126,7 +1118,7 @@ describe('createTrackingBranch (story 2.35)', () => {
   });
 });
 
-describe('createBranch — remote-tracking base (story 2.35)', () => {
+describe('createBranch — remote-tracking base', () => {
   it('creates a branch from a remote-tracking ref with no local counterpart, without an upstream', async () => {
     const { clone } = await makeManagedClone();
     expect(branchExists(clone, 'feat/remote-only')).toBe(false);
@@ -1181,8 +1173,8 @@ describe('fetchBranch', () => {
   });
 });
 
-// Story 3.1 — plain `git pull` on the current branch, only for a member already sitting on
-// its shared branch.
+// Plain `git pull` on the current branch, only for a member already sitting on its shared
+// branch.
 describe('pullBranch', () => {
   it('pulls new upstream commits into the current branch', async () => {
     const { origin, clone } = await makeOriginAndClone();
@@ -1222,8 +1214,8 @@ describe('pullBranch', () => {
   });
 });
 
-// Story 3.1 — `git merge` of the fetched shared branch into the member's own branch, never
-// a rebase; conflicts surface as `merge-conflict` so the caller can abort.
+// `git merge` of the fetched shared branch into the member's own branch, never a rebase;
+// conflicts surface as `merge-conflict` so the caller can abort.
 describe('mergeBranch', () => {
   // A feature branch behind development with no overlapping change — merges cleanly.
   async function makeBehindRepo(): Promise<string> {
@@ -1286,7 +1278,7 @@ describe('mergeBranch', () => {
   });
 });
 
-// Story 3.1 — `git merge --abort` restores the pre-run HEAD after a conflicting merge.
+// `git merge --abort` restores the pre-run HEAD after a conflicting merge.
 describe('abortMerge', () => {
   it('cancels an in-progress conflicting merge, restoring the pre-run HEAD', async () => {
     const repo = await makeCleanGitRepo();
@@ -1320,7 +1312,7 @@ describe('abortMerge', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'git-merge-abort-error' } });
   });
 
-  it('falls back to the exit status when git fails with blank stderr (review)', async () => {
+  it('falls back to the exit status when git fails with blank stderr', async () => {
     const repo = await makeCleanGitRepo();
     const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
     const shimDir = await mkdtemp(join(tmpdir(), 'tui-back-git-shim-blank-'));
@@ -1348,8 +1340,8 @@ describe('abortMerge', () => {
   });
 });
 
-// Story 3.1 (review) — the MERGE_HEAD classifier the group-update pull path uses to tell
-// a conflicting pull (abort + merge-conflict) from any other pull failure.
+// The MERGE_HEAD classifier the group-update pull path uses to tell a conflicting pull
+// (abort + merge-conflict) from any other pull failure.
 describe('isMergeInProgress', () => {
   it('reports true while a conflicting merge is in progress', async () => {
     const repo = await makeCleanGitRepo();
@@ -1381,7 +1373,7 @@ describe('isMergeInProgress', () => {
 });
 
 describe('createGitPort', () => {
-  it('wires all four pre-2.4 methods behind the factory pattern', async () => {
+  it('wires assertAllowedBranch, currentBranch, createBranch and deleteBranch behind the factory pattern', async () => {
     const repo = await makeGitRepo();
     const port = createGitPort(manifest);
 
@@ -1397,7 +1389,7 @@ describe('createGitPort', () => {
     expect(branchExists(repo, 'feat/port')).toBe(false);
   });
 
-  it('wires isBranchMerged (story 2.29) behind the factory pattern', async () => {
+  it('wires isBranchMerged behind the factory pattern', async () => {
     const repo = await makeGitRepo();
     const port = createGitPort(manifest);
     expect(runGit(repo, ['branch', 'feat/merged']).status).toBe(0);
@@ -1405,14 +1397,14 @@ describe('createGitPort', () => {
     expect(await port.isBranchMerged(repo, 'feat/merged', 'development')).toEqual({ ok: true, data: true });
   });
 
-  it('wires hasStash (story 2.29) behind the factory pattern', async () => {
+  it('wires hasStash behind the factory pattern', async () => {
     const repo = await makeGitRepo();
     const port = createGitPort(manifest);
 
     expect(await port.hasStash(repo, 'tui-back:no-such-tag')).toEqual({ ok: true, data: false });
   });
 
-  it('wires aheadBehind (story 2.6) behind the factory pattern', async () => {
+  it('wires aheadBehind behind the factory pattern', async () => {
     const { clone } = await makeOriginAndClone();
     const port = createGitPort(manifest);
 
@@ -1421,7 +1413,7 @@ describe('createGitPort', () => {
     expect(await port.aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 0 } });
   });
 
-  it('wires the story 2.4 methods (checkout, stash, branchExistsLocally) behind the factory pattern', async () => {
+  it('wires checkout, stash and branchExistsLocally behind the factory pattern', async () => {
     const repo = await makeCleanGitRepo();
     const port = createGitPort(manifest);
     expect(runGit(repo, ['branch', 'feat/x']).status).toBe(0);
@@ -1452,7 +1444,7 @@ describe('createGitPort', () => {
     expect(await port.assertAllowedBranch(repo, 'feat/taken', 'edt-other')).toEqual({ ok: true, data: undefined });
   });
 
-  it('wires the story 3.1 methods (pull, mergeBranch, abortMerge) behind the factory pattern', async () => {
+  it('wires pull, mergeBranch and abortMerge behind the factory pattern', async () => {
     const repo = await makeCleanGitRepo();
     const port = createGitPort(manifest);
     expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
@@ -1466,7 +1458,7 @@ describe('createGitPort', () => {
     expect(await port.pull(repo)).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
   });
 
-  it('wires listBranches/renameBranch (story 2.26) behind the factory pattern', async () => {
+  it('wires listBranches/renameBranch behind the factory pattern', async () => {
     const repo = await makeGitRepo();
     const port = createGitPort(manifest);
     expect(runGit(repo, ['branch', 'feat/x']).status).toBe(0);
@@ -1482,7 +1474,7 @@ describe('createGitPort', () => {
     expect(branchExists(repo, 'feat/y')).toBe(true);
   });
 
-  it('wires listRemoteBranches/createTrackingBranch (story 2.35) behind the factory pattern', async () => {
+  it('wires listRemoteBranches/createTrackingBranch behind the factory pattern', async () => {
     const { clone } = await makeManagedClone();
     const port = createGitPort(manifest);
 
@@ -1498,7 +1490,7 @@ describe('createGitPort', () => {
     expect(upstreamOf(clone, 'feat/q')).toBe('origin/feat/remote-only');
   });
 
-  it('wires the story 3.4 methods behind the factory pattern', async () => {
+  it('wires listDirtyPaths, isRebaseInProgress and hasUnmergedPaths behind the factory pattern', async () => {
     const repo = await makeCleanGitRepo();
     const port = createGitPort(manifest);
     await writeFile(join(repo, 'wip.txt'), 'uncommitted work');
@@ -1513,7 +1505,7 @@ describe('createGitPort', () => {
   });
 });
 
-// Story 3.4 — porcelain file list backing the lockfile-only classifier.
+// Porcelain file list backing the lockfile-only classifier.
 describe('listDirtyPaths', () => {
   it('reports an empty list for a clean working tree', async () => {
     const repo = await makeCleanGitRepo();
@@ -1538,7 +1530,7 @@ describe('listDirtyPaths', () => {
     }
   });
 
-  it('collapses an untracked directory by default, expands it file by file on opt-in (story 2.39)', async () => {
+  it('collapses an untracked directory by default, expands it file by file on opt-in', async () => {
     const repo = await makeCleanGitRepo();
     await mkdir(join(repo, 'newdir', 'nested'), { recursive: true });
     await writeFile(join(repo, 'newdir', 'a.txt'), 'a');
@@ -1561,7 +1553,7 @@ describe('listDirtyPaths', () => {
   });
 });
 
-// Story 2.39 — the consent-gated destructive primitive, proven against real git.
+// The consent-gated destructive primitive, proven against real git.
 describe('discardAll', () => {
   it('drops tracked modifications, untracked files and untracked dirs, but never ignored files', async () => {
     const repo = await makeCleanGitRepo();
@@ -1629,7 +1621,7 @@ describe('discardAll', () => {
   });
 });
 
-// Story 3.4 — path-scoped discard for the lockfile-only auto-fix.
+// Path-scoped discard for the lockfile-only auto-fix.
 describe('discardPaths', () => {
   it('restores a modified tracked file to its committed content', async () => {
     const repo = await makeCleanGitRepo();
@@ -1675,7 +1667,7 @@ describe('discardPaths', () => {
   });
 });
 
-// Story 2.38 — the activation pre-flight's read-only diff.
+// The activation pre-flight's read-only diff.
 describe('diffNameOnly', () => {
   it('lists every path that differs between two branches, including spaces and nested dirs', async () => {
     const repo = await makeCleanGitRepo();
@@ -1721,7 +1713,7 @@ describe('diffNameOnly', () => {
   });
 });
 
-// Story 2.38 — path-scoped discard back to HEAD (the activation overwrite).
+// Path-scoped discard back to HEAD (the activation overwrite).
 describe('discardPathsToHead', () => {
   it('discards exactly the given tracked, staged and untracked paths and nothing else', async () => {
     const repo = await makeCleanGitRepo();
@@ -1818,7 +1810,7 @@ describe('discardPathsToHead', () => {
   });
 });
 
-// Story 3.4 — mid-rebase detector (detection only: the tool never touches a rebase).
+// Mid-rebase detector (detection only: the tool never touches a rebase).
 describe('isRebaseInProgress', () => {
   it('reports false for an ordinary repo with no rebase in progress', async () => {
     const repo = await makeCleanGitRepo();
@@ -1849,7 +1841,7 @@ describe('isRebaseInProgress', () => {
   });
 });
 
-// Story 3.4 — unmerged-path verification gate before merge finalization.
+// Unmerged-path verification gate before merge finalization.
 describe('hasUnmergedPaths', () => {
   it('reports false for a clean repo', async () => {
     const repo = await makeCleanGitRepo();
@@ -1880,7 +1872,7 @@ describe('hasUnmergedPaths', () => {
   });
 });
 
-// Story 3.4 — finalizeMerge commits a human-resolved merge without opening an editor.
+// finalizeMerge commits a human-resolved merge without opening an editor.
 describe('finalizeMerge', () => {
   it('commits a hand-resolved merge (zero unmerged paths) with --no-edit', async () => {
     const repo = await makeCleanGitRepo();

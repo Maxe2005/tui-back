@@ -1,7 +1,6 @@
-// tui/zones/routes/logic: story 6.1 — the Routes zone's pure formatting/selection logic,
-// kept out of routes-zone.tsx so the component stays scannable (idiom:
-// edts-zone.logic.ts). Every keystroke behavior is a standalone pure function,
-// unit-tested directly; the `useInput` callback in the component stays a thin dispatcher.
+// tui/zones/routes/logic: the Routes zone's pure formatting/selection logic, kept out of
+// routes-zone.tsx so the component stays scannable. Every keystroke behavior is a standalone
+// pure function, unit-tested directly; the component's `useInput` stays a thin dispatcher.
 import type { Route } from '../../../../../core/ports/route-scanner.js';
 import type { FireResult } from '../../../../../core/routes/fire-request.js';
 import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../shared/components/json-tree/model.js';
@@ -27,10 +26,9 @@ export function moveRoutesSelection(current: number, direction: RoutesSelectionD
   return Math.min(Math.max(next, 0), length - 1);
 }
 
-// The spec's CLI row shape (`METHOD path`) is the whole list row: the summary is deliberately
-// NOT rendered in the list (a long summary wrapped and made rows taller than the one-row
-// budget BoundedList assumes) — it only appears in the detail pane (formatRouteDetail) for the
-// focused route.
+// The list row is `METHOD path` only: the summary is deliberately NOT rendered in the list (a
+// long summary wraps and makes rows taller than the one-row budget BoundedList assumes) — it
+// only appears in the detail pane (formatRouteDetail) for the focused route.
 export function formatRouteRow(route: Route): { label: string } {
   return { label: `${route.method} ${route.path}` };
 }
@@ -57,25 +55,23 @@ export function formatRouteDetail(route: Route): string {
   return `${route.method} ${route.path}\n\n${summary}`;
 }
 
-// Story 6.2: the fired view is `status + duration + body` (DetailPane Text-safe, same
-// single-string constraint as the route detail above) — no logs pane (Story 6.4).
+// The fired view is `status + duration + body` (DetailPane Text-safe, same single-string
+// constraint as the route detail above).
 export function formatFireResult(result: FireResult): string {
   return `${result.status} · ${result.durationMs}ms\n\n${result.body}`;
 }
 
-// Story 6.7: the Response header keeps the status line while the body dump moves into
-// the JsonTree (DetailPane's single-<Text> constraint forbids nesting the tree inside).
-// Story 6.9 adds the body size — `≥` when the body hit core's 64K-character cap, since
-// the real response was larger than what was kept.
+// The Response header keeps the status line while the body moves into the JsonTree
+// (DetailPane's single-<Text> constraint forbids nesting the tree inside), plus the body size —
+// `≥` when the body hit core's 64K-character cap, since the real response was larger.
 export function formatFireStatus(result: FireResult): string {
   const capped = result.body.length >= MAX_FIRE_BODY_CHARS;
   return `${result.status} · ${result.durationMs}ms · ${capped ? '≥' : ''}${formatByteSize(result.body)}`;
 }
 
-// Story 6.2: auth failures render distinctly from generic failures so a permission
-// mismatch or a down auth route is never mistaken for a broken endpoint. Non-auth fire
-// errors get the same human-friendly treatment (prefix + raw message) instead of a raw
-// pass-through.
+// Auth failures render distinctly from generic failures so a permission mismatch or a down auth
+// route is never mistaken for a broken endpoint. Non-auth fire errors get the same
+// human-friendly treatment (prefix + raw message) instead of a raw pass-through.
 export function formatFireError(code: string, message: string): string {
   switch (code) {
     case 'auth-unauthorized':
@@ -102,9 +98,9 @@ export function formatFireError(code: string, message: string): string {
   }
 }
 
-// Story 6.2 (6.9: the list cursor's route — the one `Enter` opens and the pane shows) — a
-// pure dispatch helper so the keystroke behavior is unit-testable without Ink. Returns
-// the cursor route, or undefined for an empty list.
+// The list cursor's route — the one `Enter` opens and the pane shows. A pure dispatch helper so
+// the keystroke behavior is unit-testable without Ink. Returns the cursor route, or undefined
+// for an empty list.
 export function resolveEnterFireTarget(
   routes: Route[] | null | undefined,
   selected: number,

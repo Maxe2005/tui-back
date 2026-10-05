@@ -1,16 +1,8 @@
-// tui/zones/dashboard: story 2.11 adds the "no repos registered yet" prompt, checked before
-// any other Dashboard content (Boundaries: "checked before any other Dashboard content").
-// The registry.list() emptiness check re-runs on mount (it unmounts/remounts on every zone
-// switch, same convention as edts-zone.tsx's mount-effect load) *and* whenever the registry
-// screen's open/close flag flips — the common flow is opening the registry screen from
-// Dashboard and closing it again without ever switching zones, which would never remount
-// DashboardZone at all, so a mount-only check would leave the prompt showing a stale
-// pre-registration snapshot (AC3: "reflects the current registry state ... never a stale
-// cached one").
-//
-// Design Notes (spec): the epics.md AC describes this chaining before Story 2.1/UX-DR19's
-// "no EDT yet" state, but that state isn't built yet — Dashboard still falls through to the
-// generic ZonePlaceholder when the registry is non-empty, left untouched here.
+// tui/zones/dashboard: the launch banner plus the "no repos registered yet" prompt, checked
+// before any other Dashboard content. The emptiness check re-runs on mount *and* whenever the
+// registry screen's open flag flips: opening and closing the registry screen from Dashboard
+// never remounts this zone, so a mount-only check would show a stale snapshot. A non-empty
+// registry falls through to the generic ZonePlaceholder.
 import { useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
@@ -21,9 +13,8 @@ import { LaunchBanner } from './launch-banner.js';
 
 export const EMPTY_REGISTRY_MESSAGE = 'No repos registered yet.';
 export const EMPTY_REGISTRY_HINT = 'Press [:] to scan a root path and register repos.';
-// review patch: a registry.list() failure (e.g. a corrupt registry.yaml) was previously
-// completely invisible — registryEmptyStatus flipped to 'error' but nothing in DashboardZone
-// rendered a branch for it, so it silently fell through to whatever registryEmpty last was.
+// A registry.list() failure (e.g. a corrupt registry.yaml) renders its own error branch rather
+// than silently falling through to whatever registryEmpty last was.
 export const REGISTRY_CHECK_ERROR_MESSAGE = 'Failed to check the repo registry.';
 
 export function DashboardZone({
@@ -42,9 +33,8 @@ export function DashboardZone({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* story 2.16: rendered unconditionally — the banner is permanent on every Dashboard
-          render, above whatever content follows, superseding story 1.12's one-time
-          launchBannerShown-gated display. */}
+      {/* Rendered unconditionally — the banner is permanent on every Dashboard render, above
+          whatever content follows. */}
       <LaunchBanner />
       {registryEmptyStatus === 'error' ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>

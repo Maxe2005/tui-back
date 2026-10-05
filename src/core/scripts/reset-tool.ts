@@ -1,25 +1,8 @@
-// core/scripts/reset-tool: the `:reset` command's use-case — wipes selected tui-back data
-// categories so a developer can start testing from a clean slate without hand-deleting files
-// across three XDG dirs. Unrelated to ./reset.ts (register --reset, corrupt-registry recovery)
+// core/scripts/reset-tool: the `:reset` command's use-case — wipes the selected data categories
+// (edts, histories, services; services always implies edts) without touching git. Each
+// category runs under its action lock and reports its own outcome; nothing is rolled back.
+// Missing files are an empty, successful category. Unrelated to ./reset.ts (register --reset)
 // despite the name.
-//
-// Categories (spec-reset-command.md, Boundaries):
-//   - edts: every edts.yaml entry removed, every child of edtsBaseDir (per-EDT dirs,
-//     <ulid>.db action logs) deleted, state.json's activeEdt set to null.
-//   - histories: state.json's filterHistory emptied (the only persisted history today).
-//   - services: every registry.yaml entry removed. Services always implies edts (an EDT
-//     whose member services are unregistered is meaningless) — enforced here, not only in
-//     the TUI checkbox logic.
-//
-// Git is never touched: member branches and `tui-back:<ulid>` stashes stay. The branches
-// left behind by every removed EDT are returned so the caller can list them.
-//
-// Mutations run under the existing action locks (edt registry key, registry key). A category
-// failing (lock held, I/O error) never stops the independent ones — each reports its own
-// outcome, and nothing is rolled back. The one dependency: services is skipped (reported
-// failed) when edts failed, so services ⇒ edts also holds at execution time. Missing files (ENOENT) are never an error: an empty category is a
-// successful no-op. Direct node:fs for the edtsBaseDir wipe mirrors delete.ts's
-// deleteEdtFiles precedent (AD-1: no port method for per-EDT file cleanup).
 import { readdir, rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { withActionLock } from '../locking.js';
@@ -31,7 +14,7 @@ import { err, ok, type Result, type ResultError } from '../result.js';
 
 export type ResetCategory = 'edts' | 'histories' | 'services';
 
-// Execution order (Design Notes): EDTs first, then histories, then services.
+// Execution order: EDTs first, then histories, then services.
 export const RESET_CATEGORIES: readonly ResetCategory[] = ['edts', 'histories', 'services'];
 
 export type ResetCategoryOutcome = { outcome: 'ok' } | { outcome: 'failed'; error: ResultError };

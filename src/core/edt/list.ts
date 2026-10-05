@@ -1,15 +1,7 @@
-// core/edt/list: story 2.6 (FR-9) — the listEdtBranchesDivergence use-case. Turns every
-// managed repo (registered + manifest-valid, mirroring core/scripts/list-repos.ts's
-// reachability/manifest handling) into its current branch + ahead/behind divergence from
-// its own configured upstream, uniformly for EDT members and non-members alike (including a
-// non-member service correctly kept on `development` per story 2.4 — it gets the exact same
-// treatment as a member, just with isMember: false).
-//
-// Source of truth is always the manifest + the git adapter (never a value cached in the EDT
-// registry): branch and divergence are read live from each repo via GitPort on every call,
-// per the spec's Design Notes ("refreshed on-demand ... not cached indefinitely"). The only
-// thing read from the EDT registry is which repoPaths belong to the *active* EDT, purely to
-// set the isMember flag — never to source a branch name.
+// core/edt/list: listEdtBranchesDivergence (FR-9) — every managed repo's current branch and
+// ahead/behind divergence from its upstream, uniformly for EDT members and non-members.
+// Branch and divergence are read live from git on every call, never cached in the EDT
+// registry; the registry only tells which repos belong to the active EDT (isMember).
 import { resolve } from 'node:path';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
@@ -29,17 +21,15 @@ export interface ServiceBranchDivergence {
   service: string;
   path: string;
   isMember: boolean;
-  // Story 2.27: the repo's own manifest-declared shared/protected branch — threaded through so
-  // every base-branch suggestion in the EDT zone can be manifest-aware instead of a hardcoded
-  // 'development' literal. Sourced straight from the manifest already loaded per repo below
-  // (no new port, no second read).
+  // The repo's manifest-declared shared/protected branch, so the EDT zone's base-branch
+  // suggestions are manifest-aware instead of a hardcoded 'development'.
   sharedBranch: string;
-  // Story 2.42: the manifest's own protectedBranches (empty when it declares none) — with
-  // sharedBranch, the service's full FR-7 protected set for every TUI advisory check.
+  // The manifest's protectedBranches (empty when it declares none) — with sharedBranch, the
+  // service's full FR-7 protected set for every TUI advisory check.
   protectedBranches: string[];
-  // null exactly when status !== 'current' — no numeric value is ever fabricated (the
-  // spec's Never clause) — including when the branch name itself could not be determined
-  // (e.g. detached HEAD), which also folds into 'unknown-offline'.
+  // null exactly when status !== 'current' — no numeric value is ever fabricated — including
+  // when the branch name itself could not be determined (e.g. detached HEAD), which also folds
+  // into 'unknown-offline'.
   branch: string | null;
   ahead: number | null;
   behind: number | null;
@@ -152,8 +142,7 @@ async function readServiceDivergence(
   const branchResult = await git.currentBranch(path);
   if (!branchResult.ok) {
     // A branch that can't even be determined (detached HEAD, corrupt repo, ...) folds into
-    // "unknown (offline)" too — the spec's I/O matrix treats every git error uniformly here
-    // ("git error -> show unknown (offline) or detail in dim-annotation").
+    // "unknown (offline)" too: every git error is treated uniformly here.
     return {
       service,
       path,

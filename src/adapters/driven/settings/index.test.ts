@@ -56,7 +56,7 @@ describe('loadSettings', () => {
     expect(result).toEqual({ ok: true, data: { settings: DEFAULT_SETTINGS, warning: null } });
   });
 
-  it('loads a valid settings file and exposes its values as-is (AC3)', async () => {
+  it('loads a valid settings file and exposes its values as-is', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await writeFile(
@@ -158,7 +158,7 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('logs.bufferSize');
   });
 
-  // Story 5.4: mirrors the logs.bufferSize bound tests above for the two new fields.
+  // Mirrors the logs.bufferSize bound tests above for filterHistorySize/filterHistoryGridMaxRows.
   it('falls back to defaults with a field-naming warning when logs.filterHistorySize exceeds the upper bound', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -267,13 +267,11 @@ describe('loadSettings', () => {
     expect(result.data.warning).not.toBeNull();
   });
 
-  it('loads a pre-amendment file whose edts block predates hiddenActionTypes — defaults just that field, keeps hiddenActionHints (review fix, 2026-08-28)', async () => {
-    // A settings.yaml written before this amendment has an `edts:` block with
-    // `hiddenActionHints` only — `hiddenActionTypes` didn't exist yet. This must parse
-    // successfully (hiddenActionTypes defaulting to []), not fall back to every default: a
-    // required-field version of this schema previously discarded the developer's existing
-    // hiddenActionHints (and even unrelated commandPalette.gridMaxRows) customizations on
-    // every load, confirmed in real usage.
+  it('loads a pre-amendment file whose edts block predates hiddenActionTypes — defaults just that field, keeps hiddenActionHints', async () => {
+    // A settings.yaml written before hiddenActionTypes existed has an `edts:` block with
+    // `hiddenActionHints` only. It must parse (hiddenActionTypes defaulting to []), not fall
+    // back to every default — that would discard the developer's hiddenActionHints and even
+    // unrelated commandPalette.gridMaxRows customizations on every load.
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await writeFile(file, 'commandPalette:\n  gridMaxRows: 15\nedts:\n  hiddenActionHints:\n    - edts\n');
@@ -384,7 +382,7 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('edts.branchDropdownMaxRows');
   });
 
-  it('loads a pre-existing file whose logs block predates startWithHistory — defaults just that field, keeps bufferSize (review fix)', async () => {
+  it('loads a pre-existing file whose logs block predates startWithHistory — defaults just that field, keeps bufferSize', async () => {
     // A settings.yaml written before this field existed has a `logs:` block with `bufferSize`
     // only. Mirrors the hiddenActionTypes precedent just above: must default startWithHistory
     // to false rather than falling back to every default (which would also silently discard
@@ -460,7 +458,7 @@ describe('saveSettings', () => {
     expect(parse(await readFile(file, 'utf8'))).toEqual(settings);
   });
 
-  it('overwrites a previously-saved file with the new value (no separate save step, AC3)', async () => {
+  it('overwrites a previously-saved file with the new value (no separate save step)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await saveSettings(file, DEFAULT_SETTINGS);

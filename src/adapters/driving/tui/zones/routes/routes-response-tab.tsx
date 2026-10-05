@@ -1,7 +1,7 @@
-// tui/zones/routes/response tab: story 6.9 — the Routes right pane's Response tab for the
-// pane route's last fire outcome: a spinner while firing, the distinct (auth-aware) error
-// rendering of 6.2, or `status · duration · size` above the 6.7 tree/raw/empty view the
-// zone hands in. Stateless; the zone owns the tree keys and measures `areaRef`.
+// tui/zones/routes/response tab: the Routes right pane's Response tab for the pane route's last
+// fire outcome — a spinner while firing, the distinct (auth-aware) error rendering, or
+// `status · duration · size` above the tree/raw/empty view the zone hands in. Stateless; the
+// zone owns the tree keys and measures `areaRef`.
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
 import { DetailPane } from '../../shared/components/detail-pane.js';

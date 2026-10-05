@@ -145,9 +145,9 @@ development_status:
   6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs: done
   epic-6-retrospective: optional
 
-  epic-7: backlog
+  epic-7: in-progress
   # Execution order: 7-1 -> 7-6 (7-1 while no other story branch is open).
-  7-1-source-comment-hygiene: backlog
+  7-1-source-comment-hygiene: done
   7-2-container-less-managed-services: backlog
   7-3-shared-zone-layout-contract-ctrl-w-resize-in-every-zone: backlog
   7-4-interaction-consistency-audit-alignment: backlog

@@ -1,28 +1,8 @@
-// core/routes/fire-request: the fire-request use-case (story 6.2, AD-2) — fire a
-// discovered route with dev-mode auth handled automatically. Mirrors list-routes.ts's
-// manifest gate (`modules[ROUTES_MODULE_ID]`, never a hardcoded repo name): a repo
-// without the module is the same named `route-exploration-not-activated` rejection, and
-// `baseUrl` comes from that same manifest `route-explorer` config only (AD-4) — no core
-// hardcoding, no second config source.
-//
-// Flow: manifest gate → `missing-base-url` before any network call → fresh scanner
-// route-exists check (`unknown-route`, never fired silently; a scanner failure passes
-// through verbatim as `route-scan-failed`) → session cookie via the DevAuthPort (its
-// `auth-endpoint-failed` passes through, no fire attempted) → `fetch(baseUrl+path)` with
-// the cookie as a `Cookie` header and an 8s timeout → on 401 force-refresh + retry (at
-// most 2 consecutive re-auths per fire, then `auth-unauthorized`) → 403 maps to the
-// distinct `auth-forbidden` (no retry) → every other status, 2xx or not, returns as
-// `FireResult{status,durationMs,body}` data (text body, 64KB cap). A throwing fetch
-// becomes `request-failed`, never an escape. The session cookie never appears in any
-// message or details.
-//
-// Story 6.9: an optional trailing `options` argument carries the request workbench's
-// draft — `body` (a JSON value, serialized here with an inferred `Content-Type:
-// application/json` unless the caller names a content-type), `query` (appended
-// URL-encoded) and `headers` (any caller `cookie` header is dropped: the auth port's
-// session cookie always wins). A body on GET/HEAD is an `invalid-argument` (fetch cannot
-// send one). The route-exists check also accepts a concrete path against a templated
-// route (`/users/42` fires the discovered `/users/{id}`); an exact match always wins.
+// core/routes/fire-request: fires a discovered route with dev-mode auth handled automatically.
+// Flow: manifest gate → `missing-base-url` → fresh route-exists check (`unknown-route`) →
+// session cookie from the DevAuthPort → fetch with an 8s timeout, re-authing on 401 (at most 2
+// re-auths, then `auth-unauthorized`); 403 is `auth-forbidden`; any other status is data. The
+// session cookie never appears in any message or details, and wins over a caller `cookie`.
 import { ROUTES_MODULE_ID } from '../edt/resolve-tab-visibility.js';
 import type { DevAuthPort } from '../ports/dev-auth.js';
 import type { ManifestPort } from '../ports/manifest.js';

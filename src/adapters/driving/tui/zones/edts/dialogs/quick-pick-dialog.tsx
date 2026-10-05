@@ -1,14 +1,7 @@
-// tui/zones/edts/dialogs: the EDT quick-pick — a filterable, arrow-navigable list of EDT
-// topics, opened in place of `edt-switch`/`edt-modify`/`edt-delete`'s old no-argument
-// fallbacks (edts-zone.tsx's `currentEdtAction` effect). Extracted following the
-// switch-dialog.tsx precedent (thin `createXDialogHandlers` object + `XDialogView` function,
-// no submit network call here — just navigation to another dialog).
-//
-// story 2.30 (Boundaries: "one shared quick-pick dialog ... mode: 'switch' | 'modify' |
-// 'delete'"). The pick interaction itself (substring filter, highlight movement, filter-text
-// editing, bounded rows) is shared/components/filterable-pick-list.tsx — the same component
-// the Update zone's service pick renders through. This file only owns what is EDT-specific:
-// the per-mode candidate pool and which pre-targeted dialog a selection opens.
+// tui/zones/edts/dialogs: the EDT quick-pick — a filterable list of EDT topics opened by a
+// no-argument `edt-switch`/`edt-modify`/`edt-delete`/`edt-create-from`. The pick interaction is
+// shared/components/filterable-pick-list.tsx; this file owns only the per-mode candidate pool
+// and which pre-targeted dialog a selection opens.
 import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
@@ -29,10 +22,8 @@ import {
   type QuickPickMode,
 } from '../edts-zone.logic.js';
 
-// The candidate pool for a given mode (Boundaries: "Switch mode filters out the active EDT
-// (today's 'first non-active EDT' invariant, preserved as the candidate pool). Modify and
-// delete modes filter over every EDT, active included."). Story 2.31: create-from too — any
-// EDT, the active one included, can be the root of a new one.
+// The candidate pool for a given mode: switch mode filters out the active EDT; modify, delete and
+// create-from modes offer every EDT, active included (any EDT can be the root of a new one).
 export function resolveQuickPickCandidates(
   mode: QuickPickMode,
   edtsRows: readonly EdtRegistryEntry[],
@@ -69,18 +60,16 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
     const items = toQuickPickItems(resolveQuickPickCandidates(current.mode, deps.edtsRows, deps.activeEdtUlid));
     const result = handleFilterablePickListKey(current, items, input, key);
 
-    // Boundary: "Esc closes the quick-pick from any mode with no dialog opened."
+    // Esc closes the quick-pick from any mode with no dialog opened.
     if (result.type === 'cancel') {
       deps.setDialog({ kind: 'none' });
       deps.setCurrentEdtAction(null);
       return;
     }
 
-    // Boundary: "Enter on a highlighted row opens the exact same pre-targeted dialog the
-    // topic-supplied path already opens (switch-confirm / modify / delete-confirm) --
-    // unchanged." Selecting the active EDT under delete mode opens the existing rejection
-    // dialog (initialDeleteDialog's own isActive check) — unchanged, just reached via the
-    // picker instead of the focused-row fallback.
+    // Enter on a highlighted row opens the same pre-targeted dialog the topic-supplied path opens
+    // (switch-confirm / modify / delete-confirm / create wizard). Selecting the active EDT under
+    // delete mode opens the existing rejection dialog (initialDeleteDialog's isActive check).
     if (result.type === 'select') {
       const target = result.item.value;
       if (current.mode === 'switch') {
@@ -88,7 +77,7 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
       } else if (current.mode === 'modify') {
         deps.setDialog(initialModifyDialog(target));
       } else if (current.mode === 'create-from') {
-        // Story 2.31: the creation wizard seeded from the chosen root EDT.
+        // The creation wizard seeded from the chosen root EDT.
         deps.setDialog(initialCreateDialog(target));
       } else {
         deps.setDialog(initialDeleteDialog(target, target.ulid === deps.activeEdtUlid));
@@ -108,7 +97,7 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
       if (latest.type !== 'update') {
         return prev;
       }
-      // Story 2.31: the not-found error clears on the first filter edit.
+      // The not-found error clears on the first filter edit.
       const notFound = latest.state.query !== prev.query ? null : prev.notFound;
       return { ...prev, ...latest.state, notFound };
     });

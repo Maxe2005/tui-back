@@ -10,11 +10,10 @@ export interface RegistryPort {
   exists(path: string): Promise<Result<boolean>>;
   scan(root: string): Promise<Result<ScanResult>>;
   reset(path: string): Promise<Result<ResetResult>>;
-  // Story 2.33: targeted read-modify-write removal of a single registered path — the
-  // counterpart `add` never had. Unlike `reset` (whole-file replace, corrupt-registry
-  // recovery only, refuses to touch a healthy file), `remove` never inspects file health and
-  // never touches any path but the one given. Removing a path that isn't currently
-  // registered is a no-op success, mirroring `add`'s own already-registered no-op (FR-1).
+  // Targeted read-modify-write removal of a single registered path. Unlike `reset`
+  // (whole-file replace, corrupt-registry recovery only, refuses to touch a healthy file),
+  // `remove` never inspects file health and never touches any path but the one given.
+  // Removing a path that isn't registered is a no-op success, like `add` (FR-1).
   remove(path: string): Promise<Result<void>>;
 }
 

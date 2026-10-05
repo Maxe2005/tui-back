@@ -1,12 +1,7 @@
-// tui/zones/edts/dialogs/create-wizard: Step 4 "Activation" (Story 2.38). Below the read-only
-// recap (Story 2.37: rebuilt from Step 3's row views, so it shows exactly what the submit's
-// memberPlans are built from):
-//   - a first EDT: the activation option, visually locked on "Oui", with why (no outgoing EDT);
-//   - a later EDT: the radio (switch now / create without switching) and, under the switch
-//     option, the info block — auto-stash, dirty-service resolution, members to their branches,
-//     non-members back to their own shared branch (listed by name);
-//   - once created: the pause panel (files at risk per service), the overwrite confirmation
-//     (every file, scrollable), or the terminal "created but not active" message.
+// tui/zones/edts/dialogs/create-wizard: Step 4 "Activation". Below a read-only recap (built from
+// Step 3's row views, so it shows exactly what the submit sends): the locked activation option
+// for a first EDT, else the switch-now / create-without-switching radio with its info block; once
+// created, the pause panel, the overwrite confirmation, or the "created but not active" message.
 // Key handling lives in activation.logic.ts.
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';

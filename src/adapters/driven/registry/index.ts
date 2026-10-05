@@ -1,8 +1,7 @@
 // adapters/driven/registry: the driven implementation of core's RegistryPort (AD-6).
-// Persists managed local paths to XDG_CONFIG_HOME/tui-back/registry.yaml (reusing Story
-// 1.2's XDG resolution + ensureXdgDir), owns the filesystem existence probe listRepos
-// uses to separate unreachable from unmanaged, and walks a root to propose scan
-// candidates. It only ever proposes on scan — never auto-registers.
+// Persists managed local paths to XDG_CONFIG_HOME/tui-back/registry.yaml, owns the existence
+// probe listRepos uses to separate unreachable from unmanaged, and walks a root to propose
+// scan candidates — it never auto-registers.
 import { copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse, stringify } from 'yaml';
@@ -101,18 +100,10 @@ export async function addRegistry(registryFile: string, path: string): Promise<R
   return ok(undefined);
 }
 
-// Story 2.33: `add`'s own read-modify-write shape, in reverse — read the list, drop the
-// canonicalized path if present, write back. Absent-path is a no-op success (never an
-// error), the same idempotency `add` already gives an already-present path (FR-1). Shares
-// `add`'s TOCTOU caveat (concurrent CLI/TUI writers can race a read-modify-write with no
-// file-level locking here — callers serialize through the advisory LockPort instead, same
-// as `add`).
-//
-// Review fix (story 2.33): the no-op path must stay a *true* no-op — listRegistry() already
-// tolerates a missing registry file (ENOENT -> ok([])) without needing the config dir to
-// exist, so the membership check runs first; ensureRegistryDir (which mkdirSync's the XDG
-// config dir) is only called once a write is actually about to happen, never just to check
-// whether one is unregistered.
+// `add`'s read-modify-write in reverse: drop the canonicalized path if present. An absent path
+// is a no-op success (FR-1). No file-level locking here — callers serialize through the
+// advisory LockPort, as for `add`. The membership check runs before ensureRegistryDir so a
+// no-op never creates the XDG config dir (listRegistry already tolerates a missing file).
 export async function removeRegistry(registryFile: string, path: string): Promise<Result<void>> {
   const canonical = resolve(path);
   const listed = await listRegistry(registryFile);

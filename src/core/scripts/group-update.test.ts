@@ -1,7 +1,6 @@
-// core/scripts/group-update: unit tests against fake ports (AD-13 core layer) — every
-// I/O-matrix row of story 3.1 plus the lock-nesting and per-service-isolation guarantees.
-// Real git/container behavior lives in adapters/driven/git|container's own integration
-// tests and the black-box e2e; here only the use-case's orchestration is exercised.
+// core/scripts/group-update: unit tests against fake ports — the use-case's orchestration:
+// per-service flow, lock nesting, per-service isolation, assisted resolution, pre-run
+// configuration, clean restart and live phase tracking.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { err, ok } from '../result.js';
 import type { ContainerPort } from '../ports/container.js';
@@ -52,7 +51,7 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     createBranch: vi.fn(async () => ok(undefined)),
     deleteBranch: vi.fn(async () => ok(undefined)),
     // Matches ACTIVE's own recorded branches per repo — anything else exercises the
-    // `unexpected-branch` row (P1), never a silent merge into the wrong branch.
+    // `unexpected-branch` row, never a silent merge into the wrong branch.
     currentBranch: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b' ? 'feat/b' : 'feat/a')),
     aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
     checkout: vi.fn(async () => ok(undefined)),
@@ -634,7 +633,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
   });
 });
 
-describe('groupUpdate — migrate phase (story 3.2)', () => {
+describe('groupUpdate — migrate phase', () => {
   // The invocation index of fn's call for path, comparable across different mocks
   // (vitest's invocationCallOrder is a global sequence shared by every mock).
   function callOrder(fn: unknown, path: string): number {
@@ -1009,7 +1008,7 @@ describe('markGroupUpdateInterrupted', () => {
   });
 });
 
-describe('groupUpdate — all-repos scope (story 3.3)', () => {
+describe('groupUpdate — all-repos scope', () => {
   function allParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdateParams {
     return {
       ...makeParams(),
@@ -1232,10 +1231,9 @@ describe('groupUpdate — all-repos scope (story 3.3)', () => {
   });
 });
 
-describe('groupUpdate — assisted resolution (story 3.4)', () => {
+describe('groupUpdate — assisted resolution', () => {
   // A scripted seam: answers each blocker with the next scripted choice, recording every
-  // blocker raised (the Code Map's "scripted seam callbacks test the same way" as fakeGit
-  // overrides + call-order assertions).
+  // blocker raised.
   function scriptedSeam(choices: UpdateBlockerChoice[]): { seam: OnUpdateBlocker; blockers: UpdateBlocker[] } {
     const blockers: UpdateBlocker[] = [];
     let index = 0;
@@ -1794,7 +1792,7 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
   });
 });
 
-describe('groupUpdate — pre-run configuration (story 3.7)', () => {
+describe('groupUpdate — pre-run configuration', () => {
   it('an EDT-scoped selection runs only the selected service: the deselected one is never touched and absent from results', async () => {
     const git = fakeGit();
     const container = fakeContainer();
@@ -2040,7 +2038,7 @@ describe('groupUpdate — pre-run configuration (story 3.7)', () => {
   });
 });
 
-describe('groupUpdate — clean-restart recipe (story 3.8)', () => {
+describe('groupUpdate — clean-restart recipe', () => {
   const RECIPE = ['npm ci', 'docker compose up -d --build'];
 
   function fakeManifestWithRecipe(restartCommands: string[]): ManifestPort {
@@ -2284,7 +2282,7 @@ describe('groupUpdate — clean-restart recipe (story 3.8)', () => {
   });
 });
 
-describe('groupUpdate — live per-service phase tracking (story 3.10)', () => {
+describe('groupUpdate — live per-service phase tracking', () => {
   function recordPhases() {
     const seen: Array<[string, UpdatePhase]> = [];
     const onPhase = vi.fn((service: string, phase: UpdatePhase) => {

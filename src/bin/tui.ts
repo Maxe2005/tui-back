@@ -69,7 +69,7 @@ try {
         }
         process.exit(0);
       }
-      // AC4: developer declines → exit 1, nothing killed/deleted
+      // Developer declines → exit 1, nothing killed/deleted
       process.stderr.write("Another TUI instance is already running\n");
       process.exit(1);
     }
@@ -81,12 +81,10 @@ try {
   process.exit(1);
 }
 
-// Composition root wiring — mirrors src/bin/main.ts's port construction exactly (same
-// XDG-resolved files, same createGitPort(manifest, edtRegistry) cross-EDT wiring from
-// story 2.4). Story 2.9 adds lock/edtsBaseDir, mirroring main.ts's own
-// createLockPort(lockDir)/join(xdg.dataDir, 'edts') exactly, so the store's
-// createEdt/switchEdt/modifyEdt actions run the identical core use-cases, in-process, that
-// `tui-back edt create|switch|modify` run out-of-process (AD-2).
+// Composition root wiring — the same port construction as src/bin/main.ts (same XDG-resolved
+// files, same createGitPort(manifest, edtRegistry) cross-EDT wiring, same lock dir and
+// edtsBaseDir), so the store's actions run the identical core use-cases in-process that the
+// CLI runs out-of-process (AD-2).
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
@@ -99,31 +97,26 @@ const migration = createMigrationPort();
 const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
-// Story 2.11: the repo registry screen reuses Story 1.5's registerRepo use-case as-is
-// (AD-2), which requires a LockPort + a resource key for its withActionLock call — mirrors
-// src/bin/main.ts:39-44's CLI composition root exactly (same lock dir, same registry file
-// as the resource key so a TUI-initiated register and a hand-run CLI one serialize on the
-// same resource rather than racing each other). Named `actionLock` (distinct from the
-// single-instance TUI `lock` above) since both live in this module's scope.
+// The registry screen's registerRepo needs a LockPort + resource key for withActionLock — the
+// same lock dir and registry file as the CLI, so a TUI-initiated register and a hand-run CLI
+// one serialize on the same resource. Named `actionLock` to tell it apart from the
+// single-instance TUI `lock` above.
 const actionLock = createLockPort(lockDir);
-// Story 2.19: the settings screen's persistence port — XDG_CONFIG_HOME/tui-back/settings.yaml,
-// zod-validated like the manifest/registry, independent of every EDT/global SQLite store.
+// The settings screen's persistence port — XDG_CONFIG_HOME/tui-back/settings.yaml,
+// zod-validated like the manifest/registry.
 const settingsFile = resolveSettingsFile(xdg);
 const settings = createSettingsPort(settingsFile);
-// Story 5.1: the Logs zone's Docker touchpoint — no XDG/lock wiring needed (DockerPort has no
-// persisted state of its own; the Logs zone's ring buffers live only in memory, per-process).
+// The Logs zone's Docker touchpoint — no XDG/lock wiring needed (log ring buffers live only in
+// memory, per process).
 const docker = createDockerPort();
-// Story 6.1: the Routes zone's scanner touchpoint — resolved out of the statically
-// compiled module registry by manifest module id (AD-5), mirroring src/bin/main.ts's own
-// CLI wiring exactly so `tui-back list-routes` and the Routes zone scan through the same
-// implementation in and out of process.
+// The Routes zone's scanner, resolved out of the statically compiled module registry by
+// manifest module id (AD-5), the same as the CLI so both scan through one implementation.
 const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
 if (!routeExplorer) {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
-// Story 6.2: the Routes zone's fire path needs the module's auth port alongside its
-// scanner — mirrors src/bin/main.ts's own CLI wiring exactly so `tui-back fire-request`
-// and the Routes zone fire through the same implementations in and out of process.
+// The Routes zone's fire path needs the module's auth port alongside its scanner — the same
+// wiring as the CLI's fire-request.
 if (!routeExplorer.auth) {
   throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
 }
@@ -152,12 +145,10 @@ const onQuit = async () => {
   process.exit(0);
 };
 
-// Story 5.1 review fix: normal zone-unmount teardown already stops every active
-// `docker logs -f` subscription (see logs-zone.tsx's own unmount effect), but an abnormal exit
-// (an uncaught crash, Ctrl+C, a `kill`) bypasses React's unmount path entirely and would
-// otherwise orphan any still-running docker child processes indefinitely. Stopping every active
-// LogsManager subscription here, on every exit path, closes that gap regardless of how the
-// process is going down.
+// Normal zone unmount stops every active `docker logs -f` subscription, but an abnormal exit
+// (an uncaught crash, Ctrl+C, a `kill`) bypasses React's unmount path and would orphan the
+// docker child processes. Stopping every LogsManager subscription here, on every exit path,
+// closes that gap.
 let stoppedLogsPanes = false;
 const stopAllLogsPanes = () => {
   if (stoppedLogsPanes) {
@@ -187,11 +178,9 @@ process.on("SIGTERM", () => {
 
 try {
   render(createElement(AppShell, { useStore: store, onQuit }), {
-    // User-reported (story 5.1 follow-up): Ink's own exitOnCtrlC swallows every Ctrl+C
-    // keypress before any zone's useInput ever sees it (ink/hooks/use-input.js: "If app is
-    // supposed to exit on Ctrl+C, skip input listeners") — incompatible with the Logs zone's
-    // Ctrl+C "clear every open pane" shortcut. `q` (app-shell.tsx's shouldQuit) is the app's
-    // real quit key; Ctrl+C is no longer a second one.
+    // Ink's exitOnCtrlC is off: it swallows every Ctrl+C before any zone's useInput sees it
+    // (ink/hooks/use-input.js), which would break the Logs zone's Ctrl+C "clear every open
+    // pane" shortcut. `q` (app-shell.tsx's shouldQuit) is the quit key.
     exitOnCtrlC: false,
     alternateScreen: true,
   });

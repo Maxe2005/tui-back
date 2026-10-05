@@ -1,9 +1,7 @@
-// tui/zones/update: real-keypress coverage for the branch-autocomplete adoption (spec
-// branch-autocomplete-input-adoption) — the config dialog's branch editor hosts shared
-// autocomplete state fed by the zone's own fetch-once-per-edit listBranches effect, behavior
-// only a real keypress plus the zone's useEffect chain can exercise. Reuses
-// edts-zone.interaction.test.tsx's real-Ink-input technique
-// (shared/test-support/fake-tty.ts) — no pty required.
+// tui/zones/update: real-keypress coverage (shared/test-support/fake-tty.ts) for what only a real
+// keypress plus the zone's useEffect chain can exercise — the config dialog's branch editor fed
+// by the zone's fetch-once-per-edit listBranches effect, the trigger keys, the no-arg
+// `:update-service` handoff and the service quick-pick.
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
@@ -76,8 +74,8 @@ async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.Re
 }
 
 // The config draft is preset straight into the store (bypassing openUpdateConfig's own
-// registry/manifest deps — draft creation is story 3.7's covered ground, not this spec's);
-// the branch source still comes through the zone's live listBranches effect.
+// registry/manifest deps, covered elsewhere); the branch source still comes through the zone's
+// live listBranches effect.
 function storeWithConfig(listBranches: (repoPath: string) => Promise<Result<string[]>>) {
   const store = createAppStore();
   store.setState({
@@ -206,10 +204,10 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
   });
 });
 
-// Story 3.11: the new zone keys dispatch through the real useInput chain (the pure
-// resolveUpdateTrigger mapping is covered in update-zone.test.tsx; these prove the thin
-// dispatcher actually calls the opener). The store stays unwired, so the opener lands in
-// its explicit store-not-wired error — never a throw, and proof the key reached it.
+// The zone keys dispatch through the real useInput chain (the pure resolveUpdateTrigger mapping
+// is covered in update-zone.test.tsx; these prove the thin dispatcher calls the opener). The
+// store stays unwired, so the opener lands in its explicit store-not-wired error — never a
+// throw, and proof the key reached it.
 describe('UpdateZone update triggers (real keypress)', () => {
   const ROW_A: ServiceBranchDivergence = {
     service: 'svc-a',
@@ -324,11 +322,11 @@ describe('UpdateZone update triggers (real keypress)', () => {
   });
 });
 
-// Story 3.11: the no-arg `:update-service` handoff end to end — the store raises the
-// selection request, the mounted zone consumes it against its highlighted row (or opens
-// the quick-pick with none). A minimally-wired store: only the ports this path reads are
-// real (registry/manifest/state/edtRegistry, plus docker for the zone's health poll and
-// empty guards for the rest); the zone's own mount-time loads stay stubbed.
+// The no-arg `:update-service` handoff end to end — the store raises the selection request, the
+// mounted zone consumes it against its highlighted row (or opens the quick-pick with none). A
+// minimally-wired store: only the ports this path reads are real (registry/manifest/state/
+// edtRegistry, plus docker for the zone's health poll and empty guards for the rest); the
+// zone's own mount-time loads stay stubbed.
 describe('UpdateZone no-arg update-service handoff (real mount)', () => {
   const ROW_A: ServiceBranchDivergence = {
     service: 'svc-a',
@@ -408,9 +406,9 @@ describe('UpdateZone no-arg update-service handoff (real mount)', () => {
   });
 });
 
-// Story 3.11: keypresses while the service quick-pick is open — the pick owns every
-// keystroke (filter, move, confirm into a pre-scoped config, cancel). Mounted with a
-// preset pick over the wired store so Enter can actually open the config.
+// Keypresses while the service quick-pick is open — the pick owns every keystroke (filter, move,
+// confirm into a pre-scoped config, cancel). Mounted with a preset pick over the wired store so
+// Enter can actually open the config.
 describe('UpdateZone service pick keypress (real keypress)', () => {
   const PICK = [
     { service: 'svc-a', repoPath: '/repo/a' },
@@ -645,11 +643,9 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
   });
 });
 
-// Story 3.11: the zone keys dispatch through to the openers with their args on a wired
-// store — `g` opens the draft EDT-scoped with every member pre-selected, `p` opens a
-// one-row draft for the highlighted row. This closes the dispatch-to-opener-args link
-// the unwired trigger tests above cannot observe (the opener would stop at
-// store-not-wired before reading any arg).
+// The zone keys dispatch through to the openers with their args on a wired store — `g` opens the
+// draft EDT-scoped with every member pre-selected, `p` opens a one-row draft for the highlighted
+// row (the unwired trigger tests above stop at store-not-wired before reading any arg).
 describe('UpdateZone wired dispatch args (real keypress)', () => {
   const ROW_A: ServiceBranchDivergence = {
     service: 'svc-a',

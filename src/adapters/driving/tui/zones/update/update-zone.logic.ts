@@ -1,9 +1,7 @@
-// tui/zones/update: story 3.6 — pure logic backing the Update zone's new list/detail shell
-// (service-status derivation, EDT-members-first list ordering, and the
-// lastServiceOutcomes merge the store applies on run completion). Extracted the same way
-// edts-zone.logic.ts is (that file's own header): the useInput callback stays a thin
-// dispatcher, everything it — or a render — needs to decide is a standalone, independently
-// unit-testable function.
+// tui/zones/update: pure logic behind the Update zone — service-status derivation, EDT-members-
+// first list ordering, the live detail and issue log, the editor command line, and the
+// lastServiceOutcomes merge the store applies on run completion. The useInput callback stays a
+// thin dispatcher over these unit-tested functions.
 import { resolve } from 'node:path';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -17,22 +15,17 @@ import type {
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 
-// The Update zone's own closed per-service status set (Design Notes): a raw HealthState
-// passthrough, plus 'updating' (a run currently targets this service) and 'migrating'
-// (story 3.10: produced when the run's live phase for this service is the migrate step —
-// the first producer of the glyph story 3.6 reserved in the type) and 'error' (derived
-// from the last completed run's outcome, not raw health — Design Notes: a container can
-// report `up` immediately after a failed migration).
+// The Update zone's own closed per-service status set: a raw HealthState passthrough, plus
+// 'updating' (a run currently targets this service), 'migrating' (the run's live phase for this
+// service is the migrate step) and 'error' (derived from the last completed run's outcome, not
+// raw health — a container can report `up` immediately after a failed migration).
 export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'error';
 
-// Precedence (Design Notes): a run currently targeting this service always wins ('updating'
-// outranks everything, including a stale 'error' from a previous run — except the live
-// `migrating` phase, which produces the long-reserved `migrating` glyph for the first
-// time in story 3.10); otherwise a standalone clean restart in flight on this service wins
-// ('restarting' — story 3.9's coarse in-flight flag, no step detail until story 3.10);
-// otherwise a failed last outcome outranks raw health (a container can report `up` right
-// after a failed migration — the old process is still running); otherwise raw health
-// passes through unchanged.
+// Precedence: a run currently targeting this service wins ('updating', or 'migrating' during the
+// live migrate phase — outranking even a stale 'error' from a previous run); otherwise a
+// standalone clean restart in flight wins ('restarting'); otherwise a failed last outcome
+// outranks raw health (a container can report `up` right after a failed migration — the old
+// process is still running); otherwise raw health passes through unchanged.
 export function deriveUpdateServiceStatus(
   health: HealthState,
   lastOutcome: GroupUpdateRepoResult['outcome'] | undefined,
@@ -41,8 +34,8 @@ export function deriveUpdateServiceStatus(
   livePhase?: UpdatePhase,
 ): UpdateServiceStatus {
   if (isTargetedByRunningRun) {
-    // Story 3.10: the list glyph stays `updating` for every live step except the migrate
-    // phase, which finally produces the reserved `migrating` glyph.
+    // The list glyph stays `updating` for every live step except the migrate phase, which
+    // produces `migrating`.
     if (livePhase === 'migrating') {
       return 'migrating';
     }
@@ -57,14 +50,12 @@ export function deriveUpdateServiceStatus(
   return health;
 }
 
-// Whether the in-flight run actually targets this list row. The scope alone is not enough:
-// a run confirmed through the pre-run configuration screen (story 3.7) carries a
-// `selection` that narrows the scope down to exactly the confirmed services — a
-// single-service run (`p`, the row-local menu, `:update-service`) is scoped `edt` or `all`
-// but selects one row only, so every other row in that scope must keep its own glyph.
-// The selection match mirrors core's own `matchSelectionItem` (resolved repoPath when the
-// item carries one, service name otherwise). A null selection is the unfiltered default:
-// every row in scope is targeted.
+// Whether the in-flight run actually targets this list row. The scope alone is not enough: a run
+// confirmed through the pre-run configuration screen carries a `selection` that narrows the
+// scope down to exactly the confirmed services — a single-service run (`p`, the row-local menu,
+// `:update-service`) is scoped `edt` or `all` but selects one row only. The match mirrors core's
+// `matchSelectionItem` (resolved repoPath when the item carries one, service name otherwise). A
+// null selection is the unfiltered default: every row in scope is targeted.
 export function isServiceTargetedByRun(
   row: { service: string; path: string },
   run: {
@@ -90,11 +81,9 @@ export function isServiceTargetedByRun(
 // a render never has to re-derive membership from `focusedEdt` a second time.
 export type UpdateServiceRow = ServiceBranchDivergence & { isMember: boolean };
 
-// The list partition (Code Map): the same active-EDT-scoped `edtsBranches` rows logs-zone.tsx
-// partitions (partitionServicesByEdtMembership against the *active* EDT, not a selector — no
-// new registry/enumeration logic), flattened into one EDT-members-first ordering for the
-// Update zone's single always-visible list (unlike Logs/EDTs zones' two separately-focusable
-// panes — this shell has no per-row focus toggle).
+// The list partition: the same active-EDT-scoped `edtsBranches` rows logs-zone.tsx partitions
+// (partitionServicesByEdtMembership against the *active* EDT, not a selector), flattened into
+// one EDT-members-first ordering for the Update zone's single always-visible list.
 export function partitionUpdateServiceRows(
   rows: readonly ServiceBranchDivergence[],
   focusedEdt: EdtRegistryEntry | undefined,
@@ -106,9 +95,9 @@ export function partitionUpdateServiceRows(
   ];
 }
 
-// The detail pane's per-service body line (I/O matrix): "idle" when `lastServiceOutcomes`
-// carries no entry for this service yet, else the outcome word plus whatever code/message
-// detail the last completed run reported for it.
+// The detail pane's per-service body line: "idle" when `lastServiceOutcomes` carries no entry
+// for this service yet, else the outcome word plus whatever code/message detail the last
+// completed run reported for it.
 export function formatServiceOutcomeDetail(lastOutcome: GroupUpdateRepoResult | undefined): string {
   if (lastOutcome === undefined) {
     return 'idle';
@@ -121,7 +110,7 @@ export function formatServiceOutcomeDetail(lastOutcome: GroupUpdateRepoResult | 
   return `${lastOutcome.outcome} (${code})${message}`;
 }
 
-// Story 3.10: one entry of the live per-service issue log. `kind` is the blocker kind
+// One entry of the live per-service issue log. `kind` is the blocker kind
 // core's `onUpdateBlocker` seam reported, or `migration-failed` for a mid-run migration
 // failure; `detail` names the repo (blockers) or carries the failure message
 // (migrations). Entries start `resolved: false` and flip to `true` once the run
@@ -135,17 +124,16 @@ export interface ServiceIssue {
   resolved: boolean;
 }
 
-// The detail pane's live body (I/O matrix): the current step plus the issue log with
-// resolved/unresolved marking — replacing the last-outcome view while a run targets the
-// selected service. A targeted service with no phase emitted yet (the run just started)
-// reports `starting`.
+// The detail pane's live body: the current step plus the issue log with resolved/unresolved
+// marking — replacing the last-outcome view while a run targets the selected service. A targeted
+// service with no phase emitted yet (the run just started) reports `starting`.
 export function formatLiveServiceDetail(phase: UpdatePhase | undefined, issues: readonly ServiceIssue[]): string {
   const lines = [`step: ${phase ?? 'starting'}`];
   for (const issue of issues) {
     const mark = issue.resolved ? '✔' : '○';
     const state = issue.resolved ? 'resolved' : 'unresolved';
-    // Review hardening: migration output can carry embedded newlines — collapse them so
-    // one issue stays one row inside the overflow-hidden detail pane.
+    // Migration output can carry embedded newlines — collapse them so one issue stays one row
+    // inside the overflow-hidden detail pane.
     lines.push(`${mark} ${issue.kind} — ${issue.detail.replace(/\s+/g, ' ')} (${state})`);
   }
   return lines.join('\n');
@@ -213,10 +201,9 @@ export function resolveEditorCommand(
   return { binary, args: rest.map((token) => token.split(EDITOR_REPO_PLACEHOLDER).join(repoPath)) };
 }
 
-// update-slice.ts's own merge (Code Map): "merged — never wholesale-replaced — ... so
-// outcomes for services outside a partial-scope run survive." Keyed by `service` (the only
-// stable identifier a GroupUpdateRepoResult row itself carries — results never carry a
-// repoPath).
+// Merged, never wholesale-replaced, so outcomes for services outside a partial-scope run survive.
+// Keyed by `service` (the only stable identifier a GroupUpdateRepoResult row carries — results
+// never carry a repoPath).
 export function mergeLastServiceOutcomes(
   current: Readonly<Record<string, GroupUpdateRepoResult>>,
   results: readonly GroupUpdateRepoResult[],

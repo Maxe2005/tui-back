@@ -1,11 +1,7 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.36 — the pure, directly unit-tested logic of the
-// 4-step create-EDT wizard (Nom -> Services -> Branches -> Activation), kept apart from the Ink
-// views/handlers the same way edts-zone.logic.ts is kept apart from edts-zone.tsx.
-//
-// Story 2.37: Step 3 is the global branch strategy + per-service exceptions table — its pure
-// resolution, row-view, validation and plan helpers live here too. Story 2.38: Step 4's pure
-// helpers (labels, the non-member return list, the log detail); its key reducer lives in
-// activation.logic.ts.
+// tui/zones/edts/dialogs/create-wizard: the pure, unit-tested logic of the 4-step create-EDT
+// wizard (Nom -> Services -> Branches -> Activation) — name availability, step gating and
+// breadcrumb, Step 3's branch resolution, row views and memberPlans, edt-create-from seeding, and
+// Step 4's helpers. Step 4's key reducer lives in activation.logic.ts.
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
@@ -72,13 +68,13 @@ export function canAdvance(
     return availability === 'taken' ? { ok: false, error: TAKEN_NAME_ERROR } : { ok: true };
   }
   if (step === 2) {
-    // Story 2.31 (review): root members gone from a non-empty pool are pruned on entering
-    // Step 3 — they must not count here, or Step 3 would open with zero real services.
+    // Root members gone from a non-empty pool are pruned on entering Step 3 — they must not count
+    // here, or Step 3 would open with zero real services.
     return pruneToCandidates(state.selectedMembers, candidates).length >= 1 ? { ok: true } : { ok: false, error: NO_SERVICE_ERROR };
   }
   if (step === 3) {
-    // Story 2.37: every row needs a resolved base (not loading, not introuvable), a non-empty
-    // target and no protected target — first blocked row wins, named by its service.
+    // Every row needs a resolved base (not loading, not introuvable), a non-empty target and no
+    // protected target — first blocked row wins, named by its service.
     const blocked = buildStep3Rows(state, candidates).find((row) => row.error !== null);
     return blocked === undefined ? { ok: true } : { ok: false, error: `${blocked.service} : ${blocked.error}` };
   }
@@ -102,8 +98,8 @@ export function reachableSteps(
   return reachable;
 }
 
-// A completed step's breadcrumb text: what was decided in it. Story 2.31 (review): the Step 2
-// count excludes root members gone from a non-empty pool (`candidates`, as canAdvance).
+// A completed step's breadcrumb text: what was decided in it. The Step 2 count excludes root
+// members gone from a non-empty pool (`candidates`, as canAdvance).
 export function stepSummary(step: WizardStep, state: CreateDialogState, candidates: readonly Pick<BranchCandidate, 'path'>[] = []): string {
   if (step === 1) {
     return `${STEP_LABELS[1]}: ${state.topic.trim()}`;
@@ -112,7 +108,7 @@ export function stepSummary(step: WizardStep, state: CreateDialogState, candidat
     return `${STEP_LABELS[2]} (${pruneToCandidates(state.selectedMembers, candidates).length})`;
   }
   if (step === 3) {
-    // Story 2.37: the global name, plus how many services carry their own exception.
+    // The global name, plus how many services carry their own exception.
     const exceptions = state.selectedMembers.filter((path) => state.branches.overrides[path] !== undefined).length;
     const suffix = exceptions === 0 ? '' : ` (+${exceptions} exception${exceptions > 1 ? 's' : ''})`;
     return `${STEP_LABELS[3]}: ${state.branches.globalName.value.trim()}${suffix}`;
@@ -141,20 +137,18 @@ export function buildBreadcrumb(
   });
 }
 
-// Wizard-scoped step navigation: Ctrl+→ / Ctrl+N forward, Ctrl+← / Ctrl+P back — the
-// resolver now lives in shared/keys/tab-navigation.ts (story 6.9, shared with the Routes
-// right pane's sub-tabs); re-exported under its wizard names so callers/tests are unchanged.
+// Wizard-scoped step navigation: Ctrl+→ / Ctrl+N forward, Ctrl+← / Ctrl+P back — the resolver lives
+// in shared/keys/tab-navigation.ts, re-exported under its wizard names.
 export { resolveTabNavKey as resolveWizardNavKey, type TabNavKey as WizardNavKey } from '../../../../shared/keys/tab-navigation.js';
 
-// Story 2.37 -----------------------------------------------------------------------------
-// Step 3: global branch strategy + per-service exceptions.
+// ---- Step 3: global branch strategy + per-service exceptions -------------------------------
 
 // The per-service facts Step 3 reads from the candidate pool (core/edt/list.ts).
 export type BranchCandidate = Pick<ServiceBranchDivergence, 'path' | 'service' | 'sharedBranch' | 'protectedBranches'>;
 
 // FR-7, advisory: the same rule the git gate enforces (core/edt/shared-branches.ts) — this
-// service's own manifest-defined set, `protectedBranches ∪ {sharedBranch}` (Story 2.42). The
-// gate stays authoritative.
+// service's own manifest-defined set, `protectedBranches ∪ {sharedBranch}`. The gate stays
+// authoritative.
 export function isProtectedTarget(name: string, protection: BranchProtection): boolean {
   return isProtectedBranch(name.trim(), protection);
 }
@@ -221,8 +215,8 @@ export const ROW_ERRORS = {
   loadError: 'échec du chargement des branches',
   notFound: 'branche introuvable',
   emptyName: 'nom de branche vide',
-  // Story 2.42: names the branch and its manifest. The short row form never repeats the service:
-  // the row and canAdvance's `<service> : ` prefix already name it.
+  // Names the branch and its manifest. The short row form never repeats the service: the row and
+  // canAdvance's `<service> : ` prefix already name it.
   protected: (name: string) => `« ${name} » est protégée par le manifeste du service`,
   exists: 'branche déjà existante',
   noopRename: 'renommage sans effet',
@@ -401,7 +395,7 @@ export function buildStep3Rows(state: CreateDialogState, candidates: readonly Br
   });
 }
 
-// Story 2.35's `memberPlans`, one per row — null while any row is still invalid. Overrides
+// The `memberPlans` createEdt takes, one per row — null while any row is still invalid. Overrides
 // pass through as-is (buildRowView's plan for an override is the override itself).
 export function buildMemberPlans(rows: readonly RowView[]): Record<string, MemberBranchPlan> | null {
   const plans: Record<string, MemberBranchPlan> = {};
@@ -414,7 +408,7 @@ export function buildMemberPlans(rows: readonly RowView[]): Record<string, Membe
   return plans;
 }
 
-// Story 2.37 (review): while Step 3's override box is open or a Panel A / box field is in
+// While Step 3's override box is open or a Panel A / box field is in
 // edit, wizard step navigation is inert — the innermost element owns the keys, and moving
 // away would silently drop edits that were never applied.
 export function isStep3Busy(state: Pick<CreateDialogState, 'step' | 'branches'>): boolean {
@@ -426,7 +420,7 @@ export function isStep3Busy(state: Pick<CreateDialogState, 'step' | 'branches'>)
 // last time) is queued for a load; focus resets to Panel A, nothing in edit, box closed.
 // Overrides and loaded lists are kept.
 //
-// Story 2.31: with a `seed` (edt-create-from's root EDT), each selected root member never
+// With a `seed` (edt-create-from's root EDT), each selected root member never
 // seeded before gets a [Créer (Perso)] override on its root-EDT branch, named after the global
 // name this entry settles on — once per path (`seededPaths`), so a row reset to global stays
 // global. A seeded override still exactly `{create, <root branch>, <previous global name>}` is
@@ -461,7 +455,7 @@ export function enterBranchStep(
   };
 }
 
-// Story 2.31: the seeding/refresh half of enterBranchStep (see its comment).
+// The seeding/refresh half of enterBranchStep (see its comment).
 function applyRootSeed(
   branches: BranchStepState,
   nextGlobalName: string,
@@ -485,7 +479,7 @@ function applyRootSeed(
   return { overrides, seededPaths };
 }
 
-// Story 2.31: an already-seeded row still exactly `{create, <root branch>, <previous global
+// An already-seeded row still exactly `{create, <root branch>, <previous global
 // name>}` is untouched, so it follows the global name to `nextGlobalName` — on Step 3 re-entry
 // (applyRootSeed) and on every Panel A edit of the global name (step-branches.tsx). Returns
 // `overrides` itself when nothing changed.
@@ -516,7 +510,7 @@ export function refreshSeededNames(
   return next ?? overrides;
 }
 
-// Story 2.31: the root members absent from the candidate pool (unregistered or unreachable
+// The root members absent from the candidate pool (unregistered or unreachable
 // since the root was created), by service name — Step 2's dim note. An empty pool lists none,
 // the same rule as pruneToCandidates (which keeps them on an empty pool).
 export function missingSeedMembers(seed: EdtRegistryEntry | null, candidates: readonly Pick<BranchCandidate, 'path'>[]): string[] {
@@ -527,7 +521,7 @@ export function missingSeedMembers(seed: EdtRegistryEntry | null, candidates: re
   return seed.members.filter((member) => !known.has(member.repoPath)).map((member) => member.service);
 }
 
-// Story 2.31: drops selected paths the candidate pool doesn't have (a root member gone since) —
+// Drops selected paths the candidate pool doesn't have (a root member gone since) —
 // only while the pool is non-empty, so a not-yet-loaded pool never wipes the selection.
 export function pruneToCandidates(selectedMembers: readonly string[], candidates: readonly Pick<BranchCandidate, 'path'>[]): readonly string[] {
   if (candidates.length === 0) {
@@ -538,7 +532,7 @@ export function pruneToCandidates(selectedMembers: readonly string[], candidates
   return pruned.length === selectedMembers.length ? selectedMembers : pruned;
 }
 
-// ---- Step 4: Activation (Story 2.38) --------------------------------------------------------
+// ---- Step 4: Activation -----------------------------------------------------------------------
 
 export const ACTIVATION_LABELS = {
   firstEdt: 'Définir cet EDT comme espace actif immédiatement',
@@ -577,8 +571,8 @@ export function isActivationAcknowledge(state: Pick<CreateDialogState, 'step' | 
   return state.step === 4 && (state.activation.outcome !== null || state.failedRows.length > 0);
 }
 
-// The action-log detail of a create, with how its activation ended. Story 2.31: a seeded
-// create names its root EDT (`Created EDT "x" from "root" with …`).
+// The action-log detail of a create, with how its activation ended. A seeded create names its
+// root EDT (`Created EDT "x" from "root" with …`).
 export function describeCreateForLog(
   topic: string,
   memberCount: number,

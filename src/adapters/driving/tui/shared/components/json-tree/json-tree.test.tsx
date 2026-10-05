@@ -149,7 +149,7 @@ describe('JsonEmptyState', () => {
   });
 });
 
-describe('JsonTreeEditor (story 6.8)', () => {
+describe('JsonTreeEditor', () => {
   function editorFor(value: unknown, extra: Record<string, unknown> = {}) {
     const rows = value === undefined ? [] : flattenJson(value, [], NO_RULES);
     return (
@@ -275,7 +275,7 @@ describe('JsonTreeEditor (story 6.8)', () => {
   });
 });
 
-describe('JsonRawEditor (story 6.8)', () => {
+describe('JsonRawEditor', () => {
   it('renders the buffer with its newline/done hints', async () => {
     const output = await renderToString(<JsonRawEditor input={{ value: '{"a":1}', cursor: 7 }} error={null} maxVisibleRows={10} />);
     expect(output).toContain('{"a":1}');

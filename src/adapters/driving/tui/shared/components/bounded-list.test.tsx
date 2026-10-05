@@ -1,8 +1,6 @@
-// tui/shared/components/bounded-list: unit coverage for story 5.5's shared scrollable-window
-// primitive — the pure clamp/window helpers (extracted verbatim from keybinding-help.tsx's own
-// resolveHelpWindow/clampHelpOffset), the component's own indicator-aware windowing on top of
-// them, and the <BoundedList> component's rendered output (renderToString, mirroring
-// keybinding-help.test.tsx's own convention).
+// tui/shared/components/bounded-list: unit coverage for the shared scrollable-window primitive
+// — the pure clamp/window helpers, the indicator-aware windowing on top of them, and the
+// <BoundedList> component's rendered output.
 import { describe, it, expect } from 'vitest';
 import { Text } from 'ink';
 import {
@@ -71,14 +69,11 @@ describe('resolveBoundedVisibility (NO_OVERFLOW / OVERFLOW)', () => {
     }
   });
 
-  // Review fix: at the extreme end of the budget (1 or 2 total rows), the original two-pass
-  // reservation could floor `itemRows` at 1 on *both* passes and end up showing 1 item plus
-  // *both* indicators — 3 rows for a budget of 1. Concretely reachable via
-  // logs-zone.test.tsx's OVERFLOW_LOGS_LISTS test, where the hints panel's own budget computes
-  // to exactly 1. These assert the invariant holds at the tightest budgets, with and without a
-  // cursorIndex to follow (the no-cursorIndex case anchors to the top, so it can only ever need
-  // a "more below" indicator; the cursorIndex cases can land anywhere, including squarely in
-  // the middle where both directions are truncated).
+  // At the extreme end of the budget (1 or 2 total rows) the window must never show content
+  // plus both indicators. Reachable via logs-zone.test.tsx's overflow test, where the hints
+  // panel's budget computes to exactly 1. Asserted with and without a cursorIndex to follow
+  // (without one the window anchors to the top, so only a "more below" indicator is ever
+  // needed; with one it can land in the middle, where both directions are truncated).
   it('never exceeds a maxVisibleRows: 1 budget, with or without a cursorIndex', () => {
     const items = Array.from({ length: 20 }, (_, i) => `item-${i}`);
     for (const cursorIndex of [undefined, 0, 10, 19]) {
@@ -106,9 +101,8 @@ describe('resolveBoundedVisibility (NO_OVERFLOW / OVERFLOW)', () => {
   });
 
   it('keeps cursorIndex inside the visible window even after the second-pass budget shrink', () => {
-    // Regression guard: the original bug recomputed itemRows on the second pass but reused the
-    // *first* pass's rawOffset, which could leave the window not containing cursorIndex at all
-    // (e.g. cursorIndex: 5 against an 8-item list, budget 3, used to render only item-4).
+    // The window must still contain cursorIndex after shrinking for a second indicator (e.g.
+    // cursorIndex: 5 against an 8-item list, budget 3, must not render only item-4).
     const items = Array.from({ length: 8 }, (_, i) => `item-${i}`);
     const result = resolveBoundedVisibility(items, 3, 5);
     expect(result.visible).toContain('item-5');
