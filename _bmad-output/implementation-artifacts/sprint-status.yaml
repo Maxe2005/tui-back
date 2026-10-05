@@ -33,7 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-10-01
+last_updated: 2026-10-05
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -148,7 +148,7 @@ development_status:
   epic-7: in-progress
   # Execution order: 7-1 -> 7-6 (7-1 while no other story branch is open).
   7-1-source-comment-hygiene: done
-  7-2-container-less-managed-services: backlog
+  7-2-container-less-managed-services: done
   7-3-shared-zone-layout-contract-ctrl-w-resize-in-every-zone: backlog
   7-4-interaction-consistency-audit-alignment: backlog
   7-5-dashboard-workspace-summary-last-update-persistence: backlog

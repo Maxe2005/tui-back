@@ -617,3 +617,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs.md`
   summary: Scanner-seeded query/header rows (including required ones) can be deleted with d and there is no "reset to seed" action to bring them back within the session.
   evidence: removeRequestRow ignores row.required and addRequestRow creates rows with required false; likely belongs with 6.3's saved-request editing.
+
+## Deferred from: review of 7-2-container-less-managed-services (2026-10-05)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-2-container-less-managed-services.md`
+  summary: Optional manifest fields use two conventions — `migrationCommand` documents a `null` fallback while `container` (since 7.2) omits the key — and the zod schema rejects explicit `null` for both.
+  evidence: `.agents/skills/manifest-generator/SKILL.md` still instructs `migrationCommand: null` when undetected, but `z.string().trim().min(1).optional()` in `src/adapters/driven/manifest/schema.ts` rejects `null`; normalizing (nullish handling or doc alignment) is pre-existing debt surfaced, not caused, by 7.2. Surfaced by blind-hunter review layer.
