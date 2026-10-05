@@ -357,11 +357,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
   const updateConfig = useStore((state) => state.updateConfig);
   const openUpdateConfig = useStore((state) => state.openUpdateConfig);
-  const setUpdateConfig = useStore((state) => state.setUpdateConfig);  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
+  const setUpdateConfig = useStore((state) => state.setUpdateConfig);
+  const closeUpdateConfig = useStore((state) => state.closeUpdateConfig);
   const confirmUpdateConfig = useStore((state) => state.confirmUpdateConfig);
   const listMergeSourceEdts = useStore((state) => state.listMergeSourceEdts);
   const chooseMergeSourceEdt = useStore((state) => state.chooseMergeSourceEdt);
-  const listBranchesForConfig = useStore((state) => state.listBranches);
   // Story 3.11: the no-arg `:update-service` handoff (zone selection → pinned config,
   // else the filterable quick-pick) plus the pick's own open candidates.
   const updateServiceSelectRequest = useStore((state) => state.updateServiceSelectRequest);
@@ -441,7 +441,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     confirmUpdateConfig,
     listMergeSourceEdts,
     chooseMergeSourceEdt,
-    listBranches: listBranchesForConfig,
+    listBranches: listBranchesAction,
   });
 
   useEffect(() => {
@@ -630,7 +630,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         const step = resolveUpdateConfigKey(
           input,
           key,
-          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing},
+          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing },
           updateConfig,
           configBranches,
         );

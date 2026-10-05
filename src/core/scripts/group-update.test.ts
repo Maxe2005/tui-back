@@ -2081,6 +2081,25 @@ describe('groupUpdate — pre-run configuration (story 3.7)', () => {
     expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'release/1']);
     expect(calls(git.fetch)).toContainEqual(['/repo/b', 'development']);
   });
+
+  it('an all-repos per-service toggle override beats the run-wide toggle', async () => {
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const params: GroupUpdateParams = {
+      ...makeParams({ migration, container }),
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      runMigrations: true,
+      selection: [
+        { service: 'a', repoPath: '/repo/a', runMigrations: false },
+        { service: 'b', repoPath: '/repo/b' },
+      ],
+    };
+
+    await groupUpdate(params);
+
+    expect(calls(migration.run).map(([path]) => path)).toEqual(['/repo/b']);
+  });
 });
 
 describe('groupUpdate — clean-restart recipe (story 3.8)', () => {

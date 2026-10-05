@@ -66,6 +66,12 @@ export function cycleToggle(current: ToggleOverride, declared: boolean): ToggleO
   return options[(Math.max(options.indexOf(current), 0) + 1) % options.length] ?? 'follow';
 }
 
+// The list is only authoritative once loaded: while it loads or when it failed, a typed branch
+// is accepted as is (the run itself rejects an unknown branch before touching anything).
+function validateBranch(value: string, context: ServiceBoxContext): string | null {
+  return context.branchesStatus === 'ready' ? validateSuggestValue(value, context.branches, 'Branche') : null;
+}
+
 export type ServiceBoxKey = TextEditKey & { leftArrow?: boolean; rightArrow?: boolean };
 
 export type ServiceBoxStep =
@@ -94,7 +100,7 @@ export function reduceServiceBoxKey(box: ServiceBoxState, context: ServiceBoxCon
     if (step.type === 'update') {
       return update({ ...box, branch: step.state, error: null });
     }
-    const message = validateSuggestValue(step.value, context.branches, 'une branche');
+    const message = validateBranch(step.value, context);
     if (message !== null) {
       return update({ ...box, error: message });
     }
@@ -112,7 +118,7 @@ export function reduceServiceBoxKey(box: ServiceBoxState, context: ServiceBoxCon
       return update({ ...box, editing: true, error: null });
     }
     // Typing on the line starts the edit, like the base line of edt-create's Step 3.
-    if (input.length === 1 && input.trim() !== '' && !key.ctrl && !key.meta && !key.tab) {
+    if (input.length >= 1 && input.trim() !== '' && !key.ctrl && !key.meta && !key.tab) {
       return update({ ...box, editing: true, branch: { ...createSuggestFieldState(box.branch.value + input) }, error: null });
     }
     return update(box);
@@ -147,7 +153,7 @@ export function applyServiceBox(
     return { ok: false, error: 'Service introuvable.' };
   }
   const value = box.branch.value.trim();
-  const invalid = validateSuggestValue(value, context.branches, 'une branche');
+  const invalid = validateBranch(value, context);
   if (invalid !== null) {
     return { ok: false, error: invalid };
   }

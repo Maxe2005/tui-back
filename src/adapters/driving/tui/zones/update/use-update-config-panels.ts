@@ -2,7 +2,7 @@
 // state (focus, cursors, the EDT field, the service box), loads what the fields suggest (EDT
 // topics once on open, a repo's branches once per box session) and turns each key step from
 // the pure reducers into draft/store changes. The zone's `useInput` only forwards keys here.
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Result } from '../../../../../core/result.js';
 import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/suggest-field.logic.js';
 import { applyMergeStrategy, type UpdateConfigDraft } from './update-config-dialog.logic.js';
@@ -57,8 +57,20 @@ const INITIAL_VIEW: PanelsViewState = { focus: 'panel', panelCursor: 0, tableCur
 export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): UpdateConfigPanelsController {
   const { draft } = input;
   const panelsOpen = draft !== null && draft.layout !== 'simple';
-  const [view, setView] = useState<PanelsViewState>(INITIAL_VIEW);
-  const [box, setBox] = useState<ServiceBoxState | null>(null);
+  const [view, setViewState] = useState<PanelsViewState>(INITIAL_VIEW);
+  const [box, setBoxState] = useState<ServiceBoxState | null>(null);
+  // Keys can arrive faster than React re-renders (key repeat, paste): the handler reads the
+  // latest view and box from refs updated synchronously, so each key builds on the previous.
+  const viewRef = useRef(view);
+  const boxRef = useRef(box);
+  const setView = (next: PanelsViewState) => {
+    viewRef.current = next;
+    setViewState(next);
+  };
+  const setBox = (next: ServiceBoxState | null) => {
+    boxRef.current = next;
+    setBoxState(next);
+  };
   const [edts, setEdts] = useState<{ ulid: string; topic: string }[]>([]);
   const [edtStatus, setEdtStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [branches, setBranches] = useState<string[]>([]);
@@ -79,12 +91,19 @@ export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): Update
       return;
     }
     let cancelled = false;
-    void input.listMergeSourceEdts().then((listed) => {
-      if (!cancelled) {
-        setEdts(listed);
-        setEdtStatus('ready');
-      }
-    });
+    input
+      .listMergeSourceEdts()
+      .then((listed) => {
+        if (!cancelled) {
+          setEdts(listed);
+          setEdtStatus('ready');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEdtStatus('error');
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -97,13 +116,22 @@ export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): Update
       return;
     }
     let cancelled = false;
+    // Another service's list must never be offered (or validated against) while this one loads.
+    setBranches([]);
     setBranchesStatus('loading');
-    void input.listBranches(boxRepoPath).then((result) => {
-      if (!cancelled) {
-        setBranches(result.ok ? result.data : []);
-        setBranchesStatus(result.ok ? 'ready' : 'error');
-      }
-    });
+    input
+      .listBranches(boxRepoPath)
+      .then((result) => {
+        if (!cancelled) {
+          setBranches(result.ok ? result.data : []);
+          setBranchesStatus(result.ok ? 'ready' : 'error');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBranchesStatus('error');
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -122,114 +150,122 @@ export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): Update
           recipeDeclared: boxRow.recipeDeclared,
         }
       : null;
-  const budget = computeConfigBudget(
-    input.windowRows,
-    draft ?? ({ layout: 'all-panels', strategy: { kind: 'shared' } } as UpdateConfigDraft),
-    view.edtField !== null,
-    input.dropdownMax,
-  );
+  const budget: ConfigBudget =
+    draft !== null
+      ? computeConfigBudget(input.windowRows, draft, view.edtField !== null, input.dropdownMax, box !== null)
+      : { tooSmall: false, tableRows: 0, dropdownLines: 0, boxDropdownLines: 0 };
 
-  const handleKey = useCallback(
-    (key_input: string, key: PanelsKey & { escape?: boolean }) => {
-      if (draft === null) {
-        return;
+  const handleKey = (key_input: string, key: PanelsKey & { escape?: boolean }) => {
+    if (draft === null) {
+      return;
+    }
+    // While only the "terminal too small" message is visible, nothing but closing is allowed:
+    // no key may act on a configuration the developer cannot see.
+    if (budget.tooSmall) {
+      if (key.escape === true) {
+        input.closeUpdateConfig();
       }
-      if (box !== null && boxContext !== null) {
-        const step = reduceServiceBoxKey(box, boxContext, key_input, key);
-        if (step.type === 'update') {
-          setBox(step.box);
-        } else if (step.type === 'close') {
-          setBox(null);
-        } else if (step.type === 'revert') {
-          input.setUpdateConfig(resetRowToGlobal(draft, box.index));
+      return;
+    }
+    const view = viewRef.current;
+    const box = boxRef.current;
+    if (box !== null && boxContext !== null) {
+      const step = reduceServiceBoxKey(box, boxContext, key_input, key);
+      if (step.type === 'update') {
+        setBox(step.box);
+      } else if (step.type === 'close') {
+        setBox(null);
+      } else if (step.type === 'revert') {
+        input.setUpdateConfig(resetRowToGlobal(draft, box.index));
+        setBox(null);
+      } else {
+        const applied = applyServiceBox(draft, box, boxContext);
+        if (applied.ok) {
+          input.setUpdateConfig(applied.draft);
           setBox(null);
         } else {
-          const applied = applyServiceBox(draft, box, boxContext);
-          if (applied.ok) {
-            input.setUpdateConfig(applied.draft);
-            setBox(null);
-          } else {
-            setBox({ ...box, error: applied.error });
-          }
+          setBox({ ...box, error: applied.error });
         }
-        return;
       }
-      const cursorView: PanelsViewState = {
-        ...view,
-        panelCursor: clampPanelCursor(draft, view.panelCursor),
-        tableCursor: clampTableCursor(draft, view.tableCursor),
-      };
-      const step = resolvePanelsKey(key_input, key, cursorView, draft, edtTopics);
-      switch (step.type) {
-        case 'move-panel':
-          setView({ ...cursorView, panelCursor: step.cursor });
-          break;
-        case 'move-table':
-          setView({ ...cursorView, tableCursor: step.cursor });
-          break;
-        case 'switch-focus':
-          setView({ ...cursorView, focus: cursorView.focus === 'panel' ? 'table' : 'panel' });
-          break;
-        case 'toggle-global':
-          input.setUpdateConfig(toggleGlobalLine(draft, step.line));
-          break;
-        case 'toggle-source': {
-          const next = toggleMergeSource(draft);
-          input.setUpdateConfig(next);
-          if (next.strategy.kind === 'shared') {
-            setView({ ...cursorView, panelCursor: clampPanelCursor(next, cursorView.panelCursor) });
-          } else {
-            setView({ ...cursorView, panelCursor: globalLines(next).indexOf('edt'), edtField: createSuggestFieldState('') });
-          }
-          break;
+      return;
+    }
+    const cursorView: PanelsViewState = {
+      ...view,
+      panelCursor: clampPanelCursor(draft, view.panelCursor),
+      tableCursor: clampTableCursor(draft, view.tableCursor),
+    };
+    const step = resolvePanelsKey(key_input, key, cursorView, draft, edtTopics);
+    switch (step.type) {
+      case 'move-panel':
+        setView({ ...cursorView, panelCursor: step.cursor });
+        break;
+      case 'move-table':
+        setView({ ...cursorView, tableCursor: step.cursor });
+        break;
+      case 'switch-focus':
+        setView({ ...cursorView, focus: cursorView.focus === 'panel' ? 'table' : 'panel' });
+        break;
+      case 'toggle-global':
+        input.setUpdateConfig(toggleGlobalLine(draft, step.line));
+        break;
+      case 'toggle-source': {
+        const next = toggleMergeSource(draft);
+        input.setUpdateConfig(next);
+        if (next.strategy.kind === 'shared') {
+          setView({ ...cursorView, panelCursor: clampPanelCursor(next, cursorView.panelCursor) });
+        } else {
+          setView({ ...cursorView, panelCursor: globalLines(next).indexOf('edt'), edtField: createSuggestFieldState('') });
         }
-        case 'edit-edt': {
-          const current = draft.strategy.kind === 'edt' ? draft.strategy.topic : '';
-          setView({ ...cursorView, edtField: createSuggestFieldState(step.initial !== '' ? step.initial : current) });
-          break;
-        }
-        case 'edt-edit':
-          setView({ ...cursorView, edtField: step.field });
-          break;
-        case 'edt-cancel':
-          setView({ ...cursorView, edtField: null });
-          break;
-        case 'edt-commit': {
-          const choice = checkEdtChoice(step.value, edts);
-          if (choice.type === 'invalid') {
-            input.setUpdateConfig({ ...draft, error: choice.message });
-            break;
-          }
-          setView({ ...cursorView, edtField: null });
-          if (choice.type === 'none') {
-            input.setUpdateConfig(applyMergeStrategy(draft, { kind: 'edt-pending' }));
-          } else {
-            void input.chooseMergeSourceEdt(choice.ulid);
-          }
-          break;
-        }
-        case 'toggle-row':
-          input.setUpdateConfig(toggleRowSelection(draft, cursorView.tableCursor));
-          break;
-        case 'open-box':
-          setBox(openServiceBox(draft, cursorView.tableCursor));
-          break;
-        case 'reset-row':
-          input.setUpdateConfig(resetRowToGlobal(draft, cursorView.tableCursor));
-          break;
-        case 'confirm':
-          void input.confirmUpdateConfig();
-          break;
-        case 'cancel':
-          input.closeUpdateConfig();
-          break;
-        default:
-          break;
+        break;
       }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [draft, view, box, boxContext, edts],
-  );
+      case 'edit-edt': {
+        const current = draft.strategy.kind === 'edt' ? draft.strategy.topic : '';
+        setView({ ...cursorView, edtField: createSuggestFieldState(step.initial !== '' ? step.initial : current) });
+        break;
+      }
+      case 'edt-edit':
+        setView({ ...cursorView, edtField: step.field });
+        break;
+      case 'edt-cancel':
+        setView({ ...cursorView, edtField: null });
+        break;
+      case 'edt-commit': {
+        // The topics are not known yet: a valid topic would be refused as unknown.
+        if (edtStatus === 'loading') {
+          break;
+        }
+        const choice = checkEdtChoice(step.value, edts);
+        if (choice.type === 'invalid') {
+          input.setUpdateConfig({ ...draft, error: choice.message });
+          break;
+        }
+        setView({ ...cursorView, edtField: null });
+        if (choice.type === 'none') {
+          input.setUpdateConfig(applyMergeStrategy(draft, { kind: 'edt-pending' }));
+        } else {
+          void input.chooseMergeSourceEdt(choice.ulid);
+        }
+        break;
+      }
+      case 'toggle-row':
+        input.setUpdateConfig(toggleRowSelection(draft, cursorView.tableCursor));
+        break;
+      case 'open-box':
+        setBox(openServiceBox(draft, cursorView.tableCursor));
+        break;
+      case 'reset-row':
+        input.setUpdateConfig(resetRowToGlobal(draft, cursorView.tableCursor));
+        break;
+      case 'confirm':
+        void input.confirmUpdateConfig();
+        break;
+      case 'cancel':
+        input.closeUpdateConfig();
+        break;
+      default:
+        break;
+    }
+  };
 
   return {
     view,

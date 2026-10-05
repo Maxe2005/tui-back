@@ -27,8 +27,9 @@ export const PANELS_TITLE_EDT = 'CONFIGURER LA MISE À JOUR';
 export const PANELS_TITLE_ALL = 'CONFIGURER LA MISE À JOUR · TOUS LES REPOS';
 export const PANELS_GLOBAL_TITLE = 'PARAMÈTRES GLOBAUX';
 export const PANELS_TABLE_TITLE = 'RÉSUMÉ ET EXCEPTIONS PAR SERVICE';
-export const PANELS_HINTS_PANEL = '[Tab] Table • [↑/↓] Ligne • [Espace/Entrée] Changer • [y] Lancer • [Esc] Annuler';
-export const PANELS_HINTS_TABLE = '[Tab] Paramètres • [↑/↓] Ligne • [Espace] Cocher • [Entrée] Configurer • [Ctrl+R] Global • [y] Lancer';
+// Two hint lines of at most ~70 characters each, so an 80-column terminal never truncates a key.
+export const PANELS_HINTS_PANEL = ['[Tab] Table • [↑/↓] Ligne • [Espace/Entrée] Changer', '[y] Lancer • [Esc] Annuler'] as const;
+export const PANELS_HINTS_TABLE = ['[Tab] Paramètres • [↑/↓] Ligne • [Espace] Cocher • [Entrée] Configurer', '[Ctrl+R] Revenir au global • [y] Lancer • [Esc] Annuler'] as const;
 export const PANELS_TOO_SMALL = `Terminal trop petit : agrandissez-le (au moins ${CONFIG_MIN_ROWS} lignes).`;
 export const EDT_PLACEHOLDER = '<aucun>';
 
@@ -212,9 +213,11 @@ export function UpdateConfigPanels({
       <Text color={colors.error} wrap="truncate-end">
         {draft.error !== null ? `✖ ${draft.error}` : ' '}
       </Text>
-      <Text color={colors['text-dim']} wrap="truncate-end">
-        {view.focus === 'panel' ? PANELS_HINTS_PANEL : PANELS_HINTS_TABLE}
-      </Text>
+      {(view.focus === 'panel' ? PANELS_HINTS_PANEL : PANELS_HINTS_TABLE).map((line) => (
+        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
+          {line}
+        </Text>
+      ))}
     </ModalDialog>
   );
 }

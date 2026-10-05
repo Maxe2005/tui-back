@@ -88,7 +88,6 @@ export function UpdateConfigDialog({
         return (
           <Box key={`${row.repoPath}:${index}`} flexDirection="column">
             <ConfigRow focused={focused || editingThis} checked={row.selected} label={row.service} meta={`${row.repoPath} ← ${row.sourceBranch}`} />
-
             {editingThis && view.editing !== null ? (
               <Box paddingLeft={4}>
                 <BranchAutocompleteInput

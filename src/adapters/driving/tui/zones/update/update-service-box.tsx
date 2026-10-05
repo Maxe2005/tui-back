@@ -1,14 +1,13 @@
 // tui/zones/update: render-only view of the "Configurer <service>" box (state and keys live in
-// update-service-box.logic.ts). Height: border 2 + title 1 + branch field 1 + its list
-// (`dropdownLines`) + 2 toggle lines + apply 1 + error 1 + footer 1 = 9 + dropdownLines.
+// update-service-box.logic.ts). Height: SERVICE_BOX_ROWS (update-config-panels.logic.ts)
+// + the branch field's list (`dropdownLines`); every line is truncated, none can wrap.
 import { Box, Text } from 'ink';
 import { SuggestField } from '../../shared/components/suggest-field.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
 
-export const SERVICE_BOX_BOX_ROWS = 9;
-export const SERVICE_BOX_FOOTER = '[↑/↓] Ligne • [Entrée] Éditer / Valider • [Espace] Changer • [Ctrl+R] Revenir au global • [Esc] Fermer';
+export const SERVICE_BOX_FOOTER = ['[↑/↓] Ligne • [Entrée] Éditer / Valider • [Espace] Changer', '[Ctrl+R] Revenir au global • [Esc] Fermer'] as const;
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 
 const OPTION_LABEL: Record<ToggleOverride, (global: boolean) => string> = {
@@ -113,9 +112,11 @@ export function UpdateServiceBox({
           ✖ {box.error}
         </Text>
       ) : null}
-      <Text color={colors['text-dim']} wrap="truncate-end">
-        {SERVICE_BOX_FOOTER}
-      </Text>
+      {SERVICE_BOX_FOOTER.map((line) => (
+        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
+          {line}
+        </Text>
+      ))}
     </Box>
   );
 }

@@ -51,6 +51,11 @@ describe('stepSuggestField', () => {
     expect(stepSuggestField(state, SUGGESTIONS, '', { return: true })).toEqual({ type: 'commit', value: 'zzz' });
   });
 
+  it('an arrow on an empty list does not arm the highlight', () => {
+    const step = stepSuggestField(createSuggestFieldState(), [], '', { downArrow: true });
+    expect(step).toMatchObject({ type: 'update', state: { highlighted: false } });
+  });
+
   it('Escape cancels', () => {
     expect(stepSuggestField(createSuggestFieldState('x'), SUGGESTIONS, '', { escape: true })).toEqual({ type: 'cancel' });
   });
@@ -79,6 +84,15 @@ describe('resolveSuggestWindow', () => {
   it('shows everything when it fits and nothing for a zero budget', () => {
     expect(resolveSuggestWindow(['a', 'b'], 0, true, 5)).toMatchObject({ items: ['a', 'b'], hiddenBelow: 0 });
     expect(resolveSuggestWindow(['a'], 0, true, 0).items).toEqual([]);
+  });
+
+  it('stays within a budget of one or two lines, indicators dropped', () => {
+    for (const budget of [1, 2]) {
+      const window = resolveSuggestWindow(many, 7, true, budget);
+      expect(window.items.length).toBeLessThanOrEqual(budget);
+      expect(window.hiddenAbove + window.hiddenBelow).toBe(0);
+      expect(window.items[window.highlight]).toBe('b7');
+    }
   });
 
   it('hides the highlight when it is not meaningful', () => {

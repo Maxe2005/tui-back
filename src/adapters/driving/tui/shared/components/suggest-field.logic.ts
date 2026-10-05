@@ -48,7 +48,7 @@ export function stepSuggestField(
     }
   }
   // On an empty field no row shows a highlight yet, so the first arrow reveals row 0.
-  if (empty && !state.highlighted && (key.upArrow === true || key.downArrow === true)) {
+  if (empty && !state.highlighted && suggestions.length > 0 && (key.upArrow === true || key.downArrow === true)) {
     return { type: 'update', state: { ...state, pickCursor: 0, highlighted: true } };
   }
   const result = handleBranchAutocompleteKey(state, suggestions, input, key);
@@ -59,7 +59,7 @@ export function stepSuggestField(
   const textChanged = result.state.value !== state.value;
   return {
     type: 'update',
-    state: { ...result.state, highlighted: textChanged ? false : arrow || state.highlighted },
+    state: { ...result.state, highlighted: textChanged ? false : (arrow && suggestions.length > 0) || state.highlighted },
   };
 }
 
@@ -69,7 +69,7 @@ export function validateSuggestValue(value: string, suggestions: readonly string
   if (trimmed === '' || suggestions.includes(trimmed)) {
     return null;
   }
-  return `"${trimmed}" n'est pas ${noun} existant(e)`;
+  return `${noun} introuvable : "${trimmed}"`;
 }
 
 export interface SuggestWindow {
@@ -96,7 +96,17 @@ export function resolveSuggestWindow(
   if (matches.length <= budget) {
     return { items: matches, highlight: showHighlight ? cursor : -1, hiddenAbove: 0, hiddenBelow: 0 };
   }
-  const size = Math.max(1, budget - 2);
+  // Too tight for the "N de plus" indicators: a plain window, no indicators.
+  if (budget < 3) {
+    const start = Math.min(Math.max(cursor, 0), matches.length - budget);
+    return {
+      items: matches.slice(start, start + budget),
+      highlight: showHighlight ? cursor - start : -1,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    };
+  }
+  const size = budget - 2;
   const start = Math.min(Math.max(cursor - Math.floor(size / 2), 0), matches.length - size);
   const items = matches.slice(start, start + size);
   return {

@@ -758,6 +758,33 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 
+  it('From EDT with no EDT chosen blocks the run: Space on the source line, Esc, then y is refused', async () => {
+    const store = storeWithTwoMembers();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'g');
+      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
+      await press(instance, stdin, ' ');
+      await waitForOutput(instance, stdout, '✖ aucun EDT choisi');
+      await press(instance, stdin, '\u001b');
+      // Ink holds a lone Esc briefly to tell it from an escape sequence; give it time so the
+      // Tab below is not read as Meta+Tab.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await press(instance, stdin, '\t');
+      await waitForOutput(instance, stdout, '[Ctrl+R] Revenir au global');
+      await press(instance, stdin, 'y');
+      await waitForOutput(instance, stdout, 'Source de merge non résolue');
+
+      expect(store.getState().updateConfig?.strategy.kind).toBe('edt-pending');
+      expect(store.getState().updateStatus).toBe('idle');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('p on the highlighted row opens a one-row draft for that service', async () => {
     const store = storeWithTwoMembers();
 

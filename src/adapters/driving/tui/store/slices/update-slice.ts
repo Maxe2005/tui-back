@@ -294,7 +294,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     ): Promise<{ sourceBranch: string; migrationDeclared: boolean; recipeDeclared: boolean }> {
       const loaded = deps ? await deps.manifest.load(repoPath) : null;
       if (loaded === null || !loaded.ok) {
-        return { sourceBranch: 'development', migrationDeclared: true, recipeDeclared: true };
+        // Unreadable manifest: claim nothing (the run reports the load failure on its own row).
+      return { sourceBranch: 'development', migrationDeclared: false, recipeDeclared: false };
       }
       return {
         sourceBranch: loaded.data.sharedBranch,
@@ -838,26 +839,33 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return [];
         }
         const [active, listed] = await Promise.all([deps.state.readActiveEdt(), deps.edtRegistry.list()]);
-        if (!listed.ok) {
+        // Without a readable active EDT the one being updated could be offered as its own
+        // source, so nothing is offered.
+        if (!listed.ok || !active.ok) {
           return [];
         }
-        const activeUlid = active.ok ? active.data : null;
-        return listed.data.filter((entry) => entry.ulid !== activeUlid).map((entry) => ({ ulid: entry.ulid, topic: entry.topic }));
+        return listed.data.filter((entry) => entry.ulid !== active.data).map((entry) => ({ ulid: entry.ulid, topic: entry.topic }));
       },
       chooseMergeSourceEdt: async (ulid: string) => {
         const draft = get().updateConfig;
         if (!deps || draft === null) {
           return;
         }
-        const listed = await deps.edtRegistry.list();
+        const [listed, active] = await Promise.all([deps.edtRegistry.list(), deps.state.readActiveEdt()]);
         const source = listed.ok ? listed.data.find((entry) => entry.ulid === ulid) : undefined;
         if (source === undefined) {
-          set({ updateConfig: { ...draft, error: 'The chosen EDT is no longer registered.' } });
+          set({ updateConfig: { ...draft, error: "L'EDT choisi n'existe plus." } });
+          return;
+        }
+        if (!active.ok || source.ulid === active.data) {
+          set({ updateConfig: { ...draft, error: "Un EDT ne peut pas être sa propre source de merge." } });
           return;
         }
         const resolved = await loadMergeSourcesFromEdt(deps.git, draft.rows, source);
         const current = get().updateConfig;
-        if (!resolved.ok || current === null) {
+        // The resolution is dropped when the screen closed, changed layout or went back to
+        // shared branches while git was being read — the developer's newer choice wins.
+        if (!resolved.ok || current === null || current.layout !== draft.layout || current.strategy.kind === 'shared') {
           return;
         }
         set({ updateConfig: applyMergeStrategy(current, { kind: 'edt', ulid, topic: source.topic, resolved: resolved.data }) });

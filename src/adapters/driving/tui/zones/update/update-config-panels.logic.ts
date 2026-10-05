@@ -232,7 +232,7 @@ export function checkEdtChoice(
   const message = validateSuggestValue(
     value,
     edts.map((edt) => edt.topic),
-    'un EDT',
+    'EDT',
   );
   if (message !== null) {
     return { type: 'invalid', message };
@@ -245,7 +245,8 @@ export function checkEdtChoice(
 // fixed line count and the table takes what is left, shrinking before anything can overflow.
 export const CONFIG_CHROME_ROWS = 10; // modal border + padding + title (6) plus the zone title and app chrome (4)
 export const CONFIG_MIN_ROWS = 22;
-const SERVICE_BOX_BOX_ROWS = 9;
+// Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1, footer 2.
+export const SERVICE_BOX_ROWS = 10;
 const FIXED_BODY_ROWS = 1 + 1 + 1 + 1 + 2; // panel A title, panel B title, table header, error line, hints
 
 export interface ConfigBudget {
@@ -262,11 +263,15 @@ export function computeConfigBudget(
   draft: UpdateConfigDraft,
   edtEditing: boolean,
   dropdownMax: number,
+  boxOpen = false,
 ): ConfigBudget {
   const available = windowRows - CONFIG_CHROME_ROWS - FIXED_BODY_ROWS - globalLines(draft).length;
+  // The EDT list may take lines from the table but always leaves it at least three rows
+  // (a header-less minimum that keeps the cursor row and one neighbor visible).
   const dropdownLines = edtEditing ? Math.max(0, Math.min(dropdownMax, available - 3)) : 0;
   const tableRows = available - dropdownLines;
   // The box replaces the panels: its fixed height is SERVICE_BOX_BOX_ROWS (9), the rest is list.
-  const boxDropdownLines = Math.max(0, Math.min(dropdownMax, windowRows - CONFIG_CHROME_ROWS - SERVICE_BOX_BOX_ROWS));
-  return { tooSmall: windowRows < CONFIG_MIN_ROWS || tableRows < 3, tableRows: Math.max(tableRows, 0), dropdownLines, boxDropdownLines };
+  const boxDropdownLines = Math.max(0, Math.min(dropdownMax, windowRows - CONFIG_CHROME_ROWS - SERVICE_BOX_ROWS));
+  // The service box replaces the table, so a short table budget alone must not hide it.
+  return { tooSmall: windowRows < CONFIG_MIN_ROWS || (!boxOpen && tableRows < 3), tableRows: Math.max(tableRows, 0), dropdownLines, boxDropdownLines };
 }

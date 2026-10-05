@@ -70,7 +70,7 @@ export function SuggestField({
       {editing && status === 'error' ? <Text color={colors.error}>Échec du chargement.</Text> : null}
       {window !== null && window.hiddenAbove > 0 ? <Text color={colors['text-dim']}>  ↑ {window.hiddenAbove} de plus</Text> : null}
       {window?.items.map((item, index) => (
-        <Text key={item} wrap="truncate-end" color={index === window.highlight ? colors.accent : colors.text}>
+        <Text key={`${index}:${item}`} wrap="truncate-end" color={index === window.highlight ? colors.accent : colors.text}>
           {index === window.highlight ? '  › ' : '    '}
           {item}
         </Text>

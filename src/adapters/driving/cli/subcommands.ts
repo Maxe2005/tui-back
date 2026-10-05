@@ -213,7 +213,7 @@ export function buildSubcommands(deps: {
           });
         }
         if (args.length === 2 && args[0] === '--from-edt' && args[1].trim() !== '') {
-          const selection = await selectionFromEdt({ edtRegistry: deps.edtRegistry, state: deps.state, git: deps.git }, args[1]);
+          const selection = await selectionFromEdt({ edtRegistry: deps.edtRegistry, state: deps.state, git: deps.git }, args[1].trim());
           if (!selection.ok) {
             return selection;
           }
