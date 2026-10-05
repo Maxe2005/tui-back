@@ -151,6 +151,11 @@ describe('resolvePanelsKey', () => {
     expect(resolvePanelsKey(' ', {}, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'toggle-global', line: 'migrations' });
   });
 
+  it('a `y` typed on the EDT line starts the filter instead of starting the run', () => {
+    const fromEdt = toggleMergeSource(edtDraft());
+    expect(resolvePanelsKey('y', {}, { ...VIEW, panelCursor: 1 }, fromEdt, [])).toEqual({ type: 'edit-edt', initial: 'y' });
+  });
+
   it('routes table keys: space toggles, Enter opens the box, Ctrl+R resets only in the table', () => {
     const table = { ...VIEW, focus: 'table' as const };
     expect(resolvePanelsKey(' ', {}, table, edtDraft(), [])).toEqual({ type: 'toggle-row' });

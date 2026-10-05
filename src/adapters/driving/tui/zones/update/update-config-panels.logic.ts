@@ -180,7 +180,9 @@ export function resolvePanelsKey(
   if (key.tab === true) {
     return { type: 'switch-focus' };
   }
-  if (input === 'y' || input === 'Y') {
+  // On the EDT line a typed `y` starts the filter like any other letter.
+  const onEdtLine = view.focus === 'panel' && globalLines(draft)[view.panelCursor] === 'edt';
+  if ((input === 'y' || input === 'Y') && !onEdtLine) {
     return { type: 'confirm' };
   }
   const direction = resolveSelectionDirection({

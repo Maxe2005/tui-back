@@ -12,64 +12,71 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 
 ## Intent
 
-**Problem:** An EDT update merges each service from its manifest `sharedBranch`; bringing a sibling EDT's work in means retyping every source branch by hand, row by row.
+**Problem:** An EDT update merges each service from its manifest `sharedBranch`; bringing a sibling EDT's work in means retyping every branch. The first cut bolted a strategy panel onto the 3.7 checklist; the screen must instead mirror edt-create's Step 3 (global parameters above a per-service table with per-row exceptions).
 
-**Approach:** Add a global merge-source strategy to the EDT-scoped update configuration (`Shared branches` | `From EDT`), resolved by one pure core helper shared by the TUI panel and a new CLI flag `update --from-edt <topic>`. Unresolved rows block the run until fixed by hand (`[Manual]`) or deselected.
+**Approach:** Rebuild the EDT-scoped and all-repos update configuration as two panels — `PARAMÈTRES GLOBAUX` (EDT scope: merge source `Shared branches` | `From EDT`, migrations, clean restart; all-repos: migrations and clean restart only) and `RÉSUMÉ ET EXCEPTIONS PAR SERVICE` (table, `[x]` first column, `Enter` opens `Configurer <service>`). Each service can override branch, migrations and clean restart. A shared `SuggestField` (filterable list + placeholder) serves the EDT pick and the per-service branch field. The single-service config stays the simple 3.7 list.
 
 ## Boundaries & Constraints
 
-**Always:** Resolution lives in core (`resolveMergeSourcesFromEdt`), no adapter imports (AD-1); `Result<T>` with kebab-case codes (AD-3). Rows keep the existing `GroupUpdateSelectionItem.sourceBranch` hand-off — `groupUpdate` itself is unchanged. Strategy panel only for EDT scope; all-repos and single-service configs stay exactly as in 3.7. Panel/table navigation (`Tab`, `Ctrl+R` reset) mirrors the edt-create wizard Step 3. Comments follow AD-17: no story/AC/review references, only non-obvious reasons; test names carry no story suffix. Never lose a `[Manual]` row on strategy change.
+**Always:**
+- Navigation and look identical to Step 3: `PanelTitle` `▶`, `BranchPlanTable` (`› `, ` │ `, dim header, `BoundedList` + `↑/↓ N de plus`), `Tab` switches panels, `Esc` closes the innermost element first, `Ctrl+R` returns a row to `global`, `Entrée` opens the box. UI strings in French (Step 3 convention).
+- Rows show the **effective** value: migrations `✔ migrate` | `off` | `— aucune commande`; restart `✔ clean` | `basic` | `basic (no recipe)`. Never `migrate` without `migrationCommand`, never `clean` without `restartCommands`.
+- Per-service overrides are `suivre global` | `non` | `oui`; `oui` is offered only when the manifest declares the action. Core: `GroupUpdateSelectionItem` gains `runMigrations?`/`cleanRestart?` overriding the run-wide values.
+- Mode column: `global` | `perso`. An empty branch commit follows the global source: row returns to `global` iff the global source is Shared; under From EDT it becomes `perso` on `sharedBranch`.
+- `SuggestField`: empty value shows a dim placeholder (`<shared-branch>`, `<aucun>`) and the default applies; the placeholder disappears once text is typed. `↑/↓` only move the list highlight — text and placeholder are untouched; `Entrée` inserts the highlighted item into the text, the next `Entrée` commits. Free text must exactly match an existing branch / EDT topic or is refused with a message.
+- `EDT source` line (a `SuggestField` over EDT topics, active EDT excluded) is visible only under From EDT. From EDT with no EDT chosen: every row blocks with `✖ aucun EDT choisi`.
+- Starting (`y`) is rejected naming unresolved services only for **selected** rows. Two panels appear for EDT and all-repos scopes; the merge-source line and the `EDT source` line exist only in EDT scope (all-repos: always shared branches). Single-service is unchanged.
+- **Height budget:** every dialog, panel and sub-component declares a max line count; table `maxVisibleRows` = terminal rows − fixed chrome; dropdown cap = `min(branchDropdownMaxRows, room left)`; cells truncated, help/error lines `truncate-end` on one line; below a minimum height show a "agrandir le terminal" message instead of overflowing.
+- AD-17 comments (no story/AC references); resolver and CLI `--from-edt` behavior from the first cut stay.
 
-**Ask First:** If a branch present only on `origin` (no local ref) cannot be merged by the existing `groupUpdate` source check without a core change beyond the resolver — HALT.
+**Ask First:** If extending `BranchPlanTable` (leading checkbox column) changes the wizard's or switch dialog's rendered output — HALT.
 
-**Never:** No change to merge/conflict/migration/restart logic; no new git adapter methods; no fetch during resolution; no `--from-edt` combined with `--all` (invalid-argument).
+**Never:** Do not modify `create-wizard/*` behavior (no `SuggestField` adoption there); no per-service CLI flags; no change to merge/conflict/migration/restart logic beyond honoring per-service toggles.
 
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| Member of source EDT | repoPath in chosen EDT, branch exists | row source = member branch, origin `edt`, shown `← <topic>` | N/A |
-| Not a member | repoPath absent from chosen EDT | empty source, red `✖ not in <topic>` | blocks run if selected |
-| Branch gone | member branch missing locally and on `origin` | `✖ branch not found`, empty source | blocks run if selected |
-| Manual row | `Enter` on unresolved row | `BranchAutocompleteInput` pre-filled with `sharedBranch`; commit → `[Manual]`, error cleared | blank commit rejected |
-| Strategy change | any change with `[Manual]` rows | manual rows kept; `Ctrl+R` resets one to the strategy | N/A |
-| Back to Shared | strategy → Shared | non-manual rows → `sharedBranch`, from-EDT errors cleared | N/A |
-| Start with errors | selected row has error, `y` | rejected, message names unresolved services | deselected rows never block |
-| CLI | `update --from-edt <topic>` | same resolution, run proceeds | unresolved members → `update-source-unresolved` listing them, no git write; unknown topic or active EDT's own → `invalid-argument` |
+| Member of source EDT | From EDT, branch exists locally | source = member branch, `← <topic>`, `global` | N/A |
+| Not a member / branch gone | From EDT | red `✖ not in <topic>` / `✖ branch not found` | blocks if selected |
+| No EDT chosen | From EDT, field empty | all rows `✖ aucun EDT choisi` | blocks if selected |
+| Undeclared action | global on, no `migrationCommand` / `restartCommands` | `— aucune commande` / `basic (no recipe)`; run skips migrate / plain restarts | N/A |
+| Row override | box: migrations `non`, or `oui` (declared, global off) | row `perso`; run honors it for that service only | `oui` hidden if undeclared |
+| Empty branch commit | Shared / From EDT | row `global` / `perso` on `sharedBranch` | N/A |
+| Typed non-existent branch or EDT | free text, `Entrée` | refused with message, field stays | N/A |
+| Strategy change | any, with `perso` rows | `perso` rows keep their overrides; `Ctrl+R` resets one | N/A |
+| Scope | all-repos / single-service | panels without merge-source line / simple 3.7 list | N/A |
 
 </frozen-after-approval>
 
 ## Code Map
 
-- `src/core/scripts/group-update.ts:120-141` -- `GroupUpdateSelectionItem`/`selection` already carries per-service `sourceBranch`; `effectiveSourceBranch`/`validateSelectionBranches` (L61-90) are the consumers. Reuse, do not alter.
-- `src/core/ports/edt-registry.ts` -- `EdtRegistryEntry.members[{service,repoPath,branch}]` is the source of truth for the chosen EDT's branches.
-- `src/core/ports/git.ts:161,172` -- `listBranches` (local) and `listRemoteBranches` (`origin/x`) feed the existence check.
-- `src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts` -- draft/rows/reducer; gains `strategy`, per-row `origin` + `error`, `Ctrl+R`, `Tab` panel focus, confirm gate on selected-row errors.
-- `src/adapters/driving/tui/zones/update/update-config-dialog.tsx` -- renders the panel above the rows; row meta shows `← topic` / `[Manual]` / red error; reuse `ConfigRow`.
-- `src/adapters/driving/tui/store/slices/update-slice.ts:292-347` -- `openEdtConfig` builds rows; keeps `edtRegistry.list()` result and per-row branch lists for re-resolution.
-- `src/adapters/driving/tui/zones/update/update-zone.tsx:420-630` -- zone-local cursor/edit state and `useInput` dispatcher; add panel focus and the EDT quick-pick (`zones/edts/dialogs/quick-pick-dialog.tsx`, `shared/components/filterable-pick-list.tsx`), excluding the active EDT.
-- `src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx` -- Step 3 panel/table pattern to mirror; `branch-plan-table.tsx` row rendering where it fits.
-- `src/adapters/driving/cli/subcommands.ts:48,160-230` -- `UPDATE_USAGE` and the `update` runner; add `--from-edt <topic>`.
-- New: `src/core/scripts/resolve-merge-sources.ts` (+ test) -- the pure resolver.
+- `src/core/scripts/group-update.ts:120-141,334,503` -- `GroupUpdateSelectionItem` + the two per-service call sites that read the run-wide `runMigrations`/`cleanRestart`; add per-item overrides.
+- `src/core/scripts/resolve-merge-sources.ts` -- resolver + `selectionFromEdt` (keep).
+- `src/adapters/driving/tui/shared/components/branch-autocomplete-input.tsx` -- source of the filter/dropdown reducer; new `suggest-field.tsx` (+ `.logic.ts`, tests) generalizes it with placeholder and a generic suggestion list.
+- `src/adapters/driving/tui/zones/edts/dialogs/branch-plan-table.tsx` -- reuse `PanelTitle`/`BranchPlanTable`; additive optional leading-cell support only.
+- `create-wizard/step-branches.tsx`, `override-box.tsx` -- reference for layout, keys, box pattern (read-only).
+- `src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts|.tsx`, `update-zone.tsx:420-700`, `store/slices/update-slice.ts` -- rework to two panels; effective-value derivation needs per-row `migrationDeclared`/`recipeDeclared` from the manifest (loaded in `resolveBranchDefault`).
+- New `update-service-box.logic.ts|.tsx` -- `Configurer <service>` box. `merge-edt-pick-dialog.tsx` is replaced by `SuggestField` and removed.
 
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `src/core/scripts/resolve-merge-sources.ts` + `.test.ts` -- `resolveMergeSourcesFromEdt(targetMembers, sourceEdt, branchesByRepo) → rows {service, repoPath, source, origin:'shared'|'edt'|'manual', error?:'not-in-edt'|'branch-not-found'}`; unit-test every matrix row against fakes.
-- [x] `update-config-dialog.logic.ts` (+ tests) -- strategy state, re-resolution on strategy change preserving manual rows, `Ctrl+R`, `Tab` focus, confirm rejection naming unresolved selected services.
-- [x] `update-config-dialog.tsx`, `update-zone.tsx`, `update-slice.ts` (+ Ink tests) -- panel, EDT quick-pick (active EDT excluded), manual editor pre-filled with `sharedBranch`; panel hidden for all-repos/single scope.
-- [x] `subcommands.ts` (+ `tui-back.e2e.test.ts`) -- `--from-edt <topic>`, `update-source-unresolved`, `invalid-argument` cases, `UPDATE_USAGE` updated.
+- [x] `group-update.ts` (+ test) -- per-service `runMigrations`/`cleanRestart` overrides in selection.
+- [x] `shared/components/suggest-field*` (+ tests) -- placeholder, highlight-only arrows, two-stage `Entrée`, exact-match validation, height cap.
+- [x] `branch-plan-table.tsx` -- no change needed: the `[x]` box is part of the Service cell, so the wizard output is untouched.
+- [x] `update-config-dialog.*`, `update-service-box.*`, `update-zone.tsx`, `update-slice.ts` (+ tests) -- two panels, effective values, overrides, `Mode`, `Ctrl+R`, blocking rules, height budget; panels for EDT + all-repos, merge-source only in EDT.
+- [x] Remove `merge-edt-pick-dialog.tsx`; update `update-config-merge-strategy.test.ts` and render tests.
 
 **Acceptance Criteria:**
-- Given an EDT update config, when it opens, then the merge-source panel shows `(•) Shared branches` and `( ) From EDT: <none>`, and `Tab` moves focus panel ↔ table.
-- Given From EDT chosen, then members get `← <topic>`, non-members `✖ not in <topic>`, missing branches `✖ branch not found`; `Enter` on one opens the editor pre-filled with `sharedBranch` and commit marks `[Manual]`.
-- Given a selected unresolved row, when `y` is pressed, then start is rejected naming the services; deselected rows never block.
-- Given an all-repos or single-service config, then no panel is shown and 3.7 behavior is unchanged.
-- Given `update --from-edt` with unresolved members, then it fails `update-source-unresolved` with no git write.
+- Given an EDT or all-repos update config, then `PARAMÈTRES GLOBAUX` and the per-service table render as in Step 3, within the terminal height at 24 rows; all-repos has no merge-source line.
+- Given a service without `migrationCommand`, then its row never shows `migrate`, even with migrations globally on.
+- Given From EDT with nothing chosen and a selected row, when `y` is pressed, then start is rejected.
+- Given a single-service config, then the 3.7 list is unchanged.
 
-## Design Notes
+## Spec Change Log
 
-A branch found only as `origin/<b>` counts as present; the row's source is then `origin/<b>` only if `groupUpdate`'s local check accepts it — otherwise the Ask-First gate above applies.
+- 2026-10-05 -- course correction (user review of the first cut): UX rebuilt after edt-create Step 3; per-service overrides for branch/migrations/clean restart folded into this story; shared `SuggestField` introduced; panels extended to all-repos (migrations + clean restart only). KEEP: resolver, `selectionFromEdt`, CLI `--from-edt`, `[Manual]`/`Ctrl+R` semantics, slice actions `listMergeSourceEdts`/`chooseMergeSourceEdt`.
 
 ## Verification
 
@@ -79,32 +86,40 @@ A branch found only as `origin/<b>` counts as present; the row's source is then 
 
 ## Suggested Review Order
 
-**Resolution (shared by TUI and CLI)**
+**Core contract**
 
-- Pure resolver: member branch, `not-in-edt`, `branch-not-found`; local refs only.
-  [`resolve-merge-sources.ts:23`](../../../src/core/scripts/resolve-merge-sources.ts#L23)
+- Selection items may override migrations / clean restart per service.
+  [`group-update.ts:121`](../../../src/core/scripts/group-update.ts#L121)
 
-- CLI-side full selection with the `update-source-unresolved` / `invalid-argument` gates.
+- Resolver and CLI selection from another EDT (unchanged from the first cut).
   [`resolve-merge-sources.ts:62`](../../../src/core/scripts/resolve-merge-sources.ts#L62)
 
-**Configuration draft**
+**Shared field**
 
-- Strategy re-resolution keeps manual rows untouched.
-  [`update-config-dialog.logic.ts:98`](../../../src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts#L98)
+- Placeholder, highlight-only arrows, two-stage Enter, empty-commit rule.
+  [`suggest-field.logic.ts:32`](../../../src/adapters/driving/tui/shared/components/suggest-field.logic.ts#L32)
 
-- Confirm blocks only on selected unresolved rows.
-  [`update-config-dialog.logic.ts:251`](../../../src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts#L251)
+**Screen model**
 
-- Store action resolving rows from the chosen EDT.
-  [`update-slice.ts:837`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L837)
+- Effective values: an undeclared action never reads as enabled.
+  [`update-config-panels.logic.ts:27`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L27)
 
-**UI and CLI wiring**
+- Key routing per focus, line and field.
+  [`update-config-panels.logic.ts:157`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L157)
 
-- Panel rendering above the service rows.
-  [`update-config-dialog.tsx:50`](../../../src/adapters/driving/tui/zones/update/update-config-dialog.tsx#L50)
+- Height budget: table shrinks before anything can overflow.
+  [`update-config-panels.logic.ts:260`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L260)
 
-- Quick-pick owns keys until it closes; panel steps dispatched here.
-  [`update-zone.tsx:620`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L620)
+- Service box apply: empty branch follows global; unknown branch refused.
+  [`update-service-box.logic.ts:140`](../../../src/adapters/driving/tui/zones/update/update-service-box.logic.ts#L140)
 
-- `--from-edt <topic>` entry in the update runner.
-  [`subcommands.ts:215`](../../../src/adapters/driving/cli/subcommands.ts#L215)
+**Wiring and views**
+
+- Manifest declarations feed each row at open time.
+  [`update-slice.ts:292`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L292)
+
+- Controller hook: view state, loaders, step-to-draft mapping.
+  [`use-update-config-panels.ts:57`](../../../src/adapters/driving/tui/zones/update/use-update-config-panels.ts#L57)
+
+- Two-panel view mirroring edt-create's Step 3.
+  [`update-config-panels.tsx:148`](../../../src/adapters/driving/tui/zones/update/update-config-panels.tsx#L148)
