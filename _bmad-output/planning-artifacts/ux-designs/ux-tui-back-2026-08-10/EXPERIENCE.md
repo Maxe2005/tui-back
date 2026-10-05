@@ -29,7 +29,7 @@ Six permanent zones, always reachable from the top bar:
 | Update | A permanent left-hand service list with live status (up/down/restarting/updating/migrating/error); a shared configuration screen (service selection, per-service source branch, migrate/clean-restart toggles) gates every run — EDT-scoped, all-repos, or single-service — followed by live per-service tracking, assisted resolution of conflicts, and migration-failure handling. Per-service quick actions (clean restart, single-service update) are available from the list at any time. | FR-10–FR-12, FR-25–FR-27 |
 | Logs | Aggregated live log stream across the active EDT's services (or a chosen subset), filterable, with inline health and developer-triggered restart. | FR-16–FR-18 |
 | Routes | Route-explorer module: discover routes, fire requests with automatic dev-mode auth, save/customize/re-fire, response + correlated logs together, global saved-request library. | FR-19–FR-23 |
-| shared-types | Publish a new `shared-types` version, see Propagation status for the active EDT's member services, propagate to chosen ones. | FR-13–FR-15 |
+| shared-types | Propagate a `shared-types` version to chosen consuming services, publish a new version, see declared-version drift; the smart update is configured from the Update zone. | FR-13–FR-15, FR-30, FR-31 |
 
 Routes and shared-types are gated at two levels (amended 2026-08-24, Sprint Change Proposal — supersedes the original "always-present, never hidden" decision): fully omitted from the tab bar only when *no repo in the entire registry* (across every EDT, or none) ever activates the relevant module (`route-explorer` for Routes; `shared-types-source`/`shared-types-consumer` for shared-types) — but when the module exists somewhere in the registry and just isn't present on an active-EDT member, the tab stays visible in a disabled state (dimmed/strikethrough) and, when selected, shows an explanatory message naming which registered repos do carry the module. What's manifest-gated at the *content* level (which services/repos appear inside an enabled zone) is unchanged.
 
@@ -160,15 +160,20 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Save-as-new name collision | Saving a customized re-fire as a new request is rejected on a name collision with an existing saved request, prompting for a different name (FR-21). |
 | Library hide / favorite | Hiding a saved request in one EDT doesn't remove it from the global library or other EDTs; favoriting is independently per-EDT and global (FR-23). |
 
-**shared-types**
+**shared-types** *(rewritten 2026-10-05)*
 | State | Treatment |
 |---|---|
-| No members | The active EDT has zero member services — nothing to publish against or propagate to; shown explicitly, not a bare empty list (mirrors EDTs' "Zero-member EDT display"). |
+| No members | The active EDT has zero member services — shown explicitly, not a bare empty list. |
+| Version entry | A text field pre-filled with `0.1.`, always editable, followed by the consumer checklist (`checkbox-list-item`); the version's existence on the registry is verified before execution (FR-15). |
+| Options | Independent toggles: `npm i`, clean restart, commit (`package.json`/`package-lock.json` only, never a push) (FR-15). |
+| Propagation in progress / per-service result | Per-service status (rewritten / installed / restarted / committed / skipped with reason / failed); each failure independently retriable (FR-15). A consumer with a dirty `package.json`/lockfile is skipped with an explicit reason. |
 | Publish in progress | Per-step (bump → build → publish → push) status, spinner on the running step (FR-13). |
-| Publish step failure (Assisted resolution) | An instance of the glossary's Assisted resolution mechanic (detect → auto-fix-known-safe-or-guided-menu → re-verify): names which step failed; a re-trigger resumes from that step rather than restarting from bump, re-verifying before the version is marked published (FR-13). |
-| Propagation status | Per active-EDT member service that declares itself a consumer: on-latest vs. behind, reflecting the latest published version at view time, not a cache (FR-14). |
-| Propagation in progress / per-service failure | Independently retriable per service; one failure doesn't block the others (FR-15). |
-| Quit mid-run | Pressing `q` while a publish or propagation run is in progress requires explicit confirmation before quitting, same rule as the Update zone's quit-mid-run state above (FR-6 precedent); if confirmed, the next launch surfaces the run as interrupted and offers to resume it. |
+| Publish step failure (Assisted resolution) | Names the failed step; a re-trigger resumes from it, and the version is verified on the registry before being marked published (FR-13). |
+| Publish success | Offers to chain into propagation with the version pre-filled, or to stop (FR-13). |
+| Drift view *(niche)* | Per consumer: declared version vs. the source repo's version on the EDT branch, in-sync or not, with a one-key jump into propagation (FR-14). |
+| Quit mid-run | Pressing `q` while a publish or propagation run is in progress requires explicit confirmation, same rule as the Update zone; if confirmed, the next launch surfaces the run as interrupted and offers to resume it. |
+
+**Update zone — smart update row** *(added 2026-10-05)*: when the EDT contains the `shared-types-source` repo, the update configuration offers a `shared-types` row: *off / publish if the merge changed something / always publish* (FR-30). The run tracking shows the `shared-types` phase first, then per-consumer auto-resolution outcomes (FR-31).
 
 **Cross-cutting, every zone**
 | State | Treatment |
@@ -253,13 +258,14 @@ Edge case: if this is the first time this exact route has been fired, the tool p
 ### UJ-3 — Max publishes and propagates a new `shared-types` version
 
 1. With the EDT active whose member services consume the changed type, Max opens the shared-types zone.
-2. He triggers publish; the tool runs `shared-types`'s own `npm run v` (bump → build → publish → push), showing per-step progress with a spinner on the running step (FR-13).
-3. The zone's list pane shows, for each EDT-member service that declares itself a `shared-types` consumer, whether it's already on the newly published version (FR-14).
-4. Max selects the services that aren't yet on it via the `checkbox-list-item` pattern and triggers propagation for just those (FR-15).
-5. **Climax:** without checking a single `package.json` by hand, Max sees every relevant service now flagged on the new version in the same list pane.
-6. **Resolution:** Max reviews and commits the staged dependency bump per service himself — the tool staged the bump and install, but never committed or pushed on his behalf.
+2. He either types the version to propagate (field pre-filled with `0.1.`), or triggers publish: the tool runs `shared-types`'s publish command (bump → build → publish → push), with per-step progress and a spinner, verifies the version on the registry and offers to chain into propagation (FR-13).
+3. He selects the consuming services via the `checkbox-list-item` pattern and ticks the options: `npm i`, clean restart, commit (FR-15).
+4. **Climax:** without editing a single `package.json`, Max sees every selected service rewritten, installed and committed in the same list pane.
+5. **Resolution:** the commits contain only `package.json`/`package-lock.json`; nothing was pushed.
 
-Failure path: if a publish step fails partway (e.g. after bump and build already succeeded), the tool names which step failed and a re-trigger resumes from that step rather than restarting from bump, avoiding a duplicate version bump (FR-13); a per-service propagation failure (e.g. an install error) is independently retriable and doesn't block the others (FR-15).
+Smart-update path: during a group update with the `shared-types` row enabled, steps 2–4 happen automatically before the other services are updated, and `shared-types`-only merge conflicts in consumers resolve by themselves (FR-30, FR-31).
+
+Failure path: a publish step failure names the step and a re-trigger resumes from it (FR-13); a per-service failure is independently retriable (FR-15).
 
 ### UJ-4 — Max hits a merge conflict during a group update
 

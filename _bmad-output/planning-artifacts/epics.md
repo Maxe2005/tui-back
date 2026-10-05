@@ -29,9 +29,9 @@ FR-9: Every managed service is displayed with its current branch and how far tha
 FR-10: A developer can run a group update — pull `development`, run migrations, restart containers — against either the active EDT's member services (default) or explicitly against all managed repos regardless of EDT (maintenance mode).
 FR-11: When a group update hits a repo that isn't cleanly updatable, the tool auto-resolves already-known-safe cases and otherwise guides the developer through a bounded menu, then re-verifies before continuing.
 FR-12: When a migration fails during a group update, the tool surfaces which service, which migration, and the error output, and lets the developer re-trigger just that service's migration after a fix.
-FR-13: A developer can publish a new `shared-types` version through the tool, which runs the `shared-types` repo's existing `npm run v` script (bump → build → publish → push), gated on the active EDT including the `shared-types-source` repo as a member, and chaining into propagation on success (amended 2026-08-24).
-FR-14: The tool shows, for the active EDT's member services, which are on the version most recently published from the active EDT's own `shared-types` branch (resolved via git ancestry, never the global-max version across unrelated branches) and which aren't (amended 2026-08-24).
-FR-15: A developer can propagate the new `shared-types` version to some or all of the active EDT's eligible member services in one action.
+FR-13: A developer can publish a new `shared-types` version through the tool (publish command, default `npm run v`; per-step progress, resume from the failed step, publication verified on the registry), gated on the active EDT including the `shared-types-source` repo, optionally chaining into propagation (amended 2026-10-05).
+FR-14: The tool shows, per consumer service of the active EDT, the `shared-types` version declared in its `package.json` versus the one declared by the source repo on the EDT's branch — niche/optional, no git-ancestry resolution (amended 2026-10-05).
+FR-15: A developer enters a `shared-types` version and applies it to some or all of the active EDT's consumer services (dependency-line rewrite, then optional `npm i` / clean restart / commit of `package.json` and `package-lock.json` only, never a push) (amended 2026-10-05).
 FR-16: A developer can view a single, live, aggregated log stream from every service in the active EDT, or a chosen subset.
 FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it (amended 2026-09-18, Sprint Change Proposal, Story 5.4: extends to recall of previously used text/regex filters, per scope, not just new filtering mechanics).
 FR-18: Service health (up / down / restarting) is visible inline with the log view.
@@ -42,6 +42,8 @@ FR-22: Firing a request (saved or ad hoc) surfaces its response and the relevant
 FR-23: A developer's saved requests form one global library, not siloed per EDT; each EDT can independently hide individual saved requests from its own view and mark others as favorites (per-EDT or global).
 FR-24 (added 2026-09-16, Sprint Change Proposal): A developer can delete an EDT they no longer need, choosing per member service whether to leave its branch alone or delete it too — informed by that branch's merge status (into its `sharedBranch`) and any uncommitted work — with deletion blocked while the EDT is active and blocked per-service when the branch is also registered as another EDT's own branch for that repo.
 FR-28 (added 2026-10-01, Sprint Change Proposal): Merge source from another EDT — global merge-source strategy (shared branches / another EDT) in the EDT-scoped update configuration, with per-service manual resolution for services absent from the chosen EDT.
+FR-30 (added 2026-10-05, Sprint Change Proposal): Smart group update — `shared-types` is processed first, then published, propagated and committed, per an update-configuration setting.
+FR-31 (added 2026-10-05, Sprint Change Proposal): Auto-resolve merge conflicts limited to the `shared-types` dependency line.
 FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed services — `container` optional in the manifest; restart/health/logs degrade to an explicit "no container" state.
 
 ### NonFunctional Requirements
@@ -99,7 +101,7 @@ UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" promp
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): adds filter-history browsing (arrow-recall and grid-browser, see UX-DR32) as a new named state. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): service lists, the hints panel, and `LogFilterEditor` (including its history-grid browser) now render within a bounded, scrollable window (UX-DR33) rather than unconditionally, preventing terminal-overflow rendering corruption.
 UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes). Amended 2026-09-30 (Sprint Change Proposal, Stories 6.6–6.9): the Routes zone's right pane is a focusable two-tab pane (Request / Response, Logs added by Story 6.4) reached with `Enter` from the list; request editing is a mandatory step before any fire; the response is browsed in a JsonTree with session-persistent, per-route filters (UX-DR34).
-UX-DR24: Implement shared-types zone states — no-members explicit state, publish-in-progress per-step status with spinner, publish-step-failure detail + resume-from-failed-step re-trigger, propagation status (on-latest-for-this-branch vs. behind, resolved live via git ancestry, never a global-max version — amended 2026-08-24), publish-success chaining immediately into a propagation offer, propagation-in-progress/per-service-failure independent retriability, and quit-mid-run confirmation with resume offer.
+UX-DR24: Implement shared-types zone states (rewritten 2026-10-05) — no-members explicit state, version-entry field (`0.1.` prefix) + consumer checklist, independent options (`npm i`, clean restart, commit), per-service propagation result/skip reason/independent retry, publish-in-progress per-step status with spinner, publish-step-failure detail + resume, publish-success chaining into propagation, niche declared-version drift view, and quit-mid-run confirmation. UX-DR21 gains a `shared-types` row (off / publish if the merge changed something / always) in the update configuration.
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
 UX-DR27 (added 2026-08-24, Sprint Change Proposal, Story 2.11; command mechanism corrected 2026-08-25, Story 2.14): Implement the repo registry screen — static manifest-creation guidance always shown, scan-a-root-path via `checkbox-list-item` multi-select, per-path register outcome (registered/already-registered/failed), distinct empty-scan state, reachable as a registered command inside the `:` command-entry bar (UX-DR29) and auto-offered from Dashboard's "no repos registered yet" state.
@@ -139,8 +141,10 @@ FR-11: Epic 3 - Assisted resolution of merge conflicts / dirty state
 FR-12: Epic 3 - Per-service migration failure handling
 FR-28: Epic 3 - Merge source from another EDT (added 2026-10-01, Sprint Change Proposal — Story 3.12)
 FR-13: Epic 4 - Publish a new shared-types version
-FR-14: Epic 4 - See propagation status without a manual check
-FR-15: Epic 4 - Propagate to chosen services
+FR-14: Epic 4 - See declared-version drift (niche)
+FR-15: Epic 4 - Propagate a version to chosen services
+FR-30: Epic 4 - Smart group update (added 2026-10-05, Sprint Change Proposal — Story 4.4)
+FR-31: Epic 4 - Auto-resolve shared-types-only merge conflicts (added 2026-10-05, Sprint Change Proposal — Story 4.5)
 FR-16: Epic 5 - Aggregated live log stream
 FR-17: Epic 5 - Filter the aggregated stream
 FR-18: Epic 5 - Inline service health
@@ -168,10 +172,10 @@ A developer can run a group update (pull, migrate, restart) scoped to the active
 **FRs covered:** FR-10, FR-11, FR-12
 **Implementation notes:** Update zone (UX-DR21), reuses Epic 2's git safety gate (AD-8), detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic.
 
-### Epic 4: `shared-types` Propagation
-A developer can publish a new `shared-types` version and see/propagate its adoption status across the active EDT's member services, without any manual per-repo check.
-**FRs covered:** FR-13, FR-14, FR-15
-**Implementation notes:** First company-specific module, validating AD-4/AD-5 in practice; shared-types zone (UX-DR24).
+### Epic 4: `shared-types` Propagation & Smart Update
+A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
+**FRs covered:** FR-13, FR-14, FR-15, FR-30, FR-31
+**Implementation notes:** First company-specific module, validating AD-4/AD-5 (AD-18); shared-types zone (UX-DR24). Prerequisites: Epic 7 done; Epic 3 merged into `devlopment` for Stories 4.4/4.5 (Sprint Change Proposal 2026-10-05).
 
 ### Epic 5: Aggregated Log Observability
 A developer can view a live, filterable, aggregated log stream across multiple services, with inline health status and a developer-triggered restart control.
@@ -1001,7 +1005,7 @@ So that the tab bar never lies about what's possible, while still decluttering w
 **When** that changes whether any repo anywhere has the module
 **Then** a tab can newly appear or disappear entirely; if the active zone's tab disappears this way, the app falls back to Dashboard
 
-**Implementation notes:** the registry-wide check requires loading manifests for all registered repos (not just active-EDT members) at shell level — verify this doesn't complicate the cold-load spinner state (UX-DR19). The `shared-types-source` module id and the git-ancestry version-resolution mechanism it feeds are specified further under Epic 4's Story 4.1/4.2 (amended below).
+**Implementation notes:** the registry-wide check requires loading manifests for all registered repos (not just active-EDT members) at shell level — verify this doesn't complicate the cold-load spinner state (UX-DR19). The `shared-types-source` module id and its parameters are specified under Epic 4 Story 4.1 (rewritten 2026-10-05; the git-ancestry mechanism is superseded).
 
 ### Story 2.14: Command Entry Bar (`:`) & Registered Commands
 
@@ -2329,97 +2333,60 @@ So that I can bring a colleague's or a sibling EDT's work into mine without rety
 
 **Implementation notes:** pure resolution helper in core (e.g. `resolveMergeSourcesFromEdt(targetMembers, sourceEdt, branchesByRepo) → rows with {source, origin: 'shared'|'edt'|'manual', error?}`) so the TUI and the CLI share it (FR-1). Draft gains `strategy: {kind:'shared'} | {kind:'edt', ulid, topic}` and per-row `origin`. Reuse `BranchPlanTable`-style row rendering where it fits instead of a new table. Branch lists are already loaded per row by Story 3.7.
 
-## Epic 4: `shared-types` Propagation
+## Epic 4: `shared-types` Propagation & Smart Update
 
-A developer can publish a new `shared-types` version and see/propagate its adoption status across the active EDT's member services, without any manual per-repo check.
+A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution — so that bumping the dependency is never a manual task.
 
-### Story 4.1: Publish a New `shared-types` Version
+> Rewritten 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05.md`): replaces the original publish / ancestry-status / propagate stories. Prerequisites: Epic 7 done; Epic 3 merged into `devlopment` for 4.4 and 4.5.
 
-> Amended 2026-08-24 (Sprint Change Proposal, correction to not-yet-built Epic 4): publish is now gated on a new `shared-types-source` manifest module identifying the `shared-types` repo itself (previously undocumented how the tool identified it), and chains into propagation on success — closing the "find the propagate action separately" gap.
+**Prerequisites:** Epic 7 done (7.2 container-less services, 7.3 layout, 7.4 interaction audit); Epic 3 merged into `devlopment` for 4.4/4.5.
 
-As a developer,
-I want to publish a new `shared-types` version through the tool,
-So that I don't have to run the release script by hand and lose track of which step failed if something breaks.
+### Story 4.1: `shared-types` Modules & Manifest Parameters
+As a developer, I want the manifest to declare which repo is the `shared-types` source and which services consume it, so that the tool knows where to publish from and where to rewrite the dependency.
+- **Given** a manifest declaring `shared-types-source` or `shared-types-consumer` **When** loaded **Then** the module ids are known to the registry and their parameters validated with defaults (§2.3); unknown parameters are rejected with a clear message.
+- **Given** the Story 2.13 tab gating **When** the modules exist **Then** the `shared-types` tab shows/omits/disables as specified there, with the source/consumer carrying services named.
+- **Given** a source repo without a container (Story 7.2) **When** registered **Then** it is accepted as an EDT member.
+- A `shared-types` port + adapter exist with read-version, write-version-line and verify-published operations, fully unit-tested against a fake filesystem/registry.
 
-**Acceptance Criteria:**
+### Story 4.2: Propagate a Version to Chosen Services
+As a developer, I want to enter a `shared-types` version and apply it to some or all consuming services of my active EDT, so that I never edit each `package.json` by hand.
+- **Given** the zone **When** opened **Then** a version field is pre-filled with `0.1.` and fully editable, followed by the consumer checklist (all consumers of the active EDT, `checkbox-list-item`).
+- **Given** a version **When** the developer confirms **Then** its existence on the registry is verified first; a non-existent version blocks execution with an explicit message.
+- **Given** selected consumers **When** propagation runs **Then** only the dependency line in each `package.json` is rewritten, preserving all other formatting.
+- **Given** the options step **When** shown **Then** `npm i`, clean restart (via the manifest recipe, Story 3.8) and commit are independent toggles; clean restart and `npm i` may both be on; commit happens after them.
+- **Given** commit is chosen **When** it runs **Then** only `package.json` and `package-lock.json` are staged, the message states the tool performed it (e.g. `chore(deps): bump @ianord/shared-types to 0.1.3674 [tui-back]`), and **nothing is ever pushed**.
+- **Given** a consumer on a protected or shared branch **When** targeted **Then** the AD-8 safety gate applies as elsewhere.
+- **Given** a consumer whose `package.json` is already dirty **When** targeted **Then** it is skipped with an explicit reason (other dirty files do not block, and are never staged).
+- **Given** one service fails **When** it happens **Then** it is independently retriable and does not block the others.
+- **Given** a run is in progress **When** `q` is pressed **Then** confirmation is required.
 
-**Given** the active EDT does not include, as a member, the repo whose manifest declares `shared-types-source`
-**When** the developer looks for the publish action
-**Then** it isn't offered (ties to Story 2.13's disabled-tab rule)
+### Story 4.3: Publish a New `shared-types` Version
+As a developer, I want to publish `shared-types` from the tool and optionally propagate straight away, so that I don't run the release script by hand or lose track of the failing step.
+- Publish is only offered when the active EDT includes the `shared-types-source` repo (Story 2.13 rule).
+- Runs the configured publish command with per-step progress (bump → build → publish → push) and a spinner on the running step; a failure names the exact step.
+- A re-trigger after a partial failure resumes from the failed step; on completion the new version is read from the source's `package.json` and **verified on the registry** before being marked published.
+- On success the tool offers to chain into Story 4.2's flow with the published version pre-filled, or to stop.
+- `q` during a run requires confirmation.
 
-**Given** a developer triggers publish
-**When** the tool runs `shared-types`'s `npm run v` script
-**Then** it shows per-step progress (bump → build → publish → push) with a spinner on the running step
+### Story 4.4: Smart Group Update — `shared-types` First
+As a developer, I want a group update that includes `shared-types` to publish and propagate a new version automatically, so that consumers merge on top of an already-bumped dependency.
+- **Given** the Update configuration (Story 3.7) **When** the EDT contains the source repo **Then** a `shared-types` row offers *off / publish if the merge changed something / always publish*.
+- **Given** the row is not off **When** the update runs **Then** `shared-types` is merged first, then (per the setting) published (4.3), propagated to all consumers of the EDT and committed (4.2, commit on, push never).
+- **Given** a single-service update of `shared-types` alone **When** it runs **Then** the same behaviour applies.
+- **Given** a failure in the `shared-types` phase **When** it occurs **Then** the remaining services are not updated silently: the run pauses with an explicit choice (retry, skip `shared-types` handling, abort), and the live run tracking (Story 3.10) shows the phase.
 
-**Given** a step fails
-**When** the failure occurs
-**Then** the tool surfaces exactly which step failed, not just a generic error
+### Story 4.5: Auto-Resolve `shared-types`-Only Merge Conflicts
+As a developer, I want conflicts caused only by the `shared-types` version bump to resolve themselves during an update, so that I only handle real conflicts.
+- **Given** a consumer's merge conflicts **When** the only conflicting hunk in `package.json` is the `shared-types` dependency line **Then** it is resolved to the EDT's current value, `npm i` is run, `package-lock.json` is staged if changed, and the merge is completed.
+- **Given** any other conflicting hunk in `package.json`, or any conflict in another file **When** detected **Then** nothing is auto-resolved and the existing assisted-resolution flow (Story 3.4) takes over untouched.
+- **Given** `package-lock.json` conflicts alongside a st-only `package.json` conflict **When** resolving **Then** the lockfile is taken from the EDT side and regenerated by `npm i` rather than hunk-merged.
+- The outcome (auto-resolved / left to user) is shown per service in the run tracking.
 
-**Given** a prior publish attempt failed partway (e.g. after bump and build succeeded)
-**When** the developer re-triggers after a fix
-**Then** the tool resumes from the failed step rather than restarting from bump — avoiding a duplicate version bump or a publish conflict on an already-published version
-
-**Given** a re-trigger completes all remaining steps
-**When** the run finishes
-**Then** the tool re-verifies the version was actually published before marking it published — a prior failed attempt is never treated as success
-
-**Given** a publish run is in progress
-**When** the developer presses `q`
-**Then** quitting requires explicit confirmation first, consistent with the Update zone's rule (Story 3.1)
-
-**Given** a publish completes successfully
-**When** the run finishes
-**Then** the tool immediately offers propagation to the active EDT's eligible consumer members (one, several, or all), chaining into Story 4.3 — propagation remains independently triggerable later too (e.g. a newly added consumer catching up)
-
-### Story 4.2: See Propagation Status
-
-> Amended 2026-08-24 (Sprint Change Proposal, correction to not-yet-built Epic 4): the original "latest published version" framing is functionally wrong — `shared-types` version numbers are globally unique but published independently per branch, so the global maximum can be unrelated to the active EDT's own branch lineage (e.g. global latest = 660, but the version actually relevant to this branch = 613, because 614–660 were published from unrelated branches). Corrected to resolve "latest relevant" via git ancestry on the active EDT's own `shared-types` branch. The exact resolution mechanism (walking tags/commits reachable from the branch tip) is flagged for `bmad-architecture` to specify before this story is built.
-
-As a developer,
-I want to see which of my active EDT's member services are on the version relevant to my active EDT's own `shared-types` branch,
-So that I never have to check `package.json` by hand across repos, and never get a false "behind" reading caused by an unrelated branch's version bump.
-
-**Acceptance Criteria:**
-
-**Given** the active EDT's member services
-**When** the shared-types zone is viewed
-**Then** every member service that declares itself a `shared-types-consumer` in its manifest shows whether it's on the version most recently published from the active EDT's own `shared-types` branch — resolved by walking that branch's git ancestry, never by comparing against the single highest version number across all branches
-
-**Given** a member service that doesn't declare `shared-types-consumer`
-**When** the view is rendered
-**Then** it is omitted from this view
-
-**Given** the status is viewed
-**When** rendered
-**Then** it reflects the branch-relevant latest version, resolved live via git ancestry at that moment — never cached, never the global maximum across unrelated branches
-
-**Given** the active EDT has zero member services
-**When** the shared-types zone is viewed
-**Then** it shows an explicit "no members" state, not a bare empty list
-
-### Story 4.3: Propagate to Chosen Services
-
-As a developer,
-I want to propagate the new `shared-types` version to some or all eligible member services in one action,
-So that I don't bump each `package.json` by hand.
-
-**Acceptance Criteria:**
-
-**Given** one or more eligible member services selected (via `checkbox-list-item`)
-**When** the developer triggers propagation
-**Then** the tool stages the dependency bump (package.json/lockfile) and installs it per selected service
-
-**Given** a propagation completes
-**When** staged
-**Then** the tool never commits or pushes the change without the developer's explicit approval — propagation prepares the change, never finalizes it
-
-**Given** one service's propagation fails (e.g. an install error)
-**When** it happens
-**Then** it is independently retriable and does not block the others
-
-**Given** a propagation or publish run is in progress
-**When** the developer presses `q`
-**Then** quitting requires explicit confirmation first, same rule as Story 4.1
+### Story 4.6: Declared-Version Drift View *(niche, optional)*
+As a developer, I want to see which consumers declare a different `shared-types` version from my EDT's `shared-types` branch, so that I spot stale services at a glance.
+- Compares each consumer's declared version with the one declared by the source repo's `package.json` on the EDT's branch; no git-ancestry walk, no caching.
+- Consumers on the same version are marked in sync; others show both values and offer a one-key jump into Story 4.2 with the source version pre-filled.
+- Explicit "no members" state when the EDT has none.
 
 ## Epic 5: Aggregated Log Observability
 
