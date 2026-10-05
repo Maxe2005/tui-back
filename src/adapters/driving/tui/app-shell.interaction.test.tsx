@@ -1678,7 +1678,7 @@ describe('AppShell settings screen (:settings)', () => {
 
   // End-to-end coverage of the filter-history fields and the clear actions, real-keypress
   // driven (mirrors the two tests just above).
-  it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists (regrouped 2026-09-20)', async () => {
+  it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1709,7 +1709,7 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
-  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists (regrouped 2026-09-20)', async () => {
+  it('Enter on "Clear global filter history" clears both global lists; Enter on "Clear a service\'s filter history" drills into a service list that clears just that service\'s lists', async () => {
     const store = createAppStore(fakeDeps());
     store.getState().commitFilterHistoryEntry({ scope: 'global', repoPath: null, mode: 'text' }, 'g-text');
     store.getState().commitFilterHistoryEntry({ scope: 'pane', repoPath: '/repo/a', mode: 'text' }, 'a-text');

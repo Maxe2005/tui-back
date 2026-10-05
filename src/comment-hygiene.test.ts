@@ -13,6 +13,7 @@ const HISTORY_REFERENCE = /\b[Ss]tory \d+\.\d+|\bAC\d+\b|review[ ]patch/;
 function listFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
+    if (entry.isSymbolicLink()) return [];
     return entry.isDirectory() ? listFiles(path) : [path];
   });
 }

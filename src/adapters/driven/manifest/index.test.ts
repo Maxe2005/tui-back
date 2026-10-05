@@ -318,7 +318,7 @@ describe('loadManifest', () => {
     }
   });
 
-  it('rejects unknown top-level keys (strict decision, 2026-08-12)', async () => {
+  it('rejects unknown top-level keys (strict schema)', async () => {
     const repo = await tempRepo(
       [
         'service: route-explorer',

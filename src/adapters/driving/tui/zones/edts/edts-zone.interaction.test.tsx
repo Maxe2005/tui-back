@@ -1811,8 +1811,8 @@ describe('EdtsZone real-keypress interactions', () => {
 
     // `initialDialogKind: 'create'` (a test-only injection point, like the smoke tests' use of
     // it) forces the dialog open despite `edts` being non-empty — the only way to reach this
-    // branch outside the partial-failure-after-create path above, since the populated view has
-    // no "new EDT" affordance yet (deferred-work.md).
+    // branch outside the partial-failure-after-create path above, since the populated view lacks
+    // a "new EDT" affordance in this context.
     const { instance, stdin } = mount(store, { initialDialogKind: 'create' });
     try {
       await instance.waitUntilRenderFlush();

@@ -1,7 +1,6 @@
-// tui/store/slices: EDT domain state — the registry's entries, the flat per-service
-// branch/divergence listing, the create/switch/modify/delete/activate use-cases (called
-// in-process, never via the CLI), the branch-picker's capabilities, and the per-EDT action
-// log. A StateCreator factory combined with the other slices into the one Zustand store.
+// tui/store/slices: EDT domain state — registry entries, per-service branch/divergence,
+// EDT use-cases (in-process), branch-picker capabilities, and per-EDT action log.
+// Combined with other slices into the one Zustand store.
 import type { StateCreator } from 'zustand';
 import {
   createEdt as createEdtUseCase,
@@ -39,8 +38,7 @@ import type { AppState, AppStoreDeps } from '../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 
-// The default base branch — one shared constant so edts-zone.tsx's initialCreateDialog() and
-// the store can never drift apart.
+// The default base branch — shared constant to prevent drift between store and zone.
 export const DEFAULT_BASE_BRANCH = 'development';
 
 // The canonical "reuse each current branch" value for `branchOptions` callers (the create
@@ -50,17 +48,13 @@ export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DE
 export type CreateEdtParams = {
   topic: string;
   members: string[];
-  // Exactly one of the two branch strategies is expected (core rejects a call carrying
-  // neither with invalid-argument; `memberPlans` wins when both are set):
-  //   - `branchOptions`: one CreateBranchOptions for every member — the CLI-shaped path, e.g.
-  //     NO_BRANCH_CREATION above for "reuse each current branch".
-  //   - `memberPlans` (used by the create wizard): one plan per member repoPath, built from the
-  //     wizard's Step 3 rows.
+  // Exactly one branch strategy required: branchOptions (CLI-shaped) or memberPlans (wizard).
+  // memberPlans takes precedence when both are present.
   branchOptions?: CreateBranchOptions;
   memberPlans?: Record<string, MemberBranchPlan>;
 };
 
-// `overwrite` holds the at-risk paths the developer confirmed discarding, per repoPath.
+// `overwrite`: at-risk paths confirmed for discarding, per repoPath.
 export type ActivateEdtRequest = {
   topic: string;
   overwrite?: Record<string, string[]>;
@@ -111,91 +105,75 @@ export type EdtActionLogEntry = {
 export type EdtSlice = {
   activeEdt: string | null;
   setActiveEdt: (edt: string | null) => void;
-  // The EDTs zone's branch/divergence listing (FR-9). `edtsBranches` is null only before the
-  // first successful load; a successful (possibly empty) load always replaces it with an array,
-  // never leaves a stale one in place mid-refresh. `edtsBranchesStatus` reflects only the
-  // in-flight request ('loading') or its failure ('error') — a successful load returns to
-  // 'idle', with `edtsBranches` (not the status) carrying the "loaded" signal.
+  // The EDTs zone's branch/divergence listing (FR-9). `edtsBranches` is null before first load;
+  // successful load replaces it with array (never leaves stale mid-refresh).
+  // `edtsBranchesStatus` reflects request state ('loading'/'error'); successful load → 'idle'.
   edtsBranches: ServiceBranchDivergence[] | null;
   edtsBranchesStatus: 'idle' | 'loading' | 'error';
   edtsBranchesError: string | null;
-  // listEdtBranchesDivergence's `unreachable`/`errors`, so a registry-listing problem (a stat
-  // failure, an unreachable registered path) is visible in the TUI as in `tui-back edts`.
-  // Populated alongside `edtsBranches` on every successful load; like `edtsBranches`, left as
-  // the last successfully-loaded value on a failed reload (the zone gates display on
-  // `edtsBranchesStatus !== 'error'`, same as it does for the row list).
+  // Unreachable paths and errors from listEdtBranchesDivergence; populated alongside
+  // edtsBranches on successful load; retained as last-successful on failed reload.
   edtsUnreachable: string[];
   edtsErrors: BranchDivergenceEntryError[];
   loadEdtsBranches: () => Promise<void>;
-  // The EDT registry's own entries (ulid/topic/status/members) — the EDT selector's data
-  // source, distinct from the flat per-service `edtsBranches` above. A failed reload clears
-  // `edts` to an empty array: never show stale rows under an error banner.
+  // EDT registry entries (ulid/topic/status/members) — EDT selector's data source.
+  // Distinct from flat per-service edtsBranches. Failed reload → empty array (no stale rows).
   edts: EdtRegistryEntry[] | null;
   edtsStatus: 'idle' | 'loading' | 'error';
   edtsError: string | null;
-  // The store's cached read of state.json's active-EDT pointer (AD-10), populated by
-  // loadEdts() and refreshed by a successful switchEdt() — never continuously re-synced via
-  // fs.watch/poll while the TUI is open (see deferred-work.md). Used by the EDTs zone to tell
-  // which selector row is the active EDT (never `EdtRegistryEntry.status`, which create.ts sets
-  // to 'active' for every brand-new entry — not an exclusive "the one active EDT" flag).
+  // Cached active-EDT pointer from state.json (AD-10). Populated by loadEdts(),
+  // refreshed by successful switchEdt(). Not continuously synced via fs.watch/poll.
+  // Used by EDTs zone to identify active EDT selector row.
   loadEdts: () => Promise<void>;
-  // The zone-owned dialogs call these core use-cases in-process (AD-2), with the same call
-  // shape as the CLI's runEdtCreate/runEdtSwitch/runEdtModify. An unwired store degrades to an
-  // explicit error Result rather than throwing.
+  // Zone-owned dialogs call core use-cases in-process (AD-2) with same shape as CLI.
+  // Unwired store → explicit error Result (no throw).
   createEdt: (params: CreateEdtParams) => Promise<Result<CreateEdtData>>;
-  // The first EDT's explicit activation (wizard Step 4) — core/edt/activate.ts. `blocked`
-  // changes nothing; `activated` updates the cached active pointer like switchEdt.
+  // First EDT's explicit activation (wizard Step 4). `blocked` changes nothing;
+  // `activated` updates cached active pointer like switchEdt.
   activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
-  // The switch dirty-repo seam — mirrors UpdateSlice's updateBlocker/resolveUpdateBlocker.
-  // Non-null while switchActiveEdt is paused inside switchEdt: core raises it only when a
-  // state-2/3 repo (outside the outgoing EDT) is dirty, and waits for a
-  // SwitchDirtyReposChoice. While set, the switch dialog renders its resolution view (its
-  // draft lives in the dialog state, never here or in core) and calls resolveSwitchDirtyRepos
-  // with `{ kind: 'proceed', resolutions }` or `{ kind: 'cancel' }`.
+  // Switch dirty-repo seam: non-null while switchActiveEdt paused inside switchEdt.
+  // Core raises only when state-2/3 repo (outside outgoing EDT) is dirty.
+  // Awaits SwitchDirtyReposChoice; switch dialog renders resolution view.
   switchDirtyRepos: SwitchDirtyRepo[] | null;
   resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
-  // Same call shape as createEdt/switchEdt/modifyEdt — the delete dialog's confirm calls
-  // core/edt/delete.ts's deleteEdt in-process (AD-2), never via the CLI.
+  // Delete dialog's confirm calls core/edt/delete.ts's deleteEdt in-process (AD-2).
   deleteEdt: (params: DeleteEdtParams) => Promise<Result<DeleteEdtData>>;
-  // The delete-confirm dialog's per-member merge/clean status, through a core export (the TUI
-  // never calls deps.git/manifest directly). Never fails outright: a per-member read failure
-  // folds into that member's statusError. `edtUlid` is the EDT being deleted — needed for the
-  // `tui-back:<edtUlid>` tagged-stash check.
+  // Delete-confirm dialog's per-member merge/clean status via core export.
+  // Never fails outright: per-member read failure folds into statusError.
+  // edtUlid needed for `tui-back:<edtUlid>` tagged-stash check.
   resolveMemberDeleteStatuses: (edtUlid: string, members: readonly EdtMember[]) => Promise<MemberDeleteStatus[]>;
-  // The branch-picker's capabilities, wrapping core/edt/modify.ts's exports (never `deps.git`
-  // directly). `renameBranch` backs the picker's row rename when adding a member, where
-  // modifyEdt's `renameBranches` cannot apply (no existing membership to resolve `oldName`).
+  // Branch-picker capabilities wrapping core/edt/modify.ts's exports.
+  // renameBranch backs picker's row rename when adding member (where modifyEdt's
+  // renameBranches cannot apply due to no existing membership).
   listBranches: (repoPath: string) => Promise<Result<string[]>>;
-  // The create wizard's Step 3 per-service lists (local + remote-tracking refs), wrapping
-  // core/edt/create.ts's listCreateCandidateBranches — never fetches.
+  // Create wizard's Step 3 per-service lists (local + remote-tracking refs).
+  // Wraps core/edt/create.ts's listCreateCandidateBranches — never fetches.
   listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
   renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<Result<void>>;
-  // EDT action state for the detail pane — tracks the in-progress action and loads the action
-  // log per EDT.
+  // EDT action state for detail pane — tracks in-progress action and loads action log per EDT.
   currentEdtAction: EdtActionState | null;
   setCurrentEdtAction: (action: EdtActionState | null) => void;
   edtActionLog: EdtActionLogEntry[];
   edtActionLogStatus: 'idle' | 'loading' | 'error';
   loadEdtActionLog: (ulid: string) => Promise<void>;
-  // EDT command dialog openers — thin store-level wrappers so commands can trigger the same
-  // dialogs edts-zone.tsx owns.
+  // EDT command dialog openers — thin store-level wrappers.
+  // Delegates to edts-zone dialog state machines.
   openEdtCreateDialog: () => void;
   openEdtSwitchDialog: (fullQuery: string) => void;
   openEdtModifyDialog: (fullQuery: string) => void;
   openEdtDeleteDialog: (fullQuery: string) => void;
-  // `edt-create-from [topic]` — opens the creation wizard seeded from a root EDT.
+  // `edt-create-from [topic]` — opens creation wizard seeded from root EDT.
   openEdtCreateFromDialog: (fullQuery: string) => void;
-  // Logs an EDT action to the per-EDT SQLite action_log table.
+  // Logs EDT action to per-EDT SQLite action_log table.
   logEdtAction: (ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string) => Promise<void>;
 };
 
 export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], EdtSlice> {
   // The pending seam promise's resolver — installed when switchActiveEdt raises a dirty-repo
-  // preview, consumed when the dialog dispatches its choice. Held in closure, never in Zustand
-  // state (mirrors UpdateSlice's own pendingBlockerResolve).
+  // preview, consumed when the dialog dispatches its choice.
   let pendingSwitchDirtyResolve: ((choice: SwitchDirtyReposChoice) => void) | null = null;
   return (set, get) => ({
     activeEdt: null,
@@ -206,13 +184,12 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
     edtsUnreachable: [],
     edtsErrors: [],
     loadEdtsBranches: async () => {
-      // A no-op-with-signal guard, not a throw: an unwired store (tests included) must stay
-      // usable — it just can never actually load.
+      // A no-op-with-signal guard: unwired store (tests) must stay usable but never load.
       if (!deps) {
         set({ edtsBranchesStatus: 'error', edtsBranchesError: NO_DEPS_ERROR });
         return;
       }
-      // Avoid a duplicate concurrent fetch (e.g. an effect re-firing) racing this one.
+      // Avoid duplicate concurrent fetch (effect re-firing) racing this one.
       if (get().edtsBranchesStatus === 'loading') {
         return;
       }
@@ -250,15 +227,13 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       set({ edtsStatus: 'loading', edtsError: null });
       const listed = await deps.edtRegistry.list();
       if (!listed.ok) {
-        // Mirrors edtsBranches' own rule: never show stale rows under an error banner —
-        // `edts` is cleared, not left at its last-successful value.
+        // Never show stale rows under error banner — edts cleared, not last-successful.
         set({ edtsStatus: 'error', edtsError: listed.error.message, edts: [] });
         return;
       }
-      // A `state.json` read failure is unrelated to whether the EDT registry loaded — don't
-      // discard a good `edts` list (including a genuinely-empty one, which auto-opens the
-      // create prompt) just because the active-EDT pointer read failed alongside it. Degrade
-      // only the pointer, to "no active EDT known".
+      // state.json read failure unrelated to EDT registry load — don't discard good edts list
+      // (including genuinely-empty, which auto-opens create prompt) just because active-EDT
+      // pointer read failed alongside it. Degrade only pointer to "no active EDT known".
       const activeUlid = await deps.state.readActiveEdt();
       set({
         edts: listed.data,
@@ -285,10 +260,10 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         memberPlans: params.memberPlans,
       });
       if (result.ok) {
-        // A create never touches state.json's active pointer — activation only happens through
-        // the wizard's Step 4 (activateEdt for the first EDT, or switchEdt). A new EDT is a
-        // fresh set of active-EDT members: reload gated-tab visibility so a carrying member
-        // flips its tab immediately. Fire-and-forget: never blocks the create flow's result.
+        // Create never touches state.json's active pointer — activation only through
+        // wizard's Step 4 (activateEdt for first EDT, or switchEdt). New EDT is fresh set
+        // of active-EDT members: reload gated-tab visibility so carrying member flips tab.
+        // Fire-and-forget: never blocks create flow's result.
         void get().loadTabVisibility();
       }
       return result;
@@ -336,10 +311,9 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           state: deps.state,
           topic: params.topic,
           force: params.force,
-          // The TUI backs the dirty-repo seam — core pauses the switch (before any git write)
-          // on the batch of dirty repos and waits here while the switch dialog's resolution
-          // view collects the developer's choice. No explicit dirtyResolutions: the seam is the
-          // TUI's only resolution source.
+          // TUI backs dirty-repo seam: core pauses switch (pre-git write) on dirty repos batch
+          // and waits here while switch dialog's resolution view collects developer's choice.
+          // No explicit dirtyResolutions: seam is TUI's only resolution source.
           onDirtyReposBeforeSwitch: async (dirty) => {
             set({ switchDirtyRepos: dirty });
             return new Promise<SwitchDirtyReposChoice>((resolve) => {
@@ -348,17 +322,17 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           },
         });
         if (result.ok) {
-          // Success updates the store's cached active-EDT pointer immediately — a direct
-          // consequence of this switch, not a continuous fs.watch/poll re-sync.
+          // Success updates store's cached active-EDT pointer immediately — direct consequence
+          // of this switch, not continuous fs.watch/poll re-sync.
           set({ activeEdt: result.data.ulid });
-          // Switching the active EDT swaps its whole member set — reload
-          // gated-tab visibility so a newly (in)active member's tab flips immediately.
+          // Switching active EDT swaps whole member set — reload gated-tab visibility so
+          // newly (in)active member's tab flips immediately.
           void get().loadTabVisibility();
         }
         return result;
       } finally {
-        // A run that threw (or resolved) while a preview was still raised must not leave the
-        // dialog stuck waiting forever — mirrors UpdateSlice's own defensive cleanup.
+        // Run that threw/resolved while preview raised must not leave dialog stuck waiting —
+        // mirrors UpdateSlice's defensive cleanup.
         pendingSwitchDirtyResolve = null;
         if (get().switchDirtyRepos !== null) {
           set({ switchDirtyRepos: null });
@@ -384,16 +358,16 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         renameBranches: params.renameBranches,
       });
       if (result.ok) {
-        // A member add/remove may target the active EDT — reload gated-tab visibility so the
-        // tab bar reflects the new membership immediately. Cheap and always correct even when
-        // the modified EDT wasn't the active one.
+        // Member add/remove may target active EDT — reload gated-tab visibility so tab bar
+        // reflects new membership immediately. Cheap and always correct even when modified EDT
+        // wasn't active one.
         void get().loadTabVisibility();
       }
       return result;
     },
-    // Note: unlike createEdt/switchEdt/modifyEdt, a successful delete never targets the active
-    // EDT (rejected upfront by the use-case itself) and never adds/removes an active member —
-    // so there is nothing for loadTabVisibility to recompute here.
+    // Unlike createEdt/switchEdt/modifyEdt, successful delete never targets active EDT
+    // (rejected upfront by use-case) and never adds/removes active member — nothing for
+    // loadTabVisibility to recompute here.
     deleteEdt: async (params) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
@@ -469,8 +443,8 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         set({ edtActionLog: [], edtActionLogStatus: 'idle' });
       }
     },
-    // EDT command dialog openers - delegate to the edts-zone dialog state machines
-    // These are thin store-level wrappers so commands can trigger the same dialogs
+    // EDT command dialog openers — thin store-level wrappers.
+    // Delegates to edts-zone dialog state machines.
     openEdtCreateDialog: () => {
       // The edts-zone component manages its own dialog state locally.
       // We set a flag that the zone can read to auto-open the create dialog.
