@@ -13,6 +13,7 @@ import {
   formatLogLine,
   healthBadgeState,
   isDefaultLogFilterSpec,
+  isRestartingDisplay,
   resolveEffectiveLines,
   sliceVisibleWindow,
   type LogFilterSpec,
@@ -58,6 +59,7 @@ export function FullscreenPane({
   // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   const paneHealth = pane?.health ?? 'down';
+  const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
   const noContainer = paneHealth === 'no-container';
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
@@ -71,11 +73,11 @@ export function FullscreenPane({
             manifest without `container` shows the dim no-container state with no restart
             control at all. */}
         <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(paneHealth)} />
-          <Text color={colors['text-dim']}> {formatHealthLabel(paneHealth)}</Text>
+          <StatusBadge state={healthBadgeState(displayHealth)} />
+          <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
         </Box>
-        {noContainer ? null : pane?.restarting || paneHealth === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restarting…</Text>
+        {noContainer ? null : displayHealth === 'restarting' ? (
+          <Text color={colors['text-dim']}> [R] restart requested — re-verifying…</Text>
         ) : (
           <Text color={colors['text-dim']}> [R] restart</Text>
         )}

@@ -347,4 +347,139 @@ describe('LogsZone', () => {
     expect(output).toContain('No active EDT.');
     expect(output).toContain('more below');
   });
+
+  it('container-less rows render only in the info-only without-container section, once each, never as selectable rows', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edt({ members: [{ service: 'lib-a', repoPath: '/repos/lib-a', branch: 'main' }] })],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        service({ service: 'lib-a', path: '/repos/lib-a', isMember: true }),
+        service({ service: 'lib-b', path: '/repos/lib-b', isMember: false }),
+        service({ service: 'api-gateway', path: '/repos/api-gateway', isMember: false }),
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsNoContainer: { '/repos/lib-a': true, '/repos/lib-b': true },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('SERVICES WITHOUT CONTAINER');
+    // The narrow list column word-wraps long lines — normalize before matching text.
+    const flat = output.replace(/\s+/g, ' ');
+    expect(flat).toContain('Info only — not selectable.');
+    expect(flat).toContain('no container');
+    // Each container-less service renders exactly once (the info-only row), never additionally
+    // in its old membership list; the member's departure empties the EDT-members list.
+    expect(output.split('lib-a').length - 1).toBe(1);
+    expect(output.split('lib-b').length - 1).toBe(1);
+    expect(flat).toContain('No services in the active EDT.');
+    expect(output).toContain('api-gateway');
+  });
+
+  it('rows with unresolved presence stay in their membership list and no third section renders', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).not.toContain('SERVICES WITHOUT CONTAINER');
+    expect(output).toContain('route-explorer');
+  });
+
+  it('every listed row carries a badge without any subscription, defaulting to down', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('○');
+    expect(output).toContain('down');
+  });
+
+  it('listed-row health fills the badge without a subscription', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'route-explorer', path: '/repos/route-explorer' })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsListedHealth: { '/repos/route-explorer': 'up' },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('●');
+    expect(output).toContain('up');
+  });
+
+  it('a restarting row names the request and the re-verification, from the health or the in-flight flag', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        service({ service: 'svc-health', path: '/repos/svc-health' }),
+        service({ service: 'svc-flag', path: '/repos/svc-flag' }),
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsPanes: {
+        '/repos/svc-health': {
+          repoPath: '/repos/svc-health',
+          service: 'svc-health',
+          lines: [],
+          streamError: null,
+          noMoreHistory: false,
+          scrollOffset: 0,
+          health: 'restarting',
+          restarting: false,
+        },
+        '/repos/svc-flag': {
+          repoPath: '/repos/svc-flag',
+          service: 'svc-flag',
+          lines: [],
+          streamError: null,
+          noMoreHistory: false,
+          scrollOffset: 0,
+          health: 'up',
+          restarting: true,
+        },
+      },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    // The exact wording is locked in the logic unit tests; the narrow list column word-wraps
+    // (and the grid interleaves columns), so here assert the distinctive new token reaches the
+    // screen while the bare state reads nowhere.
+    const flat = output.replace(/\s+/g, ' ');
+    expect(flat).toContain('re-verifying');
+    expect(flat).not.toContain('restarting');
+    expect(output).toContain('⣾');
+  });
 });

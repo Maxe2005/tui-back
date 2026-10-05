@@ -14,6 +14,7 @@ import {
   formatLogLine,
   healthBadgeState,
   isDefaultLogFilterSpec,
+  isRestartingDisplay,
   resolveEffectiveLines,
   sliceVisibleWindow,
   type LogFilterSpec,
@@ -55,8 +56,10 @@ export function LogsPaneView({
   // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   // A manifest without `container` has no stream at all — the badge goes dim (never down)
-  // and the restart control is absent entirely.
+  // and the restart control is absent entirely. A requested restart reads explicitly until
+  // the re-verifying poll lands, never as the bare state.
   const paneHealth = pane?.health ?? 'down';
+  const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
   const noContainer = paneHealth === 'no-container';
   return (
     <Box
@@ -81,11 +84,11 @@ export function LogsPaneView({
         {/* Inline health badge next to the service's logs (glyph+color paired) + the restart
             control's disabled state while restarting. */}
         <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(paneHealth)} />
-          <Text color={colors['text-dim']}> {formatHealthLabel(paneHealth)}</Text>
+          <StatusBadge state={healthBadgeState(displayHealth)} />
+          <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
         </Box>
-        {noContainer ? null : pane?.restarting || paneHealth === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restarting…</Text>
+        {noContainer ? null : displayHealth === 'restarting' ? (
+          <Text color={colors['text-dim']}> [R] restart requested — re-verifying…</Text>
         ) : (
           <Text color={colors['text-dim']}> [R]</Text>
         )}
