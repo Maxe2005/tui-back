@@ -4,6 +4,7 @@
 // interrupted marking + edts refresh) rather than re-testing the use-case matrix.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../../../../../core/result.js';
+import { toggleMergeSource } from '../../zones/update/update-config-panels.logic.js';
 import type { ContainerPort } from '../../../../../core/ports/container.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
@@ -696,12 +697,14 @@ describe('update slice: pre-run configuration screen', () => {
     expect(store.getState().updateConfig).toEqual({
       scope: 'edt',
       rows: [
-        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
-        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true, migrationDeclared: true, recipeDeclared: false, migrations: 'follow', cleanRestart: 'follow' },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true, migrationDeclared: true, recipeDeclared: false, migrations: 'follow', cleanRestart: 'follow' },
       ],
       runMigrations: true,
       cleanRestart: false,
       error: null,
+      layout: 'edt-panels',
+      strategy: { kind: 'shared' },
     });
     // Opening the screen runs no git/docker action and starts no run.
     expect(store.getState().updateStatus).toBe('idle');
@@ -900,7 +903,7 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().confirmUpdateConfig();
 
     expect(store.getState().updateConfig).not.toBeNull();
-    expect(store.getState().updateConfig?.error).toContain('No services selected');
+    expect(store.getState().updateConfig?.error).toContain('Aucun service sélectionné');
     expect(store.getState().updateStatus).toBe('idle');
     expect(deps.git.fetch).not.toHaveBeenCalled();
     expect(deps.git.pull).not.toHaveBeenCalled();
@@ -923,7 +926,7 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().confirmUpdateConfig();
 
     expect(store.getState().updateConfig).not.toBeNull();
-    expect(store.getState().updateConfig?.error).toContain('empty source branch');
+    expect(store.getState().updateConfig?.error).toContain('pas de branche source');
     expect(store.getState().updateStatus).toBe('idle');
     expect(deps.git.fetch).not.toHaveBeenCalled();
     expect(deps.git.pull).not.toHaveBeenCalled();
@@ -1169,6 +1172,8 @@ describe('update slice: pre-run configuration screen', () => {
       runMigrations: true,
       cleanRestart: false,
       error: null,
+      layout: 'simple',
+      strategy: { kind: 'shared' },
     })).not.toThrow();
     expect(store.getState().updateConfig).toBeNull();
   });
@@ -1898,5 +1903,92 @@ describe('update slice: single-service command dialog', () => {
 
     expect(store.getState().updateServiceSelectRequest).toBe(false);
     expect(store.getState().updateServicePick).toBeNull();
+  });
+});
+
+describe('update slice: merge source from another EDT', () => {
+  function depsWithSibling() {
+    const deps = fakeDeps();
+    const base = deps.edtRegistry!.list as ReturnType<typeof vi.fn>;
+    base.mockImplementation(async () =>
+      ok([
+        { ulid: 'edt-1', topic: 'demo', createdAt: '', status: 'active' as const, members: MEMBERS },
+        {
+          ulid: 'edt-2',
+          topic: 'sibling',
+          createdAt: '',
+          status: 'inactive' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/sib' }],
+        },
+      ]),
+    );
+    (deps.git!.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) =>
+      ok(path === '/repo/a' ? ['development', 'feat/sib'] : ['development']),
+    );
+    return deps;
+  }
+
+  it('lists every EDT except the one being updated', async () => {
+    const store = createAppStore(depsWithSibling());
+    expect(await store.getState().listMergeSourceEdts()).toEqual([{ ulid: 'edt-2', topic: 'sibling' }]);
+  });
+
+  it('resolves rows from the chosen EDT and flags services it does not cover', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig('edt');
+    store.getState().setUpdateConfig(toggleMergeSource(store.getState().updateConfig!));
+
+    await store.getState().chooseMergeSourceEdt('edt-2');
+
+    const rows = store.getState().updateConfig!.rows;
+    expect(rows[0]).toMatchObject({ sourceBranch: 'feat/sib', origin: 'edt' });
+    expect(rows[1]).toMatchObject({ sourceBranch: '', sourceError: 'not-in-edt' });
+  });
+
+  it('refuses the active EDT as its own merge source and reports a vanished EDT', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig('edt');
+
+    await store.getState().chooseMergeSourceEdt('edt-1');
+    expect(store.getState().updateConfig!.strategy.kind).toBe('shared');
+    expect(store.getState().updateConfig!.error).toContain('propre source');
+
+    await store.getState().chooseMergeSourceEdt('gone');
+    expect(store.getState().updateConfig!.error).toContain("n'existe plus");
+  });
+
+  it('drops a resolution that lands after the developer went back to shared branches', async () => {
+    const deps = depsWithSibling();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolveGate) => {
+      release = resolveGate;
+    });
+    (deps.git!.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      await gate;
+      return ok(['development', 'feat/sib']);
+    });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+
+    const pending = store.getState().chooseMergeSourceEdt('edt-2');
+    await Promise.resolve();
+    release();
+    await pending;
+
+    // The draft was still on shared branches when git answered: the late result is ignored.
+    expect(store.getState().updateConfig!.strategy.kind).toBe('shared');
+  });
+
+  it('offers no EDT when the active EDT cannot be read', async () => {
+    const deps = depsWithSibling();
+    (deps.state!.readActiveEdt as ReturnType<typeof vi.fn>).mockImplementation(async () => err('state-read-error', 'boom'));
+    const store = createAppStore(deps);
+    expect(await store.getState().listMergeSourceEdts()).toEqual([]);
+  });
+
+  it('does not offer the panel on a single-service config', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+    expect(store.getState().updateConfig!.layout).toBe('simple');
   });
 });

@@ -573,6 +573,97 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
   });
 
+  it('update --from-edt without a topic is rejected and the flag is documented', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    expect(update.usage).toContain('--from-edt <topic>');
+    expect(await update.run(['--from-edt'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await update.run(['--from-edt', 'a', '--all'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('update --from-edt fails with no-active-edt when no EDT is active', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    expect(await update.run(['--from-edt', 'sibling'])).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
+  });
+
+  describe('update --from-edt', () => {
+    const entry = (ulid: string, topic: string, branch: string) => ({
+      ulid,
+      topic,
+      createdAt: '2026-10-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch }],
+    });
+
+    function wired(localBranches: string[]) {
+      const merges: [string, string][] = [];
+      // Every GitPort method answers ok(undefined) unless overridden below.
+      const git = new Proxy(
+        {
+          currentBranch: async () => ok('feat/mine'),
+          branchExistsLocally: async () => ok(true),
+          hasUncommittedChanges: async () => ok(false),
+          isMergeInProgress: async () => ok(false),
+          isRebaseInProgress: async () => ok(false),
+          listDirtyPaths: async () => ok([]),
+          listBranches: async () => ok(localBranches),
+          mergeBranch: async (path: string, branch: string) => {
+            merges.push([path, branch]);
+            return ok(undefined);
+          },
+        } as Record<string, unknown>,
+        { get: (target, key: string) => target[key] ?? (async () => ok(undefined)) },
+      ) as unknown as GitPort;
+      const subcommands = buildTestSubcommands({
+        git,
+        edtRegistry: {
+          add: async () => ok(undefined),
+          list: async () => ok([entry('A', 'mine', 'feat/mine'), entry('B', 'sibling', 'feat/x')]),
+          setStatus: async () => ok(undefined),
+          update: async () => ok(undefined),
+          remove: async () => ok(undefined),
+        },
+        state: { ...fakeState(), readActiveEdt: async () => ok('A') },
+        manifest: {
+          load: async () => ok({ service: 'svc-a', container: 'ctr-a', sharedBranch: 'development', modules: {} }),
+        },
+      });
+      const update = subcommands.find((subcommand) => subcommand.name === 'update');
+      if (!update) throw new Error('expected update subcommand');
+      return { update, merges };
+    }
+
+    it('merges the sibling EDT branch instead of the shared branch', async () => {
+      const { update, merges } = wired(['feat/x']);
+
+      const result = await update.run(['--from-edt', ' sibling ']);
+
+      expect(result).toMatchObject({ ok: true, data: { scope: 'edt', results: [{ service: 'svc-a', outcome: 'updated' }] } });
+      expect(merges).toEqual([['/repo/a', 'feat/x']]);
+    });
+
+    it('fails update-source-unresolved with no git write when a member has no branch', async () => {
+      const { update, merges } = wired(['development']);
+
+      const result = await update.run(['--from-edt', 'sibling']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'update-source-unresolved' } });
+      expect(merges).toEqual([]);
+    });
+
+    it('rejects an unknown topic and the active EDT own topic', async () => {
+      const { update } = wired(['feat/x']);
+
+      expect(await update.run(['--from-edt', 'nope'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(await update.run(['--from-edt', 'mine'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+  });
+
   describe('registry clean', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');

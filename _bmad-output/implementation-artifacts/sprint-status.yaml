@@ -114,7 +114,7 @@ development_status:
   3-9-per-service-actions-clean-restart-single-service-update: done
   3-10-live-per-service-run-tracking-current-step-issue-log: done
   3-11-update-commands-main-all-repos-single-service: done
-  3-12-update-merge-source-from-another-edt: backlog
+  3-12-update-merge-source-from-another-edt: done
   epic-3-retrospective: optional
 
   epic-4: backlog

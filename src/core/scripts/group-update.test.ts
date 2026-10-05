@@ -1930,6 +1930,49 @@ describe('groupUpdate — pre-run configuration', () => {
     expect(calls(container.restart)).toHaveLength(2);
   });
 
+  it('a per-service runMigrations override beats the run-wide toggle in both directions', async () => {
+    const migration = fakeMigration();
+
+    await groupUpdate(
+      makeParams({
+        migration,
+        runMigrations: true,
+        selection: [
+          { service: 'svc-a', repoPath: '/repo/a', runMigrations: false },
+          { service: 'svc-b', repoPath: '/repo/b' },
+        ],
+      }),
+    );
+    expect(calls(migration.run).map(([path]) => path)).toEqual(['/repo/b']);
+
+    const second = fakeMigration();
+    await groupUpdate(
+      makeParams({
+        migration: second,
+        runMigrations: false,
+        selection: [{ service: 'svc-a', repoPath: '/repo/a', runMigrations: true }, { service: 'svc-b', repoPath: '/repo/b' }],
+      }),
+    );
+    expect(calls(second.run).map(([path]) => path)).toEqual(['/repo/a']);
+  });
+
+  it('a per-service cleanRestart: false keeps the plain restart even when the run asks for a clean one', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+
+    await groupUpdate(
+      makeParams({
+        container,
+        restart,
+        cleanRestart: true,
+        selection: [{ service: 'svc-a', repoPath: '/repo/a', cleanRestart: false }],
+      }),
+    );
+
+    expect(calls(container.restart)).toEqual([['ctr-a']]);
+    expect(calls(restart.run)).toHaveLength(0);
+  });
+
   it('cleanRestart: true without a declared recipe falls back to the plain container restart', async () => {
     const container = fakeContainer();
     const restart = fakeRestart();
@@ -2035,6 +2078,25 @@ describe('groupUpdate — pre-run configuration', () => {
     expect(calls(git.fetch)).toContainEqual(['/repo/a', 'release/1']);
     expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'release/1']);
     expect(calls(git.fetch)).toContainEqual(['/repo/b', 'development']);
+  });
+
+  it('an all-repos per-service toggle override beats the run-wide toggle', async () => {
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const params: GroupUpdateParams = {
+      ...makeParams({ migration, container }),
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      runMigrations: true,
+      selection: [
+        { service: 'a', repoPath: '/repo/a', runMigrations: false },
+        { service: 'b', repoPath: '/repo/b' },
+      ],
+    };
+
+    await groupUpdate(params);
+
+    expect(calls(migration.run).map(([path]) => path)).toEqual(['/repo/b']);
   });
 });
 

@@ -439,6 +439,8 @@ it('shouldQuit returns true for q', () => {
         closeUpdateServicePick: () => {},
         setUpdateConfig: () => {},
         closeUpdateConfig: () => {},
+        listMergeSourceEdts: async () => [],
+        chooseMergeSourceEdt: async () => {},
         confirmUpdateConfig: async () => {},
         // Per-service standalone restart in-flight map + runner
         serviceRestartInFlight: {},

@@ -12,6 +12,7 @@ import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
+import { selectionFromEdt } from '../../../core/scripts/resolve-merge-sources.js';
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
@@ -43,7 +44,7 @@ const EDT_DELETE_USAGE =
   'tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]... ' +
   '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
-const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
+const UPDATE_USAGE = 'tui-back update | tui-back update --from-edt <topic> | tui-back update --all --yes';
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
@@ -201,6 +202,29 @@ export function buildSubcommands(deps: {
             cleanRestart: false,
             onUpdateBlocker: undefined,
             // Same no-observer wiring as above.
+            onPhase: undefined,
+          });
+        }
+        if (args.length === 2 && args[0] === '--from-edt' && args[1].trim() !== '') {
+          const selection = await selectionFromEdt({ edtRegistry: deps.edtRegistry, state: deps.state, git: deps.git }, args[1].trim());
+          if (!selection.ok) {
+            return selection;
+          }
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            restart: deps.restart,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'edt',
+            selection: selection.data,
+            runMigrations: true,
+            cleanRestart: false,
+            onUpdateBlocker: undefined,
             onPhase: undefined,
           });
         }

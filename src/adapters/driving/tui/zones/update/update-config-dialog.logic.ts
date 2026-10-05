@@ -4,6 +4,7 @@
 // (migrate ON, clean restart OFF). Deselecting excludes a service entirely; confirming with
 // zero selected is rejected inline. Every keystroke behavior is a pure, unit-tested function.
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../core/scripts/group-update.js';
+import type { MergeSourceError, MergeSourceOrigin, MergeSourceRow } from '../../../../../core/scripts/resolve-merge-sources.js';
 import type { TextEditKey, TextInputState } from '../../shared/components/text-edit.js';
 import {
   createBranchAutocompleteState,
@@ -31,8 +32,36 @@ export interface UpdateConfigRow {
   service: string;
   repoPath: string;
   sourceBranch: string;
+  // The manifest `sharedBranch`: what the row follows under the shared strategy and what
+  // the manual editor is pre-filled with.
+  sharedBranch: string;
+  origin: MergeSourceOrigin;
+  // Set while a from-EDT row cannot resolve; blocks the run only when the row is selected.
+  sourceError?: RowSourceError;
   selected: boolean;
+  // What the manifest declares: an undeclared action can never run, whatever is asked.
+  migrationDeclared: boolean;
+  recipeDeclared: boolean;
+  // Per-service answers to the two run-wide toggles.
+  migrations: ToggleOverride;
+  cleanRestart: ToggleOverride;
 }
+
+export type RowSourceError = MergeSourceError | 'no-edt-chosen';
+export type ToggleOverride = 'follow' | 'off' | 'on';
+
+// Where non-manual rows take their source from: each manifest `sharedBranch`, or the
+// branch recorded for the service in another EDT. `resolved` is that EDT's resolution,
+// kept so a manual row can be reset without re-reading git.
+export type MergeStrategy =
+  | { kind: 'shared' }
+  // From EDT selected but no EDT picked yet: every row is blocked until one is.
+  | { kind: 'edt-pending' }
+  | { kind: 'edt'; ulid: string; topic: string; resolved: MergeSourceRow[] };
+
+// `simple`: the plain checklist (single-service config). `edt-panels`/`all-panels`: the two
+// panels — the merge-source lines exist only in EDT scope.
+export type ConfigLayout = 'simple' | 'edt-panels' | 'all-panels';
 
 // The store-owned draft (live run state lives in Zustand): the run `scope`, one row per
 // targeted service, the two run-wide toggles, and the current inline `error` (null when
@@ -44,24 +73,78 @@ export interface UpdateConfigDraft {
   runMigrations: boolean;
   cleanRestart: boolean;
   error: string | null;
+  layout: ConfigLayout;
+  strategy: MergeStrategy;
 }
 
 export interface UpdateConfigRowInput {
   service: string;
   repoPath: string;
   sourceBranch: string;
+  migrationDeclared?: boolean;
+  recipeDeclared?: boolean;
 }
 
 // Every targeted service starts pre-selected with its branch pre-filled; migrate ON and clean
 // restart OFF — deliberate defaults.
-export function createUpdateConfigDraft(scope: GroupUpdateScope, rows: readonly UpdateConfigRowInput[]): UpdateConfigDraft {
+export function createUpdateConfigDraft(
+  scope: GroupUpdateScope,
+  rows: readonly UpdateConfigRowInput[],
+  options: { layout?: ConfigLayout } = {},
+): UpdateConfigDraft {
   return {
     scope,
-    rows: rows.map((row) => ({ ...row, selected: true })),
+    rows: rows.map((row) => ({
+      service: row.service,
+      repoPath: row.repoPath,
+      sourceBranch: row.sourceBranch,
+      sharedBranch: row.sourceBranch,
+      origin: 'shared',
+      selected: true,
+      migrationDeclared: row.migrationDeclared ?? true,
+      recipeDeclared: row.recipeDeclared ?? true,
+      migrations: 'follow',
+      cleanRestart: 'follow',
+    })),
     runMigrations: true,
     cleanRestart: false,
     error: null,
+    layout: options.layout ?? 'simple',
+    strategy: { kind: 'shared' },
   };
+}
+
+// Re-resolves every non-manual row under `strategy`; manual rows keep their branch. Rows
+// the chosen EDT cannot resolve get an empty source plus the reason.
+export function applyMergeStrategy(draft: UpdateConfigDraft, strategy: MergeStrategy): UpdateConfigDraft {
+  return {
+    ...draft,
+    strategy,
+    rows: draft.rows.map((row) => (row.origin === 'manual' ? row : followStrategy(row, strategy))),
+    error: null,
+  };
+}
+
+function followStrategy(row: UpdateConfigRow, strategy: MergeStrategy): UpdateConfigRow {
+  const { sourceError: _dropped, ...rest } = row;
+  if (strategy.kind === 'shared') {
+    return { ...rest, sourceBranch: row.sharedBranch, origin: 'shared' };
+  }
+  if (strategy.kind === 'edt-pending') {
+    return { ...rest, sourceBranch: '', origin: 'edt', sourceError: 'no-edt-chosen' };
+  }
+  const resolved = strategy.resolved.find((candidate) => candidate.repoPath === row.repoPath);
+  return {
+    ...rest,
+    sourceBranch: resolved?.source ?? '',
+    origin: 'edt',
+    ...(resolved?.error !== undefined ? { sourceError: resolved.error } : {}),
+  };
+}
+
+// An unresolved row opens the editor on its manifest `sharedBranch`, not on the empty source.
+function editorSeed(row: UpdateConfigRow): string {
+  return row.sourceError !== undefined ? row.sharedBranch : row.sourceBranch;
 }
 
 // The focusable rows: every service row in order, then the migrate toggle, then the
@@ -113,7 +196,7 @@ export function beginUpdateConfigBranchEdit(draft: UpdateConfigDraft, index: num
   if (row === undefined) {
     return null;
   }
-  return createBranchAutocompleteState({ value: row.sourceBranch });
+  return createBranchAutocompleteState({ value: editorSeed(row) });
 }
 
 // One branch-editor keystroke — delegates to the shared autocomplete reducer (typing at the
@@ -151,9 +234,13 @@ export function commitUpdateConfigBranchEdit(draft: UpdateConfigDraft, index: nu
   }
   return {
     ...draft,
-    rows: draft.rows.map((candidate, candidateIndex) =>
-      candidateIndex === index ? { ...candidate, sourceBranch: value } : candidate,
-    ),
+    rows: draft.rows.map((candidate, candidateIndex) => {
+      if (candidateIndex !== index) {
+        return candidate;
+      }
+      const { sourceError: _cleared, ...rest } = candidate;
+      return { ...rest, sourceBranch: value, origin: 'manual' };
+    }),
     error: null,
   };
 }
@@ -174,19 +261,47 @@ export function confirmUpdateConfigDraft(
   draft: UpdateConfigDraft,
 ): { ok: true; config: ConfirmedUpdateConfig } | { ok: false; error: string } {
   const selected = draft.rows.filter((row) => row.selected);
+  // The two-panel screen speaks French like edt-create's Step 3; the plain list keeps English.
+  const fr = draft.layout !== 'simple';
   if (selected.length === 0) {
-    return { ok: false, error: 'No services selected — select at least one service before starting the run.' };
+    return {
+      ok: false,
+      error: fr
+        ? 'Aucun service sélectionné — cochez au moins un service avant de lancer.'
+        : 'No services selected — select at least one service before starting the run.',
+    };
+  }
+  const unresolved = selected.filter((row) => row.sourceError !== undefined);
+  if (unresolved.length > 0) {
+    const names = unresolved.map((row) => row.service).join(', ');
+    return {
+      ok: false,
+      error: fr
+        ? `Source de merge non résolue pour : ${names} — configurez la ligne (Entrée) ou décochez-la.`
+        : `Unresolved merge source for: ${names} — pick a branch (Enter) or deselect.`,
+    };
   }
   for (const row of selected) {
     if (row.sourceBranch.trim() === '') {
-      return { ok: false, error: `Service "${row.service}" has an empty source branch — enter a branch or deselect it.` };
+      return {
+        ok: false,
+        error: fr
+          ? `Le service "${row.service}" n'a pas de branche source — saisissez-en une ou décochez-le.`
+          : `Service "${row.service}" has an empty source branch — enter a branch or deselect it.`,
+      };
     }
   }
   return {
     ok: true,
     config: {
       scope: draft.scope,
-      selection: selected.map((row) => ({ service: row.service, repoPath: row.repoPath, sourceBranch: row.sourceBranch })),
+      selection: selected.map((row) => ({
+        service: row.service,
+        repoPath: row.repoPath,
+        sourceBranch: row.sourceBranch,
+        ...(row.migrations !== 'follow' ? { runMigrations: row.migrations === 'on' } : {}),
+        ...(row.cleanRestart !== 'follow' ? { cleanRestart: row.cleanRestart === 'on' } : {}),
+      })),
       runMigrations: draft.runMigrations,
       cleanRestart: draft.cleanRestart,
     },
