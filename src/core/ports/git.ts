@@ -103,6 +103,12 @@ export interface GitPort {
   // uncommitted paths a checkout from `from` to `to` would overwrite are the dirty paths that
   // also appear here. Fails `git-diff-error`.
   diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>>;
+  // The commit HEAD currently points at (`git rev-parse HEAD`) — read-only, gated nowhere.
+  // Fails `git-rev-parse-error` (e.g. an unborn HEAD).
+  headRevision(repoPath: string): Promise<Result<string>>;
+  // Line/file totals between two revisions (`git diff --numstat from to`) — read-only, gated
+  // nowhere. A binary file counts as one file with 0 lines. Fails `git-diff-error`.
+  diffStat(repoPath: string, from: string, to: string): Promise<Result<{ files: number; insertions: number; deletions: number }>>;
   // Consent-gated, path-scoped discard back to HEAD — only core/edt/activate.ts
   // calls it, and only for at-risk paths the developer explicitly confirmed overwriting. Per
   // path, whatever its state: unstaged (`reset -q -- paths`), then restored from HEAD when HEAD

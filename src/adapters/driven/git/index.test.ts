@@ -24,6 +24,8 @@ import {
   currentBranch,
   deleteBranch,
   diffNameOnly,
+  diffStat,
+  headRevision,
   discardAll,
   discardPaths,
   discardPathsToHead,
@@ -1710,6 +1712,50 @@ describe('diffNameOnly', () => {
       ok: false,
       error: { code: 'git-diff-error' },
     });
+  });
+});
+
+describe('headRevision', () => {
+  it('returns the commit HEAD points at, and fails on an unborn HEAD', async () => {
+    const repo = await makeCleanGitRepo();
+    const expected = String(runGit(repo, ['rev-parse', 'HEAD']).stdout).trim();
+
+    expect(await headRevision(repo)).toEqual({ ok: true, data: expected });
+    expect(await createGitPort(manifest).headRevision(repo)).toEqual({ ok: true, data: expected });
+
+    const empty = await mkdtemp(join(tmpdir(), 'tui-back-empty-'));
+    expect(runGit(empty, ['init', '-q']).status).toBe(0);
+    expect(await headRevision(empty)).toMatchObject({ ok: false, error: { code: 'git-rev-parse-error' } });
+    await rm(empty, { recursive: true, force: true });
+  });
+});
+
+describe('diffStat', () => {
+  it('totals files, insertions and deletions, counting a binary file with 0 lines', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'a.ts'), 'l1\nl2\nl3\n');
+    runGit(repo, ['add', 'a.ts']);
+    expect(runGit(repo, ['commit', '-m', 'base']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-q', '-b', 'feat/x']).status).toBe(0);
+    await writeFile(join(repo, 'a.ts'), 'l1\nchanged\n');
+    await writeFile(join(repo, 'new file.txt'), 'n1\nn2\n');
+    await writeFile(join(repo, 'bin.dat'), Buffer.from([0, 1, 2, 0, 3]));
+    runGit(repo, ['add', '.']);
+    expect(runGit(repo, ['commit', '-m', 'change']).status).toBe(0);
+
+    const result = await diffStat(repo, 'development', 'feat/x');
+
+    expect(result).toEqual({ ok: true, data: { files: 3, insertions: 3, deletions: 2 } });
+    expect(await createGitPort(manifest).diffStat(repo, 'feat/x', 'feat/x')).toEqual({
+      ok: true,
+      data: { files: 0, insertions: 0, deletions: 0 },
+    });
+  });
+
+  it('reports git-diff-error for an unknown revision', async () => {
+    const repo = await makeCleanGitRepo();
+
+    expect(await diffStat(repo, 'development', 'no-such-branch')).toMatchObject({ ok: false, error: { code: 'git-diff-error' } });
   });
 });
 
