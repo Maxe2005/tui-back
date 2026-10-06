@@ -884,6 +884,19 @@ describe('formatServiceOutcomeDetail — run detail', () => {
     ).toBe('updated\nmerge: +10/\u22124 lines, 3 files\nmigrations: ran (npm run m) \u2014 a \u21b5 b');
   });
 
+  it('singularizes one file and omits the dash for an empty excerpt', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: {
+          merge: { kind: 'advanced', files: 1, insertions: 1, deletions: 0 },
+          migrations: { kind: 'ran', command: 'm', outputExcerpt: '' },
+        },
+      }),
+    ).toBe('updated\nmerge: +1/\u22120 lines, 1 file\nmigrations: ran (m)');
+  });
+
   it('flags an unavailable diff and keeps run detail on a container-less skipped row', () => {
     expect(
       formatServiceOutcomeDetail({

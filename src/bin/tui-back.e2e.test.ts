@@ -1784,7 +1784,7 @@ describe('tui-back update (black-box)', () => {
     const data = JSON.parse(stdout.trim()).data;
     expect(data.results).toEqual([
       { service: 'route-explorer', outcome: 'failed', detail: expect.objectContaining({ code: 'merge-conflict' }) },
-      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.objectContaining({ merge: expect.objectContaining({ kind: 'advanced', files: expect.any(Number) }) }) },
     ]);
     // The conflicting repo is back at its pre-run HEAD with no merge in progress.
     expect(runGit(a.repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);

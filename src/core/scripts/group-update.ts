@@ -90,14 +90,17 @@ export interface GroupUpdateRepoResult {
 const OUTPUT_EXCERPT_LINES = 3;
 const OUTPUT_EXCERPT_MAX_CHARS = 200;
 
-// Last non-empty lines of the trimmed output, capped so a chatty migration stays one short blob.
+// Last non-empty lines of the trimmed output (ANSI escapes stripped), capped from the tail so
+// the final line — usually the informative one — survives a chatty migration.
 function outputExcerpt(output: string): string {
   const lines = output
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
     .trim()
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter((line) => line.trim() !== '');
-  return lines.slice(-OUTPUT_EXCERPT_LINES).join('\n').slice(0, OUTPUT_EXCERPT_MAX_CHARS);
+  return lines.slice(-OUTPUT_EXCERPT_LINES).join('\n').slice(-OUTPUT_EXCERPT_MAX_CHARS);
 }
 
 // Compares HEAD before/after the pull/merge. A failing read on either side yields no detail;

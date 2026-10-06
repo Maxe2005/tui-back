@@ -2707,6 +2707,17 @@ describe('groupUpdate — per-service run detail', () => {
     expect(migrations?.kind === 'ran' && migrations.outputExcerpt.length).toBe(200);
   });
 
+  it('keeps the tail of a long excerpt and strips ANSI escapes', async () => {
+    const output = `${'x'.repeat(300)}\u001b[31mDONE\u001b[0m`;
+    const migration = fakeMigration({ run: vi.fn(async () => ok({ output })) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    const migrations = rowOf(result, 'svc-a')?.run?.migrations;
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.endsWith('xxDONE')).toBe(true);
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.includes('\u001b')).toBe(false);
+  });
+
   it('reports migrations none when disabled or undeclared', async () => {
     const disabled = await groupUpdate(makeParams({ runMigrations: false }));
     const manifest = fakeManifest({
