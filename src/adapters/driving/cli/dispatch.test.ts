@@ -212,6 +212,8 @@ describe('subcommand registry guards', () => {
       discardPaths: async () => ok(undefined),
       discardAll: async () => ok(undefined),
       diffNameOnly: async () => ok([]),
+      headRevision: async () => ok('head-a'),
+      diffStat: async () => ok({ files: 0, insertions: 0, deletions: 0 }),
       discardPathsToHead: async () => ok(undefined),
       isRebaseInProgress: async () => ok(false),
       hasUnmergedPaths: async () => ok(false),
@@ -561,6 +563,39 @@ describe('subcommand registry guards', () => {
         expect(typeof (result.data as { note?: unknown }).note).toBe('string');
       }
     }
+  });
+
+  it('update carries the per-service run detail additively on each result row', async () => {
+    const registry: RegistryPort = {
+      list: async () => ok(['/repo/a']),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: '/p', backupPath: null }),
+      remove: async () => ok(undefined),
+    };
+    const manifest: ManifestPort = {
+      load: async () => ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} }),
+    };
+    const migration: MigrationPort = { run: async () => ok({ output: 'migrated\n' }) };
+    const subcommands = buildTestSubcommands({ registry, manifest, migration });
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    const result = await update.run(['--all', '--yes']);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          {
+            service: 'svc-a',
+            outcome: 'updated',
+            run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'ran', command: 'npm run m', outputExcerpt: 'migrated' } },
+          },
+        ],
+      },
+    });
   });
 
   it('update fails with no-active-edt when no EDT is active', async () => {

@@ -1749,8 +1749,8 @@ describe('tui-back update (black-box)', () => {
         ulid: expect.any(String),
         topic: 'demo',
         results: [
-          { service: 'route-explorer', outcome: 'updated' },
-          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'edt',
       },
@@ -1784,7 +1784,7 @@ describe('tui-back update (black-box)', () => {
     const data = JSON.parse(stdout.trim()).data;
     expect(data.results).toEqual([
       { service: 'route-explorer', outcome: 'failed', detail: expect.objectContaining({ code: 'merge-conflict' }) },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The conflicting repo is back at its pre-run HEAD with no merge in progress.
     expect(runGit(a.repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);
@@ -1810,7 +1810,7 @@ describe('tui-back update (black-box)', () => {
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
       { service: 'route-explorer', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The dirty repo was never merged: the origin's advance is still not an ancestor.
     const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
@@ -1838,8 +1838,8 @@ describe('tui-back update (black-box)', () => {
     expect(status).toBe(0);
     expect(stdout.trim().split('\n')).toHaveLength(1);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
-      { service: 'route-explorer', outcome: 'updated' },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The lockfile dirt was discarded (committed content restored) and the merge landed.
     expect(await readFile(join(a.repo, 'package.json'), 'utf8')).toBe('{"name":"route-explorer"}\n');
@@ -1860,8 +1860,8 @@ describe('tui-back update (black-box)', () => {
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
-      { service: 'route-explorer', outcome: 'updated' },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // Both members merged AND migrated: the origin advance is an ancestor and the
     // migration's marker file exists in each working tree.
@@ -1885,8 +1885,8 @@ describe('tui-back update (black-box)', () => {
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
-      { service: 'route-explorer', outcome: 'updated' },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
   });
 
@@ -1903,7 +1903,7 @@ describe('tui-back update (black-box)', () => {
 
     expect(status).toBe(0);
     const data = JSON.parse(stdout.trim()).data;
-    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'updated' });
+    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'updated', run: expect.anything() });
     expect(data.results[0].service).toBe('route-explorer');
     expect(data.results[0].outcome).toBe('failed');
     expect(data.results[0].detail.code).toBe('migration-failed');
@@ -1934,7 +1934,7 @@ describe('tui-back update (black-box)', () => {
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
       { service: 'route-explorer', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The dirty repo was never merged and never migrated.
     const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
@@ -1982,8 +1982,8 @@ describe('tui-back update (black-box)', () => {
         ulid: 'all',
         topic: 'all-repos',
         results: [
-          { service: 'route-explorer', outcome: 'updated' },
-          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'all',
       },
@@ -2074,7 +2074,7 @@ describe('tui-back update (black-box)', () => {
       data: {
         ulid: expect.any(String),
         topic: 'demo',
-        results: [{ service: 'route-explorer', outcome: 'updated' }],
+        results: [{ service: 'route-explorer', outcome: 'updated', run: expect.anything() }],
         scope: 'edt',
       },
     });
@@ -2100,8 +2100,8 @@ describe('tui-back update (black-box)', () => {
         ulid: 'all',
         topic: 'all-repos',
         results: [
-          { service: 'route-explorer', outcome: 'updated' },
-          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'all',
       },
@@ -2123,7 +2123,7 @@ describe('tui-back update (black-box)', () => {
     const { status, stdout } = runCli(['update'], dockerEnv);
 
     expect(status).toBe(0);
-    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated', run: expect.anything() }]);
     // No recipe declared, so the run took the plain container-restart path.
     expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
   });
@@ -2142,7 +2142,7 @@ describe('tui-back update (black-box)', () => {
     const { status, stdout } = runCli(['update'], dockerEnv);
 
     expect(status).toBe(0);
-    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated', run: expect.anything() }]);
     // The plain container restart ran instead of the recipe.
     expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
     // No recipe command ever executed in the repo working directory.
