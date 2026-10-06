@@ -56,6 +56,16 @@ import {
 } from '../../shared/components/json-tree/model.js';
 import { ListDetailSplit } from '../../shared/components/list-detail-split.js';
 import { ListRow } from '../../shared/components/list-row.js';
+import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import {
+  FilterablePickList,
+  clampPickListCursor,
+  createFilterablePickListState,
+  handleFilterablePickListKey,
+  matchPickItemsBySubstring,
+  type FilterablePickItem,
+  type FilterablePickListState,
+} from '../../shared/components/filterable-pick-list.js';
 import { Spinner } from '../../shared/components/spinner.js';
 import { nextTextInputValue, type TextInputState } from '../../shared/components/text-edit.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
@@ -85,6 +95,7 @@ import {
 } from './routes-request.logic.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
+import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -131,6 +142,12 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateBodyDraft = useStore((state) => state.updateBodyDraft);
   const setBodyEditError = useStore((state) => state.setBodyEditError);
   const setBodyEditErrors = useStore((state) => state.setBodyEditErrors);
+  const draftOrigins = useStore((state) => state.draftOrigins);
+  const savedRequests = useStore((state) => state.savedRequests);
+  const refreshSavedRequests = useStore((state) => state.refreshSavedRequests);
+  const saveRequestDraft = useStore((state) => state.saveRequestDraft);
+  const loadSavedRequest = useStore((state) => state.loadSavedRequest);
+  const deleteSavedRequest = useStore((state) => state.deleteSavedRequest);
 
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
 
@@ -159,6 +176,18 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [rowEdit, setRowEdit] = useState<{ section: RequestRowSection; index: number; input: TextInputState } | null>(null);
   const [rowAddPrompt, setRowAddPrompt] = useState<{ section: 'query' | 'headers'; input: TextInputState; error: string | null } | null>(null);
   const [fireBlock, setFireBlock] = useState<string | null>(null);
+  // The saved-request library UI. `savePrompt` is the Request tab's inline name prompt
+  // (prefilled with the origin name when the draft came from a saved request);
+  // `overwriteConfirm` is the destructive-overwrite confirm behind Ctrl+O (UX-DR36);
+  // the picker is the list's `FilterablePickList` reload dialog with stale rows dimmed and
+  // blocked, plus its own `d`-to-delete confirm. Any open prompt owns every key.
+  const [savePrompt, setSavePrompt] = useState<{ input: TextInputState; error: string | null; duplicate: boolean } | null>(null);
+  const [overwriteConfirm, setOverwriteConfirm] = useState<{ name: string } | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerState, setPickerState] = useState<FilterablePickListState>(() => createFilterablePickListState());
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [pickerDeleteConfirm, setPickerDeleteConfirm] = useState<{ name: string } | null>(null);
   // The request-body editor's transient inline/raw UI. Drafts, folds and filters live in the
   // store (per route, session-only), so a revisit restores them together; only the text
   // buffers are zone-local.
@@ -172,8 +201,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const paneFocused = paneFocus === 'detail';
   useEffect(() => {
-    setZoneInputCaptured(filterEditing || paneFocused);
-  }, [filterEditing, paneFocused, setZoneInputCaptured]);
+    setZoneInputCaptured(
+      filterEditing || paneFocused || savePrompt !== null || pickerOpen || overwriteConfirm !== null || pickerDeleteConfirm !== null,
+    );
+  }, [filterEditing, paneFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
@@ -191,6 +222,58 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     [paneRoute, paneRouteKey, requestDrafts],
   );
   const paneHasBody = paneRoute !== null && canEditRouteBody(paneRoute);
+
+  // The saved picker rows: a stale record carries a dim `stale` suffix in its meta and is
+  // blocked at select time (never loaded, never fired — deletion only, through a confirm).
+  const savedItems: FilterablePickItem<SavedWithStale>[] = useMemo(
+    () =>
+      (savedRequests ?? []).map((request) => ({
+        key: request.id,
+        label: request.name,
+        meta: `${request.method} ${request.path}${request.stale ? ' · stale' : ''}`,
+        value: request,
+      })),
+    [savedRequests],
+  );
+
+  const openSavePrompt = () => {
+    setSaveNotice(null);
+    const originId = paneRouteKey === null ? undefined : draftOrigins[paneRouteKey];
+    const prefill =
+      originId === undefined ? '' : (savedRequests?.find((item) => item.id === originId)?.name ?? '');
+    setSavePrompt({ input: { value: prefill, cursor: prefill.length }, error: null, duplicate: false });
+  };
+
+  // Enter saves under the prompt's name; a colliding name stays in the prompt with an inline
+  // collision error until Ctrl+O overwrites through the destructive confirm.
+  const attemptSave = (overwrite: boolean) => {
+    if (savePrompt === null || paneRouteKey === null) {
+      return;
+    }
+    const routeKey = paneRouteKey;
+    const name = savePrompt.input.value;
+    const input = savePrompt.input;
+    void (async () => {
+      const result = await saveRequestDraft(name, routeKey, overwrite ? { overwrite: true } : undefined);
+      if (result.ok) {
+        setSavePrompt(null);
+        setOverwriteConfirm(null);
+        setSaveNotice(`Saved "${result.data.name}"`);
+        void refreshSavedRequests();
+      } else if (result.error.code === 'duplicate-request-name' && !overwrite) {
+        setSavePrompt({ input, error: `"${name}" is already used — [ctrl+o] overwrite`, duplicate: true });
+      } else {
+        setSavePrompt({ input, error: result.error.message, duplicate: false });
+      }
+    })();
+  };
+
+  const openPicker = () => {
+    setPickerState(createFilterablePickListState());
+    setPickerError(null);
+    setPickerOpen(true);
+    void refreshSavedRequests();
+  };
 
   // The fired body, classified in the driving adapter (never core): JSON becomes the
   // navigable tree, anything else its raw/empty fallback.
@@ -383,6 +466,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       return;
     }
     setFireBlock(null);
+    setSaveNotice(null);
     setFilterPanelOpen(false);
     setPanelCursor(0);
     const request = buildFireRequest(paneRoute, draft, bodyDraft);
@@ -870,6 +954,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       setRowEdit(null);
       setRowAddPrompt(null);
       setFireBlock(null);
+      setSavePrompt(null);
+      setOverwriteConfirm(null);
+      setSaveNotice(null);
     }
     previousPaneRouteKey.current = paneRouteKey;
   }, [paneRouteKey]);
@@ -901,6 +988,122 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   useInput(
     (input, key) => {
+      // The destructive overwrite confirm owns every key: Enter overwrites, Esc backs out to
+      // the name prompt, nothing else acts.
+      if (overwriteConfirm !== null) {
+        if (key.escape === true) {
+          setOverwriteConfirm(null);
+          return;
+        }
+        if (key.return === true) {
+          attemptSave(true);
+          return;
+        }
+        return;
+      }
+      // The stale-row delete confirm owns every key the same way.
+      if (pickerDeleteConfirm !== null) {
+        if (key.escape === true) {
+          setPickerDeleteConfirm(null);
+          return;
+        }
+        if (key.return === true) {
+          const target = pickerDeleteConfirm.name;
+          void (async () => {
+            const result = await deleteSavedRequest(target);
+            setPickerDeleteConfirm(null);
+            if (!result.ok) {
+              setPickerError(result.error.message);
+            } else {
+              // The row is gone: drop any error line naming it (e.g. the stale-block note).
+              setPickerError(null);
+            }
+            void refreshSavedRequests();
+          })();
+          return;
+        }
+        return;
+      }
+      // The inline name prompt owns every key: Enter saves (a colliding name stays put with
+      // an inline error until Ctrl+O), Esc closes, arrows/tab never leave the field. Ctrl+O
+      // is offered only for a confirmed duplicate — any other error re-saves with Enter.
+      if (savePrompt !== null) {
+        if (key.escape === true) {
+          setSavePrompt(null);
+          return;
+        }
+        if (key.ctrl === true && (input === 'o' || input === 'O')) {
+          if (savePrompt.duplicate) {
+            setOverwriteConfirm({ name: savePrompt.input.value });
+          }
+          return;
+        }
+        if (key.return === true) {
+          attemptSave(false);
+          return;
+        }
+        if (key.upArrow === true || key.downArrow === true || key.tab === true) {
+          return;
+        }
+        if (key.ctrl === true || key.meta === true) {
+          return;
+        }
+        // Editing restarts the attempt: a stale collision error never follows a new name.
+        setSavePrompt((previous) =>
+          previous === null
+            ? previous
+            : { input: nextTextInputValue(previous.input, input, key), error: null, duplicate: false },
+        );
+        return;
+      }
+      // The saved picker owns every key while open: Esc closes, `d` on a stale row (with an
+      // empty filter — while filtering, the input owns every key) asks to delete it, Enter
+      // loads a fresh row (a stale row is blocked with an error line), and everything else filters.
+      if (pickerOpen) {
+        if (key.escape === true) {
+          setPickerOpen(false);
+          return;
+        }
+        if ((input === 'd' || input === 'D') && key.ctrl !== true && key.meta !== true && pickerState.query.trim() === '') {
+          const matches = matchPickItemsBySubstring(pickerState.query, savedItems);
+          const at = matches[clampPickListCursor(pickerState.cursor, matches.length)];
+          if (at !== undefined && at.value.stale) {
+            setPickerDeleteConfirm({ name: at.value.name });
+          }
+          return;
+        }
+        const outcome = handleFilterablePickListKey(pickerState, savedItems, input, key);
+        if (outcome.type === 'update') {
+          setPickerState(outcome.state);
+          return;
+        }
+        if (outcome.type === 'cancel') {
+          setPickerOpen(false);
+          return;
+        }
+        if (outcome.item.value.stale) {
+          setPickerError(`"${outcome.item.value.name}" is stale — press d to delete it`);
+          return;
+        }
+        const targetName = outcome.item.value.name;
+        setPickerOpen(false);
+        void (async () => {
+          const loaded = await loadSavedRequest(targetName);
+          if (!loaded.ok) {
+            setPickerError(loaded.error.message);
+            setPickerOpen(true);
+            return;
+          }
+          resetPaneTransients();
+          setSection('params');
+          setRowCursor(0);
+          setFireBlock(null);
+          setSaveNotice(null);
+          setPaneTab('request');
+          setPaneFocus('detail');
+        })();
+        return;
+      }
       if (filterEditing) {
         // Esc drops the filter entirely; Enter keeps it applied and hands the keyboard back
         // to the list (so Enter never fires a route while the input is still open).
@@ -1032,6 +1235,12 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           return;
         }
         if (key.ctrl === true || key.meta === true) {
+          return;
+        }
+        // `s` saves the draft under a name (prefilled with the origin name when the draft
+        // came from a saved request); every inline sub-editor above already owns its keys.
+        if ((input === 's' || input === 'S') && paneTab === 'request') {
+          openSavePrompt();
           return;
         }
         if (paneTab === 'request') {
@@ -1245,6 +1454,12 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setFilterEditing(true);
         return;
       }
+      // `s` opens the saved-request picker: Enter reloads a fresh row into the Request tab
+      // (stale rows render flagged and never load), `d` on a stale row deletes it.
+      if (input === 's' || input === 'S') {
+        openPicker();
+        return;
+      }
       if (key.escape === true && filter.value !== '') {
         setFilter({ value: '', cursor: 0 });
         setSelected(0);
@@ -1333,8 +1548,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     : paneFocused
       ? '[esc] back to the list'
       : focusedEditable
-        ? '[enter] request  [/ f] filter  [e] edit body  [home/end] jump'
-        : '[enter] request  [/ f] filter  [home/end] jump';
+        ? '[enter] request  [/ f] filter  [s] saved  [e] edit body  [home/end] jump'
+        : '[enter] request  [/ f] filter  [s] saved  [home/end] jump';
   // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
   // tabs lead it.
   const paneKeys = '[ctrl+r] fire · [ctrl+←→] tab';
@@ -1360,19 +1575,23 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       : scalarEdit !== null || addPrompt !== null
         ? '[enter] confirm · [esc] cancel'
         : filterPanelOpen
-          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · ${paneKeys}`;
+          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear · [s] save'
+          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · [s] save · ${paneKeys}`;
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
   const requestHint: string | null =
     !paneFocused || paneTab !== 'request'
       ? null
-      : section === 'body'
-        ? (editorHint ?? `[esc] list · [tab] section · ${paneKeys}`)
-        : rowEdit !== null || rowAddPrompt !== null
-          ? '[enter] confirm · [esc] cancel'
-          : `[esc] list · [tab] section · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
-              section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
-            }${paneKeys}`;
+      : savePrompt !== null
+        ? savePrompt.duplicate
+          ? '[enter] retry · [ctrl+o] overwrite · [esc] cancel'
+          : '[enter] save · [esc] cancel'
+        : section === 'body'
+          ? (editorHint ?? `[esc] list · [tab] section · [s] save · ${paneKeys}`)
+          : rowEdit !== null || rowAddPrompt !== null
+            ? '[enter] confirm · [esc] cancel'
+            : `[esc] list · [tab] section · [s] save · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
+                section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
+              }${paneKeys}`;
   const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
 
   const bodyNode =
@@ -1469,6 +1688,15 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 body={bodyNode}
               />
             ) : null}
+            {focused && paneTab === 'request' && savePrompt !== null ? (
+              <Box flexDirection="column">
+                <TextInputLine label="Name" value={savePrompt.input.value} cursor={savePrompt.input.cursor} focused />
+                {savePrompt.error !== null ? <Text color={colors.error}>{savePrompt.error}</Text> : null}
+              </Box>
+            ) : null}
+            {focused && paneTab === 'request' && saveNotice !== null && savePrompt === null ? (
+              <DimAnnotation text={saveNotice} />
+            ) : null}
             {focused && paneTab === 'response' ? (
               <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
                 {responseNode}
@@ -1478,6 +1706,41 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           </Box>
         }
       />
+      {overwriteConfirm !== null ? (
+        <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>A saved request named "{overwriteConfirm.name}" already exists. Overwriting replaces it.</Text>
+            <Text color={colors.text}>[Enter] overwrite · [Esc] cancel</Text>
+          </Box>
+        </ModalDialog>
+      ) : null}
+      {pickerOpen ? (
+        <ModalDialog title="Saved requests" onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            {pickerError !== null ? <Text color={colors.error}>{pickerError}</Text> : null}
+            {savedRequests === null ? (
+              <DimAnnotation text="Loading saved requests…" />
+            ) : (
+              <FilterablePickList
+                label="Filter"
+                state={pickerState}
+                items={savedItems}
+                emptyText="No saved requests yet — press s in the Request tab to save one."
+                noMatchText="No saved requests match."
+              />
+            )}
+            <DimAnnotation text="[enter] load · [esc] close · [d] delete stale" />
+          </Box>
+        </ModalDialog>
+      ) : null}
+      {pickerDeleteConfirm !== null ? (
+        <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
+            <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
+          </Box>
+        </ModalDialog>
+      ) : null}
     </Box>
   );
 }

@@ -29,6 +29,7 @@ import {
   createSettingsPort,
   resolveSettingsFile,
 } from "../adapters/driven/settings/index.js";
+import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/saved-requests/index.js";
 import { createDockerPort } from "../adapters/driven/docker/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
@@ -120,6 +121,10 @@ if (!routeExplorer) {
 if (!routeExplorer.auth) {
   throw new Error(`${ROUTES_MODULE_ID} auth module is not registered`);
 }
+// The global saved-request library — the same <dataDir>/global.db store the CLI's
+// request-* subcommands run against, so a TUI save is visible to the CLI and back.
+const globalDbFile = resolveGlobalDbFile(xdg);
+const savedRequests = createSavedRequestPort(globalDbFile);
 const store = createAppStore({
   registry,
   manifest,
@@ -137,6 +142,7 @@ const store = createAppStore({
   docker,
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
+  savedRequests,
 });
 const onQuit = async () => {
   if (tuiLock) {

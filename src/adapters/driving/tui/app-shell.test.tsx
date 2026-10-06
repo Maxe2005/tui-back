@@ -529,6 +529,14 @@ it('shouldQuit returns true for q', () => {
         updateBodyDraft: () => {},
         setBodyEditError: () => {},
         setBodyEditErrors: () => {},
+        // Saved-request library state
+        draftOrigins: {},
+        savedRequests: null,
+        savedRequestsError: null,
+        refreshSavedRequests: async () => {},
+        saveRequestDraft: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        loadSavedRequest: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        deleteSavedRequest: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

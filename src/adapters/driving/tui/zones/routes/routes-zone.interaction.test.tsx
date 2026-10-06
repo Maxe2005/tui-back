@@ -4,6 +4,9 @@ import { createElement } from 'react';
 import { Box, Text, render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
+import type { AppStoreDeps } from '../../store/app-store.js';
+import { err, ok } from '../../../../../core/result.js';
+import type { SavedRequest, SavedRequestPort } from '../../../../../core/ports/saved-request.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { RoutesZone } from './routes-zone.js';
 
@@ -1103,6 +1106,300 @@ describe('RoutesZone request step & sub-tabs', () => {
       store.getState().setRoutesPaneTab('response');
       await instance.waitUntilRenderFlush();
       expect(lastFrame(stdout)).toContain('204 · 3ms');
+    } finally {
+      instance.unmount();
+    }
+  });
+});
+
+describe('RoutesZone saved requests', () => {
+  // Ctrl+O travels as its control byte, the same codepoint-1..26 encoding KEYS documents.
+  const CTRL_O = '\x0f';
+
+  function fakeSavedPort(seed: SavedRequest[] = []): SavedRequestPort & { rows: Map<string, SavedRequest> } {
+    const rows = new Map(seed.map((item) => [item.name, { ...item }]));
+    return {
+      rows,
+      save: async (request) => {
+        if (rows.has(request.name)) {
+          return err('duplicate-request-name', `A request named "${request.name}" already exists`);
+        }
+        rows.set(request.name, { ...request });
+        return ok({ ...request });
+      },
+      overwrite: async (name, request) => {
+        const existing = rows.get(name);
+        if (existing === undefined) {
+          return err('saved-request-not-found', `No saved request named "${name}"`);
+        }
+        const next = { ...request, id: existing.id, createdAt: existing.createdAt, name };
+        rows.set(name, next);
+        return ok({ ...next });
+      },
+      get: async (name) => {
+        const found = rows.get(name);
+        return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+      },
+      list: async () => ok([...rows.values()].map((item) => ({ ...item }))),
+      remove: async (name) => (rows.delete(name) ? ok(undefined) : err('saved-request-not-found', `No saved request named "${name}"`)),
+    };
+  }
+
+  function record(name: string, overrides: Partial<SavedRequest> = {}): SavedRequest {
+    return {
+      id: `id-${name}`,
+      name,
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  function seedSaved(port: SavedRequestPort, cached: Array<SavedRequest & { stale: boolean }>) {
+    const store = createAppStore({ savedRequests: port } as unknown as AppStoreDeps);
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/health', summary: 'Health' },
+        { method: 'GET', path: '/users', summary: 'List users' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+      refreshSavedRequests: async () => {},
+      savedRequests: cached,
+      savedRequestsError: null,
+    });
+    return store;
+  }
+
+  async function settle(instance: ReturnType<typeof render>): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await instance.waitUntilRenderFlush();
+  }
+
+  async function type(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, text: string): Promise<void> {
+    for (const char of text) {
+      await press(instance, stdin, char);
+    }
+  }
+
+  it('s on the list opens the picker with fresh and stale rows; Esc closes it', async () => {
+    const store = seedSaved(
+      fakeSavedPort(),
+      [
+        { ...record('fresh-one', { query: { q: '1' } }), stale: false },
+        { ...record('stale-one', { path: '/vanished' }), stale: true },
+      ],
+    );
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 's');
+      const frame = lastFrame(stdout);
+      expect(frame).toContain('Saved requests');
+      expect(frame).toContain('fresh-one');
+      expect(frame).toContain('stale-one');
+      expect(frame).toContain('stale');
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      expect(lastFrame(stdout)).not.toContain('Saved requests');
+      expect(store.getState().routesPaneFocus).toBe('list');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('s in the Request tab saves under a fresh name and confirms in the hint', async () => {
+    const port = fakeSavedPort();
+    const store = seedSaved(port, []);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      await press(instance, stdin, 's');
+      expect(lastFrame(stdout)).toContain('Name:');
+      await type(instance, stdin, 'my-req');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Saved "my-req"');
+      expect(port.rows.has('my-req')).toBe(true);
+      expect(store.getState().draftOrigins['GET /health']).toBeDefined();
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('a colliding name stays in the prompt with an inline error until Ctrl+O overwrites', async () => {
+    const port = fakeSavedPort([record('taken')]);
+    const store = seedSaved(port, []);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 's');
+      await type(instance, stdin, 'taken');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('is already used');
+      expect(port.rows.get('taken')?.id).toBe('id-taken');
+      await press(instance, stdin, CTRL_O);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Overwrite "taken"?');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Saved "taken"');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Enter on a fresh picker row loads its draft and focuses the Request tab', async () => {
+    const port = fakeSavedPort([record('fresh-one', { query: { q: 'saved' } })]);
+    const store = seedSaved(port, [{ ...record('fresh-one', { query: { q: 'saved' } }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 's');
+      expect(lastFrame(stdout)).toContain('fresh-one');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(store.getState().requestDrafts['GET /users']?.query).toEqual([{ name: 'q', value: 'saved', required: false }]);
+      expect(store.getState().draftOrigins['GET /users']).toBe('id-fresh-one');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('a stale row never loads, and d deletes it through a confirm', async () => {
+    const port = fakeSavedPort([record('stale-one', { path: '/vanished' })]);
+    const cached = [{ ...record('stale-one', { path: '/vanished' }), stale: true }];
+    const store = seedSaved(port, cached);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 's');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Saved requests');
+      expect(store.getState().routesPaneFocus).toBe('list');
+      await press(instance, stdin, 'd');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Delete "stale-one"?');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(port.rows.has('stale-one')).toBe(false);
+      expect(lastFrame(stdout)).not.toContain('stale-one');
+    } finally {
+      instance.unmount();
+    }
+  });
+});
+
+describe('RoutesZone saved prompt guards', () => {
+  // Same control-byte encoding as above.
+  const CTRL_O = '\x0f';
+
+  function fakeSavedPort(): SavedRequestPort & { rows: Map<string, SavedRequest> } {
+    const rows = new Map<string, SavedRequest>();
+    return {
+      rows,
+      save: async (request) => {
+        if (rows.has(request.name)) {
+          return err('duplicate-request-name', `A request named "${request.name}" already exists`);
+        }
+        rows.set(request.name, { ...request });
+        return ok({ ...request });
+      },
+      overwrite: async (name, request) => {
+        const existing = rows.get(name);
+        if (existing === undefined) {
+          return err('saved-request-not-found', `No saved request named "${name}"`);
+        }
+        const next = { ...request, id: existing.id, createdAt: existing.createdAt, name };
+        rows.set(name, next);
+        return ok({ ...next });
+      },
+      get: async (name) => {
+        const found = rows.get(name);
+        return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+      },
+      list: async () => ok([...rows.values()].map((item) => ({ ...item }))),
+      remove: async (name) => (rows.delete(name) ? ok(undefined) : err('saved-request-not-found', `No saved request named "${name}"`)),
+    };
+  }
+
+  function seedGuard(port: SavedRequestPort) {
+    const store = createAppStore({ savedRequests: port } as unknown as AppStoreDeps);
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [{ method: 'GET', path: '/health', summary: 'Health' }],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+      refreshSavedRequests: async () => {},
+      savedRequests: [],
+      savedRequestsError: null,
+    });
+    return store;
+  }
+
+  async function settle(instance: ReturnType<typeof render>): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await instance.waitUntilRenderFlush();
+  }
+
+  it('Ctrl+O on a non-duplicate prompt error never opens the overwrite confirm', async () => {
+    const store = seedGuard(fakeSavedPort());
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, 's');
+      // Empty name: Enter fails with missing-argument, which is not a duplicate.
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('A request name is required');
+      await press(instance, stdin, CTRL_O);
+      await settle(instance);
+      expect(lastFrame(stdout)).not.toContain('Overwrite');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Enter on a stale picker row shows an error line instead of loading silently', async () => {
+    const stale = {
+      id: 'id-stale',
+      name: 'stale-one',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/vanished',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+      stale: true,
+    };
+    const port = fakeSavedPort();
+    const store = seedGuard(port);
+    store.setState({ savedRequests: [stale] });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 's');
+      expect(lastFrame(stdout)).toContain('stale-one');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Saved requests');
+      expect(lastFrame(stdout)).toContain('is stale');
+      expect(store.getState().routesPaneFocus).toBe('list');
     } finally {
       instance.unmount();
     }

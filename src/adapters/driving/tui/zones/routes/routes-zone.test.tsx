@@ -341,3 +341,34 @@ describe('RoutesZone JsonTree', () => {
     expect(unfocused).not.toContain('[←→] fold');
   });
 });
+
+describe('RoutesZone saved requests', () => {
+  function seedSavedHints(store: ReturnType<typeof createAppStore>) {
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+  }
+
+  it('hints [s] saved next to the route list', async () => {
+    const store = createAppStore();
+    seedSavedHints(store);
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[s] saved');
+  });
+
+  it('hints [s] save in the focused Request tab, never on the Response tab', async () => {
+    const store = createAppStore();
+    seedSavedHints(store);
+    store.setState({ routesPaneFocus: 'detail', routesPaneTab: 'request' });
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[s] save');
+    store.setState({ routesPaneTab: 'response' });
+    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[s] save');
+  });
+});

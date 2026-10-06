@@ -627,3 +627,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-2-container-less-managed-services.md`
   summary: Optional manifest fields use two conventions — `migrationCommand` documents a `null` fallback while `container` (since 7.2) omits the key — and the zod schema rejects explicit `null` for both.
   evidence: `.agents/skills/manifest-generator/SKILL.md` still instructs `migrationCommand: null` when undetected, but `z.string().trim().min(1).optional()` in `src/adapters/driven/manifest/schema.ts` rejects `null`; normalizing (nullish handling or doc alignment) is pre-existing debt surfaced, not caused, by 7.2. Surfaced by blind-hunter review layer.
+
+## Deferred from: review of 6-3-save-customize-and-re-fire-a-request (2026-10-06)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-3-save-customize-and-re-fire-a-request.md`
+  summary: `global.db` has no version runner for future numbered schema files — `schema-001.sql` is re-applied on every open and there is no loader path for the `002.sql` that Story 6.5 will need for hide/favorite columns.
+  evidence: `src/adapters/driven/saved-requests/index.ts` executes the single schema file unconditionally; the `schema_version` row exists but nothing reads it to decide which numbered files to apply. Surfaced by review (blind-hunter); deliberately left for 6.5, which is the first story that must evolve the schema.
