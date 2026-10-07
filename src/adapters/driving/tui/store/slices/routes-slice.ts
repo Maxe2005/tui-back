@@ -7,8 +7,17 @@ import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { ROUTES_MODULE_ID } from '../../../../../core/edt/resolve-tab-visibility.js';
 import type { Route } from '../../../../../core/ports/route-scanner.js';
+import type { SavedRequest } from '../../../../../core/ports/saved-request.js';
+import { err, ok, type Result } from '../../../../../core/result.js';
 import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../core/routes/fire-request.js';
 import { listRoutes } from '../../../../../core/routes/list-routes.js';
+import {
+  deleteSavedRequest as deleteSavedRequestUseCase,
+  listSavedRequests,
+  overwriteSavedRequest,
+  saveRequest,
+  type SavedWithStale,
+} from '../../../../../core/routes/saved-requests.js';
 import { listRepos } from '../../../../../core/scripts/list-repos.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
@@ -18,18 +27,24 @@ import {
   createDefaultJsonTreeState,
   pruneBodyDrafts,
   pruneJsonTreeStates,
+  routeKeyFor,
   type BodyEditError,
   type JsonTreeState,
 } from '../../shared/components/json-tree/model.js';
 import {
   MAX_REQUEST_DRAFTS,
   MAX_ROUTE_RESPONSES,
+  bodyTreeKey,
+  seedRequestDraft,
   type RequestDraft,
 } from '../../zones/routes/routes-request.logic.js';
+
+export const MAX_DRAFT_ORIGINS = 50;
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 const NO_SCANNER_ERROR = 'No route scanner wired into the TUI store';
 const NO_AUTH_ERROR = 'No dev auth wired into the TUI store';
+const NO_SAVED_ERROR = 'No saved-request store wired into the TUI store';
 
 export type RoutesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -42,8 +57,8 @@ export type RouteResponse =
 export type RoutesPaneFocus = 'list' | 'detail';
 
 // The right pane's sub-tabs, in display order.
-export type RoutesPaneTab = 'request' | 'response';
-export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['request', 'response'];
+export type RoutesPaneTab = 'saved' | 'request' | 'response';
+export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['saved', 'request', 'response'];
 
 export type { JsonTreeState, RequestDraft };
 
@@ -96,6 +111,26 @@ export type RoutesSlice = {
   setBodyEditError: (routeKey: string, path: string, entry: BodyEditError | null) => void;
   setBodyEditErrors: (routeKey: string, errors: Record<string, BodyEditError>) => void;
   updateJsonTreeState: (routeKey: string, updater: (previous: JsonTreeState) => JsonTreeState) => void;
+  // Which saved request a draft came from (`routeKey -> saved id`), so a re-fire can offer
+  // overwrite-original vs. save-as-new. Same 50-entry LRU prune as the other per-route maps;
+  // kept across a same-repo reload, dropped with the other maps on a repo switch.
+  draftOrigins: Record<string, string>;
+  // The last library listing with advisory stale flags (global, not per-repo — kept across
+  // reloads and refreshed on demand for the saved picker and the CLI-mirroring views).
+  savedRequests: SavedWithStale[] | null;
+  savedRequestsError: { code: string; message: string } | null;
+  refreshSavedRequests: (repoPath?: string) => Promise<void>;
+  // Persists one route's live draft (params stay template-seeded; query/headers/body/tree go
+  // verbatim) under `name`. Overwrite updates the colliding record in place (bumping
+  // `updatedAt`); without it a colliding name is `duplicate-request-name` and nothing is saved.
+  saveRequestDraft: (name: string, routeKey: string, opts?: { overwrite?: boolean }) => Promise<Result<SavedRequest>>;
+  // Seeds `requestDraft`, the `#body` draft and `jsonTreeStates` from the named record and
+  // links the route's origin to it. A stale record loads anyway — the hard gate stays at fire
+  // time, where `fireRoute` still rejects the vanished route with `unknown-route`.
+  loadSavedRequest: (name: string) => Promise<Result<void>>;
+  // Removes one record by exact name (`saved-request-not-found` when unknown) and unlinks
+  // every draft origin pointing at it.
+  deleteSavedRequest: (name: string) => Promise<Result<void>>;
 };
 
 function hasDraft(drafts: Record<string, unknown>, routeKey: string): boolean {
@@ -158,6 +193,9 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     setRoutesSelected: (index) => set({ routesSelected: index }),
     requestDrafts: {},
     responses: {},
+    draftOrigins: {},
+    savedRequests: null,
+    savedRequestsError: null,
     routesPaneFocus: 'list',
     routesPaneTab: 'request',
     setRoutesPaneFocus: (focus) => set({ routesPaneFocus: focus }),
@@ -285,6 +323,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             ? {
                 requestDrafts: {},
                 responses: {},
+                draftOrigins: {},
                 bodyDrafts: {},
                 bodyEditErrors: {},
                 routesPaneFocus: 'list' as const,
@@ -371,5 +410,199 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         fail(result.error.code, result.error.message);
       }
     },
+    refreshSavedRequests: async (repoPath) => {
+      const store = deps?.savedRequests;
+      if (store === undefined) {
+        set({ savedRequests: null, savedRequestsError: { code: 'store-not-wired', message: NO_SAVED_ERROR } });
+        return;
+      }
+      const result = await listSavedRequests(
+        { store, manifest: deps?.manifest, scanner: deps?.scanner },
+        ...(repoPath === undefined ? [] : [{ repoPath }]),
+      );
+      if (result.ok) {
+        set({ savedRequests: result.data.requests, savedRequestsError: null });
+      } else {
+        set({
+          savedRequests: null,
+          savedRequestsError: { code: result.error.code, message: result.error.message },
+        });
+      }
+    },
+    saveRequestDraft: async (name, routeKey, opts) => {
+      const store = deps?.savedRequests;
+      if (store === undefined) {
+        return err('store-not-wired', NO_SAVED_ERROR);
+      }
+      const state = get();
+      const repoPath = state.routesRepoPath;
+      if (repoPath === null) {
+        return err('missing-argument', 'No routes repo selected');
+      }
+      const space = routeKey.indexOf(' ');
+      if (space === -1) {
+        return err('invalid-argument', `The route key is not "METHOD path": ${routeKey}`);
+      }
+      const draft = state.requestDrafts[routeKey] ?? { params: [], query: [], headers: [] };
+      const toRecord = (rows: ReadonlyArray<{ name: string; value: string }>): Record<string, string> => {
+        const record: Record<string, string> = {};
+        for (const row of rows) {
+          record[row.name] = row.value;
+        }
+        return record;
+      };
+      const bodyDraft = hasDraft(state.bodyDrafts, routeKey) ? state.bodyDrafts[routeKey] : undefined;
+      const route = (state.routes ?? []).find((candidate) => routeKeyFor(candidate.method, candidate.path) === routeKey);
+      const contentType = route?.bodyContentType ?? (bodyDraft !== undefined ? 'application/json' : undefined);
+      const input = {
+        name,
+        repoPath,
+        method: routeKey.slice(0, space),
+        path: routeKey.slice(space + 1),
+        query: toRecord(draft.query),
+        headers: toRecord(draft.headers),
+        ...(bodyDraft === undefined ? {} : { bodyText: JSON.stringify(bodyDraft) }),
+        ...(contentType === undefined ? {} : { contentType }),
+        ...((state.jsonTreeStates[bodyTreeKey(routeKey)] ?? undefined) === undefined
+          ? {}
+          : { treeState: state.jsonTreeStates[bodyTreeKey(routeKey)] }),
+      };
+      const result =
+        opts?.overwrite === true
+          ? await overwriteSavedRequest({ store }, name, input)
+          : await saveRequest({ store }, input);
+      if (result.ok) {
+        const saved = result.data;
+        set((live) => ({
+          draftOrigins: touchEntry(live.draftOrigins, routeKey, saved.id, MAX_DRAFT_ORIGINS),
+          // The picker reads this cache: append the new record (or replace the same-name
+          // entry on overwrite) so it never waits for the next refresh to show the save.
+          savedRequests:
+            live.savedRequests === null
+              ? null
+              : live.savedRequests.some((item) => item.name === saved.name)
+                ? live.savedRequests.map((item) => (item.name === saved.name ? { ...saved, stale: false } : item))
+                : [...live.savedRequests, { ...saved, stale: false }],
+        }));
+      }
+      return result;
+    },
+    loadSavedRequest: async (name) => {
+      const store = deps?.savedRequests;
+      if (store === undefined) {
+        return err('store-not-wired', NO_SAVED_ERROR);
+      }
+      if (typeof name !== 'string' || name.trim() === '') {
+        return err('invalid-argument', 'A saved request name is required');
+      }
+      const loaded = await store.get(name.trim());
+      if (!loaded.ok) {
+        return loaded;
+      }
+      const saved = loaded.data;
+      if (saved.bodyText !== undefined) {
+        try {
+          JSON.parse(saved.bodyText) as unknown;
+        } catch {
+          return err('invalid-argument', `Saved request "${saved.name}" has a corrupt body: nothing was loaded`);
+        }
+      }
+      if (saved.treeState !== undefined && !isJsonTreeState(saved.treeState)) {
+        return err('invalid-argument', `Saved request "${saved.name}" has a corrupt tree state: nothing was loaded`);
+      }
+      const routeKey = `${saved.method.trim().toUpperCase()} ${saved.path.trim()}`;
+      const route = (get().routes ?? []).find((candidate) => routeKeyFor(candidate.method, candidate.path) === routeKey);
+      const seed = seedRequestDraft(route ?? { path: saved.path });
+      const withSavedRows = (
+        seedRows: RequestDraft['query'],
+        savedMap: Record<string, string> | undefined,
+      ): RequestDraft['query'] => {
+        if (savedMap === undefined) {
+          return seedRows;
+        }
+        const seen = new Set(seedRows.map((row) => row.name));
+        const merged = seedRows.map((row) =>
+          savedMap[row.name] === undefined ? row : { ...row, value: savedMap[row.name] as string },
+        );
+        for (const [rowName, rowValue] of Object.entries(savedMap)) {
+          if (!seen.has(rowName)) {
+            merged.push({ name: rowName, value: rowValue, required: false });
+          }
+        }
+        return merged;
+      };
+      const draft: RequestDraft = {
+        params: seed.params,
+        query: withSavedRows(seed.query, saved.query),
+        headers: withSavedRows(seed.headers, saved.headers),
+      };
+      let bodyValue: unknown;
+      if (saved.bodyText !== undefined) {
+        bodyValue = JSON.parse(saved.bodyText) as unknown;
+      }
+      const treeState = isJsonTreeState(saved.treeState) ? saved.treeState : createDefaultJsonTreeState();
+      set((live) => {
+        const touchedDrafts = touchEntry(live.requestDrafts, routeKey, draft, MAX_REQUEST_DRAFTS);
+        const { bodyDrafts, bodyEditErrors } = touchBodyDraftEntries(live.bodyDrafts, live.bodyEditErrors, routeKey, bodyValue, {});
+        const bodyKey = bodyTreeKey(routeKey);
+        const touchedTrees: Record<string, JsonTreeState> = { ...live.jsonTreeStates };
+        delete touchedTrees[bodyKey];
+        touchedTrees[bodyKey] = treeState;
+        return {
+          requestDrafts: touchedDrafts,
+          bodyDrafts,
+          bodyEditErrors,
+          jsonTreeStates: pruneJsonTreeStates(touchedTrees, MAX_JSON_TREE_STATES),
+          draftOrigins: touchEntry(live.draftOrigins, routeKey, saved.id, MAX_DRAFT_ORIGINS),
+        };
+      });
+      return ok(undefined);
+    },
+    deleteSavedRequest: async (name) => {
+      const store = deps?.savedRequests;
+      if (store === undefined) {
+        return err('store-not-wired', NO_SAVED_ERROR);
+      }
+      if (typeof name !== 'string' || name.trim() === '') {
+        return err('invalid-argument', 'A saved request name is required');
+      }
+      const trimmed = name.trim();
+      const loaded = await store.get(trimmed);
+      if (!loaded.ok) {
+        return loaded;
+      }
+      const removed = await deleteSavedRequestUseCase({ store }, trimmed);
+      if (!removed.ok) {
+        return removed;
+      }
+      const id = loaded.data.id;
+      set((live) => {
+        const origins: Record<string, string> = {};
+        for (const [routeKey, savedId] of Object.entries(live.draftOrigins)) {
+          if (savedId !== id) {
+            origins[routeKey] = savedId;
+          }
+        }
+        return {
+          draftOrigins: origins,
+          savedRequests: live.savedRequests === null ? null : live.savedRequests.filter((item) => item.name !== trimmed),
+        };
+      });
+      return ok(undefined);
+    },
   });
+}
+
+function isJsonTreeState(value: unknown): value is JsonTreeState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    Array.isArray(candidate.foldedPaths) &&
+    Array.isArray(candidate.hiddenKeys) &&
+    Array.isArray(candidate.onlyKeys) &&
+    typeof candidate.hideNulls === 'boolean' &&
+    typeof candidate.selected === 'number'
+  );
 }

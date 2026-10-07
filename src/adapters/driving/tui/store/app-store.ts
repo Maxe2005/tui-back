@@ -15,6 +15,7 @@ import type { MigrationPort } from '../../../../core/ports/migration.js';
 import type { RestartPort } from '../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { RouteScannerPort } from '../../../../core/ports/route-scanner.js';
+import type { SavedRequestPort } from '../../../../core/ports/saved-request.js';
 import type { SettingsPort } from '../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../core/ports/state.js';
 import { createNavigationSlice, type NavigationSlice } from './slices/navigation-slice.js';
@@ -76,6 +77,9 @@ export type AppStoreDeps = {
   // The Routes zone's dev-auth touchpoint, used with the scanner by core/routes/fire-request.ts;
   // fireRoute degrades to an explicit error state when it is missing.
   auth?: DevAuthPort;
+  // The saved-request library touchpoint — the same global.db store the CLI's request-*
+  // subcommands run against. Save/load/delete degrade to an explicit error when missing.
+  savedRequests?: SavedRequestPort;
 };
 
 export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & ResetSlice & RoutesSlice;

@@ -133,6 +133,7 @@ describe('RoutesZone fire and request pane', () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('Saved');
     expect(output).toContain('▸ Request');
     expect(output).toContain('Response');
     expect(output).toContain('PARAMS');
@@ -339,5 +340,115 @@ describe('RoutesZone JsonTree', () => {
     const unfocused = await renderToString(<RoutesZone useStore={store} />);
     expect(unfocused).toContain('[enter] request');
     expect(unfocused).not.toContain('[←→] fold');
+  });
+});
+
+describe('RoutesZone saved requests', () => {
+  function seedSavedHints(store: ReturnType<typeof createAppStore>) {
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+    });
+  }
+
+  it('hints [s] saved next to the route list', async () => {
+    const store = createAppStore();
+    seedSavedHints(store);
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[s] saved');
+  });
+
+  it('hints [s] save in the focused Request tab, never on the Response tab', async () => {
+    const store = createAppStore();
+    seedSavedHints(store);
+    store.setState({ routesPaneFocus: 'detail', routesPaneTab: 'request' });
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[s] save');
+    store.setState({ routesPaneTab: 'response' });
+    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[s] save');
+  });
+});
+
+describe('RoutesZone Saved sub-tab', () => {
+  function seedSavedTab(
+    store: ReturnType<typeof createAppStore>,
+    savedRequests: Array<Record<string, unknown>> | null,
+  ) {
+    store.setState({
+      routesStatus: 'ready',
+      routesRepoPath: '/repos/gateway',
+      routes: [
+        { method: 'GET', path: '/users', summary: 'List users' },
+        { method: 'POST', path: '/users', summary: 'Create a user' },
+      ],
+      routesError: null,
+      loadRoutes: async () => {},
+      fireRoute: async () => {},
+      routesPaneFocus: 'detail',
+      routesPaneTab: 'saved',
+      refreshSavedRequests: async () => {},
+      savedRequests: savedRequests as never,
+      savedRequestsError: null,
+    });
+  }
+
+  function record(name: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id: `id-${name}`,
+      name,
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+      stale: false,
+      ...overrides,
+    };
+  }
+
+  it('strips Saved first and lists only the pane route’s requests', async () => {
+    const store = createAppStore();
+    seedSavedTab(store, [record('for-users'), record('for-post', { method: 'POST' }), record('other-route', { path: '/elsewhere' })]);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('Saved');
+    expect(output).toContain('for-users');
+    expect(output).not.toContain('for-post');
+    expect(output).not.toContain('other-route');
+    expect(output).toContain('[enter] load');
+  });
+
+  it('shows the teaching empty state when the route has no saves', async () => {
+    const store = createAppStore();
+    seedSavedTab(store, [record('other-route', { path: '/elsewhere' })]);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('No saved requests for this route');
+  });
+
+  it('shows the not-loaded hint when the cache is not loaded', async () => {
+    const store = createAppStore();
+    seedSavedTab(store, null);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('not loaded');
+  });
+
+  it('surfaces the store error in the tab instead of only the not-loaded hint', async () => {
+    const store = createAppStore();
+    seedSavedTab(store, null);
+    store.setState({ savedRequestsError: { code: 'saved-requests-failed', message: 'saved library down' } });
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('saved library down');
+    expect(output).not.toContain('not loaded');
+  });
+
+  it('hints [r] retry in the Saved footer line', async () => {
+    const store = createAppStore();
+    seedSavedTab(store, [record('for-users')]);
+    const output = await renderToString(<RoutesZone useStore={store} />);
+    expect(output).toContain('[r] retry');
   });
 });

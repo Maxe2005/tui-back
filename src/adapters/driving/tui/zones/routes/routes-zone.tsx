@@ -1,8 +1,8 @@
 // tui/zones/routes: the Routes zone — a resizable list/detail split of the repo's discovered
 // routes (BoundedList of ListRows) with an inline filter, and a focusable right pane with
-// Request / Response sub-tabs. `Enter` opens the Request tab (the list never fires); `Ctrl+R`
-// fires the draft. While the pane holds focus it captures the keyboard from AppShell; `Esc`
-// unwinds sub-editors, then Response → Request, then back to the list.
+// Saved | Request | Response sub-tabs. `Enter` opens the Request tab (the list never fires);
+// `Ctrl+R` fires the draft. While the pane holds focus it captures the keyboard from AppShell;
+// `Esc` unwinds sub-editors, then Response → Request and Saved → list, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
@@ -57,6 +57,16 @@ import {
 } from '../../shared/components/json-tree/model.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { ListRow } from '../../shared/components/list-row.js';
+import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import {
+  FilterablePickList,
+  clampPickListCursor,
+  createFilterablePickListState,
+  handleFilterablePickListKey,
+  matchPickItemsBySubstring,
+  type FilterablePickItem,
+  type FilterablePickListState,
+} from '../../shared/components/filterable-pick-list.js';
 import { Spinner } from '../../shared/components/spinner.js';
 import { nextTextInputValue, type TextInputState } from '../../shared/components/text-edit.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
@@ -78,6 +88,7 @@ import {
   nextRequestSection,
   removeRequestRow,
   resolveFireBlock,
+  resolveRouteIndex,
   seedRequestDraft,
   setRequestRowValue,
   type RequestDraft,
@@ -86,6 +97,8 @@ import {
 } from './routes-request.logic.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
+import { RoutesSavedTab } from './routes-saved-tab.js';
+import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -131,6 +144,13 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const updateBodyDraft = useStore((state) => state.updateBodyDraft);
   const setBodyEditError = useStore((state) => state.setBodyEditError);
   const setBodyEditErrors = useStore((state) => state.setBodyEditErrors);
+  const draftOrigins = useStore((state) => state.draftOrigins);
+  const savedRequests = useStore((state) => state.savedRequests);
+  const savedRequestsError = useStore((state) => state.savedRequestsError);
+  const refreshSavedRequests = useStore((state) => state.refreshSavedRequests);
+  const saveRequestDraft = useStore((state) => state.saveRequestDraft);
+  const loadSavedRequest = useStore((state) => state.loadSavedRequest);
+  const deleteSavedRequest = useStore((state) => state.deleteSavedRequest);
 
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
 
@@ -159,6 +179,24 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [rowEdit, setRowEdit] = useState<{ section: RequestRowSection; index: number; input: TextInputState } | null>(null);
   const [rowAddPrompt, setRowAddPrompt] = useState<{ section: 'query' | 'headers'; input: TextInputState; error: string | null } | null>(null);
   const [fireBlock, setFireBlock] = useState<string | null>(null);
+  // The saved-request library UI. `savePrompt` is the Request tab's inline name prompt
+  // (prefilled with the origin name when the draft came from a saved request);
+  // `overwriteConfirm` is the destructive-overwrite confirm behind Ctrl+O (UX-DR36);
+  // the picker is the list's `FilterablePickList` reload dialog with stale rows dimmed and
+  // blocked, plus its own `d`-to-delete confirm. Any open prompt owns every key.
+  const [savePrompt, setSavePrompt] = useState<{ input: TextInputState; error: string | null; duplicate: boolean } | null>(null);
+  const [overwriteConfirm, setOverwriteConfirm] = useState<{ name: string } | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerState, setPickerState] = useState<FilterablePickListState>(() => createFilterablePickListState());
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [pickerDeleteConfirm, setPickerDeleteConfirm] = useState<{ name: string } | null>(null);
+  // The Saved sub-tab's zone-local pick state (filter + cursor), its inline error line and its
+  // `d`-to-delete confirm. Route-scoped: reset on every route change like the other pane
+  // transients, never autofocused.
+  const [savedTabState, setSavedTabState] = useState<FilterablePickListState>(() => createFilterablePickListState());
+  const [savedTabError, setSavedTabError] = useState<string | null>(null);
+  const [savedTabDeleteConfirm, setSavedTabDeleteConfirm] = useState<{ name: string } | null>(null);
   // The request-body editor's transient inline/raw UI. Drafts, folds and filters live in the
   // store (per route, session-only), so a revisit restores them together; only the text
   // buffers are zone-local.
@@ -172,8 +210,16 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const paneFocused = paneFocus === 'detail';
   useEffect(() => {
-    setZoneInputCaptured(filterEditing || paneFocused);
-  }, [filterEditing, paneFocused, setZoneInputCaptured]);
+    setZoneInputCaptured(
+      filterEditing ||
+        paneFocused ||
+        savePrompt !== null ||
+        pickerOpen ||
+        overwriteConfirm !== null ||
+        pickerDeleteConfirm !== null ||
+        savedTabDeleteConfirm !== null,
+    );
+  }, [filterEditing, paneFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
@@ -191,6 +237,75 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     [paneRoute, paneRouteKey, requestDrafts],
   );
   const paneHasBody = paneRoute !== null && canEditRouteBody(paneRoute);
+
+  // The saved picker rows: a stale record carries a dim `stale` suffix in its meta and is
+  // blocked at select time (never loaded, never fired — deletion only, through a confirm).
+  const savedItems: FilterablePickItem<SavedWithStale>[] = useMemo(
+    () =>
+      (savedRequests ?? []).map((request) => ({
+        key: request.id,
+        label: request.name,
+        meta: `${request.method} ${request.path}${request.stale ? ' · stale' : ''}`,
+        value: request,
+      })),
+    [savedRequests],
+  );
+
+  // The Saved sub-tab rows: only the pane route's requests, matched with the same
+  // normalized equality as `resolveRouteIndex`. Route-scoped by construction, so no stale
+  // flags, no stale blocking and no repo-mismatch handling here.
+  const savedTabItems: FilterablePickItem<SavedWithStale>[] = useMemo(() => {
+    if (paneRouteKey === null) {
+      return [];
+    }
+    return (savedRequests ?? [])
+      .filter((request) => routeKeyFor(request.method, request.path) === paneRouteKey)
+      .map((request) => ({
+        key: request.id,
+        label: request.name,
+        meta: `${request.method} ${request.path}`,
+        value: request,
+      }));
+  }, [savedRequests, paneRouteKey]);
+
+  const openSavePrompt = () => {
+    setSaveNotice(null);
+    const originId = paneRouteKey === null ? undefined : draftOrigins[paneRouteKey];
+    const prefill =
+      originId === undefined ? '' : (savedRequests?.find((item) => item.id === originId)?.name ?? '');
+    setSavePrompt({ input: { value: prefill, cursor: prefill.length }, error: null, duplicate: false });
+  };
+
+  // Enter saves under the prompt's name; a colliding name stays in the prompt with an inline
+  // collision error until Ctrl+O overwrites through the destructive confirm.
+  const attemptSave = (overwrite: boolean) => {
+    if (savePrompt === null || paneRouteKey === null) {
+      return;
+    }
+    const routeKey = paneRouteKey;
+    const name = savePrompt.input.value;
+    const input = savePrompt.input;
+    void (async () => {
+      const result = await saveRequestDraft(name, routeKey, overwrite ? { overwrite: true } : undefined);
+      if (result.ok) {
+        setSavePrompt(null);
+        setOverwriteConfirm(null);
+        setSaveNotice(`Saved "${result.data.name}"`);
+        void refreshSavedRequests();
+      } else if (result.error.code === 'duplicate-request-name' && !overwrite) {
+        setSavePrompt({ input, error: `"${name}" is already used — [ctrl+o] overwrite`, duplicate: true });
+      } else {
+        setSavePrompt({ input, error: result.error.message, duplicate: false });
+      }
+    })();
+  };
+
+  const openPicker = () => {
+    setPickerState(createFilterablePickListState());
+    setPickerError(null);
+    setPickerOpen(true);
+    void refreshSavedRequests();
+  };
 
   // The fired body, classified in the driving adapter (never core): JSON becomes the
   // navigable tree, anything else its raw/empty fallback.
@@ -340,6 +455,27 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     setRowAddPrompt(null);
     setFilterPanelOpen(false);
     setPanelCursor(0);
+    setSavedTabState(createFilterablePickListState());
+    setSavedTabError(null);
+    setSavedTabDeleteConfirm(null);
+  };
+
+  // Loads one route-scoped row into the Request tab: shared by the Saved tab's Enter
+  // and shared-reducer select paths. A failure stays on Saved with the inline error.
+  const loadSavedIntoRequest = async (targetName: string) => {
+    const loaded = await loadSavedRequest(targetName);
+    if (!loaded.ok) {
+      setSavedTabError(loaded.error.message);
+      return;
+    }
+    setSavedTabError(null);
+    resetPaneTransients();
+    setSection('params');
+    setRowCursor(0);
+    setFireBlock(null);
+    setSaveNotice(null);
+    setPaneTab('request');
+    setPaneFocus('detail');
   };
 
   // `Enter` (or `e`, straight to Body) moves the focus into the pane on its Request tab, seeding
@@ -383,6 +519,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       return;
     }
     setFireBlock(null);
+    setSaveNotice(null);
     setFilterPanelOpen(false);
     setPanelCursor(0);
     const request = buildFireRequest(paneRoute, draft, bodyDraft);
@@ -870,9 +1007,27 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       setRowEdit(null);
       setRowAddPrompt(null);
       setFireBlock(null);
+      setSavePrompt(null);
+      setOverwriteConfirm(null);
+      setSaveNotice(null);
+      setSavedTabState(createFilterablePickListState());
+      setSavedTabError(null);
+      setSavedTabDeleteConfirm(null);
     }
     previousPaneRouteKey.current = paneRouteKey;
   }, [paneRouteKey]);
+
+  // The Saved tab needs its rows: entering it (or switching route onto it) with an
+  // unloaded cache triggers one load. A failed load stays visible as the store error
+  // until the next visit or a manual `r` retry — the effect never refires off the error
+  // itself, so a failure cannot loop.
+  useEffect(() => {
+    if (paneTab === 'saved' && savedRequests === null) {
+      void refreshSavedRequests();
+    }
+    // savedRequestsError deliberately excluded: a failure must not retrigger by itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paneTab, paneRouteKey, savedRequests, refreshSavedRequests]);
 
   // The pane follows its route: a reload that drops the route hands focus back to the
   // list (its drafts stay in the store under the same key).
@@ -901,6 +1056,171 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   useInput(
     (input, key) => {
+      // The destructive overwrite confirm owns every key: Enter overwrites, Esc backs out to
+      // the name prompt, nothing else acts.
+      if (overwriteConfirm !== null) {
+        if (key.escape === true) {
+          setOverwriteConfirm(null);
+          return;
+        }
+        if (key.return === true) {
+          attemptSave(true);
+          return;
+        }
+        return;
+      }
+      // The stale-row delete confirm owns every key the same way.
+      if (pickerDeleteConfirm !== null) {
+        if (key.escape === true) {
+          setPickerDeleteConfirm(null);
+          return;
+        }
+        if (key.return === true) {
+          const target = pickerDeleteConfirm.name;
+          void (async () => {
+            const result = await deleteSavedRequest(target);
+            setPickerDeleteConfirm(null);
+            if (!result.ok) {
+              setPickerError(result.error.message);
+            } else {
+              // The row is gone: drop any error line naming it (e.g. the stale-block note).
+              setPickerError(null);
+            }
+            void refreshSavedRequests();
+          })();
+          return;
+        }
+        return;
+      }
+      // The Saved sub-tab's delete confirm owns every key the same way: Enter deletes the
+      // route-scoped row, Esc backs out to the tab.
+      if (savedTabDeleteConfirm !== null) {
+        if (key.escape === true) {
+          setSavedTabDeleteConfirm(null);
+          return;
+        }
+        if (key.return === true) {
+          const target = savedTabDeleteConfirm.name;
+          const query = savedTabState.query;
+          const routeKey = paneRouteKey;
+          void (async () => {
+            const result = await deleteSavedRequest(target);
+            setSavedTabDeleteConfirm(null);
+            if (!result.ok) {
+              setSavedTabError(result.error.message);
+            } else {
+              setSavedTabError(null);
+            }
+            await refreshSavedRequests();
+            // Re-clamp against the refreshed match list: the pre-delete length can leave
+            // the cursor past the end when the last row goes.
+            const live = useStore.getState().savedRequests ?? [];
+            const liveItems = live
+              .filter((request) => routeKey !== null && routeKeyFor(request.method, request.path) === routeKey)
+              .map((request) => ({ key: request.id, label: request.name, value: request }));
+            const liveMatches = matchPickItemsBySubstring(query, liveItems);
+            setSavedTabState((previous) => ({ ...previous, cursor: clampPickListCursor(previous.cursor, liveMatches.length) }));
+          })();
+          return;
+        }
+        return;
+      }
+      // The inline name prompt owns every key: Enter saves (a colliding name stays put with
+      // an inline error until Ctrl+O), Esc closes, arrows/tab never leave the field. Ctrl+O
+      // is offered only for a confirmed duplicate — any other error re-saves with Enter.
+      if (savePrompt !== null) {
+        if (key.escape === true) {
+          setSavePrompt(null);
+          return;
+        }
+        if (key.ctrl === true && (input === 'o' || input === 'O')) {
+          if (savePrompt.duplicate) {
+            setOverwriteConfirm({ name: savePrompt.input.value });
+          }
+          return;
+        }
+        if (key.return === true) {
+          attemptSave(false);
+          return;
+        }
+        if (key.upArrow === true || key.downArrow === true || key.tab === true) {
+          return;
+        }
+        if (key.ctrl === true || key.meta === true) {
+          return;
+        }
+        // Editing restarts the attempt: a stale collision error never follows a new name.
+        setSavePrompt((previous) =>
+          previous === null
+            ? previous
+            : { input: nextTextInputValue(previous.input, input, key), error: null, duplicate: false },
+        );
+        return;
+      }
+      // The saved picker owns every key while open: Esc closes, `d` on a stale row (with an
+      // empty filter — while filtering, the input owns every key) asks to delete it, Enter
+      // loads a fresh row (a stale row is blocked with an error line), and everything else filters.
+      // Loading first moves the list cursor onto the saved request's route — the pane always
+      // reflects the cursor — clearing the list filter when it hides that route; a route from
+      // another repo cannot load here and stays in the picker with an error line.
+      if (pickerOpen) {
+        if (key.escape === true) {
+          setPickerOpen(false);
+          return;
+        }
+        if ((input === 'd' || input === 'D') && key.ctrl !== true && key.meta !== true && pickerState.query.trim() === '') {
+          const matches = matchPickItemsBySubstring(pickerState.query, savedItems);
+          const at = matches[clampPickListCursor(pickerState.cursor, matches.length)];
+          if (at !== undefined && at.value.stale) {
+            setPickerDeleteConfirm({ name: at.value.name });
+          }
+          return;
+        }
+        const outcome = handleFilterablePickListKey(pickerState, savedItems, input, key);
+        if (outcome.type === 'update') {
+          setPickerState(outcome.state);
+          return;
+        }
+        if (outcome.type === 'cancel') {
+          setPickerOpen(false);
+          return;
+        }
+        if (outcome.item.value.stale) {
+          setPickerError(`"${outcome.item.value.name}" is stale — press d to delete it`);
+          return;
+        }
+        const targetName = outcome.item.value.name;
+        const savedTarget = outcome.item.value;
+        const visibleAt = resolveRouteIndex(visibleRoutes, savedTarget.method, savedTarget.path);
+        if (visibleAt === null) {
+          const unfilteredAt = resolveRouteIndex(routes ?? [], savedTarget.method, savedTarget.path);
+          if (unfilteredAt === null) {
+            setPickerError(`"${targetName}" targets ${savedTarget.repoPath}, not this repo — switch repo to load it`);
+            return;
+          }
+          setFilter({ value: '', cursor: 0 });
+          setSelected(unfilteredAt);
+        } else {
+          setSelected(visibleAt);
+        }
+        setPickerOpen(false);
+        void (async () => {
+          const loaded = await loadSavedRequest(targetName);
+          if (!loaded.ok) {
+            setPickerError(loaded.error.message);
+            setPickerOpen(true);
+            return;
+          }
+          resetPaneTransients();
+          setSection('params');
+          setRowCursor(0);
+          setFireBlock(null);
+          setSaveNotice(null);
+          setPaneTab('request');
+          setPaneFocus('detail');
+        })();
+        return;
+      }
       if (filterEditing) {
         // Esc drops the filter entirely; Enter keeps it applied and hands the keyboard back
         // to the list (so Enter never fires a route while the input is still open).
@@ -1032,6 +1352,82 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           return;
         }
         if (key.ctrl === true || key.meta === true) {
+          return;
+        }
+        // `s` saves the draft under a name (prefilled with the origin name when the draft
+        // came from a saved request); every inline sub-editor above already owns its keys.
+        if ((input === 's' || input === 'S') && paneTab === 'request') {
+          openSavePrompt();
+          return;
+        }
+        // Saved sub-tab: route-scoped quick re-fire. `/` focuses the filter (the input owns
+        // every key while filtering), arrows/`j`/`k` move, `Enter` loads into Request, `d`
+        // deletes through the confirm, `r` reloads the library, `Esc` clears the filter
+        // first, then returns to the list.
+        if (paneTab === 'saved') {
+          // One definition: any non-empty query (even whitespace-only) means filtering,
+          // so navigation/delete keys stay literal filter text.
+          const savedTabFiltering = savedTabState.query !== '';
+          if (key.escape === true) {
+            if (savedTabFiltering) {
+              setSavedTabState((previous) => ({ ...previous, query: '', queryCursor: 0, cursor: 0 }));
+              return;
+            }
+            closePane();
+            return;
+          }
+          // `/` focuses the filter without entering the slash itself; a slash typed while
+          // already filtering is literal filter text.
+          if (input === '/' && !savedTabFiltering) {
+            return;
+          }
+          if ((input === 'j' || input === 'k') && !savedTabFiltering) {
+            const matches = matchPickItemsBySubstring(savedTabState.query, savedTabItems);
+            const from = clampPickListCursor(savedTabState.cursor, matches.length);
+            const next = input === 'j' ? from + 1 : from - 1;
+            setSavedTabState((previous) => ({ ...previous, cursor: clampPickListCursor(next, matches.length) }));
+            return;
+          }
+          if ((input === 'd' || input === 'D') && !savedTabFiltering) {
+            const matches = matchPickItemsBySubstring(savedTabState.query, savedTabItems);
+            const at = matches[clampPickListCursor(savedTabState.cursor, matches.length)];
+            if (at !== undefined) {
+              setSavedTabDeleteConfirm({ name: at.value.name });
+            }
+            return;
+          }
+          if ((input === 'r' || input === 'R') && !savedTabFiltering) {
+            void refreshSavedRequests();
+            return;
+          }
+          if (key.return === true) {
+            const matches = matchPickItemsBySubstring(savedTabState.query, savedTabItems);
+            const at = matches[clampPickListCursor(savedTabState.cursor, matches.length)];
+            if (at === undefined) {
+              return;
+            }
+            void loadSavedIntoRequest(at.value.name);
+            return;
+          }
+          const outcome = handleFilterablePickListKey(savedTabState, savedTabItems, input, key);
+          if (outcome.type === 'update') {
+            setSavedTabState(outcome.state);
+            return;
+          }
+          if (outcome.type === 'cancel') {
+            if (savedTabFiltering) {
+              setSavedTabState((previous) => ({ ...previous, query: '', queryCursor: 0, cursor: 0 }));
+            } else {
+              closePane();
+            }
+            return;
+          }
+          // `select` via the shared reducer can only happen on arrows/typing paths here
+          // (Enter is handled above to also switch tabs); treat it like an Enter load.
+          if (outcome.type === 'select') {
+            void loadSavedIntoRequest(outcome.item.value.name);
+            return;
+          }
           return;
         }
         if (paneTab === 'request') {
@@ -1246,6 +1642,12 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setFilterEditing(true);
         return;
       }
+      // `s` opens the saved-request picker: Enter reloads a fresh row into the Request tab
+      // (stale rows render flagged and never load), `d` on a stale row deletes it.
+      if (input === 's' || input === 'S') {
+        openPicker();
+        return;
+      }
       if (key.escape === true && filter.value !== '') {
         setFilter({ value: '', cursor: 0 });
         setSelected(0);
@@ -1334,8 +1736,8 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     : paneFocused
       ? '[esc] back to the list'
       : focusedEditable
-        ? '[enter] request  [/ f] filter  [e] edit body  [home/end] jump'
-        : '[enter] request  [/ f] filter  [home/end] jump';
+        ? '[enter] request  [/ f] filter  [s] saved  [e] edit body  [home/end] jump'
+        : '[enter] request  [/ f] filter  [s] saved  [home/end] jump';
   // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
   // tabs lead it.
   const paneKeys = '[ctrl+r] fire · [ctrl+←→] tab';
@@ -1361,20 +1763,31 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       : scalarEdit !== null || addPrompt !== null
         ? '[enter] confirm · [esc] cancel'
         : filterPanelOpen
-          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · ${paneKeys}`;
+          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear · [s] save'
+          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · [s] save · ${paneKeys}`;
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
   const requestHint: string | null =
     !paneFocused || paneTab !== 'request'
       ? null
-      : section === 'body'
-        ? (editorHint ?? `[esc] list · [tab] section · ${paneKeys}`)
-        : rowEdit !== null || rowAddPrompt !== null
-          ? '[enter] confirm · [esc] cancel'
-          : `[esc] list · [tab] section · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
-              section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
-            }${paneKeys}`;
-  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
+      : savePrompt !== null
+        ? savePrompt.duplicate
+          ? '[enter] retry · [ctrl+o] overwrite · [esc] cancel'
+          : '[enter] save · [esc] cancel'
+        : section === 'body'
+          ? (editorHint ?? `[esc] list · [tab] section · [s] save · ${paneKeys}`)
+          : rowEdit !== null || rowAddPrompt !== null
+            ? '[enter] confirm · [esc] cancel'
+            : `[esc] list · [tab] section · [s] save · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
+                section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
+              }${paneKeys}`;
+  const savedHint: string | null =
+    !paneFocused || paneTab !== 'saved'
+      ? null
+      : savedTabDeleteConfirm !== null
+        ? '[enter] delete · [esc] cancel'
+        : '[enter] load · [/] filter · [d] delete · [r] retry · [esc] list · [ctrl+←→] tab';
+  const paneHint =
+    paneTab === 'request' ? requestHint : paneTab === 'saved' ? savedHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1470,6 +1883,23 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 body={bodyNode}
               />
             ) : null}
+            {focused && paneTab === 'request' && savePrompt !== null ? (
+              <Box flexDirection="column">
+                <TextInputLine label="Name" value={savePrompt.input.value} cursor={savePrompt.input.cursor} focused />
+                {savePrompt.error !== null ? <Text color={colors.error}>{savePrompt.error}</Text> : null}
+              </Box>
+            ) : null}
+            {focused && paneTab === 'request' && saveNotice !== null && savePrompt === null ? (
+              <DimAnnotation text={saveNotice} />
+            ) : null}
+            {focused && paneTab === 'saved' ? (
+              <RoutesSavedTab
+                items={savedTabItems}
+                pickState={savedTabState}
+                error={paneFocused ? (savedTabError ?? savedRequestsError?.message ?? null) : null}
+                isLoaded={savedRequests !== null}
+              />
+            ) : null}
             {focused && paneTab === 'response' ? (
               <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
                 {responseNode}
@@ -1479,6 +1909,49 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           </Box>
         }
       />
+      {overwriteConfirm !== null ? (
+        <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>A saved request named "{overwriteConfirm.name}" already exists. Overwriting replaces it.</Text>
+            <Text color={colors.text}>[Enter] overwrite · [Esc] cancel</Text>
+          </Box>
+        </ModalDialog>
+      ) : null}
+      {pickerOpen ? (
+        <ModalDialog title="Saved requests" onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            {pickerError !== null ? <Text color={colors.error}>{pickerError}</Text> : null}
+            {savedRequests === null ? (
+              <DimAnnotation text="Loading saved requests…" />
+            ) : (
+              <FilterablePickList
+                label="Filter"
+                state={pickerState}
+                items={savedItems}
+                emptyText="No saved requests yet — press s in the Request tab to save one."
+                noMatchText="No saved requests match."
+              />
+            )}
+            <DimAnnotation text="[enter] load · [esc] close · [d] delete stale" />
+          </Box>
+        </ModalDialog>
+      ) : null}
+      {pickerDeleteConfirm !== null ? (
+        <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
+            <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
+          </Box>
+        </ModalDialog>
+      ) : null}
+      {savedTabDeleteConfirm !== null ? (
+        <ModalDialog title={`Delete "${savedTabDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>The saved request "{savedTabDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
+            <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
+          </Box>
+        </ModalDialog>
+      ) : null}
     </Box>
   );
 }

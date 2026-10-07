@@ -9,6 +9,7 @@ import type { LockPort } from '../../../../../core/ports/lock.js';
 import type { Manifest, ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { Route, RouteScannerPort } from '../../../../../core/ports/route-scanner.js';
+import type { SavedRequest, SavedRequestPort } from '../../../../../core/ports/saved-request.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
 
@@ -707,5 +708,364 @@ describe('routes slice bodyDrafts', () => {
     await store.getState().loadRoutes();
     expect(store.getState().bodyDrafts['POST /users']).toEqual({ v: 1 });
     expect(store.getState().bodyEditErrors['POST /users']).toEqual({ v: { reason: 'bad', kind: 'number' } });
+  });
+});
+
+describe('routes slice saved requests', () => {
+  function fakeSavedRequests(seed: SavedRequest[] = []): SavedRequestPort {
+    const rows = new Map(seed.map((item) => [item.name, { ...item }]));
+    return {
+      save: async (request) => {
+        if (rows.has(request.name)) {
+          return err('duplicate-request-name', `A request named "${request.name}" already exists`);
+        }
+        rows.set(request.name, { ...request });
+        return ok({ ...request });
+      },
+      overwrite: async (name, request) => {
+        const existing = rows.get(name);
+        if (existing === undefined) {
+          return err('saved-request-not-found', `No saved request named "${name}"`);
+        }
+        const next = { ...request, id: existing.id, createdAt: existing.createdAt, name };
+        rows.set(name, next);
+        return ok({ ...next });
+      },
+      get: async (name) => {
+        const found = rows.get(name);
+        return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+      },
+      list: async () => ok([...rows.values()].map((item) => ({ ...item }))),
+      remove: async (name) => (rows.delete(name) ? ok(undefined) : err('saved-request-not-found', `No saved request named "${name}"`)),
+    };
+  }
+
+  function manifestWithRoutes(): ManifestPort {
+    return { load: vi.fn(async () => ok(manifestFor('gateway', { 'route-explorer': {} }))) };
+  }
+
+  async function loadedStore(savedRequests: SavedRequestPort) {
+    const store = createAppStore(fakeDeps({ manifest: manifestWithRoutes(), savedRequests }));
+    await store.getState().loadRoutes();
+    expect(store.getState().routesStatus).toBe('ready');
+    return store;
+  }
+
+  it('starts with no origins and no cached library', () => {
+    const store = createAppStore(fakeDeps());
+    expect(store.getState().draftOrigins).toEqual({});
+    expect(store.getState().savedRequests).toBeNull();
+    expect(store.getState().savedRequestsError).toBeNull();
+  });
+
+  it('saves the live draft and links the route origin to the new record', async () => {
+    const store = await loadedStore(fakeSavedRequests());
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [{ name: 'q', value: 'x', required: false }], headers: [] });
+
+    const result = await store.getState().saveRequestDraft('list-users', 'GET /users');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(store.getState().draftOrigins['GET /users']).toBe(result.data.id);
+      expect(result.data.query).toEqual({ q: 'x' });
+    }
+  });
+
+  it('rejects a colliding name without overwriting, then overwrites through the flag', async () => {
+    const store = await loadedStore(fakeSavedRequests());
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [], headers: [] });
+    expect((await store.getState().saveRequestDraft('taken', 'GET /users')).ok).toBe(true);
+
+    store.getState().updateRequestDraft('GET /users', (previous) => ({
+      ...previous,
+      query: [{ name: 'q', value: 'v2', required: false }],
+    }));
+    const collision = await store.getState().saveRequestDraft('taken', 'GET /users');
+    expect(collision).toMatchObject({ ok: false, error: { code: 'duplicate-request-name' } });
+
+    const overwritten = await store.getState().saveRequestDraft('taken', 'GET /users', { overwrite: true });
+    expect(overwritten.ok).toBe(true);
+    if (overwritten.ok) {
+      expect(overwritten.data.query).toEqual({ q: 'v2' });
+    }
+  });
+
+  it('degrades to store-not-wired when no saved-request store was injected', async () => {
+    const store = createAppStore(fakeDeps({ manifest: manifestWithRoutes() }));
+    await store.getState().loadRoutes();
+
+    expect(await store.getState().saveRequestDraft('x', 'GET /users')).toMatchObject({
+      ok: false,
+      error: { code: 'store-not-wired' },
+    });
+    expect(await store.getState().loadSavedRequest('x')).toMatchObject({ ok: false, error: { code: 'store-not-wired' } });
+    expect(await store.getState().deleteSavedRequest('x')).toMatchObject({ ok: false, error: { code: 'store-not-wired' } });
+
+    await store.getState().refreshSavedRequests();
+    expect(store.getState().savedRequestsError).toMatchObject({ code: 'store-not-wired' });
+  });
+
+  it('loads a record back into the draft, the body draft, the tree state and the origin link', async () => {
+    const seed: SavedRequest = {
+      id: 'id-1',
+      name: 'filtered',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      query: { q: 'saved' },
+      headers: { 'X-Trace': 't1' },
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+
+    const result = await store.getState().loadSavedRequest('filtered');
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(store.getState().requestDrafts['GET /users']?.query).toEqual([{ name: 'q', value: 'saved', required: false }]);
+    expect(store.getState().requestDrafts['GET /users']?.headers).toEqual([{ name: 'X-Trace', value: 't1', required: false }]);
+    expect(store.getState().draftOrigins['GET /users']).toBe('id-1');
+  });
+
+  it('reports saved-request-not-found when loading or deleting an unknown name', async () => {
+    const store = await loadedStore(fakeSavedRequests());
+
+    expect(await store.getState().loadSavedRequest('missing')).toMatchObject({
+      ok: false,
+      error: { code: 'saved-request-not-found' },
+    });
+    expect(await store.getState().deleteSavedRequest('missing')).toMatchObject({
+      ok: false,
+      error: { code: 'saved-request-not-found' },
+    });
+  });
+
+  it('delete unlinks every draft origin pointing at the removed record', async () => {
+    const seed: SavedRequest = {
+      id: 'id-9',
+      name: 'old',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+    await store.getState().loadSavedRequest('old');
+    expect(store.getState().draftOrigins['GET /users']).toBe('id-9');
+
+    expect(await store.getState().deleteSavedRequest('old')).toEqual({ ok: true, data: undefined });
+    expect(store.getState().draftOrigins).toEqual({});
+  });
+
+  it('refreshes the library cache with advisory stale flags', async () => {
+    const seed: SavedRequest = {
+      id: 'id-1',
+      name: 'gone',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/vanished',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+
+    await store.getState().refreshSavedRequests();
+
+    expect(store.getState().savedRequestsError).toBeNull();
+    expect(store.getState().savedRequests).toMatchObject([{ name: 'gone', stale: true }]);
+  });
+
+  it('keeps origins across a same-repo reload and drops them on a repo switch', async () => {
+    const repos = ['/repos/gateway'];
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([...repos])),
+      add: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = createAppStore(fakeDeps({ manifest: manifestWithRoutes(), savedRequests: fakeSavedRequests(), registry }));
+    await store.getState().loadRoutes();
+    expect(store.getState().routesStatus).toBe('ready');
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [], headers: [] });
+    await store.getState().saveRequestDraft('keep-me', 'GET /users');
+
+    await store.getState().loadRoutes();
+    expect(store.getState().draftOrigins['GET /users']).toBeDefined();
+
+    repos.splice(0, 1, '/repos/other');
+    await store.getState().loadRoutes();
+    expect(store.getState().draftOrigins).toEqual({});
+  });
+
+  it('prunes origins past the 50 most-recently-touched routes', async () => {
+    const store = await loadedStore(fakeSavedRequests());
+    for (let index = 0; index < 52; index += 1) {
+      store.getState().ensureRequestDraft(`GET /r-${index}`, { params: [], query: [], headers: [] });
+      const saved = await store.getState().saveRequestDraft(`req-${index}`, `GET /r-${index}`);
+      expect(saved.ok).toBe(true);
+    }
+    const origins = store.getState().draftOrigins;
+    expect(Object.keys(origins)).toHaveLength(50);
+    expect(origins['GET /r-0']).toBeUndefined();
+    expect(origins['GET /r-1']).toBeUndefined();
+    expect(origins['GET /r-51']).toBeDefined();
+  });
+});
+
+describe('routes slice saved-request cache and guards', () => {
+  function fakeSavedRequests(seed: SavedRequest[] = []): SavedRequestPort {
+    const rows = new Map(seed.map((item) => [item.name, { ...item }]));
+    return {
+      save: async (request) => {
+        if (rows.has(request.name)) {
+          return err('duplicate-request-name', `A request named "${request.name}" already exists`);
+        }
+        rows.set(request.name, { ...request });
+        return ok({ ...request });
+      },
+      overwrite: async (name, request) => {
+        const existing = rows.get(name);
+        if (existing === undefined) {
+          return err('saved-request-not-found', `No saved request named "${name}"`);
+        }
+        const next = { ...request, id: existing.id, createdAt: existing.createdAt, name };
+        rows.set(name, next);
+        return ok({ ...next });
+      },
+      get: async (name) => {
+        const found = rows.get(name);
+        return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+      },
+      list: async () => ok([...rows.values()].map((item) => ({ ...item }))),
+      remove: async (name) => (rows.delete(name) ? ok(undefined) : err('saved-request-not-found', `No saved request named "${name}"`)),
+    };
+  }
+
+  function manifestWithRoutes(): ManifestPort {
+    return { load: vi.fn(async () => ok(manifestFor('gateway', { 'route-explorer': {} }))) };
+  }
+
+  async function loadedStore(savedRequests: SavedRequestPort) {
+    const store = createAppStore(fakeDeps({ manifest: manifestWithRoutes(), savedRequests }));
+    await store.getState().loadRoutes();
+    expect(store.getState().routesStatus).toBe('ready');
+    return store;
+  }
+
+  function seedCache(store: ReturnType<typeof createAppStore>) {
+    store.setState({
+      savedRequests: [
+        {
+          id: 'id-cached',
+          name: 'cached',
+          repoPath: '/repos/gateway',
+          method: 'GET',
+          path: '/users',
+          query: { q: 'old' },
+          createdAt: '2026-10-06T00:00:00.000Z',
+          updatedAt: '2026-10-06T00:00:00.000Z',
+          stale: false,
+        },
+      ],
+    });
+  }
+
+  it('appends a fresh save to the picker cache without a refresh', async () => {
+    const store = await loadedStore(fakeSavedRequests());
+    seedCache(store);
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [], headers: [] });
+
+    expect((await store.getState().saveRequestDraft('brand-new', 'GET /users')).ok).toBe(true);
+
+    const names = (store.getState().savedRequests ?? []).map((item) => item.name);
+    expect(names).toEqual(['cached', 'brand-new']);
+  });
+
+  it('replaces the same-name cache entry on overwrite', async () => {
+    const seed: SavedRequest = {
+      id: 'id-1',
+      name: 'cached',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      query: { q: 'old' },
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+    seedCache(store);
+    store.getState().ensureRequestDraft('GET /users', {
+      params: [],
+      query: [{ name: 'q', value: 'new', required: false }],
+      headers: [],
+    });
+
+    expect((await store.getState().saveRequestDraft('cached', 'GET /users', { overwrite: true })).ok).toBe(true);
+
+    expect(store.getState().savedRequests).toMatchObject([{ name: 'cached', query: { q: 'new' }, stale: false }]);
+  });
+
+  it('rejects a corrupt body without touching the live drafts', async () => {
+    const seed: SavedRequest = {
+      id: 'id-1',
+      name: 'broken-body',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      bodyText: '{ nope',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+    const before = store.getState().requestDrafts;
+
+    const result = await store.getState().loadSavedRequest('broken-body');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(store.getState().requestDrafts).toBe(before);
+    expect(store.getState().draftOrigins).toEqual({});
+  });
+
+  it('rejects an unrecognized tree state without touching the live drafts', async () => {
+    const seed: SavedRequest = {
+      id: 'id-1',
+      name: 'broken-tree',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      treeState: { bogus: true },
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+    store.getState().ensureRequestDraft('GET /users', { params: [], query: [], headers: [] });
+    const before = store.getState().requestDrafts['GET /users'];
+
+    const result = await store.getState().loadSavedRequest('broken-tree');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(store.getState().requestDrafts['GET /users']).toBe(before);
+    expect(store.getState().draftOrigins).toEqual({});
+  });
+
+  it('rejects blank names and trims padded ones on load and delete', async () => {
+    const seed: SavedRequest = {
+      id: 'id-1',
+      name: 'padded',
+      repoPath: '/repos/gateway',
+      method: 'GET',
+      path: '/users',
+      createdAt: '2026-10-06T00:00:00.000Z',
+      updatedAt: '2026-10-06T00:00:00.000Z',
+    };
+    const store = await loadedStore(fakeSavedRequests([seed]));
+
+    expect(await store.getState().loadSavedRequest('   ')).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await store.getState().deleteSavedRequest('')).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect((await store.getState().loadSavedRequest('  padded  ')).ok).toBe(true);
+    expect((await store.getState().deleteSavedRequest('  padded  ')).ok).toBe(true);
   });
 });

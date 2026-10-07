@@ -14,6 +14,7 @@ import { createGitPort } from '../adapters/driven/git/index.js';
 import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
+import { createSavedRequestPort, resolveGlobalDbFile } from '../adapters/driven/saved-requests/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
 import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
@@ -34,6 +35,10 @@ const migration = createMigrationPort();
 const restart = createRestartPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
+// The global saved-request library lives at <dataDir>/global.db (same XDG resolution as the
+// other stores): one sqlite file, hand-rolled numbered SQL, no migration framework.
+const globalDbFile = resolveGlobalDbFile(xdg);
+const savedRequests = createSavedRequestPort(globalDbFile);
 
 // Per-resource advisory lock directory under XDG_STATE_HOME/tui-back/locks. The lock adapter
 // creates it lazily on first acquire, so read-only commands never write state and an
@@ -77,6 +82,7 @@ const subcommands = buildSubcommands({
   isTTY: interactiveIsTTY,
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
+  savedRequests,
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);

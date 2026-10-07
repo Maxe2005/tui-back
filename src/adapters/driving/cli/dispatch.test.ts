@@ -10,6 +10,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
+import type { SavedRequest, SavedRequestPort } from '../../../core/ports/saved-request.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
@@ -177,6 +178,16 @@ describe('subcommand registry guards', () => {
     };
   }
 
+  function fakeSavedRequests(): SavedRequestPort {
+    return {
+      save: async (request) => ok(request),
+      overwrite: async (_name, request) => ok(request),
+      get: async (name) => err('saved-request-not-found', `No saved request named "${name}"`),
+      list: async () => ok([]),
+      remove: async (name) => err('saved-request-not-found', `No saved request named "${name}"`),
+    };
+  }
+
   function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
     const registry: RegistryPort = {
       list: async () => ok([]),
@@ -241,6 +252,7 @@ describe('subcommand registry guards', () => {
       state: fakeState(),
       scanner,
       auth,
+      savedRequests: fakeSavedRequests(),
       ...overrides,
     });
   }
@@ -259,6 +271,9 @@ describe('subcommand registry guards', () => {
       'registry',
       'list-routes',
       'fire-request',
+      'request-list',
+      'request-fire',
+      'request-delete',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
@@ -300,7 +315,7 @@ describe('subcommand registry guards', () => {
     if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
 
     expect(fireRequestCmd.usage).toBe(
-      "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']...",
+      "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']... [--save <name>]",
     );
 
     const missing = await fireRequestCmd.run([]);
@@ -373,6 +388,230 @@ describe('subcommand registry guards', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('fire-request --save persists the fired request and rejects a colliding name with duplicate-request-name', async () => {
+    const fetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const saved: SavedRequest[] = [];
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'POST', path: '/users' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+        savedRequests: {
+          ...fakeSavedRequests(),
+          get: async (name) => {
+            const found = saved.find((item) => item.name === name);
+            return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+          },
+          save: async (request) => {
+            if (saved.some((item) => item.name === request.name)) {
+              return err('duplicate-request-name', `A request named "${request.name}" already exists`);
+            }
+            saved.push({ ...request });
+            return ok(request);
+          },
+        },
+      });
+      const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+      if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+      const first = await fireRequestCmd.run([
+        '/repos/gateway',
+        'POST',
+        '/users',
+        '--query',
+        'q=1',
+        '--header',
+        'X-Trace: t1',
+        '--body',
+        '{"a":1}',
+        '--save',
+        'create-user',
+      ]);
+      expect(first).toMatchObject({ ok: true, data: { status: 200 } });
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        name: 'create-user',
+        repoPath: '/repos/gateway',
+        method: 'POST',
+        path: '/users',
+        query: { q: '1' },
+        headers: { 'X-Trace': 't1' },
+        bodyText: '{"a":1}',
+        contentType: 'application/json',
+      });
+
+      // A colliding name is rejected before anything is fired: no second fetch, same record kept.
+      const callsBefore = fetch.mock.calls.length;
+      const second = await fireRequestCmd.run(['/repos/gateway', 'POST', '/users', '--save', 'create-user']);
+      expect(second).toMatchObject({ ok: false, error: { code: 'duplicate-request-name' } });
+      expect(fetch.mock.calls.length).toBe(callsBefore);
+      expect(saved).toHaveLength(1);
+
+      expect(await fireRequestCmd.run(['/repos/gateway', 'GET', '/users', '--save'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+      expect(await fireRequestCmd.run(['/repos/gateway', 'GET', '/users', '--save', 'a', '--save', 'b'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('request-list shows stale flags and narrows with --repo', async () => {
+    const subcommands = buildTestSubcommands({
+      manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': {} } }) },
+      scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }]) },
+      savedRequests: {
+        ...fakeSavedRequests(),
+        list: async () =>
+          ok([
+            { id: 'id-1', name: 'kept', repoPath: '/repos/gateway', method: 'GET', path: '/users', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' },
+            { id: 'id-2', name: 'gone', repoPath: '/repos/gateway', method: 'GET', path: '/vanished', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' },
+          ]),
+      },
+    });
+    const requestList = subcommands.find((subcommand) => subcommand.name === 'request-list');
+    if (!requestList) throw new Error('expected request-list subcommand');
+
+    const listed = await requestList.run([]);
+    expect(listed).toMatchObject({
+      ok: true,
+      data: { requests: [{ name: 'kept', stale: false }, { name: 'gone', stale: true }] },
+    });
+
+    const narrowed = await requestList.run(['--repo', '/repos/other']);
+    expect(narrowed).toMatchObject({ ok: true, data: { requests: [] } });
+
+    expect(await requestList.run(['--bogus'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await requestList.run(['--repo'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('request-fire re-fires by name with overrides, persistence flags and the stale hard gate', async () => {
+    const fetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+        savedRequests: {
+          ...fakeSavedRequests(),
+          get: async (name) =>
+            name === 'list-users'
+              ? ok({ id: 'id-1', name, repoPath: '/repos/gateway', method: 'GET', path: '/users', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' })
+              : name === 'stale-one'
+                ? ok({ id: 'id-2', name, repoPath: '/repos/gateway', method: 'GET', path: '/vanished', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' })
+                : err('saved-request-not-found', `No saved request named "${name}"`),
+        },
+      });
+      const requestFire = subcommands.find((subcommand) => subcommand.name === 'request-fire');
+      if (!requestFire) throw new Error('expected request-fire subcommand');
+
+      expect(await requestFire.run([])).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+      expect(await requestFire.run(['missing'])).toMatchObject({ ok: false, error: { code: 'saved-request-not-found' } });
+      expect(fetch).not.toHaveBeenCalled();
+
+      const fired = await requestFire.run(['list-users', '--query', 'q=1']);
+      expect(fired).toMatchObject({ ok: true, data: { status: 200 } });
+
+      const stale = await requestFire.run(['stale-one']);
+      expect(stale).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+
+      expect(await requestFire.run(['list-users', '--overwrite', '--save-as', 'other'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+      expect(await requestFire.run(['list-users', '--bogus', 'v'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('request-fire --overwrite updates the original and --save-as stores a new record', async () => {
+    const fetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const rows = new Map<string, SavedRequest>([
+        ['base', { id: 'id-1', name: 'base', repoPath: '/repos/gateway', method: 'GET', path: '/users', query: { q: '1' }, createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' }],
+        ['taken', { id: 'id-2', name: 'taken', repoPath: '/repos/gateway', method: 'GET', path: '/users', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' }],
+      ]);
+      const overwritten: string[] = [];
+      const created: string[] = [];
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+        savedRequests: {
+          ...fakeSavedRequests(),
+          save: async (request) => {
+            created.push(request.name);
+            const record = { ...request };
+            rows.set(request.name, record);
+            return ok(record);
+          },
+          overwrite: async (name, request) => {
+            overwritten.push(name);
+            const existing = rows.get(name);
+            if (existing === undefined) {
+              return err('saved-request-not-found', `No saved request named "${name}"`);
+            }
+            const next = { ...request, id: existing.id, createdAt: existing.createdAt, name };
+            rows.set(name, next);
+            return ok(next);
+          },
+          get: async (name) => {
+            const found = rows.get(name);
+            return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+          },
+        },
+      });
+      const requestFire = subcommands.find((subcommand) => subcommand.name === 'request-fire');
+      if (!requestFire) throw new Error('expected request-fire subcommand');
+
+      const updated = await requestFire.run(['base', '--query', 'q=2', '--overwrite']);
+      expect(updated).toMatchObject({ ok: true, data: { status: 200 } });
+      expect(overwritten).toEqual(['base']);
+      expect(rows.get('base')).toMatchObject({ query: { q: '2' } });
+
+      const forked = await requestFire.run(['base', '--query', 'q=3', '--save-as', 'copy']);
+      expect(forked).toMatchObject({ ok: true, data: { status: 200 } });
+      expect(created).toEqual(['copy']);
+      expect(rows.get('copy')).toMatchObject({ name: 'copy', query: { q: '3' } });
+      expect(rows.get('base')).toMatchObject({ query: { q: '2' } });
+
+      const callsBefore = fetch.mock.calls.length;
+      const collision = await requestFire.run(['base', '--save-as', 'taken']);
+      expect(collision).toMatchObject({ ok: false, error: { code: 'duplicate-request-name' } });
+      expect(fetch.mock.calls.length).toBe(callsBefore);
+      expect(created).toEqual(['copy']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('request-delete removes by exact name and reports unknown names', async () => {
+    const removed: string[] = [];
+    const subcommands = buildTestSubcommands({
+      savedRequests: {
+        ...fakeSavedRequests(),
+        remove: async (name) =>
+          name === 'list-users' ? (removed.push(name), ok(undefined)) : err('saved-request-not-found', `No saved request named "${name}"`),
+      },
+    });
+    const requestDelete = subcommands.find((subcommand) => subcommand.name === 'request-delete');
+    if (!requestDelete) throw new Error('expected request-delete subcommand');
+
+    expect(await requestDelete.run([])).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+    expect(await requestDelete.run(['a', 'b'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await requestDelete.run(['missing'])).toMatchObject({ ok: false, error: { code: 'saved-request-not-found' } });
+    expect(await requestDelete.run(['list-users'])).toEqual({ ok: true, data: { name: 'list-users' } });
+    expect(removed).toEqual(['list-users']);
   });
 
   it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {

@@ -170,6 +170,20 @@ export function setRequestRowValue(rows: readonly RequestRow[], index: number, v
   return rows.map((row, candidate) => (candidate === index ? { ...row, value } : row));
 }
 
+// Index of the route a saved request targets, so the picker can move the list cursor
+// onto it before loading its draft — the pane always reflects the cursor's route.
+export function resolveRouteIndex(
+  routes: readonly Pick<Route, 'method' | 'path'>[],
+  method: string,
+  path: string,
+): number | null {
+  const wanted = `${method.trim().toUpperCase()} ${path.trim()}`;
+  const found = routes.findIndex(
+    (route) => `${route.method.trim().toUpperCase()} ${route.path.trim()}` === wanted,
+  );
+  return found === -1 ? null : found;
+}
+
 // Tab/Shift+Tab cycle the sections (wrapping — unlike the sub-tabs, a section ring).
 export function nextRequestSection(current: RequestSection, direction: 'next' | 'back'): RequestSection {
   const index = REQUEST_SECTIONS.indexOf(current);

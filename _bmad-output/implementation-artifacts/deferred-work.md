@@ -634,3 +634,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
   summary: `TWO_PANEL_NAV` lives in `edts-zone.logic.ts` but is imported by shared dialog logic (wizard, switch-resolution); move it to the shared primitive or a dialogs module.
   evidence: layering smell flagged by the blind review; dialogs depend on a zone-specific module.
+
+## Deferred from: review of 6-3-save-customize-and-re-fire-a-request (2026-10-06)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-3-save-customize-and-re-fire-a-request.md`
+  summary: `global.db` has no version runner for future numbered schema files — `schema-001.sql` is re-applied on every open and there is no loader path for the `002.sql` that Story 6.5 will need for hide/favorite columns.
+  evidence: `src/adapters/driven/saved-requests/index.ts` executes the single schema file unconditionally; the `schema_version` row exists but nothing reads it to decide which numbered files to apply. Surfaced by review (blind-hunter); deliberately left for 6.5, which is the first story that must evolve the schema.
