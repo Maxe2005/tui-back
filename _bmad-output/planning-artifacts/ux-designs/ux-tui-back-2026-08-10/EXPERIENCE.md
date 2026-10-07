@@ -208,6 +208,35 @@ The canonical keybinding contract for downstream implementation:
 - `Left` / `Right` (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism corrected 2026-08-25 after a review loopback) — with nothing capturing input, directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends — an always-available alternative to the mnemonics above, with no separate focus mode.
 - Mouse (optional) — click to select/activate, mirroring the keyboard equivalent; drag on a splitter resizes it directly, mirroring `Ctrl+W` mode.
 
+### Interaction consistency contract (UX-DR36, Story 7.4) — DRAFT, pending developer validation
+
+The same intent uses the same key, wording and component in every zone and dialog. Source: `_bmad-output/implementation-artifacts/epic-7/interaction-inventory-7-4.md`. Any deviation must be listed in the last table with its reason.
+
+| Intent | Canonical choice |
+|---|---|
+| List cursor / jump | `↑`/`↓` move (clamped), `Home`/`End` jump, in every list. No vim keys; `g`/`G` stay reserved for top/bottom and are bound to nothing else. One shared cursor module. |
+| Activate | `Enter` confirms or opens, never toggles. |
+| Toggle | `Space` toggles only. |
+| Focus movement | `Tab`/`Shift+Tab` through the shared focus-navigation primitive; no raw `key.tab` handling. |
+| Edit / commit / cancel | `Enter` commits, `Esc` cancels and restores the previous value (filter editors included). |
+| Dialog confirm / cancel | `Enter` confirms, `Esc` cancels, closing the innermost layer first. `y`/`n` confirmations and `y` as a start key are removed. |
+| Destructive action | Reversible: modal + `Enter`. Irreversible file loss: second step `Ctrl+E`. Data reset: typed word. Clearing a view: no confirmation, but labelled. |
+| Filter | `/` opens, `Esc` clears. |
+| Refresh / retry | `R` retries or refreshes in the current context; load errors show `[R] retry`. |
+| Footer and `?` help | Both generated from one keybinding declaration list; the footer takes its context (zone, dialog, pane) from the store. |
+| Hint format | `[Key] verb`, entries joined by two spaces, English, `Esc`/`Enter` capitalised, `↑/↓`, `Ctrl+W`. |
+| Modal title | UPPERCASE English noun phrase, no suffix punctuation. |
+| Loading / empty / error | One shared `StateLine`: spinner + "Loading X…", dim "No X yet.", error colour "Failed to load X. [R] retry". |
+| Text input | `nextTextInputValue` + `TextInputLine` everywhere. |
+| Pick list | `FilterablePickList` when filterable; one shared menu list for fixed menus. |
+| Branch input | One `BranchAutocompleteInput`; the command-bar suggest field is documented as a separate purpose. |
+| UI language | English for every label, hint, title and error; the French Voice examples above are superseded (to be amended on validation). |
+| `Ctrl+R` | One meaning only (see deviations once decided). |
+
+| Deviation | Reason |
+|---|---|
+| _none yet_ | |
+
 ## Accessibility Floor
 
 Behavioral; visual contrast values live in `DESIGN.md`.
