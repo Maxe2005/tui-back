@@ -86,6 +86,12 @@ describe('footerHintsFor', () => {
     }
   });
 
+  it('generates the footer from the keybinding declarations, with zone-only entries', () => {
+    expect(footerHintsFor('update')).toContain('[m/a/p] configure');
+    expect(footerHintsFor('edts')).not.toContain('[m/a/p] configure');
+    expect(DEFAULT_FOOTER_HINTS).toContain('[↑/↓] move');
+  });
+
   it('advertises Logs wrap-all as W', () => {
     expect(footerHintsFor('logs')).toContain('[W] wrap all');
     expect(footerHintsFor('edts')).not.toContain('[W] wrap all');

@@ -1,8 +1,12 @@
+import type { ZoneId } from '../zones/zones.js';
 import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
 
+// `footer` marks a row the footer advertises too (with `zone` when only that zone shows it), so
+// the footer and the ? help are generated from this one list.
 export type Keybinding = {
   keys: string;
   description: string;
+  footer?: { key: string; verb: string; zone?: ZoneId };
 };
 
 // The subset of Ink's `Key` type every list-navigation pure function reads, shared so the
@@ -20,10 +24,12 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '↑ / ↓',
     description: 'Move highlight up/down within a list',
+    footer: { key: '↑/↓', verb: 'move' },
   },
   {
     keys: 'Home / End',
     description: 'Jump to top/bottom of the current list',
+    footer: { key: 'Home/End', verb: 'top/bottom' },
   },
   {
     keys: 'Space',
@@ -47,22 +53,27 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+W',
     description:
       'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)',
+    footer: { key: 'Ctrl+W', verb: 'resize' },
   },
   {
     keys: '/',
     description: 'Open filter within the current zone',
+    footer: { key: '/', verb: 'filter' },
   },
   {
     keys: ':',
     description: 'Open command entry',
+    footer: { key: ':', verb: 'cmd' },
   },
   {
     keys: '?',
     description: 'Open the keybinding-help screen',
+    footer: { key: '?', verb: 'help' },
   },
   {
     keys: 'q',
     description: "Quit (confirms first if a run is in progress; disable in :settings' General tab)",
+    footer: { key: 'q', verb: 'quit' },
   },
   {
     keys: ':quit',
@@ -76,6 +87,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '← / →',
     description: 'Switch to previous/next zone tab, wrapping at the ends',
+    footer: { key: '←/→', verb: 'zone' },
   },
   // Wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
   {
@@ -157,6 +169,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'W (Logs)',
     description: 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)',
+    footer: { key: 'W', verb: 'wrap all', zone: 'logs' },
   },
   {
     keys: 'i (Logs)',
@@ -169,6 +182,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'm / a / p (Update)',
     description: 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service',
+    footer: { key: 'm/a/p', verb: 'configure', zone: 'update' },
   },
   {
     keys: 'Ctrl+N (Update config)',
