@@ -312,8 +312,26 @@ export function formatLastUpdateRecap(
     const glyph = row.outcome === 'updated' ? '✔' : row.outcome === 'skipped' ? '○' : '✖';
     const source = selection?.find((item) => item.service === row.service)?.sourceBranch ?? 'shared branch';
     const target = branchByService[row.service] ?? '?';
-    const detail = row.detail !== undefined ? ` (${row.detail.code})` : '';
+    const detail =
+      row.detail !== undefined ? ` (${row.detail.code})${row.detail.message !== '' ? `: ${row.detail.message.replace(/\s+/g, ' ').trim()}` : ''}` : '';
     return `${glyph} ${row.service}  ${source} → ${target}  ${row.outcome}${detail}`;
   });
   return { title, contextLines, resultLines };
+}
+
+// The recap view toggle: `Esc` drops service focus (the right pane shows the last-update
+// recap); any list-navigation key hands focus back to the remembered service without moving it.
+// `handled` tells the dispatcher the key is consumed.
+export function resolveRecapToggle(
+  recapActive: boolean,
+  key: { escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
+): { recapActive: boolean; handled: boolean } {
+  if (key.escape === true) {
+    return { recapActive: true, handled: !recapActive };
+  }
+  const navigates = key.upArrow === true || key.downArrow === true || key.home === true || key.end === true;
+  if (recapActive && navigates) {
+    return { recapActive: false, handled: true };
+  }
+  return { recapActive, handled: false };
 }

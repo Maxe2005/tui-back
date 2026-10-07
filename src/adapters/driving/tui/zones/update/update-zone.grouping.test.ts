@@ -55,11 +55,28 @@ describe('formatLastUpdateRecap', () => {
     expect(recap?.title).toBe('Last update — EDT "feat-x"');
     expect(recap?.resultLines).toEqual([
       '✔ api  develop → feat-x  updated',
-      '✖ web  shared branch → ?  failed (migration-failed)',
+      '✖ web  shared branch → ?  failed (migration-failed): boom',
     ]);
   });
 
   it('titles an all-repos run', () => {
     expect(formatLastUpdateRecap('all-repos', [], null, {})?.title).toBe('Last update — all repos');
+  });
+});
+
+import { resolveRecapToggle } from './update-zone.logic.js';
+
+describe('resolveRecapToggle', () => {
+  it('Esc enters the recap view', () => {
+    expect(resolveRecapToggle(false, { escape: true })).toEqual({ recapActive: true, handled: true });
+  });
+
+  it('an arrow leaves the recap view and is consumed', () => {
+    expect(resolveRecapToggle(true, { downArrow: true })).toEqual({ recapActive: false, handled: true });
+    expect(resolveRecapToggle(true, { upArrow: true })).toEqual({ recapActive: false, handled: true });
+  });
+
+  it('arrows in the service view are not consumed', () => {
+    expect(resolveRecapToggle(false, { downArrow: true })).toEqual({ recapActive: false, handled: false });
   });
 });
