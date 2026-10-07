@@ -10,6 +10,7 @@ import {
   DEFAULT_VISIBILITY_FLAGS,
   adjustScrollOffset,
   computeGridLayout,
+  computeLogsLayout,
   computeLineRowCount,
   cycleLogsPaneFocus,
   detectLogLevel,
@@ -804,5 +805,28 @@ describe('resolveHistoryBrowseDown', () => {
     const browsing = { index: 1, savedDraft: 'active' };
     const result = resolveHistoryBrowseDown(browsing, ['active', 'older']);
     expect(result).toEqual({ query: 'active', browsing: null });
+  });
+});
+
+describe('computeLogsLayout list ratio', () => {
+  const base = {
+    windowColumns: 120,
+    windowRows: 40,
+    activePaneCount: 1,
+    edtServiceCount: 0,
+    otherServiceCount: 0,
+    filterEditorOpen: false,
+    historyGridOpen: false,
+    filterHistoryGridMaxRows: 8,
+  };
+
+  it('gives the grid less width as the list ratio grows, and the columns always fit the window', () => {
+    const narrowList = computeLogsLayout({ ...base, listRatio: 0.15 });
+    const wideList = computeLogsLayout({ ...base, listRatio: 0.5 });
+    expect(wideList.layout.cellWidth).toBeLessThan(narrowList.layout.cellWidth);
+    for (const [ratio, result] of [[0.15, narrowList], [0.5, wideList]] as const) {
+      const listColumns = Math.floor((base.windowColumns - 1) * ratio);
+      expect(listColumns + 1 + result.layout.cellWidth * result.layout.cols).toBeLessThanOrEqual(base.windowColumns);
+    }
   });
 });

@@ -1356,4 +1356,67 @@ describe('LogsZone real-keypress interactions', () => {
       }
     });
   });
+
+  describe('wrap keys', () => {
+    function longPane(path: string, marker: string) {
+      return {
+        repoPath: path,
+        service: path.split('/').pop() ?? path,
+        lines: [{ timestamp: '2026-01-01T00:00:00.000Z', stream: 'stdout' as const, text: `${'word '.repeat(60)}${marker}` }],
+        streamError: null,
+        noMoreHistory: false,
+        scrollOffset: 0,
+        health: 'up',
+        restarting: false,
+      };
+    }
+
+    async function mountWithTwoPanes() {
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        logsOtherSelected: ['/repos/api-gateway', '/repos/route-explorer'],
+        logsPanes: {
+          '/repos/api-gateway': longPane('/repos/api-gateway', 'ENDAAA'),
+          '/repos/route-explorer': longPane('/repos/route-explorer', 'ENDBBB'),
+        },
+      });
+      const mounted = mount(store);
+      await mounted.instance.waitUntilRenderFlush();
+      await press(mounted.instance, mounted.stdin, KEYS.tab);
+      await press(mounted.instance, mounted.stdin, KEYS.tab);
+      return mounted;
+    }
+
+    function lastFrame(stdout: FakeTtyStdout, before: number): string {
+      return stdout.contentFramesSince(before).at(-1) ?? '';
+    }
+
+    it('Ctrl+W wraps nothing, W wraps every pane, bare w flips only the focused pane', async () => {
+      const { instance, stdin, stdout } = await mountWithTwoPanes();
+      try {
+        let mark = stdout.chunkCount;
+        await press(instance, stdin, KEYS.ctrlW);
+        let frame = lastFrame(stdout, mark);
+        expect(frame).not.toContain('ENDAAA');
+        expect(frame).not.toContain('ENDBBB');
+
+        mark = stdout.chunkCount;
+        await press(instance, stdin, 'W');
+        frame = lastFrame(stdout, mark);
+        expect(frame).toContain('ENDAAA');
+        expect(frame).toContain('ENDBBB');
+
+        // Bare w flips only the focused (first) pane back to truncated.
+        mark = stdout.chunkCount;
+        await press(instance, stdin, 'w');
+        frame = lastFrame(stdout, mark);
+        expect(frame).not.toContain('ENDAAA');
+        expect(frame).toContain('ENDBBB');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+  });
 });

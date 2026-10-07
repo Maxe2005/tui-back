@@ -2,7 +2,7 @@
 title: 'Story 7.3: Shared zone layout contract & Ctrl+W resize in every zone (UX-DR35)'
 type: 'feature'
 created: '2026-10-07'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '13edecf001e8efcfc57272f292e12ad8db1b4eeb'
 review_loop_iteration: 0
 context:

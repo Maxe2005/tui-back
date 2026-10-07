@@ -20,10 +20,10 @@ import type { StatePort } from "../../../../core/ports/state.js";
 import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/settings.js";
 import type { DockerPort } from "../../../../core/ports/docker.js";
 import { ZONES } from "../zones/zones.js";
-import { defaultZoneRatios } from "../zones/zone-layouts.js";
-
-const DEFAULT_LIST_RATIO = 2 / 5;
+import { ZONE_LAYOUTS, defaultZoneRatios } from "../zones/zone-layouts.js";
 import { createAppStore, NO_BRANCH_CREATION, type AppStoreDeps } from "./app-store.js";
+
+const DEFAULT_LIST_RATIO = ZONE_LAYOUTS.dashboard.boundaries[0]!.defaultRatio;
 
 function manifestFor(repoPath: string): Manifest {
   const name = repoPath.split("/").pop();
