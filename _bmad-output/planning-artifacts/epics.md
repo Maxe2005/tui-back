@@ -194,6 +194,56 @@ So that I can follow each service's progress in real time and keep using the too
 
 **Implementation notes:** `core/ports` signatures are already `Promise<Result<…>>` — no core change beyond callers that relied on synchronous behavior. Migrate adapter by adapter (migration, restart, container, git, docker), one commit each.
 
+### Story 3.14: Update Zone — Member/Other Service Grouping & Last-Update Recap View
+
+> Added 2026-10-07. Gives the Update zone the same member/other split as the EDT and Logs zones and a no-focus recap view.
+
+As a developer,
+I want the service list split into EDT members and other services, and a recap view when no service is focused,
+So that I see at a glance what a group update will touch and what the last update did.
+
+**Acceptance Criteria:**
+
+**Given** the Update zone's service list **When** it renders **Then** it is split into two titled groups, `EDT members` (services that the active EDT's group update will touch) and `Others`, in the same visual style as the EDT and Logs zones.
+
+**Given** the service list **When** the developer presses `Esc` **Then** no service is focused and the right pane shows the **last-update recap**: its context (from → to: source branch or EDT, target branch or EDT) and the per-service results of the services it covered; the pane footer `[G] EDT update, [P] this service, [Enter] for service actions. Press [A] for all-repos maintenance mode (every managed repo).` is shown on this view **only**, never on per-service views.
+
+**Given** the recap view **When** the developer presses `↑` or `↓` **Then** focus returns to a service and the per-service view replaces the recap.
+
+**Given** no update has run in this session **When** the recap view opens **Then** it states that no update has run yet. The recap lives in memory only; it is not persisted across restarts.
+
+### Story 3.15: Update Zone — Per-Service Detail Pane (Last Run & Live Step Tracking)
+
+> Added 2026-10-07. Extends Story 3.10's live tracking into a clear, glyph-rich per-service pane.
+
+As a developer,
+I want the right pane to show information specific to the focused service — its last update or its live progress,
+So that I can follow each step of an update in real time.
+
+**Acceptance Criteria:**
+
+**Given** a focused service with no update in progress for it (none running, or already finished while others still run) **When** the pane renders **Then** it shows the context of its last update (from → to: branch and EDT) and the result of each main component — merge, migration, restart — as separate, spaced, glyph-prefixed blocks.
+
+**Given** a focused service that an update is currently processing **When** the pane renders **Then** a clear running indicator is shown and each step (merge, migration, restart) displays its state live: pending, in progress (with the interaction prompt when a blocker needs resolving), or done (with its result), updating in real time.
+
+**Given** a run in progress **When** the service list renders **Then** it keeps only the services being updated.
+
+### Story 3.16: Global "Update in Progress" Status & Action Locks
+
+> Added 2026-10-07.
+
+As a developer,
+I want the whole tool to know an update is running and refuse conflicting actions,
+So that I can keep working in parallel without corrupting a run.
+
+**Acceptance Criteria:**
+
+**Given** a group update is running **When** the developer looks at the Update tab **Then** it carries a dedicated "update in progress" status visible from every zone.
+
+**Given** a run in progress **When** the developer attempts a second update (any entry point), an EDT switch, an EDT creation with activation/switch, or a standalone service restart **Then** the action is rejected with a clear message naming the running update; EDT creation without switch stays allowed.
+
+**Given** a run in progress **When** the developer uses logs or other zones **Then** they stay usable; known degraded behavior (e.g. logs of restarting containers) is documented, not blocked.
+
 ## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
 **FRs covered:** FR-13, FR-14, FR-15, FR-30, FR-31
