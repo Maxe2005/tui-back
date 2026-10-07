@@ -112,6 +112,9 @@ export type UpdateSlice = {
   // The per-service step tracker (merge / migration / restart, each pending → running →
   // done|failed|skipped) advanced by the same `onPhase` emissions; cleared with the live maps.
   liveServiceSteps: Record<string, ServiceStepStates>;
+  // Services of the in-flight run whose final row already landed (core's `onServiceResult`): the
+  // detail pane shows their last-update view while the others are still running.
+  liveServiceDone: Record<string, true>;
   // The last finished run's per-service snapshot — settled steps, final row, and the context
   // (merge source, target branch, EDT topic) — kept in memory for the detail pane's
   // "last update" view; merged per service, never wholesale-replaced.
@@ -243,6 +246,11 @@ function resolveLiveIssues(issues: Record<string, ServiceIssue[]>, service: stri
   return { ...issues, [service]: existing.map((entry) => (entry.resolved ? entry : { ...entry, resolved: true })) };
 }
 
+function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const { [key]: _removed, ...rest } = record;
+  return rest;
+}
+
 // Settles each finished row's live steps into the in-memory last-run snapshot, with its
 // merge source (confirmed override, else the shared branch), target branch and EDT topic.
 function mergeLastServiceRuns(
@@ -252,6 +260,10 @@ function mergeLastServiceRuns(
 ): Record<string, ServiceRunSnapshot> {
   const next = { ...state.lastServiceRuns };
   for (const result of results) {
+    // Already settled when its row landed mid-run — the live steps are gone by now.
+    if (state.liveServiceDone[result.service] === true) {
+      continue;
+    }
     next[result.service] = {
       steps: finalizeServiceSteps(state.liveServiceSteps[result.service], result),
       result,
@@ -579,6 +591,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateBlocker: null,
       liveServicePhase: {},
       liveServiceSteps: {},
+      liveServiceDone: {},
       liveServiceIssues: {},
       lastServiceRuns: {},
       resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
@@ -627,6 +640,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           // resolved/unresolved entries from the previous run never leak into this one.
           liveServicePhase: {},
           liveServiceSteps: {},
+          liveServiceDone: {},
           liveServiceIssues: {},
         });
         pendingBlockerResolve = null;
@@ -672,6 +686,15 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             // service's current step at its phase boundaries. The next phase for a service
             // implies its re-verification passed, so its unresolved entries flip to
             // resolved here (a failed re-verify never advances the pipeline).
+            onServiceResult: (row) => {
+              set((state) => ({
+                liveServiceDone: { ...state.liveServiceDone, [row.service]: true as const },
+                liveServicePhase: omitKey(state.liveServicePhase, row.service),
+                liveServiceSteps: omitKey(state.liveServiceSteps, row.service),
+                lastServiceRuns: mergeLastServiceRuns(state, [row], state.updateScope === 'all' ? 'all-repos' : (state.edts?.find((entry) => entry.ulid === state.activeEdt)?.topic ?? null)),
+                lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, [row]),
+              }));
+            },
             onPhase: ((service: string, phase: UpdatePhase) => {
               set((state) => ({
                 liveServicePhase: { ...state.liveServicePhase, [service]: phase },
@@ -713,6 +736,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 // final per-service outcome, with its settled steps and context snapshot.
                 liveServicePhase: {},
                 liveServiceSteps: {},
+                liveServiceDone: {},
                 lastServiceRuns: mergeLastServiceRuns(state, result.data.results, result.data.topic),
                 liveServiceIssues,
                 // Merged, never wholesale-replaced — a partial-scope run (a single
@@ -728,6 +752,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               // A top-level rejection ran nothing — no live state survives it.
               liveServicePhase: {},
               liveServiceSteps: {},
+              liveServiceDone: {},
               liveServiceIssues: {},
             });
           }
@@ -739,6 +764,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateErrorCode: 'internal-error',
             liveServicePhase: {},
             liveServiceSteps: {},
+            liveServiceDone: {},
             liveServiceIssues: {},
           });
         } finally {
@@ -1148,6 +1174,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           serviceRestartInFlight: {},
           liveServicePhase: {},
           liveServiceSteps: {},
+          liveServiceDone: {},
           liveServiceIssues: {},
         }),
 

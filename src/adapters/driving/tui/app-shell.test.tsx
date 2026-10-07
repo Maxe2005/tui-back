@@ -457,6 +457,7 @@ it('shouldQuit returns true for q', () => {
         liveServicePhase: {},
         liveServiceIssues: {},
         liveServiceSteps: {},
+        liveServiceDone: {},
         lastServiceRuns: {},
         // Logs zone state
         logsEdtSelected: [],
