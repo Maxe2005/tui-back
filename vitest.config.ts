@@ -6,6 +6,9 @@ import { configDefaults, defineConfig } from 'vitest/config';
 // failures from code that isn't this working tree's.
 export default defineConfig({
   test: {
+    // Render assertions match plain text; a FORCE_COLOR/COLORTERM in the caller's shell would
+    // wrap it in ANSI codes and split the expected strings.
+    env: { FORCE_COLOR: '0', NO_COLOR: '1' },
     exclude: [...configDefaults.exclude, '.claude/**'],
   },
 });
