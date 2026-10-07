@@ -25,6 +25,7 @@ import {
   resolveSelectionDirection,
   resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
+import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import {
   commandAtGridCursor,
   groupCommandsByColumn,
@@ -41,6 +42,7 @@ import {
   computeLogsLayout,
   cycleFilterLevel,
   cycleLogsPaneFocus,
+  LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
@@ -552,8 +554,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         return;
       }
 
-      if (key.tab) {
-        setPaneFocus((current) => cycleLogsPaneFocus(current));
+      const paneStep = resolveFocusStep(input, key, LOGS_PANE_FOCUS_NAV.mode);
+      if (paneStep !== null) {
+        setPaneFocus((current) => cycleLogsPaneFocus(current, paneStep));
         return;
       }
 

@@ -131,6 +131,13 @@ describe('splitNoContainerRows', () => {
   });
 });
 
+describe('cycleLogsPaneFocus back', () => {
+  it('reverses, wrapping first to last', () => {
+    expect(cycleLogsPaneFocus('edt-list', 'back')).toBe('panes');
+    expect(cycleLogsPaneFocus('panes', 'back')).toBe('other-list');
+  });
+});
+
 describe('cycleLogsPaneFocus', () => {
   it('cycles edt-list -> other-list -> panes -> edt-list', () => {
     expect(cycleLogsPaneFocus('edt-list')).toBe('other-list');

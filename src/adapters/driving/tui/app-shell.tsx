@@ -10,6 +10,7 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
 import { SettingsScreen } from './shared/settings-screen.js';
+import { resolveFocusStep } from './shared/keys/focus-navigation.js';
 import { colors } from './shared/theme/theme.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
@@ -276,8 +277,9 @@ export function AppShell({
     // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
     if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
       if (state.resizeMode !== null) {
-        if (key.tab) {
-          state.cycleResizeTargetBoundary();
+        const boundaryStep = resolveFocusStep(input, key, 'tab');
+        if (boundaryStep !== null) {
+          state.cycleResizeTargetBoundary(boundaryStep);
           return;
         }
         if (shouldExitResizeMode(key)) {

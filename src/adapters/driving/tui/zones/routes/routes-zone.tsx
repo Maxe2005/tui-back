@@ -8,6 +8,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
+import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
@@ -1034,8 +1035,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           return;
         }
         if (paneTab === 'request') {
-          if (key.tab === true) {
-            setSection((previous) => nextRequestSection(previous, key.shift === true ? 'back' : 'next'));
+          const sectionStep = resolveFocusStep(input, key, 'tab');
+          if (sectionStep !== null) {
+            setSection((previous) => nextRequestSection(previous, sectionStep));
             setRowCursor(0);
             setFilterPanelOpen(false);
             setPanelCursor(0);

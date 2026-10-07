@@ -505,6 +505,13 @@ describe('cyclePaneFocus', () => {
   });
 });
 
+describe('cyclePaneFocus back', () => {
+  it('reverses, wrapping first to last', () => {
+    expect(cyclePaneFocus('edts', 'back')).toBe('other-services');
+    expect(cyclePaneFocus('other-services', 'back')).toBe('edt-services');
+  });
+});
+
 describe('cycleFormFocus', () => {
   it('cycles topic <-> members', () => {
     expect(cycleFormFocus('topic')).toBe('members');

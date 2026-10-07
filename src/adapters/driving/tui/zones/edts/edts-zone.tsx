@@ -13,10 +13,12 @@ import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { ListRow } from '../../shared/components/list-row.js';
+import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
   appendHint,
   cyclePaneFocus,
+  PANE_FOCUS_NAV,
   formatEdtActionHistory,
   formatEdtDetail,
   formatEdtRowMeta,
@@ -727,8 +729,9 @@ export function EdtsZone({
     // Base edt-list view (no dialog open): Tab cycles which of the three lists is focused;
     // arrows/Home/End move only the currently-focused list — all three stay independently
     // navigable.
-    if (key.tab) {
-      setPaneFocus((current) => cyclePaneFocus(current));
+    const paneStep = resolveFocusStep(input, key, PANE_FOCUS_NAV.mode);
+    if (paneStep !== null) {
+      setPaneFocus((current) => cyclePaneFocus(current, paneStep));
       return;
     }
 
