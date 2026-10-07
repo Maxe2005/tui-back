@@ -2,7 +2,7 @@
 title: 'Story 7.4: Interaction consistency audit & alignment (UX-DR36)'
 type: 'refactor'
 created: '2026-10-07'
-status: 'in-review'
+status: 'done'
 baseline_commit: '94d7ee8b9969e883059b51793119b5115dbce3d5'
 review_loop_iteration: 0
 context:
@@ -123,3 +123,38 @@ Approved answers: `[ Start run ]` is the only way to start (no Ctrl+N chord), si
 Implemented key path: every scope opens the two-panel screen (layouts `edt-panels`, `all-panels`, `service-panels`; a single service is a one-row table with no merge source line). Opens with focus on the table. `Tab`/`Shift+Tab` toggle table and global panel. Table: arrows/Home/End, `Space` select, `Enter` opens the per-service box, `Ctrl+R` back to global. Box: arrows/Home/End/Tab move lines, `Space`/Left/Right flip, `Enter` edit or apply, `Ctrl+R` back to global, `Esc` closes. Global panel: arrows/Home/End, `Space` changes, `Enter` edits the EDT source, `Enter` on the last line `[ Start run ]` starts the run. `Esc` closes the innermost layer, then cancels.
 
 Removed: `UpdateConfigDialog`, `resolveUpdateConfigKey`, the single-row cursor/edit helpers and their tests, the zone's branch-edit state. Tests changed for this: `update-config-dialog.test.ts` (draft and confirm tests only; setup uses `setRow`/`toggleRowSelection`), `update-config-panels.logic.test.ts` (Start run line, no Ctrl+N), `update-zone.interaction.test.tsx` (branch edit through the service box, `Failed to load.`, `CONFIGURE SERVICE UPDATE`, table-first focus, Start run), `update-slice.test.ts` (`service-panels` layout), `update-zone.test.tsx` (`[M]` idle prompt), `keybindings.test.ts` (Enter row replaces Ctrl+N row), suggest-field strings now English (`Loading…`, `N more`).
+
+## Suggested Review Order
+
+**Contract**
+
+- Validated UX-DR36 table and its deviations: the reference everything conforms to.
+  [`EXPERIENCE.md`](../../../_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md)
+
+- Evidence behind it: per-intent inventory and divergences.
+  [`interaction-inventory-7-4.md`](interaction-inventory-7-4.md)
+
+**Shared helpers**
+
+- One hint format: `[Key] verb`, two-space separator.
+  [`hints.ts:8`](../../../src/adapters/driving/tui/shared/components/hints.ts#L8)
+
+- One loading/empty/error line with retry text.
+  [`state-line.tsx:24`](../../../src/adapters/driving/tui/shared/components/state-line.tsx#L24)
+
+- Shared Home/End cursor and box-line movement (Tab, not value flip).
+  [`list-cursor.ts:9`](../../../src/adapters/driving/tui/shared/keys/list-cursor.ts#L9)
+  [`box-line-nav.ts:7`](../../../src/adapters/driving/tui/shared/keys/box-line-nav.ts#L7)
+
+- Footer derived from the keybinding declarations.
+  [`footer.tsx:28`](../../../src/adapters/driving/tui/shared/components/footer.tsx#L28)
+
+**Merged Update config**
+
+- Single-service now uses the two-panel screen with its own minimum height.
+  [`update-config-panels.logic.ts:253`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L253)
+
+**Key changes**
+
+- BranchPicker rename moves to Ctrl+T (Ink exposes no F2).
+  [`branch-picker.tsx:358`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L358)
