@@ -171,7 +171,7 @@ describe('UpdateZone restarting row', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('✖');
     expect(output).toContain('restart-failed');

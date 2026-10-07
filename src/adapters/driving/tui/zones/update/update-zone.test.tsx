@@ -529,7 +529,7 @@ describe('UpdateZone rendering', () => {
   it('idle with no interruption shows the Enter prompt plus the all-repos affordance', async () => {
     const store = createAppStore();
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_IDLE_PROMPT);
     expect(output).toContain(UPDATE_ALL_REPOS_PROMPT);
@@ -551,7 +551,7 @@ describe('UpdateZone rendering', () => {
       ],
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('UPDATE SERVICE');
     expect(output).toContain('svc-a');
@@ -564,7 +564,7 @@ describe('UpdateZone rendering', () => {
   it('a closed service pick renders no pick modal', async () => {
     const store = createAppStore();
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).not.toContain('UPDATE SERVICE');
   });
@@ -573,7 +573,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({ updateServicePick: [] });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('UPDATE SERVICE');
     expect(output).toContain('No service to select');
@@ -584,7 +584,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1' });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_INTERRUPTED_OFFER);
   });
@@ -598,7 +598,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1', updateStatus: 'running' });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_RUNNING_LABEL);
     expect(output).toContain('svc-a');
@@ -608,7 +608,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({ edts: null, activeEdt: null, updateStatus: 'running' });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_RUNNING_LABEL);
     expect(output).toContain(UPDATE_LOADING_MEMBERS);
@@ -618,7 +618,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({ edts: INTERRUPTED_EDTS, activeEdt: 'edt-1', updateStatus: 'running', updateScope: 'all' });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_ALL_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_RUNNING_LABEL);
@@ -635,7 +635,7 @@ describe('UpdateZone rendering', () => {
       updateResults: [{ service: 'a', outcome: 'updated' }],
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('ALL-REPOS UPDATE');
     expect(output).toContain('All repos: 1 updated, 0 skipped, 0 failed.');
@@ -661,7 +661,7 @@ describe('UpdateZone rendering', () => {
       ],
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('✔ svc-a  shared branch → ?  updated');
     expect(output).toContain('✖ svc-b  shared branch → ?  failed (merge-conflict): conflict');
@@ -683,7 +683,7 @@ describe('UpdateZone rendering', () => {
       ],
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('✔ route-explorer');
     expect(output).toContain('✖ route-explorer');
@@ -698,7 +698,7 @@ describe('UpdateZone rendering', () => {
       updateResults: [],
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('has no member services');
     expect(output).not.toContain('0 updated, 0 skipped, 0 failed');
@@ -709,7 +709,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({ updateStatus: 'error', updateError: 'No active EDT', updateErrorCode: 'no-active-edt' });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('No active EDT');
     expect(output).toContain('no-active-edt');
@@ -725,7 +725,7 @@ describe('UpdateZone rendering', () => {
       updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' },
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_BLOCKER_TITLE);
     expect(output).toContain('svc-a');
@@ -742,7 +742,7 @@ describe('UpdateZone rendering', () => {
       updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' },
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain('Retry #2');
     expect(output).toContain('Unmerged paths remain');
@@ -755,7 +755,7 @@ describe('UpdateZone rendering', () => {
       updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' },
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).not.toContain('Stash changes');
     expect(output).toContain('Open in editor, then retry');
@@ -764,7 +764,7 @@ describe('UpdateZone rendering', () => {
   it('no raised blocker renders no blocker modal', async () => {
     const store = createAppStore();
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).not.toContain(UPDATE_BLOCKER_TITLE);
   });
@@ -1021,7 +1021,7 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('svc-a');
     expect(output).toContain('svc-b');
@@ -1044,7 +1044,7 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
     const lines = output.split('\n');
 
     // Isolate each service's own *list row* line (identified by its unique meta text "+0/-0",
@@ -1105,7 +1105,7 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
     const lines = output.split('\n');
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
     const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
@@ -1131,7 +1131,7 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('✖');
     expect(output).toContain('failed (merge-conflict): Automatic merge failed');
@@ -1267,7 +1267,7 @@ describe('UpdateZone health-poll wiring against real (fake-port) deps', () => {
     });
 
     const stdout = new FakeTtyStdout();
-    const instance = render(createElement(UpdateZone, { useStore: store }), {
+    const instance = render(createElement(UpdateZone, { useStore: store, initialRecap: false }), {
       stdout: stdout as unknown as NodeJS.WriteStream,
       stdin: fakeTtyStdin(),
       interactive: false,
@@ -1326,7 +1326,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     // The first row (svc-a, the EDT member) is selected and targeted — the live view
     // replaces the last-outcome view that would otherwise read "updated".
@@ -1349,7 +1349,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('UPDATE IN PROGRESS');
     expect(output).toContain('○ Merge — waiting');
@@ -1369,7 +1369,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
     const lines = output.split('\n');
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
 
@@ -1392,7 +1392,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('⚠ A group update is already in progress (update-already-running)');
     expect(output).toContain('UPDATE IN PROGRESS');
@@ -1420,7 +1420,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).not.toContain('UPDATE IN PROGRESS');
     expect(output).toContain('last update');
@@ -1446,7 +1446,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).not.toContain('step:');
   });
@@ -1466,7 +1466,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('step: restarting');
   });
@@ -1485,7 +1485,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('step: starting');
   });

@@ -26,9 +26,7 @@ import {
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import {
-  buildUpdateListEntries,
   deriveUpdateServiceStatus,
-  entryIndexOfRow,
   formatLastUpdateRecap,
   formatLiveServiceDetail,
   formatServiceUpdateContext,
@@ -37,6 +35,10 @@ import {
   partitionUpdateServiceRows,
   resolveEditorCommand,
   resolveRecapToggle,
+  resolveUpdatePaneRows,
+  splitUpdateServiceRows,
+  UPDATE_MEMBERS_HEADER,
+  UPDATE_OTHERS_HEADER,
 } from './update-zone.logic.js';
 import { UpdateServiceDetail } from './update-service-detail.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
@@ -326,9 +328,9 @@ export function launchEditor(repoPath: string, configured = ''): LaunchEditorRes
   return { ok: true };
 }
 
-// `initialRecap` starts the zone with service focus dropped (the recap view) — used by static
-// renders, which cannot press `Esc`.
-export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { useStore?: AppStore; initialRecap?: boolean }) {
+// The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
+// key focuses a service. Tests pass `initialRecap={false}` to start on a service.
+export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { useStore?: AppStore; initialRecap?: boolean }) {
   const updateStatus = useStore((state) => state.updateStatus);
   const updateResults = useStore((state) => state.updateResults);
   const updateNote = useStore((state) => state.updateNote);
@@ -465,9 +467,11 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
   const isRowTargeted = (row: { service: string; path: string }): boolean => isRowInRun(row) && liveServiceDone[row.service] !== true;
   // During a run the list keeps only the services the run covers.
   const serviceRows = updateStatus === 'running' ? allServiceRows.filter(isRowInRun) : allServiceRows;
-  const listEntries = buildUpdateListEntries(serviceRows);
+  const panes = splitUpdateServiceRows(serviceRows);
   const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
   const selectedServiceRow = serviceRows[clampedServiceCursor];
+  // Triggers act on a focused service only — never on the remembered cursor behind the recap.
+  const focusedServiceRow = recapActive ? undefined : selectedServiceRow;
   const runningMembers = edtMembers.filter((member) => isRowTargeted({ service: member.service, path: member.repoPath }));
   // A narrowed all-scope run (a single service outside the active EDT) names its selected
   // rows — the generic "loading members" line is only for the unfiltered all-repos run.
@@ -550,8 +554,8 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
       return;
     }
     clearUpdateServiceSelectionRequest();
-    if (selectedServiceRow !== undefined) {
-      void openUpdateConfig({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+    if (focusedServiceRow !== undefined) {
+      void openUpdateConfig({ service: focusedServiceRow.service, repoPath: focusedServiceRow.path });
     } else {
       void openUpdateServicePick();
     }
@@ -752,14 +756,14 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
         return;
       }
       if (trigger === 'open-single-config') {
-        if (selectedServiceRow !== undefined) {
-          void openUpdateConfig({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+        if (focusedServiceRow !== undefined) {
+          void openUpdateConfig({ service: focusedServiceRow.service, repoPath: focusedServiceRow.path });
         }
         return;
       }
       if (trigger === 'open-service-menu') {
-        if (selectedServiceRow !== undefined) {
-          const target = { service: selectedServiceRow.service, repoPath: selectedServiceRow.path };
+        if (focusedServiceRow !== undefined) {
+          const target = { service: focusedServiceRow.service, repoPath: focusedServiceRow.path };
           setServiceMenu(target);
           // Offered until the manifest says otherwise — a slow lookup must never hide the
           // row, only a confirmed container-less-without-recipe manifest does.
@@ -782,6 +786,32 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
   // This zone's service-list chrome budget (an approximation, like edts-zone.tsx/logs-zone.tsx).
   const windowSize = useWindowSize();
   const serviceListMaxVisibleRows = Math.max(windowSize.rows - UPDATE_SERVICE_LIST_CHROME_ROWS, 3);
+  const membersRatio = useStore((state) => state.splitterRatios.update[1]) ?? 0.4;
+  const paneRows = resolveUpdatePaneRows(serviceListMaxVisibleRows, membersRatio);
+  // Pane-local cursor: members come first in the flat row array, so others are offset by them.
+  const cursorInMembers = clampedServiceCursor < panes.members.length;
+  const renderServiceRow = (row: (typeof serviceRows)[number], index: number) => {
+    const health = updateServiceHealth[row.path] ?? 'down';
+    const lastOutcome = lastServiceOutcomes[row.service];
+    const isTargeted = isRowTargeted(row);
+    // The coarse standalone-restart flag (the in-flight map holds this service's resolved
+    // repoPath) and the live phase, which refines the glyph to `migrating`.
+    const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
+    const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
+    return (
+      <Box key={row.path} flexDirection="row">
+        <StatusBadge state={status} />
+        {status === 'no-container' ? (
+          <Box marginLeft={1}>
+            <Text color={colors['text-dim']}>no container</Text>
+          </Box>
+        ) : null}
+        <Box marginLeft={1} flexGrow={1} minWidth={0}>
+          <ListRow label={row.service} meta={formatServiceMeta(row)} selected={!recapActive && index === clampedServiceCursor} />
+        </Box>
+      </Box>
+    );
+  };
 
   const branchByService = Object.fromEntries(serviceRows.map((row) => [row.service, row.branch]));
   const recap = formatLastUpdateRecap(updateTopic, updateResults, updateSelection, branchByService);
@@ -823,44 +853,38 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
               <Text color={colors['text-dim']}>No managed services found.</Text>
             ) : null}
-            {/* Every row always carries exactly one glyph from the closed
+            {/* Two distinct panes like the EDTs zone's, resizable through boundary 1. Every row
+                always carries exactly one glyph from the closed
                 up/down/restarting/updating/migrating/error set — never blank, never bridged
                 through a generic state. */}
-            <BoundedList
-              items={listEntries}
-              maxVisibleRows={serviceListMaxVisibleRows}
-              cursorIndex={entryIndexOfRow(listEntries, clampedServiceCursor)}
-              renderItem={(entry) => {
-                if (entry.kind === 'header') {
-                  return (
-                    <Box key={`header-${entry.label}`}>
-                      <Text color={colors['text-dim']}>{entry.label}</Text>
-                    </Box>
-                  );
-                }
-                const row = entry.row;
-                const index = entry.rowIndex;
-                const health = updateServiceHealth[row.path] ?? 'down';
-                const lastOutcome = lastServiceOutcomes[row.service];
-                const isTargeted = isRowTargeted(row);
-                // The coarse standalone-restart flag (the in-flight map holds this service's
-                // resolved repoPath) and the live phase, which refines the glyph to `migrating`.
-                const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
-                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
-                return (
-                  <Box key={row.path} flexDirection="row">
-                    <StatusBadge state={status} />
-                    {status === 'no-container' ? (
-                      <Box marginLeft={1}>
-                        <Text color={colors['text-dim']}>no container</Text>
-                      </Box>
-                    ) : null}
-                    <Box marginLeft={1} flexGrow={1} minWidth={0}>
-                      <ListRow label={row.service} meta={formatServiceMeta(row)} selected={!recapActive && index === clampedServiceCursor} />
-                    </Box>
-                  </Box>
-                );
-              }}
+            <ZoneLayout
+              zoneId="update"
+              boundary={1}
+              useStore={useStore}
+              first={
+                <>
+                  <Text color={!recapActive && cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_MEMBERS_HEADER}</Text>
+                  {panes.members.length === 0 ? <Text color={colors['text-dim']}>No services in this EDT.</Text> : null}
+                  <BoundedList
+                    items={panes.members}
+                    maxVisibleRows={paneRows.members}
+                    cursorIndex={cursorInMembers ? clampedServiceCursor : undefined}
+                    renderItem={(row, index) => renderServiceRow(row, index)}
+                  />
+                </>
+              }
+              second={
+                <>
+                  <Text color={!recapActive && !cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_OTHERS_HEADER}</Text>
+                  {panes.others.length === 0 ? <Text color={colors['text-dim']}>No other services.</Text> : null}
+                  <BoundedList
+                    items={panes.others}
+                    maxVisibleRows={paneRows.others}
+                    cursorIndex={cursorInMembers ? undefined : clampedServiceCursor - panes.members.length}
+                    renderItem={(row, index) => renderServiceRow(row, panes.members.length + index)}
+                  />
+                </>
+              }
             />
           </Box>
         }
