@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FOOTER_CONTEXTS, KEYBINDINGS } from './index.js';
+import { FOOTER_CONTEXTS, KEYBINDINGS, activeFooterContext } from './index.js';
 import { formatHints } from '../shared/components/hints.js';
 
 const describeHints = (hints: Parameters<typeof formatHints>[0]) => (hints.length > 0 ? formatHints(hints) : 'No keys while it runs');
@@ -94,5 +94,20 @@ describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)
   it('has no duplicate keys values — the help screen cannot repeat a row', () => {
     const keysValues = KEYBINDINGS.map((entry) => entry.keys);
     expect(new Set(keysValues).size).toBe(keysValues.length);
+  });
+});
+
+describe('activeFooterContext', () => {
+  it('lets an overlay outrank a zone whichever registered first', () => {
+    expect(activeFooterContext([])).toBeUndefined();
+    expect(activeFooterContext([{ owner: 'edts', id: 'confirm' }])).toBe('confirm');
+    expect(activeFooterContext([{ owner: 'help', id: 'help' }, { owner: 'edts', id: 'confirm' }])).toBe('help');
+    expect(activeFooterContext([{ owner: 'edts', id: 'confirm' }, { owner: 'command-bar', id: 'command' }])).toBe('command');
+    expect(activeFooterContext([{ owner: 'help', id: 'help' }, { owner: 'command-bar', id: 'command' }])).toBe('command');
+  });
+
+  it('keeps the no-key context out of the footer as an empty line and in the help with its reason', () => {
+    expect(FOOTER_CONTEXTS.busy.hints).toEqual([]);
+    expect(KEYBINDINGS.find((entry) => entry.keys === FOOTER_CONTEXTS.busy.label)?.description).toBe('No keys while it runs');
   });
 });

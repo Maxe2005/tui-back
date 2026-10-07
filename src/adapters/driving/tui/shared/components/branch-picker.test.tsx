@@ -513,3 +513,38 @@ describe('branchPickerFooterContext', () => {
     expect(branchPickerFooterContext(baseState({ baseFocused: false, nameSubListOpen: true }), true)).toBe('branch-picker-members');
   });
 });
+
+describe('create-new base field edge cases', () => {
+  const BRANCHES = ['development', 'feat-x'];
+
+  it('an empty base keeps the default and advances instead of filling in the first branch', () => {
+    const result = handleBranchPickerKey(baseState({ baseBranch: '', baseBranchCursor: 0 }), BRANCHES, [], '', { return: true });
+    expect(result.type === 'update' && [result.state.baseFocused, result.state.baseBranch]).toEqual([false, '']);
+  });
+
+  it('never accepts free text while the branch list is loading or failed', () => {
+    for (const status of ['loading', 'error'] as const) {
+      const state = baseState({ baseBranch: 'typed-ref', baseBranchCursor: 9 });
+      const result = handleBranchPickerKey(state, [], [], '', { return: true }, status);
+      expect(result).toEqual({ type: 'update', state });
+    }
+    const ready = handleBranchPickerKey(baseState({ baseBranch: 'typed-ref', baseBranchCursor: 9 }), BRANCHES, [], '', { return: true }, 'ready');
+    expect(ready.type === 'update' && ready.state.baseFocused).toBe(false);
+  });
+
+  it('resets the base highlight when the value is edited or the mode changes', () => {
+    const edited = handleBranchPickerKey(baseState({ baseBranch: 'fe', baseBranchCursor: 2, basePickCursor: 1 }), BRANCHES, [], 'a', {});
+    expect(edited.type === 'update' && edited.state.basePickCursor).toBe(0);
+    const switched = handleBranchPickerKey(baseState({ basePickCursor: 1 }), BRANCHES, [], '', { tab: true });
+    expect(switched.type === 'update' && switched.state.basePickCursor).toBe(0);
+  });
+
+  it('keeps the loading and error line visible when the base field is not focused', async () => {
+    for (const [status, text] of [['loading', 'Loading branches…'], ['error', 'Failed to load branches.']] as const) {
+      const output = await renderToString(
+        <BranchPicker state={baseState({ baseFocused: false })} branches={[]} branchesStatus={status} otherMemberBranches={[]} maxRows={5} />,
+      );
+      expect(output.split(text)).toHaveLength(2);
+    }
+  });
+});

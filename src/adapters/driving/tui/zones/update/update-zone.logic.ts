@@ -13,6 +13,7 @@ import type {
   UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
+import type { FooterContextId } from '../../keybindings/index.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 
 // The Update zone's own closed per-service status set: a raw HealthState passthrough, plus
@@ -244,4 +245,35 @@ export function mergeLastServiceOutcomes(
     next[result.service] = result;
   }
   return next;
+}
+
+export type UpdateFooterInput = {
+  blocker: boolean;
+  // The pre-run config screen's own context when it is open (see updateConfigFooterContext).
+  config: FooterContextId | null;
+  servicePick: boolean;
+  quitConfirm: boolean;
+  serviceMenu: boolean;
+  // A `:update-service` request waiting for its service list or pick: nothing to press yet.
+  selectRequest: boolean;
+};
+
+// The layer that owns the keyboard, in the same priority order as the zone's key handler.
+export function updateFooterContext(input: UpdateFooterInput): FooterContextId | null {
+  if (input.blocker) {
+    return 'menu';
+  }
+  if (input.config !== null) {
+    return input.config;
+  }
+  if (input.servicePick) {
+    return 'menu';
+  }
+  if (input.quitConfirm) {
+    return 'confirm';
+  }
+  if (input.serviceMenu) {
+    return 'menu';
+  }
+  return input.selectRequest ? 'busy' : null;
 }

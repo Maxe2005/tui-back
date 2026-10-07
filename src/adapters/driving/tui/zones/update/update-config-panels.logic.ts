@@ -261,7 +261,7 @@ export function checkEdtChoice(
 // Height budget (NFR-7): the modal shares the terminal with its chrome, so every block gets a
 // fixed line count and the table takes what is left, shrinking before anything can overflow.
 export const CONFIG_CHROME_ROWS = 10; // modal border + padding + title (6) plus the zone title and app chrome (4)
-export const CONFIG_MIN_ROWS = 20;
+export const CONFIG_MIN_ROWS = 21;
 // A one-service screen needs one table row, so it fits wherever the service box does.
 export const CONFIG_SERVICE_MIN_ROWS = 18;
 // Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1.

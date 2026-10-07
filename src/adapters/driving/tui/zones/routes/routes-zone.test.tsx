@@ -186,8 +186,10 @@ describe('RoutesZone fire and request pane', () => {
     const unfocused = await renderToString(<RoutesZone useStore={store} />);
     expect(unfocused).toContain('No response yet');
     expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
+    expect(unfocused).not.toContain('Ctrl+R');
     store.setState({ routesPaneFocus: 'detail' });
     expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-response-empty');
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('No response yet — [Ctrl+R] fire');
     expect(FOOTER_CONTEXTS['routes-response-empty'].hints).toContainEqual(['Ctrl+R', 'fire']);
   });
 

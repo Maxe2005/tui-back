@@ -324,3 +324,10 @@ describe('BranchAutocompleteInput render', () => {
     expect(output).not.toContain('✖');
   });
 });
+
+describe('resolveSuggestWindow with a non-finite budget', () => {
+  it('shows everything for an unbounded budget and nothing for NaN', () => {
+    expect(resolveSuggestWindow(['a', 'b', 'c'], 0, true, Infinity).items).toEqual(['a', 'b', 'c']);
+    expect(resolveSuggestWindow(['a', 'b'], 0, true, Number.NaN).items).toEqual([]);
+  });
+});

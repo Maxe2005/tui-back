@@ -32,6 +32,7 @@ import {
   isServiceTargetedByRun,
   partitionUpdateServiceRows,
   resolveEditorCommand,
+  updateFooterContext,
 } from './update-zone.logic.js';
 import { UPDATE_SERVICE_MENU_ESCAPE, UpdateServiceMenuDialog, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
 import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
@@ -366,19 +367,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // The layer that owns the keyboard, in the same priority order as the key handler below.
   useFooterContext(
     'update',
-    updateBlocker !== null
-      ? 'menu'
-      : updateConfig !== null
-        ? updateConfigFooterContext(configPanels.view, configPanels.box)
-        : updateServicePick !== null
-          ? 'menu'
-          : quitConfirm
-            ? 'confirm'
-            : serviceMenu !== null
-              ? 'menu'
-              : updateServiceSelectRequest
-                ? 'busy'
-                : null,
+    updateFooterContext({
+      blocker: updateBlocker !== null,
+      config: updateConfig !== null ? updateConfigFooterContext(configPanels.view, configPanels.box) : null,
+      servicePick: updateServicePick !== null,
+      quitConfirm,
+      serviceMenu: serviceMenu !== null,
+      selectRequest: updateServiceSelectRequest,
+    }),
     useStore,
   );
 

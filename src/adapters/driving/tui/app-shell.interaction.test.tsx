@@ -20,6 +20,7 @@ import type { DockerPort } from '../../../core/ports/docker.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
+import { footerIdOf } from './shared/test-support/mount-for-test.js';
 
 // Mirrors app-store.test.ts's fakeDeps/manifestFor: the mount-time/registry-close
 // `loadTabVisibility()` effect is AppShell's only production activation path, and a deps-less
@@ -2660,5 +2661,70 @@ describe('AppShell Routes right-pane key ownership', () => {
       instance.unmount();
       await instance.waitUntilExit();
     }
+  });
+});
+
+describe('AppShell footer contexts (real keypress)', () => {
+  const settle = async (instance: ReturnType<typeof render>) => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await instance.waitUntilRenderFlush();
+  };
+
+  async function withShell(run: (ctx: { store: ReturnType<typeof createAppStore>; instance: ReturnType<typeof render>; stdin: NodeJS.ReadStream }) => Promise<void>) {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await run({ store, instance, stdin });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  }
+
+  it('the global filter registers its context while open and clears it on Esc', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      expect(footerIdOf(store)).toBeUndefined();
+      await press(instance, stdin, '/');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('dismiss');
+      await pressEscape(instance, stdin);
+      await settle(instance);
+      expect(footerIdOf(store)).toBeUndefined();
+    });
+  });
+
+  it('the help registers its context while open and clears it on close', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, '?');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('help');
+      await press(instance, stdin, '?');
+      await settle(instance);
+      expect(footerIdOf(store)).toBeUndefined();
+    });
+  });
+
+  it('the command bar registers its context while open and clears it on Esc', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, ':');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('command');
+      await pressEscape(instance, stdin);
+      await settle(instance);
+      expect(footerIdOf(store)).toBeUndefined();
+    });
+  });
+
+  it('a zone registering while the help is open does not take the footer from it', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, '?');
+      await settle(instance);
+      store.getState().setFooterContext('edts', 'confirm');
+      expect(footerIdOf(store)).toBe('help');
+      await press(instance, stdin, '?');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('confirm');
+    });
   });
 });

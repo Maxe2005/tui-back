@@ -81,7 +81,7 @@ What changed, in commit order:
 
 Decisions:
 - No HALT: the three autocompletes share one view and one reducer. The default-on-empty rule stays in `stepSuggestField` (a wrapper over the shared reducer, keyed by the placeholder), because only the Update fields mean "use the default" when empty.
-- Update config reclaimed the rows of its two hint lines: `CONFIG_MIN_ROWS` 22 to 20, `CONFIG_SERVICE_MIN_ROWS` 20 to 18, `SERVICE_BOX_ROWS` 10 to 8.
+- Update config reclaimed the rows of its two hint lines: `CONFIG_MIN_ROWS` 22 to 21 (the real floor for a 3-row table under the four global lines), `CONFIG_SERVICE_MIN_ROWS` 20 to 18, `SERVICE_BOX_ROWS` 10 to 8.
 - Behaviour that moved with the unification (all inside the validated table's "Branch input" row): create-new's base field no longer cycles the value with the arrows (they highlight; `Enter` fills in, then advances), matching is substring instead of prefix, and the dropdown cap now counts indicator lines.
 
 ### Deliberately changed tests
@@ -93,3 +93,9 @@ Decisions:
 - Layout budget: `update-config-panels.logic.test.ts` and `update-config-panels.test.tsx` (18 rows for a one-service screen).
 - Removed with their code: `moveHintCursor`, `moveCandidateCursor`, `matchBranchesByPrefix`, `resolveBranchAutocompleteDropdown`, `PANELS_HINTS_*`, the step/box `*_FOOTER` constants.
 - Added: `hints.guard.test.ts`, `menu-list.test.tsx`, `edts-footer-context.test.ts`, footer-context cases in `top-bar-footer-split.test.tsx`, `keybindings.test.ts`, and the screen/zone tests; `mount-for-test.ts` keeps a tree mounted to read registered contexts.
+
+### Review follow-up (same story)
+
+- Footer: overlays (help, command bar, filter, registry, settings, reset) outrank zones (`activeFooterContext`); `busy` is a declared no-key context for running actions and opening dialogs; a fullscreen pane without a container has its own context without restart; Routes selection is the pure `routesFooterContext`; Update's chain is `updateFooterContext`; owners are typed (`FooterOwner`).
+- Inputs: BranchPicker's base field advances on an empty value, never accepts free text before the list is ready, resets its highlight; `TextInputLine` scrolls to keep the caret visible and takes a `suffix`; `StateLine` filters blank parts; the help lists context rows under their own heading.
+- Tests: table cases for EDTs/Routes/Update contexts, mount tests for help/command bar/global filter, overlay precedence, exact-height renders of the update config; `mount-for-test.ts` moved to `shared/test-support` with `footerIdOf`. Branch-picker interaction tests now settle the list load before pressing Enter on the base field and give those tests a working `listBranches`.

@@ -255,6 +255,7 @@ export function handleBranchPickerKey(
           ...state,
           mode: nextMode,
           renameSub: { oldName: state.currentBranch, value: state.currentBranch, cursor: state.currentBranch.length, error: null },
+          basePickCursor: 0,
           nameSubListOpen: false,
           nameSubListCursor: 0,
           error: null,

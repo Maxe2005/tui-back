@@ -18,3 +18,11 @@ describe('resolveStateLineText', () => {
     expect(resolveStateLineText({ kind: 'error', subject: 'EDTs', retry: true })).toBe('Failed to load EDTs. [R] retry');
   });
 });
+
+describe('resolveStateLineText with blank parts', () => {
+  it('leaves no stray space or doubled punctuation when verb or subject is blank', () => {
+    expect(resolveStateLineText({ kind: 'error', subject: '', verb: 'Failed to scan' })).toBe('Failed to scan.');
+    expect(resolveStateLineText({ kind: 'error', subject: '  ', verb: 'Failed to scan', retry: true })).toBe('Failed to scan. [R] retry');
+    expect(resolveStateLineText({ kind: 'loading', subject: '', verb: 'Registering' })).toBe('Registering…');
+  });
+});
