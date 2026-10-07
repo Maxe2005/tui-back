@@ -112,6 +112,9 @@ export type UpdateSlice = {
   // The per-service step tracker (merge / migration / restart, each pending → running →
   // done|failed|skipped) advanced by the same `onPhase` emissions; cleared with the live maps.
   liveServiceSteps: Record<string, ServiceStepStates>;
+  // A trigger rejected while a group run is in flight (second update, service restart, config
+  // open): shown by the zone without touching `updateStatus`, cleared when the run ends.
+  updateNotice: { code: string; message: string } | null;
   // Services of the in-flight run whose final row already landed (core's `onServiceResult`): the
   // detail pane shows their last-update view while the others are still running.
   liveServiceDone: Record<string, true>;
@@ -591,6 +594,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateBlocker: null,
       liveServicePhase: {},
       liveServiceSteps: {},
+      updateNotice: null,
       liveServiceDone: {},
       liveServiceIssues: {},
       lastServiceRuns: {},
@@ -610,11 +614,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         if (get().updateStatus === 'running') {
-          set({
-            updateStatus: 'error',
-            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
-            updateErrorCode: 'update-already-running',
-          });
+          // The in-flight run keeps its `running` status — a rejected trigger only raises a notice.
+          set({ updateNotice: { code: 'update-already-running', message: 'A group update is already in progress — wait for it to finish before starting another.' } });
           return;
         }
         if (Object.keys(get().serviceRestartInFlight).length > 0) {
@@ -640,6 +641,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           // resolved/unresolved entries from the previous run never leak into this one.
           liveServicePhase: {},
           liveServiceSteps: {},
+          updateNotice: null,
           liveServiceDone: {},
           liveServiceIssues: {},
         });
@@ -736,6 +738,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 // final per-service outcome, with its settled steps and context snapshot.
                 liveServicePhase: {},
                 liveServiceSteps: {},
+                updateNotice: null,
                 liveServiceDone: {},
                 lastServiceRuns: mergeLastServiceRuns(state, result.data.results, result.data.topic),
                 liveServiceIssues,
@@ -752,6 +755,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               // A top-level rejection ran nothing — no live state survives it.
               liveServicePhase: {},
               liveServiceSteps: {},
+              updateNotice: null,
               liveServiceDone: {},
               liveServiceIssues: {},
             });
@@ -764,6 +768,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateErrorCode: 'internal-error',
             liveServicePhase: {},
             liveServiceSteps: {},
+            updateNotice: null,
             liveServiceDone: {},
             liveServiceIssues: {},
           });
@@ -792,11 +797,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         if (get().updateStatus === 'running') {
-          set({
-            updateStatus: 'error',
-            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
-            updateErrorCode: 'update-already-running',
-          });
+          // The in-flight run keeps its `running` status — a rejected trigger only raises a notice.
+          set({ updateNotice: { code: 'update-already-running', message: 'A group update is already in progress — wait for it to finish before starting another.' } });
           return;
         }
         if (Object.keys(get().serviceRestartInFlight).length > 0) {
@@ -827,11 +829,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         if (get().updateStatus === 'running') {
-          set({
-            updateStatus: 'error',
-            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
-            updateErrorCode: 'update-already-running',
-          });
+          // The in-flight run keeps its `running` status — a rejected trigger only raises a notice.
+          set({ updateNotice: { code: 'update-already-running', message: 'A group update is already in progress — wait for it to finish before starting another.' } });
           return;
         }
         if (Object.keys(get().serviceRestartInFlight).length > 0) {
@@ -869,11 +868,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         if (get().updateStatus === 'running') {
-          set({
-            updateStatus: 'error',
-            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
-            updateErrorCode: 'update-already-running',
-          });
+          // The in-flight run keeps its `running` status — a rejected trigger only raises a notice.
+          set({ updateNotice: { code: 'update-already-running', message: 'A group update is already in progress — wait for it to finish before starting another.' } });
           return;
         }
         if (Object.keys(get().serviceRestartInFlight).length > 0) {
@@ -1036,11 +1032,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return;
         }
         if (get().updateStatus === 'running') {
-          set({
-            updateStatus: 'error',
-            updateError: 'A group update is already in progress — wait for it to finish before starting another.',
-            updateErrorCode: 'update-already-running',
-          });
+          // The in-flight run keeps its `running` status — a rejected trigger only raises a notice.
+          set({ updateNotice: { code: 'update-already-running', message: 'A group update is already in progress — wait for it to finish before starting another.' } });
           return;
         }
         const key = resolve(repoPath);
@@ -1174,6 +1167,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           serviceRestartInFlight: {},
           liveServicePhase: {},
           liveServiceSteps: {},
+          updateNotice: null,
           liveServiceDone: {},
           liveServiceIssues: {},
         }),

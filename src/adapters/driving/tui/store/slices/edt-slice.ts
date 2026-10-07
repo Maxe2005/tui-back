@@ -45,6 +45,13 @@ export const DEFAULT_BASE_BRANCH = 'development';
 // wizard sends `memberPlans` instead).
 export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DEFAULT_BASE_BRANCH, mode: 'grouped', names: {} };
 
+// Activating or switching the active EDT rewrites every member's branch and the active pointer,
+// so it must never run underneath a group update. Creating an EDT stays allowed (it does not
+// touch the active pointer), only its activation step is refused.
+export const UPDATE_IN_PROGRESS_CODE = 'update-in-progress';
+export const UPDATE_IN_PROGRESS_MESSAGE =
+  'A group update is in progress — wait for it to finish before activating or switching an EDT.';
+
 export type CreateEdtParams = {
   topic: string;
   members: string[];
@@ -272,6 +279,9 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
+      if (get().updateStatus === 'running') {
+        return { ok: false, error: { code: UPDATE_IN_PROGRESS_CODE, message: UPDATE_IN_PROGRESS_MESSAGE } };
+      }
       const result = await activateEdtUseCase({
         edtRegistry: deps.edtRegistry,
         edtRegistryResourceKey: deps.edtRegistryResourceKey,
@@ -299,6 +309,9 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
     switchEdt: async (params) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      if (get().updateStatus === 'running') {
+        return { ok: false, error: { code: UPDATE_IN_PROGRESS_CODE, message: UPDATE_IN_PROGRESS_MESSAGE } };
       }
       try {
         const result = await switchActiveEdtUseCase({
