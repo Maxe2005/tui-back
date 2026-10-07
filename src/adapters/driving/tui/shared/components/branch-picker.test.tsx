@@ -22,6 +22,21 @@ function baseState(overrides: Partial<BranchPickerState> = {}): BranchPickerStat
   };
 }
 
+describe('cycleBranchPickerMode back', () => {
+  it('reverses, wrapping', () => {
+    expect(cycleBranchPickerMode('pick-existing', true, 'back')).toBe('rename-current');
+    expect(cycleBranchPickerMode('create-new', false, 'back')).toBe('pick-existing');
+  });
+});
+
+describe('cycleBranchPickerMode unknown mode', () => {
+  it('lets stepFocus pick the first stop forward and the last going back', () => {
+    const unknown = 'nope' as never;
+    expect(cycleBranchPickerMode(unknown, true, 'next')).toBe('pick-existing');
+    expect(cycleBranchPickerMode(unknown, true, 'back')).toBe('rename-current');
+  });
+});
+
 describe('cycleBranchPickerMode', () => {
   it('cycles Pick existing -> Create new -> Rename current -> Pick existing when a current branch exists', () => {
     expect(cycleBranchPickerMode('pick-existing', true)).toBe('create-new');
@@ -161,6 +176,28 @@ describe('handleBranchPickerKey — mode cycling (Tab)', () => {
     expect(result.type).toBe('update');
     if (result.type === 'update') {
       expect(result.state.mode).toBe('pick-existing');
+    }
+  });
+});
+
+describe('handleBranchPickerKey — Shift+Tab', () => {
+  it('reverses the mode switch, wrapping Create new -> Pick existing -> Rename current', () => {
+    const state = baseState();
+    expect(state.mode).toBe('create-new');
+    const back = handleBranchPickerKey(state, [], [], '', { tab: true, shift: true });
+    expect(back.type === 'update' && back.state.mode).toBe('pick-existing');
+    const wrapped = handleBranchPickerKey(back.type === 'update' ? back.state : state, [], [], '', { tab: true, shift: true });
+    expect(wrapped.type === 'update' && wrapped.state.mode).toBe('rename-current');
+  });
+
+  it('swallows Tab and Shift+Tab while a Pick-existing row-rename sub-view is open', () => {
+    const state = baseState({
+      mode: 'pick-existing',
+      renameSub: { oldName: 'feat', value: 'feat', cursor: 4, error: null },
+    });
+    for (const key of [{ tab: true }, { tab: true, shift: true }]) {
+      const result = handleBranchPickerKey(state, ['feat'], [], '', key);
+      expect(result).toEqual({ type: 'update', state });
     }
   });
 });

@@ -8,6 +8,7 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
+import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
@@ -54,7 +55,7 @@ import {
   type TreeKeyAction,
   type TreePanelAction,
 } from '../../shared/components/json-tree/model.js';
-import { ListDetailSplit } from '../../shared/components/list-detail-split.js';
+import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { Spinner } from '../../shared/components/spinner.js';
 import { nextTextInputValue, type TextInputState } from '../../shared/components/text-edit.js';
@@ -104,7 +105,6 @@ export function formatRoutesDisabledMessage(carryingServices: string[]): string 
 export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const status = useStore((state) => state.tabVisibility.routes.status);
   const carryingServices = useStore((state) => state.tabVisibility.routes.carryingServices);
-  const ratio = useStore((state) => state.splitterRatios.routes[0]);
   const resizeMode = useStore((state) => state.resizeMode);
   const commandBarOpen = useStore((state) => state.commandBarOpen);
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
@@ -1035,8 +1035,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           return;
         }
         if (paneTab === 'request') {
-          if (key.tab === true) {
-            setSection((previous) => nextRequestSection(previous, key.shift === true ? 'back' : 'next'));
+          const sectionStep = resolveFocusStep(input, key, 'tab');
+          if (sectionStep !== null) {
+            setSection((previous) => nextRequestSection(previous, sectionStep));
             setRowCursor(0);
             setFilterPanelOpen(false);
             setPanelCursor(0);
@@ -1419,10 +1420,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
-      <ListDetailSplit
-        ratio={ratio}
-        listSplitterTargeted={resizeMode?.zone === 'routes' && resizeMode.targetBoundary === 0}
-        list={
+      <ZoneLayout
+        zoneId="routes"
+        useStore={useStore}
+        first={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <Text color={colors['text-dim']} wrap="truncate-end">
               ROUTES{filterActive || routes.length !== visibleRoutes.length ? ` (${visibleRoutes.length}/${routes.length})` : ` (${routes.length})`}
@@ -1451,7 +1452,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             <DimAnnotation text={listHint} />
           </Box>
         }
-        detail={
+        second={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {focused ? <DetailPane title="Route">{formatRouteDetail(focused)}</DetailPane> : null}
             {focused ? <RoutesPaneTabStrip tabs={ROUTES_PANE_TABS} active={paneTab} focused={paneFocused} /> : null}

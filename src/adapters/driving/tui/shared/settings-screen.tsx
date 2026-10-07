@@ -10,6 +10,7 @@ import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
 import { TextInputLine } from './components/text-input-line.js';
+import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
@@ -41,8 +42,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
 // nextZoneId since every settings tab is always reachable.
 export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
   const index = SETTINGS_TABS.indexOf(current);
-  const nextIndex = (index + direction + SETTINGS_TABS.length) % SETTINGS_TABS.length;
-  return SETTINGS_TABS[nextIndex]!;
+  return stepFocus(SETTINGS_TABS, SETTINGS_TABS[index] ?? SETTINGS_TABS[0]!, direction === 1 ? 'next' : 'back');
 }
 
 export type SettingsTabState = {
@@ -395,7 +395,8 @@ export function SettingsScreen({
 
     // Tab always cycles the top-level tabs (never while drilled in). Left/Right also cycle tabs
     // at every tab's own top level; Tab remains the Logs tab's way back out.
-    if (!drilledIn && key.tab) {
+    const tabStep = drilledIn ? null : resolveFocusStep(input, key, 'tab');
+    if (tabStep !== null) {
       // Landing on (or leaving) the EDTs/Logs tab always resets to its own top level — on every
       // arrival, not just the first.
       setEdtsGroup(null);
@@ -403,11 +404,12 @@ export function SettingsScreen({
       setLogsGroup(null);
       setLogsGroupCursor(0);
       setLogsClearServiceOpen(false);
-      setTab((current) => nextSettingsTab(current, 1));
+      setTab((current) => nextSettingsTab(current, tabStep === 'back' ? -1 : 1));
       return;
     }
-    if (!drilledIn && (key.leftArrow || key.rightArrow)) {
-      const direction = key.leftArrow ? -1 : 1;
+    const arrowStep = drilledIn ? null : resolveFocusStep(input, key, 'horizontal');
+    if (arrowStep !== null) {
+      const direction = arrowStep === 'back' ? -1 : 1;
       setEdtsGroup(null);
       setGroupCursor(0);
       setLogsGroup(null);

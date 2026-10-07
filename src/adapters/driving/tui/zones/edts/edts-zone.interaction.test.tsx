@@ -603,6 +603,83 @@ describe('EdtsZone real-keypress interactions', () => {
   // plain title once the session closes — covering both ways a session opens in Modify: a
   // freshly-checked not-yet-member row (direct checklist Enter), and an existing member (only via
   // the retry action — see the test above).
+  it('Shift+Tab moves the modify form from topic to members (reverse of Tab), so Enter on a member row submits', async () => {
+    const store = createAppStore();
+    const active = edt({
+      ulid: 'active-ulid',
+      topic: 'active-edt',
+      status: 'active',
+      members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }],
+    });
+    let modifyParams: ModifyEdtParams | undefined;
+    store.setState({
+      edts: [active],
+      edtsStatus: 'idle',
+      activeEdt: 'active-ulid',
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: true, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      modifyEdt: async (params): Promise<Result<ModifyEdtData>> => {
+        modifyParams = params;
+        return { ok: true, data: { ulid: 'active-ulid', topic: 'active-edt', results: [] } };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // open modify
+      await press(instance, stdin, KEYS.shiftTab); // topic -> members; cursor defaults onto svc-a, already checked
+      await press(instance, stdin, KEYS.enter); // submits directly — never opens the branch-picker
+      await instance.waitUntilRenderFlush();
+
+      expect(modifyParams).toBeDefined();
+      expect(modifyParams?.setBranches).toEqual([]);
+      expect(modifyParams?.renameBranches).toEqual([]);
+      expect(modifyParams?.removeMembers).toEqual([]);
+      // The branch-picker's own chrome never rendered — proves this really took the
+      // submit path, not edit-branch followed by an immediate auto-submit.
+      expect(stdout.output).not.toContain('Create new');
+      expect(stdout.output).not.toContain('Rename current');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  // The dialog title names the service a branch-picker session is open for, reverting to the
+  // plain title once the session closes — covering both ways a session opens in Modify: a
+  // freshly-checked not-yet-member row (direct checklist Enter), and an existing member (only via
+  // the retry action — see the test above).
+  it('Shift+Tab on the base view reverses pane focus, wrapping EDTS -> OTHER SERVICES', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edt({ status: 'active' })],
+      edtsStatus: 'idle',
+      activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      edtsBranches: [
+        { service: 'svc-z', path: '/repos/z', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.shiftTab);
+      // Focus now sits on OTHER SERVICES, so Enter opens that service's actions dialog.
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('ADD TO EDT');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('branch-picker title names the service for a freshly-checked candidate, reverting to MODIFY EDT on close', async () => {
     const store = createAppStore();
     const active = edt({

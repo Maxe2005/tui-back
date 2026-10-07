@@ -101,11 +101,11 @@ describe('EdtsZone rendered styling', () => {
 });
 
 // The EDTs zone has 3 splitter boundaries — 1 vertical (list<->detail, rendered
-// by the shared ListDetailSplit, boundary 0) and 2 horizontal (the list column's own
+// by the shared ZoneLayout, boundary 0) and 2 horizontal (the list column's own
 // EDTS<->rest / EDT SERVICES<->OTHER SERVICES sub-splits, boundaries 1/2). Ctrl+W resize-mode
 // recolors whichever one is currently targeted to colors.accent; every other boundary stays
-// colors.border. Boundary 0 is a real regression case: it's rendered by ListDetailSplit
-// (list-detail-split.tsx), a component EdtsZone doesn't own outright — a prop-plumbing gap
+// colors.border. Boundary 0 is a real regression case: it's rendered by ZoneLayout
+// (zone-layout.tsx), a component EdtsZone doesn't own outright — a prop-plumbing gap
 // there would leave it permanently colors.border regardless of resizeMode.
 describe('EdtsZone splitter targeting under Ctrl+W resize-mode', () => {
   it('recolors only boundary 0 (the vertical list<->detail split) to accent when targeted', async () => {

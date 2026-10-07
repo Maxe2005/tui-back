@@ -9,6 +9,7 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
+import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
@@ -199,22 +200,27 @@ export function jumpSelection(jump: SelectionJump, length: number): number {
 // partitionServicesByEdtMembership). Default focus is the EDT selector.
 export type PaneFocus = 'edts' | 'edt-services' | 'other-services';
 
-export function cyclePaneFocus(current: PaneFocus): PaneFocus {
-  if (current === 'edts') {
-    return 'edt-services';
-  }
-  if (current === 'edt-services') {
-    return 'other-services';
-  }
-  return 'edts';
+export const PANE_FOCUS_NAV: FocusNavDeclaration<PaneFocus> = {
+  mode: 'tab',
+  stops: ['edts', 'edt-services', 'other-services'],
+};
+
+export function cyclePaneFocus(current: PaneFocus, direction: FocusNavDirection = 'next'): PaneFocus {
+  return stepFocus(PANE_FOCUS_NAV.stops, current, direction);
 }
 
 // Tab's first consumer: cycling a form's topic-input ↔ member-checklist while a
 // create/switch/modify dialog is open.
 export type FormFocus = 'topic' | 'members';
 
-export function cycleFormFocus(current: FormFocus): FormFocus {
-  return current === 'topic' ? 'members' : 'topic';
+// The two panels (global line / per-service table) the create wizard's Step 3 and the switch
+// resolution view toggle between.
+export const TWO_PANEL_NAV: FocusNavDeclaration<'global' | 'rows'> = { mode: 'tab', stops: ['global', 'rows'] };
+
+export const FORM_FOCUS_NAV: FocusNavDeclaration<FormFocus> = { mode: 'tab', stops: ['topic', 'members'] };
+
+export function cycleFormFocus(current: FormFocus, direction: FocusNavDirection = 'next'): FormFocus {
+  return stepFocus(FORM_FOCUS_NAV.stops, current, direction);
 }
 
 // The hand-rolled controlled text-input interpreter (`TextEditKey`/`TextInputState`/

@@ -338,6 +338,7 @@ export type UpdateConfigInputKey = {
   ctrl?: boolean;
   meta?: boolean;
   tab?: boolean;
+  shift?: boolean;
 };
 
 export type UpdateConfigStep =

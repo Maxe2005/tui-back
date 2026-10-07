@@ -9,6 +9,7 @@ export type TextEditKey = {
   return?: boolean;
   escape?: boolean;
   tab?: boolean;
+  shift?: boolean;
   upArrow?: boolean;
   downArrow?: boolean;
   leftArrow?: boolean;

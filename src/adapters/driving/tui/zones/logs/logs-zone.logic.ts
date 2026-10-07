@@ -6,6 +6,7 @@ import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
+import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { spacing } from '../../shared/theme/theme.js';
 
 // HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
@@ -72,14 +73,13 @@ export function splitNoContainerRows(
 // and the focus type stays unchanged.
 export type LogsPaneFocus = 'edt-list' | 'other-list' | 'panes';
 
-export function cycleLogsPaneFocus(current: LogsPaneFocus): LogsPaneFocus {
-  if (current === 'edt-list') {
-    return 'other-list';
-  }
-  if (current === 'other-list') {
-    return 'panes';
-  }
-  return 'edt-list';
+export const LOGS_PANE_FOCUS_NAV: FocusNavDeclaration<LogsPaneFocus> = {
+  mode: 'tab',
+  stops: ['edt-list', 'other-list', 'panes'],
+};
+
+export function cycleLogsPaneFocus(current: LogsPaneFocus, direction: FocusNavDirection = 'next'): LogsPaneFocus {
+  return stepFocus(LOGS_PANE_FOCUS_NAV.stops, current, direction);
 }
 
 // Picks the squarest rows x cols grid fitting n panes (ceil(sqrt(n)) columns) within the
@@ -109,10 +109,9 @@ export function computeGridLayout(paneCount: number, width: number, height: numb
   };
 }
 
-// Reserves a fixed-width left column for the two lists — this zone has no resizable splitter
-// ratio (unlike the ListDetailSplit-based zones); the grid's auto-resize (computeGridLayout)
-// absorbs whatever width remains. Also used directly by logs-zone.tsx's list column `width`.
-export const LIST_COLUMN_WIDTH = 32;
+// The list column takes `listRatio` of the width left after the one-column splitter; the grid's
+// auto-resize (computeGridLayout) absorbs whatever width remains.
+const SPLITTER_COLUMNS = 1;
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, this zone's own list headers/
 // hints) subtracted from the raw window size before computeGridLayout ever sees it — an
 // approximation is fine here since the real per-pane sizing still flows through Ink's own
@@ -150,6 +149,7 @@ const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" head
 
 export type LogsLayoutInput = {
   windowColumns: number;
+  listRatio: number;
   windowRows: number;
   activePaneCount: number;
   edtServiceCount: number;
@@ -177,7 +177,8 @@ export type LogsLayout = {
 // BoundedList windows. One pure function so the whole budget is unit-testable against a given
 // terminal size without mounting Ink.
 export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
-  const gridAvailableWidth = Math.max(input.windowColumns - LIST_COLUMN_WIDTH - spacing['pane-padding-x'], 20);
+  const listColumnWidth = Math.floor((input.windowColumns - SPLITTER_COLUMNS) * input.listRatio);
+  const gridAvailableWidth = Math.max(input.windowColumns - SPLITTER_COLUMNS - listColumnWidth - spacing['pane-padding-x'], 20);
   const gridAvailableHeight = Math.max(input.windowRows - CHROME_ROWS, 5);
   const layout = computeGridLayout(input.activePaneCount, gridAvailableWidth, gridAvailableHeight);
   const paneVisibleLines = Math.max(layout.cellHeight - PANE_CHROME_ROWS, 1);
@@ -350,9 +351,8 @@ export function resolveSelectAllToggle(allPaths: readonly string[], selected: re
   return isAllSelected ? 'deselect-all' : 'select-all';
 }
 
-// Ctrl+C/Ctrl+W apply clear/wrap to every active pane at once, while the bare `c`/`w` stay scoped
-// to the sub-focused (or fullscreen) pane. Ctrl is required for the same reason isSelectAllKey
-// uses it: an unambiguous, intentional "do this everywhere" gesture.
+// Ctrl+C and Shift+W apply clear/wrap to every active pane at once, while the bare `c`/`w` stay
+// scoped to the sub-focused (or fullscreen) pane. Ctrl+W belongs to the global resize-mode.
 type LogsCtrlKey = { ctrl?: boolean };
 
 export function isClearAllLogsKey(input: string, key: LogsCtrlKey): boolean {
@@ -360,7 +360,7 @@ export function isClearAllLogsKey(input: string, key: LogsCtrlKey): boolean {
 }
 
 export function isWrapAllLogsKey(input: string, key: LogsCtrlKey): boolean {
-  return key.ctrl === true && input.toLowerCase() === 'w';
+  return key.ctrl !== true && input === 'W';
 }
 
 // Toggles timestamp/stdout/stderr visibility independently (t/o/p) without reconnecting the

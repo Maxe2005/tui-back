@@ -20,8 +20,10 @@ import type { StatePort } from "../../../../core/ports/state.js";
 import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/settings.js";
 import type { DockerPort } from "../../../../core/ports/docker.js";
 import { ZONES } from "../zones/zones.js";
-import { DEFAULT_LIST_RATIO } from "../shared/components/list-detail-split.js";
+import { ZONE_LAYOUTS, defaultZoneRatios } from "../zones/zone-layouts.js";
 import { createAppStore, NO_BRANCH_CREATION, type AppStoreDeps } from "./app-store.js";
+
+const DEFAULT_LIST_RATIO = ZONE_LAYOUTS.dashboard.boundaries[0]!.defaultRatio;
 
 function manifestFor(repoPath: string): Manifest {
   const name = repoPath.split("/").pop();
@@ -151,11 +153,7 @@ describe("app store", () => {
     expect(state.activeEdt).toBeNull();
     for (const zone of ZONES) {
       expect(state.zoneEvents[zone.id]).toBe(0);
-      expect(state.splitterRatios[zone.id]).toEqual(
-        zone.id === "edts"
-          ? [DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO]
-          : [DEFAULT_LIST_RATIO],
-      );
+      expect(state.splitterRatios[zone.id]).toEqual(defaultZoneRatios(zone.id));
     }
   });
 
@@ -245,6 +243,15 @@ describe("app store", () => {
       expect(store.getState().resizeMode?.targetBoundary).toBe(2);
       store.getState().cycleResizeTargetBoundary();
       expect(store.getState().resizeMode?.targetBoundary).toBe(0);
+    });
+
+    it("cycleResizeTargetBoundary('back') reverses, wrapping first to last", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("edts");
+      store.getState().cycleResizeTargetBoundary("back");
+      expect(store.getState().resizeMode?.targetBoundary).toBe(2);
+      store.getState().cycleResizeTargetBoundary("back");
+      expect(store.getState().resizeMode?.targetBoundary).toBe(1);
     });
 
     it("cycleResizeTargetBoundary is a no-op while resizeMode is null", () => {
@@ -1418,6 +1425,43 @@ describe("app store", () => {
         DEFAULT_LIST_RATIO,
       ]);
       expect(store.getState().splitterRatios.dashboard).toEqual([0.6]);
+    });
+
+    it("loadSplitterRatios() clamps a persisted ratio to its boundary's own min/max", async () => {
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok({ logs: [0.9], dashboard: [0.9] })),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+        readFilterHistory: vi.fn(async () => ok(null)),
+        writeFilterHistory: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      await store.getState().loadSplitterRatios();
+
+      expect(store.getState().splitterRatios.logs).toEqual([0.5]);
+      expect(store.getState().splitterRatios.dashboard).toEqual([0.8]);
+    });
+
+    it("enterResizeMode() engages on boundary 0 in any zone with a boundary and Tab cycles that zone's declared boundaries", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("logs");
+      expect(store.getState().resizeMode).toEqual({ zone: "logs", targetBoundary: 0 });
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode).toEqual({ zone: "logs", targetBoundary: 0 });
+      store.getState().exitResizeMode();
+      store.getState().enterResizeMode("edts");
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode).toEqual({ zone: "edts", targetBoundary: 1 });
+    });
+
+    it("setSplitterRatio() clamps to the targeted boundary's own min/max", async () => {
+      const store = createAppStore();
+      await store.getState().setSplitterRatio("logs", 0, 0.99);
+      expect(store.getState().splitterRatios.logs).toEqual([0.5]);
+      await store.getState().setSplitterRatio("logs", 0, 0);
+      expect(store.getState().splitterRatios.logs).toEqual([0.15]);
     });
 
     it("loadSplitterRatios() on a genuine I/O error keeps the built-in defaults", async () => {

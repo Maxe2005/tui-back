@@ -627,3 +627,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-2-container-less-managed-services.md`
   summary: Optional manifest fields use two conventions — `migrationCommand` documents a `null` fallback while `container` (since 7.2) omits the key — and the zod schema rejects explicit `null` for both.
   evidence: `.agents/skills/manifest-generator/SKILL.md` still instructs `migrationCommand: null` when undetected, but `z.string().trim().min(1).optional()` in `src/adapters/driven/manifest/schema.ts` rejects `null`; normalizing (nullish handling or doc alignment) is pre-existing debt surfaced, not caused, by 7.2. Surfaced by blind-hunter review layer.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
+  summary: Footer `[Tab/Shift+Tab] focus` hint stays visible in EDTs/Logs while a dialog, filter editor or fullscreen preview is open and Tab means something else.
+  evidence: footerHintsFor only receives the zone id, not overlay/capture state (edge-case review).
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
+  summary: `TWO_PANEL_NAV` lives in `edts-zone.logic.ts` but is imported by shared dialog logic (wizard, switch-resolution); move it to the shared primitive or a dialogs module.
+  evidence: layering smell flagged by the blind review; dialogs depend on a zone-specific module.

@@ -3,19 +3,17 @@
 // (help, run-in-progress, zone-input-capture, quit-request, the `:` command bar).
 import type { StateCreator } from 'zustand';
 import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibilityData } from '../../../../../core/edt/resolve-tab-visibility.js';
-import { DEFAULT_LIST_RATIO, clampListRatio } from '../../shared/components/list-detail-split.js';
+import { stepFocus, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
+import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../zones/zone-layouts.js';
 import { ZONES, type ZoneId } from '../../zones/zones.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 export type ZoneEvents = Record<ZoneId, number>;
-// One ratio per boundary, per zone — every zone has one boundary (its list<->detail split)
-// except the EDTs zone, which has three (list<->detail, EDTS<->rest, EDT SERVICES<->OTHER
-// SERVICES). A zone's array length is the authoritative boundary count: `emptyRatios()`,
-// `loadSplitterRatios` and `cycleResizeTargetBoundary` all read it off the array.
+// One ratio per boundary, per zone. The zone layout specs (zones/zone-layouts.ts) are the
+// authoritative boundary count, orientation, default and min/max — never the array length.
 export type ZoneRatios = Record<ZoneId, number[]>;
 // The Ctrl+W keyboard resize-mode's single source of truth, so AppShell's global gate and
-// EdtsZone's own useInput check the same flag. `zone` is always 'edts' today — Ctrl+W only
-// engages while the EDTs zone is active — but kept generic for reuse.
+// every zone's own useInput check the same flag.
 export type ResizeMode = { zone: ZoneId; targetBoundary: number } | null;
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
@@ -24,12 +22,8 @@ function emptyEvents(): ZoneEvents {
   return Object.fromEntries(ZONES.map((zone) => [zone.id, 0])) as ZoneEvents;
 }
 
-// Every zone gets a single-entry default array (its one list<->detail boundary) except the
-// EDTs zone, whose list column has 3 fixed-but-movable boundaries.
 function emptyRatios(): ZoneRatios {
-  return Object.fromEntries(
-    ZONES.map((zone) => [zone.id, zone.id === 'edts' ? [DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO] : [DEFAULT_LIST_RATIO]]),
-  ) as ZoneRatios;
+  return Object.fromEntries(ZONES.map((zone) => [zone.id, defaultZoneRatios(zone.id)])) as ZoneRatios;
 }
 
 export type NavigationSlice = {
@@ -38,21 +32,22 @@ export type NavigationSlice = {
   zoneEvents: ZoneEvents;
   addZoneEvent: (zone: ZoneId) => void;
   splitterRatios: ZoneRatios;
-  // `boundaryIndex` selects which of that zone's splitterRatios entries moves (0 is every
-  // zone's list<->detail split; 1/2 exist for the EDTs zone's two sub-splits). Persists via
+  // `boundaryIndex` selects which of that zone's declared boundaries moves; the ratio is clamped
+  // to that boundary's own min/max. Persists via
   // StatePort.writeSplitterRatios immediately — no separate save step — chained like
   // updateSettings' settingsSaveChain so concurrent moves land on disk in request order.
   setSplitterRatio: (zone: ZoneId, boundaryIndex: number, ratio: number) => Promise<void>;
   // Hydrates splitterRatios from state.json once at AppShell mount, mirroring loadSettings().
   // A missing/corrupt file, or a persisted zone whose array length doesn't match that zone's
-  // boundary count, silently keeps that zone's built-in default.
+  // declared boundary count, silently keeps that zone's spec defaults.
   loadSplitterRatios: () => Promise<void>;
   resizeMode: ResizeMode;
+  // A no-op for a zone declaring no boundary.
   enterResizeMode: (zone: ZoneId) => void;
   exitResizeMode: () => void;
-  // Cycles the active resize-mode's targetBoundary across however many boundaries its zone
-  // has (splitterRatios[zone].length) — a no-op while resizeMode is null.
-  cycleResizeTargetBoundary: () => void;
+  // Cycles the active resize-mode's targetBoundary across its zone's declared boundaries — a
+  // no-op while resizeMode is null.
+  cycleResizeTargetBoundary: (direction?: FocusNavDirection) => void;
   helpOpen: boolean;
   openHelp: () => void;
   closeHelp: () => void;
@@ -93,6 +88,10 @@ export type NavigationSlice = {
   closeCommandBar: () => void;
 };
 
+function boundaryIndices(count: number): number[] {
+  return Array.from({ length: count }, (_, index) => index);
+}
+
 export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], NavigationSlice> {
   // Serializes setSplitterRatio's persistence calls like settingsSaveChain does for
   // updateSettings — each write chains onto the previous one so concurrent boundary moves
@@ -123,12 +122,12 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
       splitterRatiosVersion += 1;
       set((state) => {
         const zoneRatios = state.splitterRatios[zone];
-        if (boundaryIndex < 0 || boundaryIndex >= zoneRatios.length) {
+        if (boundaryIndex < 0 || boundaryIndex >= boundaryCount(zone) || boundaryIndex >= zoneRatios.length) {
           // Out-of-range boundary index (e.g. a stale resizeMode after a zone's boundary
           // count somehow shrank): never write a sparse/invalid array.
           return {};
         }
-        const nextZoneRatios = zoneRatios.map((value, index) => (index === boundaryIndex ? clampListRatio(ratio) : value));
+        const nextZoneRatios = zoneRatios.map((value, index) => (index === boundaryIndex ? clampBoundaryRatio(zone, boundaryIndex, ratio) : value));
         return { splitterRatios: { ...state.splitterRatios, [zone]: nextZoneRatios } };
       });
       // Applies to the live store synchronously above, before persistence even starts — no
@@ -169,29 +168,35 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
         const next: ZoneRatios = { ...state.splitterRatios };
         for (const zone of ZONES) {
           const candidate = persisted[zone.id];
-          const boundaryCount = state.splitterRatios[zone.id].length;
           // A wrong-length array for this zone falls back to its own default silently — every
           // other zone's ratios are unaffected.
-          if (Array.isArray(candidate) && candidate.length === boundaryCount) {
-            next[zone.id] = candidate.map((value) => clampListRatio(value));
+          if (Array.isArray(candidate) && candidate.length === boundaryCount(zone.id)) {
+            next[zone.id] = candidate.map((value, index) => clampBoundaryRatio(zone.id, index, value));
           }
         }
         return { splitterRatios: next };
       });
     },
     resizeMode: null,
-    enterResizeMode: (zone) => set({ resizeMode: { zone, targetBoundary: 0 } }),
+    enterResizeMode: (zone) => {
+      if (hasResizableBoundary(zone)) {
+        set({ resizeMode: { zone, targetBoundary: 0 } });
+      }
+    },
     exitResizeMode: () => set({ resizeMode: null }),
-    cycleResizeTargetBoundary: () =>
+    cycleResizeTargetBoundary: (direction = 'next') =>
       set((state) => {
         if (state.resizeMode === null) {
           return {};
         }
-        const boundaryCount = state.splitterRatios[state.resizeMode.zone].length;
+        const count = boundaryCount(state.resizeMode.zone);
+        if (count === 0) {
+          return { resizeMode: null };
+        }
         return {
           resizeMode: {
             zone: state.resizeMode.zone,
-            targetBoundary: (state.resizeMode.targetBoundary + 1) % boundaryCount,
+            targetBoundary: stepFocus(boundaryIndices(count), state.resizeMode.targetBoundary, direction),
           },
         };
       }),

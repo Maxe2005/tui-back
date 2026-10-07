@@ -6,8 +6,9 @@
 import { Box, Text, type Key } from 'ink';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
+import { resolveFocusStep, stepFocus } from '../../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import { TWO_PANEL_NAV, type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
@@ -85,8 +86,9 @@ export function reduceBranchStepKey(
     return { state: withBranches(state, { ...branches, overrides: { ...branches.overrides, [box.path]: result.plan }, box: null }), cancel: false };
   }
 
-  if (key.tab) {
-    return { state: withBranches(state, { ...branches, panel: branches.panel === 'global' ? 'rows' : 'global', editing: false }), cancel: false };
+  const panelStep = resolveFocusStep(input, key, 'tab');
+  if (panelStep !== null) {
+    return { state: withBranches(state, { ...branches, panel: stepFocus(TWO_PANEL_NAV.stops, branches.panel, panelStep), editing: false }), cancel: false };
   }
 
   if (branches.panel === 'global') {
