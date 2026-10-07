@@ -1288,7 +1288,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.text}>No route list for this repo.</Text>
+        <StateLine kind="empty" subject="routes" text="No route list for this repo." />
         <DimAnnotation text={routesError.message} />
       </Box>
     );
@@ -1316,7 +1316,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.text}>No routes discovered for this repo.</Text>
+        <StateLine kind="empty" subject="routes" text="No routes discovered for this repo." />
       </Box>
     );
   }

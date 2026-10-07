@@ -38,7 +38,7 @@ import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine, resolveStateLineText } from '../../shared/components/state-line.js';
 import { formatHint, formatHints } from '../../shared/components/hints.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from './update-config-panels.logic.js';
@@ -56,7 +56,7 @@ export const UPDATE_INTERRUPTED_OFFER = `Last update was interrupted — ${forma
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
-export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
+export const UPDATE_LOADING_MEMBERS = resolveStateLineText({ kind: 'loading', subject: 'member services' });
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
 export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted?';
 export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted?';
@@ -675,7 +675,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
             {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={updateStatus !== 'running'} /> : null}
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
-              <Text color={colors['text-dim']}>No managed services found.</Text>
+              <StateLine kind="empty" subject="managed services" text="No managed services found." />
             ) : null}
             {/* Every row always carries exactly one glyph from the closed
                 up/down/restarting/updating/migrating/error set — never blank, never bridged
@@ -728,7 +728,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                     </Box>
                   ))
                 ) : isAllRun || runningMembers.length === 0 ? (
-                  <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
+                  <StateLine kind="loading" subject="member services" />
                 ) : (
                   runningMembers.map((member) => (
                     <Box key={member.repoPath}>

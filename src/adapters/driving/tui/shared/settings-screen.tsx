@@ -29,6 +29,7 @@ import {
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
+import { StateLine } from './components/state-line.js';
 
 export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
 
@@ -822,7 +823,7 @@ export function SettingsScreen({
           // The "clear a service's history" row's drill-down — a plain Up/Down list over every
           // manifest service, never limited to the active EDT's own members.
           <Box flexDirection="column">
-            {logsServices.length === 0 ? <DimAnnotation text="No manifest services loaded yet." /> : null}
+            {logsServices.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
             {logsServices.map((service, index) => {
               const highlighted = index === logsClearServiceCursor;
               return (

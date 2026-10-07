@@ -210,7 +210,7 @@ describe('RepoRegistryScreen', () => {
     const store = createAppStore();
     store.setState({ registryScanStatus: 'error', registryScanError: 'Scan root not found: /nope' });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
-    expect(output).toContain('Scan failed');
+    expect(output).toContain('Failed to scan');
     expect(output).toContain('Scan root not found: /nope');
     expect(output).not.toContain('No manifest-carrying repos found here');
   });
@@ -220,7 +220,7 @@ describe('RepoRegistryScreen', () => {
     store.setState({ registryScanStatus: 'idle', registryScanResult: { candidates: [], skipped: [] } });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     expect(output).toContain('No manifest-carrying repos found here');
-    expect(output).not.toContain('Scan failed');
+    expect(output).not.toContain('Failed to scan');
   });
 
   it('lists every scan candidate as a checkbox-list-item, unchecked, first one highlighted (UX-DR9)', async () => {
@@ -299,7 +299,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     const store = createAppStore();
     store.setState({ registryCleanScanStatus: 'error', registryCleanScanError: 'bad yaml' });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
-    expect(output).toContain('Scan failed');
+    expect(output).toContain('Failed to scan');
     expect(output).toContain('bad yaml');
     expect(output).not.toContain('No stale registry entries found');
   });
@@ -309,7 +309,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     store.setState({ registryCleanScanStatus: 'idle', registryCleanCandidates: [] });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     expect(output).toContain('No stale registry entries found');
-    expect(output).not.toContain('Scan failed');
+    expect(output).not.toContain('Failed to scan');
   });
 
   it('lists every stale candidate pre-checked, with its reason, and an EDT-member note when applicable', async () => {

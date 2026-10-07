@@ -17,6 +17,7 @@ import {
   runCommand as runCommandInZone,
   type Command,
 } from '../commands/commands.js';
+import { StateLine } from './components/state-line.js';
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same
 // query, with no intervening key, to reveal the grid.
@@ -556,7 +557,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
         ) : null}
 
         {gridShown && matches.length === 0 ? (
-          <Text color={colors['text-dim']}>No matching command.</Text>
+          <StateLine kind="empty" subject="commands" text="No matching command." />
         ) : null}
 
         {gridVisible ? (

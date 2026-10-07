@@ -892,7 +892,7 @@ export function EdtsZone({
                   <>
                     <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
                     {!loading && status !== 'error' && edtServices.length === 0 ? (
-                      <Text color={colors['text-dim']}>No services in this EDT.</Text>
+                      <StateLine kind="empty" subject="services" text="No services in this EDT." />
                     ) : null}
                     {/* Bounded to edtServicesMaxVisibleRows — only the rendered window, never the
                         content/selection/action semantics. */}
@@ -919,7 +919,7 @@ export function EdtsZone({
                 <>
                 <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
                 {!loading && status !== 'error' && otherServices.length === 0 ? (
-                  <Text color={colors['text-dim']}>No managed services found.</Text>
+                  <StateLine kind="empty" subject="managed services" text="No managed services found." />
                 ) : null}
                 {/* Bounded to otherServicesMaxVisibleRows. */}
                 <BoundedList

@@ -5,7 +5,6 @@
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
 import { DetailPane } from '../../shared/components/detail-pane.js';
-import { Spinner } from '../../shared/components/spinner.js';
 import { StateLine } from '../../shared/components/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RouteResponse } from '../../store/slices/routes-slice.js';
@@ -25,10 +24,7 @@ export function RoutesResponseTab({
   }
   if (response.status === 'firing') {
     return (
-      <Box flexDirection="row">
-        <Spinner />
-        <Text color={colors['text-dim']}> Firing…</Text>
-      </Box>
+      <StateLine kind="loading" verb="Firing" subject="" />
     );
   }
   if (response.status === 'error') {

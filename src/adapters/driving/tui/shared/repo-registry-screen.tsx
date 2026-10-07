@@ -8,7 +8,7 @@ import { Box, Text, useInput, type Key } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
-import { Spinner } from './components/spinner.js';
+import { StateLine } from './components/state-line.js';
 import { nextCursorForKey } from './keys/list-cursor.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import type { FooterContextId } from '../keybindings/index.js';
@@ -298,21 +298,18 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         ) : null}
 
         {phase === 'scanning' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Scanning {root}…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Scanning" subject={root} />
         ) : null}
 
         {phase === 'scan-error' ? (
           <Box flexDirection="column">
-            <Text color={colors.error}>Scan failed.</Text>
+            <StateLine kind="error" verb="Failed to scan" subject={root} />
             {registryScanError ? <DimAnnotation text={registryScanError} /> : null}
           </Box>
         ) : null}
 
         {phase === 'empty' ? (
-          <Text color={colors['text-dim']}>No manifest-carrying repos found here.</Text>
+          <StateLine kind="empty" subject="manifest-carrying repos" text="No manifest-carrying repos found here." />
         ) : null}
 
         {phase === 'candidates' ? (
@@ -339,10 +336,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         ) : null}
 
         {phase === 'registering' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Registering…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Registering" subject="" />
         ) : null}
 
         {phase === 'results' ? (
@@ -362,20 +356,17 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         {phase === 'clean-candidates' ? (
           <Box flexDirection="column">
             {registryCleanScanStatus === 'loading' ? (
-              <Box>
-                <Spinner />
-                <Text color={colors.text}> Scanning the registry for stale entries…</Text>
-              </Box>
+              <StateLine kind="loading" verb="Scanning" subject="the registry for stale entries" />
             ) : registryCleanScanStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error}>Scan failed.</Text>
+                <StateLine kind="error" verb="Failed to scan" subject="the registry for stale entries" />
                 {registryCleanScanError ? <DimAnnotation text={registryCleanScanError} /> : null}
               </Box>
             ) : staleCandidates.length === 0 ? (
               // Zero candidates is an explicit, visible state, never silent — same convention
               // as the scan flow's own 'empty' phase.
               <Box flexDirection="column">
-                <Text color={colors['text-dim']}>No stale registry entries found.</Text>
+                <StateLine kind="empty" subject="stale registry entries" text="No stale registry entries found." />
                 {registryCleanErrors.length > 0 ? (
                   <DimAnnotation
                     text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
@@ -418,10 +409,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         ) : null}
 
         {phase === 'cleaning' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Removing stale entries…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Removing" subject="stale entries" />
         ) : null}
 
         {phase === 'clean-results' ? (

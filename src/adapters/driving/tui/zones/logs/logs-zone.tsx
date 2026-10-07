@@ -785,9 +785,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               <Text color={paneFocus === 'edt-list' ? colors.accent : colors['text-dim']}>ACTIVE EDT MEMBERS</Text>
               {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
               {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={activePanes.length === 0} /> : null}
-              {focusedEdt === undefined ? <DimAnnotation text="No active EDT." /> : null}
+              {focusedEdt === undefined ? <StateLine kind="empty" subject="EDT" text="No active EDT." /> : null}
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
-                <DimAnnotation text="No services in the active EDT." />
+                <StateLine kind="empty" subject="services" text="No services in the active EDT." />
               ) : null}
               {/* Bounded to edtListMaxVisibleRows, following the cursor only while this list owns
                   focus — otherwise the window anchors to the top. */}
@@ -812,7 +812,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
-                <DimAnnotation text="No other managed services." />
+                <StateLine kind="empty" subject="services" text="No other managed services." />
               ) : null}
               <BoundedList
                 items={otherServices}

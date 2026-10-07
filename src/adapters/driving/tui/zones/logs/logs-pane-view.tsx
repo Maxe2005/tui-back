@@ -21,6 +21,7 @@ import {
   type LogFilterSpec,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 export function LogsPaneView({
   service,
@@ -104,9 +105,13 @@ export function LogsPaneView({
       {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
-          <Text color={colors['text-dim']}>
-            {noContainer ? 'No container — no logs' : allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}
-          </Text>
+          noContainer ? (
+            <StateLine kind="empty" subject="logs" text="No container — no logs" />
+          ) : allLinesHiddenByFilters ? (
+            <StateLine kind="empty" subject="lines" text="All lines hidden by filters" />
+          ) : (
+            <StateLine kind="loading" verb="Waiting for" subject="logs" />
+          )
         ) : null}
         {windowLines.map((line, index) => (
           <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
