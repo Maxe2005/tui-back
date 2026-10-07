@@ -121,12 +121,12 @@ describe('RoutesZone fire and request pane', () => {
     });
   }
 
-  it('hints [enter] request (never fire) next to the route list', async () => {
+  it('hints [Enter] request (never fire) next to the route list', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[enter] request');
-    expect(output).not.toContain('[enter] fire');
+    expect(output).toContain('[Enter] request');
+    expect(output).not.toContain('[Enter] fire');
   });
 
   it('previews the cursor route on the Request tab with its empty sections', async () => {
@@ -183,9 +183,9 @@ describe('RoutesZone fire and request pane', () => {
     store.setState({ routesPaneTab: 'response' });
     const unfocused = await renderToString(<RoutesZone useStore={store} />);
     expect(unfocused).toContain('No response yet');
-    expect(unfocused).not.toContain('[ctrl+r]');
+    expect(unfocused).not.toContain('[Ctrl+R]');
     store.setState({ routesPaneFocus: 'detail' });
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[ctrl+r] fires the request');
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[Ctrl+R] fires the request');
   });
 
   it('shows the cursor route’s own response only (per route)', async () => {
@@ -247,11 +247,11 @@ describe('RoutesZone body editor', () => {
     expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[e] edit');
   });
 
-  it('keeps the [enter] request hint next to the edit hint and previews the seeded body', async () => {
+  it('keeps the [Enter] request hint next to the edit hint and previews the seeded body', async () => {
     const store = createAppStore();
     seedBodyRoutes(store);
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[enter] request');
+    expect(output).toContain('[Enter] request');
     expect(output).toContain('[e] edit');
     expect(output).toContain('ada');
   });
@@ -332,12 +332,12 @@ describe('RoutesZone JsonTree', () => {
     const store = createAppStore();
     seedFiredJson(store);
     const focused = await renderToString(<RoutesZone useStore={store} />);
-    expect(focused).toContain('[←→] fold');
-    expect(focused).toContain('[esc] back to the list');
+    expect(focused).toContain('[←/→] fold');
+    expect(focused).toContain('[Esc] back to the list');
     expect(focused).not.toContain('[home/end] jump');
     store.getState().setRoutesPaneFocus('list');
     const unfocused = await renderToString(<RoutesZone useStore={store} />);
-    expect(unfocused).toContain('[enter] request');
-    expect(unfocused).not.toContain('[←→] fold');
+    expect(unfocused).toContain('[Enter] request');
+    expect(unfocused).not.toContain('[←/→] fold');
   });
 });

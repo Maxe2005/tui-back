@@ -116,8 +116,8 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
       </Box>
     );
     hint = selectedCategories(screen).length > 0
-      ? 'Space to toggle, Enter to review, Esc to cancel.'
-      : 'Space to toggle (check at least one), Esc to cancel.';
+      ? '[Space] toggle  [Enter] review  [Esc] cancel'
+      : '[Space] toggle  [Esc] cancel  (check at least one)';
   } else if (screen.step === 'summary') {
     body = (
       <Box flexDirection="column">
@@ -127,10 +127,10 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
     );
     hint =
       preview?.status === 'ready'
-        ? 'Enter to continue, Esc to cancel.'
+        ? '[Enter] continue  [Esc] cancel'
         : preview?.status === 'error'
-          ? 'The summary could not be loaded, so the reset cannot continue. Esc to cancel.'
-          : 'Loading the summary… Esc to cancel.';
+          ? 'The summary could not be loaded, so the reset cannot continue.  [Esc] cancel'
+          : 'Loading the summary…  [Esc] cancel';
   } else {
     body = (
       <Box flexDirection="column">
@@ -140,7 +140,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
         <TextInputLine label="Confirm" value={screen.confirm.value} cursor={screen.confirm.cursor} focused />
       </Box>
     );
-    hint = 'Only the exact word executes. Esc to cancel.';
+    hint = 'Only the exact word executes.  [Esc] cancel';
   }
 
   return (

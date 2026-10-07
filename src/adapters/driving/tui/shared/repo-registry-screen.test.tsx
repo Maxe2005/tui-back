@@ -192,7 +192,7 @@ describe('RepoRegistryScreen', () => {
     const store = createAppStore();
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     expect(output).toContain('Root path:');
-    expect(output).toContain('Type a path, then Enter to scan.');
+    expect(output).toContain('Type a path  [Enter] scan');
   });
 
   it('shows a scanning indicator while the scan is in flight', async () => {
@@ -229,7 +229,7 @@ describe('RepoRegistryScreen', () => {
     expect(output).toContain('/repos/api-gateway');
     expect(output).toContain('/repos/route-explorer');
     expect(output).toContain('[ ]');
-    expect(output).toContain('Space to toggle, Enter to register the selection.');
+    expect(output).toContain('[Space] toggle  [Enter] register selection');
 
     // checkbox-list-item.tsx's own `selected` prop has no visible effect on its own, so the
     // highlighted (arrow-navigable, first) row must carry its own visible distinction —
@@ -325,7 +325,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     // Pre-checked by default — unlike scan/register's own candidates.
     expect(output).toContain('[x]');
     expect(output).not.toContain('[ ]');
-    expect(output).toContain('Space to toggle, Enter to remove the selection.');
+    expect(output).toContain('[Space] toggle  [Enter] remove selection');
   });
 
   it('reports a path that could not even be checked, alongside the candidate list — never silently dropped', async () => {

@@ -294,7 +294,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
-            <DimAnnotation text="Type a path, then Enter to scan." />
+            <DimAnnotation text="Type a path  [Enter] scan" />
             <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
           </Box>
         ) : null}
@@ -337,7 +337,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle, Enter to register the selection." />
+            <DimAnnotation text="[Space] toggle  [Enter] register selection" />
           </Box>
         ) : null}
 
@@ -417,7 +417,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="Space to toggle, Enter to remove the selection." />
+                <DimAnnotation text="[Space] toggle  [Enter] remove selection" />
               </Box>
             )}
           </Box>

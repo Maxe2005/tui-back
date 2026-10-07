@@ -7,14 +7,14 @@ import { LOGS_PANE_FOCUS_NAV } from '../../zones/logs/logs-zone.logic.js';
 import { colors, spacing } from '../theme/theme.js';
 
 export const DEFAULT_FOOTER_HINTS = [
-  '[↑↓] move',
+  '[↑/↓] move',
   '[Home/End] top/bottom',
-  '[←→] zone',
+  '[←/→] zone',
   '[/] filter',
   '[:] cmd',
   '[?] help',
   '[q] quit',
-  '^W resize',
+  '[Ctrl+W] resize',
 ];
 
 // Zones whose Tab key cycles pane focus, keyed to the same declarations their handlers use.
@@ -24,7 +24,7 @@ const ZONE_FOCUS_NAV: Partial<Record<ZoneId, FocusNavDeclaration<unknown>>> = {
   logs: LOGS_PANE_FOCUS_NAV,
 };
 
-const RESIZE_HINT = '^W resize';
+const RESIZE_HINT = '[Ctrl+W] resize';
 
 // The resize hint is advertised only for a zone declaring a boundary; Logs also advertises its
 // wrap-all key, since Ctrl+W no longer is it.

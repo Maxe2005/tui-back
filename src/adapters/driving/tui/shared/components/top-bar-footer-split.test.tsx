@@ -65,9 +65,9 @@ describe('Footer', () => {
     expect(output).toContain('[?] help');
   });
 
-  it('omits the redundant [d/e/u/l/r/s] zone mnemonic, keeping [←→] zone in the default hints (UX-DR7)', () => {
+  it('omits the redundant [d/e/u/l/r/s] zone mnemonic, keeping [←/→] zone in the default hints (UX-DR7)', () => {
     expect(DEFAULT_FOOTER_HINTS).not.toContain('[d/e/u/l/r/s] zone');
-    expect(DEFAULT_FOOTER_HINTS).toContain('[←→] zone');
+    expect(DEFAULT_FOOTER_HINTS).toContain('[←/→] zone');
   });
 });
 
@@ -80,9 +80,9 @@ describe('footerHintsFor', () => {
     expect(footerHintsFor('dashboard')).not.toContain('[Tab/Shift+Tab] focus');
   });
 
-  it('advertises ^W resize in every zone that declares a boundary', () => {
+  it('advertises [Ctrl+W] resize in every zone that declares a boundary', () => {
     for (const zone of ['dashboard', 'edts', 'update', 'logs', 'routes', 'shared-types'] as const) {
-      expect(footerHintsFor(zone)).toContain('^W resize');
+      expect(footerHintsFor(zone)).toContain('[Ctrl+W] resize');
     }
   });
 

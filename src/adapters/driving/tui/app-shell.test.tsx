@@ -37,17 +37,17 @@ describe('help-open decision helpers', () => {
 });
 
 describe('AppShell', () => {
-  it('advertises W wrap-all and ^W resize in the Logs footer, and no [W] hint in another zone', async () => {
+  it('advertises W wrap-all and [Ctrl+W] resize in the Logs footer, and no [W] hint in another zone', async () => {
     const store = createAppStore();
     const onQuit = vi.fn();
     store.getState().setActiveZone('logs');
     const logsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(logsOutput).toContain('[W] wrap all');
-    expect(logsOutput).toContain('^W resize');
+    expect(logsOutput).toContain('[Ctrl+W] resize');
 
     store.getState().setActiveZone('edts');
     const edtsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
-    expect(edtsOutput).toContain('^W resize');
+    expect(edtsOutput).toContain('[Ctrl+W] resize');
     expect(edtsOutput).not.toContain('[W] wrap all');
   });
 
