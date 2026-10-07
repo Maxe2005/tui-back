@@ -1467,6 +1467,20 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
+  it('Shift+Tab on the General tab goes back to the Logs tab (wrapping), Tab goes forward', async () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().openSettingsScreen();
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.shiftTab);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Buffer size');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('Esc closes it — nothing to discard', async () => {
     const store = createAppStore();
     store.getState().openSettingsScreen();
@@ -2065,6 +2079,26 @@ describe('AppShell Ctrl+W resize-mode', () => {
       await press(instance, stdin, KEYS.ctrlW);
 
       expect(store.getState().resizeMode).toBeNull();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Shift+Tab in resize-mode reverses the target boundary, wrapping first to last', async () => {
+    const store = createAppStore();
+    store.getState().setActiveZone('edts');
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.ctrlW);
+      expect(store.getState().resizeMode).toEqual({ zone: 'edts', targetBoundary: 0 });
+
+      await press(instance, stdin, KEYS.shiftTab);
+      expect(store.getState().resizeMode).toEqual({ zone: 'edts', targetBoundary: 2 });
+
+      await press(instance, stdin, KEYS.shiftTab);
+      expect(store.getState().resizeMode).toEqual({ zone: 'edts', targetBoundary: 1 });
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

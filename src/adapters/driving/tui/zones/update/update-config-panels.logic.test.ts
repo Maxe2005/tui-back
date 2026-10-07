@@ -143,6 +143,11 @@ describe('resolvePanelsKey', () => {
     expect(resolvePanelsKey('y', {}, VIEW, edtDraft(), [])).toEqual({ type: 'confirm' });
   });
 
+  it('Shift+Tab switches focus too, Ctrl+Tab does not', () => {
+    expect(resolvePanelsKey('', { tab: true, shift: true }, VIEW, edtDraft(), [])).toEqual({ type: 'switch-focus' });
+    expect(resolvePanelsKey('', { tab: true, ctrl: true }, VIEW, edtDraft(), [])).not.toEqual({ type: 'switch-focus' });
+  });
+
   it('routes panel keys by line: source toggles, toggles flip, EDT line edits', () => {
     const fromEdt = toggleMergeSource(edtDraft());
     expect(resolvePanelsKey(' ', {}, VIEW, edtDraft(), [])).toEqual({ type: 'toggle-source' });

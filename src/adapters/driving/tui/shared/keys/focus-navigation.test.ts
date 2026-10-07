@@ -6,6 +6,11 @@ describe('resolveFocusStep', () => {
     expect(resolveFocusStep('', { tab: true }, 'tab')).toBe('next');
     expect(resolveFocusStep('', { tab: true, shift: true }, 'tab')).toBe('back');
   });
+  it('tab mode ignores Ctrl+Tab and Meta+Tab', () => {
+    expect(resolveFocusStep('', { tab: true, ctrl: true }, 'tab')).toBeNull();
+    expect(resolveFocusStep('', { tab: true, meta: true }, 'tab')).toBeNull();
+    expect(resolveFocusStep('', { tab: true, shift: true, ctrl: true }, 'tab')).toBeNull();
+  });
   it('returns null for keys outside the declared mode', () => {
     expect(resolveFocusStep('', { rightArrow: true }, 'tab')).toBeNull();
     expect(resolveFocusStep('', { tab: true }, 'horizontal')).toBeNull();
