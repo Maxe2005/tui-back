@@ -20,6 +20,7 @@ import type { DockerPort } from '../../../core/ports/docker.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
+import { footerIdOf } from './shared/test-support/mount-for-test.js';
 
 // Mirrors app-store.test.ts's fakeDeps/manifestFor: the mount-time/registry-close
 // `loadTabVisibility()` effect is AppShell's only production activation path, and a deps-less
@@ -303,22 +304,6 @@ describe('AppShell Left/Right zone-arrow navigation', () => {
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-
-      await press(instance, stdin, KEYS.right);
-
-      expect(store.getState().activeZone).toBe('dashboard');
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
-  it('has no effect while the filter overlay is open', async () => {
-    const store = createAppStore();
-    const { instance, stdin } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, '/'); // opens the filter modal (local AppShell state)
 
       await press(instance, stdin, KEYS.right);
 
@@ -794,22 +779,6 @@ describe('AppShell command-entry bar (:)', () => {
     }
   });
 
-  it('never stacks on top of the filter overlay', async () => {
-    const store = createAppStore();
-    const { instance, stdin, stdout } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, '/'); // opens the filter modal (local AppShell state)
-
-      await press(instance, stdin, ':');
-
-      expect(stdout.output).not.toContain('COMMAND');
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
   it('never stacks on top of the repo registry screen', async () => {
     const store = createAppStore();
     store.getState().openRegistryScreen();
@@ -1203,7 +1172,7 @@ describe('AppShell command-entry bar (:)', () => {
       // action and opens the create wizard — so the dialog itself, not the transient
       // currentEdtAction flag, is what proves the command actually ran.
       expect(store.getState().activeZone).toBe('edts');
-      expect(stdout.output).toContain("EDT Wizard: Création d'un espace de travail");
+      expect(stdout.output).toContain("CREATE EDT");
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1818,40 +1787,6 @@ describe('AppShell settings screen (:settings)', () => {
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
-  // The Logs zone owns `/` itself (its global-filter editor), so this app-wide stub must go
-  // inert while it's the active zone — the same double-dispatch hazard as the arrow keys.
-  it('the global "/" filter stub opens normally outside the Logs zone', async () => {
-    const store = createAppStore();
-    const { instance, stdin, stdout } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-      expect(store.getState().activeZone).not.toBe('logs');
-
-      await press(instance, stdin, '/');
-
-      expect(stdout.output).toContain('Filter input — wired in Epic 2+');
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
-  it('the global "/" filter stub stays inert while the Logs zone is active — it owns "/" itself', async () => {
-    const store = createAppStore();
-    store.setState({ activeZone: 'logs' });
-    const { instance, stdin, stdout } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-
-      await press(instance, stdin, '/');
-
-      expect(stdout.output).not.toContain('Filter input — wired in Epic 2+');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -2660,5 +2595,58 @@ describe('AppShell Routes right-pane key ownership', () => {
       instance.unmount();
       await instance.waitUntilExit();
     }
+  });
+});
+
+describe('AppShell footer contexts (real keypress)', () => {
+  const settle = async (instance: ReturnType<typeof render>) => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await instance.waitUntilRenderFlush();
+  };
+
+  async function withShell(run: (ctx: { store: ReturnType<typeof createAppStore>; instance: ReturnType<typeof render>; stdin: NodeJS.ReadStream }) => Promise<void>) {
+    const store = createAppStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await run({ store, instance, stdin });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  }
+
+  it('the help registers its context while open and clears it on close', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, '?');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('help');
+      await press(instance, stdin, '?');
+      await settle(instance);
+      expect(footerIdOf(store)).toBeUndefined();
+    });
+  });
+
+  it('the command bar registers its context while open and clears it on Esc', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, ':');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('command');
+      await pressEscape(instance, stdin);
+      await settle(instance);
+      expect(footerIdOf(store)).toBeUndefined();
+    });
+  });
+
+  it('a zone registering while the help is open does not take the footer from it', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, '?');
+      await settle(instance);
+      store.getState().setFooterContext('edts', 'confirm');
+      expect(footerIdOf(store)).toBe('help');
+      await press(instance, stdin, '?');
+      await settle(instance);
+      expect(footerIdOf(store)).toBe('confirm');
+    });
   });
 });

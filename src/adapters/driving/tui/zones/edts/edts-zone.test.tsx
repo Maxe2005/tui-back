@@ -6,6 +6,7 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { EdtsZone } from './edts-zone.js';
@@ -31,16 +32,12 @@ import {
   formatServiceDetail,
   formatServiceMeta,
   isSwitchBlockedError,
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
   resolveCandidateListState,
   resolveActionHint,
   resolveIssuesSeverity,
   resolveModifyEnterAction,
   resolveModifyOps,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
@@ -49,6 +46,7 @@ import {
   validateBranchEditValue,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.logic.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
   return {
@@ -1039,12 +1037,12 @@ describe('EdtsZone', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain("EDT Wizard: Création d'un espace de travail");
-    expect(output).toContain('[▶ 1. Nom ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
-    expect(output).toContain('Choisissez un nom unique');
-    expect(output).toContain('Nom:');
-    // With zero EDTs, Esc has nothing to cancel back to — the hint says it quits.
-    expect(output).toContain('[Esc] Quitter');
+    expect(output).toContain("CREATE EDT");
+    expect(output).toContain('[▶ 1. Name ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
+    expect(output).toContain('Pick a unique name');
+    expect(output).toContain('Name:');
+    // With zero EDTs, Esc has nothing to cancel back to — the footer context says it quits.
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="create" />)).toBe('wizard-first');
   });
 
   it('Step 2 shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
@@ -1088,15 +1086,14 @@ describe('EdtsZone', () => {
       },
     };
     const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={10} />);
-    expect(output).toContain('Nom : auth-flow');
-    expect(output).toContain('Services : api-gateway, billing, crm, docs');
-    expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
-    expect(output).toContain('billing : [Renommer] feat/bill -> feat/b2');
-    // An [Existante] branch attached under its own name is printed once; a remote one still
+    expect(output).toContain('Name: auth-flow');
+    expect(output).toContain('Services: api-gateway, billing, crm, docs');
+    expect(output).toContain('api-gateway : [Create (Global)] development → auth-flow');
+    expect(output).toContain('billing : [Rename] feat/bill -> feat/b2');
+    // An [Existing] branch attached under its own name is printed once; a remote one still
     // shows the local name it lands on.
-    expect(output).toMatch(/crm : \[Existante\] feat\/crm\s*\n/);
-    expect(output).toContain('docs : [Existante] origin/feat/docs → feat/docs');
-    expect(output).toContain("[Entrée] Créer l'EDT");
+    expect(output).toMatch(/crm : \[Existing\] feat\/crm\s*\n/);
+    expect(output).toContain('docs : [Existing] origin/feat/docs → feat/docs');
 
     const acknowledged = await renderToString(
       <ActivationStepView
@@ -1105,8 +1102,7 @@ describe('EdtsZone', () => {
         maxVisibleRows={10}
       />,
     );
-    expect(acknowledged).not.toContain("[Entrée] Créer l'EDT");
-    expect(acknowledged).toContain('EDT créé mais non activé');
+    expect(acknowledged).toContain('EDT created but not activated');
   });
 
   it('Step 2 lists every registered managed repo as a checkbox row', async () => {
@@ -1262,8 +1258,7 @@ describe('EdtsZone', () => {
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-blocked" />);
     expect(output).toContain('SWITCH EDT');
-    expect(output).toContain('force switch');
-    expect(output).toContain('cancel');
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="switch-blocked" />)).toBe('force-confirm');
   });
 
   // The delete-confirm dialog lists every member with branch, merge status, and uncommitted-work
@@ -1333,7 +1328,7 @@ describe('EdtsZone', () => {
     expect(output).toContain('DELETE EDT');
     expect(output).toContain('active-work');
     expect(output).toContain('active EDT');
-    expect(output).toContain('cancel');
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="delete-confirm-rejected" />)).toBe('dismiss');
     expect(output).not.toContain('confirm');
   });
 
@@ -1476,7 +1471,7 @@ describe('EdtsZone quick-pick dialog rendering', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
-    expect(output).toContain('SWITCH EDT — SELECT');
+    expect(output).toContain('SELECT EDT TO SWITCH');
     expect(output).toContain('No EDT to select');
     expect(output).not.toContain('No matching EDT');
   });
@@ -1650,7 +1645,7 @@ describe('EdtsZone', () => {
     expect(output).toContain('feature-y');
   });
 
-  it('Add-to-EDT branch field shows a visible cursor hint [Enter] confirm [Esc] cancel (closes affordance gap)', async () => {
+  it('Add-to-EDT branch field registers the branch-picker footer context (closes affordance gap)', async () => {
     const store = createAppStore();
     const target = edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     store.setState({
@@ -1662,9 +1657,7 @@ describe('EdtsZone', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
     });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="add-to-edt" />);
-    expect(output).toContain('[Enter] confirm');
-    expect(output).toContain('[Esc] cancel');
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="add-to-edt" />)).toBe('branch-picker-base');
   });
 
   it('the detail-pane hint for EDT SERVICES/OTHER SERVICES matches Enter\'s actual behavior', async () => {

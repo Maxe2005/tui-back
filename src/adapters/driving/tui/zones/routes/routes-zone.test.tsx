@@ -4,7 +4,9 @@
 // loadRoutes effect is seeded around, not through).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import { RoutesZone, formatRoutesDisabledMessage } from './routes-zone.js';
 
 describe('formatRoutesDisabledMessage', () => {
@@ -121,12 +123,12 @@ describe('RoutesZone fire and request pane', () => {
     });
   }
 
-  it('hints [enter] request (never fire) next to the route list', async () => {
+  it('declares [Enter] request (never fire) for the route list', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
-    const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[enter] request');
-    expect(output).not.toContain('[enter] fire');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
+    expect(FOOTER_CONTEXTS['routes-list'].hints).toContainEqual(['Enter', 'request']);
+    expect(JSON.stringify(FOOTER_CONTEXTS['routes-list'].hints)).not.toContain('fire');
   });
 
   it('previews the cursor route on the Request tab with its empty sections', async () => {
@@ -178,15 +180,18 @@ describe('RoutesZone fire and request pane', () => {
     expect(output).toContain('Access forbidden — this session lacks permission');
   });
 
-  it('shows a hint when the route has no response yet', async () => {
+  it('shows an empty state when the route has no response yet, fire key in the pane context', async () => {
     const store = createAppStore();
     seedReadyRoutes(store);
     store.setState({ routesPaneTab: 'response' });
     const unfocused = await renderToString(<RoutesZone useStore={store} />);
     expect(unfocused).toContain('No response yet');
-    expect(unfocused).not.toContain('[ctrl+r]');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
+    expect(unfocused).not.toContain('Ctrl+R');
     store.setState({ routesPaneFocus: 'detail' });
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[ctrl+r] fires the request');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-response-empty');
+    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('No response yet — [Ctrl+R] fire');
+    expect(FOOTER_CONTEXTS['routes-response-empty'].hints).toContainEqual(['Ctrl+R', 'fire']);
   });
 
   it('shows the cursor route’s own response only (per route)', async () => {
@@ -240,20 +245,22 @@ describe('RoutesZone body editor', () => {
     });
   }
 
-  it('hints [e] edit body on an editable route and hides the hint otherwise', async () => {
+  it('switches to the editable list context on a route carrying a body, and back otherwise', async () => {
     const store = createAppStore();
     seedBodyRoutes(store);
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[e] edit');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list-editable');
     store.getState().setRoutesSelected(1);
-    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[e] edit');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
   });
 
-  it('keeps the [enter] request hint next to the edit hint and previews the seeded body', async () => {
+  it('keeps the request key next to the edit key and previews the seeded body', async () => {
     const store = createAppStore();
     seedBodyRoutes(store);
     const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[enter] request');
-    expect(output).toContain('[e] edit');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list-editable');
+    expect(FOOTER_CONTEXTS['routes-list-editable'].hints).toEqual(
+      expect.arrayContaining([['Enter', 'request'], ['e', 'edit body']]),
+    );
     expect(output).toContain('ada');
   });
 });
@@ -329,17 +336,12 @@ describe('RoutesZone JsonTree', () => {
     expect(await renderToString(<RoutesZone useStore={store} />)).toContain('Empty JSON value');
   });
 
-  it('shows right-pane hints at the bottom of the right pane while focused', async () => {
+  it('registers the response-tree footer context while the pane is focused', async () => {
     const store = createAppStore();
     seedFiredJson(store);
-    const focused = await renderToString(<RoutesZone useStore={store} />);
-    expect(focused).toContain('[←→] fold');
-    expect(focused).toContain('[esc] back to the list');
-    expect(focused).not.toContain('[home/end] jump');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-response-tree');
     store.getState().setRoutesPaneFocus('list');
-    const unfocused = await renderToString(<RoutesZone useStore={store} />);
-    expect(unfocused).toContain('[enter] request');
-    expect(unfocused).not.toContain('[←→] fold');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
   });
 });
 
@@ -361,16 +363,20 @@ describe('RoutesZone saved requests', () => {
   it('hints [s] saved next to the route list', async () => {
     const store = createAppStore();
     seedSavedHints(store);
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[s] saved');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
+    expect(FOOTER_CONTEXTS['routes-list'].hints).toContainEqual(['s', 'saved']);
   });
 
   it('hints [s] save in the focused Request tab, never on the Response tab', async () => {
     const store = createAppStore();
     seedSavedHints(store);
     store.setState({ routesPaneFocus: 'detail', routesPaneTab: 'request' });
-    expect(await renderToString(<RoutesZone useStore={store} />)).toContain('[s] save');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-section');
+    expect(FOOTER_CONTEXTS['routes-section'].hints).toContainEqual(['s', 'save']);
     store.setState({ routesPaneTab: 'response' });
-    expect(await renderToString(<RoutesZone useStore={store} />)).not.toContain('[s] save');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-response-empty');
+    expect(JSON.stringify(FOOTER_CONTEXTS['routes-response-empty'].hints)).not.toContain("'save'");
+    expect(JSON.stringify(FOOTER_CONTEXTS['routes-response-empty'].hints)).not.toContain('"save"');
   });
 });
 
@@ -419,7 +425,8 @@ describe('RoutesZone Saved sub-tab', () => {
     expect(output).toContain('for-users');
     expect(output).not.toContain('for-post');
     expect(output).not.toContain('other-route');
-    expect(output).toContain('[enter] load');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-saved');
+    expect(FOOTER_CONTEXTS['routes-saved'].hints).toContainEqual(['Enter', 'load']);
   });
 
   it('shows the teaching empty state when the route has no saves', async () => {
@@ -448,7 +455,7 @@ describe('RoutesZone Saved sub-tab', () => {
   it('hints [r] retry in the Saved footer line', async () => {
     const store = createAppStore();
     seedSavedTab(store, [record('for-users')]);
-    const output = await renderToString(<RoutesZone useStore={store} />);
-    expect(output).toContain('[r] retry');
+    expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-saved');
+    expect(FOOTER_CONTEXTS['routes-saved'].hints).toContainEqual(['r', 'retry']);
   });
 });

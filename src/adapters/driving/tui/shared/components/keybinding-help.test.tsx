@@ -9,6 +9,8 @@ import {
 } from './index.js';
 import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 import { renderToString } from './render-to-string.js';
+import { footerContextOf } from '../test-support/mount-for-test.js';
+import { withSectionHeadings } from './keybinding-help.js';
 
 // clampHelpOffset/resolveHelpWindow are thin aliases for bounded-list.tsx's
 // clampBoundedOffset/resolveBoundedWindow, not a second copy of the window logic.
@@ -49,8 +51,7 @@ describe('keybinding-help scroll window (UX-DR15)', () => {
     expect(down.scrollOffset).toBe(1);
 
     const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    // The zone-scoped Logs wrap-all row is last.
-    expect(atBottom.visible.at(-1)?.keys).toBe('W (Logs)');
+    expect(atBottom.visible.at(-1)?.keys).toBe(KEYBINDINGS.at(-1)?.keys);
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
     const backUp = resolveHelpWindow(KEYBINDINGS, atBottom.scrollOffset - 1, 10);
@@ -109,5 +110,25 @@ describe('KeybindingHelp modal', () => {
     expect(output).toContain('[↑ / ↓]');
     expect(output).toContain('[Home / End]');
     expect(output).not.toContain('Open command entry');
+  });
+});
+
+describe('KeybindingHelp footer context and grouping', () => {
+  it('registers the help context while open and nothing while closed', async () => {
+    const closed = createAppStore();
+    expect(await footerContextOf(closed, <KeybindingHelp useStore={closed} />)).toBeUndefined();
+    const open = createAppStore();
+    open.getState().openHelp();
+    expect(await footerContextOf(open, <KeybindingHelp useStore={open} />)).toBe('help');
+  });
+
+  it('puts one heading before the per-context rows, also when the window starts inside them', () => {
+    const firstContext = KEYBINDINGS.findIndex((entry) => entry.section !== undefined);
+    const around = withSectionHeadings(KEYBINDINGS.slice(firstContext - 1, firstContext + 3));
+    expect(around.filter((item) => item.kind === 'heading')).toHaveLength(1);
+    expect(around.findIndex((item) => item.kind === 'heading')).toBe(1);
+    const inside = withSectionHeadings(KEYBINDINGS.slice(firstContext + 2, firstContext + 5));
+    expect(inside[0]).toMatchObject({ kind: 'heading' });
+    expect(withSectionHeadings(KEYBINDINGS.slice(0, 5)).some((item) => item.kind === 'heading')).toBe(false);
   });
 });

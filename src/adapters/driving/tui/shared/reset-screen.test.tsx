@@ -3,6 +3,7 @@
 // reset-screen.logic.test.ts (renderToString never delivers a keypress).
 import { describe, expect, it } from 'vitest';
 import { createAppStore } from '../store/app-store.js';
+import { footerIdOf, mountForTest } from './test-support/mount-for-test.js';
 import { renderToString } from './components/render-to-string.js';
 import { ResetScreen } from './reset-screen.js';
 import {
@@ -107,8 +108,26 @@ describe('ResetScreen render', () => {
     const state = { ...toggleResetCategory(createResetScreenState(), 'edts'), step: 'summary' as const };
     const output = await renderToString(<ResetScreen useStore={store} initialState={state} />);
     expect(output).toContain('registry exploded');
-    expect(output).toContain('cannot continue');
-    expect(output).not.toContain('Enter to continue');
+    expect(output).toContain('Failed to load the summary.');
+  });
+
+  async function footerContextFor(step: 'select' | 'summary' | 'confirm', preview?: ResetSummaryPreview) {
+    const store = createAppStore();
+    if (preview !== undefined) {
+      store.setState({ resetPreview: preview });
+    }
+    const state = { ...toggleResetCategory(createResetScreenState(), 'edts'), step };
+    const mounted = await mountForTest(<ResetScreen useStore={store} initialState={state} />);
+    const id = footerIdOf(store);
+    mounted.unmount();
+    return { id, after: store.getState().footerContexts.length };
+  }
+
+  it('registers the footer context of each step and clears it on close', async () => {
+    expect(await footerContextFor('select')).toEqual({ id: 'reset-select', after: 0 });
+    expect((await footerContextFor('summary', PREVIEW)).id).toBe('reset-summary');
+    expect((await footerContextFor('summary', { ...PREVIEW, status: 'error' })).id).toBe('reset-wait');
+    expect((await footerContextFor('confirm')).id).toBe('reset-confirm');
   });
 
   it('running: shows progress and no key hints but waiting', async () => {

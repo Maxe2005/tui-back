@@ -137,8 +137,6 @@ export function FilterablePickList<T>(props: FilterablePickListProps<T>) {
   const highlight = clampPickListCursor(state.cursor, matches.length);
   return (
     <Box flexDirection="column">
-      {/* TextInputLine ships its own "[Enter] confirm  [Esc] cancel" hint line while focused —
-          the pick's one and only hint, never duplicated below the list. */}
       <TextInputLine label={label} value={state.query} cursor={state.queryCursor} focused />
       {matches.length === 0 ? (
         <DimAnnotation text={items.length === 0 ? emptyText : noMatchText} />

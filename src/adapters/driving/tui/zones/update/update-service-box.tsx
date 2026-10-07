@@ -1,19 +1,18 @@
-// tui/zones/update: render-only view of the "Configurer <service>" box (state and keys live in
+// tui/zones/update: render-only view of the "Configure <service>" box (state and keys live in
 // update-service-box.logic.ts). Height: SERVICE_BOX_ROWS (update-config-panels.logic.ts)
 // + the branch field's list (`dropdownLines`); every line is truncated, none can wrap.
 import { Box, Text } from 'ink';
-import { SuggestField } from '../../shared/components/suggest-field.js';
+import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
 
-export const SERVICE_BOX_FOOTER = ['[↑/↓] Ligne • [Entrée] Éditer / Valider • [Espace] Changer', '[Ctrl+R] Revenir au global • [Esc] Fermer'] as const;
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 
 const OPTION_LABEL: Record<ToggleOverride, (global: boolean) => string> = {
-  follow: (global) => `suivre global (${global ? 'oui' : 'non'})`,
-  off: () => 'non',
-  on: () => 'oui',
+  follow: (global) => `follow global (${global ? 'yes' : 'no'})`,
+  off: () => 'no',
+  on: () => 'yes',
 };
 
 function Marker({ focused }: { focused: boolean }) {
@@ -69,17 +68,17 @@ export function UpdateServiceBox({
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
       <Text color={colors.accent} bold wrap="truncate-end">
-        Configurer {context.service}
+        Configure {context.service}
       </Text>
       <Box>
         <Marker focused={focused('branch')} />
-        <SuggestField
-          label="Branche source"
+        <BranchAutocompleteInput
+          label="Source branch"
           labelWidth={16}
           state={box.branch}
-          suggestions={context.branches}
+          branches={context.branches}
           placeholder={SHARED_BRANCH_PLACEHOLDER}
-          status={context.branchesStatus}
+          branchesStatus={context.branchesStatus}
           maxLines={dropdownLines}
           editing={box.editing}
           focused={focused('branch')}
@@ -91,7 +90,7 @@ export function UpdateServiceBox({
         value={box.migrations}
         declared={context.migrationDeclared}
         global={globalMigrations}
-        undeclaredText="— aucune commande déclarée"
+        undeclaredText="— no command declared"
       />
       <ToggleLine
         label="Clean restart"
@@ -99,12 +98,12 @@ export function UpdateServiceBox({
         value={box.cleanRestart}
         declared={context.recipeDeclared}
         global={globalCleanRestart}
-        undeclaredText="— aucune recette : restart basique"
+        undeclaredText="— no recipe: basic restart"
       />
       <Box>
         <Marker focused={focused('apply')} />
         <Text color={focused('apply') ? colors.accent : colors.text} bold={focused('apply')}>
-          [ Appliquer ]
+          [ Apply ]
         </Text>
       </Box>
       {box.error !== null ? (
@@ -112,11 +111,6 @@ export function UpdateServiceBox({
           ✖ {box.error}
         </Text>
       ) : null}
-      {SERVICE_BOX_FOOTER.map((line) => (
-        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
-          {line}
-        </Text>
-      ))}
     </Box>
   );
 }

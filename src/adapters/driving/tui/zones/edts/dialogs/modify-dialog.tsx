@@ -20,12 +20,8 @@ import {
   cycleFormFocus,
   FORM_FOCUS_NAV,
   findRetryableFailedRow,
-  jumpSelection,
-  moveSelection,
   resolveModifyEnterAction,
   resolveModifyOps,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   suggestBranchForNewMember,
   summarizeFailedResults,
   toggleMemberSelection,
@@ -35,6 +31,8 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
+import { StateLine } from '../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -211,7 +209,7 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
 
   function handleModifyBranchPickerInput(current: ModifyDialogState, session: BranchPickerSession, input: string, key: Key) {
     const otherMemberBranches = Array.from(new Set(current.target.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchPicker: null } : prev));
       return;
@@ -367,7 +365,7 @@ export function ModifyDialogView({
 }) {
   const title = resolveModifyDialogTitle(dialog, candidates);
   return (
-    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title={title} open={true}>
       <Box flexDirection="column">
         {dialog.branchPicker !== null ? (
           <BranchPicker
@@ -380,8 +378,8 @@ export function ModifyDialogView({
         ) : (
           <>
             <TextInputLine label="Topic" value={dialog.topic} cursor={dialog.topicCursor} focused={dialog.formFocus === 'topic'} />
-            {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-            {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
+            {candidateState === 'loading' ? <StateLine kind="loading" subject="services" /> : null}
+            {candidateState === 'empty' ? <StateLine kind="empty" subject="registered services" text="No registered services available." /> : null}
             {candidateState === 'ready'
               ? candidates.map((candidate, index) => {
                   const branch =

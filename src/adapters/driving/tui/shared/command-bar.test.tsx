@@ -3,8 +3,11 @@
 // never emits data, so useInput itself is never exercised here). Real-keypress coverage of the
 // bar mounted inside AppShell lives in app-shell.interaction.test.tsx.
 import { describe, it, expect } from 'vitest';
+import { createAppStore } from '../store/app-store.js';
+import { footerContextOf, mountForTest } from './test-support/mount-for-test.js';
 import type { Command } from '../commands/commands.js';
 import {
+  CommandBar,
   backspaceCommandQuery,
   commandAtGridCursor,
   groupCommandsByColumn,
@@ -428,5 +431,17 @@ describe('runCommand', () => {
 
     expect(runCommand(fakeStore(calls), 'boom', [throwing])).toBe(true);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('CommandBar footer context', () => {
+  it('registers the command context while mounted and clears it on unmount', async () => {
+    const store = createAppStore();
+    expect(await footerContextOf(store, <CommandBar useStore={store} onClose={() => {}} />)).toBe('command');
+    expect(store.getState().footerContexts).toEqual([]);
+    const mounted = await mountForTest(<CommandBar useStore={store} onClose={() => {}} />);
+    expect(store.getState().footerContexts).toEqual([{ owner: 'command-bar', id: 'command' }]);
+    mounted.unmount();
+    expect(store.getState().footerContexts).toEqual([]);
   });
 });

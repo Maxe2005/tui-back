@@ -86,7 +86,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key, current.branchPicker.branchesStatus);
     if (result.type === 'cancel') {
       deps.setDialog({ kind: 'none' });
       return;
@@ -105,7 +105,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
 
 export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialogState; maxRows: number }) {
   return (
-    <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="ADD TO EDT" open={true}>
       <Box flexDirection="column">
         <Text color={colors.text}>
           Add {dialog.serviceName} to "{dialog.edt.topic}"

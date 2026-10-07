@@ -1,8 +1,9 @@
-// shared/components/branch-autocomplete-input: the shared branch-choosing input — a text field
-// (TextInputLine) plus a bounded, case-insensitive substring dropdown and an exact-match
-// validity glyph (`✔`/`✖`, never color alone). `handleBranchAutocompleteKey` is the pure reducer
-// the host dialog's useInput calls; the first Enter on a non-empty list inserts the highlighted
-// branch, so the host keeps its own commit semantics.
+// shared/components/branch-autocomplete-input: the one suggest-as-you-type input — a text field
+// (TextInputLine), a bounded case-insensitive substring list that follows the highlight, an
+// exact-match validity glyph (`✔`/`✖`, never color alone) and one StateLine for loading/error.
+// Suggestions are plain strings (branches, EDT topics). `handleBranchAutocompleteKey` is the
+// pure reducer the host's useInput calls; the first Enter on a non-empty list inserts the
+// highlighted suggestion, so the host keeps its own commit semantics.
 import { Box, Text } from 'ink';
 // Text editing goes through shared/components/text-edit.ts directly, never edts-zone.logic:
 // that path would close an import cycle (autocomplete -> edts-zone.logic -> branch-picker ->
@@ -10,6 +11,7 @@ import { Box, Text } from 'ink';
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
+import { StateLine } from './state-line.js';
 
 export type BranchAutocompleteStatus = 'loading' | 'ready' | 'error';
 
@@ -58,16 +60,50 @@ export function resolveBranchAutocompleteValidity(
   return { exact, glyph: exact ? '✔' : '✖', glyphColor: exact ? colors.success : colors.error };
 }
 
-// The dropdown's own windowing: a maxRows-capped slice plus the overflow count for the
-// `… N more` line. Deliberately no scrolling window — when pickCursor runs past the visible
-// slice, no row highlights rather than the window following it.
-export function resolveBranchAutocompleteDropdown(
+export interface SuggestWindow {
+  items: readonly string[];
+  // Index of the highlighted item inside `items`, or -1 when none is highlighted.
+  highlight: number;
+  hiddenAbove: number;
+  hiddenBelow: number;
+}
+
+// Slices the matches into at most `maxLines` lines including the "N more" indicators, the
+// window following the highlight. Zero or negative budgets render nothing.
+export function resolveSuggestWindow(
   matches: readonly string[],
-  maxRows: number,
-): { visible: readonly string[]; overflow: number } {
-  const safeMax = Number.isFinite(maxRows) ? Math.max(0, Math.floor(maxRows)) : 0;
-  const visible = matches.slice(0, safeMax);
-  return { visible, overflow: matches.length - visible.length };
+  pickCursor: number,
+  showHighlight: boolean,
+  maxLines: number,
+): SuggestWindow {
+  // An unbounded budget shows every match; anything else non-finite (NaN) shows none.
+  const budget = maxLines === Infinity ? matches.length : Number.isFinite(maxLines) ? Math.max(0, Math.floor(maxLines)) : 0;
+  if (budget === 0 || matches.length === 0) {
+    return { items: [], highlight: -1, hiddenAbove: 0, hiddenBelow: 0 };
+  }
+  const cursor = clampAutocompletePickCursor(pickCursor, matches.length);
+  if (matches.length <= budget) {
+    return { items: matches, highlight: showHighlight ? cursor : -1, hiddenAbove: 0, hiddenBelow: 0 };
+  }
+  // Too tight for the "N more" indicators: a plain window, no indicators.
+  if (budget < 3) {
+    const start = Math.min(Math.max(cursor, 0), matches.length - budget);
+    return {
+      items: matches.slice(start, start + budget),
+      highlight: showHighlight ? cursor - start : -1,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    };
+  }
+  const size = budget - 2;
+  const start = Math.min(Math.max(cursor - Math.floor(size / 2), 0), matches.length - size);
+  const items = matches.slice(start, start + size);
+  return {
+    items,
+    highlight: showHighlight ? cursor - start : -1,
+    hiddenAbove: start,
+    hiddenBelow: matches.length - start - items.length,
+  };
 }
 
 export type BranchAutocompleteKey = TextEditKey;
@@ -124,51 +160,71 @@ export function handleBranchAutocompleteKey(
 
 export type BranchAutocompleteInputProps = {
   label: string;
-  state: BranchAutocompleteState;
+  state: BranchAutocompleteState & { highlighted?: boolean };
+  // What the suggestions are, for the loading/error line.
+  subject?: string;
   branches: readonly string[];
   branchesStatus: BranchAutocompleteStatus;
-  maxRows: number;
+  // The list's line budget, "N more" indicators included.
+  maxLines: number;
+  // The row cursor sits on the field (accent label) even when not editing.
   focused?: boolean;
+  // The field owns the keys: caret, list and validity are shown only then. Defaults to true.
+  editing?: boolean;
+  // Dim text standing for "use the default" while the field is empty; its presence also hides
+  // the empty field's validity mark and the list's highlight until an arrow or a letter.
+  placeholder?: string;
+  labelWidth?: number;
+  // Only where the host binds a retry key for this list.
+  retry?: boolean;
 };
 
+// With a placeholder the empty field means "default", so no row is highlighted until an arrow
+// moved it or text filters the list.
+export function branchAutocompleteShowsHighlight(state: { value: string; highlighted?: boolean }, hasPlaceholder: boolean): boolean {
+  return !hasPlaceholder || state.value.trim() !== '' || state.highlighted === true;
+}
+
 export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
-  const { label, state, branches, branchesStatus, maxRows, focused = false } = props;
-  if (branchesStatus === 'loading' || branchesStatus === 'error') {
-    // No dropdown and no validity coloring while the branch list itself is unavailable — the
-    // field stays editable, with the status line carrying the state (same convention as
-    // branch-picker.tsx's own loading/error lines).
-    return (
-      <Box flexDirection="column">
-        <TextInputLine label={label} value={state.value} cursor={state.cursor} focused={focused} />
-        {branchesStatus === 'loading' ? (
-          <Text color={colors['text-dim']}>Loading branches…</Text>
-        ) : (
-          <Text color={colors.error}>Failed to load branches.</Text>
-        )}
-      </Box>
-    );
-  }
-  const matches = matchBranchesBySubstring(state.value, branches);
-  const { visible, overflow } = resolveBranchAutocompleteDropdown(matches, maxRows);
-  const validity = resolveBranchAutocompleteValidity(state.value, branches);
-  const highlight = clampAutocompletePickCursor(state.pickCursor, matches.length);
+  const { label, state, branches, branchesStatus, maxLines, focused = false, editing = true, placeholder, labelWidth, retry, subject = 'branches' } = props;
+  const hasPlaceholder = placeholder !== undefined;
+  const empty = state.value === '';
+  const ready = branchesStatus === 'ready';
+  // No list and no validity coloring while the suggestions themselves are unavailable — the
+  // field stays editable, with the status line carrying the state.
+  const validity =
+    ready && (hasPlaceholder ? editing && !empty : true) ? resolveBranchAutocompleteValidity(state.value, branches) : null;
+  const window =
+    editing && ready
+      ? resolveSuggestWindow(
+          matchBranchesBySubstring(state.value, branches),
+          state.pickCursor,
+          branchAutocompleteShowsHighlight(state, hasPlaceholder),
+          maxLines,
+        )
+      : null;
   return (
     <Box flexDirection="column">
-      <Box flexDirection="row">
-        <TextInputLine label={label} value={state.value} cursor={state.cursor} focused={focused} />
-        <Text color={validity.glyphColor}> {validity.glyph}</Text>
-      </Box>
-      {visible.length > 0 ? (
-        <Box flexDirection="column" paddingLeft={2}>
-          {visible.map((branch, index) => (
-            <Text key={branch} color={index === highlight ? colors.accent : colors.text}>
-              {index === highlight ? '› ' : '  '}
-              {branch}
-            </Text>
-          ))}
-        </Box>
-      ) : null}
-      {overflow > 0 ? <Text color={colors['text-dim']}>… {overflow} more</Text> : null}
+      <TextInputLine
+        label={label}
+        value={state.value}
+        cursor={state.cursor}
+        focused={editing}
+        highlighted={focused}
+        placeholder={placeholder}
+        labelWidth={labelWidth}
+        suffix={validity !== null ? { text: ` ${validity.glyph}`, color: validity.glyphColor } : undefined}
+      />
+      {editing && branchesStatus === 'loading' ? <StateLine kind="loading" subject={subject} /> : null}
+      {editing && branchesStatus === 'error' ? <StateLine kind="error" subject={subject} retry={retry} /> : null}
+      {window !== null && window.hiddenAbove > 0 ? <Text color={colors['text-dim']}>  ↑ {window.hiddenAbove} more</Text> : null}
+      {window?.items.map((item, index) => (
+        <Text key={`${index}:${item}`} wrap="truncate-end" color={index === window.highlight ? colors.accent : colors.text}>
+          {index === window.highlight ? '  › ' : '    '}
+          {item}
+        </Text>
+      ))}
+      {window !== null && window.hiddenBelow > 0 ? <Text color={colors['text-dim']}>  ↓ {window.hiddenBelow} more</Text> : null}
     </Box>
   );
 }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Text, useInput } from 'ink';
-import { KEYBINDINGS, type NavigationKey } from '../../keybindings/index.js';
+import { KEYBINDINGS, type Keybinding } from '../../keybindings/index.js';
+import type { NavigationKey } from '../keys/navigation-key.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors } from '../theme/theme.js';
+import { useFooterContext } from '../hooks/use-footer-context.js';
 import { ModalDialog } from './modal-dialog.js';
 import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 
@@ -36,6 +38,21 @@ export function resolveHelpScroll(
   return offset;
 }
 
+export type HelpItem = { kind: 'heading'; text: string } | { kind: 'row'; entry: Keybinding };
+
+// A heading line before the first visible row of a section (also when the window starts inside
+// it), so the per-context rows stay apart from the plain key rows.
+export function withSectionHeadings(rows: readonly Keybinding[]): HelpItem[] {
+  const items: HelpItem[] = [];
+  rows.forEach((entry, index) => {
+    if (entry.section !== undefined && entry.section !== rows[index - 1]?.section) {
+      items.push({ kind: 'heading', text: entry.section.toUpperCase() });
+    }
+    items.push({ kind: 'row', entry });
+  });
+  return items;
+}
+
 export function KeybindingHelp({
   useStore = useAppStore,
   visibleLines = DEFAULT_HELP_VISIBLE_LINES,
@@ -46,6 +63,7 @@ export function KeybindingHelp({
   const helpOpen = useStore((state) => state.helpOpen);
   const closeHelp = useStore((state) => state.closeHelp);
   const [scrollOffset, setScrollOffset] = useState(0);
+  useFooterContext('help', helpOpen ? 'help' : null, useStore);
 
   useEffect(() => {
     if (helpOpen) {
@@ -67,16 +85,20 @@ export function KeybindingHelp({
   return (
     <ModalDialog
       title="KEYBINDINGS"
-      onConfirm={() => {}}
-      onCancel={closeHelp}
       open={helpOpen}
     >
-      {visible.map((entry) => (
-        <Text key={entry.keys}>
-          <Text color={colors['text-dim']}>[{entry.keys}]</Text>
-          <Text color={colors.text}> {entry.description}</Text>
-        </Text>
-      ))}
+      {withSectionHeadings(visible).map((item) =>
+        item.kind === 'heading' ? (
+          <Text key={`heading:${item.text}`} bold color={colors.accent}>
+            {item.text}
+          </Text>
+        ) : (
+          <Text key={item.entry.keys}>
+            <Text color={colors['text-dim']}>[{item.entry.keys}]</Text>
+            <Text color={colors.text}> {item.entry.description}</Text>
+          </Text>
+        ),
+      )}
     </ModalDialog>
   );
 }

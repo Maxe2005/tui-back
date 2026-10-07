@@ -34,7 +34,7 @@ export function UpdateServicePickDialog({
   candidates: readonly UpdateServicePickCandidate[];
 }) {
   return (
-    <ModalDialog title={UPDATE_SERVICE_PICK_TITLE} onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title={UPDATE_SERVICE_PICK_TITLE} open={true}>
       <FilterablePickList
         label="Filter"
         state={state}

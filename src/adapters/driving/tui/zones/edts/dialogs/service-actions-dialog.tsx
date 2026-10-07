@@ -6,16 +6,12 @@ import type { AppState } from '../../../store/app-store.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList, type FailedResultRow } from '../../../shared/components/failed-result-list.js';
-import { ListRow } from '../../../shared/components/list-row.js';
+import { MenuList, resolveMenuKey } from '../../../shared/components/menu-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   createPickerSession,
   findRetryableFailedRow,
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   SERVICE_ACTION_MENU_ITEMS,
   summarizeFailedResults,
   type EdtDialogState,
@@ -140,7 +136,7 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: null } : prev));
       return;
@@ -186,27 +182,16 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
         return;
       }
     }
-    const jump = resolveSelectionJump(key);
-    if (jump !== null) {
-      deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: jumpSelection(jump, SERVICE_ACTION_MENU_ITEMS.length) } : prev));
+    // Restart is a disabled row — Enter on it never chooses; Esc was handled above.
+    const step = resolveMenuKey(key, current.cursor, SERVICE_ACTION_MENU_ITEMS, 'close');
+    if (step.type === 'move') {
+      deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: step.cursor } : prev));
       return;
     }
-    const direction = resolveSelectionDirection(key);
-    if (direction !== null) {
-      deps.setDialog((prev) =>
-        prev.kind === 'service-actions' ? { ...prev, cursor: moveSelection(prev.cursor, direction, SERVICE_ACTION_MENU_ITEMS.length) } : prev,
-      );
-      return;
-    }
-    if (key.return) {
-      const item = SERVICE_ACTION_MENU_ITEMS[current.cursor];
-      if (item === undefined || item.disabled) {
-        // Restart is rendered disabled — Enter on it never dispatches.
-        return;
-      }
-      if (current.cursor === 0) {
+    if (step.type === 'choose') {
+      if (step.choice === 'remove') {
         void submitRemoveFromEdt(current);
-      } else {
+      } else if (step.choice === 'change-branch') {
         openServiceActionsBranchPicker(current);
       }
     }
@@ -217,7 +202,7 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
 
 export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceActionsDialogState; maxRows: number }) {
   return (
-    <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="SERVICE ACTIONS" open={true}>
       <Box flexDirection="column">
         <Text color={colors.text}>{dialog.serviceName}</Text>
         {dialog.branchPicker !== null ? (
@@ -234,9 +219,7 @@ export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceA
           </>
         ) : (
           <>
-            {SERVICE_ACTION_MENU_ITEMS.map((item, index) => (
-              <ListRow key={item.label} label={item.label} meta={item.disabled ? 'Available with Epic 5' : undefined} selected={index === dialog.cursor} />
-            ))}
+            <MenuList items={SERVICE_ACTION_MENU_ITEMS} cursor={dialog.cursor} />
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Working…" /> : null}
           </>

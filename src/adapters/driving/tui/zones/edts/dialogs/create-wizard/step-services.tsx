@@ -9,13 +9,11 @@ import {
   type CandidateListState,
   type CreateDialogState,
   type EdtDialogState,
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   toggleMemberSelection,
 } from '../../edts-zone.logic.js';
 import { missingSeedMembers } from './wizard.logic.js';
+import { StateLine } from '../../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,
@@ -64,9 +62,9 @@ export function ServicesStepView({
   const missing = candidateState === 'ready' ? missingSeedMembers(dialog.seedFromEdt, candidates) : [];
   return (
     <Box flexDirection="column">
-      {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-      {candidateState === 'error' ? <Text color={colors.error}>Failed to load services — cannot show candidates.</Text> : null}
-      {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
+      {candidateState === 'loading' ? <StateLine kind="loading" subject="services" /> : null}
+      {candidateState === 'error' ? <StateLine kind="error" subject="services" /> : null}
+      {candidateState === 'empty' ? <StateLine kind="empty" subject="registered services" text="No registered services available." /> : null}
       {candidateState === 'ready'
         ? candidates.map((candidate, index) => (
             <Box key={candidate.path}>
@@ -76,7 +74,7 @@ export function ServicesStepView({
           ))
         : null}
       {missing.length > 0 ? (
-        <Text color={colors['text-dim']}>Services de l'EDT source introuvables (ignorés) : {missing.join(', ')}</Text>
+        <Text color={colors['text-dim']}>Source EDT services not found (ignored): {missing.join(', ')}</Text>
       ) : null}
     </Box>
   );

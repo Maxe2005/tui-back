@@ -3,18 +3,32 @@
 // per-path outcomes, and the "Clean stale entries" flow — plus the pure key-handling functions
 // (renderToString's fake stdin never emits keys, so useInput itself is never exercised).
 import { describe, it, expect } from 'vitest';
+import { FOOTER_CONTEXTS } from '../keybindings/index.js';
 import { createAppStore } from '../store/app-store.js';
+import { footerContextOf as contextOf } from './test-support/mount-for-test.js';
 import { renderToString } from './components/render-to-string.js';
 import {
   MANIFEST_GUIDANCE_LINES,
   RepoRegistryScreen,
   backspaceRootInput,
-  moveCandidateCursor,
+  registryFooterContext,
   resolveRegistryScreenPhase,
   toggleCandidateSelection,
   toggleCleanCandidateExclusion,
   typeRootInputChar,
 } from './repo-registry-screen.js';
+
+const footerContextOf = (store: ReturnType<typeof createAppStore>) => contextOf(store, <RepoRegistryScreen useStore={store} />);
+
+describe('registryFooterContext', () => {
+  it('advertises its own keys only for the interactive phases', () => {
+    expect(registryFooterContext('root-input', false)).toBe('registry-path');
+    expect(registryFooterContext('candidates', false)).toBe('registry-candidates');
+    expect(registryFooterContext('clean-candidates', true)).toBe('registry-stale');
+    expect(registryFooterContext('clean-candidates', false)).toBe('dismiss');
+    expect(registryFooterContext('results', false)).toBe('dismiss');
+  });
+});
 
 describe('resolveRegistryScreenPhase', () => {
   const base = {
@@ -136,22 +150,6 @@ describe('backspaceRootInput', () => {
   });
 });
 
-describe('moveCandidateCursor', () => {
-  it('moves down and up by one', () => {
-    expect(moveCandidateCursor(0, 'down', 3)).toBe(1);
-    expect(moveCandidateCursor(1, 'up', 3)).toBe(0);
-  });
-
-  it('clamps at both bounds', () => {
-    expect(moveCandidateCursor(2, 'down', 3)).toBe(2);
-    expect(moveCandidateCursor(0, 'up', 3)).toBe(0);
-  });
-
-  it('always returns 0 for an empty list', () => {
-    expect(moveCandidateCursor(0, 'down', 0)).toBe(0);
-  });
-});
-
 describe('toggleCandidateSelection', () => {
   it('adds an unselected path and removes an already-selected one, without mutating the input set', () => {
     const original = new Set(['/repos/a']);
@@ -192,7 +190,8 @@ describe('RepoRegistryScreen', () => {
     const store = createAppStore();
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     expect(output).toContain('Root path:');
-    expect(output).toContain('Type a path, then Enter to scan.');
+    expect(output).toContain('Type a path.');
+    expect(await footerContextOf(store)).toBe('registry-path');
   });
 
   it('shows a scanning indicator while the scan is in flight', async () => {
@@ -206,7 +205,7 @@ describe('RepoRegistryScreen', () => {
     const store = createAppStore();
     store.setState({ registryScanStatus: 'error', registryScanError: 'Scan root not found: /nope' });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
-    expect(output).toContain('Scan failed');
+    expect(output).toContain('Failed to scan');
     expect(output).toContain('Scan root not found: /nope');
     expect(output).not.toContain('No manifest-carrying repos found here');
   });
@@ -216,7 +215,7 @@ describe('RepoRegistryScreen', () => {
     store.setState({ registryScanStatus: 'idle', registryScanResult: { candidates: [], skipped: [] } });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     expect(output).toContain('No manifest-carrying repos found here');
-    expect(output).not.toContain('Scan failed');
+    expect(output).not.toContain('Failed to scan');
   });
 
   it('lists every scan candidate as a checkbox-list-item, unchecked, first one highlighted (UX-DR9)', async () => {
@@ -229,7 +228,7 @@ describe('RepoRegistryScreen', () => {
     expect(output).toContain('/repos/api-gateway');
     expect(output).toContain('/repos/route-explorer');
     expect(output).toContain('[ ]');
-    expect(output).toContain('Space to toggle, Enter to register the selection.');
+    expect(await footerContextOf(store)).toBe('registry-candidates');
 
     // checkbox-list-item.tsx's own `selected` prop has no visible effect on its own, so the
     // highlighted (arrow-navigable, first) row must carry its own visible distinction —
@@ -268,13 +267,14 @@ describe('RepoRegistryScreen', () => {
     expect(output).toContain('/repos/bad');
     expect(output).toContain('failed');
     expect(output).toContain('Action already in progress');
-    expect(output).toContain('Esc to close.');
+    expect(await footerContextOf(store)).toBe('dismiss');
   });
 
   it('shows the Ctrl+L hint for "Clean stale entries" on the root-input screen', async () => {
     const store = createAppStore();
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
-    expect(output).toContain('Ctrl+L to clean stale registry entries');
+    expect(output).toContain('Stale registry entries');
+    expect(FOOTER_CONTEXTS['registry-path'].hints).toContainEqual(['Ctrl+L', 'clean stale entries']);
   });
 });
 
@@ -294,7 +294,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     const store = createAppStore();
     store.setState({ registryCleanScanStatus: 'error', registryCleanScanError: 'bad yaml' });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
-    expect(output).toContain('Scan failed');
+    expect(output).toContain('Failed to scan');
     expect(output).toContain('bad yaml');
     expect(output).not.toContain('No stale registry entries found');
   });
@@ -304,7 +304,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     store.setState({ registryCleanScanStatus: 'idle', registryCleanCandidates: [] });
     const output = await renderToString(<RepoRegistryScreen useStore={store} />);
     expect(output).toContain('No stale registry entries found');
-    expect(output).not.toContain('Scan failed');
+    expect(output).not.toContain('Failed to scan');
   });
 
   it('lists every stale candidate pre-checked, with its reason, and an EDT-member note when applicable', async () => {
@@ -325,7 +325,7 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     // Pre-checked by default — unlike scan/register's own candidates.
     expect(output).toContain('[x]');
     expect(output).not.toContain('[ ]');
-    expect(output).toContain('Space to toggle, Enter to remove the selection.');
+    expect(await footerContextOf(store)).toBe('registry-stale');
   });
 
   it('reports a path that could not even be checked, alongside the candidate list — never silently dropped', async () => {
@@ -379,6 +379,6 @@ describe('RepoRegistryScreen — Clean stale entries', () => {
     expect(output).toContain('/repos/bad');
     expect(output).toContain('failed');
     expect(output).toContain('disk full');
-    expect(output).toContain('Esc to close.');
+    expect(await footerContextOf(store)).toBe('dismiss');
   });
 });

@@ -50,7 +50,7 @@ function typeInto(state: OverrideBoxState, text: string): OverrideBoxState {
 }
 
 describe('openOverrideBox', () => {
-  it('a global row opens in "Créer nouvelle" pre-filled with its base and the global name', () => {
+  it('a global row opens in "Create new" pre-filled with its base and the global name', () => {
     const opened = openOverrideBox('/repos/a', { base: 'origin/rel', name: 'auth-flow' });
     expect(opened).toMatchObject({ mode: 'create', line: 'mode', editing: false, rename: false, error: null });
     expect(opened.base.value).toBe('origin/rel');
@@ -66,13 +66,21 @@ describe('openOverrideBox', () => {
 });
 
 describe('reduceOverrideBoxKey', () => {
-  it('Space or Tab on the Mode line toggles the mode; lines follow the mode and the rename checkbox', () => {
+  it('Space or Left/Right on the Mode line toggles the mode, Tab moves to the next line; lines follow the mode and the rename checkbox', () => {
     const toggled = updated(press(box(), ' '));
     expect(toggled.mode).toBe('existing');
-    expect(updated(press(toggled, '', { tab: true })).mode).toBe('create');
+    expect(updated(press(toggled, '', { rightArrow: true })).mode).toBe('create');
+    expect(updated(press(box(), '', { tab: true }))).toMatchObject({ mode: 'create', line: 'base' });
     expect(overrideBoxLines(box())).toEqual(['mode', 'base', 'name', 'apply']);
     expect(overrideBoxLines({ mode: 'existing', rename: false })).toEqual(['mode', 'existing', 'rename', 'apply']);
     expect(overrideBoxLines({ mode: 'existing', rename: true })).toEqual(['mode', 'existing', 'rename', 'newName', 'apply']);
+  });
+
+  it('Tab and Shift+Tab move lines and never insert a character or flip the mode', () => {
+    const onName = box({ line: 'name' });
+    const next = updated(press(onName, '', { tab: true }));
+    expect(next).toMatchObject({ line: 'apply', name: onName.name, mode: 'create' });
+    expect(updated(press(onName, '', { tab: true, shift: true })).line).toBe('base');
   });
 
   it('↑/↓ move between lines, clamped', () => {
@@ -118,7 +126,7 @@ describe('reduceOverrideBoxKey', () => {
     expect(press(box({ line: 'name', editing: true }), 'r', { ctrl: true })).toEqual({ type: 'revert' });
   });
 
-  it('Perso: Enter on [ Appliquer ] applies a create plan', () => {
+  it('Custom: Enter on [ Apply ] applies a create plan', () => {
     const ready = box({ line: 'apply', base: { value: 'origin/dev', cursor: 10, pickCursor: 0 }, name: { value: 'q', cursor: 1 } });
     expect(press(ready, '', { return: true })).toEqual({ type: 'apply', plan: { kind: 'create', base: 'origin/dev', name: 'q' } });
   });
@@ -146,7 +154,7 @@ describe('validateOverrideBox', () => {
   });
 
   it('names the branch and the service\'s manifest, in French', () => {
-    expect(protectedNameError('preprod', 'svc-a')).toBe('« preprod » est protégée par le manifeste de svc-a');
+    expect(protectedNameError('preprod', 'svc-a')).toBe('“preprod” is protected by the manifest of svc-a');
   });
 
   it('a branch the service\'s manifest does not list is not protected', () => {
@@ -179,7 +187,7 @@ describe('validateOverrideBox', () => {
     });
   });
 
-  it('a Perso name or a rename target that already exists locally is refused, and so is a no-op rename', () => {
+  it('a Custom name or a rename target that already exists locally is refused, and so is a no-op rename', () => {
     expect(validateOverrideBox(box({ name: { value: 'feat/z', cursor: 6 } }), CONTEXT)).toEqual({ ok: false, error: existingTargetError('feat/z') });
     const existing = box({ mode: 'existing', rename: true, existing: { value: 'origin/w', cursor: 8, pickCursor: 0 } });
     expect(validateOverrideBox({ ...existing, newName: { value: 'feat/z', cursor: 6 } }, CONTEXT)).toEqual({ ok: false, error: existingTargetError('feat/z') });

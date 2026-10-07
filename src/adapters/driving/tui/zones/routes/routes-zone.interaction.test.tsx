@@ -9,6 +9,7 @@ import { err, ok } from '../../../../../core/result.js';
 import type { SavedRequest, SavedRequestPort } from '../../../../../core/ports/saved-request.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { RoutesZone } from './routes-zone.js';
+import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
 
 const ROWS = 14;
 
@@ -470,8 +471,7 @@ describe('RoutesZone body editor', () => {
       expect(frame).toContain('name');
       expect(frame).toContain('"ada"');
       expect(frame).toContain('0 lines hidden — still sent');
-      expect(frame).toContain('[enter] edit');
-      expect(frame).toContain('[a] add');
+      expect(footerIdOf(store)).toBe('routes-body-tree-add');
       expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
     } finally {
       instance.unmount();
@@ -484,7 +484,7 @@ describe('RoutesZone body editor', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
-      expect(lastFrame(stdout)).not.toContain('[e] edit body');
+      expect(footerIdOf(store)).toBe('routes-list');
       await press(instance, stdin, 'e');
       expect(store.getState().routesPaneFocus).toBe('list');
       expect(store.getState().bodyDrafts).toEqual({});
@@ -562,7 +562,7 @@ describe('RoutesZone body editor', () => {
       expect(lastFrame(stdout)).toContain('▸ BODY');
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('▸ BODY');
-      expect(lastFrame(stdout)).toContain('[enter] request');
+      expect(footerIdOf(store)).toBe('routes-list-editable');
     } finally {
       instance.unmount();
     }
@@ -944,7 +944,7 @@ describe('RoutesZone request step & sub-tabs', () => {
       expect(store.getState().routesPaneFocus).toBe('detail');
       expect(store.getState().routesPaneTab).toBe('request');
       expect(store.getState().zoneInputCaptured).toBe(true);
-      expect(lastFrame(stdout)).toContain('[ctrl+r] fire');
+      expect(footerIdOf(store)).toMatch(/^routes-(section|rows)/);
       await pressEscape(instance, stdin);
       expect(store.getState().routesPaneFocus).toBe('list');
       expect(store.getState().zoneInputCaptured).toBe(false);

@@ -8,10 +8,6 @@ import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
 import {
-  ACTIVATION_FIRST_FOOTER,
-  ACTIVATION_PAUSE_FOOTER,
-  ACTIVATION_RADIO_FOOTER,
-  OVERWRITE_CONFIRM_FOOTER,
   overwriteConfirmLines,
 } from './activation.logic.js';
 import { ACTIVATION_LABELS, activateLaterHint, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from './wizard.logic.js';
@@ -31,8 +27,8 @@ function Recap({ dialog, candidates }: { dialog: CreateDialogState; candidates: 
   const rows = buildStep3Rows(dialog, candidates);
   return (
     <>
-      <Text color={colors.text}>Nom : {dialog.topic.trim()}</Text>
-      <Text color={colors.text}>Services : {rows.map((row) => row.service).join(', ')}</Text>
+      <Text color={colors.text}>Name: {dialog.topic.trim()}</Text>
+      <Text color={colors.text}>Services: {rows.map((row) => row.service).join(', ')}</Text>
       {rows.map((row) => (
         <Text key={row.path} color={colors['text-dim']}>
           {'  '}
@@ -48,22 +44,21 @@ function PausePanel({ dialog, maxVisibleRows }: { dialog: CreateDialogState; max
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.warning} paddingX={1}>
       <Text color={colors.warning} bold>
-        ACTIVATION EN PAUSE
+        ACTIVATION PAUSED
       </Text>
       <Text color={colors.text}>
-        L'EDT est créé. Ces fichiers non commités seraient écrasés par le passage sur la branche cible — aucune bascule n'a encore eu lieu :
+        The EDT is created. These uncommitted files would be overwritten by the move to the target branch — no switch has happened yet:
       </Text>
       <BoundedList
         items={lines}
         maxVisibleRows={maxVisibleRows}
-        moreBelowLabel="fichiers en dessous"
+        moreBelowLabel="files below"
         renderItem={(line) => (
           <Text key={line.key} color={line.kind === 'head' ? colors.warning : colors.text} wrap="truncate-end">
             {line.text}
           </Text>
         )}
       />
-      <Text color={colors['text-dim']}>{ACTIVATION_PAUSE_FOOTER}</Text>
     </Box>
   );
 }
@@ -74,24 +69,23 @@ function OverwriteConfirm({ dialog, maxVisibleRows }: { dialog: CreateDialogStat
   return (
     <Box flexDirection="column">
       <Text color={colors.error} bold>
-        CONFIRMER L'ÉCRASEMENT
+        CONFIRM OVERWRITE
       </Text>
       <Text color={colors.text}>
-        Les modifications non commitées de ces fichiers (suivis, indexés ou non suivis) seront définitivement détruites, puis l'activation reprendra. Cette action est irréversible.
+        Uncommitted changes in these files (tracked, staged or untracked) will be permanently destroyed, then activation resumes. This cannot be undone.
       </Text>
       <BoundedList
         items={lines}
         maxVisibleRows={maxVisibleRows}
         cursorIndex={cursor}
-        moreAboveLabel="fichiers au-dessus"
-        moreBelowLabel="fichiers en dessous"
+        moreAboveLabel="files above"
+        moreBelowLabel="files below"
         renderItem={(line) => (
           <Text key={line.key} color={line.kind === 'head' ? colors.warning : colors.text} wrap="truncate-end">
             {line.text}
           </Text>
         )}
       />
-      <Text color={colors['text-dim']}>{OVERWRITE_CONFIRM_FOOTER}</Text>
     </Box>
   );
 }
@@ -101,9 +95,8 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
   if (activation.firstEdt) {
     return (
       <>
-        <Text color={colors.accent}>(•) {ACTIVATION_LABELS.firstEdt} — Oui (verrouillé)</Text>
+        <Text color={colors.accent}>(•) {ACTIVATION_LABELS.firstEdt} — Yes (locked)</Text>
         <Text color={colors['text-dim']}>{'    '}{ACTIVATION_LABELS.firstEdtExplanation}</Text>
-        <Text color={colors.accent}>{ACTIVATION_FIRST_FOOTER}</Text>
       </>
     );
   }
@@ -134,7 +127,6 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
       <Text color={switching ? colors.text : colors.accent}>
         {switching ? '( )' : '(•)'} {ACTIVATION_LABELS.stay}
       </Text>
-      <Text color={colors.accent}>{ACTIVATION_RADIO_FOOTER}</Text>
     </>
   );
 }

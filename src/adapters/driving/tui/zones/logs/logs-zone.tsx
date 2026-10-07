@@ -9,6 +9,8 @@ import type { HealthState } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -19,11 +21,7 @@ import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
 import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
-  resolveSelectionDirection,
-  resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import {
@@ -45,6 +43,8 @@ import {
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
+  logsFooterContext,
+  logsLegendHints,
   filterHistoryKeyString,
   filterVisibleLines,
   formatHealthLabel,
@@ -82,6 +82,8 @@ import {
   type LogsPaneFocus,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
@@ -174,7 +176,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Wrap/truncate is per pane (keyed by repoPath), so 'w' targets just the sub-focused/fullscreen
   // pane, with Shift+W as the explicit "apply to every open pane" (see isWrapAllLogsKey).
   const [paneWrap, setPaneWrap] = useState<Record<string, boolean>>({});
-  // The global filter every pane is engaged with by default, the per-pane engagement flags ('g'
+  // The global filter every pane is engaged with by default, the per-pane engagement flags ('i'
   // opts a single pane out), and each pane's own filter ('f'). Ephemeral UI state — never
   // persisted.
   const [globalFilter, setGlobalFilter] = useState<LogFilterSpec>(DEFAULT_LOG_FILTER);
@@ -220,6 +222,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+  useFooterContext(
+    'logs',
+    logsFooterContext(filterEditor !== null, historyGridCursor !== null, {
+      open: logsFullscreenTarget !== null,
+      restartable: logsFullscreenTarget === null || logsPanes[logsFullscreenTarget]?.health !== 'no-container',
+    }),
+    useStore,
+  );
 
   // AppShell's global Left/Right zone-switch fires on the same keypress as this zone's useInput
   // (Ink dispatches to every mounted hook), so moving pane sub-focus with Left/Right would switch
@@ -407,7 +417,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           setHistoryGridCursor(null);
           return;
         }
-        if (key.tab) {
+        // Tab and Shift+Tab both flip: with only two modes, reversing is the same move.
+        if (resolveFocusStep(input, key, 'tab') !== null) {
           // Text and regex are distinct (scope, mode) history lists — flipping mode mid-recall
           // drops any browsing state (a stale `index`/`savedDraft` would be reused against the new
           // mode's list on the next ↑/↓). Like a printable char/Backspace while browsing, the
@@ -499,7 +510,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           closeLogsFullscreen();
           return;
         }
-        // `/`/`f`/`g` — same bare-key-scopes-to-one-pane idiom as `c`/`w` below, fullscreen's one
+        // `/`/`f`/`i` — same bare-key-scopes-to-one-pane idiom as `c`/`w` below, fullscreen's one
         // pane standing in for "the sub-focused grid pane".
         if (input === '/') {
           openGlobalFilterEditor();
@@ -509,7 +520,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           openPaneFilterEditor(logsFullscreenTarget);
           return;
         }
-        if (input === 'g') {
+        if (input === 'i') {
           setPaneFilterEngaged((current) => toggleGlobalFilterEngagement(current, logsFullscreenTarget));
           return;
         }
@@ -551,6 +562,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         if (toggle !== null) {
           setVisibility((current) => toggleVisibilityFlag(current, toggle));
         }
+        return;
+      }
+
+      // R restarts the focused pane once panes are open, so it only retries the load when there
+      // is no pane to restart.
+      if (input === 'R' && servicesStatus === 'error' && activePanes.length === 0) {
+        void loadEdtsBranches();
         return;
       }
 
@@ -707,7 +725,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
-      // `f` opens the sub-focused pane's own filter editor; `g` toggles its engagement with the
+      // `f` opens the sub-focused pane's own filter editor; `i` toggles its engagement with the
       // global filter — same bare-key-scopes-to-one-pane idiom as `c`/`w` above.
       if (input === 'f') {
         const focused = activePanes[subFocus];
@@ -716,7 +734,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
-      if (input === 'g') {
+      if (input === 'i') {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
           setPaneFilterEngaged((current) => toggleGlobalFilterEngagement(current, focused.path));
@@ -772,11 +790,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
             first={
             <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']} minHeight={0} overflow="hidden">
               <Text color={paneFocus === 'edt-list' ? colors.accent : colors['text-dim']}>ACTIVE EDT MEMBERS</Text>
-              {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-              {servicesStatus === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
-              {focusedEdt === undefined ? <DimAnnotation text="No active EDT." /> : null}
+              {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
+              {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={activePanes.length === 0} /> : null}
+              {focusedEdt === undefined ? <StateLine kind="empty" subject="EDT" text="No active EDT." /> : null}
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
-                <DimAnnotation text="No services in the active EDT." />
+                <StateLine kind="empty" subject="services" text="No services in the active EDT." />
               ) : null}
               {/* Bounded to edtListMaxVisibleRows, following the cursor only while this list owns
                   focus — otherwise the window anchors to the top. */}
@@ -801,7 +819,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
-                <DimAnnotation text="No other managed services." />
+                <StateLine kind="empty" subject="services" text="No other managed services." />
               ) : null}
               <BoundedList
                 items={otherServices}
@@ -849,24 +867,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {filterEditor === null ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
                   <BoundedList
-                    items={[
-                      '[Space] toggle',
-                      '[Enter] preview',
-                      '[Ctrl+A] toggle all',
-                      `[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`,
-                      `[o] stdout ${visibility.showStdout ? 'on' : 'off'}`,
-                      `[p] stderr ${visibility.showStderr ? 'on' : 'off'}`,
-                      '[Ctrl+↑/↓] scroll pane',
-                      '[c] clear focused pane',
-                      '[Ctrl+C] clear all panes',
-                      '[w] wrap/truncate this pane',
-                      '[W] wrap/truncate all',
-                      '[R] restart focused pane',
-                      '[/] edit global filter',
-                      "[f] edit this pane's filter",
-                      '[g] toggle global (pane)',
-                      '[Esc] clear filter (cascade)',
-                    ]}
+                    items={logsLegendHints(visibility).map(formatHint)}
                     maxVisibleRows={hintsMaxVisibleRows}
                     renderItem={(text, index) => <DimAnnotation key={index} text={text} />}
                   />

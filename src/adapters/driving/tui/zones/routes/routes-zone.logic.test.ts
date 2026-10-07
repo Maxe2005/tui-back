@@ -2,6 +2,7 @@
 // itself is never invoked by any test (renderToString's fake stdin never emits a keypress), so
 // selection behavior is only verifiable through these functions.
 import { describe, expect, it } from 'vitest';
+import { routesFooterContext, UNAVAILABLE_FOOTER_INPUT, type RoutesFooterInput } from './routes-zone.logic.js';
 import {
   formatFireError,
   filterRoutes,
@@ -134,5 +135,40 @@ describe('resolveEnterFireTarget', () => {
     expect(resolveEnterFireTarget([], 0)).toBeUndefined();
     expect(resolveEnterFireTarget(null, 0)).toBeUndefined();
     expect(resolveEnterFireTarget(undefined, 0)).toBeUndefined();
+  });
+});
+
+describe('routesFooterContext', () => {
+  const READY: RoutesFooterInput = { ...UNAVAILABLE_FOOTER_INPUT, unavailable: false };
+  const pane = (overrides: Partial<RoutesFooterInput>): RoutesFooterInput => ({ ...READY, paneFocused: true, ...overrides });
+  const editor = (overrides: Partial<RoutesFooterInput['editor']>) => ({ open: true, raw: false, editing: false, canAdd: false, ...overrides });
+
+  const cases: Array<[string, RoutesFooterInput, string | null]> = [
+    ['list', READY, 'routes-list'],
+    ['list on a route with an editable body', { ...READY, listEditable: true }, 'routes-list-editable'],
+    ['filter being edited', { ...READY, filterEditing: true }, 'routes-filter'],
+    ['response tab, nothing fired', pane({ paneTab: 'response' }), 'routes-response-empty'],
+    ['response tab, raw body', pane({ paneTab: 'response', responseKind: 'raw' }), 'routes-response-raw'],
+    ['response tab, empty body', pane({ paneTab: 'response', responseKind: 'empty' }), 'routes-response-empty'],
+    ['response tab, JSON tree', pane({ paneTab: 'response', responseKind: 'json' }), 'routes-response-tree'],
+    ['response tab, rules panel', pane({ paneTab: 'response', responseKind: 'json', filterPanelOpen: true }), 'routes-rules-panel'],
+    ['request tab, query params', pane({ section: 'params', rowCount: 2 }), 'routes-rows-readonly'],
+    ['request tab, no params', pane({ section: 'params' }), 'routes-section'],
+    ['request tab, headers with rows', pane({ section: 'headers', rowCount: 1 }), 'routes-rows'],
+    ['request tab, empty query', pane({ section: 'query' }), 'routes-rows-empty'],
+    ['request tab, row being edited', pane({ section: 'headers', rowCount: 1, rowEditing: true }), 'confirm'],
+    ['request tab, body without an open editor', pane({ section: 'body' }), 'routes-section'],
+    ['body editor, tree', pane({ section: 'body', editor: editor({}) }), 'routes-body-tree'],
+    ['body editor, tree with an add target', pane({ section: 'body', editor: editor({ canAdd: true }) }), 'routes-body-tree-add'],
+    ['body editor, raw', pane({ section: 'body', editor: editor({ raw: true }) }), 'routes-body-raw'],
+    ['body editor, value being edited', pane({ section: 'body', editor: editor({ editing: true }) }), 'confirm'],
+    ['body editor, rules panel', pane({ section: 'body', filterPanelOpen: true, editor: editor({}) }), 'routes-rules-panel'],
+    ['list unavailable, nothing captured', { ...UNAVAILABLE_FOOTER_INPUT }, null],
+    ['list unavailable while the pane holds the keyboard', { ...UNAVAILABLE_FOOTER_INPUT, paneFocused: true }, 'busy'],
+    ['list unavailable while the filter is open', { ...UNAVAILABLE_FOOTER_INPUT, filterEditing: true }, 'busy'],
+  ];
+
+  it.each(cases)('%s', (_name, input, expected) => {
+    expect(routesFooterContext(input)).toBe(expected);
   });
 });

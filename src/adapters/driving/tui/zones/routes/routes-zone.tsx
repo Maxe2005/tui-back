@@ -5,7 +5,6 @@
 // `Esc` unwinds sub-editors, then Response → Request and Saved → list, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
-import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -13,6 +12,7 @@ import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { FooterContext } from '../../shared/components/footer-context.js';
 import { JsonEmptyState, JsonRawFallback, JsonTree, JsonRawEditor, JsonTreeEditor } from '../../shared/components/json-tree/json-tree.js';
 import {
   addEntryAtPath,
@@ -78,6 +78,8 @@ import {
   formatRouteRow,
   moveRoutesSelection,
   resolveEnterFireTarget,
+  routesFooterContext,
+  UNAVAILABLE_FOOTER_INPUT,
   resolveRoutesDirection,
 } from './routes-zone.logic.js';
 import {
@@ -99,6 +101,9 @@ import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
 import { RoutesSavedTab } from './routes-saved-tab.js';
 import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
+import { formatHints } from '../../shared/components/hints.js';
+import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -1662,7 +1667,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      const jump = resolveSelectionJump({ ...key, upArrow: false, downArrow: false, tab: false });
+      const jump = resolveSelectionJump(key);
       if (jump !== null) {
         setSelected(jumpSelection(jump, visibleRoutes.length));
         return;
@@ -1686,8 +1691,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus === 'error' && routesError?.code === 'route-exploration-not-activated') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.text}>No route list for this repo.</Text>
+        <StateLine kind="empty" subject="routes" text="No route list for this repo." />
         <DimAnnotation text={routesError.message} />
       </Box>
     );
@@ -1696,6 +1702,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus === 'error') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Text color={colors.error}>{routesError ? routesError.message : 'Route scan failed.'}</Text>
       </Box>
@@ -1705,11 +1712,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus !== 'ready' || routes === null) {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Box flexDirection="row">
-          <Spinner />
-          <Text color={colors['text-dim']}> Loading routes…</Text>
-        </Box>
+        <StateLine kind="loading" subject="routes" />
       </Box>
     );
   }
@@ -1717,8 +1722,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routes.length === 0) {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.text}>No routes discovered for this repo.</Text>
+        <StateLine kind="empty" subject="routes" text="No routes discovered for this repo." />
       </Box>
     );
   }
@@ -1731,63 +1737,28 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const filterActive = filter.value !== '';
   const treeActive = treeFocused && classification !== null;
   const focusedEditable = focused !== undefined && canEditRouteBody(focused);
-  const listHint = filterEditing
-    ? '[enter] apply  [esc] clear'
-    : paneFocused
-      ? '[esc] back to the list'
-      : focusedEditable
-        ? '[enter] request  [/ f] filter  [s] saved  [e] edit body  [home/end] jump'
-        : '[enter] request  [/ f] filter  [s] saved  [home/end] jump';
-  // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
-  // tabs lead it.
-  const paneKeys = '[ctrl+r] fire · [ctrl+←→] tab';
-  const treeHint = !treeActive
-    ? null
-    : classification?.kind === 'raw'
-      ? `[esc] request · [↑↓] scroll · ${paneKeys}`
-      : classification?.kind === 'empty'
-        ? `[esc] request · ${paneKeys}`
-        : filterPanelOpen
-          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : `[esc] request · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level · ${paneKeys}`;
-  // Footer hints reflect editor focus — the sub-editor owns its line while open, the tree mode
-  // lists the edit keys. `[a]` only shows when an add target exists (UX-DR7: never hint an
+  // The footer reflects editor focus — the sub-editor owns the line while open, the tree mode
+  // lists the edit keys. The add key only shows when an add target exists (UX-DR7: never hint an
   // inert key — scalar roots and empty drafts take `r`).
   const editorSelectedRow = editorOpen ? editorRows[clampedEditorSelected] : undefined;
   const editorCanAdd =
     editorSelectedRow !== undefined && editorDraft !== undefined && resolveAddParentPath(editorDraft, editorSelectedRow.path) !== null;
-  const editorHint: string | null = !editorOpen
-    ? null
-    : rawEditor !== null
-      ? '[esc] done · [enter] newline'
-      : scalarEdit !== null || addPrompt !== null
-        ? '[enter] confirm · [esc] cancel'
-        : filterPanelOpen
-          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear · [s] save'
-          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · [s] save · ${paneKeys}`;
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
-  const requestHint: string | null =
-    !paneFocused || paneTab !== 'request'
-      ? null
-      : savePrompt !== null
-        ? savePrompt.duplicate
-          ? '[enter] retry · [ctrl+o] overwrite · [esc] cancel'
-          : '[enter] save · [esc] cancel'
-        : section === 'body'
-          ? (editorHint ?? `[esc] list · [tab] section · [s] save · ${paneKeys}`)
-          : rowEdit !== null || rowAddPrompt !== null
-            ? '[enter] confirm · [esc] cancel'
-            : `[esc] list · [tab] section · [s] save · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
-                section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
-              }${paneKeys}`;
-  const savedHint: string | null =
-    !paneFocused || paneTab !== 'saved'
-      ? null
-      : savedTabDeleteConfirm !== null
-        ? '[enter] delete · [esc] cancel'
-        : '[enter] load · [/] filter · [d] delete · [r] retry · [esc] list · [ctrl+←→] tab';
-  const paneHint =
-    paneTab === 'request' ? requestHint : paneTab === 'saved' ? savedHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
+  const footerContext = routesFooterContext({
+    unavailable: false,
+    filterEditing,
+    paneFocused,
+    paneTab,
+    saveState: savePrompt === null ? 'none' : savePrompt.duplicate ? 'duplicate' : 'naming',
+    savedDeleteConfirm: savedTabDeleteConfirm !== null,
+    listEditable: focusedEditable,
+    filterPanelOpen,
+    responseKind: treeActive ? (classification?.kind ?? null) : null,
+    section,
+    rowEditing: rowEdit !== null || rowAddPrompt !== null,
+    rowCount: rowSectionRows.length,
+    editor: { open: editorOpen, raw: rawEditor !== null, editing: scalarEdit !== null || addPrompt !== null, canAdd: editorCanAdd },
+  });
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1833,6 +1804,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
+      <FooterContext owner="routes" id={footerContext} useStore={useStore} />
       <ZoneLayout
         zoneId="routes"
         useStore={useStore}
@@ -1849,7 +1821,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             ) : null}
             <Box ref={listAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
               {visibleRoutes.length === 0 ? (
-                <Text color={colors['text-dim']}>No routes match the filter.</Text>
+                <StateLine kind="empty" subject="routes" text="No routes match the filter." />
               ) : (
                 <BoundedList
                   items={visibleRoutes}
@@ -1862,7 +1834,6 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 />
               )}
             </Box>
-            <DimAnnotation text={listHint} />
           </Box>
         }
         second={
@@ -1905,20 +1876,19 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 {responseNode}
               </RoutesResponseTab>
             ) : null}
-            {paneHint !== null ? <DimAnnotation text={paneHint} /> : null}
           </Box>
         }
       />
       {overwriteConfirm !== null ? (
-        <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+        <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`}>
           <Box flexDirection="column">
             <Text color={colors.text}>A saved request named "{overwriteConfirm.name}" already exists. Overwriting replaces it.</Text>
-            <Text color={colors.text}>[Enter] overwrite · [Esc] cancel</Text>
+            <Text color={colors.text}>{formatHints([['Enter', 'overwrite'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}
       {pickerOpen ? (
-        <ModalDialog title="Saved requests" onConfirm={() => {}} onCancel={() => {}}>
+        <ModalDialog title="Saved requests">
           <Box flexDirection="column">
             {pickerError !== null ? <Text color={colors.error}>{pickerError}</Text> : null}
             {savedRequests === null ? (
@@ -1932,23 +1902,23 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 noMatchText="No saved requests match."
               />
             )}
-            <DimAnnotation text="[enter] load · [esc] close · [d] delete stale" />
+            <DimAnnotation text={formatHints([['Enter', 'load'], ['Esc', 'close'], ['d', 'delete stale']])} />
           </Box>
         </ModalDialog>
       ) : null}
       {pickerDeleteConfirm !== null ? (
-        <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+        <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`}>
           <Box flexDirection="column">
             <Text color={colors.text}>The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
-            <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
+            <Text color={colors.text}>{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}
       {savedTabDeleteConfirm !== null ? (
-        <ModalDialog title={`Delete "${savedTabDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+        <ModalDialog title={`Delete "${savedTabDeleteConfirm.name}"?`}>
           <Box flexDirection="column">
             <Text color={colors.text}>The saved request "{savedTabDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
-            <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
+            <Text color={colors.text}>{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}

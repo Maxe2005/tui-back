@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyMergeStrategy,
-  commitUpdateConfigBranchEdit,
   confirmUpdateConfigDraft,
   createUpdateConfigDraft,
   type MergeStrategy,
@@ -25,6 +24,7 @@ import {
   toggleMergeSource,
   toggleRowSelection,
   type PanelsViewState,
+  updateConfigFooterContext,
 } from './update-config-panels.logic.js';
 import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
 
@@ -66,16 +66,17 @@ describe('effective values', () => {
   it('is perso as soon as the row departs from the global parameters', () => {
     const api = edtDraft().rows[0]!;
     expect(rowMode(api)).toBe('global');
-    expect(rowMode({ ...api, migrations: 'off' })).toBe('perso');
-    expect(rowMode({ ...api, origin: 'manual' })).toBe('perso');
+    expect(rowMode({ ...api, migrations: 'off' })).toBe('custom');
+    expect(rowMode({ ...api, origin: 'manual' })).toBe('custom');
   });
 });
 
 describe('global lines', () => {
   it('shows the EDT line only under From EDT, and no source lines for all-repos', () => {
-    expect(globalLines(edtDraft())).toEqual(['source', 'migrations', 'cleanRestart']);
-    expect(globalLines(toggleMergeSource(edtDraft()))).toEqual(['source', 'edt', 'migrations', 'cleanRestart']);
-    expect(globalLines(createUpdateConfigDraft('all', ROWS, { layout: 'all-panels' }))).toEqual(['migrations', 'cleanRestart']);
+    expect(globalLines(edtDraft())).toEqual(['source', 'migrations', 'cleanRestart', 'start']);
+    expect(globalLines(toggleMergeSource(edtDraft()))).toEqual(['source', 'edt', 'migrations', 'cleanRestart', 'start']);
+    expect(globalLines(createUpdateConfigDraft('all', ROWS, { layout: 'all-panels' }))).toEqual(['migrations', 'cleanRestart', 'start']);
+    expect(globalLines(createUpdateConfigDraft('edt', ROWS.slice(0, 1)))).toEqual(['migrations', 'cleanRestart', 'start']);
   });
 });
 
@@ -115,7 +116,8 @@ describe('row exceptions', () => {
   });
 
   it('keeps a manual branch across a strategy change and Ctrl+R forgets every exception', () => {
-    const manual = commitUpdateConfigBranchEdit(edtDraft(), 0, 'release/2');
+    const start = edtDraft();
+    const manual = setRow(start, 0, { ...start.rows[0]!, sourceBranch: 'release/2', origin: 'manual' });
     const withToggles = setRow(manual, 0, { ...manual.rows[0]!, migrations: 'off', cleanRestart: 'on' });
     const changed = toggleMergeSource(withToggles);
     expect(changed.rows[0]).toMatchObject({ sourceBranch: 'release/2', origin: 'manual' });
@@ -138,9 +140,20 @@ describe('row exceptions', () => {
 });
 
 describe('resolvePanelsKey', () => {
-  it('Tab switches focus and y confirms', () => {
+  it('Tab switches focus and only Enter on the Start run line confirms (y, Ctrl+N and Enter elsewhere do not)', () => {
     expect(resolvePanelsKey('', { tab: true }, VIEW, edtDraft(), [])).toEqual({ type: 'switch-focus' });
-    expect(resolvePanelsKey('y', {}, VIEW, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('', { return: true }, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'ignore' });
+    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toEqual({ type: 'ignore' });
+    expect(resolvePanelsKey(' ', {}, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'ignore' });
+    expect(resolvePanelsKey('', { return: true }, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'ignore' });
+    expect(resolvePanelsKey('y', {}, VIEW, edtDraft(), [])).toEqual({ type: 'ignore' });
+  });
+
+  it('Home/End jump to the first and last line of the focused panel or table', () => {
+    expect(resolvePanelsKey('', { end: true }, VIEW, edtDraft(), [])).toMatchObject({ type: 'move-panel', cursor: 3 });
+    expect(resolvePanelsKey('', { home: true }, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'move-panel', cursor: 0 });
+    expect(resolvePanelsKey('', { end: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toMatchObject({ type: 'move-table' });
   });
 
   it('Shift+Tab switches focus too, Ctrl+Tab does not', () => {
@@ -194,11 +207,30 @@ describe('computeConfigBudget', () => {
     expect(roomy.tableRows).toBeGreaterThan(10);
   });
 
+  it('lets a one-service screen use an 18-row terminal and flags 17', () => {
+    const draft = createUpdateConfigDraft('edt', ROWS.slice(0, 1), { layout: 'service-panels' });
+    const fits = computeConfigBudget(18, draft, false, 5);
+    expect(fits.tooSmall).toBe(false);
+    expect(fits.tableRows).toBe(1);
+    expect(computeConfigBudget(17, draft, false, 5).tooSmall).toBe(true);
+  });
+
   it('gives the open EDT list lines taken from the table, never more than the setting', () => {
     const draft = toggleMergeSource(edtDraft());
     const closed = computeConfigBudget(30, draft, false, 5);
     const open = computeConfigBudget(30, draft, true, 5);
     expect(open.dropdownLines).toBeLessThanOrEqual(5);
     expect(open.tableRows + open.dropdownLines).toBe(closed.tableRows);
+  });
+});
+
+describe('updateConfigFooterContext', () => {
+  it('names the layer that owns the keyboard: field edit, service box, global panel or table', () => {
+    const view = { focus: 'panel' as const, edtField: null };
+    expect(updateConfigFooterContext(view, null)).toBe('update-config-global');
+    expect(updateConfigFooterContext({ ...view, focus: 'table' }, null)).toBe('update-config-table');
+    expect(updateConfigFooterContext({ ...view, edtField: createSuggestFieldState('') }, null)).toBe('branch-input');
+    expect(updateConfigFooterContext(view, { editing: false })).toBe('update-box');
+    expect(updateConfigFooterContext(view, { editing: true })).toBe('branch-input');
   });
 });

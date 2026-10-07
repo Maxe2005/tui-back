@@ -24,7 +24,7 @@ import {
   type SummaryTone,
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
+import { formatServiceMeta } from '../edts/edts-zone.logic.js';
 import {
   deriveUpdateServiceStatus,
   formatLastUpdateRecap,
@@ -39,21 +39,19 @@ import {
   splitUpdateServiceRows,
   UPDATE_MEMBERS_HEADER,
   UPDATE_OTHERS_HEADER,
+  updateFooterContext,
 } from './update-zone.logic.js';
 import { UpdateServiceDetail } from './update-service-detail.js';
-import { UpdateConfigDialog } from './update-config-dialog.js';
-import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
+import { UPDATE_SERVICE_MENU_ESCAPE, UpdateServiceMenuDialog, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
+import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
-import {
-  beginUpdateConfigBranchEdit,
-  clampUpdateConfigCursor,
-  commitUpdateConfigBranchEdit,
-  resolveUpdateConfigKey,
-  toggleUpdateConfigRow,
-  type BranchAutocompleteState,
-} from './update-config-dialog.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
+import { formatHint, formatHints } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
+import { updateConfigFooterContext } from './update-config-panels.logic.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -61,20 +59,16 @@ import {
 // EDTS_SERVICE_LISTS_CHROME_ROWS.
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
-export const UPDATE_IDLE_PROMPT = '[G] EDT update, [P] this service, [Enter] for service actions.';
-export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
+export const UPDATE_IDLE_PROMPT = formatHints([['M', 'EDT update'], ['P', 'this service'], ['Enter', 'service actions']]);
+export const UPDATE_ALL_REPOS_PROMPT = formatHint(['A', 'all-repos maintenance mode (every managed repo)']);
+export const UPDATE_INTERRUPTED_OFFER = `Last update was interrupted — ${formatHint(['Enter', 'service actions'])}`;
 export const UPDATE_NO_RECAP = 'No update has run yet in this session.';
-export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
-export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
-export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? ([y]/[n])';
-export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted? ([y]/[n])';
-export const UPDATE_ALL_CONFIRM_TITLE = 'ALL-REPOS UPDATE';
-export const UPDATE_ALL_CONFIRM_BODY =
-  'Update every managed repo (outside the active EDT too)? Press [Enter] to confirm, [Esc] to cancel.';
+export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted?';
+export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted?';
 
 // Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
 // always exactly one rendered line.
@@ -147,11 +141,11 @@ export function shouldOpenAllConfirm(input: string, updateStatus: string): boole
   return (input === 'a' || input === 'A') && updateStatus !== 'running';
 }
 
-// The EDT-scoped main trigger — `g` while idle/done/error opens the config pre-scoped to every
+// The EDT-scoped main trigger — `m` while idle/done/error opens the config pre-scoped to every
 // EDT member (never while a run is in flight — a second trigger is rejected by the same guard as
 // every other scope).
 export function shouldOpenEdtConfig(input: string, updateStatus: string): boolean {
-  return (input === 'g' || input === 'G') && updateStatus !== 'running';
+  return (input === 'm' || input === 'M') && updateStatus !== 'running';
 }
 
 // The single-service trigger — `p` while idle/done/error opens the config pre-scoped to the
@@ -161,7 +155,7 @@ export function shouldOpenSingleConfig(input: string, updateStatus: string): boo
 }
 
 // The trigger mapping — `a` opens the pre-run configuration screen pre-scoped to every managed
-// repo, `g` to the EDT, `p` to the highlighted row; `Enter` opens the per-service action menu
+// repo, `m` to the EDT members, `p` to the highlighted row; `Enter` opens the per-service action menu
 // for the selected row (Update this service / Clean restart / Cancel). No trigger ever starts
 // an unconfigured run. Pure because the zone's `useInput` is never driven in tests, so an inline
 // mapping would let a wiring regression back to a direct `runGroupUpdate` go undetected.
@@ -207,10 +201,10 @@ export function resolveAllConfirm(input: string, key: { return?: boolean; escape
 export type QuitConfirmDecision = 'confirm' | 'cancel';
 
 export function resolveQuitConfirm(input: string, key: { return?: boolean; escape?: boolean }): QuitConfirmDecision | null {
-  if (input === 'y' || input === 'Y' || key.return === true) {
+  if (key.return === true) {
     return 'confirm';
   }
-  if (input === 'n' || input === 'N' || key.escape === true) {
+  if (key.escape === true) {
     return 'cancel';
   }
   return null;
@@ -222,16 +216,18 @@ export function resolveQuitConfirm(input: string, key: { return?: boolean; escap
 // continues) so a stray keystroke never cancels the run.
 export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
 
-export const UPDATE_BLOCKER_MENU_ITEMS = Object.freeze([
+export type UpdateBlockerMenuValue = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+
+export type UpdateBlockerMenuItem = MenuItem<UpdateBlockerMenuValue>;
+
+export const UPDATE_BLOCKER_MENU_ESCAPE: UpdateBlockerMenuValue = 'cancel-repo';
+
+export const UPDATE_BLOCKER_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Object.freeze([
   { value: 'stash', label: 'Stash changes and continue' },
   { value: 'edited', label: 'Open in editor, then retry' },
   { value: 'cancel-repo', label: 'Cancel this repo (continue with the rest)' },
   { value: 'cancel-run', label: 'Cancel the whole run' },
-] as const);
-
-export type UpdateBlockerMenuValue = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number]['value'];
-
-export type UpdateBlockerMenuItem = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number];
+]);
 
 // The choices offered for a blocker kind. A merge conflict drops `stash`: git refuses to
 // stash unmerged paths, and once the conflict is resolved and staged a stash silently
@@ -266,49 +262,6 @@ export function formatBlockerRetry(blocker: UpdateBlocker): string | null {
   }
   const reason = blocker.retryReason !== undefined && blocker.retryReason !== '' ? ` — ${blocker.retryReason}` : '';
   return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
-}
-
-export type BlockerMenuKey = {
-  upArrow?: boolean;
-  downArrow?: boolean;
-  home?: boolean;
-  end?: boolean;
-  return?: boolean;
-  escape?: boolean;
-};
-
-export type BlockerMenuStep = { type: 'move'; cursor: number } | { type: 'choose'; choice: UpdateBlockerMenuValue } | { type: 'ignore' };
-
-export function resolveBlockerMenuKey(
-  input: string,
-  key: BlockerMenuKey,
-  cursor: number,
-  items: readonly UpdateBlockerMenuItem[] = UPDATE_BLOCKER_MENU_ITEMS,
-): BlockerMenuStep {
-  const length = items.length;
-  if (key.home === true) {
-    return { type: 'move', cursor: 0 };
-  }
-  if (key.end === true) {
-    return { type: 'move', cursor: length - 1 };
-  }
-  if (key.upArrow === true) {
-    return { type: 'move', cursor: Math.max(0, cursor - 1) };
-  }
-  if (key.downArrow === true) {
-    return { type: 'move', cursor: Math.min(length - 1, cursor + 1) };
-  }
-  if (key.return === true) {
-    const item = items[cursor];
-    if (item === undefined) {
-      return { type: 'ignore' };
-    }
-    return { type: 'choose', choice: item.value };
-  }
-  if (key.escape === true) {
-    return { type: 'choose', choice: 'cancel-repo' };
-  }
-  return { type: 'ignore' };
 }
 
 // The driving-side editor launch — core only ever sees the `edited` choice. Spawns the resolved
@@ -412,13 +365,6 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // Whether service focus is dropped (`Esc`): the right pane then shows the last-update recap
   // and the idle footer prompt; an arrow key hands focus back. Zone-local UI state.
   const [recapActive, setRecapActive] = useState(initialRecap);
-  // The config screen's keyboard cursor + in-progress branch edit — zone-local UI state. The draft
-  // itself (rows, toggles, error) is run state in the store. The edit hosts the shared
-  // autocomplete state; its branch source lives in the two states below, fetched once per edit.
-  const [configCursor, setConfigCursor] = useState(0);
-  const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
-  const [configBranches, setConfigBranches] = useState<string[]>([]);
-  const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -435,6 +381,20 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     chooseMergeSourceEdt,
     listBranches: listBranchesAction,
   });
+
+  // The layer that owns the keyboard, in the same priority order as the key handler below.
+  useFooterContext(
+    'update',
+    updateFooterContext({
+      blocker: updateBlocker !== null,
+      config: updateConfig !== null ? updateConfigFooterContext(configPanels.view, configPanels.box) : null,
+      servicePick: updateServicePick !== null,
+      quitConfirm,
+      serviceMenu: serviceMenu !== null,
+      selectRequest: updateServiceSelectRequest,
+    }),
+    useStore,
+  );
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -520,20 +480,6 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     setEditorError(null);
   }, [updateBlocker]);
 
-  // A newly opened config screen always starts browsing on its first row with no branch
-  // edit in flight. Keyed on the open boolean — never the draft object — so a toggle or
-  // branch commit (which replaces the draft) doesn't snap the cursor back to 0 or wipe an
-  // edit session.
-  const isUpdateConfigOpen = updateConfig !== null;
-  useEffect(() => {
-    if (isUpdateConfigOpen) {
-      setConfigCursor(0);
-      setConfigEditing(null);
-      setConfigBranches([]);
-      setConfigBranchesStatus('loading');
-    }
-  }, [isUpdateConfigOpen]);
-
   // A newly opened service pick always starts unfiltered on its first row. The single reset point
   // is the pick *closing* — whoever closed it (Enter, Esc, or the store on a run start/reset) —
   // so the next open never paints a frame of the previous session's filter. Keyed on the open
@@ -564,42 +510,12 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);
 
-  // Fetches the edited row's own listBranches(repoPath) once per branch-edit session —
-  // the same shape as the EDT zone's own branch-picker effect (keyed on primitives, stale
-  // responses dropped). Opening an edit resets the source to loading (see the begin-edit
-  // dispatch below); closing it leaves the last source in place, unused until the next
-  // edit re-arms it.
-  const editingRepoPath =
-    updateConfig !== null && configEditing !== null
-      ? (updateConfig.rows[clampUpdateConfigCursor(updateConfig, configCursor)]?.repoPath ?? null)
-      : null;
-  const isConfigEditing = configEditing !== null;
-  useEffect(() => {
-    if (editingRepoPath === null || !isConfigEditing || configBranchesStatus !== 'loading') {
-      return;
-    }
-    let cancelled = false;
-    const repoPath = editingRepoPath;
-    void (async () => {
-      const result = await listBranchesAction(repoPath);
-      if (cancelled) {
-        return;
-      }
-      setConfigBranches(result.ok ? result.data : []);
-      setConfigBranchesStatus(result.ok ? 'ready' : 'error');
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingRepoPath, isConfigEditing, configBranchesStatus, listBranchesAction]);
-
   useInput(
     (input, key) => {
       // While a repo waits on the resolution seam, the menu owns every keystroke — `q` must not
       // open the quit-confirm underneath it (cancel the run through the menu instead).
       if (updateBlocker !== null) {
-        const step = resolveBlockerMenuKey(input, key, blockerCursor, blockerMenuItems(updateBlocker.kind));
+        const step = resolveMenuKey(key, blockerCursor, blockerMenuItems(updateBlocker.kind), UPDATE_BLOCKER_MENU_ESCAPE);
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -621,47 +537,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       // While the pre-run configuration screen is open it owns every keystroke — the run starts
       // only through its confirm path, with exactly the confirmed configuration.
       if (updateConfig !== null) {
-        if (updateConfig.layout !== 'simple') {
-          configPanels.handleKey(input, key);
-          return;
-        }
-        const step = resolveUpdateConfigKey(
-          input,
-          key,
-          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing },
-          updateConfig,
-          configBranches,
-        );
-        if (step.type === 'move') {
-          setConfigCursor(step.cursor);
-        } else if (step.type === 'toggle') {
-          setUpdateConfig(toggleUpdateConfigRow(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor)));
-        } else if (step.type === 'begin-edit') {
-          const editing = beginUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor));
-          if (editing !== null) {
-            setConfigEditing(editing);
-            // Re-arm the per-row branch source: a fresh edit always starts loading, and the
-            // effect above fetches this row's own listBranches once.
-            setConfigBranches([]);
-            setConfigBranchesStatus('loading');
-          }
-        } else if (step.type === 'edit') {
-          setConfigEditing(step.editing);
-        } else if (step.type === 'commit-edit') {
-          if (configEditing !== null) {
-            setUpdateConfig(
-              commitUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor), configEditing.value),
-            );
-            setConfigEditing(null);
-          }
-        } else if (step.type === 'cancel-edit') {
-          setConfigEditing(null);
-        } else if (step.type === 'confirm') {
-          void confirmUpdateConfig();
-        } else if (step.type === 'cancel') {
-          setConfigEditing(null);
-          closeUpdateConfig();
-        }
+        configPanels.handleKey(input, key);
         return;
       }
       // While the service quick-pick is open it owns every keystroke — the shared pick reducer
@@ -701,7 +577,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       // service; clean restart runs the standalone single-service use-case for that repo alone.
       if (serviceMenu !== null) {
         const menuItems = visibleServiceMenuItems(serviceMenuRestartAvailable);
-        const step = resolveServiceMenuKey(input, key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems);
+        const step = resolveMenuKey(key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems, UPDATE_SERVICE_MENU_ESCAPE);
         if (step.type === 'move') {
           setServiceMenuCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -725,6 +601,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         setRecapActive(recapToggle.recapActive);
         return;
       }
+      if (input === 'R' && servicesStatus === 'error' && updateStatus !== 'running') {
+        void loadEdtsBranches();
+        return;
+      }
       // The service list's own cursor — moves regardless of run state (browsing is harmless
       // mid-run); none of the triggers below use arrow/Home/End.
       const jump = resolveSelectionJump(key);
@@ -743,7 +623,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
         return;
       }
-      // `a`/`g`/`p` pre-scope the pre-run configuration screen to every managed repo, the EDT,
+      // `a`/`m`/`p` pre-scope the pre-run configuration screen to every managed repo, the EDT,
       // or the highlighted row; `Enter` opens the row-local action menu — no git/docker action
       // runs before a choice is confirmed through its own path.
       const trigger = resolveUpdateTrigger(input, key, updateStatus);
@@ -848,10 +728,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         first={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <Text color={colors['text-dim']}>SERVICES</Text>
-            {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-            {servicesStatus === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+            {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
+            {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={updateStatus !== 'running'} /> : null}
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
-              <Text color={colors['text-dim']}>No managed services found.</Text>
+              <StateLine kind="empty" subject="managed services" text="No managed services found." />
             ) : null}
             {/* Two distinct panes like the EDTs zone's, resizable through boundary 1. Every row
                 always carries exactly one glyph from the closed
@@ -946,7 +826,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                     </Box>
                   ))
                 ) : isAllRun || runningMembers.length === 0 ? (
-                  <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
+                  <StateLine kind="loading" subject="member services" />
                 ) : (
                   runningMembers.map((member) => (
                     <Box key={member.repoPath}>
@@ -1007,10 +887,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
           </Box>
         }
       />
-      <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
+      <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
-      {updateConfig !== null && updateConfig.layout !== 'simple' ? (
+      {updateConfig !== null ? (
         <UpdateConfigPanels
           draft={updateConfig}
           view={configPanels.view}
@@ -1022,30 +902,19 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
           boxContext={configPanels.boxContext}
         />
       ) : null}
-      {updateConfig !== null && updateConfig.layout === 'simple' ? (
-        <UpdateConfigDialog
-          draft={updateConfig}
-          view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
-          branches={configBranches}
-          branchesStatus={configBranchesStatus}
-          maxRows={branchDropdownMaxRows}
-        />
-      ) : null}
       {serviceMenu !== null ? (
         <UpdateServiceMenuDialog service={serviceMenu.service} cursor={clampedServiceMenuCursor} items={serviceMenuItems} />
       ) : null}
       {/* The no-arg `:update-service` fallback — a filterable service quick-pick. Confirming a
           row opens the config pre-scoped to that one service; Esc closes with nothing opened. */}
       {updateServicePick !== null ? <UpdateServicePickDialog state={pickState} candidates={updateServicePick} /> : null}
-      <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
+      <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
             {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
             {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
-            {blockerMenuItems(updateBlocker.kind).map((item, index) => (
-              <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
-            ))}
+            <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
           </Box>
         ) : null}
       </ModalDialog>

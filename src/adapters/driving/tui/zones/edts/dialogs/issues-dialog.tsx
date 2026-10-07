@@ -7,6 +7,7 @@ import type { BranchDivergenceEntryError } from '../../../../../../core/edt/list
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import { explainIssueErrorCode, explainUnreachable } from '../edts-zone.logic.js';
+import { StateLine } from '../../../shared/components/state-line.js';
 
 export type IssuesDialogViewProps = {
   unreachable: readonly string[];
@@ -15,9 +16,9 @@ export type IssuesDialogViewProps = {
 
 export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps) {
   return (
-    <ModalDialog title="SERVICE LISTING ISSUES" onConfirm={() => {}} onCancel={() => {}} open={true} maxHeight={20}>
+    <ModalDialog title="SERVICE LISTING ISSUES" open={true} maxHeight={20}>
       <Box flexDirection="column">
-        {unreachable.length === 0 && errors.length === 0 ? <Text color={colors.text}>No issues.</Text> : null}
+        {unreachable.length === 0 && errors.length === 0 ? <StateLine kind="empty" subject="issues" text="No issues." /> : null}
         {unreachable.map((path) => {
           const { reason, suggestion } = explainUnreachable();
           return (
@@ -41,7 +42,6 @@ export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps)
             </Box>
           );
         })}
-        <Text color={colors.text}>[Esc] close</Text>
       </Box>
     </ModalDialog>
   );

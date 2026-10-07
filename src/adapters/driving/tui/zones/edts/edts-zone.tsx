@@ -11,6 +11,9 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint, formatHints } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
+import { edtsFooterContext } from './edts-footer-context.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -33,15 +36,11 @@ import {
   initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
   resolveIssuesSeverity,
   type PaneFocus,
   resolveActionHint,
   resolveCandidateListState,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   type DeleteDialogState,
   type EdtDialogState,
 } from './edts-zone.logic.js';
@@ -60,6 +59,8 @@ import {
   resolutionRepos,
   type LocalBranchList,
 } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above the splitter,
 // both section headers, and the loading/error/issues lines) subtracted from the window size
@@ -315,6 +316,7 @@ export function EdtsZone({
   }, [focusedEdt?.ulid]);
 
   const dialogOpen = dialog.kind !== 'none';
+  useFooterContext('edts', edtsFooterContext(dialog, { registryEmpty: edtsRows.length === 0, resolutionPending: switchDirtyRepos !== null }), useStore);
 
   // No EDT exists -> the create wizard, never a bare/empty list. Auto-opens once the list has
   // genuinely resolved to empty (never while still loading, never on a load error).
@@ -561,7 +563,7 @@ export function EdtsZone({
             ? {
                 ...prev,
                 submitting: false,
-                error: `EDT « ${created.topic} » créé, mais introuvable après rechargement — basculez-y depuis la liste des EDT.`,
+                error: `EDT “${created.topic}” was created but could not be found after reload — switch to it from the EDT list.`,
                 activation: { ...prev.activation, created, outcome: 'not-activated' },
               }
             : prev,
@@ -735,6 +737,19 @@ export function EdtsZone({
       return;
     }
 
+    if (input === 'R' && (edtsStatus === 'error' || status === 'error')) {
+      // Reload only the failed source(s); ignored while any load is still in flight.
+      if (edtsStatus !== 'loading' && status !== 'loading') {
+        if (status === 'error') {
+          void loadEdtsBranches();
+        }
+        if (edtsStatus === 'error') {
+          void loadEdts();
+        }
+      }
+      return;
+    }
+
     // Opens the issues detail dialog from any pane, like the summary line's "[i] details" hint —
     // only reachable when there's actually something to show.
     if (input === 'i' && issuesSummary !== null) {
@@ -821,10 +836,10 @@ export function EdtsZone({
               first={
               <>
               <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
-              {edtsLoading ? <Text color={colors['text-dim']}>Loading EDTs…</Text> : null}
-              {edtsStatus === 'error' ? <Text color={colors.error}>Failed to load EDTs</Text> : null}
+              {edtsLoading ? <StateLine kind="loading" subject="EDTs" /> : null}
+              {edtsStatus === 'error' ? <StateLine kind="error" subject="EDTs" retry /> : null}
               {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
-                <Text color={colors['text-dim']}>No EDTs yet.</Text>
+                <StateLine kind="empty" subject="EDTs" />
               ) : null}
               {edtsRows.map((entry, index) => (
                 <ListRow
@@ -842,7 +857,7 @@ export function EdtsZone({
                   active={entry.ulid === activeEdtUlid}
                 />
               ))}
-              {!dialogOpen ? <DimAnnotation text="[Enter] switch/modify  [Tab] focus" /> : null}
+              {!dialogOpen ? <DimAnnotation text={formatHints([['Enter', 'switch/modify'], ['Tab', 'focus']])} /> : null}
               </>
               }
               second={
@@ -853,16 +868,16 @@ export function EdtsZone({
               {/* issuesSummary counts unreachable/error services across the whole list, so it
                   shows once here, above both groups, never nested under one where a flagged
                   service in the other would go unreported. */}
-              {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-              {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+              {loading ? <StateLine kind="loading" subject="services" /> : null}
+              {status === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
               {/* Colored by severity (not the uniform dim gray of other DimAnnotation lines) so a
-                  listing problem is noticed, not skimmed past — plus an `[i] details` hint into
-                  the read-only issues dialog. */}
+                  listing problem is noticed, not skimmed past — plus a details hint into the
+                  read-only issues dialog. */}
               {issuesSummary ? (
                 <Box paddingLeft={2}>
                   <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold>
                     {issuesSeverity === 'error' ? '✖' : '▲'} {issuesSummary}
-                    {!dialogOpen ? '  [i] details' : ''}
+                    {!dialogOpen ? `  ${formatHint(['i', 'details'])}` : ''}
                   </Text>
                 </Box>
               ) : null}
@@ -877,7 +892,7 @@ export function EdtsZone({
                   <>
                     <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
                     {!loading && status !== 'error' && edtServices.length === 0 ? (
-                      <Text color={colors['text-dim']}>No services in this EDT.</Text>
+                      <StateLine kind="empty" subject="services" text="No services in this EDT." />
                     ) : null}
                     {/* Bounded to edtServicesMaxVisibleRows — only the rendered window, never the
                         content/selection/action semantics. */}
@@ -904,7 +919,7 @@ export function EdtsZone({
                 <>
                 <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
                 {!loading && status !== 'error' && otherServices.length === 0 ? (
-                  <Text color={colors['text-dim']}>No managed services found.</Text>
+                  <StateLine kind="empty" subject="managed services" text="No managed services found." />
                 ) : null}
                 {/* Bounded to otherServicesMaxVisibleRows. */}
                 <BoundedList
@@ -941,8 +956,8 @@ export function EdtsZone({
                     : 'No EDT selected.'}
                 </DetailPane>
                 {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
-                {edtActionLogStatus === 'loading' && <DimAnnotation text="Loading action history…" />}
-                {edtActionLogStatus === 'error' && <DimAnnotation text="Failed to load action history" />}
+                {edtActionLogStatus === 'loading' && <StateLine kind="loading" subject="action history" />}
+                {edtActionLogStatus === 'error' && <StateLine kind="error" subject="action history" />}
               </>
             ) : paneFocus === 'edt-services' ? (
               <>

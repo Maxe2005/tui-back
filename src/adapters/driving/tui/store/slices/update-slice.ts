@@ -937,11 +937,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         const [listed, active] = await Promise.all([deps.edtRegistry.list(), deps.state.readActiveEdt()]);
         const source = listed.ok ? listed.data.find((entry) => entry.ulid === ulid) : undefined;
         if (source === undefined) {
-          set({ updateConfig: { ...draft, error: "L'EDT choisi n'existe plus." } });
+          set({ updateConfig: { ...draft, error: 'The chosen EDT no longer exists.' } });
           return;
         }
         if (!active.ok || source.ulid === active.data) {
-          set({ updateConfig: { ...draft, error: "Un EDT ne peut pas être sa propre source de merge." } });
+          set({ updateConfig: { ...draft, error: 'An EDT cannot be its own merge source.' } });
           return;
         }
         const resolved = await loadMergeSourcesFromEdt(deps.git, draft.rows, source);

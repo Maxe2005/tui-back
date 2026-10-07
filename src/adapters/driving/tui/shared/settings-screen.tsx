@@ -10,7 +10,11 @@ import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
 import { TextInputLine } from './components/text-input-line.js';
+import { formatHint } from './components/hints.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
 import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
@@ -25,6 +29,7 @@ import {
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
+import { StateLine } from './components/state-line.js';
 
 export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
 
@@ -174,11 +179,9 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
     }
     return { type: 'edit', editing: nextTextInputValue(view.editing, input, key) };
   }
-  if (key.upArrow) {
-    return { type: 'move', cursor: moveHintCursor(view.cursor, 'up', GENERAL_SETTINGS_ROWS.length) };
-  }
-  if (key.downArrow) {
-    return { type: 'move', cursor: moveHintCursor(view.cursor, 'down', GENERAL_SETTINGS_ROWS.length) };
+  const cursor = nextCursorForKey(key, view.cursor, GENERAL_SETTINGS_ROWS.length);
+  if (cursor !== null) {
+    return { type: 'move', cursor };
   }
   const row = GENERAL_SETTINGS_ROWS[view.cursor];
   if (row === 'quit-shortcut' && input === ' ') {
@@ -194,20 +197,10 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
 export type HideableActionHint = { id: string; label: string };
 
 export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
-  { id: 'edts', label: 'EDT selector — "[Enter] Switch" / "[Enter] Modify"' },
-  { id: 'edt-services', label: 'EDT services — "[Enter] Remove / Change branch"' },
-  { id: 'other-services', label: 'Other services — "[Enter] Add to EDT"' },
+  { id: 'edts', label: `EDT selector — "${formatHint(['Enter', 'Switch'])}" / "${formatHint(['Enter', 'Modify'])}"` },
+  { id: 'edt-services', label: `EDT services — "${formatHint(['Enter', 'Remove / Change branch'])}"` },
+  { id: 'other-services', label: `Other services — "${formatHint(['Enter', 'Add to EDT'])}"` },
 ];
-
-// Generic clamped cursor mover — reused for the EDTs tab's group-list cursor and both of its
-// checkbox cursors (each just an index into a small fixed-length list).
-export function moveHintCursor(current: number, direction: 'up' | 'down', length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
-}
 
 // Toggles `id` in `hidden`, never mutating the input array (Settings.edts.hiddenActionHints and
 // hiddenActionTypes are each a string[], not a Set). Shared by both EDTs checkbox groups.
@@ -283,6 +276,36 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'filter-history-dedup', label: 'Filter history dedup' },
   { id: 'clear-history', label: 'Clear history' },
 ];
+
+const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId, FooterContextId> = {
+  'hint-visibility': 'settings-toggle',
+  'action-types': 'settings-toggle',
+  'branch-dropdown-rows': 'settings-adjust',
+  'buffer-size': 'settings-adjust',
+  'start-with-history': 'settings-toggle',
+  'filter-history-size': 'settings-adjust',
+  'filter-history-grid': 'settings-adjust',
+  'filter-history-dedup': 'settings-toggle',
+  'clear-history': 'settings-run',
+};
+
+// The footer context of the current tab and drill-down level: a text edit is a plain
+// confirm/cancel, a group list opens groups, and each group advertises its own control.
+export function settingsFooterContext(
+  tab: SettingsTab,
+  state: { generalEditing: boolean; edtsGroup: SettingsGroupId | null; logsGroup: LogsSettingsGroupId | null },
+): FooterContextId {
+  switch (tab) {
+    case 'general':
+      return state.generalEditing ? 'confirm' : 'settings-general';
+    case 'command-palette':
+      return 'settings-palette';
+    case 'edts':
+      return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
+    case 'logs':
+      return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
+  }
+}
 
 // "Clear history" is the one Logs group holding more than a single field — its own small
 // Up/Down row list, one level below the group list, mirroring the EDTs tab's own two-level
@@ -367,6 +390,12 @@ export function SettingsScreen({
   // cancels the edit rather than closing the screen.
   const drilledIn =
     (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
+
+  useFooterContext(
+    'settings',
+    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup }),
+    useStore,
+  );
 
   useInput((input, key) => {
     if (key.escape) {
@@ -461,15 +490,12 @@ export function SettingsScreen({
       // clears that one service's two lists (text + regex), Esc (handled above) steps back to
       // the "Clear history" group's row list.
       if (logsClearServiceOpen) {
-        if (key.upArrow) {
-          setLogsClearServiceCursor((current) => moveHintCursor(current, 'up', logsServices.length));
+        const moved = nextCursorForKey(key, logsClearServiceCursor, logsServices.length);
+        if (moved !== null) {
+          setLogsClearServiceCursor(moved);
           return;
         }
-        if (key.downArrow) {
-          setLogsClearServiceCursor((current) => moveHintCursor(current, 'down', logsServices.length));
-          return;
-        }
-        if (key.return || input === ' ') {
+        if (key.return) {
           const service = logsServices[logsClearServiceCursor];
           if (service) {
             clearServiceFilterHistory(service.path);
@@ -481,16 +507,13 @@ export function SettingsScreen({
       // "Clear history" is the one Logs group with more than one field — its own small Up/Down
       // row list, Enter triggers whichever action is highlighted.
       if (logsGroup === 'clear-history') {
-        if (key.upArrow) {
-          setLogsClearRowCursor((current) => moveHintCursor(current, 'up', LOGS_CLEAR_ROWS.length));
-          return;
-        }
-        if (key.downArrow) {
-          setLogsClearRowCursor((current) => moveHintCursor(current, 'down', LOGS_CLEAR_ROWS.length));
+        const moved = nextCursorForKey(key, logsClearRowCursor, LOGS_CLEAR_ROWS.length);
+        if (moved !== null) {
+          setLogsClearRowCursor(moved);
           return;
         }
         const row = LOGS_CLEAR_ROWS[logsClearRowCursor];
-        if (row === 'clear-global' && (key.return || input === ' ')) {
+        if (row === 'clear-global' && key.return) {
           clearGlobalFilterHistory();
           return;
         }
@@ -563,12 +586,9 @@ export function SettingsScreen({
       }
 
       // logsGroup === null: the group-list level — Up/Down navigates, Enter drills in.
-      if (key.upArrow) {
-        setLogsGroupCursor((current) => moveHintCursor(current, 'up', LOGS_SETTINGS_GROUPS.length));
-        return;
-      }
-      if (key.downArrow) {
-        setLogsGroupCursor((current) => moveHintCursor(current, 'down', LOGS_SETTINGS_GROUPS.length));
+      const moved = nextCursorForKey(key, logsGroupCursor, LOGS_SETTINGS_GROUPS.length);
+      if (moved !== null) {
+        setLogsGroupCursor(moved);
         return;
       }
       if (key.return) {
@@ -586,12 +606,9 @@ export function SettingsScreen({
 
     if (!drilledIn) {
       // The group-list level — Up/Down navigates, Enter drills in.
-      if (key.upArrow) {
-        setGroupCursor((current) => moveHintCursor(current, 'up', SETTINGS_GROUPS.length));
-        return;
-      }
-      if (key.downArrow) {
-        setGroupCursor((current) => moveHintCursor(current, 'down', SETTINGS_GROUPS.length));
+      const moved = nextCursorForKey(key, groupCursor, SETTINGS_GROUPS.length);
+      if (moved !== null) {
+        setGroupCursor(moved);
         return;
       }
       if (key.return) {
@@ -604,12 +621,9 @@ export function SettingsScreen({
     }
 
     if (edtsGroup === 'hint-visibility') {
-      if (key.upArrow) {
-        setHintCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_HINTS.length));
-        return;
-      }
-      if (key.downArrow) {
-        setHintCursor((current) => moveHintCursor(current, 'down', HIDEABLE_ACTION_HINTS.length));
+      const moved = nextCursorForKey(key, hintCursor, HIDEABLE_ACTION_HINTS.length);
+      if (moved !== null) {
+        setHintCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -648,12 +662,9 @@ export function SettingsScreen({
     }
 
     // edtsGroup === 'action-types'
-    if (key.upArrow) {
-      setActionTypeCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_TYPES.length));
-      return;
-    }
-    if (key.downArrow) {
-      setActionTypeCursor((current) => moveHintCursor(current, 'down', HIDEABLE_ACTION_TYPES.length));
+    const moved = nextCursorForKey(key, actionTypeCursor, HIDEABLE_ACTION_TYPES.length);
+    if (moved !== null) {
+      setActionTypeCursor(moved);
       return;
     }
     if (input === ' ') {
@@ -667,7 +678,7 @@ export function SettingsScreen({
   });
 
   return (
-    <ModalDialog title="SETTINGS" open onConfirm={() => {}} onCancel={onClose}>
+    <ModalDialog title="SETTINGS" open>
       <Box flexDirection="column">
         <Box flexDirection="row">
           {SETTINGS_TABS.map((t) => {
@@ -710,11 +721,11 @@ export function SettingsScreen({
               )}
             </Box>
             {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
-              <DimAnnotation text="Space to toggle. Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
+              <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
             ) : generalEditing !== null ? (
               <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
             ) : (
-              <DimAnnotation text="Enter to edit. Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
+              <DimAnnotation text="Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
             )}
           </Box>
         ) : null}
@@ -724,7 +735,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Up/Down to adjust, or type a digit (1-9)." />
+            <DimAnnotation text="Rows of the command grid before it scrolls." />
           </Box>
         ) : null}
 
@@ -741,7 +752,6 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter to open a group. Esc to close." />
           </Box>
         ) : null}
 
@@ -751,7 +761,7 @@ export function SettingsScreen({
               Log buffer size (lines per pane): <Text color={colors.accent}>{settings.logs.bufferSize}</Text>
             </Text>
             <DimAnnotation
-              text={`Left/Right: ±${LOG_BUFFER_SIZE_STEP} per press, or a typed digit (1-9) for a x100 preset. Applies to new streams only — already-running panes keep their current buffer size. Esc for the group list.`}
+              text={`Steps of ${LOG_BUFFER_SIZE_STEP} lines; a digit sets a x100 preset. Applies to new streams only — already-running panes keep their current buffer size.`}
             />
           </Box>
         ) : null}
@@ -762,7 +772,6 @@ export function SettingsScreen({
               label="Start streaming with the most recent history"
               state={settings.logs.startWithHistory ? 'checked' : 'unchecked'}
             />
-            <DimAnnotation text="Space to toggle. Esc for the group list." />
           </Box>
         ) : null}
 
@@ -771,7 +780,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Filter history size (entries per list): <Text color={colors.accent}>{settings.logs.filterHistorySize}</Text>
             </Text>
-            <DimAnnotation text={`Left/Right: ±${FILTER_HISTORY_SIZE_STEP} per press. Esc for the group list.`} />
+            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
           </Box>
         ) : null}
 
@@ -780,7 +789,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Filter history grid max rows: <Text color={colors.accent}>{settings.logs.filterHistoryGridMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Left/Right: ±1 per press, or a typed digit (1-9). Esc for the group list." />
+            <DimAnnotation text="Steps of 1 row; a digit sets the value." />
           </Box>
         ) : null}
 
@@ -790,7 +799,7 @@ export function SettingsScreen({
               label="Dedup filter history (one instance per filter)"
               state={settings.logs.filterHistoryDedup ? 'checked' : 'unchecked'}
             />
-            <DimAnnotation text="Space to toggle. Checked: reusing a filter moves it to the most recent place instead of storing it twice. Esc for the group list." />
+            <DimAnnotation text="Checked: reusing a filter moves it to the most recent place instead of storing it twice." />
           </Box>
         ) : null}
 
@@ -807,7 +816,6 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter runs the highlighted action. Esc for the group list." />
           </Box>
         ) : null}
 
@@ -815,7 +823,7 @@ export function SettingsScreen({
           // The "clear a service's history" row's drill-down — a plain Up/Down list over every
           // manifest service, never limited to the active EDT's own members.
           <Box flexDirection="column">
-            {logsServices.length === 0 ? <DimAnnotation text="No manifest services loaded yet." /> : null}
+            {logsServices.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
             {logsServices.map((service, index) => {
               const highlighted = index === logsClearServiceCursor;
               return (
@@ -825,7 +833,7 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter to clear that service's filter history (text + regex). Esc for the row list." />
+            <DimAnnotation text="Clears that service's filter history (text + regex)." />
           </Box>
         ) : null}
 
@@ -842,7 +850,6 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter to open a group. Esc to close." />
           </Box>
         ) : null}
 
@@ -863,7 +870,7 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle — checked hides that hint from the EDT detail pane. Esc for the group list." />
+            <DimAnnotation text="Checked hides that hint from the EDT detail pane." />
           </Box>
         ) : null}
 
@@ -882,7 +889,7 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle — checked hides that action type from the Recent actions log. Esc for the group list." />
+            <DimAnnotation text="Checked hides that action type from the Recent actions log." />
           </Box>
         ) : null}
 
@@ -891,7 +898,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Branch dropdown max rows: <Text color={colors.accent}>{settings.edts.branchDropdownMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Up/Down or Left/Right to adjust, or type a digit (1-9). Caps the branch autocomplete dropdown before its … N more line. Esc for the group list." />
+            <DimAnnotation text="Caps the lines of the autocomplete dropdown, “N more” indicators included." />
           </Box>
         ) : null}
       </Box>

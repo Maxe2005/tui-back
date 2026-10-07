@@ -8,10 +8,12 @@ import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition 
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import type { NavigationKey } from '../../keybindings/index.js';
+import type { NavigationKey } from '../../shared/keys/navigation-key.js';
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
+import { formatHint } from '../../shared/components/hints.js';
+import type { MenuItem } from '../../shared/components/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
@@ -147,51 +149,6 @@ export function explainUnreachable(): IssueExplanation {
   };
 }
 
-// The arrow-key row-focus transition, interpreted as a pure function so it is unit-testable
-// (renderToString's fake stdin never invokes useInput). Arrows/Home/End only — they produce an
-// empty `input` in Ink, so only `key` flags are read. Generic over "current index, length", so
-// every list here (EDT selector, member checklists) reuses it.
-export type SelectionDirection = 'up' | 'down';
-
-export function resolveSelectionDirection(key: NavigationKey): SelectionDirection | null {
-  if (key.downArrow) {
-    return 'down';
-  }
-  if (key.upArrow) {
-    return 'up';
-  }
-  return null;
-}
-
-export function moveSelection(current: number, direction: SelectionDirection, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
-}
-
-// Home/End jump to top/bottom, a pure function for the same testability reason as
-// resolveSelectionDirection.
-export type SelectionJump = 'top' | 'bottom';
-
-export function resolveSelectionJump(key: NavigationKey): SelectionJump | null {
-  if (key.home) {
-    return 'top';
-  }
-  if (key.end) {
-    return 'bottom';
-  }
-  return null;
-}
-
-export function jumpSelection(jump: SelectionJump, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  return jump === 'top' ? 0 : length - 1;
-}
-
 // ---- Base-view focus and forms -----------------------------------------------------------
 
 // Tab's second consumer (the first is cycleFormFocus below, inside a form): cycling which of the
@@ -212,10 +169,6 @@ export function cyclePaneFocus(current: PaneFocus, direction: FocusNavDirection 
 // Tab's first consumer: cycling a form's topic-input ↔ member-checklist while a
 // create/switch/modify dialog is open.
 export type FormFocus = 'topic' | 'members';
-
-// The two panels (global line / per-service table) the create wizard's Step 3 and the switch
-// resolution view toggle between.
-export const TWO_PANEL_NAV: FocusNavDeclaration<'global' | 'rows'> = { mode: 'tab', stops: ['global', 'rows'] };
 
 export const FORM_FOCUS_NAV: FocusNavDeclaration<FormFocus> = { mode: 'tab', stops: ['topic', 'members'] };
 
@@ -270,9 +223,9 @@ export type CreateFormFocus = FormFocus;
 
 // ---- Create wizard Step 3 ----------------------------------------------------------------
 // The "global strategy + per-service exceptions" state. A row override is exactly core's
-// MemberBranchPlan: `create` renders as [Créer (Perso)], `existing` as [Existante] — or
-// [Renommer] once `renameTo` is set. A path with no override follows Panel A's global rule
-// ([Créer (Global)]).
+// MemberBranchPlan: `create` renders as [Create (Custom)], `existing` as [Existante] — or
+// [Rename] once `renameTo` is set. A path with no override follows Panel A's global rule
+// ([Create (Global)]).
 export type RowOverride = MemberBranchPlan;
 
 // One service's branch lists, loaded once per Step 3 entry (a failed load is retried on the
@@ -299,7 +252,7 @@ export type BranchStepState = {
   overrides: Readonly<Record<string, RowOverride>>;
   lists: Readonly<Record<string, BranchListState>>;
   box: OverrideBoxState | null;
-  // The root-EDT members already given their seeded [Créer (Perso)] override — each path is
+  // The root-EDT members already given their seeded [Create (Custom)] override — each path is
   // seeded at most once, so a row the developer reset to global stays global.
   seededPaths: readonly string[];
 };
@@ -421,11 +374,11 @@ export function formatEdtActionHistory(
 export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActiveEdt: boolean): string {
   switch (paneFocus) {
     case 'edts':
-      return focusedIsActiveEdt ? '[Enter] Modify' : '[Enter] Switch';
+      return formatHint(['Enter', focusedIsActiveEdt ? 'Modify' : 'Switch']);
     case 'edt-services':
-      return '[Enter] Remove / Change branch';
+      return formatHint(['Enter', 'Remove / Change branch']);
     case 'other-services':
-      return '[Enter] Add to EDT';
+      return formatHint(['Enter', 'Add to EDT']);
     default:
       return '';
   }
@@ -688,11 +641,13 @@ export type ModifyDialogState = {
 // EDT / a visibly disabled Restart. Three ListRows inside the existing ModalDialog,
 // arrow/Home/End-navigable via the resolveSelectionDirection/moveSelection pair every list here
 // uses.
-export const SERVICE_ACTION_MENU_ITEMS = Object.freeze([
-  { label: 'Remove from EDT', disabled: false },
-  { label: 'Change branch for this EDT', disabled: false },
-  { label: 'Restart', disabled: true },
-] as const);
+export type ServiceActionValue = 'remove' | 'change-branch' | 'restart' | 'close';
+
+export const SERVICE_ACTION_MENU_ITEMS: readonly MenuItem<ServiceActionValue>[] = Object.freeze([
+  { value: 'remove', label: 'Remove from EDT' },
+  { value: 'change-branch', label: 'Change branch for this EDT' },
+  { value: 'restart', label: 'Restart', disabled: true, note: 'Available with Epic 5' },
+]);
 
 export type ServiceActionsDialogState = {
   kind: 'service-actions';

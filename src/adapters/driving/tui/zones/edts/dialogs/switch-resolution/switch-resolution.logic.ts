@@ -7,10 +7,11 @@ import { resolve } from 'node:path';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
-import { resolveFocusStep, stepFocus } from '../../../../shared/keys/focus-navigation.js';
-import { suggestBranchNameFromTopic, TWO_PANEL_NAV } from '../../edts-zone.logic.js';
+import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
+import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
+import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
 export type ResolutionAction = 'adopt' | 'discard';
 
@@ -86,26 +87,24 @@ export type SwitchResolutionState = {
   decision: SwitchResolutionDecision | null;
 };
 
-export const SWITCH_RESOLUTION_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch';
-
 export const RESOLUTION_MODE_LABELS = {
-  adoptGlobal: '[Adopter (Global)]',
-  adoptPerso: '[Adopter (Perso)]',
-  discard: '[Écraser]',
+  adoptGlobal: '[Adopt (Global)]',
+  adoptPerso: '[Adopt (Custom)]',
+  discard: '[Discard]',
 } as const;
 
 export const RESOLUTION_ERRORS = {
   // `currentBranch === 'HEAD'` also covers a branch core could not read.
-  detachedHead: 'HEAD détachée ou branche illisible — seul Écraser est possible',
-  unreadableManifest: 'manifeste illisible — impossible de valider la branche ; choisissez Écraser ou annulez',
-  noOutgoing: 'Aucun EDT sortant — seul [Écraser] est possible',
-  blocked: 'Corrigez les lignes invalides avant de confirmer',
+  detachedHead: 'Detached HEAD or unreadable branch — only Discard is possible',
+  unreadableManifest: 'unreadable manifest — cannot validate the branch; choose Discard or cancel',
+  noOutgoing: 'No outgoing EDT — only [Discard] is possible',
+  blocked: 'Fix the invalid rows before confirming',
 } as const;
 
 // Ctrl+E refused: this discard row's file list could not be read by the pre-flight, so what
 // would be destroyed cannot be shown (nor pinned through `confirmedPaths`).
 export function unlistedDiscardError(service: string): string {
-  return `liste des fichiers indisponible pour ${service} — annulez et relancez la bascule`;
+  return `file list unavailable for ${service} — cancel and retry the switch`;
 }
 
 // The rows needing a decision: dirty state-2/3 repos (state-1 rows are auto-stashed).
@@ -212,13 +211,13 @@ export function modeLabel(plan: RowPlan): string {
 
 export function scopeLabel(repo: SwitchDirtyRepo): string {
   if (repo.scope === 'member-of-other-edt') {
-    return repo.owningEdtTopics.length > 0 ? `membre de ${repo.owningEdtTopics.join(', ')}` : 'membre d\'un autre EDT';
+    return repo.owningEdtTopics.length > 0 ? `member of ${repo.owningEdtTopics.join(', ')}` : 'member of another EDT';
   }
-  return 'hors EDT';
+  return 'outside any EDT';
 }
 
 export function claimedBranchError(topic: string): string {
-  return `utilisée par l'EDT « ${topic} » — la reprendre casserait cet EDT`;
+  return `used by the EDT “${topic}” — reusing it would break that EDT`;
 }
 
 // Advisory (the git gate stays authoritative). Order: detached HEAD, unreadable manifest (no
@@ -301,7 +300,7 @@ export function blockedRow(
   return undefined;
 }
 
-// ---- The "Configurer <service>" box --------------------------------------------------------
+// ---- The "Configure <service>" box --------------------------------------------------------
 
 export function boxLines(box: Pick<SwitchResolutionBox, 'action'>): SwitchResolutionBoxLine[] {
   return box.action === 'adopt' ? ['action', 'branch', 'apply'] : ['action', 'apply'];
@@ -370,14 +369,13 @@ export function reduceResolutionBoxKey(
   if (key.escape) {
     return { type: 'close' };
   }
-  if (key.upArrow || key.downArrow) {
-    const lines = boxLines(box);
-    const index = lines.indexOf(box.line) + (key.downArrow ? 1 : -1);
-    return { type: 'update', box: { ...box, line: lines[Math.min(Math.max(index, 0), lines.length - 1)] ?? box.line } };
+  const moved = moveBoxLine(boxLines(box), box.line, input, key);
+  if (moved !== null) {
+    return { type: 'update', box: { ...box, line: moved } };
   }
   if (box.line === 'action') {
-    if (input === ' ' || key.tab || key.leftArrow || key.rightArrow) {
-      // With no outgoing EDT only Écraser is offered.
+    if (input === ' ' || key.leftArrow || key.rightArrow) {
+      // With no outgoing EDT only Discard is offered.
       return row.hasOutgoing ? { type: 'update', box: { ...box, action: box.action === 'adopt' ? 'discard' : 'adopt', error: null } } : { type: 'update', box };
     }
     return { type: 'update', box: key.return ? { ...box, line: nextBoxLine(box) } : box };
@@ -385,7 +383,7 @@ export function reduceResolutionBoxKey(
   if (box.line === 'branch') {
     return { type: 'update', box: key.return ? { ...box, editing: true, error: null } : box };
   }
-  // [ Appliquer ]
+  // [ Apply ]
   if (!key.return) {
     return { type: 'update', box };
   }
@@ -397,15 +395,15 @@ export function reduceResolutionBoxKey(
 }
 
 // ---- The main reducer ----------------------------------------------------------------------
-//   - Panel A "STRATÉGIE GLOBALE" (focused on open): the default action, Adopter dans <outgoing
-//     topic> or Écraser (`Space`/`←→`), plus, when Adopter, the global branch name (pre-filled
+//   - Panel A "GLOBAL STRATEGY" (focused on open): the default action, Adopt into <outgoing
+//     topic> or Discard (`Space`/`←→`), plus, when Adopt, the global branch name (pre-filled
 //     with the outgoing topic's slug) applied to every row on a SHARED branch. With no outgoing
-//     EDT only Écraser is offered.
-//   - Panel B "SERVICES CONCERNÉS": one row per dirty state-2/3 service; `Enter` opens the
-//     "Configurer <service>" box, `[ Appliquer ]` makes the row Perso (or Écraser), `Ctrl+R`
+//     EDT only Discard is offered.
+//   - Panel B "AFFECTED SERVICES": one row per dirty state-2/3 service; `Enter` opens the
+//     "Configure <service>" box, `[ Apply ]` makes the row Custom (or Discard), `Ctrl+R`
 //     returns it to the global strategy.
-//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Écraser row it first opens
-//     the discard confirmation (files per service, default Retour, `Ctrl+E` confirms).
+//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Discard row it first opens
+//     the discard confirmation (files per service, default back, `Ctrl+E` confirms).
 //   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation); on
 //     the main view it cancels the whole switch.
 
@@ -427,7 +425,7 @@ export function reduceSwitchResolutionKey(
   const global = globalOf(state);
   const rows = buildRows(dirty, global);
 
-  // The discard confirmation: default is Retour; only Ctrl+E confirms.
+  // The discard confirmation: default is back; only Ctrl+E confirms.
   if (state.confirm !== null) {
     if (isCtrl(input, key, 'e')) {
       const unlisted = rows.find((row) => row.plan.kind === 'discard' && row.repo.dirtyPaths === undefined);

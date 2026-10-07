@@ -5,7 +5,7 @@
 // text, `Enter` on an empty field commits the default unless a suggestion was highlighted,
 // exact-match validation, and a list window that follows the highlight within a line budget.
 import {
-  clampAutocompletePickCursor,
+  branchAutocompleteShowsHighlight,
   createBranchAutocompleteState,
   handleBranchAutocompleteKey,
   isBranchAutocompleteExactMatch,
@@ -69,52 +69,7 @@ export function validateSuggestValue(value: string, suggestions: readonly string
   if (trimmed === '' || suggestions.includes(trimmed)) {
     return null;
   }
-  return `${noun} introuvable : "${trimmed}"`;
-}
-
-export interface SuggestWindow {
-  items: readonly string[];
-  // Index of the highlighted item inside `items`, or -1 when none is highlighted.
-  highlight: number;
-  hiddenAbove: number;
-  hiddenBelow: number;
-}
-
-// Slices the matches into at most `maxLines` lines including the "N de plus" indicators, the
-// window following the highlight. Zero or negative budgets render nothing.
-export function resolveSuggestWindow(
-  matches: readonly string[],
-  pickCursor: number,
-  showHighlight: boolean,
-  maxLines: number,
-): SuggestWindow {
-  const budget = Number.isFinite(maxLines) ? Math.max(0, Math.floor(maxLines)) : 0;
-  if (budget === 0 || matches.length === 0) {
-    return { items: [], highlight: -1, hiddenAbove: 0, hiddenBelow: 0 };
-  }
-  const cursor = clampAutocompletePickCursor(pickCursor, matches.length);
-  if (matches.length <= budget) {
-    return { items: matches, highlight: showHighlight ? cursor : -1, hiddenAbove: 0, hiddenBelow: 0 };
-  }
-  // Too tight for the "N de plus" indicators: a plain window, no indicators.
-  if (budget < 3) {
-    const start = Math.min(Math.max(cursor, 0), matches.length - budget);
-    return {
-      items: matches.slice(start, start + budget),
-      highlight: showHighlight ? cursor - start : -1,
-      hiddenAbove: 0,
-      hiddenBelow: 0,
-    };
-  }
-  const size = budget - 2;
-  const start = Math.min(Math.max(cursor - Math.floor(size / 2), 0), matches.length - size);
-  const items = matches.slice(start, start + size);
-  return {
-    items,
-    highlight: showHighlight ? cursor - start : -1,
-    hiddenAbove: start,
-    hiddenBelow: matches.length - start - items.length,
-  };
+  return `${noun} not found: "${trimmed}"`;
 }
 
 export function suggestMatches(state: SuggestFieldState, suggestions: readonly string[]): string[] {
@@ -123,5 +78,5 @@ export function suggestMatches(state: SuggestFieldState, suggestions: readonly s
 
 // The highlight is meaningful once text filters the list or an arrow moved it.
 export function suggestShowsHighlight(state: SuggestFieldState): boolean {
-  return state.value.trim() !== '' || state.highlighted;
+  return branchAutocompleteShowsHighlight(state, true);
 }

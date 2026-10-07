@@ -8,9 +8,10 @@ import {
   validateSuggestValue,
   type SuggestFieldState,
 } from '../../shared/components/suggest-field.logic.js';
+import type { FooterContextId } from '../../keybindings/index.js';
 import type { TextEditKey } from '../../shared/components/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { moveSelection, resolveSelectionDirection } from '../edts/edts-zone.logic.js';
+import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import {
   applyMergeStrategy,
   type ToggleOverride,
@@ -39,20 +40,20 @@ export function effectiveRestart(draft: UpdateConfigDraft, row: UpdateConfigRow)
   return row.recipeDeclared ? 'clean' : 'no-recipe';
 }
 
-// `perso` as soon as the row departs from the global parameters in any way.
-export function rowMode(row: UpdateConfigRow): 'global' | 'perso' {
-  return row.origin === 'manual' || row.migrations !== 'follow' || row.cleanRestart !== 'follow' ? 'perso' : 'global';
+// `custom` as soon as the row departs from the global parameters in any way.
+export function rowMode(row: UpdateConfigRow): 'global' | 'custom' {
+  return row.origin === 'manual' || row.migrations !== 'follow' || row.cleanRestart !== 'follow' ? 'custom' : 'global';
 }
 
-export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart';
+export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart' | 'start';
 
 export function globalLines(draft: UpdateConfigDraft): GlobalLine[] {
   if (draft.layout !== 'edt-panels') {
-    return ['migrations', 'cleanRestart'];
+    return ['migrations', 'cleanRestart', 'start'];
   }
   return draft.strategy.kind === 'shared'
-    ? ['source', 'migrations', 'cleanRestart']
-    : ['source', 'edt', 'migrations', 'cleanRestart'];
+    ? ['source', 'migrations', 'cleanRestart', 'start']
+    : ['source', 'edt', 'migrations', 'cleanRestart', 'start'];
 }
 
 export function clampPanelCursor(draft: UpdateConfigDraft, cursor: number): number {
@@ -122,7 +123,26 @@ export interface PanelsViewState {
   edtField: SuggestFieldState | null;
 }
 
-export type PanelsKey = TextEditKey & { upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean };
+// The footer context of the screen layer that owns the keyboard: a branch/EDT field being edited,
+// the per-service box, or the global panel / services table.
+export function updateConfigFooterContext(view: Pick<PanelsViewState, 'focus' | 'edtField'>, box: { editing: boolean } | null): FooterContextId {
+  if (box !== null) {
+    return box.editing ? 'branch-input' : 'update-box';
+  }
+  if (view.edtField !== null) {
+    return 'branch-input';
+  }
+  return view.focus === 'panel' ? 'update-config-global' : 'update-config-table';
+}
+
+export type PanelsKey = TextEditKey & {
+  upArrow?: boolean;
+  downArrow?: boolean;
+  leftArrow?: boolean;
+  rightArrow?: boolean;
+  home?: boolean;
+  end?: boolean;
+};
 
 export type PanelsStep =
   | { type: 'move-panel'; cursor: number }
@@ -149,7 +169,6 @@ function isPrintable(input: string, key: PanelsKey): boolean {
     !key.meta &&
     !key.return &&
     !key.escape &&
-    !key.tab &&
     !key.backspace &&
     !key.delete
   );
@@ -181,21 +200,16 @@ export function resolvePanelsKey(
   if (resolveFocusStep(input, key, 'tab') !== null) {
     return { type: 'switch-focus' };
   }
-  // On the EDT line a typed `y` starts the filter like any other letter.
-  const onEdtLine = view.focus === 'panel' && globalLines(draft)[view.panelCursor] === 'edt';
-  if ((input === 'y' || input === 'Y') && !onEdtLine) {
-    return { type: 'confirm' };
-  }
-  const direction = resolveSelectionDirection({
+  const cursorKey = {
     upArrow: key.upArrow === true,
     downArrow: key.downArrow === true,
-    home: false,
-    end: false,
-    tab: false,
-  });
+    home: key.home === true,
+    end: key.end === true,
+  };
   if (view.focus === 'table') {
-    if (direction !== null) {
-      return { type: 'move-table', cursor: moveSelection(view.tableCursor, direction, draft.rows.length) };
+    const cursor = nextCursorForKey(cursorKey, view.tableCursor, draft.rows.length);
+    if (cursor !== null) {
+      return { type: 'move-table', cursor };
     }
     if (input === ' ') {
       return { type: 'toggle-row' };
@@ -203,14 +217,13 @@ export function resolvePanelsKey(
     return key.return === true && draft.rows[view.tableCursor] !== undefined ? { type: 'open-box' } : { type: 'ignore' };
   }
   const lines = globalLines(draft);
-  if (direction !== null) {
-    return { type: 'move-panel', cursor: moveSelection(view.panelCursor, direction, lines.length) };
+  const panelCursor = nextCursorForKey(cursorKey, view.panelCursor, lines.length);
+  if (panelCursor !== null) {
+    return { type: 'move-panel', cursor: panelCursor };
   }
   const line = lines[view.panelCursor];
   if (line === 'source') {
-    return input === ' ' || key.return === true || key.leftArrow === true || key.rightArrow === true
-      ? { type: 'toggle-source' }
-      : { type: 'ignore' };
+    return input === ' ' || key.leftArrow === true || key.rightArrow === true ? { type: 'toggle-source' } : { type: 'ignore' };
   }
   if (line === 'edt') {
     if (key.return === true) {
@@ -218,7 +231,10 @@ export function resolvePanelsKey(
     }
     return isPrintable(input, key) ? { type: 'edit-edt', initial: input } : { type: 'ignore' };
   }
-  if (line !== undefined && (input === ' ' || key.return === true)) {
+  if (line === 'start') {
+    return key.return === true ? { type: 'confirm' } : { type: 'ignore' };
+  }
+  if (line !== undefined && input === ' ') {
     return { type: 'toggle-global', line };
   }
   return { type: 'ignore' };
@@ -245,10 +261,12 @@ export function checkEdtChoice(
 // Height budget (NFR-7): the modal shares the terminal with its chrome, so every block gets a
 // fixed line count and the table takes what is left, shrinking before anything can overflow.
 export const CONFIG_CHROME_ROWS = 10; // modal border + padding + title (6) plus the zone title and app chrome (4)
-export const CONFIG_MIN_ROWS = 22;
-// Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1, footer 2.
-export const SERVICE_BOX_ROWS = 10;
-const FIXED_BODY_ROWS = 1 + 1 + 1 + 1 + 2; // panel A title, panel B title, table header, error line, hints
+export const CONFIG_MIN_ROWS = 21;
+// A one-service screen needs one table row, so it fits wherever the service box does.
+export const CONFIG_SERVICE_MIN_ROWS = 18;
+// Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1.
+export const SERVICE_BOX_ROWS = 8;
+const FIXED_BODY_ROWS = 1 + 1 + 1 + 1; // panel A title, panel B title, table header, error line
 
 export interface ConfigBudget {
   tooSmall: boolean;
@@ -274,5 +292,7 @@ export function computeConfigBudget(
   // The box replaces the panels: its fixed height is SERVICE_BOX_BOX_ROWS (9), the rest is list.
   const boxDropdownLines = Math.max(0, Math.min(dropdownMax, windowRows - CONFIG_CHROME_ROWS - SERVICE_BOX_ROWS));
   // The service box replaces the table, so a short table budget alone must not hide it.
-  return { tooSmall: windowRows < CONFIG_MIN_ROWS || (!boxOpen && tableRows < 3), tableRows: Math.max(tableRows, 0), dropdownLines, boxDropdownLines };
+  const minRows = draft.layout === 'service-panels' ? CONFIG_SERVICE_MIN_ROWS : CONFIG_MIN_ROWS;
+  const neededTableRows = Math.min(3, Math.max(draft.rows.length, 1));
+  return { tooSmall: windowRows < minRows || (!boxOpen && tableRows < neededTableRows), tableRows: Math.max(tableRows, 0), dropdownLines, boxDropdownLines };
 }

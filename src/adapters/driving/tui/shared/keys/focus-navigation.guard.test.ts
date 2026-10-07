@@ -12,13 +12,7 @@ const ALLOWED = new Set([
   'adapters/driving/tui/shared/command-bar.tsx',
   'adapters/driving/tui/shared/components/text-edit.ts',
   'adapters/driving/tui/shared/components/branch-picker.tsx',
-  'adapters/driving/tui/zones/logs/logs-zone.tsx',
-  'adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.logic.ts',
   'adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx',
-  'adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts',
-  'adapters/driving/tui/zones/update/update-service-box.logic.ts',
-  'adapters/driving/tui/zones/update/update-config-panels.logic.ts',
-  'adapters/driving/tui/zones/update/update-config-dialog.logic.ts',
   'adapters/driving/tui/zones/routes/routes-zone.tsx',
 ]);
 

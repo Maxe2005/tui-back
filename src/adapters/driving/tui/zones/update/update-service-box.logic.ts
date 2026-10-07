@@ -1,7 +1,7 @@
-// tui/zones/update: state and pure key reducer of the "Configurer <service>" box — per-service
+// tui/zones/update: state and pure key reducer of the "Configure <service>" box — per-service
 // exceptions to the global update parameters (source branch, migrations, clean restart), same
 // shape and keys as edt-create's override box. Lines: branch field, migrations, restart, then
-// `[ Appliquer ]`. An option is only offered when the manifest declares the action.
+// `[ Apply ]`. An option is only offered when the manifest declares the action.
 import {
   createSuggestFieldState,
   stepSuggestField,
@@ -11,6 +11,7 @@ import {
 import type { TextEditKey } from '../../shared/components/text-edit.js';
 import type { BranchAutocompleteStatus } from '../../shared/components/branch-autocomplete-input.js';
 import type { ToggleOverride, UpdateConfigDraft } from './update-config-dialog.logic.js';
+import { nextBoxLine } from '../../shared/keys/box-line-nav.js';
 import { commitEmptyBranch, setRow } from './update-config-panels.logic.js';
 
 export type ServiceBoxLine = 'branch' | 'migrations' | 'restart' | 'apply';
@@ -69,7 +70,7 @@ export function cycleToggle(current: ToggleOverride, declared: boolean): ToggleO
 // The list is only authoritative once loaded: while it loads or when it failed, a typed branch
 // is accepted as is (the run itself rejects an unknown branch before touching anything).
 function validateBranch(value: string, context: ServiceBoxContext): string | null {
-  return context.branchesStatus === 'ready' ? validateSuggestValue(value, context.branches, 'Branche') : null;
+  return context.branchesStatus === 'ready' ? validateSuggestValue(value, context.branches, 'Branch') : null;
 }
 
 export type ServiceBoxKey = TextEditKey & { leftArrow?: boolean; rightArrow?: boolean };
@@ -109,16 +110,16 @@ export function reduceServiceBoxKey(box: ServiceBoxState, context: ServiceBoxCon
   if (key.escape) {
     return { type: 'close' };
   }
-  if (key.upArrow || key.downArrow) {
-    const index = LINES.indexOf(box.line) + (key.downArrow ? 1 : -1);
-    return update({ ...box, line: LINES[Math.min(Math.max(index, 0), LINES.length - 1)] ?? box.line });
+  const moved = nextBoxLine(LINES, box.line, input, key);
+  if (moved !== null) {
+    return update({ ...box, line: moved });
   }
   if (box.line === 'branch') {
     if (key.return) {
       return update({ ...box, editing: true, error: null });
     }
     // Typing on the line starts the edit, like the base line of edt-create's Step 3.
-    if (input.length >= 1 && input.trim() !== '' && !key.ctrl && !key.meta && !key.tab) {
+    if (input.length >= 1 && input.trim() !== '' && !key.ctrl && !key.meta) {
       return update({ ...box, editing: true, branch: { ...createSuggestFieldState(box.branch.value + input) }, error: null });
     }
     return update(box);
@@ -126,7 +127,7 @@ export function reduceServiceBoxKey(box: ServiceBoxState, context: ServiceBoxCon
   if (box.line === 'migrations' || box.line === 'restart') {
     const migrations = box.line === 'migrations';
     const declared = migrations ? context.migrationDeclared : context.recipeDeclared;
-    if (input === ' ' || key.tab || key.leftArrow || key.rightArrow) {
+    if (input === ' ' || key.leftArrow || key.rightArrow) {
       if (!declared) {
         return update(box);
       }
@@ -150,7 +151,7 @@ export function applyServiceBox(
 ): { ok: true; draft: UpdateConfigDraft } | { ok: false; error: string } {
   const row = draft.rows[box.index];
   if (row === undefined) {
-    return { ok: false, error: 'Service introuvable.' };
+    return { ok: false, error: 'Service not found.' };
   }
   const value = box.branch.value.trim();
   const invalid = validateBranch(value, context);
