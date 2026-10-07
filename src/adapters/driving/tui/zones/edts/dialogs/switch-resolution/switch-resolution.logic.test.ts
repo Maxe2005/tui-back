@@ -167,6 +167,15 @@ describe('reduceSwitchResolutionKey', () => {
     expect(buildRows(DIRTY, globalOf(next)).map((row) => row.plan.kind === 'adopt' && row.plan.branch)).toEqual(['wip', 'feat/x']);
   });
 
+  it('Tab and Shift+Tab move lines inside the box without flipping the action or typing', () => {
+    const opened = press(ready(initialSwitchResolution('Mon Topic', DIRTY)), TAB, DOWN, ENTER);
+    expect(opened.box).toMatchObject({ line: 'action', action: 'adopt' });
+    const forward = press(opened, TAB);
+    expect(forward.box).toMatchObject({ line: 'branch', action: 'adopt', branch: opened.box!.branch });
+    const back = press(forward, ['', { tab: true, shift: true }]);
+    expect(back.box).toMatchObject({ line: 'action', action: 'adopt' });
+  });
+
   it('a Perso override stops following Panel A; Ctrl+R in the box returns the row to Global', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     // Panel B, row 2 (svc-b), open the box, edit the branch to feat/y, apply.

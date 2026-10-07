@@ -344,6 +344,14 @@ describe('handleBranchPickerKey — Pick existing', () => {
     }
   });
 
+  it('Ctrl+R no longer opens the rename field (it is back-to-global elsewhere)', () => {
+    const result = handleBranchPickerKey(pickState({ pickCursor: 1 }), ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub).toBeNull();
+    }
+  });
+
   it('confirming the rename field submits a rename outcome in one step', () => {
     const state = pickState({ renameSub: { oldName: 'shared-feature', value: 'shared-feature-v2', cursor: 'shared-feature-v2'.length, error: null } });
     const result = handleBranchPickerKey(state, ['shared-feature'], [], '', { return: true });

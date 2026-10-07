@@ -593,9 +593,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      if (input === 'R' && servicesStatus === 'error') {
+      if (input === 'R' && servicesStatus === 'error' && updateStatus !== 'running') {
         void loadEdtsBranches();
-        void loadEdts();
         return;
       }
       // The service list's own cursor — moves regardless of run state (browsing is harmless
@@ -693,7 +692,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <Text color={colors['text-dim']}>SERVICES</Text>
             {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
-            {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
+            {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={updateStatus !== 'running'} /> : null}
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
               <Text color={colors['text-dim']}>No managed services found.</Text>
             ) : null}

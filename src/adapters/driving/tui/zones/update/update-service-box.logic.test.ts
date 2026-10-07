@@ -37,6 +37,16 @@ describe('service box', () => {
     expect(reduceServiceBoxKey(restart, CONTEXT, ' ', {})).toMatchObject({ box: { cleanRestart: 'follow' } });
   });
 
+  it('Tab and Shift+Tab move between lines and never flip a toggle or type a character', () => {
+    const start = { ...openServiceBox(draft(), 0)!, line: 'migrations' as const };
+    const forward = reduceServiceBoxKey(start, CONTEXT, '', { tab: true });
+    expect(forward).toMatchObject({ type: 'update', box: { line: 'restart', migrations: 'follow', cleanRestart: 'follow' } });
+    const back = reduceServiceBoxKey(start, CONTEXT, '', { tab: true, shift: true });
+    expect(back).toMatchObject({ box: { line: 'branch', migrations: 'follow' } });
+    const onBranch = openServiceBox(draft(), 0)!;
+    expect(reduceServiceBoxKey(onBranch, CONTEXT, '', { tab: true })).toMatchObject({ box: { line: 'migrations', editing: false, branch: onBranch.branch } });
+  });
+
   it('refuses a branch outside the list in the field and in apply', () => {
     const editing = { ...openServiceBox(draft(), 0)!, editing: true, branch: { value: 'nope', cursor: 4, pickCursor: 0, highlighted: false } };
     expect(reduceServiceBoxKey(editing, CONTEXT, '', { return: true })).toMatchObject({ type: 'update', box: { editing: true, error: expect.stringContaining('nope') } });

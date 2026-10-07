@@ -4464,3 +4464,56 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 });
+
+describe('EdtsZone R retry (real keypress)', () => {
+  function errorStore(overrides: Record<string, unknown>) {
+    const store = createAppStore();
+    store.setState({
+      edts: null,
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: null,
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      ...overrides,
+    });
+    return store;
+  }
+
+  it('R reloads only the source that failed', async () => {
+    const loadEdts = vi.fn(async () => {});
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = errorStore({ edtsStatus: 'error', edtsBranchesStatus: 'idle', loadEdts, loadEdtsBranches });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      const edtCalls = loadEdts.mock.calls.length;
+      const branchCalls = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdts.mock.calls.length).toBe(edtCalls + 1);
+      expect(loadEdtsBranches.mock.calls.length).toBe(branchCalls);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('R is ignored while a load is in flight', async () => {
+    const loadEdts = vi.fn(async () => {});
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = errorStore({ edtsStatus: 'error', edtsBranchesStatus: 'loading', loadEdts, loadEdtsBranches });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      const edtCalls = loadEdts.mock.calls.length;
+      const branchCalls = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdts.mock.calls.length).toBe(edtCalls);
+      expect(loadEdtsBranches.mock.calls.length).toBe(branchCalls);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

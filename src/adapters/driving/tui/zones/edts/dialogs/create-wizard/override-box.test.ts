@@ -76,6 +76,13 @@ describe('reduceOverrideBoxKey', () => {
     expect(overrideBoxLines({ mode: 'existing', rename: true })).toEqual(['mode', 'existing', 'rename', 'newName', 'apply']);
   });
 
+  it('Tab and Shift+Tab move lines and never insert a character or flip the mode', () => {
+    const onName = box({ line: 'name' });
+    const next = updated(press(onName, '', { tab: true }));
+    expect(next).toMatchObject({ line: 'apply', name: onName.name, mode: 'create' });
+    expect(updated(press(onName, '', { tab: true, shift: true })).line).toBe('base');
+  });
+
   it('↑/↓ move between lines, clamped', () => {
     const down = updated(press(box(), '', { downArrow: true }));
     expect(down.line).toBe('base');

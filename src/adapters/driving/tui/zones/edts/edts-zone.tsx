@@ -737,8 +737,15 @@ export function EdtsZone({
     }
 
     if (input === 'R' && (edtsStatus === 'error' || status === 'error')) {
-      void loadEdtsBranches();
-      void loadEdts();
+      // Reload only the failed source(s); ignored while any load is still in flight.
+      if (edtsStatus !== 'loading' && status !== 'loading') {
+        if (status === 'error') {
+          void loadEdtsBranches();
+        }
+        if (edtsStatus === 'error') {
+          void loadEdts();
+        }
+      }
       return;
     }
 

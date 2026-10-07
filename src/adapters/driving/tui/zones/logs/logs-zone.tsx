@@ -408,6 +408,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           setHistoryGridCursor(null);
           return;
         }
+        // Tab and Shift+Tab both flip: with only two modes, reversing is the same move.
         if (resolveFocusStep(input, key, 'tab') !== null) {
           // Text and regex are distinct (scope, mode) history lists — flipping mode mid-recall
           // drops any browsing state (a stale `index`/`savedDraft` would be reused against the new
@@ -555,7 +556,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         return;
       }
 
-      if (input === 'R' && servicesStatus === 'error') {
+      // R restarts the focused pane once panes are open, so it only retries the load when there
+      // is no pane to restart.
+      if (input === 'R' && servicesStatus === 'error' && activePanes.length === 0) {
         void loadEdtsBranches();
         return;
       }
@@ -779,7 +782,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
             <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']} minHeight={0} overflow="hidden">
               <Text color={paneFocus === 'edt-list' ? colors.accent : colors['text-dim']}>ACTIVE EDT MEMBERS</Text>
               {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
-              {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
+              {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={activePanes.length === 0} /> : null}
               {focusedEdt === undefined ? <DimAnnotation text="No active EDT." /> : null}
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
                 <DimAnnotation text="No services in the active EDT." />
