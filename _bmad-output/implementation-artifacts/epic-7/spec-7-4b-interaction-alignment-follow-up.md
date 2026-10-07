@@ -2,7 +2,7 @@
 title: 'Story 7.4b: Interaction alignment follow-up (UX-DR36)'
 type: 'refactor'
 created: '2026-10-07'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'e91a9755eb2cae82f806cabefa2de3bc89bc3f8f'
 review_loop_iteration: 0
 context:
@@ -99,3 +99,21 @@ Decisions:
 - Footer: overlays (help, command bar, filter, registry, settings, reset) outrank zones (`activeFooterContext`); `busy` is a declared no-key context for running actions and opening dialogs; a fullscreen pane without a container has its own context without restart; Routes selection is the pure `routesFooterContext`; Update's chain is `updateFooterContext`; owners are typed (`FooterOwner`).
 - Inputs: BranchPicker's base field advances on an empty value, never accepts free text before the list is ready, resets its highlight; `TextInputLine` scrolls to keep the caret visible and takes a `suffix`; `StateLine` filters blank parts; the help lists context rows under their own heading.
 - Tests: table cases for EDTs/Routes/Update contexts, mount tests for help/command bar/global filter, overlay precedence, exact-height renders of the update config; `mount-for-test.ts` moved to `shared/test-support` with `footerIdOf`. Branch-picker interaction tests now settle the list load before pressing Enter on the base field and give those tests a working `listBranches`.
+
+## Suggested Review Order
+
+**Footer contract**
+
+- Overlay ranking decides which owner's context the footer shows.
+  [`footer-contexts.ts:307`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L307)
+
+- Per-dialog context selection for EDTs, now the only place those keys are advertised.
+  [`edts-footer-context.ts:73`](../../../src/adapters/driving/tui/zones/edts/edts-footer-context.ts#L73)
+
+- Guard test: hint strings must go through `formatHints`.
+  [`hints.guard.test.ts:38`](../../../src/adapters/driving/tui/shared/components/hints.guard.test.ts#L38)
+
+**Shared components**
+
+- One menu list and key resolver replace three reducers.
+  [`menu-list.tsx:32`](../../../src/adapters/driving/tui/shared/components/menu-list.tsx#L32)
