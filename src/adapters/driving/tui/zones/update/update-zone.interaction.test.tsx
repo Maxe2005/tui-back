@@ -716,7 +716,7 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'm');
-      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
 
       expect(store.getState().updateConfig).toMatchObject({
         scope: 'edt',
@@ -739,12 +739,12 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'm');
-      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
       await press(instance, stdin, '\t');
       await press(instance, stdin, '\r');
-      await waitForOutput(instance, stdout, 'Configurer svc-a');
+      await waitForOutput(instance, stdout, 'Configure svc-a');
       await press(instance, stdin, '\u001b');
-      await waitForOutput(instance, stdout, 'RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+      await waitForOutput(instance, stdout, 'SUMMARY AND PER-SERVICE EXCEPTIONS');
 
       expect(store.getState().updateConfig).not.toBeNull();
       expect(store.getState().updateConfig?.rows.every((row) => row.origin === 'shared')).toBe(true);
@@ -754,26 +754,24 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 
-  it('From EDT with no EDT chosen blocks the run: Space on the source line, Esc, then Enter on a panel line is refused', async () => {
+  it('From EDT with no EDT chosen blocks the run: Space on the source line, Esc, then Ctrl+N is refused', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'm');
-      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
       await press(instance, stdin, ' ');
-      await waitForOutput(instance, stdout, '✖ aucun EDT choisi');
+      await waitForOutput(instance, stdout, '✖ no EDT chosen');
       await press(instance, stdin, '\u001b');
       // Ink holds a lone Esc briefly to tell it from an escape sequence; give it time so the
       // Tab below is not read as Meta+Tab.
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
       await press(instance, stdin, '\t');
-      await waitForOutput(instance, stdout, 'Revenir au global');
-      await press(instance, stdin, '\t');
-      await press(instance, stdin, '\u001b[B');
-      await press(instance, stdin, '\r');
-      await waitForOutput(instance, stdout, 'Source de merge non résolue');
+      await waitForOutput(instance, stdout, 'back to global');
+      await press(instance, stdin, '\u000e');
+      await waitForOutput(instance, stdout, 'Unresolved merge source');
 
       expect(store.getState().updateConfig?.strategy.kind).toBe('edt-pending');
       expect(store.getState().updateStatus).toBe('idle');

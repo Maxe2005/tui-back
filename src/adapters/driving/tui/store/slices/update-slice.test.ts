@@ -939,7 +939,7 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().confirmUpdateConfig();
 
     expect(store.getState().updateConfig).not.toBeNull();
-    expect(store.getState().updateConfig?.error).toContain('Aucun service sélectionné');
+    expect(store.getState().updateConfig?.error).toContain('No services selected');
     expect(store.getState().updateStatus).toBe('idle');
     expect(deps.git.fetch).not.toHaveBeenCalled();
     expect(deps.git.pull).not.toHaveBeenCalled();
@@ -962,7 +962,7 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().confirmUpdateConfig();
 
     expect(store.getState().updateConfig).not.toBeNull();
-    expect(store.getState().updateConfig?.error).toContain('pas de branche source');
+    expect(store.getState().updateConfig?.error).toContain('empty source branch');
     expect(store.getState().updateStatus).toBe('idle');
     expect(deps.git.fetch).not.toHaveBeenCalled();
     expect(deps.git.pull).not.toHaveBeenCalled();

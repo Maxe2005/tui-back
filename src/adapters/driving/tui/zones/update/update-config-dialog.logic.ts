@@ -258,34 +258,17 @@ export function confirmUpdateConfigDraft(
   draft: UpdateConfigDraft,
 ): { ok: true; config: ConfirmedUpdateConfig } | { ok: false; error: string } {
   const selected = draft.rows.filter((row) => row.selected);
-  // The two-panel screen speaks French like edt-create's Step 3; the plain list keeps English.
-  const fr = draft.layout !== 'simple';
   if (selected.length === 0) {
-    return {
-      ok: false,
-      error: fr
-        ? 'Aucun service sélectionné — cochez au moins un service avant de lancer.'
-        : 'No services selected — select at least one service before starting the run.',
-    };
+    return { ok: false, error: 'No services selected — select at least one service before starting the run.' };
   }
   const unresolved = selected.filter((row) => row.sourceError !== undefined);
   if (unresolved.length > 0) {
     const names = unresolved.map((row) => row.service).join(', ');
-    return {
-      ok: false,
-      error: fr
-        ? `Source de merge non résolue pour : ${names} — configurez la ligne (Entrée) ou décochez-la.`
-        : `Unresolved merge source for: ${names} — pick a branch (Enter) or deselect.`,
-    };
+    return { ok: false, error: `Unresolved merge source for: ${names} — pick a branch or deselect.` };
   }
   for (const row of selected) {
     if (row.sourceBranch.trim() === '') {
-      return {
-        ok: false,
-        error: fr
-          ? `Le service "${row.service}" n'a pas de branche source — saisissez-en une ou décochez-le.`
-          : `Service "${row.service}" has an empty source branch — enter a branch or deselect it.`,
-      };
+      return { ok: false, error: `Service "${row.service}" has an empty source branch — enter a branch or deselect it.` };
     }
   }
   return {

@@ -176,7 +176,11 @@ export function resolvePanelsKey(
     return step.type === 'commit' ? { type: 'edt-commit', value: step.value } : { type: 'edt-cancel' };
   }
   if (key.ctrl === true) {
-    return input.toLowerCase() === 'r' && view.focus === 'table' ? { type: 'reset-row' } : { type: 'ignore' };
+    const letter = input.toLowerCase();
+    if (letter === 'n') {
+      return { type: 'confirm' };
+    }
+    return letter === 'r' && view.focus === 'table' ? { type: 'reset-row' } : { type: 'ignore' };
   }
   if (key.meta === true) {
     return { type: 'ignore' };
@@ -210,9 +214,6 @@ export function resolvePanelsKey(
   }
   const line = lines[view.panelCursor];
   if (line === 'source') {
-    if (key.return === true) {
-      return { type: 'confirm' };
-    }
     return input === ' ' || key.leftArrow === true || key.rightArrow === true ? { type: 'toggle-source' } : { type: 'ignore' };
   }
   if (line === 'edt') {
@@ -220,9 +221,6 @@ export function resolvePanelsKey(
       return { type: 'edit-edt', initial: '' };
     }
     return isPrintable(input, key) ? { type: 'edit-edt', initial: input } : { type: 'ignore' };
-  }
-  if (key.return === true) {
-    return { type: 'confirm' };
   }
   if (line !== undefined && input === ' ') {
     return { type: 'toggle-global', line };

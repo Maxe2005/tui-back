@@ -20,7 +20,7 @@ const draft = () =>
   createUpdateConfigDraft('edt', [{ service: 'api', repoPath: '/r/api', sourceBranch: 'development' }], { layout: 'edt-panels' });
 
 describe('service box', () => {
-  it('only offers `oui` for declared actions', () => {
+  it('only offers `on` for declared actions', () => {
     expect(cycleToggle('off', true)).toBe('on');
     expect(cycleToggle('off', false)).toBe('follow');
   });

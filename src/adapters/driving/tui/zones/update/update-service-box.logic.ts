@@ -1,7 +1,7 @@
-// tui/zones/update: state and pure key reducer of the "Configurer <service>" box — per-service
+// tui/zones/update: state and pure key reducer of the "Configure <service>" box — per-service
 // exceptions to the global update parameters (source branch, migrations, clean restart), same
 // shape and keys as edt-create's override box. Lines: branch field, migrations, restart, then
-// `[ Appliquer ]`. An option is only offered when the manifest declares the action.
+// `[ Apply ]`. An option is only offered when the manifest declares the action.
 import {
   createSuggestFieldState,
   stepSuggestField,
@@ -70,7 +70,7 @@ export function cycleToggle(current: ToggleOverride, declared: boolean): ToggleO
 // The list is only authoritative once loaded: while it loads or when it failed, a typed branch
 // is accepted as is (the run itself rejects an unknown branch before touching anything).
 function validateBranch(value: string, context: ServiceBoxContext): string | null {
-  return context.branchesStatus === 'ready' ? validateSuggestValue(value, context.branches, 'Branche') : null;
+  return context.branchesStatus === 'ready' ? validateSuggestValue(value, context.branches, 'Branch') : null;
 }
 
 export type ServiceBoxKey = TextEditKey & { leftArrow?: boolean; rightArrow?: boolean };
@@ -151,7 +151,7 @@ export function applyServiceBox(
 ): { ok: true; draft: UpdateConfigDraft } | { ok: false; error: string } {
   const row = draft.rows[box.index];
   if (row === undefined) {
-    return { ok: false, error: 'Service introuvable.' };
+    return { ok: false, error: 'Service not found.' };
   }
   const value = box.branch.value.trim();
   const invalid = validateBranch(value, context);

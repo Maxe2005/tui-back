@@ -138,9 +138,11 @@ describe('row exceptions', () => {
 });
 
 describe('resolvePanelsKey', () => {
-  it('Tab switches focus and Enter on a panel line confirms (y no longer does)', () => {
+  it('Tab switches focus and Ctrl+N confirms from either panel (y and Enter do not)', () => {
     expect(resolvePanelsKey('', { tab: true }, VIEW, edtDraft(), [])).toEqual({ type: 'switch-focus' });
-    expect(resolvePanelsKey('', { return: true }, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('', { return: true }, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'ignore' });
     expect(resolvePanelsKey('y', {}, VIEW, edtDraft(), [])).toEqual({ type: 'ignore' });
   });
 

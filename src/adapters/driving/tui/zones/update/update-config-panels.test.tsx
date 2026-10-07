@@ -41,20 +41,20 @@ const lineCount = (output: string) => output.split('\n').length;
 describe('UpdateConfigPanels', () => {
   it('renders the global panel above the service table with the effective cells', async () => {
     const output = await render(draftWith(3), 30);
-    expect(output).toContain('PARAMÈTRES GLOBAUX');
-    expect(output).toContain('Source du merge');
+    expect(output).toContain('GLOBAL SETTINGS');
+    expect(output).toContain('Merge source');
     expect(output).toContain('(•) Shared branches');
-    expect(output).toContain('RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+    expect(output).toContain('SUMMARY AND PER-SERVICE EXCEPTIONS');
     expect(output).toContain('[x] svc-0');
     expect(output).toContain('✔ migrate');
-    expect(output).toContain('— aucune commande');
+    expect(output).toContain('— no command');
     expect(output).toContain('basic');
   });
 
   it('shows the EDT line under From EDT, with errors and the topic marker on rows', async () => {
     const pending = toggleMergeSource(draftWith(2));
-    expect(await render(pending, 30)).toContain('✖ aucun EDT choisi');
-    expect(await render(pending, 30)).toContain('<aucun>');
+    expect(await render(pending, 30)).toContain('✖ no EDT chosen');
+    expect(await render(pending, 30)).toContain('<none>');
     const resolved = applyMergeStrategy(draftWith(2), {
       kind: 'edt',
       ulid: 'U',
@@ -71,7 +71,7 @@ describe('UpdateConfigPanels', () => {
 
   it('all-repos has no merge-source lines', async () => {
     const output = await render(draftWith(2, 'all-panels'), 30);
-    expect(output).not.toContain('Source du merge');
+    expect(output).not.toContain('Merge source');
     expect(output).toContain('Migrations');
     expect(output).toContain('Clean restart');
   });
@@ -106,10 +106,10 @@ describe('UpdateConfigPanels', () => {
       box,
       boxContext: { service: 'svc-1', branches: ['development', 'feat/x'], branchesStatus: 'ready', migrationDeclared: false, recipeDeclared: true },
     });
-    expect(output).toContain('Configurer svc-1');
+    expect(output).toContain('Configure svc-1');
     expect(output).toContain('<shared-branch>');
-    expect(output).toContain('— aucune commande déclarée');
-    expect(output).not.toContain('PARAMÈTRES GLOBAUX');
+    expect(output).toContain('— no command declared');
+    expect(output).not.toContain('GLOBAL SETTINGS');
     expect(lineCount(output)).toBeLessThanOrEqual(24);
   });
 });
