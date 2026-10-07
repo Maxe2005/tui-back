@@ -17,6 +17,7 @@ import { colors } from '../../../shared/theme/theme.js';
 import {
   createPickerSession,
   cycleFormFocus,
+  FORM_FOCUS_NAV,
   findRetryableFailedRow,
   jumpSelection,
   moveSelection,
@@ -33,6 +34,7 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -261,8 +263,9 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
         }
       }
     }
-    if (key.tab) {
-      deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, formFocus: cycleFormFocus(prev.formFocus) } : prev));
+    const formStep = resolveFocusStep(input, key, FORM_FOCUS_NAV.mode);
+    if (formStep !== null) {
+      deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, formFocus: cycleFormFocus(prev.formFocus, formStep) } : prev));
       return;
     }
     if (key.escape) {

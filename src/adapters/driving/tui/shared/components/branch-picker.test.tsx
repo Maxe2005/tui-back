@@ -22,6 +22,13 @@ function baseState(overrides: Partial<BranchPickerState> = {}): BranchPickerStat
   };
 }
 
+describe('cycleBranchPickerMode back', () => {
+  it('reverses, wrapping', () => {
+    expect(cycleBranchPickerMode('pick-existing', true, 'back')).toBe('rename-current');
+    expect(cycleBranchPickerMode('create-new', false, 'back')).toBe('pick-existing');
+  });
+});
+
 describe('cycleBranchPickerMode', () => {
   it('cycles Pick existing -> Create new -> Rename current -> Pick existing when a current branch exists', () => {
     expect(cycleBranchPickerMode('pick-existing', true)).toBe('create-new');

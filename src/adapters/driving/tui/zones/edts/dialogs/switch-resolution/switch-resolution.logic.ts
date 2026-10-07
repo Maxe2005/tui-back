@@ -7,7 +7,8 @@ import { resolve } from 'node:path';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
-import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
+import { resolveFocusStep, stepFocus } from '../../../../shared/keys/focus-navigation.js';
+import { suggestBranchNameFromTopic, TWO_PANEL_NAV } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
 
@@ -481,8 +482,9 @@ export function reduceSwitchResolutionKey(
     return { ...state, editing: false, decision: { kind: 'proceed', resolutions: buildResolutions(rows) } };
   }
 
-  if (key.tab) {
-    return { ...state, panel: state.panel === 'global' ? 'rows' : 'global', editing: false };
+  const panelStep = resolveFocusStep(input, key, 'tab');
+  if (panelStep !== null) {
+    return { ...state, panel: stepFocus(TWO_PANEL_NAV.stops, state.panel, panelStep), editing: false };
   }
 
   if (state.panel === 'global') {
