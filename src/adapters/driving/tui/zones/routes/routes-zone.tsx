@@ -209,6 +209,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
   const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
   const windowSize = useWindowSize();
+  // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
+  // (the repo path wraps or unwraps, changing the list's height). Subscribing here makes this
+  // zone re-render too, so useElementSize re-measures instead of keeping a stale list budget.
+  useStore((state) => state.splitterRatios.routes);
   const [listAreaRef, listAreaSize] = useElementSize();
   const [responseAreaRef, responseAreaSize] = useElementSize();
   const [bodyAreaRef, bodyAreaSize] = useElementSize();
