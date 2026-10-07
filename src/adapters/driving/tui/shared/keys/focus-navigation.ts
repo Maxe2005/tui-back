@@ -13,6 +13,7 @@ export type FocusNavKey = {
   tab?: boolean;
   shift?: boolean;
   ctrl?: boolean;
+  meta?: boolean;
   leftArrow?: boolean;
   rightArrow?: boolean;
   upArrow?: boolean;
@@ -27,7 +28,7 @@ export type FocusNavDeclaration<T> = {
 export function resolveFocusStep(input: string, key: FocusNavKey, mode: FocusNavMode): FocusNavDirection | null {
   switch (mode) {
     case 'tab':
-      if (key.tab !== true) {
+      if (key.tab !== true || key.ctrl === true || key.meta === true) {
         return null;
       }
       return key.shift === true ? 'back' : 'next';

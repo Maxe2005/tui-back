@@ -23,7 +23,7 @@ export function cycleBranchPickerMode(
   const stops: BranchPickerMode[] = hasCurrentBranch
     ? ['pick-existing', 'create-new', 'rename-current']
     : ['pick-existing', 'create-new'];
-  return stepFocus(stops, stops.includes(mode) ? mode : stops[0], direction);
+  return stepFocus(stops, mode, direction);
 }
 
 // Case-insensitive prefix match — same convention as commands.ts's matchCommands.
@@ -219,7 +219,10 @@ export function handleBranchPickerKey(
   // Tab cycles the mode switch — never while a Pick-existing row-rename sub-view is open
   // (Escape closes that back to the list first).
   const modeStep = resolveFocusStep(input, key, 'tab');
-  if (modeStep !== null && !(state.mode === 'pick-existing' && state.renameSub !== null)) {
+  if (modeStep !== null && state.mode === 'pick-existing' && state.renameSub !== null) {
+    return { type: 'update', state };
+  }
+  if (modeStep !== null) {
     const nextMode = cycleBranchPickerMode(state.mode, state.hasCurrentBranch, modeStep);
     // Always closes Create-new's other-members sub-list on any mode change — otherwise a
     // Tab-away-then-back-to-Create-new leaves it open and the next Enter on the name field gets
