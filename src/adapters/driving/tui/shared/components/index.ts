@@ -48,7 +48,6 @@ export type { ZonePlaceholderProps } from './zone-placeholder.js';
 export {
   BranchPicker,
   cycleBranchPickerMode,
-  matchBranchesByPrefix,
   createBranchPickerState,
   applyBranchPickerRetry,
   handleBranchPickerKey,

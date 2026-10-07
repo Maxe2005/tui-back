@@ -52,6 +52,30 @@ export const FOOTER_CONTEXTS = {
     label: 'Create-EDT wizard (first EDT)',
     hints: [['Ctrl+→/Ctrl+N', 'next step'], ['Ctrl+←/Ctrl+P', 'previous step'], ['Esc', 'quit']],
   },
+  'branch-picker-pick': {
+    label: 'Branch picker, pick existing',
+    hints: [['Tab', 'switch mode'], [KEY_UP_DOWN, 'move'], ['Enter', 'fill in / set branch'], ['Ctrl+T', 'rename this branch'], CANCEL],
+  },
+  'branch-picker-base': {
+    label: 'Branch picker, base branch',
+    hints: [['Tab', 'switch mode'], [KEY_UP_DOWN, 'move'], ['Enter', 'fill in / next field'], CANCEL],
+  },
+  'branch-picker-name': {
+    label: 'Branch picker, new name',
+    hints: [['Tab', 'switch mode'], ['Enter', 'create'], CANCEL],
+  },
+  'branch-picker-name-members': {
+    label: 'Branch picker, new name (other members)',
+    hints: [['Tab', 'switch mode'], ['↓', "other members' branches"], ['Enter', 'create'], CANCEL],
+  },
+  'branch-picker-members': {
+    label: "Branch picker, other members' branches",
+    hints: [MOVE, ['Enter', 'pick'], CLOSE],
+  },
+  'branch-picker-rename': {
+    label: 'Branch picker, rename current',
+    hints: [['Tab', 'switch mode'], ['Enter', 'rename'], CANCEL],
+  },
   help: { label: 'Keybinding help', hints: [[KEY_UP_DOWN, 'scroll'], ['Esc/?', 'close']] },
   command: { label: 'Command entry', hints: [['Tab', 'complete'], ['Enter', 'run'], ['Esc', 'close']] },
   'logs-filter-edit': {
