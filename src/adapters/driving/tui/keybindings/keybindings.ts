@@ -96,11 +96,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Enter (wizard Step 3)',
     description: 'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   },
-  // Scoped to the create-EDT wizard's Step 3 "Configurer <service>" box — no collision:
-  // BranchPicker's own Ctrl+R (rename a row) lives in other modals.
+  // Back to global in every per-service box or table; the branch picker's rename is Ctrl+T.
   {
     keys: 'Ctrl+R',
-    description: 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy',
+    description: 'Per-service box or table (wizard Step 3, switch resolution, Update config): revert the service to the global strategy',
   },
   // Scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause panel and its
   // overwrite confirmation).
@@ -136,15 +135,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'Ctrl+N (switch resolution)',
-    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
-  },
-  {
-    keys: 'Ctrl+R (switch resolution)',
-    description: 'Switch EDT, "Configurer" box: return the service to the global strategy',
+    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Discard] row asks a second confirmation)',
   },
   {
     keys: 'Space / ← → (switch resolution)',
-    description: 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser',
+    description: 'Switch EDT, global strategy and "Configure" box: toggle the action between Adopt and Discard',
   },
   {
     keys: '↑ / ↓ (switch discard confirmation)',
@@ -162,5 +157,33 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'W (Logs)',
     description: 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)',
+  },
+  {
+    keys: 'i (Logs)',
+    description: 'Logs: toggle the focused pane between following and ignoring the global filter',
+  },
+  {
+    keys: 'R (Logs)',
+    description: 'Logs: restart the focused pane\'s service',
+  },
+  {
+    keys: 'm / a / p (Update)',
+    description: 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service',
+  },
+  {
+    keys: 'Ctrl+N (Update config)',
+    description: 'Update config, two-panel screen: start the run (Enter starts it in the plain list)',
+  },
+  {
+    keys: 'R (load error)',
+    description: 'EDTs, Update and Logs: retry a failed list load',
+  },
+  {
+    keys: 'Ctrl+R (Routes)',
+    description: 'Routes: fire the request of the open pane',
+  },
+  {
+    keys: 'Ctrl+T (branch picker)',
+    description: 'Branch picker: rename the highlighted branch',
   },
 ];

@@ -49,8 +49,7 @@ describe('keybinding-help scroll window (UX-DR15)', () => {
     expect(down.scrollOffset).toBe(1);
 
     const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    // The zone-scoped Logs wrap-all row is last.
-    expect(atBottom.visible.at(-1)?.keys).toBe('W (Logs)');
+    expect(atBottom.visible.at(-1)?.keys).toBe('Ctrl+T (branch picker)');
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
     const backUp = resolveHelpWindow(KEYBINDINGS, atBottom.scrollOffset - 1, 10);

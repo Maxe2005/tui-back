@@ -38,7 +38,7 @@ const EXPECTED = [
     'Enter (wizard Step 3)',
     'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   ],
-  ['Ctrl+R', 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy'],
+  ['Ctrl+R', 'Per-service box or table (wizard Step 3, switch resolution, Update config): revert the service to the global strategy'],
   ['Space / ↑ ↓ (wizard Step 4)', 'Create-EDT wizard, Step 4: choose between switching to the new EDT now and creating it without switching'],
   ['R (wizard Step 4 pause)', 'Create-EDT wizard, Step 4 paused on files at risk: re-run the pre-flight after fixing them by hand'],
   ['E (wizard Step 4 pause)', 'Create-EDT wizard, Step 4 paused on files at risk: open the overwrite confirmation listing every file'],
@@ -48,10 +48,9 @@ const EXPECTED = [
   ['Enter (switch resolution)', 'Switch EDT, dirty services: edit the global branch name / configure the focused service row'],
   [
     'Ctrl+N (switch resolution)',
-    'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
+    'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Discard] row asks a second confirmation)',
   ],
-  ['Ctrl+R (switch resolution)', 'Switch EDT, "Configurer" box: return the service to the global strategy'],
-  ['Space / ← → (switch resolution)', 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser'],
+  ['Space / ← → (switch resolution)', 'Switch EDT, global strategy and "Configure" box: toggle the action between Adopt and Discard'],
   ['↑ / ↓ (switch discard confirmation)', 'Switch EDT, discard confirmation: scroll the list of files to be destroyed'],
   ['Ctrl+E (switch resolution)', 'Switch EDT, discard confirmation: destroy the listed files and proceed (Enter/Esc go back)'],
   [
@@ -59,6 +58,13 @@ const EXPECTED = [
     'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
   ],
   ['W (Logs)', 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)'],
+  ['i (Logs)', 'Logs: toggle the focused pane between following and ignoring the global filter'],
+  ['R (Logs)', "Logs: restart the focused pane's service"],
+  ['m / a / p (Update)', 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service'],
+  ['Ctrl+N (Update config)', 'Update config, two-panel screen: start the run (Enter starts it in the plain list)'],
+  ['R (load error)', 'EDTs, Update and Logs: retry a failed list load'],
+  ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane'],
+  ['Ctrl+T (branch picker)', 'Branch picker: rename the highlighted branch'],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
