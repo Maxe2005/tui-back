@@ -239,7 +239,7 @@ describe('LogsZone real-keypress interactions', () => {
 
   // `i` toggles that one pane's engagement with the global filter — reflected back via the
   // pane's own "global filter: off" annotation.
-  it('"g" toggles the sub-focused pane\'s engagement with the global filter', async () => {
+  it('"i" toggles the sub-focused pane\'s engagement with the global filter', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {

@@ -297,7 +297,7 @@ export function rowIssueMessage(issue: PlanIssue): string {
   }
 }
 
-// One Panel B row, ready to render: display texts for the Base / Source and Branche cible
+// One Panel B row, ready to render: display texts for the Base / Source and Target branch
 // columns, the blocking error (if any, on the column it belongs to), and the resulting plan.
 export type RowView = {
   path: string;

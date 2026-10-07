@@ -49,7 +49,7 @@ describe('keybinding-help scroll window (UX-DR15)', () => {
     expect(down.scrollOffset).toBe(1);
 
     const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    expect(atBottom.visible.at(-1)?.keys).toBe('Ctrl+T (branch picker)');
+    expect(atBottom.visible.at(-1)?.keys).toBe(KEYBINDINGS.at(-1)?.keys);
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
     const backUp = resolveHelpWindow(KEYBINDINGS, atBottom.scrollOffset - 1, 10);

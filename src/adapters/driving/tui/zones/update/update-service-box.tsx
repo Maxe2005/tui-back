@@ -1,15 +1,15 @@
-// tui/zones/update: render-only view of the "Configurer <service>" box (state and keys live in
+// tui/zones/update: render-only view of the "Configure <service>" box (state and keys live in
 // update-service-box.logic.ts). Height: SERVICE_BOX_ROWS (update-config-panels.logic.ts)
 // + the branch field's list (`dropdownLines`); every line is truncated, none can wrap.
 import { Box, Text } from 'ink';
-import { formatHints, KEY_UP_DOWN } from '../../shared/components/hints.js';
+import { formatHints } from '../../shared/components/hints.js';
 import { SuggestField } from '../../shared/components/suggest-field.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
 
 export const SERVICE_BOX_FOOTER = [
-  formatHints([[KEY_UP_DOWN, 'move'], ['Enter', 'edit / apply'], ['Space', 'change']]),
+  formatHints([['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'change']]),
   formatHints([['Ctrl+R', 'back to global'], ['Esc', 'close']]),
 ] as const;
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';

@@ -1,5 +1,5 @@
 // tui/zones/update: render-only view of the two-panel update configuration (EDT and all-repos
-// scopes), laid out like edt-create's Step 3: PARAMÈTRES GLOBAUX above a per-service table.
+// scopes), laid out like edt-create's Step 3: GLOBAL SETTINGS above a per-service table.
 // Height: modal chrome is budgeted by computeConfigBudget; this view adds panel A (one line per
 // global line), the table (header 1 + `tableRows` incl. its more-above/below lines), one error
 // line and two hint lines, all truncated to a single line — nothing here can wrap.

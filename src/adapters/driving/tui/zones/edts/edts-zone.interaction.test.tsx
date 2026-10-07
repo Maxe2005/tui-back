@@ -268,8 +268,8 @@ describe('EdtsZone real-keypress interactions', () => {
       for (const part of ['[Tab] switch pane', '[Enter] configure row', '[Ctrl+N] confirm', '[Esc] cancel']) {
         expect(stdout.output).toContain(part);
       }
-      expect(stdout.output).toContain('hors EDT');
-      expect(stdout.output).toContain('membre de third');
+      expect(stdout.output).toContain('outside any EDT');
+      expect(stdout.output).toContain('member of third');
       expect(stdout.output).toContain('[Adopt (Global)]');
       expect(stdout.output).toContain('svc-orders — will be stashed for Mon Topic (restored on return)');
 
@@ -296,7 +296,7 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('an Discard strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
+  it('a Discard strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
     const { store, probe } = resolutionStore();
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1412,7 +1412,7 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('"Configure" box — a Perso row ignores Panel A; Ctrl+R reverts it to the global rule', async () => {
+  it('"Configure" box — a Custom row ignores Panel A; Ctrl+R reverts it to the global rule', async () => {
     const { store, createCalls } = step3Store({ lists: { '/repos/a': { local: ['main'], remote: ['origin/dev'] }, '/repos/b': { local: ['development'], remote: [] } } });
     const { instance, stdout, stdin } = mount(store);
     try {
@@ -1423,7 +1423,7 @@ describe('EdtsZone real-keypress interactions', () => {
       let frame = lastWizardFrame(stdout);
       expect(frame).toContain('Configure svc-a');
       expect(frame).toContain('Mode: (•) Create new ( ) Choose existing');
-      expect(frame).toContain('Branche de base (source): main');
+      expect(frame).toContain('Base branch (source): main');
       expect(frame).toContain('Branch name: demo');
 
       await press(instance, stdin, KEYS.down); // base line
@@ -1444,7 +1444,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(frame).not.toContain('Configure svc-a');
       expect(frame).toMatch(/svc-a +│ \[Create \(Custom\)\] +│ origin\/dev +│ q/);
 
-      // Perso ignores Panel A: an unresolvable global base only blocks the global row.
+      // Custom ignores Panel A: an unresolvable global base only blocks the global row.
       await press(instance, stdin, KEYS.tab);
       await type(instance, stdin, 'zzz');
       frame = lastWizardFrame(stdout);
@@ -1475,7 +1475,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open the box
       await press(instance, stdin, KEYS.space); // Mode -> Choose existing
-      await press(instance, stdin, KEYS.down); // "Branche existante"
+      await press(instance, stdin, KEYS.down); // "Existing branch"
       await press(instance, stdin, KEYS.enter);
       await type(instance, stdin, 'feat/z');
       await press(instance, stdin, KEYS.enter); // commit -> rename checkbox
@@ -1514,14 +1514,14 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(frame).toContain('“prod” is a local branch protected by the manifest of svc-a');
 
       await press(instance, stdin, KEYS.up); // rename checkbox
-      await press(instance, stdin, KEYS.up); // "Branche existante"
+      await press(instance, stdin, KEYS.up); // "Existing branch"
       await press(instance, stdin, KEYS.enter);
       for (let i = 0; i < 4; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'origin/w');
       await press(instance, stdin, KEYS.enter); // commit -> rename checkbox
-      await press(instance, stdin, KEYS.space); // check it: "Nouveau nom" appears
+      await press(instance, stdin, KEYS.space); // check it: "New name" appears
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter);
       await type(instance, stdin, 'w2');
@@ -3852,7 +3852,7 @@ describe('EdtsZone edt-create-from', () => {
     }
   });
 
-  it('known topic: seeded wizard — inherited row Perso on the root branch, added row Global; submit sends the root bases', async () => {
+  it('known topic: seeded wizard — inherited row Custom on the root branch, added row Global; submit sends the root bases', async () => {
     const { store, createCalls, logged } = createFromStore('feat-a');
     const { instance, stdout, stdin } = mount(store);
     try {

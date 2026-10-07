@@ -176,7 +176,7 @@ describe('reduceSwitchResolutionKey', () => {
     expect(back.box).toMatchObject({ line: 'action', action: 'adopt' });
   });
 
-  it('a Perso override stops following Panel A; Ctrl+R in the box returns the row to Global', () => {
+  it('a Custom override stops following Panel A; Ctrl+R in the box returns the row to Global', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     // Panel B, row 2 (svc-b), open the box, edit the branch to feat/y, apply.
     const opened = press(state, TAB, DOWN, ENTER);
@@ -186,7 +186,7 @@ describe('reduceSwitchResolutionKey', () => {
     expect(applied.overrides['/repo/b']).toEqual({ kind: 'adopt', branch: 'feat/y' });
     const rows = buildRows(DIRTY, globalOf(applied));
     expect(modeLabel(rows[1]!.plan)).toBe('[Adopt (Custom)]');
-    // Switching Panel A to Discard leaves the Perso row alone.
+    // Switching Panel A to Discard leaves the Custom row alone.
     const globalDiscard = press(applied, TAB, SPACE);
     expect(buildRows(DIRTY, globalOf(globalDiscard)).map((row) => row.plan.kind)).toEqual(['discard', 'adopt']);
     const reverted = press(applied, ENTER, CTRL_R);

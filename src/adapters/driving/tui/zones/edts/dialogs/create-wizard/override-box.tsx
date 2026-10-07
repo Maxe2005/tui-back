@@ -1,4 +1,4 @@
-// tui/zones/edts/dialogs/create-wizard: the "Configurer <service>" override box's Ink view. Its
+// tui/zones/edts/dialogs/create-wizard: the "Configure <service>" override box's Ink view. Its
 // state, key reducer and Apply validation live in override-box.logic.ts.
 import { Box, Text } from 'ink';
 import {
@@ -16,7 +16,7 @@ import {
   type OverrideBoxLine,
   type OverrideBoxState,
 } from './override-box.logic.js';
-import { formatHints, KEY_UP_DOWN } from '../../../../shared/components/hints.js';
+import { formatHints } from '../../../../shared/components/hints.js';
 
 function LineMarker({ focused }: { focused: boolean }) {
   return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
@@ -64,7 +64,7 @@ function BoxField({
 }
 
 export const OVERRIDE_BOX_FOOTER =
-  formatHints([[KEY_UP_DOWN, 'move'], ['Enter', 'edit / apply'], ['Space', 'mode'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
+  formatHints([['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'mode'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
 
 export function OverrideBoxView({
   box,
@@ -93,7 +93,7 @@ export function OverrideBoxView({
       {box.mode === 'create' ? (
         <>
           <BoxField
-            label="Branche de base (source)"
+            label="Base branch (source)"
             focused={focused('base')}
             editing={box.editing}
             autocomplete={box.base}
@@ -107,7 +107,7 @@ export function OverrideBoxView({
       ) : (
         <>
           <BoxField
-            label="Branche existante"
+            label="Existing branch"
             focused={focused('existing')}
             editing={box.editing}
             autocomplete={box.existing}
@@ -120,7 +120,7 @@ export function OverrideBoxView({
             <Text color={focused('rename') ? colors.accent : colors.text}>{box.rename ? '[x]' : '[ ]'} Rename the local branch</Text>
           </Box>
           {box.rename ? (
-            <BoxField label="Nouveau nom" focused={focused('newName')} editing={box.editing} value={box.newName} context={context} maxRows={maxRows} />
+            <BoxField label="New name" focused={focused('newName')} editing={box.editing} value={box.newName} context={context} maxRows={maxRows} />
           ) : null}
           {newNameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.newName.value.trim(), context.service)}</Text> : null}
         </>

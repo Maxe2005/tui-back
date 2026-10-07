@@ -234,7 +234,7 @@ export type CreateFormFocus = FormFocus;
 // ---- Create wizard Step 3 ----------------------------------------------------------------
 // The "global strategy + per-service exceptions" state. A row override is exactly core's
 // MemberBranchPlan: `create` renders as [Create (Custom)], `existing` as [Existante] — or
-// [Renommer] once `renameTo` is set. A path with no override follows Panel A's global rule
+// [Rename] once `renameTo` is set. A path with no override follows Panel A's global rule
 // ([Create (Global)]).
 export type RowOverride = MemberBranchPlan;
 

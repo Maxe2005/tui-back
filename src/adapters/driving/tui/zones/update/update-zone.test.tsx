@@ -301,7 +301,7 @@ describe('shouldOpenEdtConfig / shouldOpenSingleConfig', () => {
   });
 });
 
-describe('resolveUpdateTrigger (g / p)', () => {
+describe('resolveUpdateTrigger (m / p)', () => {
   it('opens the edt-scoped config on m/M while idle/done/error', () => {
     expect(resolveUpdateTrigger('m', {}, 'idle')).toBe('open-edt-config');
     expect(resolveUpdateTrigger('M', {}, 'done')).toBe('open-edt-config');

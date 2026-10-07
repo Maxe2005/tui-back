@@ -1,7 +1,7 @@
 // tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" — one global branch rule (Panel A: the
 // default source branch, empty meaning each service's own sharedBranch, and the global branch
 // name) then per-service exceptions (Panel B: a height-bounded table, Enter opens the
-// "Configurer <service>" box). Tab switches panels; Enter never advances the wizard here. Esc
+// "Configure <service>" box). Tab switches panels; Enter never advances the wizard here. Esc
 // closes the innermost element first. A pure reducer (reduceBranchStepKey) handles the keys.
 import { Box, Text, type Key } from 'ink';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';

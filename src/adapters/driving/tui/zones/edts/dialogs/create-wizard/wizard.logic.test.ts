@@ -243,7 +243,7 @@ describe('buildRowView / buildMemberPlans', () => {
     expect(row).toMatchObject({ baseStatus: 'error', error: 'failed to load branches: not a git repository' });
   });
 
-  it('a global or Perso target that already exists locally is a row error', () => {
+  it('a global or Custom target that already exists locally is a row error', () => {
     const global = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'feat/q' }, ready(['main', 'feat/q']), PROTECTION);
     expect(global).toMatchObject({ targetError: 'branch already exists', plan: null });
     const perso = buildRowView(
@@ -276,7 +276,7 @@ describe('buildRowView / buildMemberPlans', () => {
     expect(unlisted).toMatchObject({ targetError: null, plan: { kind: 'create', base: 'development', name: 'preprod' } });
   });
 
-  it('Perso: ignores Panel A entirely', () => {
+  it('Custom: ignores Panel A entirely', () => {
     const override = { kind: 'create' as const, base: 'origin/dev', name: 'q' };
     const row = buildRowView({ path: '/repos/a', service: 'svc-a', override }, { base: 'nope', name: 'other' }, ready([]), PROTECTION);
     expect(row).toMatchObject({ mode: 'perso', modeLabel: '[Create (Custom)]', base: 'origin/dev', target: 'q', error: null });

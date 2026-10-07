@@ -1,4 +1,4 @@
-// tui/zones/edts/dialogs/create-wizard: the "Configurer <service>" override box's state, pure key
+// tui/zones/edts/dialogs/create-wizard: the "Configure <service>" override box's state, pure key
 // reducer and Apply validation, kept apart from its Ink view (override-box.tsx) so
 // edts-zone.logic.ts can type its state without importing a view file. Two modes: Create new
 // (base branch + new name) and Choose existing (existing branch, optionally renamed).
@@ -208,7 +208,7 @@ function reduceAutocompleteField(
 // next line; `Esc` leaves the field, or closes the box without applying; `Enter` on
 // `[ Apply ]` validates and applies; `Ctrl+R` reverts the row to the global strategy.
 export function reduceOverrideBoxKey(box: OverrideBoxState, context: OverrideBoxContext, input: string, key: TextEditKey): OverrideBoxKeyResult {
-  // Ctrl+R: "Revenir à la stratégie globale" — wins from any line, in or out of a field.
+  // Ctrl+R: back to the global strategy — wins from any line, in or out of a field.
   if (key.ctrl && input.toLowerCase() === 'r') {
     return { type: 'revert' };
   }

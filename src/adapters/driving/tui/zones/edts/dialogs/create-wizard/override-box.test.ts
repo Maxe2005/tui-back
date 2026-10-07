@@ -126,7 +126,7 @@ describe('reduceOverrideBoxKey', () => {
     expect(press(box({ line: 'name', editing: true }), 'r', { ctrl: true })).toEqual({ type: 'revert' });
   });
 
-  it('Perso: Enter on [ Apply ] applies a create plan', () => {
+  it('Custom: Enter on [ Apply ] applies a create plan', () => {
     const ready = box({ line: 'apply', base: { value: 'origin/dev', cursor: 10, pickCursor: 0 }, name: { value: 'q', cursor: 1 } });
     expect(press(ready, '', { return: true })).toEqual({ type: 'apply', plan: { kind: 'create', base: 'origin/dev', name: 'q' } });
   });
@@ -187,7 +187,7 @@ describe('validateOverrideBox', () => {
     });
   });
 
-  it('a Perso name or a rename target that already exists locally is refused, and so is a no-op rename', () => {
+  it('a Custom name or a rename target that already exists locally is refused, and so is a no-op rename', () => {
     expect(validateOverrideBox(box({ name: { value: 'feat/z', cursor: 6 } }), CONTEXT)).toEqual({ ok: false, error: existingTargetError('feat/z') });
     const existing = box({ mode: 'existing', rename: true, existing: { value: 'origin/w', cursor: 8, pickCursor: 0 } });
     expect(validateOverrideBox({ ...existing, newName: { value: 'feat/z', cursor: 6 } }, CONTEXT)).toEqual({ ok: false, error: existingTargetError('feat/z') });

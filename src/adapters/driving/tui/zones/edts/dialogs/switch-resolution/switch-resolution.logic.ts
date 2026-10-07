@@ -214,9 +214,9 @@ export function modeLabel(plan: RowPlan): string {
 
 export function scopeLabel(repo: SwitchDirtyRepo): string {
   if (repo.scope === 'member-of-other-edt') {
-    return repo.owningEdtTopics.length > 0 ? `membre de ${repo.owningEdtTopics.join(', ')}` : 'membre d\'un autre EDT';
+    return repo.owningEdtTopics.length > 0 ? `member of ${repo.owningEdtTopics.join(', ')}` : 'member of another EDT';
   }
-  return 'hors EDT';
+  return 'outside any EDT';
 }
 
 export function claimedBranchError(topic: string): string {
@@ -303,7 +303,7 @@ export function blockedRow(
   return undefined;
 }
 
-// ---- The "Configurer <service>" box --------------------------------------------------------
+// ---- The "Configure <service>" box --------------------------------------------------------
 
 export function boxLines(box: Pick<SwitchResolutionBox, 'action'>): SwitchResolutionBoxLine[] {
   return box.action === 'adopt' ? ['action', 'branch', 'apply'] : ['action', 'apply'];
@@ -378,7 +378,7 @@ export function reduceResolutionBoxKey(
   }
   if (box.line === 'action') {
     if (input === ' ' || key.leftArrow || key.rightArrow) {
-      // With no outgoing EDT only Écraser is offered.
+      // With no outgoing EDT only Discard is offered.
       return row.hasOutgoing ? { type: 'update', box: { ...box, action: box.action === 'adopt' ? 'discard' : 'adopt', error: null } } : { type: 'update', box };
     }
     return { type: 'update', box: key.return ? { ...box, line: nextBoxLine(box) } : box };
@@ -398,14 +398,14 @@ export function reduceResolutionBoxKey(
 }
 
 // ---- The main reducer ----------------------------------------------------------------------
-//   - Panel A "STRATÉGIE GLOBALE" (focused on open): the default action, Adopter dans <outgoing
-//     topic> or Écraser (`Space`/`←→`), plus, when Adopter, the global branch name (pre-filled
+//   - Panel A "GLOBAL STRATEGY" (focused on open): the default action, Adopt into <outgoing
+//     topic> or Discard (`Space`/`←→`), plus, when Adopt, the global branch name (pre-filled
 //     with the outgoing topic's slug) applied to every row on a SHARED branch. With no outgoing
-//     EDT only Écraser is offered.
-//   - Panel B "SERVICES CONCERNÉS": one row per dirty state-2/3 service; `Enter` opens the
-//     "Configurer <service>" box, `[ Apply ]` makes the row Perso (or Écraser), `Ctrl+R`
+//     EDT only Discard is offered.
+//   - Panel B "AFFECTED SERVICES": one row per dirty state-2/3 service; `Enter` opens the
+//     "Configure <service>" box, `[ Apply ]` makes the row Custom (or Discard), `Ctrl+R`
 //     returns it to the global strategy.
-//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Écraser row it first opens
+//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Discard row it first opens
 //     the discard confirmation (files per service, default back, `Ctrl+E` confirms).
 //   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation); on
 //     the main view it cancels the whole switch.

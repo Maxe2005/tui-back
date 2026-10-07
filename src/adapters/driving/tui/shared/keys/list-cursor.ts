@@ -2,10 +2,8 @@
 // Pure functions so lists are unit-testable (renderToString's fake stdin never invokes useInput).
 
 import type { NavigationKey } from '../../keybindings/index.js';
-// The arrow-key row-focus transition, interpreted as a pure function so it is unit-testable
-// (renderToString's fake stdin never invokes useInput). Arrows/Home/End only — they produce an
-// empty `input` in Ink, so only `key` flags are read. Generic over "current index, length", so
-// every list here (EDT selector, member checklists) reuses it.
+
+// Arrow/Home/End keys produce an empty `input` in Ink, so only `key` flags are read.
 export type SelectionDirection = 'up' | 'down';
 
 export function resolveSelectionDirection(key: Pick<NavigationKey, 'upArrow' | 'downArrow'>): SelectionDirection | null {

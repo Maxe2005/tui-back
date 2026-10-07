@@ -1,6 +1,6 @@
 // tui/zones/edts/dialogs/switch-resolution: the SWITCH EDT resolution view's Ink rendering — the
 // intro, Panel A (global strategy), Panel B (the shared BranchPlanTable, then the read-only dim
-// state-1 rows), the "Configurer <service>" box and the discard confirmation. State and key
+// state-1 rows), the "Configure <service>" box and the discard confirmation. State and key
 // handling live in switch-resolution.logic.ts.
 import { Box, Text } from 'ink';
 import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
@@ -23,11 +23,11 @@ import {
   type SwitchResolutionBox,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
-import { formatHints, KEY_UP_DOWN } from '../../../../shared/components/hints.js';
+import { formatHints } from '../../../../shared/components/hints.js';
 
 const COLUMN_HEADERS = ['Service', 'Scope', 'Current branch', 'Action', 'Target branch'] as const;
 
-export const RESOLUTION_BOX_FOOTER = formatHints([[KEY_UP_DOWN, 'move'], ['Space', 'action'], ['Enter', 'edit / apply'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
+export const RESOLUTION_BOX_FOOTER = formatHints([['↑/↓/Tab', 'move'], ['Space/←/→', 'action'], ['Enter', 'edit / apply'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
 export const DISCARD_CONFIRM_FOOTER = formatHints([['Ctrl+E', 'overwrite for good'], ['Enter/Esc', 'back']]);
 
 function Marker({ focused }: { focused: boolean }) {
