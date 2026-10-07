@@ -185,6 +185,9 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
           return {};
         }
         const count = boundaryCount(state.resizeMode.zone);
+        if (count === 0) {
+          return { resizeMode: null };
+        }
         return {
           resizeMode: {
             zone: state.resizeMode.zone,

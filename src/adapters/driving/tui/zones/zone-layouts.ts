@@ -42,7 +42,7 @@ export function defaultZoneRatios(zone: ZoneId): number[] {
 export function clampBoundaryRatio(zone: ZoneId, boundaryIndex: number, ratio: number): number {
   const spec = ZONE_LAYOUTS[zone].boundaries[boundaryIndex];
   if (spec === undefined) {
-    return ratio;
+    return Number.isFinite(ratio) ? ratio : 0.5;
   }
   const safe = Number.isFinite(ratio) ? ratio : spec.defaultRatio;
   return Math.min(spec.max, Math.max(spec.min, safe));

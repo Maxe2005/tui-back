@@ -22,7 +22,12 @@ export function ZoneLayout({ zoneId, boundary = 0, first, second, useStore = use
   );
   const spec = ZONE_LAYOUTS[zoneId].boundaries[boundary];
   if (spec === undefined) {
-    return <>{first}</>;
+    return (
+      <>
+        {first}
+        {second}
+      </>
+    );
   }
   const flex = resolveBoundaryFlex(zoneId, boundary, ratio ?? spec.defaultRatio);
   const vertical = spec.orientation === 'vertical';
