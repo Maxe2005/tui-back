@@ -233,12 +233,18 @@ The same intent uses the same key, wording and component in every zone and dialo
 | UI language | English for every label, hint, title and error, with strings kept easy to extract; the French Voice examples above are superseded. A fr/en setting is a separate future story. |
 | Retry / restart | `R` = retry or refresh (create-wizard activation pause, load errors). Logs `R` = restart the focused service (documented deviation, same "run again" family). A bare `R` is never active while a text field is focused. |
 | Back to global | `Ctrl+R` in every per-service parameter box and table (Update config, wizard override box, switch-resolution box). |
-| Rename branch | `F2` in `BranchPicker` (replaces `Ctrl+R`). Must be verified to reach Ink on common terminals; fall back to a documented alternative if not. |
+| Rename branch | `Ctrl+T` in `BranchPicker` (replaces `Ctrl+R`). `F2` was validated first but Ink 7.1.1 `useInput` exposes no function-key flag (empty input), so it cannot be bound; `Ctrl+T` is the documented fallback. |
 
 | Deviation | Reason |
 |---|---|
 | Routes: `Ctrl+R` = fire request | Routes has text fields, so a bare letter cannot be used; `Ctrl+Enter` is not distinguishable from `Enter` on common terminals. |
 | Logs: `R` = restart service | Same "run again" family as retry; letter already established. |
+| Two-panel screens (wizard step 3, switch resolution, Update config): `Ctrl+N` confirms | `Enter` opens or edits the focused row there, so it cannot also confirm; the same chord is the wizard's next-step key. The plain Update config list (single service) confirms with `Enter`. |
+| `FilterablePickList`: `Home`/`End` move the text caret | The filter text field has focus, so the keys belong to the caret; `↑`/`↓` move the cursor. |
+| Routes raw body editor: `Esc` closes and keeps the text, `Enter` is a newline | A multi-line editor needs `Enter` for newlines; discarding a hand-typed body on `Esc` would lose work. |
+| Branch lists: no `[R] retry` hint | A bare letter would type into the focused text field; branch lists reload on reopening the field. |
+| Clearing views (Logs `c`/`Ctrl+C`) and Routes row `d` act without confirmation | Reversible or trivially re-creatable data; labelled in the hints, per the destructive-action rule. |
+| Registry stale-entry cleaning: selection + `Enter`, no second step | The registry entries only point at paths that are gone; nothing on disk is destroyed. |
 
 ## Accessibility Floor
 
