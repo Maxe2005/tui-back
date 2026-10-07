@@ -1,5 +1,6 @@
 import type { ZoneId } from '../zones/zones.js';
 import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
+export type { NavigationKey } from '../shared/keys/navigation-key.js';
 
 // `footer` marks a row the footer advertises too (with `zone` when only that zone shows it), so
 // the footer and the ? help are generated from this one list.
@@ -7,17 +8,6 @@ export type Keybinding = {
   keys: string;
   description: string;
   footer?: { key: string; verb: string; zone?: ZoneId };
-};
-
-// The subset of Ink's `Key` type every list-navigation pure function reads, shared so the
-// shape can't drift across call sites. Arrow/Home/End/Tab keys produce an empty `input`
-// string in Ink — only these flags are set.
-export type NavigationKey = {
-  upArrow: boolean;
-  downArrow: boolean;
-  home: boolean;
-  end: boolean;
-  tab: boolean;
 };
 
 export const KEYBINDINGS: readonly Keybinding[] = [

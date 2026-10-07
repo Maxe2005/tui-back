@@ -25,6 +25,10 @@ export type FocusNavDeclaration<T> = {
   stops: readonly T[];
 };
 
+// The two panels (global line / per-service table) the create wizard's Step 3 and the switch
+// resolution view toggle between.
+export const TWO_PANEL_NAV: FocusNavDeclaration<'global' | 'rows'> = { mode: 'tab', stops: ['global', 'rows'] };
+
 export function resolveFocusStep(input: string, key: FocusNavKey, mode: FocusNavMode): FocusNavDirection | null {
   switch (mode) {
     case 'tab':

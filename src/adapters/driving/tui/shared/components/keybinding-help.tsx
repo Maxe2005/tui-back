@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Text, useInput } from 'ink';
-import { KEYBINDINGS, type NavigationKey } from '../../keybindings/index.js';
+import { KEYBINDINGS } from '../../keybindings/index.js';
+import type { NavigationKey } from '../keys/navigation-key.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors } from '../theme/theme.js';
 import { ModalDialog } from './modal-dialog.js';
