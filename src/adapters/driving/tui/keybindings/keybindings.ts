@@ -59,8 +59,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: '/',
-    description: 'Open filter within the current zone',
-    footer: { key: '/', verb: 'filter' },
+    description: 'Logs / Routes: open the filter',
+    footer: { key: '/', verb: 'filter', zones: ['logs', 'routes'] },
   },
   {
     keys: ':',

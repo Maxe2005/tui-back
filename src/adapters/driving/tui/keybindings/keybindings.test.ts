@@ -22,7 +22,7 @@ const EXPECTED = [
     'Ctrl+W',
     "Keyboard resize-mode on the active zone's splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)",
   ],
-  ['/', 'Open filter within the current zone'],
+  ['/', 'Logs / Routes: open the filter'],
   [':', 'Open command entry'],
   ['?', 'Open the keybinding-help screen'],
   ['q', "Quit (confirms first if a run is in progress; disable in :settings' General tab)"],

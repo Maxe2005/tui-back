@@ -314,22 +314,6 @@ describe('AppShell Left/Right zone-arrow navigation', () => {
     }
   });
 
-  it('has no effect while the filter overlay is open', async () => {
-    const store = createAppStore();
-    const { instance, stdin } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, '/'); // opens the filter modal (local AppShell state)
-
-      await press(instance, stdin, KEYS.right);
-
-      expect(store.getState().activeZone).toBe('dashboard');
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
   it('has no effect while the help overlay is open', async () => {
     const store = createAppStore();
     store.getState().openHelp();
@@ -789,22 +773,6 @@ describe('AppShell command-entry bar (:)', () => {
       // "?" must land as a literal query character (the bar owns free-text capture) — it
       // must never also pop the global keybinding-help modal on top of the bar.
       expect(store.getState().helpOpen).toBe(false);
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
-  it('never stacks on top of the filter overlay', async () => {
-    const store = createAppStore();
-    const { instance, stdin, stdout } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-      await press(instance, stdin, '/'); // opens the filter modal (local AppShell state)
-
-      await press(instance, stdin, ':');
-
-      expect(stdout.output).not.toContain('COMMAND');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1824,40 +1792,6 @@ describe('AppShell settings screen (:settings)', () => {
       await instance.waitUntilExit();
     }
   });
-
-  // The Logs zone owns `/` itself (its global-filter editor), so this app-wide stub must go
-  // inert while it's the active zone — the same double-dispatch hazard as the arrow keys.
-  it('the global "/" filter stub opens normally outside the Logs zone', async () => {
-    const store = createAppStore();
-    const { instance, stdin, stdout } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-      expect(store.getState().activeZone).not.toBe('logs');
-
-      await press(instance, stdin, '/');
-
-      expect(stdout.output).toContain('Filter input — wired in Epic 2+');
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
-
-  it('the global "/" filter stub stays inert while the Logs zone is active — it owns "/" itself', async () => {
-    const store = createAppStore();
-    store.setState({ activeZone: 'logs' });
-    const { instance, stdin, stdout } = mount(store);
-    try {
-      await instance.waitUntilRenderFlush();
-
-      await press(instance, stdin, '/');
-
-      expect(stdout.output).not.toContain('Filter input — wired in Epic 2+');
-    } finally {
-      instance.unmount();
-      await instance.waitUntilExit();
-    }
-  });
 });
 
 describe('AppShell tabVisibility load activation', () => {
@@ -2681,18 +2615,6 @@ describe('AppShell footer contexts (real keypress)', () => {
       await instance.waitUntilExit();
     }
   }
-
-  it('the global filter registers its context while open and clears it on Esc', async () => {
-    await withShell(async ({ store, instance, stdin }) => {
-      expect(footerIdOf(store)).toBeUndefined();
-      await press(instance, stdin, '/');
-      await settle(instance);
-      expect(footerIdOf(store)).toBe('dismiss');
-      await pressEscape(instance, stdin);
-      await settle(instance);
-      expect(footerIdOf(store)).toBeUndefined();
-    });
-  });
 
   it('the help registers its context while open and clears it on close', async () => {
     await withShell(async ({ store, instance, stdin }) => {

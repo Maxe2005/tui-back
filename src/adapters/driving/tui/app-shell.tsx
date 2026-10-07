@@ -4,7 +4,6 @@ import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-vis
 import { CommandBar } from './shared/command-bar.js';
 import { Footer } from './shared/components/footer.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
-import { ModalDialog } from './shared/components/modal-dialog.js';
 import { TopBar } from './shared/components/top-bar.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
@@ -138,10 +137,6 @@ export function shouldFallbackToDashboard(
   return zoneGatedStatus(activeZone, tabVisibility) === 'omitted';
 }
 
-export function shouldOpenFilter(input: string): boolean {
-  return input === '/';
-}
-
 export function shouldOpenCommand(input: string): boolean {
   return input === ':';
 }
@@ -204,9 +199,6 @@ export function AppShell({
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
-
-  const [filterOpen, setFilterOpen] = useState(false);
-  useFooterContext('filter', filterOpen ? 'dismiss' : null, useStore);
 
   // A single effect keyed on `registryScreenOpen` both fires the mount-time load (it starts
   // false) and reloads whenever the registry screen closes (registering may show/hide a gated
@@ -277,7 +269,7 @@ export function AppShell({
     // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
     // exclusion as the zone-switch block below; entering additionally requires the active zone
     // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
-    if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
+    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
       if (state.resizeMode !== null) {
         const boundaryStep = resolveFocusStep(input, key, 'tab');
         if (boundaryStep !== null) {
@@ -320,7 +312,6 @@ export function AppShell({
     // returned, so this is defensive against future reordering.
     if (
       !helpOpen &&
-      !filterOpen &&
       !registryScreenOpen &&
       !commandBarOpen &&
       !settingsScreenOpen &&
@@ -347,14 +338,6 @@ export function AppShell({
         return;
       }
 
-      // The Routes and Logs zones own `/` themselves (route filter, global-filter editor) while
-      // active — without this guard, this app-wide filter stub would also fire on the same
-      // keystroke (Ink dispatches to every mounted `useInput` hook).
-      if (activeZone !== 'logs' && activeZone !== 'routes' && shouldOpenFilter(input)) {
-        setFilterOpen(true);
-        return;
-      }
-
       if (shouldOpenCommand(input)) {
         openCommandBar();
         return;
@@ -364,10 +347,6 @@ export function AppShell({
         onQuit();
         return;
       }
-    }
-
-    if (filterOpen && (input === '?' || key.escape === true)) {
-      setFilterOpen(false);
     }
 
     // Esc always closes the registry screen, regardless of its internal phase (no partial
@@ -386,14 +365,6 @@ export function AppShell({
       <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} />
       <ZoneScreen useStore={useStore} />
       <KeybindingHelp useStore={useStore} />
-      {filterOpen && (
-        <ModalDialog
-          title="FILTER"
-          open={true}
-        >
-          <Text>Filter input — wired in Epic 2+</Text>
-        </ModalDialog>
-      )}
       {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
       {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
       {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}

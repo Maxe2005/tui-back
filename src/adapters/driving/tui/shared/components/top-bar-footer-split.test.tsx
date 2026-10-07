@@ -27,7 +27,6 @@ describe('TopBar', () => {
     expect(output).toContain('tui-back');
     expect(output).toContain('checkout-revamp');
     expect(output).not.toContain('edt-01hx2');
-    expect(output).toContain('[/] filter');
     expect(output).toContain('[:] cmd');
   });
 

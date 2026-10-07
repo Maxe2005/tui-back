@@ -297,9 +297,9 @@ export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
 
 // Who may register a footer context. Overlays sit above the zone they cover, so they win over a
 // zone that registers or re-registers while one is open.
-export type FooterOwner = 'help' | 'command-bar' | 'filter' | 'registry' | 'settings' | 'reset' | 'edts' | 'update' | 'logs' | 'routes';
+export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'edts' | 'update' | 'logs' | 'routes';
 
-export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'filter', 'registry', 'settings', 'reset'];
+export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset'];
 
 export type FooterContextEntry = { owner: FooterOwner; id: FooterContextId };
 

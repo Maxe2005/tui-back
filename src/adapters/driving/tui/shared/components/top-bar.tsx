@@ -19,7 +19,7 @@ export function TopBar({
         {topic ? topic : 'no active EDT'}
       </Text>
       <Box flexGrow={1} />
-      <Text color={colors['text-dim']}>{formatHints([['/', 'filter'], [':', 'cmd']])}</Text>
+      <Text color={colors['text-dim']}>{formatHints([[':', 'cmd']])}</Text>
     </Box>
   );
 }

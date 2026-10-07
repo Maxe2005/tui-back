@@ -7,7 +7,6 @@ import {
   shouldQuit,
   shouldSwitchZone,
   shouldOpenCommand,
-  shouldOpenFilter,
   resolveZoneArrowSwitch,
   shouldFallbackToDashboard,
   shouldEnterResizeMode,
@@ -60,7 +59,6 @@ describe('AppShell', () => {
     for (const zone of ZONES) {
       expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
     }
-    expect(output).toContain('[/] filter');
   });
 
   it('never mounts the command bar on initial render — commandBarOpen defaults closed', async () => {
@@ -79,7 +77,6 @@ describe('AppShell', () => {
     for (const zone of ZONES) {
       expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
     }
-    expect(output).toContain('[/] filter');
     expect(output).toContain('[q] quit');
   });
 
@@ -226,11 +223,6 @@ describe('AppShell', () => {
         expect(shouldFallbackToDashboard('dashboard', visibility)).toBe(false);
         expect(shouldFallbackToDashboard('logs', visibility)).toBe(false);
       });
-    });
-
-    it('shouldOpenFilter returns true for /', () => {
-      expect(shouldOpenFilter('/')).toBe(true);
-      expect(shouldOpenFilter('j')).toBe(false);
     });
 
     describe('resolveZoneArrowSwitch', () => {
