@@ -208,7 +208,7 @@ The canonical keybinding contract for downstream implementation:
 - `Left` / `Right` (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism corrected 2026-08-25 after a review loopback) — with nothing capturing input, directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends — an always-available alternative to the mnemonics above, with no separate focus mode.
 - Mouse (optional) — click to select/activate, mirroring the keyboard equivalent; drag on a splitter resizes it directly, mirroring `Ctrl+W` mode.
 
-### Interaction consistency contract (UX-DR36, Story 7.4) — DRAFT, pending developer validation
+### Interaction consistency contract (UX-DR36, Story 7.4) — validated 2026-10-07
 
 The same intent uses the same key, wording and component in every zone and dialog. Source: `_bmad-output/implementation-artifacts/epic-7/interaction-inventory-7-4.md`. Any deviation must be listed in the last table with its reason.
 
@@ -230,12 +230,15 @@ The same intent uses the same key, wording and component in every zone and dialo
 | Text input | `nextTextInputValue` + `TextInputLine` everywhere. |
 | Pick list | `FilterablePickList` when filterable; one shared menu list for fixed menus. |
 | Branch input | One `BranchAutocompleteInput`; the command-bar suggest field is documented as a separate purpose. |
-| UI language | English for every label, hint, title and error; the French Voice examples above are superseded (to be amended on validation). |
-| `Ctrl+R` | One meaning only (see deviations once decided). |
+| UI language | English for every label, hint, title and error, with strings kept easy to extract; the French Voice examples above are superseded. A fr/en setting is a separate future story. |
+| Retry / restart | `R` = retry or refresh (create-wizard activation pause, load errors). Logs `R` = restart the focused service (documented deviation, same "run again" family). A bare `R` is never active while a text field is focused. |
+| Back to global | `Ctrl+R` in every per-service parameter box and table (Update config, wizard override box, switch-resolution box). |
+| Rename branch | `F2` in `BranchPicker` (replaces `Ctrl+R`). Must be verified to reach Ink on common terminals; fall back to a documented alternative if not. |
 
 | Deviation | Reason |
 |---|---|
-| _none yet_ | |
+| Routes: `Ctrl+R` = fire request | Routes has text fields, so a bare letter cannot be used; `Ctrl+Enter` is not distinguishable from `Enter` on common terminals. |
+| Logs: `R` = restart service | Same "run again" family as retry; letter already established. |
 
 ## Accessibility Floor
 
