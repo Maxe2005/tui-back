@@ -207,7 +207,7 @@ export function SwitchResolutionView({
         cursor={state.rowCursor}
         focused={rowsFocused}
         maxVisibleRows={maxVisibleRows}
-        labels={{ moreAbove: 'services au-dessus', moreBelow: 'services en dessous' }}
+        labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
       {stashed.map((repo) => (
         <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">

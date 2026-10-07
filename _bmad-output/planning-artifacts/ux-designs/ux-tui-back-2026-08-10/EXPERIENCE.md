@@ -223,13 +223,13 @@ The same intent uses the same key, wording and component in every zone and dialo
 | Destructive action | Reversible: modal + `Enter`. Irreversible file loss: second step `Ctrl+E`. Data reset: typed word. Clearing a view: no confirmation, but labelled. |
 | Filter | `/` opens, `Esc` clears. |
 | Refresh / retry | `R` retries or refreshes in the current context; load errors show `[R] retry`. |
-| Footer and `?` help | Both generated from one keybinding declaration list; the footer takes its context (zone, dialog, pane) from the store. |
-| Hint format | `[Key] verb`, entries joined by two spaces, English, `Esc`/`Enter` capitalised, `↑/↓`, `Ctrl+W`. |
+| Footer and `?` help | Both generated from one keybinding declaration list. The footer takes its context (zone, dialog, pane, screen) from the store: the layer that owns the keyboard registers a declared context (`keybindings/footer-contexts.ts`), the footer shows exactly that context's hints, and the zone hints return when it closes. The `?` help lists the same context rows. |
+| Hint format | `[Key] verb`, entries joined by two spaces, English, `Esc`/`Enter` capitalised, `↑/↓`, `Ctrl+W`. Built only through `formatHint(s)`; a guard test fails any literal written by hand. |
 | Modal title | UPPERCASE English noun phrase, no suffix punctuation. |
 | Loading / empty / error | One shared `StateLine`: spinner + "Loading X…", dim "No X yet.", error colour "Failed to load X. [R] retry". |
 | Text input | `nextTextInputValue` + `TextInputLine` everywhere. |
-| Pick list | `FilterablePickList` when filterable; one shared menu list for fixed menus. |
-| Branch input | One `BranchAutocompleteInput`; the command-bar suggest field is documented as a separate purpose. |
+| Pick list | `FilterablePickList` when filterable; `MenuList` (one reducer, one view) for fixed menus: service actions, Update service menu, blocker menu. |
+| Branch input | One `BranchAutocompleteInput` for every suggestion field (branches, EDT topics): substring suggestions in a window that follows the highlight inside a line budget (`↑/↓ N more` indicators count), `✔`/`✖` validity mark, optional dim placeholder for "use the default", loading/error through `StateLine`. `Enter` fills in the highlighted suggestion, then accepts a listed value. BranchPicker's create-new base-branch field uses it too (arrows highlight instead of overwriting the text). The `branchDropdownMaxRows` setting is now the line budget, indicators included. |
 | UI language | English for every label, hint, title and error, with strings kept easy to extract; the French Voice examples above are superseded. A fr/en setting is a separate future story. |
 | Retry / restart | `R` = retry or refresh (create-wizard activation pause, load errors). Logs `R` = restart the focused service (documented deviation, same "run again" family). A bare `R` is never active while a text field is focused. |
 | Back to global | `Ctrl+R` in every per-service parameter box and table (Update config, wizard override box, switch-resolution box). |
@@ -246,6 +246,10 @@ The same intent uses the same key, wording and component in every zone and dialo
 | Branch lists: no `[R] retry` hint | A bare letter would type into the focused text field; branch lists reload on reopening the field. |
 | Clearing views (Logs `c`/`Ctrl+C`) and Routes row `d` act without confirmation | Reversible or trivially re-creatable data; labelled in the hints, per the destructive-action rule. |
 | Registry stale-entry cleaning: selection + `Enter`, no second step | The registry entries only point at paths that are gone; nothing on disk is destroyed. |
+| Dashboard empty-registry sentence (`Press [:] ...`) stays hand-written | The Dashboard belongs to stories 7.5/7.6; it is the one allowlisted literal in the hint guard test. |
+| Action-progress labels (`Saving…`, `Deleting…`, `Switching…`, `Creating…`) are plain annotations, not `StateLine` | They report an action in flight, not a list being loaded; `StateLine` covers loading, empty and error states. |
+| Detail-pane action hints (`[Enter] Switch`, `[Enter] Remove / Change branch`) and the `[i] details` suffix stay inline | They are zone content the settings screen lets the user hide; they are built with `formatHint` and keep their capitalised verbs. |
+| A dialog with no key to press (creating, activating, preparing the switch resolution) registers no footer context | The footer falls back to the zone hints for that moment; a context would only advertise keys that do nothing. |
 
 ## Accessibility Floor
 

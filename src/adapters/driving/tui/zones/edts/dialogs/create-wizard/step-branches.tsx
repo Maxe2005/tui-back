@@ -257,7 +257,7 @@ export function BranchStepView({
         cursor={branches.rowCursor}
         focused={rowsFocused}
         maxVisibleRows={maxVisibleRows}
-        labels={{ moreAbove: 'services au-dessus', moreBelow: 'services en dessous' }}
+        labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
       {blocked !== undefined ? (
         <Text color={colors.error}>

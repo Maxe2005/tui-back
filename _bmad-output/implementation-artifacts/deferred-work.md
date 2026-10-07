@@ -631,16 +631,21 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
   summary: Footer `[Tab/Shift+Tab] focus` hint stays visible in EDTs/Logs while a dialog, filter editor or fullscreen preview is open and Tab means something else.
   evidence: footerHintsFor only receives the zone id, not overlay/capture state (edge-case review).
+  resolved_by: story 7.4b — the footer is context-live: a dialog, pane or screen registers its context and the zone hints return when it closes (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
   summary: `TWO_PANEL_NAV` lives in `edts-zone.logic.ts` but is imported by shared dialog logic (wizard, switch-resolution); move it to the shared primitive or a dialogs module.
   evidence: layering smell flagged by the blind review; dialogs depend on a zone-specific module.
+  resolved_by: story 7.4b — `TWO_PANEL_NAV` now lives in `shared/keys/focus-navigation.ts` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md`
   summary: Enforce the one-hint-format rule with a guard test; many wizard, Logs, Routes, registry and reset hints still bypass `formatHints`.
   evidence: Review found hand-written hints with mixed key spellings and letter case outside the helper, and no test checks the rule.
+  resolved_by: story 7.4b — hints are declared data (`keybindings/footer-contexts.ts`), and `hints.guard.test.ts` fails any `[Key] verb` literal built outside `formatHints` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md`
   summary: Derive the footer's resize filter and StateLine's `[R] retry` from the keybinding declarations, and fix the shared → keybindings → zones type-import layering.
   evidence: `footerHintsFor` compares against a duplicated RESIZE_HINT string, StateLine hard-codes the retry text, and `list-cursor.ts` imports `NavigationKey` from `keybindings/`.
+  resolved_by: story 7.4b — footer entries carry `when: 'resizable'`, StateLine takes `RETRY_HINT` from the declarations, `NavigationKey` moved to `shared/keys/navigation-key.ts` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md`
   summary: Reuse the shared list-cursor reducer in settings-screen and repo-registry-screen instead of repeating the Home/End computation, and adopt StateLine in the remaining loading/empty spots.
   evidence: Review found about eight inline `key.home ? 0 : len - 1` copies and unconverted "Loading…"/"No … yet" lines.
+  resolved_by: story 7.4b — settings and registry call `nextCursorForKey`; loading/empty/error lines go through `StateLine` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
