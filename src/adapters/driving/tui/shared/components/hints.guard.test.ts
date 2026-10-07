@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const TUI = fileURLToPath(new URL('../../', import.meta.url));
 
 // Files allowed to spell a `[Key] verb` literal: the helper that defines the format, and the
-// Dashboard, which belongs to a later story and keeps its own empty-registry sentence.
+// Dashboard, whose empty-registry sentence is still its own.
 const ALLOWED = new Set(['shared/components/hints.ts', 'zones/dashboard/dashboard-zone.tsx']);
 
 function sourceFiles(dir: string): string[] {
