@@ -9,6 +9,7 @@ import {
   type SuggestFieldState,
 } from '../../shared/components/suggest-field.logic.js';
 import type { TextEditKey } from '../../shared/components/text-edit.js';
+import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { moveSelection, resolveSelectionDirection } from '../edts/edts-zone.logic.js';
 import {
   applyMergeStrategy,
@@ -177,7 +178,7 @@ export function resolvePanelsKey(
   if (key.escape === true) {
     return { type: 'cancel' };
   }
-  if (key.tab === true) {
+  if (resolveFocusStep(input, key, 'tab') !== null) {
     return { type: 'switch-focus' };
   }
   // On the EDT line a typed `y` starts the filter like any other letter.

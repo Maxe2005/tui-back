@@ -245,6 +245,15 @@ describe("app store", () => {
       expect(store.getState().resizeMode?.targetBoundary).toBe(0);
     });
 
+    it("cycleResizeTargetBoundary('back') reverses, wrapping first to last", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("edts");
+      store.getState().cycleResizeTargetBoundary("back");
+      expect(store.getState().resizeMode?.targetBoundary).toBe(2);
+      store.getState().cycleResizeTargetBoundary("back");
+      expect(store.getState().resizeMode?.targetBoundary).toBe(1);
+    });
+
     it("cycleResizeTargetBoundary is a no-op while resizeMode is null", () => {
       const store = createAppStore();
       store.getState().cycleResizeTargetBoundary();

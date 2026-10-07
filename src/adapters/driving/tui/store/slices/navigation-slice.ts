@@ -3,6 +3,7 @@
 // (help, run-in-progress, zone-input-capture, quit-request, the `:` command bar).
 import type { StateCreator } from 'zustand';
 import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibilityData } from '../../../../../core/edt/resolve-tab-visibility.js';
+import { stepFocus, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../zones/zone-layouts.js';
 import { ZONES, type ZoneId } from '../../zones/zones.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
@@ -46,7 +47,7 @@ export type NavigationSlice = {
   exitResizeMode: () => void;
   // Cycles the active resize-mode's targetBoundary across its zone's declared boundaries — a
   // no-op while resizeMode is null.
-  cycleResizeTargetBoundary: () => void;
+  cycleResizeTargetBoundary: (direction?: FocusNavDirection) => void;
   helpOpen: boolean;
   openHelp: () => void;
   closeHelp: () => void;
@@ -86,6 +87,10 @@ export type NavigationSlice = {
   openCommandBar: () => void;
   closeCommandBar: () => void;
 };
+
+function boundaryIndices(count: number): number[] {
+  return Array.from({ length: count }, (_, index) => index);
+}
 
 export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], NavigationSlice> {
   // Serializes setSplitterRatio's persistence calls like settingsSaveChain does for
@@ -179,7 +184,7 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
       }
     },
     exitResizeMode: () => set({ resizeMode: null }),
-    cycleResizeTargetBoundary: () =>
+    cycleResizeTargetBoundary: (direction = 'next') =>
       set((state) => {
         if (state.resizeMode === null) {
           return {};
@@ -191,7 +196,7 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
         return {
           resizeMode: {
             zone: state.resizeMode.zone,
-            targetBoundary: (state.resizeMode.targetBoundary + 1) % count,
+            targetBoundary: stepFocus(boundaryIndices(count), state.resizeMode.targetBoundary, direction),
           },
         };
       }),

@@ -6,6 +6,7 @@ import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
+import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { spacing } from '../../shared/theme/theme.js';
 
 // HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
@@ -72,14 +73,13 @@ export function splitNoContainerRows(
 // and the focus type stays unchanged.
 export type LogsPaneFocus = 'edt-list' | 'other-list' | 'panes';
 
-export function cycleLogsPaneFocus(current: LogsPaneFocus): LogsPaneFocus {
-  if (current === 'edt-list') {
-    return 'other-list';
-  }
-  if (current === 'other-list') {
-    return 'panes';
-  }
-  return 'edt-list';
+export const LOGS_PANE_FOCUS_NAV: FocusNavDeclaration<LogsPaneFocus> = {
+  mode: 'tab',
+  stops: ['edt-list', 'other-list', 'panes'],
+};
+
+export function cycleLogsPaneFocus(current: LogsPaneFocus, direction: FocusNavDirection = 'next'): LogsPaneFocus {
+  return stepFocus(LOGS_PANE_FOCUS_NAV.stops, current, direction);
 }
 
 // Picks the squarest rows x cols grid fitting n panes (ceil(sqrt(n)) columns) within the

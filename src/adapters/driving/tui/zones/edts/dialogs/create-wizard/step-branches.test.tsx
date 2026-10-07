@@ -67,6 +67,12 @@ describe('reduceBranchStepKey', () => {
     expect(moved.branches.globalName.cursor).toBe(0);
   });
 
+  it('Shift+Tab switches panels like Tab (two stops: state changes, editing ends)', () => {
+    const { state } = reduceBranchStepKey(editingName(), CANDS, '', { tab: true, shift: true });
+    expect(state.branches.panel).toBe('rows');
+    expect(state.branches.editing).toBe(false);
+  });
+
   it('editing the global name in Panel A carries untouched seeded rows along, never edited ones', () => {
     const seed = {
       ulid: 'root',

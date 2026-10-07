@@ -1,6 +1,9 @@
 import { Box, Text } from 'ink';
 import { hasResizableBoundary } from '../../zones/zone-layouts.js';
 import type { ZoneId } from '../../zones/zones.js';
+import { focusNavFooterHint, type FocusNavDeclaration } from '../keys/focus-navigation.js';
+import { PANE_FOCUS_NAV } from '../../zones/edts/edts-zone.logic.js';
+import { LOGS_PANE_FOCUS_NAV } from '../../zones/logs/logs-zone.logic.js';
 import { colors, spacing } from '../theme/theme.js';
 
 export const DEFAULT_FOOTER_HINTS = [
@@ -14,6 +17,13 @@ export const DEFAULT_FOOTER_HINTS = [
   '^W resize',
 ];
 
+// Zones whose Tab key cycles pane focus, keyed to the same declarations their handlers use.
+// Routes has no zone-level declaration (its Tab cycles request sections inside one pane).
+const ZONE_FOCUS_NAV: Partial<Record<ZoneId, FocusNavDeclaration<unknown>>> = {
+  edts: PANE_FOCUS_NAV,
+  logs: LOGS_PANE_FOCUS_NAV,
+};
+
 const RESIZE_HINT = '^W resize';
 
 // The resize hint is advertised only for a zone declaring a boundary; Logs also advertises its
@@ -25,6 +35,10 @@ export function footerHintsFor(zone?: ZoneId): string[] {
   }
   if (zone === undefined || hasResizableBoundary(zone)) {
     base.push(RESIZE_HINT);
+  }
+  const focusNav = zone === undefined ? undefined : ZONE_FOCUS_NAV[zone];
+  if (focusNav !== undefined) {
+    base.push(focusNavFooterHint(focusNav.mode, 'focus'));
   }
   return base;
 }

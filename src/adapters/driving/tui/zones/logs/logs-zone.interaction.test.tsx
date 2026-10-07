@@ -102,6 +102,21 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
+  it('Shift+Tab reverses focus edt-list -> panes -> other-list (Space then toggles the other list)', async () => {
+    const store = seedStore();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.shiftTab); // edt-list -> panes (wraps back)
+      await press(instance, stdin, KEYS.shiftTab); // panes -> other-list
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().logsOtherSelected).toEqual(['/repos/api-gateway']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('Space toggles a selection on and back off', async () => {
     const store = seedStore();
     const { instance, stdin } = mount(store);
