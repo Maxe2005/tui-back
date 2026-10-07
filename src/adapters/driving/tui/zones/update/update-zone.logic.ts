@@ -246,41 +246,27 @@ export function mergeLastServiceOutcomes(
   return next;
 }
 
-// One line of the Update zone's grouped service list: a group header or a service row. The
-// cursor moves over rows only; headers are skipped by construction (the list renders from
-// these entries while selection stays an index into the flat row array).
-export type UpdateListEntry = { kind: 'header'; label: string } | { kind: 'row'; row: UpdateServiceRow; rowIndex: number };
-
+// The two service panes (EDT members above, other services below), each a contiguous slice of
+// the members-first flat row array — the selection cursor stays an index into that flat array,
+// so `offset` converts a pane-local index and back.
 export const UPDATE_MEMBERS_HEADER = 'EDT MEMBERS';
 export const UPDATE_OTHERS_HEADER = 'OTHER SERVICES';
 
-// Splits the (members-first) flat rows into the two titled groups the EDT and Logs zones use,
-// so the list shows at a glance which services a group update will touch. An empty group
-// carries no header.
-export function buildUpdateListEntries(rows: readonly UpdateServiceRow[]): UpdateListEntry[] {
-  const entries: UpdateListEntry[] = [];
-  const groups: Array<[string, boolean]> = [
-    [UPDATE_MEMBERS_HEADER, true],
-    [UPDATE_OTHERS_HEADER, false],
-  ];
-  for (const [label, isMember] of groups) {
-    const indexes = rows.flatMap((row, rowIndex) => (row.isMember === isMember ? [rowIndex] : []));
-    if (indexes.length === 0) {
-      continue;
-    }
-    entries.push({ kind: 'header', label });
-    for (const rowIndex of indexes) {
-      entries.push({ kind: 'row', row: rows[rowIndex] as UpdateServiceRow, rowIndex });
-    }
-  }
-  return entries;
+export interface UpdateServicePanes {
+  members: UpdateServiceRow[];
+  others: UpdateServiceRow[];
 }
 
-// The entry index holding the given row index, so the bounded window keeps the selected row
-// (and its header, when it is the group's first row) in view. Undefined when there is none.
-export function entryIndexOfRow(entries: readonly UpdateListEntry[], rowIndex: number): number | undefined {
-  const found = entries.findIndex((entry) => entry.kind === 'row' && entry.rowIndex === rowIndex);
-  return found === -1 ? undefined : found;
+export function splitUpdateServiceRows(rows: readonly UpdateServiceRow[]): UpdateServicePanes {
+  return { members: rows.filter((row) => row.isMember), others: rows.filter((row) => !row.isMember) };
+}
+
+// The rows each pane may draw, from the total list budget and the splitter ratio: the header
+// takes one line per pane and a pane never gets less than one list row.
+export function resolveUpdatePaneRows(totalRows: number, membersRatio: number): { members: number; others: number } {
+  const usable = Math.max(2, Math.floor(totalRows) - 2);
+  const members = Math.min(usable - 1, Math.max(1, Math.round(usable * membersRatio)));
+  return { members, others: Math.max(1, usable - members) };
 }
 
 // The recap view's body: the last run's context (who it covered, from which sources to which

@@ -244,6 +244,22 @@ So that I can keep working in parallel without corrupting a run.
 
 **Given** a run in progress **When** the developer uses logs or other zones **Then** they stay usable; known degraded behavior (e.g. logs of restarting containers) is documented, not blocked.
 
+### Story 3.17: Update Zone — Global Default View & Resizable Member/Other Panes
+
+> Added 2026-10-07. Follow-up to 3.14: the zone opens on the global recap and the two service groups become real, independently resizable panes like the EDTs zone's.
+
+As a developer,
+I want the Update tab to open on the global view and its EDT members / other services to be two distinct, resizable panes,
+So that I get the overview first and can size each group to what I'm looking at.
+
+**Acceptance Criteria:**
+
+**Given** the Update tab opens **When** it first renders **Then** no service is focused and the right pane shows the global recap view (with its footer prompt); an arrow key focuses a service.
+
+**Given** the service list **When** it renders **Then** `EDT MEMBERS` and `OTHER SERVICES` are two distinct panes separated by a splitter (as in the EDTs zone), each with its own bounded list, and the boundary is declared in the zone layout contract so `Ctrl+W` resizes it and `Tab` cycles it with the list/detail boundary.
+
+**Given** no service is focused **When** the developer presses `p` or `Enter` **Then** nothing opens — they act on a focused service only.
+
 ## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
 **FRs covered:** FR-13, FR-14, FR-15, FR-30, FR-31

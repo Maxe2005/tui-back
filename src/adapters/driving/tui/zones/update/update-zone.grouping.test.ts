@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildUpdateListEntries,
-  entryIndexOfRow,
   formatLastUpdateRecap,
-  UPDATE_MEMBERS_HEADER,
-  UPDATE_OTHERS_HEADER,
+  resolveUpdatePaneRows,
+  splitUpdateServiceRows,
   type UpdateServiceRow,
 } from './update-zone.logic.js';
 
@@ -12,28 +10,28 @@ function row(service: string, isMember: boolean): UpdateServiceRow {
   return { service, path: `/r/${service}`, branch: 'main', isMember } as unknown as UpdateServiceRow;
 }
 
-describe('buildUpdateListEntries', () => {
-  it('emits a header per non-empty group with members first', () => {
-    const entries = buildUpdateListEntries([row('a', true), row('b', true), row('c', false)]);
-    expect(entries.map((e) => (e.kind === 'header' ? e.label : e.row.service))).toEqual([
-      UPDATE_MEMBERS_HEADER,
-      'a',
-      'b',
-      UPDATE_OTHERS_HEADER,
-      'c',
-    ]);
+describe('splitUpdateServiceRows', () => {
+  it('splits members from others, keeping order', () => {
+    const { members, others } = splitUpdateServiceRows([row('a', true), row('b', true), row('c', false)]);
+    expect(members.map((r) => r.service)).toEqual(['a', 'b']);
+    expect(others.map((r) => r.service)).toEqual(['c']);
   });
 
-  it('omits the header of an empty group', () => {
-    expect(buildUpdateListEntries([row('c', false)]).map((e) => e.kind)).toEqual(['header', 'row']);
-    expect(buildUpdateListEntries([])).toEqual([]);
+  it('an empty side is an empty list', () => {
+    expect(splitUpdateServiceRows([row('c', false)]).members).toEqual([]);
+    expect(splitUpdateServiceRows([])).toEqual({ members: [], others: [] });
+  });
+});
+
+describe('resolveUpdatePaneRows', () => {
+  it('shares the budget by ratio, reserving a header line per pane', () => {
+    expect(resolveUpdatePaneRows(12, 0.4)).toEqual({ members: 4, others: 6 });
   });
 
-  it('maps a row index to its entry index past the headers', () => {
-    const entries = buildUpdateListEntries([row('a', true), row('c', false)]);
-    expect(entryIndexOfRow(entries, 0)).toBe(1);
-    expect(entryIndexOfRow(entries, 1)).toBe(3);
-    expect(entryIndexOfRow(entries, 5)).toBeUndefined();
+  it('never gives a pane less than one row', () => {
+    const tiny = resolveUpdatePaneRows(1, 0.4);
+    expect(tiny.members).toBeGreaterThanOrEqual(1);
+    expect(tiny.others).toBeGreaterThanOrEqual(1);
   });
 });
 
