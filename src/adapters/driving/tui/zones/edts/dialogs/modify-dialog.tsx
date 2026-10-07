@@ -368,7 +368,7 @@ export function ModifyDialogView({
 }) {
   const title = resolveModifyDialogTitle(dialog, candidates);
   return (
-    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title={title} open={true}>
       <Box flexDirection="column">
         {dialog.branchPicker !== null ? (
           <BranchPicker

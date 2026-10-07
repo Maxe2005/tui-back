@@ -444,7 +444,7 @@ export function CreateWizardView({
   // Step navigation only exists before the create; afterwards Step 4's own footers apply.
   const created = dialog.activation.created !== null;
   return (
-    <ModalDialog title={CREATE_WIZARD_TITLE} onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title={CREATE_WIZARD_TITLE} open={true}>
       <Box flexDirection="column">
         <Box flexWrap="wrap">
           {breadcrumb.map((item, index) => (

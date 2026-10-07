@@ -175,7 +175,7 @@ export function UpdateConfigPanels({
   const title = draft.scope === 'all' ? PANELS_TITLE_ALL : PANELS_TITLE_EDT;
   if (budget.tooSmall) {
     return (
-      <ModalDialog title={title} open onConfirm={() => {}} onCancel={() => {}}>
+      <ModalDialog title={title} open>
         <Text color={colors.warning} wrap="truncate-end">
           {PANELS_TOO_SMALL}
         </Text>
@@ -184,7 +184,7 @@ export function UpdateConfigPanels({
   }
   if (box !== null && boxContext !== null) {
     return (
-      <ModalDialog title={title} open onConfirm={() => {}} onCancel={() => {}}>
+      <ModalDialog title={title} open>
         <UpdateServiceBox
           box={box}
           context={boxContext}
@@ -196,7 +196,7 @@ export function UpdateConfigPanels({
     );
   }
   return (
-    <ModalDialog title={title} open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title={title} open>
       <PanelTitle text={PANELS_GLOBAL_TITLE} focused={view.focus === 'panel'} />
       <GlobalLines
         draft={draft}

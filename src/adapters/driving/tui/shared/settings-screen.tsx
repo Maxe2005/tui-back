@@ -694,7 +694,7 @@ export function SettingsScreen({
   });
 
   return (
-    <ModalDialog title="SETTINGS" open onConfirm={() => {}} onCancel={onClose}>
+    <ModalDialog title="SETTINGS" open>
       <Box flexDirection="column">
         <Box flexDirection="row">
           {SETTINGS_TABS.map((t) => {

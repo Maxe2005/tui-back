@@ -288,7 +288,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   });
 
   return (
-    <ModalDialog title="REPO REGISTRY" open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title="REPO REGISTRY" open>
       <Box flexDirection="column">
         <Box flexDirection="column">
           {MANIFEST_GUIDANCE_LINES.map((line) => (

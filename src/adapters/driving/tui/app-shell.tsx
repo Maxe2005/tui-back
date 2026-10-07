@@ -387,8 +387,6 @@ export function AppShell({
       {filterOpen && (
         <ModalDialog
           title="FILTER"
-          onConfirm={() => {}}
-          onCancel={() => setFilterOpen(false)}
           open={true}
         >
           <Text>Filter input — wired in Epic 2+</Text>

@@ -105,7 +105,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
 
 export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialogState; maxRows: number }) {
   return (
-    <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="ADD TO EDT" open={true}>
       <Box flexDirection="column">
         <Text color={colors.text}>
           Add {dialog.serviceName} to "{dialog.edt.topic}"

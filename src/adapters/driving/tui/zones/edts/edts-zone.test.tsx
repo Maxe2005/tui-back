@@ -1476,7 +1476,7 @@ describe('EdtsZone quick-pick dialog rendering', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
-    expect(output).toContain('SWITCH EDT — SELECT');
+    expect(output).toContain('SELECT EDT TO SWITCH');
     expect(output).toContain('No EDT to select');
     expect(output).not.toContain('No matching EDT');
   });

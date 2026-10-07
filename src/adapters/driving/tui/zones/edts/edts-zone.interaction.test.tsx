@@ -3434,7 +3434,7 @@ describe('EdtsZone quick-pick dialog', () => {
     try {
       await instance.waitUntilRenderFlush();
       expect(stdout.output).toContain('Filter');
-      // The quick-pick dialog's own title ("SWITCH EDT — SELECT") legitimately contains the
+      // The quick-pick dialog's own title ("SELECT EDT TO SWITCH") legitimately contains the
       // substring "SWITCH EDT" — assert against the switch-confirm dialog's distinguishing
       // confirm prompt instead, which only switch-dialog.tsx itself ever renders.
       expect(stdout.output).not.toContain('Switch to "');
@@ -3548,7 +3548,7 @@ describe('EdtsZone quick-pick dialog', () => {
       const outputSinceEscape = stdout.output.slice(outputLengthBeforeEscape);
 
       expect(outputSinceEscape).not.toContain('Filter');
-      expect(outputSinceEscape).not.toContain('SWITCH EDT — SELECT');
+      expect(outputSinceEscape).not.toContain('SELECT EDT TO SWITCH');
       // The base EDT-list hint line — hidden while any dialog is open — is back.
       expect(outputSinceEscape).toContain('[Enter] switch/modify');
       expect(store.getState().currentEdtAction).toBeNull();
@@ -3780,7 +3780,7 @@ describe('EdtsZone edt-create-from', () => {
     ],
   });
   const OTHER = edt({ ulid: 'other-ulid', topic: 'other-work' });
-  const PICK_TITLE = 'CREATE FROM EDT — SELECT';
+  const PICK_TITLE = 'SELECT EDT TO COPY';
 
   function createFromStore(target: string) {
     const { store, createCalls } = step3Store({ edts: [ROOT, OTHER] });

@@ -74,7 +74,7 @@ export function UpdateConfigDialog({
         ? 'Every managed repo'
         : 'Active EDT members';
   return (
-    <ModalDialog title={draft.scope === 'all' ? UPDATE_CONFIG_TITLE_ALL : UPDATE_CONFIG_TITLE_EDT} open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title={draft.scope === 'all' ? UPDATE_CONFIG_TITLE_ALL : UPDATE_CONFIG_TITLE_EDT} open>
       <Text color={colors['text-dim']}>{scopeLine}</Text>
       {draft.rows.length === 0 ? <Text color={colors['text-dim']}>No services to configure.</Text> : null}
       {draft.rows.map((row, index) => {

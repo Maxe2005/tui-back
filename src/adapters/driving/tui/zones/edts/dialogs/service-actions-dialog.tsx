@@ -217,7 +217,7 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
 
 export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceActionsDialogState; maxRows: number }) {
   return (
-    <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="SERVICE ACTIONS" open={true}>
       <Box flexDirection="column">
         <Text color={colors.text}>{dialog.serviceName}</Text>
         {dialog.branchPicker !== null ? (

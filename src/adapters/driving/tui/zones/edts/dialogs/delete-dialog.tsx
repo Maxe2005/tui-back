@@ -121,7 +121,7 @@ export function createDeleteDialogHandlers(deps: DeleteDialogDeps) {
 
 export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
   return (
-    <ModalDialog title="DELETE EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="DELETE EDT" open={true}>
       <Box flexDirection="column">
         {dialog.rejected ? (
           <>

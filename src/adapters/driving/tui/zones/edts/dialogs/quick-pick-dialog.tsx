@@ -42,10 +42,10 @@ export function toQuickPickItems(pool: readonly EdtRegistryEntry[]): FilterableP
 }
 
 const QUICK_PICK_TITLE: Record<QuickPickMode, string> = {
-  switch: 'SWITCH EDT — SELECT',
-  modify: 'MODIFY EDT — SELECT',
-  delete: 'DELETE EDT — SELECT',
-  'create-from': 'CREATE FROM EDT — SELECT',
+  switch: 'SELECT EDT TO SWITCH',
+  modify: 'SELECT EDT TO MODIFY',
+  delete: 'SELECT EDT TO DELETE',
+  'create-from': 'SELECT EDT TO COPY',
 };
 
 export type QuickPickDialogDeps = {
@@ -108,7 +108,7 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
 
 export function QuickPickDialogView({ dialog, pool }: { dialog: QuickPickDialogState; pool: readonly EdtRegistryEntry[] }) {
   return (
-    <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} open={true}>
       <Box flexDirection="column">
         {dialog.notFound !== null ? <Text color={colors.error}>{dialog.notFound}</Text> : null}
         <FilterablePickList

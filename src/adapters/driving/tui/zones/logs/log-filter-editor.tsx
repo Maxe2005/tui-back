@@ -54,7 +54,7 @@ export function LogFilterEditor({
   // widest entry scrolling out of view would shrink the column and misalign the padding.
   const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
   return (
-    <ModalDialog title={title} onConfirm={() => {}} onCancel={() => {}} open>
+    <ModalDialog title={title} open>
       <TextInputLine
         label={editor.mode === 'regex' ? 'Regex' : 'Text'}
         value={editor.query}

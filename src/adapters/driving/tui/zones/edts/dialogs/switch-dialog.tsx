@@ -198,7 +198,7 @@ export function SwitchDialogView({
 }) {
   if (dialog.results !== undefined) {
     return (
-      <ModalDialog title="SWITCH EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+      <ModalDialog title="SWITCH EDT" open={true}>
         <Box flexDirection="column">
           <SwitchResultsView dialog={dialog} results={dialog.results} />
         </Box>
@@ -206,7 +206,7 @@ export function SwitchDialogView({
     );
   }
   return (
-    <ModalDialog title="SWITCH EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="SWITCH EDT" open={true}>
       <Box flexDirection="column">
         {switchDirtyRepos !== null ? (
           dialog.resolution !== null ? (

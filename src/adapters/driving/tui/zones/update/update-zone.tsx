@@ -904,7 +904,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           </Box>
         }
       />
-      <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm} onConfirm={() => {}} onCancel={() => setQuitConfirm(false)}>
+      <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
       {updateConfig !== null && updateConfig.layout !== 'simple' ? (
@@ -934,7 +934,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {/* The no-arg `:update-service` fallback — a filterable service quick-pick. Confirming a
           row opens the config pre-scoped to that one service; Esc closes with nothing opened. */}
       {updateServicePick !== null ? <UpdateServicePickDialog state={pickState} candidates={updateServicePick} /> : null}
-      <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null} onConfirm={() => {}} onCancel={() => {}}>
+      <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
