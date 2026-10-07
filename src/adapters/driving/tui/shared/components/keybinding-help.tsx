@@ -4,6 +4,7 @@ import { KEYBINDINGS } from '../../keybindings/index.js';
 import type { NavigationKey } from '../keys/navigation-key.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors } from '../theme/theme.js';
+import { useFooterContext } from '../hooks/use-footer-context.js';
 import { ModalDialog } from './modal-dialog.js';
 import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 
@@ -47,6 +48,7 @@ export function KeybindingHelp({
   const helpOpen = useStore((state) => state.helpOpen);
   const closeHelp = useStore((state) => state.closeHelp);
   const [scrollOffset, setScrollOffset] = useState(0);
+  useFooterContext('help', helpOpen ? 'help' : null, useStore);
 
   useEffect(() => {
     if (helpOpen) {

@@ -9,6 +9,7 @@ import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
 import {
   COMMANDS,
   matchCommands,
@@ -385,6 +386,7 @@ export type CommandBarProps = {
 export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps) {
   // Read live from the store (the settings screen's Command Palette tab).
   const gridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  useFooterContext('command-bar', 'command', useStore);
   const [query, setQuery] = useState('');
   const [unknownCommand, setUnknownCommand] = useState(false);
   const [pending, setPending] = useState<TabPressState | null>(null);

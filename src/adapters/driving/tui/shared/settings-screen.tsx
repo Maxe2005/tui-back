@@ -10,7 +10,9 @@ import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
 import { TextInputLine } from './components/text-input-line.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
 import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
@@ -287,6 +289,36 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'clear-history', label: 'Clear history' },
 ];
 
+const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId, FooterContextId> = {
+  'hint-visibility': 'settings-toggle',
+  'action-types': 'settings-toggle',
+  'branch-dropdown-rows': 'settings-adjust',
+  'buffer-size': 'settings-adjust',
+  'start-with-history': 'settings-toggle',
+  'filter-history-size': 'settings-adjust',
+  'filter-history-grid': 'settings-adjust',
+  'filter-history-dedup': 'settings-toggle',
+  'clear-history': 'settings-run',
+};
+
+// The footer context of the current tab and drill-down level: a text edit is a plain
+// confirm/cancel, a group list opens groups, and each group advertises its own control.
+export function settingsFooterContext(
+  tab: SettingsTab,
+  state: { generalEditing: boolean; edtsGroup: SettingsGroupId | null; logsGroup: LogsSettingsGroupId | null },
+): FooterContextId {
+  switch (tab) {
+    case 'general':
+      return state.generalEditing ? 'confirm' : 'settings-general';
+    case 'command-palette':
+      return 'settings-palette';
+    case 'edts':
+      return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
+    case 'logs':
+      return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
+  }
+}
+
 // "Clear history" is the one Logs group holding more than a single field — its own small
 // Up/Down row list, one level below the group list, mirroring the EDTs tab's own two-level
 // depth (group list -> checkbox list) rather than growing a third top-level list.
@@ -370,6 +402,12 @@ export function SettingsScreen({
   // cancels the edit rather than closing the screen.
   const drilledIn =
     (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
+
+  useFooterContext(
+    'settings',
+    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup }),
+    useStore,
+  );
 
   useInput((input, key) => {
     if (key.escape) {
@@ -737,11 +775,11 @@ export function SettingsScreen({
               )}
             </Box>
             {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
-              <DimAnnotation text="Space to toggle. Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
+              <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
             ) : generalEditing !== null ? (
               <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
             ) : (
-              <DimAnnotation text="Enter to edit. Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
+              <DimAnnotation text="Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
             )}
           </Box>
         ) : null}
@@ -751,7 +789,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Up/Down to adjust, or type a digit (1-9)." />
+            <DimAnnotation text="Rows of the command grid before it scrolls." />
           </Box>
         ) : null}
 
@@ -768,7 +806,6 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter to open a group. Esc to close." />
           </Box>
         ) : null}
 
@@ -778,7 +815,7 @@ export function SettingsScreen({
               Log buffer size (lines per pane): <Text color={colors.accent}>{settings.logs.bufferSize}</Text>
             </Text>
             <DimAnnotation
-              text={`Left/Right: ±${LOG_BUFFER_SIZE_STEP} per press, or a typed digit (1-9) for a x100 preset. Applies to new streams only — already-running panes keep their current buffer size. Esc for the group list.`}
+              text={`Steps of ${LOG_BUFFER_SIZE_STEP} lines; a digit sets a x100 preset. Applies to new streams only — already-running panes keep their current buffer size.`}
             />
           </Box>
         ) : null}
@@ -789,7 +826,6 @@ export function SettingsScreen({
               label="Start streaming with the most recent history"
               state={settings.logs.startWithHistory ? 'checked' : 'unchecked'}
             />
-            <DimAnnotation text="Space to toggle. Esc for the group list." />
           </Box>
         ) : null}
 
@@ -798,7 +834,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Filter history size (entries per list): <Text color={colors.accent}>{settings.logs.filterHistorySize}</Text>
             </Text>
-            <DimAnnotation text={`Left/Right: ±${FILTER_HISTORY_SIZE_STEP} per press. Esc for the group list.`} />
+            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
           </Box>
         ) : null}
 
@@ -807,7 +843,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Filter history grid max rows: <Text color={colors.accent}>{settings.logs.filterHistoryGridMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Left/Right: ±1 per press, or a typed digit (1-9). Esc for the group list." />
+            <DimAnnotation text="Steps of 1 row; a digit sets the value." />
           </Box>
         ) : null}
 
@@ -817,7 +853,7 @@ export function SettingsScreen({
               label="Dedup filter history (one instance per filter)"
               state={settings.logs.filterHistoryDedup ? 'checked' : 'unchecked'}
             />
-            <DimAnnotation text="Space to toggle. Checked: reusing a filter moves it to the most recent place instead of storing it twice. Esc for the group list." />
+            <DimAnnotation text="Checked: reusing a filter moves it to the most recent place instead of storing it twice." />
           </Box>
         ) : null}
 
@@ -834,7 +870,6 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter runs the highlighted action. Esc for the group list." />
           </Box>
         ) : null}
 
@@ -852,7 +887,7 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter to clear that service's filter history (text + regex). Esc for the row list." />
+            <DimAnnotation text="Clears that service's filter history (text + regex)." />
           </Box>
         ) : null}
 
@@ -869,7 +904,6 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Enter to open a group. Esc to close." />
           </Box>
         ) : null}
 
@@ -890,7 +924,7 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle — checked hides that hint from the EDT detail pane. Esc for the group list." />
+            <DimAnnotation text="Checked hides that hint from the EDT detail pane." />
           </Box>
         ) : null}
 
@@ -909,7 +943,7 @@ export function SettingsScreen({
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle — checked hides that action type from the Recent actions log. Esc for the group list." />
+            <DimAnnotation text="Checked hides that action type from the Recent actions log." />
           </Box>
         ) : null}
 
@@ -918,7 +952,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Branch dropdown max rows: <Text color={colors.accent}>{settings.edts.branchDropdownMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Up/Down or Left/Right to adjust, or type a digit (1-9). Caps the branch autocomplete dropdown before its … N more line. Esc for the group list." />
+            <DimAnnotation text="Caps the branch autocomplete dropdown before its … N more line." />
           </Box>
         ) : null}
       </Box>

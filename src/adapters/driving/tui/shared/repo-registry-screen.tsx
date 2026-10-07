@@ -9,6 +9,8 @@ import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { Spinner } from './components/spinner.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors } from './theme/theme.js';
 import {
   useAppStore,
@@ -94,6 +96,18 @@ export function resolveRegistryScreenPhase(store: {
     return store.registryScanResult.candidates.length === 0 ? 'empty' : 'candidates';
   }
   return 'root-input';
+}
+
+// The footer context of a phase: only the three interactive phases advertise their own keys, every
+// other one just closes with Esc.
+export function registryFooterContext(phase: RegistryScreenPhase, hasStaleCandidates: boolean): FooterContextId {
+  if (phase === 'root-input') {
+    return 'registry-path';
+  }
+  if (phase === 'candidates') {
+    return 'registry-candidates';
+  }
+  return phase === 'clean-candidates' && hasStaleCandidates ? 'registry-stale' : 'dismiss';
 }
 
 // Root-path free-text entry. Ctrl/meta combos (e.g. Ctrl+W resize-mode, reserved elsewhere
@@ -207,6 +221,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const clampedCleanCursor = staleCandidates.length === 0 ? 0 : Math.min(cleanCursor, staleCandidates.length - 1);
   const selectedStalePaths = staleCandidates.map((candidate) => candidate.path).filter((path) => !cleanExcluded.has(path));
 
+  useFooterContext('registry', registryFooterContext(phase, staleCandidates.length > 0), useStore);
+
   useInput((input, key) => {
     if (phase === 'root-input') {
       // Ctrl+L: "Clean stale entries" — never a plain "l" keypress, which must stay available
@@ -302,8 +318,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
-            <DimAnnotation text="Type a path  [Enter] scan" />
-            <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
+            <DimAnnotation text="Type a path. Stale registry entries (unreachable or unmanaged) can be cleaned too." />
           </Box>
         ) : null}
 
@@ -345,7 +360,6 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 </Box>
               );
             })}
-            <DimAnnotation text="[Space] toggle  [Enter] register selection" />
           </Box>
         ) : null}
 
@@ -367,7 +381,6 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 {result.detail ? <DimAnnotation text={result.detail} /> : null}
               </Box>
             ))}
-            <DimAnnotation text="Esc to close." />
           </Box>
         ) : null}
 
@@ -395,8 +408,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="Esc to close." />
-              </Box>
+                  </Box>
             ) : (
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>STALE ENTRIES</Text>
@@ -425,8 +437,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="[Space] toggle  [Enter] remove selection" />
-              </Box>
+                  </Box>
             )}
           </Box>
         ) : null}
@@ -449,7 +460,6 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
               </Box>
             ))}
-            <DimAnnotation text="Esc to close." />
           </Box>
         ) : null}
       </Box>

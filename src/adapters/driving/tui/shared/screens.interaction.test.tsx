@@ -59,7 +59,7 @@ describe('SettingsScreen (real keypress)', () => {
       await instance.waitUntilRenderFlush();
       await press(KEYS.end);
       await press(KEYS.enter);
-      expect(stdout.output).toContain('[Enter] confirm  [Esc] cancel');
+      expect(store.getState().footerContexts.at(-1)?.id).toBe('confirm');
     } finally {
       await stop();
     }

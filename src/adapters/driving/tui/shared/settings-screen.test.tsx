@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
+import { settingsFooterContext } from './settings-screen.js';
 import {
   EDITOR_COMMAND_PLACEHOLDER_TEXT,
   FILTER_HISTORY_SIZE_STEP,
@@ -256,7 +257,7 @@ describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared 
     );
     expect(output).toContain('Branch dropdown max rows:');
     expect(output).toContain('12');
-    expect(output).toContain('Up/Down or Left/Right to adjust, or type a digit (1-9).');
+    expect(output).toContain('Caps the branch autocomplete dropdown');
   });
 });
 
@@ -343,7 +344,7 @@ describe('SettingsScreen', () => {
     const checked = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
     const checkedLine = checked.split('\n').find((line) => line.includes("Enable 'q' to quit"));
     expect(checkedLine).toContain('[x]');
-    expect(checked).toContain('Space to toggle');
+    expect(checked).toContain('Unchecked: ');
 
     store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: false, editorCommand: '' } } });
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
@@ -368,9 +369,8 @@ describe('SettingsScreen', () => {
     store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true, editorCommand: 'code <repo>' } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="general" initialGeneralEditing />);
     expect(output).toContain('Editor command: code <repo>');
-    expect(output).toContain('[Enter] confirm  [Esc] cancel');
     expect(output).toContain('<repo> is replaced by the repo path');
-    expect(output).not.toContain('Enter to edit.');
+    expect(output).not.toContain('Run by the Update zone');
   });
 
   it('surfaces a non-blocking settings warning without crashing (corrupt-file fallback)', async () => {
@@ -408,7 +408,7 @@ describe('SettingsScreen', () => {
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" />);
     expect(output).toContain('Command grid max rows:');
     expect(output).toContain('12');
-    expect(output).toContain('Up/Down to adjust, or type a digit (1-9).');
+    expect(output).toContain('Rows of the command grid');
   });
 
   it('renders the live bufferSize value and hints when drilled into the "Buffer size" group', async () => {
@@ -417,7 +417,7 @@ describe('SettingsScreen', () => {
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="buffer-size" />);
     expect(output).toContain('Log buffer size');
     expect(output).toContain('750');
-    expect(output).toContain(`±${LOG_BUFFER_SIZE_STEP} per press`);
+    expect(output).toContain(`Steps of ${LOG_BUFFER_SIZE_STEP} lines`);
     expect(output).toContain('Applies to new streams only');
   });
 
@@ -427,7 +427,6 @@ describe('SettingsScreen', () => {
     const unchecked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
     const uncheckedLine = unchecked.split('\n').find((line) => line.includes('Start streaming with the most recent history'));
     expect(uncheckedLine).toContain('[ ]');
-    expect(unchecked).toContain('Space to toggle');
 
     store.setState({ settings: { ...DEFAULT_SETTINGS, logs: { bufferSize: 500, startWithHistory: true, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } } });
     const checked = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="start-with-history" />);
@@ -605,5 +604,20 @@ describe('resolveGeneralSettingsKey (General tab row list + editor command field
       type: 'commit-edit',
       value: '',
     });
+  });
+});
+
+describe('settingsFooterContext', () => {
+  const closed = { generalEditing: false, edtsGroup: null, logsGroup: null };
+
+  it('maps each tab and drill-down level to its footer context', () => {
+    expect(settingsFooterContext('general', closed)).toBe('settings-general');
+    expect(settingsFooterContext('general', { ...closed, generalEditing: true })).toBe('confirm');
+    expect(settingsFooterContext('command-palette', closed)).toBe('settings-palette');
+    expect(settingsFooterContext('edts', closed)).toBe('settings-groups');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
+    expect(settingsFooterContext('logs', { ...closed, logsGroup: 'buffer-size' })).toBe('settings-adjust');
+    expect(settingsFooterContext('logs', { ...closed, logsGroup: 'clear-history' })).toBe('settings-run');
   });
 });

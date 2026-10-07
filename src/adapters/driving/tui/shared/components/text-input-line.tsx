@@ -55,7 +55,6 @@ export function TextInputLine(props: TextInputLineProps) {
         <Text inverse>{atCursor}</Text>
         <Text color={layout.labelColor}>{after}</Text>
       </Box>
-      <Text color={colors.text}>[Enter] confirm  [Esc] cancel</Text>
     </Box>
   );
 }
