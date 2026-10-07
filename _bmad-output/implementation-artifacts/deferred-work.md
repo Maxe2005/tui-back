@@ -649,3 +649,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: Reuse the shared list-cursor reducer in settings-screen and repo-registry-screen instead of repeating the Home/End computation, and adopt StateLine in the remaining loading/empty spots.
   evidence: Review found about eight inline `key.home ? 0 : len - 1` copies and unconverted "Loading…"/"No … yet" lines.
   resolved_by: story 7.4b — settings and registry call `nextCursorForKey`; loading/empty/error lines go through `StateLine` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
+  summary: Long footer contexts (logs-fullscreen, routes-body-tree-add, wizard-pause) can wrap or clip on 80-column terminals; decide truncation or a two-line footer.
+  evidence: Review found no truncation or width test, and the agent reverted `truncate-end` because it cut Logs hints in an AppShell test.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
+  summary: Close the hint-guard holes (keys longer than three characters, trailing comments, whole-file allowlist) and untangle the keybindings ↔ shared/components dependency cycle.
+  evidence: `hints.guard.test.ts` is a regex scan with a 1-3 character key pattern and a whole-file Dashboard exemption; `keybindings/` now imports `shared/components/hints` while components import it back.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
+  summary: Restore discoverability of the BranchPicker "other members' branches" sub-list outside the footer, and derive the Tab focus hint from each zone's focus-nav declaration.
+  evidence: The in-pane `[↓] other members' branches` hint was removed and `footerHintsFor` now uses a static `Tab/Shift+Tab` entry guarded only by a mode assertion.

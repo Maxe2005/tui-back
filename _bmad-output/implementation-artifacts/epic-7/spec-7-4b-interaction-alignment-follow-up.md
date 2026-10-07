@@ -2,7 +2,7 @@
 title: 'Story 7.4b: Interaction alignment follow-up (UX-DR36)'
 type: 'refactor'
 created: '2026-10-07'
-status: 'review'
+status: 'in-review'
 baseline_commit: 'e91a9755eb2cae82f806cabefa2de3bc89bc3f8f'
 review_loop_iteration: 0
 context:
