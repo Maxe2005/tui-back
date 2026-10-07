@@ -7,7 +7,7 @@ import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
+import { resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { EdtsZone } from './edts-zone.js';
 import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
 import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
@@ -390,7 +390,7 @@ describe('EdtsZone', () => {
       loadEdtsBranches: noopLoad,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
-    // The list pane's width is ratio-bound (list-detail-split.tsx), so this row's label plus its
+    // The list pane's width is ratio-bound (zone-layout.tsx), so this row's label plus its
     // long "unknown (offline)" meta doesn't fit and truncates with an ellipsis (list-row.tsx). The
     // detail pane's title (never truncated) still carries the full, upper-cased name, so this
     // assertion is case-insensitive rather than tied to the truncated row.
@@ -1766,8 +1766,8 @@ describe('EdtsZone', () => {
     expect(output).toContain('Switched to EDT "active-edt"');
   });
 
-  // The detail pane's horizontal position/width is derived from ListDetailSplit's flexGrow ratio
-  // (resolveSplitFlex), independent of content — this proves the split stays stable with the
+  // The detail pane's horizontal position/width is derived from ZoneLayout's flexGrow ratio
+  // (resolveBoundaryFlex), independent of content — this proves the split stays stable with the
   // longer detail content (action history + the hint line), never a layout change.
   it('the detail pane\'s split ratio is unchanged whether the content is short or long (regression)', async () => {
     const shortStore = createAppStore();
@@ -1780,7 +1780,7 @@ describe('EdtsZone', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
     });
-    // Boundary 0 is the list<->detail split ListDetailSplit itself reads (edts-zone.tsx).
+    // Boundary 0 is the list<->detail split ZoneLayout itself reads (edts-zone.tsx).
     const shortRatio = shortStore.getState().splitterRatios.edts[0];
 
     const longStore = createAppStore();
@@ -1802,10 +1802,10 @@ describe('EdtsZone', () => {
     });
     const longRatio = longStore.getState().splitterRatios.edts[0];
 
-    // Same ratio input -> resolveSplitFlex (the sole width driver, confirmed content-blind by
-    // reading list-detail-split.tsx) returns identical flexGrow values regardless of how much
+    // Same ratio input -> resolveBoundaryFlex (the sole width driver, confirmed content-blind by
+    // reading zone-layout.tsx) returns identical flexGrow values regardless of how much
     // text the detail pane's children happen to render.
-    expect(resolveSplitFlex(longRatio)).toEqual(resolveSplitFlex(shortRatio));
+    expect(resolveBoundaryFlex('edts', 0, longRatio)).toEqual(resolveBoundaryFlex('edts', 0, shortRatio));
 
     const shortOutput = await renderToString(<EdtsZone useStore={shortStore} />);
     const longOutput = await renderToString(<EdtsZone useStore={longStore} />);

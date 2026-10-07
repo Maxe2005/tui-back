@@ -11,9 +11,8 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { ListDetailSplit, resolveSplitFlex } from '../../shared/components/list-detail-split.js';
+import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { ListRow } from '../../shared/components/list-row.js';
-import { Splitter } from '../../shared/components/splitter.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
   appendHint,
@@ -104,10 +103,6 @@ export function EdtsZone({
     | 'issues'
     | 'quick-pick';
 }) {
-  // splitterRatios.edts is a 3-entry array — boundary 0 drives the list<->detail split below;
-  // boundaries 1/2 drive the list column's two sub-splits (EDTS<->rest, EDT SERVICES<->OTHER
-  // SERVICES).
-  const ratio = useStore((state) => state.splitterRatios.edts);
   const resizeMode = useStore((state) => state.resizeMode);
   const services = useStore((state) => state.edtsBranches);
   const status = useStore((state) => state.edtsBranchesStatus);
@@ -808,21 +803,20 @@ export function EdtsZone({
 
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
-      <ListDetailSplit
-        ratio={ratio[0]}
-        listSplitterTargeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 0}
-        list={
+      <ZoneLayout
+        zoneId="edts"
+        useStore={useStore}
+        first={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {/* The list column's 3 fixed-but-movable regions — EDTS, EDT SERVICES, OTHER
-                SERVICES — each a sub-Box separated by a horizontal Splitter, sized off
-                splitterRatios.edts[1]/[2] (boundary 1 splits EDTS vs. the rest; boundary 2 splits
-                the rest into EDT SERVICES vs. OTHER SERVICES). `targeted` recolors whichever
-                boundary Ctrl+W resize-mode has selected, read off the same store flag AppShell
-                dispatches against. */}
-            {/* Every flexGrow box below also carries `flexBasis={0} minHeight={0}
-                overflow="hidden"`: otherwise a pane's minimum size is its content size (Yoga's
-                "min-size: auto") and a long list would drag its boundary down with it. */}
-            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).list} flexBasis={0} minHeight={0} overflow="hidden">
+                SERVICES — are nested ZoneLayouts: boundary 1 splits EDTS vs. the rest; boundary 2
+                splits the rest into EDT SERVICES vs. OTHER SERVICES. */}
+            <ZoneLayout
+              zoneId="edts"
+              boundary={1}
+              useStore={useStore}
+              first={
+              <>
               <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
               {edtsLoading ? <Text color={colors['text-dim']}>Loading EDTs…</Text> : null}
               {edtsStatus === 'error' ? <Text color={colors.error}>Failed to load EDTs</Text> : null}
@@ -846,15 +840,10 @@ export function EdtsZone({
                 />
               ))}
               {!dialogOpen ? <DimAnnotation text="[Enter] switch/modify  [Tab] focus" /> : null}
-            </Box>
-
-            <Splitter
-              orientation="horizontal"
-              size={1}
-              targeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 1}
-            />
-
-            <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[1]).detail} flexBasis={0} minHeight={0} overflow="hidden">
+              </>
+              }
+              second={
+              <>
               {/* The services list is split into two Tab-cyclable panes, partitioned against the
                   *selected* EDT's membership — a "No EDT selected" note stands in for EDT
                   SERVICES when no EDT is focused. */}
@@ -875,7 +864,12 @@ export function EdtsZone({
                 </Box>
               ) : null}
 
-              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).list} flexBasis={0} minHeight={0} overflow="hidden">
+              <ZoneLayout
+                zoneId="edts"
+                boundary={2}
+                useStore={useStore}
+                first={
+                <>
                 {focusedEdt !== undefined ? (
                   <>
                     <Text color={paneFocus === 'edt-services' ? colors.accent : colors['text-dim']}>EDT SERVICES</Text>
@@ -901,15 +895,10 @@ export function EdtsZone({
                 ) : (
                   <DimAnnotation text="No EDT selected" />
                 )}
-              </Box>
-
-              <Splitter
-                orientation="horizontal"
-                size={1}
-                targeted={resizeMode?.zone === 'edts' && resizeMode.targetBoundary === 2}
-              />
-
-              <Box flexDirection="column" flexGrow={resolveSplitFlex(ratio[2]).detail} flexBasis={0} minHeight={0} overflow="hidden">
+                </>
+                }
+                second={
+                <>
                 <Text color={paneFocus === 'other-services' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
                 {!loading && status !== 'error' && otherServices.length === 0 ? (
                   <Text color={colors['text-dim']}>No managed services found.</Text>
@@ -928,11 +917,15 @@ export function EdtsZone({
                     />
                   )}
                 />
-              </Box>
-            </Box>
+                </>
+                }
+              />
+              </>
+              }
+            />
           </Box>
         }
-        detail={
+        second={
           <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {paneFocus === 'edts' ? (
               <>

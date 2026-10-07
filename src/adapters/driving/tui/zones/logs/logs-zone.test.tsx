@@ -60,6 +60,16 @@ describe('LogsZone', () => {
     expect(output).toContain('No service selected');
   });
 
+  it('advertises W (not Ctrl+W) for wrapping every pane in the hint list', async () => {
+    const store = createAppStore();
+    store.setState({ edts: [], edtsStatus: 'idle', activeEdt: null, edtsBranches: [], edtsBranchesStatus: 'idle', loadEdts: async () => {}, loadEdtsBranches: async () => {} });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+
+    expect(output).toContain('[W] wrap/truncate all');
+    expect(output).not.toContain('[Ctrl+W]');
+  });
+
   it('shows "No active EDT." in the EDT-members list, with every service falling to OTHER SERVICES, when no EDT is active', async () => {
     const store = createAppStore();
     store.setState({

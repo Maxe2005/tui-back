@@ -13,7 +13,7 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import {
   BoundedList,
   DetailPane,
-  ListDetailSplit,
+  ZoneLayout,
   ListRow,
   ModalDialog,
   Spinner,
@@ -370,7 +370,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const liveServiceIssues = useStore((state) => state.liveServiceIssues);
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
   const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
-  const ratio = useStore((state) => state.splitterRatios.update);
   // The shared branch autocomplete's visible row cap + the edited row's own branch source —
   // the same store actions the EDT zone's own picker sessions use (never `deps.git`
   // directly).
@@ -781,10 +780,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <Box paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>UPDATE</Text>
       </Box>
-      <ListDetailSplit
-        ratio={ratio[0]}
-        listSplitterTargeted={resizeMode?.zone === 'update' && resizeMode.targetBoundary === 0}
-        list={
+      <ZoneLayout
+        zoneId="update"
+        useStore={useStore}
+        first={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <Text color={colors['text-dim']}>SERVICES</Text>
             {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
@@ -824,7 +823,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             />
           </Box>
         }
-        detail={
+        second={
           <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>
               {detailBody}

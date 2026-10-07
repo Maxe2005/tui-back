@@ -2005,9 +2005,26 @@ describe('AppShell splitterRatios load activation', () => {
 });
 
 describe('AppShell Ctrl+W resize-mode', () => {
-  it('Ctrl+W is a no-op on a non-EDTs zone', async () => {
+  it.each(['dashboard', 'update', 'logs', 'routes', 'shared-types'] as const)('Ctrl+W engages resize-mode on boundary 0 in the %s zone', async (zone) => {
     const store = createAppStore();
-    store.getState().setActiveZone('dashboard');
+    store.getState().setActiveZone(zone);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, KEYS.ctrlW);
+
+      expect(store.getState().resizeMode).toEqual({ zone, targetBoundary: 0 });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Ctrl+W is a no-op while the Logs fullscreen preview is open', async () => {
+    const store = createAppStore();
+    store.getState().setActiveZone('logs');
+    store.setState({ logsFullscreenTarget: '/repos/api-gateway', logsFullscreenServiceName: 'api-gateway' });
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
