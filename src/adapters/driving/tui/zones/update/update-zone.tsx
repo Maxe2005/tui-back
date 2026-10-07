@@ -31,12 +31,14 @@ import {
   entryIndexOfRow,
   formatLastUpdateRecap,
   formatLiveServiceDetail,
+  formatServiceUpdateContext,
   formatServiceOutcomeDetail,
   isServiceTargetedByRun,
   partitionUpdateServiceRows,
   resolveEditorCommand,
   resolveRecapToggle,
 } from './update-zone.logic.js';
+import { UpdateServiceDetail } from './update-service-detail.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
@@ -375,6 +377,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
   const lastServiceOutcomes = useStore((state) => state.lastServiceOutcomes);
   const liveServicePhase = useStore((state) => state.liveServicePhase);
   const liveServiceIssues = useStore((state) => state.liveServiceIssues);
+  const liveServiceSteps = useStore((state) => state.liveServiceSteps);
+  const liveServiceDone = useStore((state) => state.liveServiceDone);
+  const lastServiceRuns = useStore((state) => state.lastServiceRuns);
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
   const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
   const ratio = useStore((state) => state.splitterRatios.update);
@@ -438,10 +443,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
 
   const rows = servicesStatus === 'error' ? [] : (services ?? []);
   const focusedEdt = (edts ?? []).find((entry) => entry.ulid === activeEdt);
-  const serviceRows = partitionUpdateServiceRows(rows, focusedEdt);
-  const listEntries = buildUpdateListEntries(serviceRows);
-  const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
-  const selectedServiceRow = serviceRows[clampedServiceCursor];
+  const allServiceRows = partitionUpdateServiceRows(rows, focusedEdt);
   // The open row-local menu's visible rows — the restart row drops out for a container-less
   // service without a recipe (see describeServiceRestart), and the cursor clamps with it so
   // a row that arrived while browsing never points past the last visible item.
@@ -456,8 +458,16 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
   const isAllRun = updateScope === 'all';
   const runningMemberPaths = new Set(edtMembers.map((member) => member.repoPath));
   const runTarget = { scope: isAllRun ? ('all' as const) : ('edt' as const), memberPaths: runningMemberPaths, selection: updateSelection };
-  const isRowTargeted = (row: { service: string; path: string }): boolean =>
+  // Whether the in-flight run covers this row at all (finished services included), vs.
+  // `isRowTargeted`: covered and still being processed.
+  const isRowInRun = (row: { service: string; path: string }): boolean =>
     updateStatus === 'running' && isServiceTargetedByRun(row, runTarget);
+  const isRowTargeted = (row: { service: string; path: string }): boolean => isRowInRun(row) && liveServiceDone[row.service] !== true;
+  // During a run the list keeps only the services the run covers.
+  const serviceRows = updateStatus === 'running' ? allServiceRows.filter(isRowInRun) : allServiceRows;
+  const listEntries = buildUpdateListEntries(serviceRows);
+  const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
+  const selectedServiceRow = serviceRows[clampedServiceCursor];
   const runningMembers = edtMembers.filter((member) => isRowTargeted({ service: member.service, path: member.repoPath }));
   // A narrowed all-scope run (a single service outside the active EDT) names its selected
   // rows — the generic "loading members" line is only for the unfiltered all-repos run.
@@ -786,6 +796,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
   const isSelectedTargeted = selectedServiceRow !== undefined && isRowTargeted(selectedServiceRow);
   const isSelectedRestarting =
     selectedServiceRow !== undefined && serviceRestartInFlight[resolvePath(selectedServiceRow.path)] !== undefined;
+  const selectedRun = selectedServiceRow !== undefined ? lastServiceRuns[selectedServiceRow.service] : undefined;
   const showLiveDetail = isSelectedTargeted || isSelectedRestarting;
   const detailBody =
     selectedServiceRow === undefined
@@ -856,9 +867,24 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
         detail={
           <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             {!recapActive ? (
-              <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>
-                {detailBody}
-              </DetailPane>
+              selectedServiceRow !== undefined &&
+              !isSelectedRestarting &&
+              (isSelectedTargeted || selectedRun !== undefined || selectedLastOutcome === undefined) ? (
+                <UpdateServiceDetail
+                  service={selectedServiceRow.service}
+                  mode={isSelectedTargeted ? 'live' : selectedRun !== undefined ? 'last' : 'never'}
+                  context={
+                    selectedRun !== undefined && !isSelectedTargeted
+                      ? formatServiceUpdateContext(selectedRun.source, selectedRun.target, selectedRun.topic)
+                      : null
+                  }
+                  steps={isSelectedTargeted ? liveServiceSteps[selectedServiceRow.service] : selectedRun?.steps}
+                  result={isSelectedTargeted ? undefined : selectedRun?.result}
+                  issues={selectedLiveIssues}
+                />
+              ) : (
+                <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>{detailBody}</DetailPane>
+              )
             ) : null}
             {!recapActive && updateStatus === 'running' ? (
               <Box>

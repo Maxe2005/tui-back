@@ -180,6 +180,9 @@ export interface GroupUpdateParams {
   // restarting), never allowed to throw into the pipeline — a throwing observer is swallowed
   // per emission.
   onPhase?: OnUpdatePhase;
+  // Fires once per service as soon as its row is final (before the run ends), so a driving
+  // side can show a finished service while others still run. Observer-only, like onPhase.
+  onServiceResult?: OnServiceResult;
 }
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
@@ -207,6 +210,25 @@ export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerC
 export type UpdatePhase = 'pulling' | 'merging' | 'migrating' | 'restarting';
 
 export type OnUpdatePhase = (service: string, phase: UpdatePhase) => void;
+
+export type OnServiceResult = (row: GroupUpdateRepoResult) => void;
+
+// Same never-break-the-pipeline contract as emitPhase.
+function emitServiceResult(onServiceResult: OnServiceResult | undefined, row: GroupUpdateRepoResult): void {
+  if (onServiceResult === undefined) {
+    return;
+  }
+  try {
+    const result = onServiceResult(row) as unknown;
+    if (result instanceof Promise) {
+      result.catch(() => {
+        // Observer-only — the run continues.
+      });
+    }
+  } catch {
+    // Observer-only — the run continues.
+  }
+}
 
 // A driving-side phase observer must never break the pipeline — a throwing observer (a
 // driving-side bug) is swallowed per emission so one repo's live view never strands the
@@ -361,6 +383,7 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         params.onPhase,
       );
       results.push(outcome.row);
+      emitServiceResult(params.onServiceResult, outcome.row);
       if (outcome.cancelRun) {
         break;
       }
@@ -547,6 +570,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
           params.onPhase,
         );
         results.push(outcome.row);
+        emitServiceResult(params.onServiceResult, outcome.row);
         if (outcome.cancelRun) {
           break;
         }

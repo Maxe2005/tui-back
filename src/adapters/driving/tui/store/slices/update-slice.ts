@@ -19,7 +19,13 @@ import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scr
 import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
-import { mergeLastServiceOutcomes, type ServiceIssue } from '../../zones/update/update-zone.logic.js';
+import {
+  advanceServiceSteps,
+  finalizeServiceSteps,
+  mergeLastServiceOutcomes,
+  type ServiceIssue,
+  type ServiceStepStates,
+} from '../../zones/update/update-zone.logic.js';
 import { loadMergeSourcesFromEdt } from '../../../../../core/scripts/resolve-merge-sources.js';
 import {
   applyMergeStrategy,
@@ -103,6 +109,16 @@ export type UpdateSlice = {
   // ended its service mid-run stays inspectable until the next run clears it.
   liveServicePhase: Record<string, UpdatePhase>;
   liveServiceIssues: Record<string, ServiceIssue[]>;
+  // The per-service step tracker (merge / migration / restart, each pending → running →
+  // done|failed|skipped) advanced by the same `onPhase` emissions; cleared with the live maps.
+  liveServiceSteps: Record<string, ServiceStepStates>;
+  // Services of the in-flight run whose final row already landed (core's `onServiceResult`): the
+  // detail pane shows their last-update view while the others are still running.
+  liveServiceDone: Record<string, true>;
+  // The last finished run's per-service snapshot — settled steps, final row, and the context
+  // (merge source, target branch, EDT topic) — kept in memory for the detail pane's
+  // "last update" view; merged per service, never wholesale-replaced.
+  lastServiceRuns: Record<string, ServiceRunSnapshot>;
   // Starts the core use-case in-process. A no-op-with-signal guard, not a throw, when the
   // store is unwired; a second call while a run is already in flight reports
   // `update-already-running` so double-Enter gives feedback instead of silence.
@@ -228,6 +244,43 @@ function resolveLiveIssues(issues: Record<string, ServiceIssue[]>, service: stri
     return issues;
   }
   return { ...issues, [service]: existing.map((entry) => (entry.resolved ? entry : { ...entry, resolved: true })) };
+}
+
+function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const { [key]: _removed, ...rest } = record;
+  return rest;
+}
+
+// Settles each finished row's live steps into the in-memory last-run snapshot, with its
+// merge source (confirmed override, else the shared branch), target branch and EDT topic.
+function mergeLastServiceRuns(
+  state: AppState,
+  results: readonly GroupUpdateRepoResult[],
+  topic: string | null,
+): Record<string, ServiceRunSnapshot> {
+  const next = { ...state.lastServiceRuns };
+  for (const result of results) {
+    // Already settled when its row landed mid-run — the live steps are gone by now.
+    if (state.liveServiceDone[result.service] === true) {
+      continue;
+    }
+    next[result.service] = {
+      steps: finalizeServiceSteps(state.liveServiceSteps[result.service], result),
+      result,
+      source: state.updateSelection?.find((item) => item.service === result.service)?.sourceBranch,
+      target: state.edtsBranches?.find((row) => row.service === result.service)?.branch ?? null,
+      topic,
+    };
+  }
+  return next;
+}
+
+export interface ServiceRunSnapshot {
+  steps: ServiceStepStates;
+  result: GroupUpdateRepoResult;
+  source: string | undefined;
+  target: string | null;
+  topic: string | null;
 }
 
 export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], UpdateSlice> {
@@ -537,7 +590,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateSelection: null,
       updateBlocker: null,
       liveServicePhase: {},
+      liveServiceSteps: {},
+      liveServiceDone: {},
       liveServiceIssues: {},
+      lastServiceRuns: {},
       resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
         const resolve = pendingBlockerResolve;
         pendingBlockerResolve = null;
@@ -583,6 +639,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           // A fresh run starts with a fresh live view — stale phases and
           // resolved/unresolved entries from the previous run never leak into this one.
           liveServicePhase: {},
+          liveServiceSteps: {},
+          liveServiceDone: {},
           liveServiceIssues: {},
         });
         pendingBlockerResolve = null;
@@ -628,9 +686,19 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             // service's current step at its phase boundaries. The next phase for a service
             // implies its re-verification passed, so its unresolved entries flip to
             // resolved here (a failed re-verify never advances the pipeline).
+            onServiceResult: (row) => {
+              set((state) => ({
+                liveServiceDone: { ...state.liveServiceDone, [row.service]: true as const },
+                liveServicePhase: omitKey(state.liveServicePhase, row.service),
+                liveServiceSteps: omitKey(state.liveServiceSteps, row.service),
+                lastServiceRuns: mergeLastServiceRuns(state, [row], state.updateScope === 'all' ? 'all-repos' : (state.edts?.find((entry) => entry.ulid === state.activeEdt)?.topic ?? null)),
+                lastServiceOutcomes: mergeLastServiceOutcomes(state.lastServiceOutcomes, [row]),
+              }));
+            },
             onPhase: ((service: string, phase: UpdatePhase) => {
               set((state) => ({
                 liveServicePhase: { ...state.liveServicePhase, [service]: phase },
+                liveServiceSteps: { ...state.liveServiceSteps, [service]: advanceServiceSteps(state.liveServiceSteps[service], phase) },
                 liveServiceIssues: resolveLiveIssues(state.liveServiceIssues, service),
               }));
             }) satisfies OnUpdatePhase,
@@ -665,8 +733,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 updateUlid: result.data.ulid,
                 updateScope: result.data.scope,
                 // The live step clears with the run — revisiting a covered service shows the
-                // final per-service outcome.
+                // final per-service outcome, with its settled steps and context snapshot.
                 liveServicePhase: {},
+                liveServiceSteps: {},
+                liveServiceDone: {},
+                lastServiceRuns: mergeLastServiceRuns(state, result.data.results, result.data.topic),
                 liveServiceIssues,
                 // Merged, never wholesale-replaced — a partial-scope run (a single
                 // EDT) must never drop another service's earlier outcome.
@@ -680,6 +751,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               updateErrorCode: result.error.code,
               // A top-level rejection ran nothing — no live state survives it.
               liveServicePhase: {},
+              liveServiceSteps: {},
+              liveServiceDone: {},
               liveServiceIssues: {},
             });
           }
@@ -690,6 +763,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateError: detail,
             updateErrorCode: 'internal-error',
             liveServicePhase: {},
+            liveServiceSteps: {},
+            liveServiceDone: {},
             liveServiceIssues: {},
           });
         } finally {
@@ -1098,6 +1173,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateServicePick: null,
           serviceRestartInFlight: {},
           liveServicePhase: {},
+          liveServiceSteps: {},
+          liveServiceDone: {},
           liveServiceIssues: {},
         }),
 

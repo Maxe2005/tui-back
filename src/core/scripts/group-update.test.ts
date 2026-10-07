@@ -177,6 +177,7 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.runMigrations !== undefined ? { runMigrations: overrides.runMigrations } : {}),
     ...(overrides.cleanRestart !== undefined ? { cleanRestart: overrides.cleanRestart } : {}),
     ...(overrides.onPhase !== undefined ? { onPhase: overrides.onPhase } : {}),
+    ...(overrides.onServiceResult !== undefined ? { onServiceResult: overrides.onServiceResult } : {}),
   };
 }
 
@@ -2463,6 +2464,31 @@ describe('groupUpdate — services without a declared container', () => {
       },
     });
     expect(calls(container.restart)).toHaveLength(0);
+  });
+});
+
+describe('groupUpdate — per-service result observer', () => {
+  it('emits each service row as soon as it is final, in order, before the run returns', async () => {
+    const rows: string[] = [];
+    const onServiceResult = vi.fn((row: { service: string; outcome: string }) => {
+      rows.push(`${row.service}:${row.outcome}`);
+    });
+
+    const result = await groupUpdate(makeParams({ onServiceResult }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(rows).toEqual(['svc-a:updated', 'svc-b:updated']);
+  });
+
+  it('a throwing observer never breaks the run', async () => {
+    const onServiceResult = vi.fn(() => {
+      throw new Error('observer bug');
+    });
+
+    const result = await groupUpdate(makeParams({ onServiceResult }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(onServiceResult).toHaveBeenCalledTimes(2);
   });
 });
 

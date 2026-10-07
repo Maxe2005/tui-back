@@ -1582,6 +1582,58 @@ describe('live per-service run tracking', () => {
     expect(store.getState().liveServicePhase).toEqual({});
   });
 
+  it('steps advance live and settle into the last-run snapshot', async () => {
+    let releaseMigration: (() => void) | undefined;
+    const migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve;
+    });
+    const migration: MigrationPort = {
+      run: vi.fn(async () => {
+        await migrationGate;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
+    expect(store.getState().liveServiceSteps['svc-a']).toEqual({ merge: 'done', migration: 'running', restart: 'pending' });
+
+    releaseMigration?.();
+    await run;
+
+    expect(store.getState().liveServiceSteps).toEqual({});
+    expect(store.getState().lastServiceRuns['svc-a']?.steps).toEqual({ merge: 'done', migration: 'done', restart: 'done' });
+  });
+
+  it('a finished service flips to its last-run view while another is still running', async () => {
+    let releaseB: (() => void) | undefined;
+    const gateB = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    const migration: MigrationPort = {
+      run: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/b') {
+          await gateB;
+        }
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().liveServiceDone['svc-a'] === true);
+
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().lastServiceRuns['svc-a']?.steps).toEqual({ merge: 'done', migration: 'done', restart: 'done' });
+    expect(store.getState().lastServiceOutcomes['svc-a']?.outcome).toBe('updated');
+    expect(store.getState().liveServiceDone['svc-b']).toBeUndefined();
+
+    releaseB?.();
+    await run;
+    expect(store.getState().liveServiceDone).toEqual({});
+  });
+
   it('a blocker appends an unresolved issue, resolved once the run re-verifies and moves on', async () => {
     const base = fakeDeps();
     let dirtyReads = 0;
