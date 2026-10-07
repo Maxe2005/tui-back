@@ -3,6 +3,7 @@
 import { Box, Text } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint } from '../../shared/components/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors } from '../../shared/theme/theme.js';
@@ -88,9 +89,9 @@ export function LogsPaneView({
           <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
         </Box>
         {noContainer ? null : displayHealth === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restart requested — re-verifying…</Text>
+          <Text color={colors['text-dim']}> {formatHint(['R', 'restart requested — re-verifying…'])}</Text>
         ) : (
-          <Text color={colors['text-dim']}> [R]</Text>
+          <Text color={colors['text-dim']}> {formatHint(['R', 'restart'])}</Text>
         )}
       </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}

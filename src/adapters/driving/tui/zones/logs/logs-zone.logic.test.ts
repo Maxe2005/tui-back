@@ -25,6 +25,8 @@ import {
   isPaneWrapped,
   isRestartingDisplay,
   isSelectAllKey,
+  logsFooterContext,
+  logsLegendHints,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
@@ -835,5 +837,22 @@ describe('computeLogsLayout list ratio', () => {
       const listColumns = Math.floor((base.windowColumns - 1) * ratio);
       expect(listColumns + 1 + result.layout.cellWidth * result.layout.cols).toBeLessThanOrEqual(base.windowColumns);
     }
+  });
+});
+
+describe('logsFooterContext', () => {
+  it('puts the filter editor (and its history grid) above the fullscreen pane', () => {
+    expect(logsFooterContext(false, false, false)).toBeNull();
+    expect(logsFooterContext(false, false, true)).toBe('logs-fullscreen');
+    expect(logsFooterContext(true, false, true)).toBe('logs-filter-edit');
+    expect(logsFooterContext(true, true, true)).toBe('logs-filter-history');
+  });
+});
+
+describe('logsLegendHints', () => {
+  it('shows the live state of the stream toggles', () => {
+    const hints = logsLegendHints({ showTimestamps: true, showStdout: false, showStderr: true });
+    expect(hints).toContainEqual(['t', 'timestamps on']);
+    expect(hints).toContainEqual(['o', 'stdout off']);
   });
 });

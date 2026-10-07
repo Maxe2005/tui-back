@@ -9,6 +9,8 @@ import type { HealthState } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -45,6 +47,8 @@ import {
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
+  logsFooterContext,
+  logsLegendHints,
   filterHistoryKeyString,
   filterVisibleLines,
   formatHealthLabel,
@@ -221,6 +225,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+  useFooterContext('logs', logsFooterContext(filterEditor !== null, historyGridCursor !== null, logsFullscreenTarget !== null), useStore);
 
   // AppShell's global Left/Right zone-switch fires on the same keypress as this zone's useInput
   // (Ink dispatches to every mounted hook), so moving pane sub-focus with Left/Right would switch
@@ -859,24 +864,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {filterEditor === null ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
                   <BoundedList
-                    items={[
-                      '[Space] toggle',
-                      '[Enter] preview',
-                      '[Ctrl+A] toggle all',
-                      `[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`,
-                      `[o] stdout ${visibility.showStdout ? 'on' : 'off'}`,
-                      `[p] stderr ${visibility.showStderr ? 'on' : 'off'}`,
-                      '[Ctrl+↑/↓] scroll pane',
-                      '[c] clear focused pane',
-                      '[Ctrl+C] clear all panes',
-                      '[w] wrap/truncate this pane',
-                      '[W] wrap/truncate all',
-                      '[R] restart focused pane',
-                      '[/] edit global filter',
-                      "[f] edit this pane's filter",
-                      '[i] toggle global filter (pane)',
-                      '[Esc] clear filter (cascade)',
-                    ]}
+                    items={logsLegendHints(visibility).map(formatHint)}
                     maxVisibleRows={hintsMaxVisibleRows}
                     renderItem={(text, index) => <DimAnnotation key={index} text={text} />}
                   />

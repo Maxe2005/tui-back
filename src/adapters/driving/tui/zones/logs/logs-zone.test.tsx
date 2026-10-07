@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { createAppStore } from '../../store/app-store.js';
+import { footerContextOf } from '../../shared/components/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { LogsZone } from './logs-zone.js';
 
@@ -248,7 +249,7 @@ describe('LogsZone', () => {
     const output = await renderToString(<LogsZone useStore={store} />);
 
     expect(output).toContain('fullscreen line');
-    expect(output).toContain('[Esc] back');
+    expect(await footerContextOf(store, <LogsZone useStore={store} />)).toBe('logs-fullscreen');
     // The grid/list chrome is not shown while fullscreen owns the view.
     expect(output).not.toContain('ACTIVE EDT MEMBERS');
   });
