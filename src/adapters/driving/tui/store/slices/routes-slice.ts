@@ -57,8 +57,8 @@ export type RouteResponse =
 export type RoutesPaneFocus = 'list' | 'detail';
 
 // The right pane's sub-tabs, in display order.
-export type RoutesPaneTab = 'request' | 'response';
-export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['request', 'response'];
+export type RoutesPaneTab = 'saved' | 'request' | 'response';
+export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['saved', 'request', 'response'];
 
 export type { JsonTreeState, RequestDraft };
 

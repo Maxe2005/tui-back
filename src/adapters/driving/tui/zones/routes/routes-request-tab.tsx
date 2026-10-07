@@ -22,7 +22,7 @@ import {
 // the remaining height).
 const MAX_SECTION_ROWS = 4;
 
-const PANE_TAB_LABELS: Record<RoutesPaneTab, string> = { request: 'Request', response: 'Response' };
+const PANE_TAB_LABELS: Record<RoutesPaneTab, string> = { saved: 'Saved', request: 'Request', response: 'Response' };
 
 // The active tab is marked and bold; the strip turns accent while the pane holds focus
 // (the pane's "title highlighted" focus cue).

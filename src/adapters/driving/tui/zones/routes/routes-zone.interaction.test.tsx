@@ -1052,7 +1052,12 @@ describe('RoutesZone request step & sub-tabs', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
+      expect(store.getState().routesPaneTab).toBe('request');
       await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      await press(instance, stdin, KEYS.ctrlRight);
       expect(store.getState().routesPaneTab).toBe('request');
       await press(instance, stdin, KEYS.ctrlRight);
       expect(store.getState().routesPaneTab).toBe('response');
@@ -1060,12 +1065,14 @@ describe('RoutesZone request step & sub-tabs', () => {
       expect(store.getState().routesPaneTab).toBe('response');
       await press(instance, stdin, KEYS.ctrlP);
       expect(store.getState().routesPaneTab).toBe('request');
+      await press(instance, stdin, KEYS.ctrlP);
+      expect(store.getState().routesPaneTab).toBe('saved');
       await press(instance, stdin, KEYS.ctrlN);
-      expect(store.getState().routesPaneTab).toBe('response');
+      expect(store.getState().routesPaneTab).toBe('request');
       // Number keys and [ ] never switch tabs.
       await press(instance, stdin, '1');
       await press(instance, stdin, '[');
-      expect(store.getState().routesPaneTab).toBe('response');
+      expect(store.getState().routesPaneTab).toBe('request');
     } finally {
       instance.unmount();
     }
@@ -1335,6 +1342,306 @@ describe('RoutesZone saved requests', () => {
       await settle(instance);
       expect(port.rows.has('stale-one')).toBe(false);
       expect(lastFrame(stdout)).not.toContain('stale-one');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab lists only the pane route and Enter loads into Request', async () => {
+    const port = fakeSavedPort([
+      record('for-health', { method: 'GET', path: '/health', query: { q: 'saved' } }),
+      record('for-users', { method: 'GET', path: '/users' }),
+    ]);
+    const store = seedSaved(port, [
+      { ...record('for-health', { method: 'GET', path: '/health', query: { q: 'saved' } }), stale: false },
+      { ...record('for-users', { method: 'GET', path: '/users' }), stale: false },
+    ]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().routesPaneTab).toBe('request');
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      let frame = lastFrame(stdout);
+      expect(frame).toContain('for-health');
+      expect(frame).not.toContain('for-users');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      expect(store.getState().requestDrafts['GET /health']?.query).toEqual([{ name: 'q', value: 'saved', required: false }]);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Enter on the list still lands on Request, never on Saved', async () => {
+    const store = seedSaved(fakeSavedPort(), []);
+    const { instance, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(store.getState().routesPaneTab).not.toBe('saved');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab shows the teaching empty state and Esc returns to the list', async () => {
+    const store = seedSaved(fakeSavedPort(), []);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      expect(lastFrame(stdout)).toContain('No saved requests for this route');
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      expect(store.getState().routesPaneFocus).toBe('list');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab d deletes the route-scoped row through a confirm', async () => {
+    const port = fakeSavedPort([record('gone', { method: 'GET', path: '/health' })]);
+    const store = seedSaved(port, [{ ...record('gone', { method: 'GET', path: '/health' }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(lastFrame(stdout)).toContain('gone');
+      await press(instance, stdin, 'd');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Delete "gone"?');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(port.rows.has('gone')).toBe(false);
+      expect(lastFrame(stdout)).toContain('No saved requests for this route');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab filter narrows rows and Esc clears it before leaving', async () => {
+    const port = fakeSavedPort([
+      record('alpha', { method: 'GET', path: '/health' }),
+      record('beta', { method: 'GET', path: '/health' }),
+    ]);
+    const store = seedSaved(port, [
+      { ...record('alpha', { method: 'GET', path: '/health' }), stale: false },
+      { ...record('beta', { method: 'GET', path: '/health' }), stale: false },
+    ]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      await type(instance, stdin, 'alp');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('alpha');
+      expect(lastFrame(stdout)).not.toContain('beta');
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('beta');
+      expect(store.getState().routesPaneTab).toBe('saved');
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      expect(store.getState().routesPaneFocus).toBe('list');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab resets its filter when the route changes', async () => {
+    const port = fakeSavedPort([
+      record('h-one', { method: 'GET', path: '/health' }),
+      record('u-one', { method: 'GET', path: '/users' }),
+    ]);
+    const store = seedSaved(port, [
+      { ...record('h-one', { method: 'GET', path: '/health' }), stale: false },
+      { ...record('u-one', { method: 'GET', path: '/users' }), stale: false },
+    ]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await type(instance, stdin, 'h-one');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('h-one');
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      expect(store.getState().routesPaneFocus).toBe('list');
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await settle(instance);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      expect(lastFrame(stdout)).toContain('u-one');
+      expect(lastFrame(stdout)).not.toContain('h-one');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab r re-runs the library refresh', async () => {
+    const store = seedSaved(fakeSavedPort(), [
+      { ...record('one', { method: 'GET', path: '/health' }), stale: false },
+    ]);
+    const refresh = vi.fn(async () => {});
+    store.setState({ refreshSavedRequests: refresh });
+    const { instance, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      await press(instance, stdin, 'r');
+      await settle(instance);
+      expect(refresh).toHaveBeenCalled();
+      expect(store.getState().routesPaneTab).toBe('saved');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab treats a whitespace-only filter as filtering: d types instead of deleting', async () => {
+    const port = fakeSavedPort([record('one', { method: 'GET', path: '/health' })]);
+    const store = seedSaved(port, [{ ...record('one', { method: 'GET', path: '/health' }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await press(instance, stdin, ' ');
+      await settle(instance);
+      await press(instance, stdin, 'd');
+      await settle(instance);
+      expect(lastFrame(stdout)).not.toContain('Delete "one"?');
+      expect(port.rows.has('one')).toBe(true);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab delete of the last row keeps a valid cursor: Enter loads the remainder', async () => {
+    const port = fakeSavedPort([
+      record('alpha', { method: 'GET', path: '/health', query: { q: 'a' } }),
+      record('beta', { method: 'GET', path: '/health', query: { q: 'b' } }),
+    ]);
+    const store = seedSaved(port, [
+      { ...record('alpha', { method: 'GET', path: '/health', query: { q: 'a' } }), stale: false },
+      { ...record('beta', { method: 'GET', path: '/health', query: { q: 'b' } }), stale: false },
+    ]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, 'd');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Delete "beta"?');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(port.rows.has('beta')).toBe(false);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(store.getState().requestDrafts['GET /health']?.query).toEqual([{ name: 'q', value: 'a', required: false }]);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab Esc cancels the delete confirm and keeps the row', async () => {
+    const port = fakeSavedPort([record('keep', { method: 'GET', path: '/health' })]);
+    const store = seedSaved(port, [{ ...record('keep', { method: 'GET', path: '/health' }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await press(instance, stdin, 'd');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Delete "keep"?');
+      await press(instance, stdin, KEYS.escape);
+      await settle(instance);
+      expect(lastFrame(stdout)).not.toContain('Delete "keep"?');
+      expect(lastFrame(stdout)).toContain('keep');
+      expect(port.rows.has('keep')).toBe(true);
+      expect(store.getState().routesPaneTab).toBe('saved');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab first visit auto-loads an unloaded cache', async () => {
+    const store = seedSaved(fakeSavedPort(), []);
+    store.setState({ savedRequests: null, savedRequestsError: null });
+    const cached = [{ ...record('auto', { method: 'GET', path: '/health' }), stale: false }];
+    const refresh = vi.fn(async () => {
+      store.setState({ savedRequests: cached, savedRequestsError: null });
+    });
+    store.setState({ refreshSavedRequests: refresh });
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(refresh).not.toHaveBeenCalled();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await settle(instance);
+      expect(refresh).toHaveBeenCalled();
+      expect(lastFrame(stdout)).toContain('auto');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab Enter with a failing load stays on Saved with the inline error', async () => {
+    const port = fakeSavedPort([record('broken', { method: 'GET', path: '/health' })]);
+    port.get = async () => err('saved-request-not-found', 'No saved request named "broken"');
+    const store = seedSaved(port, [{ ...record('broken', { method: 'GET', path: '/health' }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(store.getState().routesPaneTab).toBe('saved');
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      expect(lastFrame(stdout)).toContain('No saved request named');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Saved sub-tab delete confirm surfaces a failing remove as the inline error', async () => {
+    const port = fakeSavedPort([record('stuck', { method: 'GET', path: '/health' })]);
+    port.remove = async () => err('saved-requests-failed', 'remove blew up');
+    const store = seedSaved(port, [{ ...record('stuck', { method: 'GET', path: '/health' }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.ctrlLeft);
+      await press(instance, stdin, 'd');
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Delete "stuck"?');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('remove blew up');
+      expect(port.rows.has('stuck')).toBe(true);
+      expect(store.getState().routesPaneTab).toBe('saved');
     } finally {
       instance.unmount();
     }

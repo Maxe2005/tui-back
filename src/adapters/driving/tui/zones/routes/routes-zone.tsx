@@ -1,8 +1,8 @@
 // tui/zones/routes: the Routes zone — a resizable list/detail split of the repo's discovered
 // routes (BoundedList of ListRows) with an inline filter, and a focusable right pane with
-// Request / Response sub-tabs. `Enter` opens the Request tab (the list never fires); `Ctrl+R`
-// fires the draft. While the pane holds focus it captures the keyboard from AppShell; `Esc`
-// unwinds sub-editors, then Response → Request, then back to the list.
+// Saved | Request | Response sub-tabs. `Enter` opens the Request tab (the list never fires);
+// `Ctrl+R` fires the draft. While the pane holds focus it captures the keyboard from AppShell;
+// `Esc` unwinds sub-editors, then Response → Request and Saved → list, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
@@ -96,6 +96,7 @@ import {
 } from './routes-request.logic.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
+import { RoutesSavedTab } from './routes-saved-tab.js';
 import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
@@ -145,6 +146,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const setBodyEditErrors = useStore((state) => state.setBodyEditErrors);
   const draftOrigins = useStore((state) => state.draftOrigins);
   const savedRequests = useStore((state) => state.savedRequests);
+  const savedRequestsError = useStore((state) => state.savedRequestsError);
   const refreshSavedRequests = useStore((state) => state.refreshSavedRequests);
   const saveRequestDraft = useStore((state) => state.saveRequestDraft);
   const loadSavedRequest = useStore((state) => state.loadSavedRequest);
@@ -189,6 +191,12 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [pickerState, setPickerState] = useState<FilterablePickListState>(() => createFilterablePickListState());
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [pickerDeleteConfirm, setPickerDeleteConfirm] = useState<{ name: string } | null>(null);
+  // The Saved sub-tab's zone-local pick state (filter + cursor), its inline error line and its
+  // `d`-to-delete confirm. Route-scoped: reset on every route change like the other pane
+  // transients, never autofocused.
+  const [savedTabState, setSavedTabState] = useState<FilterablePickListState>(() => createFilterablePickListState());
+  const [savedTabError, setSavedTabError] = useState<string | null>(null);
+  const [savedTabDeleteConfirm, setSavedTabDeleteConfirm] = useState<{ name: string } | null>(null);
   // The request-body editor's transient inline/raw UI. Drafts, folds and filters live in the
   // store (per route, session-only), so a revisit restores them together; only the text
   // buffers are zone-local.
@@ -203,9 +211,15 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const paneFocused = paneFocus === 'detail';
   useEffect(() => {
     setZoneInputCaptured(
-      filterEditing || paneFocused || savePrompt !== null || pickerOpen || overwriteConfirm !== null || pickerDeleteConfirm !== null,
+      filterEditing ||
+        paneFocused ||
+        savePrompt !== null ||
+        pickerOpen ||
+        overwriteConfirm !== null ||
+        pickerDeleteConfirm !== null ||
+        savedTabDeleteConfirm !== null,
     );
-  }, [filterEditing, paneFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, setZoneInputCaptured]);
+  }, [filterEditing, paneFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
 
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
@@ -236,6 +250,23 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       })),
     [savedRequests],
   );
+
+  // The Saved sub-tab rows: only the pane route's requests, matched with the same
+  // normalized equality as `resolveRouteIndex`. Route-scoped by construction, so no stale
+  // flags, no stale blocking and no repo-mismatch handling here.
+  const savedTabItems: FilterablePickItem<SavedWithStale>[] = useMemo(() => {
+    if (paneRouteKey === null) {
+      return [];
+    }
+    return (savedRequests ?? [])
+      .filter((request) => routeKeyFor(request.method, request.path) === paneRouteKey)
+      .map((request) => ({
+        key: request.id,
+        label: request.name,
+        meta: `${request.method} ${request.path}`,
+        value: request,
+      }));
+  }, [savedRequests, paneRouteKey]);
 
   const openSavePrompt = () => {
     setSaveNotice(null);
@@ -424,6 +455,27 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     setRowAddPrompt(null);
     setFilterPanelOpen(false);
     setPanelCursor(0);
+    setSavedTabState(createFilterablePickListState());
+    setSavedTabError(null);
+    setSavedTabDeleteConfirm(null);
+  };
+
+  // Loads one route-scoped row into the Request tab: shared by the Saved tab's Enter
+  // and shared-reducer select paths. A failure stays on Saved with the inline error.
+  const loadSavedIntoRequest = async (targetName: string) => {
+    const loaded = await loadSavedRequest(targetName);
+    if (!loaded.ok) {
+      setSavedTabError(loaded.error.message);
+      return;
+    }
+    setSavedTabError(null);
+    resetPaneTransients();
+    setSection('params');
+    setRowCursor(0);
+    setFireBlock(null);
+    setSaveNotice(null);
+    setPaneTab('request');
+    setPaneFocus('detail');
   };
 
   // `Enter` (or `e`, straight to Body) moves the focus into the pane on its Request tab, seeding
@@ -958,9 +1010,24 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       setSavePrompt(null);
       setOverwriteConfirm(null);
       setSaveNotice(null);
+      setSavedTabState(createFilterablePickListState());
+      setSavedTabError(null);
+      setSavedTabDeleteConfirm(null);
     }
     previousPaneRouteKey.current = paneRouteKey;
   }, [paneRouteKey]);
+
+  // The Saved tab needs its rows: entering it (or switching route onto it) with an
+  // unloaded cache triggers one load. A failed load stays visible as the store error
+  // until the next visit or a manual `r` retry — the effect never refires off the error
+  // itself, so a failure cannot loop.
+  useEffect(() => {
+    if (paneTab === 'saved' && savedRequests === null) {
+      void refreshSavedRequests();
+    }
+    // savedRequestsError deliberately excluded: a failure must not retrigger by itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paneTab, paneRouteKey, savedRequests, refreshSavedRequests]);
 
   // The pane follows its route: a reload that drops the route hands focus back to the
   // list (its drafts stay in the store under the same key).
@@ -1020,6 +1087,39 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               setPickerError(null);
             }
             void refreshSavedRequests();
+          })();
+          return;
+        }
+        return;
+      }
+      // The Saved sub-tab's delete confirm owns every key the same way: Enter deletes the
+      // route-scoped row, Esc backs out to the tab.
+      if (savedTabDeleteConfirm !== null) {
+        if (key.escape === true) {
+          setSavedTabDeleteConfirm(null);
+          return;
+        }
+        if (key.return === true) {
+          const target = savedTabDeleteConfirm.name;
+          const query = savedTabState.query;
+          const routeKey = paneRouteKey;
+          void (async () => {
+            const result = await deleteSavedRequest(target);
+            setSavedTabDeleteConfirm(null);
+            if (!result.ok) {
+              setSavedTabError(result.error.message);
+            } else {
+              setSavedTabError(null);
+            }
+            await refreshSavedRequests();
+            // Re-clamp against the refreshed match list: the pre-delete length can leave
+            // the cursor past the end when the last row goes.
+            const live = useStore.getState().savedRequests ?? [];
+            const liveItems = live
+              .filter((request) => routeKey !== null && routeKeyFor(request.method, request.path) === routeKey)
+              .map((request) => ({ key: request.id, label: request.name, value: request }));
+            const liveMatches = matchPickItemsBySubstring(query, liveItems);
+            setSavedTabState((previous) => ({ ...previous, cursor: clampPickListCursor(previous.cursor, liveMatches.length) }));
           })();
           return;
         }
@@ -1258,6 +1358,76 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         // came from a saved request); every inline sub-editor above already owns its keys.
         if ((input === 's' || input === 'S') && paneTab === 'request') {
           openSavePrompt();
+          return;
+        }
+        // Saved sub-tab: route-scoped quick re-fire. `/` focuses the filter (the input owns
+        // every key while filtering), arrows/`j`/`k` move, `Enter` loads into Request, `d`
+        // deletes through the confirm, `r` reloads the library, `Esc` clears the filter
+        // first, then returns to the list.
+        if (paneTab === 'saved') {
+          // One definition: any non-empty query (even whitespace-only) means filtering,
+          // so navigation/delete keys stay literal filter text.
+          const savedTabFiltering = savedTabState.query !== '';
+          if (key.escape === true) {
+            if (savedTabFiltering) {
+              setSavedTabState((previous) => ({ ...previous, query: '', queryCursor: 0, cursor: 0 }));
+              return;
+            }
+            closePane();
+            return;
+          }
+          // `/` focuses the filter without entering the slash itself; a slash typed while
+          // already filtering is literal filter text.
+          if (input === '/' && !savedTabFiltering) {
+            return;
+          }
+          if ((input === 'j' || input === 'k') && !savedTabFiltering) {
+            const matches = matchPickItemsBySubstring(savedTabState.query, savedTabItems);
+            const from = clampPickListCursor(savedTabState.cursor, matches.length);
+            const next = input === 'j' ? from + 1 : from - 1;
+            setSavedTabState((previous) => ({ ...previous, cursor: clampPickListCursor(next, matches.length) }));
+            return;
+          }
+          if ((input === 'd' || input === 'D') && !savedTabFiltering) {
+            const matches = matchPickItemsBySubstring(savedTabState.query, savedTabItems);
+            const at = matches[clampPickListCursor(savedTabState.cursor, matches.length)];
+            if (at !== undefined) {
+              setSavedTabDeleteConfirm({ name: at.value.name });
+            }
+            return;
+          }
+          if ((input === 'r' || input === 'R') && !savedTabFiltering) {
+            void refreshSavedRequests();
+            return;
+          }
+          if (key.return === true) {
+            const matches = matchPickItemsBySubstring(savedTabState.query, savedTabItems);
+            const at = matches[clampPickListCursor(savedTabState.cursor, matches.length)];
+            if (at === undefined) {
+              return;
+            }
+            void loadSavedIntoRequest(at.value.name);
+            return;
+          }
+          const outcome = handleFilterablePickListKey(savedTabState, savedTabItems, input, key);
+          if (outcome.type === 'update') {
+            setSavedTabState(outcome.state);
+            return;
+          }
+          if (outcome.type === 'cancel') {
+            if (savedTabFiltering) {
+              setSavedTabState((previous) => ({ ...previous, query: '', queryCursor: 0, cursor: 0 }));
+            } else {
+              closePane();
+            }
+            return;
+          }
+          // `select` via the shared reducer can only happen on arrows/typing paths here
+          // (Enter is handled above to also switch tabs); treat it like an Enter load.
+          if (outcome.type === 'select') {
+            void loadSavedIntoRequest(outcome.item.value.name);
+            return;
+          }
           return;
         }
         if (paneTab === 'request') {
@@ -1609,7 +1779,14 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             : `[esc] list · [tab] section · [s] save · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
                 section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
               }${paneKeys}`;
-  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
+  const savedHint: string | null =
+    !paneFocused || paneTab !== 'saved'
+      ? null
+      : savedTabDeleteConfirm !== null
+        ? '[enter] delete · [esc] cancel'
+        : '[enter] load · [/] filter · [d] delete · [r] retry · [esc] list · [ctrl+←→] tab';
+  const paneHint =
+    paneTab === 'request' ? requestHint : paneTab === 'saved' ? savedHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1714,6 +1891,14 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {focused && paneTab === 'request' && saveNotice !== null && savePrompt === null ? (
               <DimAnnotation text={saveNotice} />
             ) : null}
+            {focused && paneTab === 'saved' ? (
+              <RoutesSavedTab
+                items={savedTabItems}
+                pickState={savedTabState}
+                error={paneFocused ? (savedTabError ?? savedRequestsError?.message ?? null) : null}
+                isLoaded={savedRequests !== null}
+              />
+            ) : null}
             {focused && paneTab === 'response' ? (
               <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
                 {responseNode}
@@ -1754,6 +1939,14 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
           <Box flexDirection="column">
             <Text color={colors.text}>The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
+            <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
+          </Box>
+        </ModalDialog>
+      ) : null}
+      {savedTabDeleteConfirm !== null ? (
+        <ModalDialog title={`Delete "${savedTabDeleteConfirm.name}"?`} onConfirm={() => {}} onCancel={() => {}}>
+          <Box flexDirection="column">
+            <Text color={colors.text}>The saved request "{savedTabDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
             <Text color={colors.text}>[Enter] delete · [Esc] cancel</Text>
           </Box>
         </ModalDialog>
