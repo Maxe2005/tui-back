@@ -36,15 +36,11 @@ import {
   initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
   resolveIssuesSeverity,
   type PaneFocus,
   resolveActionHint,
   resolveCandidateListState,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   type DeleteDialogState,
   type EdtDialogState,
 } from './edts-zone.logic.js';
@@ -64,6 +60,7 @@ import {
   type LocalBranchList,
 } from './dialogs/switch-resolution/switch-resolution.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above the splitter,
 // both section headers, and the loading/error/issues lines) subtracted from the window size

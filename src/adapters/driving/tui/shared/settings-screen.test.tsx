@@ -36,7 +36,6 @@ import {
   clampFilterHistorySize,
   clampGridMaxRows,
   clampLogBufferSize,
-  moveHintCursor,
   nextSettingsTab,
   parseBranchDropdownMaxRowsDigit,
   parseFilterHistoryGridMaxRowsDigit,
@@ -279,18 +278,6 @@ describe('LOGS_SETTINGS_GROUPS', () => {
       'Filter history dedup',
       'Clear history',
     ]);
-  });
-});
-
-describe('moveHintCursor', () => {
-  it('moves down and up by one, clamped at both bounds', () => {
-    expect(moveHintCursor(0, 'down', 3)).toBe(1);
-    expect(moveHintCursor(2, 'down', 3)).toBe(2);
-    expect(moveHintCursor(0, 'up', 3)).toBe(0);
-  });
-
-  it('always returns 0 for an empty list', () => {
-    expect(moveHintCursor(0, 'down', 0)).toBe(0);
   });
 });
 

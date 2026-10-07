@@ -32,16 +32,12 @@ import {
   formatServiceDetail,
   formatServiceMeta,
   isSwitchBlockedError,
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
   resolveCandidateListState,
   resolveActionHint,
   resolveIssuesSeverity,
   resolveModifyEnterAction,
   resolveModifyOps,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
@@ -50,6 +46,7 @@ import {
   validateBranchEditValue,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.logic.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
   return {

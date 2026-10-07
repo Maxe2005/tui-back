@@ -24,7 +24,7 @@ import {
   type SummaryTone,
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
+import { formatServiceMeta } from '../edts/edts-zone.logic.js';
 import {
   deriveUpdateServiceStatus,
   formatLiveServiceDetail,
@@ -42,6 +42,7 @@ import { StateLine } from '../../shared/components/state-line.js';
 import { formatHint, formatHints } from '../../shared/components/hints.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from './update-config-panels.logic.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the

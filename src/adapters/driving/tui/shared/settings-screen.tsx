@@ -13,6 +13,7 @@ import { TextInputLine } from './components/text-input-line.js';
 import { formatHint } from './components/hints.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
 import type { FooterContextId } from '../keybindings/index.js';
 import { colors, spacing, typography } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
@@ -177,14 +178,9 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
     }
     return { type: 'edit', editing: nextTextInputValue(view.editing, input, key) };
   }
-  if (key.home || key.end) {
-    return { type: 'move', cursor: key.home ? 0 : GENERAL_SETTINGS_ROWS.length - 1 };
-  }
-  if (key.upArrow) {
-    return { type: 'move', cursor: moveHintCursor(view.cursor, 'up', GENERAL_SETTINGS_ROWS.length) };
-  }
-  if (key.downArrow) {
-    return { type: 'move', cursor: moveHintCursor(view.cursor, 'down', GENERAL_SETTINGS_ROWS.length) };
+  const cursor = nextCursorForKey(key, view.cursor, GENERAL_SETTINGS_ROWS.length);
+  if (cursor !== null) {
+    return { type: 'move', cursor };
   }
   const row = GENERAL_SETTINGS_ROWS[view.cursor];
   if (row === 'quit-shortcut' && input === ' ') {
@@ -204,16 +200,6 @@ export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
   { id: 'edt-services', label: `EDT services — "${formatHint(['Enter', 'Remove / Change branch'])}"` },
   { id: 'other-services', label: `Other services — "${formatHint(['Enter', 'Add to EDT'])}"` },
 ];
-
-// Generic clamped cursor mover — reused for the EDTs tab's group-list cursor and both of its
-// checkbox cursors (each just an index into a small fixed-length list).
-export function moveHintCursor(current: number, direction: 'up' | 'down', length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
-}
 
 // Toggles `id` in `hidden`, never mutating the input array (Settings.edts.hiddenActionHints and
 // hiddenActionTypes are each a string[], not a Set). Shared by both EDTs checkbox groups.
@@ -503,16 +489,9 @@ export function SettingsScreen({
       // clears that one service's two lists (text + regex), Esc (handled above) steps back to
       // the "Clear history" group's row list.
       if (logsClearServiceOpen) {
-        if (key.home || key.end) {
-          setLogsClearServiceCursor(key.home ? 0 : Math.max(logsServices.length - 1, 0));
-          return;
-        }
-        if (key.upArrow) {
-          setLogsClearServiceCursor((current) => moveHintCursor(current, 'up', logsServices.length));
-          return;
-        }
-        if (key.downArrow) {
-          setLogsClearServiceCursor((current) => moveHintCursor(current, 'down', logsServices.length));
+        const moved = nextCursorForKey(key, logsClearServiceCursor, logsServices.length);
+        if (moved !== null) {
+          setLogsClearServiceCursor(moved);
           return;
         }
         if (key.return) {
@@ -527,16 +506,9 @@ export function SettingsScreen({
       // "Clear history" is the one Logs group with more than one field — its own small Up/Down
       // row list, Enter triggers whichever action is highlighted.
       if (logsGroup === 'clear-history') {
-        if (key.home || key.end) {
-          setLogsClearRowCursor(key.home ? 0 : Math.max(LOGS_CLEAR_ROWS.length - 1, 0));
-          return;
-        }
-        if (key.upArrow) {
-          setLogsClearRowCursor((current) => moveHintCursor(current, 'up', LOGS_CLEAR_ROWS.length));
-          return;
-        }
-        if (key.downArrow) {
-          setLogsClearRowCursor((current) => moveHintCursor(current, 'down', LOGS_CLEAR_ROWS.length));
+        const moved = nextCursorForKey(key, logsClearRowCursor, LOGS_CLEAR_ROWS.length);
+        if (moved !== null) {
+          setLogsClearRowCursor(moved);
           return;
         }
         const row = LOGS_CLEAR_ROWS[logsClearRowCursor];
@@ -613,16 +585,9 @@ export function SettingsScreen({
       }
 
       // logsGroup === null: the group-list level — Up/Down navigates, Enter drills in.
-      if (key.home || key.end) {
-        setLogsGroupCursor(key.home ? 0 : Math.max(LOGS_SETTINGS_GROUPS.length - 1, 0));
-        return;
-      }
-      if (key.upArrow) {
-        setLogsGroupCursor((current) => moveHintCursor(current, 'up', LOGS_SETTINGS_GROUPS.length));
-        return;
-      }
-      if (key.downArrow) {
-        setLogsGroupCursor((current) => moveHintCursor(current, 'down', LOGS_SETTINGS_GROUPS.length));
+      const moved = nextCursorForKey(key, logsGroupCursor, LOGS_SETTINGS_GROUPS.length);
+      if (moved !== null) {
+        setLogsGroupCursor(moved);
         return;
       }
       if (key.return) {
@@ -640,16 +605,9 @@ export function SettingsScreen({
 
     if (!drilledIn) {
       // The group-list level — Up/Down navigates, Enter drills in.
-      if (key.home || key.end) {
-        setGroupCursor(key.home ? 0 : Math.max(SETTINGS_GROUPS.length - 1, 0));
-        return;
-      }
-      if (key.upArrow) {
-        setGroupCursor((current) => moveHintCursor(current, 'up', SETTINGS_GROUPS.length));
-        return;
-      }
-      if (key.downArrow) {
-        setGroupCursor((current) => moveHintCursor(current, 'down', SETTINGS_GROUPS.length));
+      const moved = nextCursorForKey(key, groupCursor, SETTINGS_GROUPS.length);
+      if (moved !== null) {
+        setGroupCursor(moved);
         return;
       }
       if (key.return) {
@@ -662,16 +620,9 @@ export function SettingsScreen({
     }
 
     if (edtsGroup === 'hint-visibility') {
-      if (key.home || key.end) {
-        setHintCursor(key.home ? 0 : Math.max(HIDEABLE_ACTION_HINTS.length - 1, 0));
-        return;
-      }
-      if (key.upArrow) {
-        setHintCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_HINTS.length));
-        return;
-      }
-      if (key.downArrow) {
-        setHintCursor((current) => moveHintCursor(current, 'down', HIDEABLE_ACTION_HINTS.length));
+      const moved = nextCursorForKey(key, hintCursor, HIDEABLE_ACTION_HINTS.length);
+      if (moved !== null) {
+        setHintCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -710,16 +661,9 @@ export function SettingsScreen({
     }
 
     // edtsGroup === 'action-types'
-    if (key.home || key.end) {
-      setActionTypeCursor(key.home ? 0 : Math.max(HIDEABLE_ACTION_TYPES.length - 1, 0));
-      return;
-    }
-    if (key.upArrow) {
-      setActionTypeCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_TYPES.length));
-      return;
-    }
-    if (key.downArrow) {
-      setActionTypeCursor((current) => moveHintCursor(current, 'down', HIDEABLE_ACTION_TYPES.length));
+    const moved = nextCursorForKey(key, actionTypeCursor, HIDEABLE_ACTION_TYPES.length);
+    if (moved !== null) {
+      setActionTypeCursor(moved);
       return;
     }
     if (input === ' ') {

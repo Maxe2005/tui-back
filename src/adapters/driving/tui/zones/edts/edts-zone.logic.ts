@@ -149,14 +149,6 @@ export function explainUnreachable(): IssueExplanation {
   };
 }
 
-export {
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
-} from '../../shared/keys/list-cursor.js';
-export type { SelectionDirection, SelectionJump } from '../../shared/keys/list-cursor.js';
-
 // ---- Base-view focus and forms -----------------------------------------------------------
 
 // Tab's second consumer (the first is cycleFormFocus below, inside a form): cycling which of the

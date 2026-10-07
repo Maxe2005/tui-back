@@ -9,6 +9,7 @@ import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { Spinner } from './components/spinner.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import type { FooterContextId } from '../keybindings/index.js';
 import { colors } from './theme/theme.js';
@@ -124,18 +125,6 @@ export function backspaceRootInput(current: string): string {
   return current.slice(0, -1);
 }
 
-// Candidate-list cursor movement (checkbox-list-item is a static row; the screen owns which row
-// is highlighted for Space/navigation).
-export type CandidateDirection = 'up' | 'down';
-
-export function moveCandidateCursor(current: number, direction: CandidateDirection, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
-}
-
 // Space toggles the highlighted candidate's checked state — checkbox-list-item's semantics:
 // Space toggles, Enter confirms the whole selection.
 export function toggleCandidateSelection(selected: ReadonlySet<string>, path: string): Set<string> {
@@ -247,16 +236,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'candidates') {
-      if (key.home || key.end) {
-        setCursor(key.home ? 0 : Math.max(candidates.length - 1, 0));
-        return;
-      }
-      if (key.downArrow) {
-        setCursor((current) => moveCandidateCursor(current, 'down', candidates.length));
-        return;
-      }
-      if (key.upArrow) {
-        setCursor((current) => moveCandidateCursor(current, 'up', candidates.length));
+      const moved = nextCursorForKey(key, clampedCursor, candidates.length);
+      if (moved !== null) {
+        setCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -275,16 +257,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'clean-candidates' && staleCandidates.length > 0) {
-      if (key.home || key.end) {
-        setCleanCursor(key.home ? 0 : Math.max(staleCandidates.length - 1, 0));
-        return;
-      }
-      if (key.downArrow) {
-        setCleanCursor((current) => moveCandidateCursor(current, 'down', staleCandidates.length));
-        return;
-      }
-      if (key.upArrow) {
-        setCleanCursor((current) => moveCandidateCursor(current, 'up', staleCandidates.length));
+      const moved = nextCursorForKey(key, clampedCleanCursor, staleCandidates.length);
+      if (moved !== null) {
+        setCleanCursor(moved);
         return;
       }
       if (input === ' ') {

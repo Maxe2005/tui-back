@@ -12,10 +12,6 @@ import { colors } from '../../../shared/theme/theme.js';
 import {
   buildDeleteMemberRows,
   formatDeleteMemberMeta,
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   stripAssistedActionCodes,
   summarizeFailedResults,
   toggleDeleteDisposition,
@@ -23,6 +19,7 @@ import {
   type EdtDialogState,
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 
 export type DeleteDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

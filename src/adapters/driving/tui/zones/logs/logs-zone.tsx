@@ -21,11 +21,7 @@ import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
 import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
-  resolveSelectionDirection,
-  resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import {
@@ -87,6 +83,7 @@ import {
   type VisibilityFlags,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {

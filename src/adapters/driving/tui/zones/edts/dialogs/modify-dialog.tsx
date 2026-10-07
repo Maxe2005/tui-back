@@ -20,12 +20,8 @@ import {
   cycleFormFocus,
   FORM_FOCUS_NAV,
   findRetryableFailedRow,
-  jumpSelection,
-  moveSelection,
   resolveModifyEnterAction,
   resolveModifyOps,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   suggestBranchForNewMember,
   summarizeFailedResults,
   toggleMemberSelection,
@@ -36,6 +32,7 @@ import {
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

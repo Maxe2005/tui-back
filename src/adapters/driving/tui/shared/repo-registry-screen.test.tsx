@@ -11,7 +11,6 @@ import {
   MANIFEST_GUIDANCE_LINES,
   RepoRegistryScreen,
   backspaceRootInput,
-  moveCandidateCursor,
   registryFooterContext,
   resolveRegistryScreenPhase,
   toggleCandidateSelection,
@@ -153,22 +152,6 @@ describe('backspaceRootInput', () => {
 
   it('is a no-op on an empty string', () => {
     expect(backspaceRootInput('')).toBe('');
-  });
-});
-
-describe('moveCandidateCursor', () => {
-  it('moves down and up by one', () => {
-    expect(moveCandidateCursor(0, 'down', 3)).toBe(1);
-    expect(moveCandidateCursor(1, 'up', 3)).toBe(0);
-  });
-
-  it('clamps at both bounds', () => {
-    expect(moveCandidateCursor(2, 'down', 3)).toBe(2);
-    expect(moveCandidateCursor(0, 'up', 3)).toBe(0);
-  });
-
-  it('always returns 0 for an empty list', () => {
-    expect(moveCandidateCursor(0, 'down', 0)).toBe(0);
   });
 });
 
