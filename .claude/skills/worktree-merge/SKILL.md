@@ -65,11 +65,21 @@ git merge --no-ff <source> -m "Merge <source> into <target>"
 
 1. Premier essai : merge normal. En cas de conflit, lister les fichiers
    (`git status --porcelain | grep '^UU'`).
-2. Tentative auto, uniquement ces deux cas :
+2. Tentative auto, uniquement ces cas :
    - Retry `git merge --abort` puis `git merge --no-ff -X ignore-space-change`
      : si le conflit n'était que whitespace, garder le résultat en le
      signalant comme `merged-whitespace-retry`.
    - Fichiers ajoutés des deux côtés à contenu identique : accepter tel quel.
+   - **Fichiers de suivi** (`_bmad-output/implementation-artifacts/deferred-work.md`,
+     `_bmad-output/implementation-artifacts/sprint-status.yaml`, et tout autre
+     fichier de suivi BMAD du même dossier) : résoudre soi-même, sans demander.
+     Règle : conserver les ajouts des deux côtés (union des entrées, sans
+     doublon), et pour `last_updated` / dates de mise à jour garder la plus
+     récente. Pour `sprint-status.yaml`, si deux côtés ont des statuts différents
+     pour une même clé, garder le statut le plus avancé
+     (backlog < ready-for-dev < in-progress < review < done). Vérifier qu'aucun
+     marqueur `<<<<<<<` / `>>>>>>>` ne reste, puis signaler le fichier comme
+     `merged-tracking-resolved` dans le rapport.
 3. Tout autre conflit : `git merge --abort` pour revenir à un arbre propre,
    marquer la source `blocked-conflict` avec la liste des fichiers, et HALT :
    arrêter la boucle, ne pas passer à la branche suivante, rapporter la
