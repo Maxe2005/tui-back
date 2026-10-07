@@ -12,6 +12,7 @@ import type { NavigationKey } from '../../shared/keys/navigation-key.js';
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
+import { formatHint } from '../../shared/components/hints.js';
 import type { MenuItem } from '../../shared/components/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
@@ -381,11 +382,11 @@ export function formatEdtActionHistory(
 export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActiveEdt: boolean): string {
   switch (paneFocus) {
     case 'edts':
-      return focusedIsActiveEdt ? '[Enter] Modify' : '[Enter] Switch';
+      return formatHint(['Enter', focusedIsActiveEdt ? 'Modify' : 'Switch']);
     case 'edt-services':
-      return '[Enter] Remove / Change branch';
+      return formatHint(['Enter', 'Remove / Change branch']);
     case 'other-services':
-      return '[Enter] Add to EDT';
+      return formatHint(['Enter', 'Add to EDT']);
     default:
       return '';
   }

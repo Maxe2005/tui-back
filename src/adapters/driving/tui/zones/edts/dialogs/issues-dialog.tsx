@@ -41,7 +41,6 @@ export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps)
             </Box>
           );
         })}
-        <Text color={colors.text}>[Esc] close</Text>
       </Box>
     </ModalDialog>
   );

@@ -11,6 +11,9 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint, formatHints } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
+import { edtsFooterContext } from './edts-footer-context.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -316,6 +319,7 @@ export function EdtsZone({
   }, [focusedEdt?.ulid]);
 
   const dialogOpen = dialog.kind !== 'none';
+  useFooterContext('edts', edtsFooterContext(dialog, { registryEmpty: edtsRows.length === 0, resolutionPending: switchDirtyRepos !== null }), useStore);
 
   // No EDT exists -> the create wizard, never a bare/empty list. Auto-opens once the list has
   // genuinely resolved to empty (never while still loading, never on a load error).
@@ -856,7 +860,7 @@ export function EdtsZone({
                   active={entry.ulid === activeEdtUlid}
                 />
               ))}
-              {!dialogOpen ? <DimAnnotation text="[Enter] switch/modify  [Tab] focus" /> : null}
+              {!dialogOpen ? <DimAnnotation text={formatHints([['Enter', 'switch/modify'], ['Tab', 'focus']])} /> : null}
               </>
               }
               second={
@@ -870,13 +874,13 @@ export function EdtsZone({
               {loading ? <StateLine kind="loading" subject="services" /> : null}
               {status === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
               {/* Colored by severity (not the uniform dim gray of other DimAnnotation lines) so a
-                  listing problem is noticed, not skimmed past — plus an `[i] details` hint into
-                  the read-only issues dialog. */}
+                  listing problem is noticed, not skimmed past — plus a details hint into the
+                  read-only issues dialog. */}
               {issuesSummary ? (
                 <Box paddingLeft={2}>
                   <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold>
                     {issuesSeverity === 'error' ? '✖' : '▲'} {issuesSummary}
-                    {!dialogOpen ? '  [i] details' : ''}
+                    {!dialogOpen ? `  ${formatHint(['i', 'details'])}` : ''}
                   </Text>
                 </Box>
               ) : null}

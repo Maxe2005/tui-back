@@ -61,6 +61,10 @@ async function settle(instance: ReturnType<typeof render>): Promise<void> {
   await instance.waitUntilRenderFlush();
 }
 
+function footerId(store: ReturnType<typeof createAppStore>): string | undefined {
+  return store.getState().footerContexts.at(-1)?.id;
+}
+
 function lastWizardFrame(stdout: FakeTtyStdout): string {
   return stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
 }
@@ -263,11 +267,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(stdout.output).toContain('Default action: (•) Adopt into Mon Topic  ( ) Discard');
       expect(stdout.output).toContain('Global branch name');
       expect(stdout.output).toContain('mon-topic');
-      // The footer wraps at the fake TTY's 80 columns; its exact text is pinned by
-      // switch-resolution.logic.test.ts (SWITCH_RESOLUTION_FOOTER).
-      for (const part of ['[Tab] switch pane', '[Enter] configure row', '[Ctrl+N] confirm', '[Esc] cancel']) {
-        expect(stdout.output).toContain(part);
-      }
+      expect(footerId(store)).toBe('switch-resolution');
       expect(stdout.output).toContain('outside any EDT');
       expect(stdout.output).toContain('member of third');
       expect(stdout.output).toContain('[Adopt (Global)]');
@@ -424,7 +424,9 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // open switch-confirm
       await press(instance, stdin, KEYS.enter); // attempt switch -> blocked
       expect(switchCalls).toEqual([{ force: false }]);
-      expect(stdout.output).toContain('force switch');
+      expect(stdout.output).toContain('Cannot switch away');
+      await settle(instance);
+      expect(footerId(store)).toBe('force-confirm');
 
       // Escape cancels the blocked prompt without ever forcing.
       await pressEscape(instance, stdin);
@@ -1282,7 +1284,8 @@ describe('EdtsZone real-keypress interactions', () => {
 
       // The EDT already exists — nothing may re-submit or navigate away; the failure rows stay
       // until acknowledged, and Enter closes the wizard.
-      expect(stdout.output).toContain('[Enter/Esc] close');
+      await settle(instance);
+      expect(footerId(store)).toBe('close');
       await press(instance, stdin, KEYS.ctrlLeft);
       expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('shared/protected');
       const beforeClose = stdout.output.length;
@@ -1310,8 +1313,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(frame).toContain('Service │ Mode');
       expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ auth-flow/);
       expect(frame).toMatch(/svc-b +│ \[Create \(Global\)\] │ development +│ auth-flow/);
-      // The Step 3 footer (wrapped at the 80-column fake terminal).
-      expect(frame).toContain('[Tab] switch pane  [Enter] configure row  [Ctrl+N] next step');
+      expect(footerId(store)).toBe('wizard-branches-first');
       // Each service's lists are loaded exactly once for this entry.
       expect([...listCalls].sort()).toEqual(['/repos/a', '/repos/b']);
 
@@ -3270,7 +3272,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // -> Change branch
       await press(instance, stdin, KEYS.enter); // open the shared branch-picker
-      expect(stdout.output).toContain('[Tab] switch mode');
+      expect(footerId(store)).toBe('branch-picker-base');
 
       // Only the output *written since* Escape proves the menu is back in the *current*
       // render, not merely present somewhere earlier in the accumulated log (same technique
@@ -3513,7 +3515,7 @@ describe('EdtsZone quick-pick dialog', () => {
       expect(rejectedFrame).toContain('DELETE EDT');
       // The existing delete rejection message, reached via the picker.
       expect(rejectedFrame).toContain('active EDT');
-      expect(rejectedFrame).toContain('cancel');
+      expect(footerId(store)).toBe('dismiss');
       expect(rejectedFrame).not.toContain('confirm');
     } finally {
       instance.unmount();
@@ -4085,7 +4087,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       expect(frame).toContain('svc-a (2 file(s))');
       expect(frame).toContain('a.ts');
       expect(frame).toContain('lib/b.ts');
-      expect(frame).toContain('[R] retry');
+      expect(footerId(store)).toBe('wizard-pause');
       expect(logged).toHaveLength(0);
 
       await press(instance, stdin, 'r'); // still blocked -> panel refreshed
@@ -4132,7 +4134,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       let frame = lastWizardFrame(stdout);
       expect(frame).toContain("CONFIRM OVERWRITE");
       expect(frame).toContain('lib/b.ts');
-      expect(frame).toContain('[Ctrl+E] overwrite for good');
+      expect(footerId(store)).toBe('overwrite-confirm');
 
       await press(instance, stdin, KEYS.enter); // back
       frame = lastWizardFrame(stdout);

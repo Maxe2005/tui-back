@@ -5,12 +5,6 @@
 import type { ActivationBlockedRepo } from '../../../../../../../core/edt/activate.js';
 import type { TextEditKey } from '../../../../shared/components/text-edit.js';
 import type { ActivationState } from '../../edts-zone.logic.js';
-import { formatHints } from '../../../../shared/components/hints.js';
-
-export const ACTIVATION_PAUSE_FOOTER = formatHints([['R', 'retry'], ['E', 'overwrite'], ['Esc', 'stop (the EDT stays created but inactive)']]);
-export const OVERWRITE_CONFIRM_FOOTER = formatHints([['Ctrl+E', 'overwrite for good'], ['Enter/Esc', 'back']]);
-export const ACTIVATION_RADIO_FOOTER = formatHints([['Space/↑/↓', 'choose'], ['Enter', 'create the EDT']]);
-export const ACTIVATION_FIRST_FOOTER = formatHints([['Enter', 'create and activate the EDT']]);
 
 export type ActivationConfirmLine = { key: string; text: string; kind: 'head' | 'file' };
 

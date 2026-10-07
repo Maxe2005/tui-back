@@ -11,6 +11,8 @@ const CANCEL: Hint = ['Esc', 'cancel'];
 const BACK: Hint = ['Esc', 'back'];
 const CLOSE: Hint = ['Esc', 'close'];
 const TAB_SWITCH: Hint = ['←/→', 'tab'];
+const WIZARD_NEXT: Hint = ['Ctrl+→/Ctrl+N', 'next step'];
+const WIZARD_PREVIOUS: Hint = ['Ctrl+←/Ctrl+P', 'previous step'];
 
 // Keys shared by both Routes right-pane tabs.
 const ROUTES_PANE_KEYS: readonly Hint[] = [
@@ -41,16 +43,63 @@ export const FOOTER_CONTEXTS = {
   menu: { label: 'Menu or pick list', hints: [MOVE, ['Enter', 'select'], CANCEL] },
   checklist: { label: 'Checklist dialog', hints: [MOVE, ['Space', 'toggle'], CONFIRM, CANCEL] },
   'branch-input': {
-    label: 'Branch field',
-    hints: [[KEY_UP_DOWN, 'suggestions'], ['Tab', 'complete'], CONFIRM, CANCEL],
+    label: 'Suggestion field',
+    hints: [[KEY_UP_DOWN, 'suggestions'], ['Enter', 'fill in / confirm'], CANCEL],
   },
-  wizard: {
-    label: 'Create-EDT wizard',
-    hints: [['Ctrl+→/Ctrl+N', 'next step'], ['Ctrl+←/Ctrl+P', 'previous step'], CANCEL],
+  'modify-topic': { label: 'Modify EDT, topic', hints: [['Tab', 'focus'], ['Enter', 'save'], CANCEL] },
+  'modify-members': {
+    label: 'Modify EDT, members',
+    hints: [MOVE, ['Space', 'toggle'], ['Tab', 'focus'], ['Enter', 'edit branch / save'], CANCEL],
   },
-  'wizard-first': {
-    label: 'Create-EDT wizard (first EDT)',
-    hints: [['Ctrl+→/Ctrl+N', 'next step'], ['Ctrl+←/Ctrl+P', 'previous step'], ['Esc', 'quit']],
+  wizard: { label: 'Create-EDT wizard', hints: [WIZARD_NEXT, WIZARD_PREVIOUS, CANCEL] },
+  'wizard-first': { label: 'Create-EDT wizard (first EDT)', hints: [WIZARD_NEXT, WIZARD_PREVIOUS, ['Esc', 'quit']] },
+  'wizard-branches': {
+    label: 'Create-EDT wizard, branches',
+    hints: [['Tab', 'switch pane'], ['Enter', 'configure row'], WIZARD_NEXT, WIZARD_PREVIOUS, CANCEL],
+  },
+  'wizard-branches-first': {
+    label: 'Create-EDT wizard, branches (first EDT)',
+    hints: [['Tab', 'switch pane'], ['Enter', 'configure row'], WIZARD_NEXT, WIZARD_PREVIOUS, ['Esc', 'quit']],
+  },
+  'wizard-activation': {
+    label: 'Create-EDT wizard, activation',
+    hints: [['Space/↑/↓', 'choose'], ['Enter', 'create the EDT'], WIZARD_PREVIOUS, CANCEL],
+  },
+  'wizard-activation-first': {
+    label: 'Create-EDT wizard, activation (first EDT)',
+    hints: [['Enter', 'create and activate the EDT'], WIZARD_PREVIOUS, ['Esc', 'quit']],
+  },
+  'wizard-pause': {
+    label: 'Create-EDT wizard, files at risk',
+    hints: [['R', 'retry'], ['E', 'overwrite'], ['Esc', 'stop (the EDT stays created but inactive)']],
+  },
+  'overwrite-confirm': {
+    label: 'Overwrite confirmation',
+    hints: [[KEY_UP_DOWN, 'scroll'], ['Ctrl+E', 'overwrite for good'], ['Enter/Esc', 'back']],
+  },
+  'override-box': {
+    label: 'Create-EDT wizard, service box',
+    hints: [['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'mode'], ['Ctrl+R', 'back to global strategy'], CLOSE],
+  },
+  'switch-resolution': {
+    label: 'Switch EDT, dirty services',
+    hints: [['Tab', 'switch pane'], ['Enter', 'configure row'], ['Ctrl+N', 'confirm'], ['Esc', 'cancel switch']],
+  },
+  'switch-box': {
+    label: 'Switch EDT, service box',
+    hints: [['↑/↓/Tab', 'move'], ['Space/←/→', 'action'], ['Enter', 'edit / apply'], ['Ctrl+R', 'back to global strategy'], CLOSE],
+  },
+  'update-config-global': {
+    label: 'Update config, global settings',
+    hints: [['Tab', 'table'], MOVE, ['Space', 'change'], ['Enter', 'edit EDT / run on Start run'], CANCEL],
+  },
+  'update-config-table': {
+    label: 'Update config, services table',
+    hints: [['Tab', 'settings'], MOVE, ['Space', 'select'], ['Enter', 'configure'], ['Ctrl+R', 'back to global'], CANCEL],
+  },
+  'update-box': {
+    label: 'Update config, service box',
+    hints: [['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'change'], ['Ctrl+R', 'back to global'], CLOSE],
   },
   'branch-picker-pick': {
     label: 'Branch picker, pick existing',

@@ -39,6 +39,9 @@ import { UpdateServicePickDialog, toServicePickItems } from './update-service-pi
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { formatHint, formatHints } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
+import { updateConfigFooterContext } from './update-config-panels.logic.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -46,19 +49,19 @@ import { StateLine } from '../../shared/components/state-line.js';
 // EDTS_SERVICE_LISTS_CHROME_ROWS.
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
-export const UPDATE_IDLE_PROMPT = '[M] EDT update, [P] this service, [Enter] for service actions.';
-export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
-export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
+export const UPDATE_IDLE_PROMPT = formatHints([['M', 'EDT update'], ['P', 'this service'], ['Enter', 'service actions']]);
+export const UPDATE_ALL_REPOS_PROMPT = formatHint(['A', 'all-repos maintenance mode (every managed repo)']);
+export const UPDATE_INTERRUPTED_OFFER = `Last update was interrupted — ${formatHint(['Enter', 'service actions'])}`;
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
-export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? [Enter] confirm  [Esc] cancel';
-export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted? [Enter] confirm  [Esc] cancel';
+export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted?';
+export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted?';
 export const UPDATE_ALL_CONFIRM_TITLE = 'ALL-REPOS UPDATE';
 export const UPDATE_ALL_CONFIRM_BODY =
-  'Update every managed repo (outside the active EDT too)? [Enter] confirm  [Esc] cancel';
+  'Update every managed repo (outside the active EDT too)?';
 
 // Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
 // always exactly one rendered line.
@@ -362,6 +365,23 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     chooseMergeSourceEdt,
     listBranches: listBranchesAction,
   });
+
+  // The layer that owns the keyboard, in the same priority order as the key handler below.
+  useFooterContext(
+    'update',
+    updateBlocker !== null
+      ? 'menu'
+      : updateConfig !== null
+        ? updateConfigFooterContext(configPanels.view, configPanels.box)
+        : updateServicePick !== null
+          ? 'menu'
+          : quitConfirm
+            ? 'confirm'
+            : serviceMenu !== null
+              ? 'menu'
+              : null,
+    useStore,
+  );
 
   useEffect(() => {
     void loadEdtsBranches();

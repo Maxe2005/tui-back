@@ -18,6 +18,7 @@ import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { footerContextOf } from '../../shared/components/mount-for-test.js';
 import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
@@ -558,7 +559,7 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('/repo/a');
     expect(output).toContain('svc-b');
     expect(output).toContain('Filter:');
-    expect(output).toContain('[Enter] confirm  [Esc] cancel');
+    expect(await footerContextOf(store, createElement(UpdateZone, { useStore: store }))).toBe('menu');
   });
 
   it('a closed service pick renders no pick modal', async () => {
@@ -590,7 +591,7 @@ describe('UpdateZone rendering', () => {
   });
 
   it('the interrupted offer routes through the service-actions menu, never a direct re-run', () => {
-    expect(UPDATE_INTERRUPTED_OFFER).toContain('for service actions');
+    expect(UPDATE_INTERRUPTED_OFFER).toContain('service actions');
     expect(UPDATE_INTERRUPTED_OFFER).not.toContain('to re-run');
   });
 

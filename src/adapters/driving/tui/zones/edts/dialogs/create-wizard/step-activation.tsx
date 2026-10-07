@@ -8,10 +8,6 @@ import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
 import {
-  ACTIVATION_FIRST_FOOTER,
-  ACTIVATION_PAUSE_FOOTER,
-  ACTIVATION_RADIO_FOOTER,
-  OVERWRITE_CONFIRM_FOOTER,
   overwriteConfirmLines,
 } from './activation.logic.js';
 import { ACTIVATION_LABELS, activateLaterHint, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from './wizard.logic.js';
@@ -63,7 +59,6 @@ function PausePanel({ dialog, maxVisibleRows }: { dialog: CreateDialogState; max
           </Text>
         )}
       />
-      <Text color={colors['text-dim']}>{ACTIVATION_PAUSE_FOOTER}</Text>
     </Box>
   );
 }
@@ -91,7 +86,6 @@ function OverwriteConfirm({ dialog, maxVisibleRows }: { dialog: CreateDialogStat
           </Text>
         )}
       />
-      <Text color={colors['text-dim']}>{OVERWRITE_CONFIRM_FOOTER}</Text>
     </Box>
   );
 }
@@ -103,7 +97,6 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
       <>
         <Text color={colors.accent}>(•) {ACTIVATION_LABELS.firstEdt} — Yes (locked)</Text>
         <Text color={colors['text-dim']}>{'    '}{ACTIVATION_LABELS.firstEdtExplanation}</Text>
-        <Text color={colors.accent}>{ACTIVATION_FIRST_FOOTER}</Text>
       </>
     );
   }
@@ -134,7 +127,6 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
       <Text color={switching ? colors.text : colors.accent}>
         {switching ? '( )' : '(•)'} {ACTIVATION_LABELS.stay}
       </Text>
-      <Text color={colors.accent}>{ACTIVATION_RADIO_FOOTER}</Text>
     </>
   );
 }

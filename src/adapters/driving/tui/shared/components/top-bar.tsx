@@ -1,6 +1,7 @@
 import { Box, Text } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { colors, spacing } from '../theme/theme.js';
+import { formatHints } from './hints.js';
 
 export function TopBar({
   activeEdt,
@@ -18,7 +19,7 @@ export function TopBar({
         {topic ? topic : 'no active EDT'}
       </Text>
       <Box flexGrow={1} />
-      <Text color={colors['text-dim']}>[/] filter  [:] cmd</Text>
+      <Text color={colors['text-dim']}>{formatHints([['/', 'filter'], [':', 'cmd']])}</Text>
     </Box>
   );
 }

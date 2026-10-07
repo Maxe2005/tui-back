@@ -1,7 +1,8 @@
 // tui/zones/update: Ink rendering of the two-panel configuration — layout, effective cells,
 // scope differences, the service box and the height budget.
 import { describe, expect, it } from 'vitest';
-import { UpdateConfigPanels, PANELS_TOO_SMALL, PANELS_HINTS_TABLE } from './update-config-panels.js';
+import { UpdateConfigPanels, PANELS_TOO_SMALL } from './update-config-panels.js';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import { applyMergeStrategy, createUpdateConfigDraft, type UpdateConfigDraft } from './update-config-dialog.logic.js';
 import { computeConfigBudget, setRow, toggleMergeSource, type PanelsViewState } from './update-config-panels.logic.js';
 import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
@@ -113,18 +114,18 @@ describe('UpdateConfigPanels', () => {
     expect(lineCount(output)).toBeLessThanOrEqual(24);
   });
 
-  it('a one-service screen fits a 20-row terminal where the table has one row, and asks for more below that', async () => {
+  it('a one-service screen fits an 18-row terminal where the table has one row, and asks for more below that', async () => {
     const draft = createUpdateConfigDraft('edt', [{ service: 'svc-1', repoPath: '/repo/1', sourceBranch: 'development' }], { layout: 'service-panels' });
-    const fits = await render(draft, 20);
+    const fits = await render(draft, 18);
     expect(fits).toContain('svc-1');
     expect(fits).toContain('[ Start run ]');
     expect(fits).not.toContain('Terminal too small');
-    expect(lineCount(fits)).toBeLessThanOrEqual(20);
-    expect(await render(draft, 19)).toContain('Terminal too small');
+    expect(lineCount(fits)).toBeLessThanOrEqual(18);
+    expect(await render(draft, 17)).toContain('Terminal too small');
   });
 
-  it('the table hints say how to start the run', () => {
-    expect(PANELS_HINTS_TABLE.join(' ')).toContain('Start run');
+  it('the global-panel footer context says how to start the run', () => {
+    expect(JSON.stringify(FOOTER_CONTEXTS['update-config-global'].hints)).toContain('Start run');
   });
 
   describe('branch autocomplete through the service box', () => {

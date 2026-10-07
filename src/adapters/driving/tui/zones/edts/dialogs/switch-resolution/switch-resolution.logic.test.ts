@@ -12,7 +12,6 @@ import {
   otherEdtBranches,
   reduceSwitchResolutionKey,
   RESOLUTION_ERRORS,
-  SWITCH_RESOLUTION_FOOTER,
   validateRow,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
@@ -75,10 +74,6 @@ describe('switch-resolution Shift+Tab', () => {
 });
 
 describe('switch-resolution rows', () => {
-  it('pins the footer verbatim', () => {
-    expect(SWITCH_RESOLUTION_FOOTER).toBe('[Tab] switch pane  [Enter] configure row  [Ctrl+N] confirm  [Esc] cancel switch');
-  });
-
   it('global adopt: a shared-branch repo targets the outgoing slug, a non-shared one keeps its branch; state-1 rows are left out', () => {
     const state = initialSwitchResolution('Mon Topic', DIRTY);
     const rows = buildRows(DIRTY, globalOf(state));

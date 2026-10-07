@@ -10,6 +10,7 @@ import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
 import { TextInputLine } from './components/text-input-line.js';
+import { formatHint } from './components/hints.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
 import type { FooterContextId } from '../keybindings/index.js';
@@ -199,9 +200,9 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
 export type HideableActionHint = { id: string; label: string };
 
 export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
-  { id: 'edts', label: 'EDT selector — "[Enter] Switch" / "[Enter] Modify"' },
-  { id: 'edt-services', label: 'EDT services — "[Enter] Remove / Change branch"' },
-  { id: 'other-services', label: 'Other services — "[Enter] Add to EDT"' },
+  { id: 'edts', label: `EDT selector — "${formatHint(['Enter', 'Switch'])}" / "${formatHint(['Enter', 'Modify'])}"` },
+  { id: 'edt-services', label: `EDT services — "${formatHint(['Enter', 'Remove / Change branch'])}"` },
+  { id: 'other-services', label: `Other services — "${formatHint(['Enter', 'Add to EDT'])}"` },
 ];
 
 // Generic clamped cursor mover — reused for the EDTs tab's group-list cursor and both of its

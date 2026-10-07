@@ -140,7 +140,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
     body = (
       <Box flexDirection="column">
         <Text color={colors.text}>
-          Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter to delete. This cannot be undone.
+          Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter. This permanently deletes the data and cannot be undone.
         </Text>
         <TextInputLine label="Confirm" value={screen.confirm.value} cursor={screen.confirm.cursor} focused />
       </Box>

@@ -4,7 +4,6 @@
 // global line), the table (header 1 + `tableRows` incl. its more-above/below lines), one error
 // line and two hint lines, all truncated to a single line — nothing here can wrap.
 import { Box, Text } from 'ink';
-import { formatHints, KEY_UP_DOWN } from '../../shared/components/hints.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
 import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/suggest-field.logic.js';
@@ -31,15 +30,6 @@ export const PANELS_TITLE_SERVICE = 'CONFIGURE SERVICE UPDATE';
 export const START_RUN_LABEL = '[ Start run ]';
 export const PANELS_GLOBAL_TITLE = 'GLOBAL SETTINGS';
 export const PANELS_TABLE_TITLE = 'SUMMARY AND PER-SERVICE EXCEPTIONS';
-// Two hint lines of at most ~70 characters each, so an 80-column terminal never truncates a key.
-export const PANELS_HINTS_PANEL = [
-  formatHints([['Tab', 'table'], [KEY_UP_DOWN, 'move'], ['Space', 'change']]),
-  formatHints([['Enter', 'edit EDT / run on Start run'], ['Esc', 'cancel']]),
-] as const;
-export const PANELS_HINTS_TABLE = [
-  formatHints([['Tab', 'settings'], [KEY_UP_DOWN, 'move'], ['Space', 'select'], ['Enter', 'configure']]),
-  formatHints([['Ctrl+R', 'back to global'], ['Tab', 'panel, Enter on Start run'], ['Esc', 'cancel']]),
-] as const;
 export const PANELS_TOO_SMALL = `Terminal too small: enlarge it (at least ${CONFIG_MIN_ROWS} rows).`;
 export function panelsTooSmallText(draft: UpdateConfigDraft): string {
   return draft.layout === 'service-panels' ? `Terminal too small: enlarge it (at least ${CONFIG_SERVICE_MIN_ROWS} rows).` : PANELS_TOO_SMALL;
@@ -237,11 +227,6 @@ export function UpdateConfigPanels({
       <Text color={colors.error} wrap="truncate-end">
         {draft.error !== null ? `✖ ${draft.error}` : ' '}
       </Text>
-      {(view.focus === 'panel' ? PANELS_HINTS_PANEL : PANELS_HINTS_TABLE).map((line) => (
-        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
-          {line}
-        </Text>
-      ))}
     </ModalDialog>
   );
 }
