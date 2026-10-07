@@ -1815,7 +1815,11 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             </Text>
             {routesRepoPath ? <DimAnnotation text={routesRepoPath} /> : null}
             {filterEditing ? (
-              <TextInputLine label="Filter" value={filter.value} cursor={filter.cursor} focused />
+              // TextInputLine's box grows (flexGrow) to measure its width; in this column pane that
+              // would also grow vertically and eat half the free height, so wrap it to keep one row.
+              <Box flexShrink={0}>
+                <TextInputLine label="Filter" value={filter.value} cursor={filter.cursor} focused />
+              </Box>
             ) : filterActive ? (
               <Text color={colors.accent} wrap="truncate-end">Filter: {filter.value}</Text>
             ) : null}
