@@ -13,6 +13,7 @@ import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../edts/dialog
 import type { UpdateConfigDraft, UpdateConfigRow } from './update-config-dialog.logic.js';
 import {
   CONFIG_MIN_ROWS,
+  CONFIG_SERVICE_MIN_ROWS,
   effectiveMigrations,
   effectiveRestart,
   globalLines,
@@ -33,13 +34,16 @@ export const PANELS_TABLE_TITLE = 'SUMMARY AND PER-SERVICE EXCEPTIONS';
 // Two hint lines of at most ~70 characters each, so an 80-column terminal never truncates a key.
 export const PANELS_HINTS_PANEL = [
   formatHints([['Tab', 'table'], [KEY_UP_DOWN, 'move'], ['Space', 'change']]),
-  formatHints([['Enter', 'edit EDT / start run'], ['Esc', 'cancel']]),
+  formatHints([['Enter', 'edit EDT / run on Start run'], ['Esc', 'cancel']]),
 ] as const;
 export const PANELS_HINTS_TABLE = [
   formatHints([['Tab', 'settings'], [KEY_UP_DOWN, 'move'], ['Space', 'select'], ['Enter', 'configure']]),
-  formatHints([['Ctrl+R', 'back to global'], ['Esc', 'cancel']]),
+  formatHints([['Ctrl+R', 'back to global'], ['Tab', 'panel, Enter on Start run'], ['Esc', 'cancel']]),
 ] as const;
 export const PANELS_TOO_SMALL = `Terminal too small: enlarge it (at least ${CONFIG_MIN_ROWS} rows).`;
+export function panelsTooSmallText(draft: UpdateConfigDraft): string {
+  return draft.layout === 'service-panels' ? `Terminal too small: enlarge it (at least ${CONFIG_SERVICE_MIN_ROWS} rows).` : PANELS_TOO_SMALL;
+}
 export const EDT_PLACEHOLDER = '<none>';
 
 const COLUMN_HEADERS = ['    Service', 'Mode', 'Source', 'Migrations', 'Restart'] as const;
@@ -189,7 +193,7 @@ export function UpdateConfigPanels({
     return (
       <ModalDialog title={title} open>
         <Text color={colors.warning} wrap="truncate-end">
-          {PANELS_TOO_SMALL}
+          {panelsTooSmallText(draft)}
         </Text>
       </ModalDialog>
     );

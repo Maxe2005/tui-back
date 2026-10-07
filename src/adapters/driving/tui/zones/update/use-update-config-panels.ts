@@ -79,7 +79,8 @@ export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): Update
   // Fresh view every time a panels screen opens.
   useEffect(() => {
     if (panelsOpen) {
-      setView(INITIAL_VIEW);
+      // A draft with no rows has no table to focus: open on the global panel.
+      setView(draft.rows.length === 0 ? { ...INITIAL_VIEW, focus: 'panel' } : INITIAL_VIEW);
       setBox(null);
       setEdtStatus('loading');
     }

@@ -206,6 +206,14 @@ describe('computeConfigBudget', () => {
     expect(roomy.tableRows).toBeGreaterThan(10);
   });
 
+  it('lets a one-service screen use a 20-row terminal and flags 19', () => {
+    const draft = createUpdateConfigDraft('edt', ROWS.slice(0, 1), { layout: 'service-panels' });
+    const fits = computeConfigBudget(20, draft, false, 5);
+    expect(fits.tooSmall).toBe(false);
+    expect(fits.tableRows).toBe(1);
+    expect(computeConfigBudget(19, draft, false, 5).tooSmall).toBe(true);
+  });
+
   it('gives the open EDT list lines taken from the table, never more than the setting', () => {
     const draft = toggleMergeSource(edtDraft());
     const closed = computeConfigBudget(30, draft, false, 5);

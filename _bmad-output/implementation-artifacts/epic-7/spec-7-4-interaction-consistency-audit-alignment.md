@@ -2,7 +2,7 @@
 title: 'Story 7.4: Interaction consistency audit & alignment (UX-DR36)'
 type: 'refactor'
 created: '2026-10-07'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '94d7ee8b9969e883059b51793119b5115dbce3d5'
 review_loop_iteration: 0
 context:

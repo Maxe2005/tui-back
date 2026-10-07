@@ -80,7 +80,7 @@ export interface SuggestWindow {
   hiddenBelow: number;
 }
 
-// Slices the matches into at most `maxLines` lines including the "N de plus" indicators, the
+// Slices the matches into at most `maxLines` lines including the "N more" indicators, the
 // window following the highlight. Zero or negative budgets render nothing.
 export function resolveSuggestWindow(
   matches: readonly string[],
@@ -96,7 +96,7 @@ export function resolveSuggestWindow(
   if (matches.length <= budget) {
     return { items: matches, highlight: showHighlight ? cursor : -1, hiddenAbove: 0, hiddenBelow: 0 };
   }
-  // Too tight for the "N de plus" indicators: a plain window, no indicators.
+  // Too tight for the "N more" indicators: a plain window, no indicators.
   if (budget < 3) {
     const start = Math.min(Math.max(cursor, 0), matches.length - budget);
     return {

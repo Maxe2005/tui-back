@@ -249,6 +249,8 @@ export function checkEdtChoice(
 // fixed line count and the table takes what is left, shrinking before anything can overflow.
 export const CONFIG_CHROME_ROWS = 10; // modal border + padding + title (6) plus the zone title and app chrome (4)
 export const CONFIG_MIN_ROWS = 22;
+// A one-service screen needs one table row, so it fits wherever the service box does.
+export const CONFIG_SERVICE_MIN_ROWS = 20;
 // Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1, footer 2.
 export const SERVICE_BOX_ROWS = 10;
 const FIXED_BODY_ROWS = 1 + 1 + 1 + 1 + 2; // panel A title, panel B title, table header, error line, hints
@@ -277,5 +279,7 @@ export function computeConfigBudget(
   // The box replaces the panels: its fixed height is SERVICE_BOX_BOX_ROWS (9), the rest is list.
   const boxDropdownLines = Math.max(0, Math.min(dropdownMax, windowRows - CONFIG_CHROME_ROWS - SERVICE_BOX_ROWS));
   // The service box replaces the table, so a short table budget alone must not hide it.
-  return { tooSmall: windowRows < CONFIG_MIN_ROWS || (!boxOpen && tableRows < 3), tableRows: Math.max(tableRows, 0), dropdownLines, boxDropdownLines };
+  const minRows = draft.layout === 'service-panels' ? CONFIG_SERVICE_MIN_ROWS : CONFIG_MIN_ROWS;
+  const neededTableRows = Math.min(3, Math.max(draft.rows.length, 1));
+  return { tooSmall: windowRows < minRows || (!boxOpen && tableRows < neededTableRows), tableRows: Math.max(tableRows, 0), dropdownLines, boxDropdownLines };
 }
