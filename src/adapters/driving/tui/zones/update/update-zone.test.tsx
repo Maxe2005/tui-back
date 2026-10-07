@@ -18,21 +18,19 @@ import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
-import { footerContextOf } from '../../shared/components/mount-for-test.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
 import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
 import {
-  UPDATE_ALL_CONFIRM_BODY,
-  UPDATE_ALL_CONFIRM_TITLE,
   UPDATE_ALL_REPOS_PROMPT,
   UPDATE_ALL_RUNNING_LABEL,
   UPDATE_BLOCKER_MENU_ITEMS,
   UPDATE_BLOCKER_TITLE,
   UPDATE_IDLE_PROMPT,
   UPDATE_INTERRUPTED_OFFER,
-  UPDATE_LOADING_MEMBERS,
+
   UPDATE_QUIT_CONFIRM_BODY,
   UPDATE_QUIT_CONFIRM_BODY_ALL,
   UPDATE_RUNNING_LABEL,
@@ -115,6 +113,8 @@ const SERVICE_B: ServiceBranchDivergence = {
   behind: 0,
   status: 'current',
 };
+
+const LOADING_MEMBERS = 'Loading member services…';
 
 describe('formatUpdateRow', () => {
   it('renders each outcome with a glyph paired to the outcome word, code, and message', () => {
@@ -612,7 +612,7 @@ describe('UpdateZone rendering', () => {
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_RUNNING_LABEL);
-    expect(output).toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).toContain(LOADING_MEMBERS);
   });
 
   it('an all-repos run shows the all label with the generic loading line, never EDT member rows', async () => {
@@ -623,7 +623,7 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain(UPDATE_ALL_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_RUNNING_LABEL);
-    expect(output).toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).toContain(LOADING_MEMBERS);
     expect(output).not.toContain('svc-a (feat/a)');
   });
 
@@ -1119,7 +1119,7 @@ describe('UpdateZone service-list shell rendering', () => {
     expect(svcARow).not.toContain('⇄');
     expect(output).toContain(UPDATE_SELECTION_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_ALL_RUNNING_LABEL);
-    expect(output).not.toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).not.toContain(LOADING_MEMBERS);
   });
 
   it('error: a service whose last completed run failed shows the error glyph and the failure detail', async () => {

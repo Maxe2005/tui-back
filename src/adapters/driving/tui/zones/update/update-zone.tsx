@@ -38,7 +38,7 @@ import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
-import { StateLine, resolveStateLineText } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/state-line.js';
 import { formatHint, formatHints } from '../../shared/components/hints.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from './update-config-panels.logic.js';
@@ -56,13 +56,9 @@ export const UPDATE_INTERRUPTED_OFFER = `Last update was interrupted — ${forma
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
-export const UPDATE_LOADING_MEMBERS = resolveStateLineText({ kind: 'loading', subject: 'member services' });
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
 export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted?';
 export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted?';
-export const UPDATE_ALL_CONFIRM_TITLE = 'ALL-REPOS UPDATE';
-export const UPDATE_ALL_CONFIRM_BODY =
-  'Update every managed repo (outside the active EDT too)?';
 
 // Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
 // always exactly one rendered line.
@@ -380,7 +376,9 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             ? 'confirm'
             : serviceMenu !== null
               ? 'menu'
-              : null,
+              : updateServiceSelectRequest
+                ? 'busy'
+                : null,
     useStore,
   );
 

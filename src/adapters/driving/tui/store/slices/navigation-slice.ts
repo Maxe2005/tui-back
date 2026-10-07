@@ -6,7 +6,7 @@ import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibility
 import { stepFocus, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../zones/zone-layouts.js';
 import { ZONES, type ZoneId } from '../../zones/zones.js';
-import type { FooterContextId } from '../../keybindings/index.js';
+import type { FooterContextEntry, FooterContextId, FooterOwner } from '../../keybindings/index.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 export type ZoneEvents = Record<ZoneId, number>;
@@ -91,10 +91,8 @@ export type NavigationSlice = {
   // owners first registered; the last entry wins, and an owner clearing itself (null) hands the
   // footer back to the previous owner, ultimately to the zone hints.
   footerContexts: readonly FooterContextEntry[];
-  setFooterContext: (owner: string, id: FooterContextId | null) => void;
+  setFooterContext: (owner: FooterOwner, id: FooterContextId | null) => void;
 };
-
-export type FooterContextEntry = { owner: string; id: FooterContextId };
 
 function boundaryIndices(count: number): number[] {
   return Array.from({ length: count }, (_, index) => index);

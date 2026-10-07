@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { hasResizableBoundary } from '../../zones/zone-layouts.js';
 import type { ZoneId } from '../../zones/zones.js';
-import { KEYBINDINGS, footerContextHints, type FooterContextId } from '../../keybindings/index.js';
+import { KEYBINDINGS, activeFooterContext, footerContextHints, type FooterContextId } from '../../keybindings/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors, spacing } from '../theme/theme.js';
 import { formatHint } from './hints.js';
@@ -32,7 +32,7 @@ export function footerContextHintStrings(id: FooterContextId): string[] {
 }
 
 export function Footer({ hints, zone, useStore = useAppStore }: { hints?: string[]; zone?: ZoneId; useStore?: AppStore }) {
-  const context = useStore((state) => state.footerContexts.at(-1)?.id);
+  const context = useStore((state) => activeFooterContext(state.footerContexts));
   const items = hints && hints.length > 0 ? hints : context !== undefined ? footerContextHintStrings(context) : footerHintsFor(zone);
   return (
     <Box

@@ -203,6 +203,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const [cleanCursor, setCleanCursor] = useState(0);
   const [cleanExcluded, setCleanExcluded] = useState<Set<string>>(new Set());
 
+  const rootLabel = root.trim() === '' ? 'the root path' : root;
   const candidates = registryScanResult?.candidates ?? [];
   const clampedCursor = candidates.length === 0 ? 0 : Math.min(cursor, candidates.length - 1);
 
@@ -298,12 +299,12 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         ) : null}
 
         {phase === 'scanning' ? (
-          <StateLine kind="loading" verb="Scanning" subject={root} />
+          <StateLine kind="loading" verb="Scanning" subject={rootLabel} />
         ) : null}
 
         {phase === 'scan-error' ? (
           <Box flexDirection="column">
-            <StateLine kind="error" verb="Failed to scan" subject={root} />
+            <StateLine kind="error" verb="Failed to scan" subject={rootLabel} />
             {registryScanError ? <DimAnnotation text={registryScanError} /> : null}
           </Box>
         ) : null}
@@ -374,7 +375,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                  </Box>
+              </Box>
             ) : (
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>STALE ENTRIES</Text>
@@ -403,7 +404,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                  </Box>
+              </Box>
             )}
           </Box>
         ) : null}

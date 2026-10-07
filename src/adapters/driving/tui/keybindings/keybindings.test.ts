@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { FOOTER_CONTEXTS, KEYBINDINGS } from './index.js';
 import { formatHints } from '../shared/components/hints.js';
 
-const CONTEXT_ROWS = Object.values(FOOTER_CONTEXTS).map((context) => [context.label, formatHints(context.hints)] as const);
+const describeHints = (hints: Parameters<typeof formatHints>[0]) => (hints.length > 0 ? formatHints(hints) : 'No keys while it runs');
+const CONTEXT_ROWS = Object.values(FOOTER_CONTEXTS).map((context) => [context.label, describeHints(context.hints)] as const);
 
 const EXPECTED = [
   ['↑ / ↓', 'Move highlight up/down within a list'],

@@ -158,7 +158,7 @@ describe('Footer context', () => {
 
   it('lets the last owner win and hands back to the previous one', () => {
     const store = createAppStore();
-    store.getState().setFooterContext('zone', 'menu');
+    store.getState().setFooterContext('edts', 'menu');
     store.getState().setFooterContext('help', 'help');
     expect(store.getState().footerContexts.at(-1)?.id).toBe('help');
     store.getState().setFooterContext('help', null);

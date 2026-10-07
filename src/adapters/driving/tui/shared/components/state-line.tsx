@@ -14,14 +14,19 @@ export type StateLineProps =
   | { kind: 'empty'; subject: string; text?: string }
   | { kind: 'error'; subject: string; retry?: boolean; verb?: string };
 
+// Verb and subject, minus whichever is blank, so no stray space precedes the punctuation.
+function joinParts(verb: string, subject: string): string {
+  return [verb, subject].filter((part) => part.trim() !== '').join(' ');
+}
+
 export function resolveStateLineText(props: StateLineProps): string {
   switch (props.kind) {
     case 'loading':
-      return `${[props.verb ?? 'Loading', props.subject].filter((part) => part !== '').join(' ')}…`;
+      return `${joinParts(props.verb ?? 'Loading', props.subject)}…`;
     case 'empty':
       return props.text ?? `No ${props.subject} yet.`;
     case 'error':
-      return `${props.verb ?? 'Failed to load'} ${props.subject}.${props.retry === true ? ` ${formatHint(RETRY_HINT)}` : ''}`;
+      return `${joinParts(props.verb ?? 'Failed to load', props.subject)}.${props.retry === true ? ` ${formatHint(RETRY_HINT)}` : ''}`;
   }
 }
 

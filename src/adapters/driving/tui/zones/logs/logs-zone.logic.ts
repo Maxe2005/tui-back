@@ -401,11 +401,19 @@ export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true,
 
 // The footer context while an overlay owns the keyboard: the filter editor (its history grid is
 // its own sub-mode) sits above the fullscreen pane it may have been opened from.
-export function logsFooterContext(filterEditorOpen: boolean, historyGridOpen: boolean, fullscreenOpen: boolean): FooterContextId | null {
+// A service without a container has no restart, so its fullscreen pane never advertises one.
+export function logsFooterContext(
+  filterEditorOpen: boolean,
+  historyGridOpen: boolean,
+  fullscreen: { open: boolean; restartable: boolean },
+): FooterContextId | null {
   if (filterEditorOpen) {
     return historyGridOpen ? 'logs-filter-history' : 'logs-filter-edit';
   }
-  return fullscreenOpen ? 'logs-fullscreen' : null;
+  if (!fullscreen.open) {
+    return null;
+  }
+  return fullscreen.restartable ? 'logs-fullscreen' : 'logs-fullscreen-no-container';
 }
 
 // The key legend under the service list; the stream toggles show their live state.

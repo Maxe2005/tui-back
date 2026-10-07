@@ -24,8 +24,8 @@ export function wizardFooterContext(dialog: CreateDialogState, registryEmpty: bo
     return 'wizard-pause';
   }
   // Creating or activating: nothing to press until the outcome lands.
-  if (activation.created !== null) {
-    return null;
+  if (activation.created !== null || dialog.submitting) {
+    return 'busy';
   }
   if (dialog.step === 3) {
     if (branches.box !== null) {
@@ -60,7 +60,10 @@ function switchFooterContext(dialog: SwitchDialogState, resolutionPending: boole
     return 'close';
   }
   if (resolutionPending) {
-    return dialog.resolution === null ? null : switchResolutionFooterContext(dialog.resolution);
+    return dialog.resolution === null ? 'busy' : switchResolutionFooterContext(dialog.resolution);
+  }
+  if (dialog.submitting) {
+    return 'busy';
   }
   return dialog.blocked ? 'force-confirm' : 'confirm';
 }
@@ -79,12 +82,22 @@ export function edtsFooterContext(
     case 'switch-confirm':
       return switchFooterContext(dialog, state.resolutionPending);
     case 'modify':
+      if (dialog.submitting) {
+        return 'busy';
+      }
       return pickerContext(dialog.branchPicker, dialog.target.members) ?? (dialog.formFocus === 'members' ? 'modify-members' : 'modify-topic');
     case 'service-actions':
+      if (dialog.submitting) {
+        return 'busy';
+      }
       return pickerContext(dialog.branchPicker, dialog.edt.members) ?? 'menu';
     case 'add-to-edt':
-      return pickerContext(dialog.branchPicker, dialog.edt.members);
+      // No picker yet means the dialog is still opening: nothing to press.
+      return dialog.submitting ? 'busy' : (pickerContext(dialog.branchPicker, dialog.edt.members) ?? 'busy');
     case 'delete-confirm':
+      if (dialog.submitting) {
+        return 'busy';
+      }
       return dialog.rejected || dialog.memberRows === null ? 'dismiss' : 'checklist';
     case 'issues':
       return 'dismiss';

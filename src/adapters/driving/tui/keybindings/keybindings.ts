@@ -11,10 +11,14 @@ export type { NavigationKey } from '../shared/keys/navigation-key.js';
 export type Keybinding = {
   keys: string;
   description: string;
+  // Rows of the same section are listed under one heading in the `?` help.
+  section?: string;
   footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' };
 };
 
 // The retry key StateLine advertises beside a load error; zones bind R to their reload.
+export const CONTEXT_SECTION = 'Keys per dialog, pane and screen';
+
 export const RETRY_HINT: Hint = ['R', 'retry'];
 
 export const KEYBINDINGS: readonly Keybinding[] = [
@@ -200,6 +204,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   ...Object.values(FOOTER_CONTEXTS).map((context) => ({
     keys: context.label,
-    description: formatHints(context.hints),
+    description: context.hints.length > 0 ? formatHints(context.hints) : 'No keys while it runs',
+    section: CONTEXT_SECTION,
   })),
 ];

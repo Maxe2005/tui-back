@@ -1,8 +1,9 @@
-// tui/shared/components: keeps a tree mounted (renderToString unmounts at once) so a test can read
+// tui/shared/test-support: keeps a tree mounted (renderToString unmounts at once) so a test can read
 // effects' results — e.g. the footer context a screen registered — before unmounting it.
 import { render } from 'ink';
 import { Readable, Writable } from 'node:stream';
 import type { ReactNode } from 'react';
+import { activeFooterContext, type FooterContextEntry } from '../../keybindings/index.js';
 
 export async function mountForTest(node: ReactNode): Promise<{ frame: () => string; unmount: () => void }> {
   let output = '';
@@ -29,11 +30,16 @@ export async function mountForTest(node: ReactNode): Promise<{ frame: () => stri
 
 // The footer context the tree registers once mounted, read from the given store.
 export async function footerContextOf(
-  store: { getState: () => { footerContexts: readonly { id: string }[] } },
+  store: { getState: () => { footerContexts: readonly FooterContextEntry[] } },
   node: ReactNode,
 ): Promise<string | undefined> {
   const mounted = await mountForTest(node);
-  const id = store.getState().footerContexts.at(-1)?.id;
+  const id = activeFooterContext(store.getState().footerContexts);
   mounted.unmount();
   return id;
+}
+
+// The footer context currently shown for a store (overlays win over zones).
+export function footerIdOf(store: { getState: () => { footerContexts: readonly FooterContextEntry[] } }): string | undefined {
+  return activeFooterContext(store.getState().footerContexts);
 }

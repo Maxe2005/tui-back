@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { Box } from 'ink';
 import { colors } from '../theme/theme.js';
 import { TextInputLine, resolveTextInputLineLayout } from './index.js';
+import { windowAroundCaret } from './text-input-line.js';
 import { renderToString } from './render-to-string.js';
 
 describe('resolveTextInputLineLayout', () => {
@@ -65,5 +67,39 @@ describe('TextInputLine cursor navigation', () => {
   it('does not affect the unfocused render at all', async () => {
     const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={2} focused={false} />);
     expect(output).toContain('Topic: abcd');
+  });
+});
+
+describe('TextInputLine at a narrow width', () => {
+  const LONG = 'abcdefghijklmnopqrstuvwxyz';
+
+  it('keeps the caret and the last typed characters on screen, on one line', async () => {
+    const output = await renderToString(
+      <Box width={20}>
+        <TextInputLine label="Topic" value={LONG} focused />
+      </Box>,
+    );
+    const lines = output.split('\n').filter((line) => line.trim() !== '');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('xyz');
+    expect(lines[0]!.trimEnd().length).toBeLessThanOrEqual(20);
+  });
+
+  it('shows the character under a mid-value caret', async () => {
+    const output = await renderToString(
+      <Box width={20}>
+        <TextInputLine label="Topic" value={LONG} cursor={10} focused />
+      </Box>,
+    );
+    expect(output).toContain('k');
+    expect(output).not.toContain('xyz');
+  });
+});
+
+describe('windowAroundCaret', () => {
+  it('slides with the caret and always leaves a cell for it', () => {
+    expect(windowAroundCaret('abcdefghij', 10, 7, 12)).toEqual({ start: 7, text: 'hij' });
+    expect(windowAroundCaret('abcdefghij', 0, 7, 12)).toEqual({ start: 0, text: 'abcd' });
+    expect(windowAroundCaret('abc', 3, 7, 5)).toEqual({ start: 3, text: '' });
   });
 });

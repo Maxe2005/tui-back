@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
 import { DetailPane } from '../../shared/components/detail-pane.js';
+import { formatHint } from '../../shared/components/hints.js';
 import { StateLine } from '../../shared/components/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RouteResponse } from '../../store/slices/routes-slice.js';
@@ -12,15 +13,18 @@ import { formatFireError, formatFireStatus } from './routes-zone.logic.js';
 
 export function RoutesResponseTab({
   response,
+  focused,
   areaRef,
   children,
 }: {
   response: RouteResponse | undefined;
+  // Ctrl+R only works from the focused pane (UX-DR7: never hint an inert key).
+  focused: boolean;
   areaRef: { current: DOMElement | null };
   children: ReactNode;
 }) {
   if (response === undefined) {
-    return <StateLine kind="empty" subject="response" />;
+    return <StateLine kind="empty" subject="response" text={focused ? `No response yet — ${formatHint(['Ctrl+R', 'fire'])}` : undefined} />;
   }
   if (response.status === 'firing') {
     return (

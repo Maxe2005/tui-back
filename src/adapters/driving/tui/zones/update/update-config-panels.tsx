@@ -2,7 +2,7 @@
 // scopes), laid out like edt-create's Step 3: GLOBAL SETTINGS above a per-service table.
 // Height: modal chrome is budgeted by computeConfigBudget; this view adds panel A (one line per
 // global line), the table (header 1 + `tableRows` incl. its more-above/below lines), one error
-// line and two hint lines, all truncated to a single line — nothing here can wrap.
+// line, all truncated to a single line — nothing here can wrap.
 import { Box, Text } from 'ink';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';

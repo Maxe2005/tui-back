@@ -225,6 +225,7 @@ export function handleBranchPickerKey(
   otherMemberBranches: readonly string[],
   input: string,
   key: TextEditKey,
+  branchesStatus: 'loading' | 'ready' | 'error' = 'ready',
 ): BranchPickerKeyResult {
   if (key.escape) {
     if (state.mode === 'pick-existing' && state.renameSub !== null) {
@@ -263,12 +264,12 @@ export function handleBranchPickerKey(
     const clearedRename = state.mode === 'rename-current' ? null : state.renameSub;
     return {
       type: 'update',
-      state: { ...state, mode: nextMode, renameSub: clearedRename, baseFocused: true, nameSubListOpen: false, nameSubListCursor: 0, error: null },
+      state: { ...state, mode: nextMode, renameSub: clearedRename, baseFocused: true, basePickCursor: 0, nameSubListOpen: false, nameSubListCursor: 0, error: null },
     };
   }
 
   if (state.mode === 'create-new') {
-    return handleCreateNewKey(state, branches, otherMemberBranches, input, key);
+    return handleCreateNewKey(state, branches, otherMemberBranches, input, key, branchesStatus);
   }
   if (state.mode === 'pick-existing') {
     return handlePickExistingKey(state, branches, input, key);
@@ -282,13 +283,23 @@ function handleCreateNewKey(
   otherMemberBranches: readonly string[],
   input: string,
   key: TextEditKey,
+  branchesStatus: 'loading' | 'ready' | 'error',
 ): BranchPickerKeyResult {
   if (state.baseFocused) {
     // The base-branch field is the shared autocomplete: Enter fills in the highlighted
     // suggestion, and moves on to the name once the field already holds a listed branch (or
-    // nothing is suggested, so a free-typed ref is still accepted).
-    if (key.return && (matchBranchesBySubstring(state.baseBranch, branches).length === 0 || isBranchAutocompleteExactMatch(state.baseBranch, branches))) {
-      return { type: 'update', state: { ...state, baseFocused: false } };
+    // nothing is suggested, so a free-typed ref is still accepted). An empty field keeps the
+    // default and advances; free text is never accepted before the branch list can validate it.
+    if (key.return) {
+      if (state.baseBranch.trim() === '') {
+        return { type: 'update', state: { ...state, baseFocused: false } };
+      }
+      if (branchesStatus !== 'ready') {
+        return { type: 'update', state };
+      }
+      if (matchBranchesBySubstring(state.baseBranch, branches).length === 0 || isBranchAutocompleteExactMatch(state.baseBranch, branches)) {
+        return { type: 'update', state: { ...state, baseFocused: false } };
+      }
     }
     const delegated = handleBranchAutocompleteKey(
       { value: state.baseBranch, cursor: state.baseBranchCursor, pickCursor: state.basePickCursor },

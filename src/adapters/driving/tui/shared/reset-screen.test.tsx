@@ -3,7 +3,7 @@
 // reset-screen.logic.test.ts (renderToString never delivers a keypress).
 import { describe, expect, it } from 'vitest';
 import { createAppStore } from '../store/app-store.js';
-import { mountForTest } from './components/mount-for-test.js';
+import { footerIdOf, mountForTest } from './test-support/mount-for-test.js';
 import { renderToString } from './components/render-to-string.js';
 import { ResetScreen } from './reset-screen.js';
 import {
@@ -118,7 +118,7 @@ describe('ResetScreen render', () => {
     }
     const state = { ...toggleResetCategory(createResetScreenState(), 'edts'), step };
     const mounted = await mountForTest(<ResetScreen useStore={store} initialState={state} />);
-    const id = store.getState().footerContexts.at(-1)?.id;
+    const id = footerIdOf(store);
     mounted.unmount();
     return { id, after: store.getState().footerContexts.length };
   }

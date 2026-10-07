@@ -4,6 +4,7 @@
 import type { Route } from '../../../../../core/ports/route-scanner.js';
 import type { FireResult } from '../../../../../core/routes/fire-request.js';
 import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../shared/components/json-tree/model.js';
+import type { FooterContextId } from '../../keybindings/index.js';
 import { formatByteSize } from './routes-request.logic.js';
 
 export type RoutesSelectionDirection = 'up' | 'down';
@@ -111,3 +112,82 @@ export function resolveEnterFireTarget(
   }
   return list[Math.min(selected, list.length - 1)];
 }
+
+export type RoutesFooterInput = {
+  // The route list is not shown (loading, scan failed, no routes): there is nothing to press.
+  unavailable: boolean;
+  filterEditing: boolean;
+  paneFocused: boolean;
+  paneTab: 'request' | 'response';
+  listEditable: boolean;
+  filterPanelOpen: boolean;
+  // Response tab: how the last response renders; null when there is none to classify.
+  responseKind: 'json' | 'raw' | 'empty' | null;
+  // Request tab.
+  section: 'params' | 'query' | 'headers' | 'body';
+  rowEditing: boolean;
+  rowCount: number;
+  editor: { open: boolean; raw: boolean; editing: boolean; canAdd: boolean };
+};
+
+// The footer context of the Routes zone: the list, the filter field, or whichever part of the
+// focused right pane owns the keyboard. An unavailable list only claims the footer while input is
+// captured, so the zone and global keys stay advertised when they work.
+export function routesFooterContext(input: RoutesFooterInput): FooterContextId | null {
+  const captured = input.filterEditing || input.paneFocused;
+  if (input.unavailable) {
+    return captured ? 'busy' : null;
+  }
+  if (!input.paneFocused) {
+    if (input.filterEditing) {
+      return 'routes-filter';
+    }
+    return input.listEditable ? 'routes-list-editable' : 'routes-list';
+  }
+  if (input.paneTab === 'response') {
+    if (input.responseKind === 'raw') {
+      return 'routes-response-raw';
+    }
+    if (input.responseKind === 'json') {
+      return input.filterPanelOpen ? 'routes-rules-panel' : 'routes-response-tree';
+    }
+    return 'routes-response-empty';
+  }
+  if (input.section === 'body') {
+    const { editor } = input;
+    if (!editor.open) {
+      return 'routes-section';
+    }
+    if (editor.raw) {
+      return 'routes-body-raw';
+    }
+    if (editor.editing) {
+      return 'confirm';
+    }
+    if (input.filterPanelOpen) {
+      return 'routes-rules-panel';
+    }
+    return editor.canAdd ? 'routes-body-tree-add' : 'routes-body-tree';
+  }
+  if (input.rowEditing) {
+    return 'confirm';
+  }
+  if (input.section === 'params') {
+    return input.rowCount > 0 ? 'routes-rows-readonly' : 'routes-section';
+  }
+  return input.rowCount > 0 ? 'routes-rows' : 'routes-rows-empty';
+}
+
+export const UNAVAILABLE_FOOTER_INPUT: RoutesFooterInput = {
+  unavailable: true,
+  filterEditing: false,
+  paneFocused: false,
+  paneTab: 'request',
+  listEditable: false,
+  filterPanelOpen: false,
+  responseKind: null,
+  section: 'params',
+  rowEditing: false,
+  rowCount: 0,
+  editor: { open: false, raw: false, editing: false, canAdd: false },
+};

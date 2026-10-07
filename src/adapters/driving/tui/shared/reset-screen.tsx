@@ -96,7 +96,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
   if (status === 'running') {
     body = <Text color={colors.warning}>Resetting…</Text>;
     note = 'Please wait.';
-    context = null;
+    context = 'busy';
   } else if (status === 'done') {
     body = <Lines lines={buildResetResultLines(result, error)} />;
     context = 'close';

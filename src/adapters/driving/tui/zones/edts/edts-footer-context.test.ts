@@ -52,10 +52,10 @@ describe('wizardFooterContext', () => {
     expect(wizardFooterContext({ ...paused, activation: { ...paused.activation, confirm: { scroll: 0 } } }, false)).toBe('overwrite-confirm');
   });
 
-  it('is acknowledge-only once an outcome landed, and idle while the create runs', () => {
+  it('is acknowledge-only once an outcome landed, and shows no keys while the create runs', () => {
     const created = { ulid: 'u', topic: 't' };
     expect(wizardFooterContext(wizard({ step: 4, activation: { ...initialActivationState(), created, outcome: 'stopped' } }), false)).toBe('close');
-    expect(wizardFooterContext(wizard({ step: 4, activation: { ...initialActivationState(), created } }), false)).toBeNull();
+    expect(wizardFooterContext(wizard({ step: 4, activation: { ...initialActivationState(), created } }), false)).toBe('busy');
   });
 });
 
@@ -71,7 +71,7 @@ describe('edtsFooterContext', () => {
     const base = initialSwitchDialog(EDT);
     expect(edtsFooterContext(base, CLOSED)).toBe('confirm');
     expect(edtsFooterContext({ ...base, blocked: true }, CLOSED)).toBe('force-confirm');
-    expect(edtsFooterContext(base, { ...CLOSED, resolutionPending: true })).toBeNull();
+    expect(edtsFooterContext(base, { ...CLOSED, resolutionPending: true })).toBe('busy');
     expect(edtsFooterContext({ ...base, results: [] }, CLOSED)).toBe('close');
   });
 

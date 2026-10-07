@@ -6,6 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { RoutesZone } from './routes-zone.js';
+import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
 
 const ROWS = 14;
 
@@ -53,10 +54,6 @@ function mount(store: ReturnType<typeof createAppStore>, rows = ROWS) {
 async function press(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, sequence: string): Promise<void> {
   (stdin as unknown as { write: (chunk: string) => void }).write(sequence);
   await instance.waitUntilRenderFlush();
-}
-
-function footerId(store: ReturnType<typeof createAppStore>): string | undefined {
-  return store.getState().footerContexts.at(-1)?.id;
 }
 
 function lastFrame(stdout: FakeTtyStdout): string {
@@ -471,7 +468,7 @@ describe('RoutesZone body editor', () => {
       expect(frame).toContain('name');
       expect(frame).toContain('"ada"');
       expect(frame).toContain('0 lines hidden — still sent');
-      expect(footerId(store)).toBe('routes-body-tree-add');
+      expect(footerIdOf(store)).toBe('routes-body-tree-add');
       expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
     } finally {
       instance.unmount();
@@ -484,7 +481,7 @@ describe('RoutesZone body editor', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
-      expect(footerId(store)).toBe('routes-list');
+      expect(footerIdOf(store)).toBe('routes-list');
       await press(instance, stdin, 'e');
       expect(store.getState().routesPaneFocus).toBe('list');
       expect(store.getState().bodyDrafts).toEqual({});
@@ -562,7 +559,7 @@ describe('RoutesZone body editor', () => {
       expect(lastFrame(stdout)).toContain('▸ BODY');
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('▸ BODY');
-      expect(footerId(store)).toBe('routes-list-editable');
+      expect(footerIdOf(store)).toBe('routes-list-editable');
     } finally {
       instance.unmount();
     }
@@ -944,7 +941,7 @@ describe('RoutesZone request step & sub-tabs', () => {
       expect(store.getState().routesPaneFocus).toBe('detail');
       expect(store.getState().routesPaneTab).toBe('request');
       expect(store.getState().zoneInputCaptured).toBe(true);
-      expect(footerId(store)).toMatch(/^routes-(section|rows)/);
+      expect(footerIdOf(store)).toMatch(/^routes-(section|rows)/);
       await pressEscape(instance, stdin);
       expect(store.getState().routesPaneFocus).toBe('list');
       expect(store.getState().zoneInputCaptured).toBe(false);

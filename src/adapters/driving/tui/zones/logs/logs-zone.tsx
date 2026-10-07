@@ -222,7 +222,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
-  useFooterContext('logs', logsFooterContext(filterEditor !== null, historyGridCursor !== null, logsFullscreenTarget !== null), useStore);
+  useFooterContext(
+    'logs',
+    logsFooterContext(filterEditor !== null, historyGridCursor !== null, {
+      open: logsFullscreenTarget !== null,
+      restartable: logsFullscreenTarget === null || logsPanes[logsFullscreenTarget]?.health !== 'no-container',
+    }),
+    useStore,
+  );
 
   // AppShell's global Left/Right zone-switch fires on the same keypress as this zone's useInput
   // (Ink dispatches to every mounted hook), so moving pane sub-focus with Left/Right would switch

@@ -6,7 +6,7 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
-import { footerContextOf } from '../../shared/components/mount-for-test.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { EdtsZone } from './edts-zone.js';

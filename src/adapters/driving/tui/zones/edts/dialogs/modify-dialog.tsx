@@ -209,7 +209,7 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
 
   function handleModifyBranchPickerInput(current: ModifyDialogState, session: BranchPickerSession, input: string, key: Key) {
     const otherMemberBranches = Array.from(new Set(current.target.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchPicker: null } : prev));
       return;

@@ -40,6 +40,8 @@ export const FOOTER_CONTEXTS = {
   'force-confirm': { label: 'Forced action', hints: [['Enter', 'force switch anyway'], CANCEL] },
   close: { label: 'Result dialog', hints: [['Enter/Esc', 'close']] },
   dismiss: { label: 'Read-only dialog', hints: [CLOSE] },
+  // An action is running and the dialog ignores every key until it lands.
+  busy: { label: 'Action in progress', hints: [] },
   menu: { label: 'Menu or pick list', hints: [MOVE, ['Enter', 'select'], CANCEL] },
   checklist: { label: 'Checklist dialog', hints: [MOVE, ['Space', 'toggle'], CONFIRM, CANCEL] },
   'branch-input': {
@@ -135,6 +137,19 @@ export const FOOTER_CONTEXTS = {
     label: 'Logs filter history',
     hints: [['↑/↓/←/→', 'browse history'], ['Enter', 'recall'], CLOSE],
   },
+  'logs-fullscreen-no-container': {
+    label: 'Logs fullscreen pane (no container)',
+    hints: [
+      ['Esc', 'back'],
+      [KEY_UP_DOWN, 'scroll'],
+      ['c', 'clear'],
+      ['t/o/p', 'toggle timestamps/stdout/stderr'],
+      ['w', 'wrap/truncate'],
+      ['/', 'global filter'],
+      ['f', 'pane filter'],
+      ['i', 'toggle global engagement'],
+    ],
+  },
   'logs-fullscreen': {
     label: 'Logs fullscreen pane',
     hints: [
@@ -152,11 +167,11 @@ export const FOOTER_CONTEXTS = {
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
   'routes-list': {
     label: 'Routes list',
-    hints: [['Enter', 'request'], ['/', 'filter'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['/ f', 'filter'], ['Home/End', 'jump']],
   },
   'routes-list-editable': {
     label: 'Routes list (body editable)',
-    hints: [['Enter', 'request'], ['/', 'filter'], ['e', 'edit body'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['/ f', 'filter'], ['e', 'edit body'], ['Home/End', 'jump']],
   },
   'routes-response-raw': {
     label: 'Routes response (raw)',
@@ -279,6 +294,20 @@ export const FOOTER_CONTEXTS = {
 } as const satisfies Record<string, FooterContextDeclaration>;
 
 export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
+
+// Who may register a footer context. Overlays sit above the zone they cover, so they win over a
+// zone that registers or re-registers while one is open.
+export type FooterOwner = 'help' | 'command-bar' | 'filter' | 'registry' | 'settings' | 'reset' | 'edts' | 'update' | 'logs' | 'routes';
+
+export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'filter', 'registry', 'settings', 'reset'];
+
+export type FooterContextEntry = { owner: FooterOwner; id: FooterContextId };
+
+// The context the footer shows: the last registered overlay, else the last registered zone.
+export function activeFooterContext(entries: readonly FooterContextEntry[]): FooterContextId | undefined {
+  const overlay = entries.findLast((entry) => FOOTER_OVERLAY_OWNERS.includes(entry.owner));
+  return (overlay ?? entries.at(-1))?.id;
+}
 
 export function footerContextHints(id: FooterContextId): readonly Hint[] {
   return FOOTER_CONTEXTS[id].hints;

@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { FOOTER_CONTEXTS } from '../keybindings/index.js';
 import { createAppStore } from '../store/app-store.js';
-import { mountForTest } from './components/mount-for-test.js';
+import { footerContextOf as contextOf } from './test-support/mount-for-test.js';
 import { renderToString } from './components/render-to-string.js';
 import {
   MANIFEST_GUIDANCE_LINES,
@@ -18,12 +18,7 @@ import {
   typeRootInputChar,
 } from './repo-registry-screen.js';
 
-async function footerContextOf(store: ReturnType<typeof createAppStore>) {
-  const mounted = await mountForTest(<RepoRegistryScreen useStore={store} />);
-  const id = store.getState().footerContexts.at(-1)?.id;
-  mounted.unmount();
-  return id;
-}
+const footerContextOf = (store: ReturnType<typeof createAppStore>) => contextOf(store, <RepoRegistryScreen useStore={store} />);
 
 describe('registryFooterContext', () => {
   it('advertises its own keys only for the interactive phases', () => {

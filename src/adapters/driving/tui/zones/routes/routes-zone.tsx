@@ -13,7 +13,6 @@ import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { FooterContext } from '../../shared/components/footer-context.js';
-import type { FooterContextId } from '../../keybindings/index.js';
 import { JsonEmptyState, JsonRawFallback, JsonTree, JsonRawEditor, JsonTreeEditor } from '../../shared/components/json-tree/json-tree.js';
 import {
   addEntryAtPath,
@@ -69,6 +68,8 @@ import {
   formatRouteRow,
   moveRoutesSelection,
   resolveEnterFireTarget,
+  routesFooterContext,
+  UNAVAILABLE_FOOTER_INPUT,
   resolveRoutesDirection,
 } from './routes-zone.logic.js';
 import {
@@ -1287,6 +1288,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus === 'error' && routesError?.code === 'route-exploration-not-activated') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <StateLine kind="empty" subject="routes" text="No route list for this repo." />
         <DimAnnotation text={routesError.message} />
@@ -1297,6 +1299,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus === 'error') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Text color={colors.error}>{routesError ? routesError.message : 'Route scan failed.'}</Text>
       </Box>
@@ -1306,6 +1309,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus !== 'ready' || routes === null) {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <StateLine kind="loading" subject="routes" />
       </Box>
@@ -1315,6 +1319,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routes.length === 0) {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <StateLine kind="empty" subject="routes" text="No routes discovered for this repo." />
       </Box>
@@ -1329,51 +1334,26 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const filterActive = filter.value !== '';
   const treeActive = treeFocused && classification !== null;
   const focusedEditable = focused !== undefined && canEditRouteBody(focused);
-  const treeContext: FooterContextId | null = !treeActive
-    ? null
-    : classification?.kind === 'raw'
-      ? 'routes-response-raw'
-      : classification?.kind === 'empty'
-        ? 'routes-response-empty'
-        : filterPanelOpen
-          ? 'routes-rules-panel'
-          : 'routes-response-tree';
   // The footer reflects editor focus — the sub-editor owns the line while open, the tree mode
   // lists the edit keys. The add key only shows when an add target exists (UX-DR7: never hint an
   // inert key — scalar roots and empty drafts take `r`).
   const editorSelectedRow = editorOpen ? editorRows[clampedEditorSelected] : undefined;
   const editorCanAdd =
     editorSelectedRow !== undefined && editorDraft !== undefined && resolveAddParentPath(editorDraft, editorSelectedRow.path) !== null;
-  const editorContext: FooterContextId | null = !editorOpen
-    ? null
-    : rawEditor !== null
-      ? 'routes-body-raw'
-      : scalarEdit !== null || addPrompt !== null
-        ? 'confirm'
-        : filterPanelOpen
-          ? 'routes-rules-panel'
-          : editorCanAdd
-            ? 'routes-body-tree-add'
-            : 'routes-body-tree';
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
-  const requestContext: FooterContextId | null =
-    !paneFocused || paneTab !== 'request'
-      ? null
-      : section === 'body'
-        ? (editorContext ?? 'routes-section')
-        : rowEdit !== null || rowAddPrompt !== null
-          ? 'confirm'
-          : section === 'params'
-            ? rowSectionRows.length > 0
-              ? 'routes-rows-readonly'
-              : 'routes-section'
-            : rowSectionRows.length > 0
-              ? 'routes-rows'
-              : 'routes-rows-empty';
-  const paneContext: FooterContextId | null =
-    paneTab === 'request' ? requestContext : paneFocused ? (treeContext ?? 'routes-response-empty') : null;
-  const listContext: FooterContextId = filterEditing ? 'routes-filter' : focusedEditable ? 'routes-list-editable' : 'routes-list';
-  const footerContext = paneFocused ? paneContext : listContext;
+  const footerContext = routesFooterContext({
+    unavailable: false,
+    filterEditing,
+    paneFocused,
+    paneTab,
+    listEditable: focusedEditable,
+    filterPanelOpen,
+    responseKind: treeActive ? (classification?.kind ?? null) : null,
+    section,
+    rowEditing: rowEdit !== null || rowAddPrompt !== null,
+    rowCount: rowSectionRows.length,
+    editor: { open: editorOpen, raw: rawEditor !== null, editing: scalarEdit !== null || addPrompt !== null, canAdd: editorCanAdd },
+  });
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1470,7 +1450,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               />
             ) : null}
             {focused && paneTab === 'response' ? (
-              <RoutesResponseTab response={paneResponse} areaRef={responseAreaRef}>
+              <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
                 {responseNode}
               </RoutesResponseTab>
             ) : null}

@@ -76,7 +76,8 @@ export function resolveSuggestWindow(
   showHighlight: boolean,
   maxLines: number,
 ): SuggestWindow {
-  const budget = Number.isFinite(maxLines) ? Math.max(0, Math.floor(maxLines)) : 0;
+  // An unbounded budget shows every match; anything else non-finite (NaN) shows none.
+  const budget = maxLines === Infinity ? matches.length : Number.isFinite(maxLines) ? Math.max(0, Math.floor(maxLines)) : 0;
   if (budget === 0 || matches.length === 0) {
     return { items: [], highlight: -1, hiddenAbove: 0, hiddenBelow: 0 };
   }
@@ -204,18 +205,16 @@ export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
       : null;
   return (
     <Box flexDirection="column">
-      <Box flexDirection="row">
-        <TextInputLine
-          label={label}
-          value={state.value}
-          cursor={state.cursor}
-          focused={editing}
-          highlighted={focused}
-          placeholder={placeholder}
-          labelWidth={labelWidth}
-        />
-        {validity !== null ? <Text color={validity.glyphColor}> {validity.glyph}</Text> : null}
-      </Box>
+      <TextInputLine
+        label={label}
+        value={state.value}
+        cursor={state.cursor}
+        focused={editing}
+        highlighted={focused}
+        placeholder={placeholder}
+        labelWidth={labelWidth}
+        suffix={validity !== null ? { text: ` ${validity.glyph}`, color: validity.glyphColor } : undefined}
+      />
       {editing && branchesStatus === 'loading' ? <StateLine kind="loading" subject={subject} /> : null}
       {editing && branchesStatus === 'error' ? <StateLine kind="error" subject={subject} retry={retry} /> : null}
       {window !== null && window.hiddenAbove > 0 ? <Text color={colors['text-dim']}>  ↑ {window.hiddenAbove} more</Text> : null}

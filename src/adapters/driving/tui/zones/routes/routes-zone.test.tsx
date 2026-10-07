@@ -4,7 +4,7 @@
 // loadRoutes effect is seeded around, not through).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
-import { footerContextOf } from '../../shared/components/mount-for-test.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import { RoutesZone, formatRoutesDisabledMessage } from './routes-zone.js';

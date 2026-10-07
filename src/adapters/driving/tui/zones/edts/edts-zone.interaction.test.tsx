@@ -14,6 +14,7 @@ import { createAppStore, type CreateEdtParams, type ModifyEdtParams } from '../.
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { EdtsZone } from './edts-zone.js';
 import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from './dialogs/create-wizard/create-wizard.js';
+import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
 
 function edt(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
   return {
@@ -61,8 +62,11 @@ async function settle(instance: ReturnType<typeof render>): Promise<void> {
   await instance.waitUntilRenderFlush();
 }
 
-function footerId(store: ReturnType<typeof createAppStore>): string | undefined {
-  return store.getState().footerContexts.at(-1)?.id;
+// The picker fetches its branch list in an effect after it opens; Enter on the base field waits for it.
+async function settleBranches(instance: ReturnType<typeof render>): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await settle(instance);
+  }
 }
 
 function lastWizardFrame(stdout: FakeTtyStdout): string {
@@ -267,7 +271,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(stdout.output).toContain('Default action: (•) Adopt into Mon Topic  ( ) Discard');
       expect(stdout.output).toContain('Global branch name');
       expect(stdout.output).toContain('mon-topic');
-      expect(footerId(store)).toBe('switch-resolution');
+      expect(footerIdOf(store)).toBe('switch-resolution');
       expect(stdout.output).toContain('outside any EDT');
       expect(stdout.output).toContain('member of third');
       expect(stdout.output).toContain('[Adopt (Global)]');
@@ -426,7 +430,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(switchCalls).toEqual([{ force: false }]);
       expect(stdout.output).toContain('Cannot switch away');
       await settle(instance);
-      expect(footerId(store)).toBe('force-confirm');
+      expect(footerIdOf(store)).toBe('force-confirm');
 
       // Escape cancels the blocked prompt without ever forcing.
       await pressEscape(instance, stdin);
@@ -491,6 +495,7 @@ describe('EdtsZone real-keypress interactions', () => {
     });
     let modifyParams: ModifyEdtParams | undefined;
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -525,12 +530,14 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.space);
       await press(instance, stdin, KEYS.enter);
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       for (let i = 0; i < 'main'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'feature-y');
       await press(instance, stdin, KEYS.enter); // commit the create-new stage, back to the form
+      await settle(instance);
 
       // Space unchecks that same not-yet-member row — the branch just staged for it must be
       // dropped before it ever reaches modifyEdt (a real `git checkout` on a repo the
@@ -875,6 +882,7 @@ describe('EdtsZone real-keypress interactions', () => {
     });
     let modifyCalls = 0;
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -903,6 +911,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down); // cursor -> row 1 (not-yet-member svc-b)
       await press(instance, stdin, KEYS.space); // check it -> auto-stages branchEdits['/repos/b'] = 'main' (svc-a's unanimous branch)
       await press(instance, stdin, KEYS.enter); // open the branch-picker for svc-b (Create new: base field focused first)
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       // Clear the pre-filled value down to empty.
       for (let i = 0; i < 'main'.length; i += 1) {
@@ -1285,7 +1294,7 @@ describe('EdtsZone real-keypress interactions', () => {
       // The EDT already exists — nothing may re-submit or navigate away; the failure rows stay
       // until acknowledged, and Enter closes the wizard.
       await settle(instance);
-      expect(footerId(store)).toBe('close');
+      expect(footerIdOf(store)).toBe('close');
       await press(instance, stdin, KEYS.ctrlLeft);
       expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('shared/protected');
       const beforeClose = stdout.output.length;
@@ -1313,7 +1322,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(frame).toContain('Service │ Mode');
       expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ auth-flow/);
       expect(frame).toMatch(/svc-b +│ \[Create \(Global\)\] │ development +│ auth-flow/);
-      expect(footerId(store)).toBe('wizard-branches-first');
+      expect(footerIdOf(store)).toBe('wizard-branches-first');
       // Each service's lists are loaded exactly once for this entry.
       expect([...listCalls].sort()).toEqual(['/repos/a', '/repos/b']);
 
@@ -2617,6 +2626,7 @@ describe('EdtsZone real-keypress interactions', () => {
     let loggedOutcome: string | undefined;
     const store = createAppStore();
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -2649,6 +2659,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
       await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new: base field focused first)
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       await type(instance, stdin, '-y');
       await press(instance, stdin, KEYS.enter); // confirm
@@ -2677,6 +2688,7 @@ describe('EdtsZone real-keypress interactions', () => {
     let createdBase: string | undefined;
     const store = createAppStore();
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -2733,6 +2745,7 @@ describe('EdtsZone real-keypress interactions', () => {
     const modifyCalls: ModifyEdtParams[] = [];
     const store = createAppStore();
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -2779,12 +2792,14 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down); // cursor -> row 1 (not-yet-member svc-b)
       await press(instance, stdin, KEYS.space); // check it -> auto-stages branchEdits['/repos/b'] = 'main'
       await press(instance, stdin, KEYS.enter); // open the branch-picker for svc-b (Create new: base field focused first)
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       for (let i = 0; i < 'main'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'feature-y');
       await press(instance, stdin, KEYS.enter); // commit (create pre-step + stage), back to the form
+      await settle(instance);
       // Still members-focus, cursor still on svc-b's (still checked+editable) row — Tab back
       // to topic-focus first so this next Enter submits rather than reopening the picker.
       await press(instance, stdin, KEYS.tab); // members -> topic
@@ -2844,6 +2859,7 @@ describe('EdtsZone real-keypress interactions', () => {
     const modifyCalls: ModifyEdtParams[] = [];
     const store = createAppStore();
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -2885,12 +2901,14 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down); // cursor -> row 1 (not-yet-member svc-b)
       await press(instance, stdin, KEYS.space); // check it -> auto-stages branchEdits['/repos/b'] = 'main'
       await press(instance, stdin, KEYS.enter); // open the branch-picker for svc-b (Create new: base field focused first)
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       for (let i = 0; i < 'main'.length; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'feature-y');
       await press(instance, stdin, KEYS.enter); // commit (create pre-step + stage), back to the form
+      await settle(instance);
       await press(instance, stdin, KEYS.tab); // members -> topic
       await press(instance, stdin, KEYS.enter); // submit (topic-focus Enter) -> collision
       await instance.waitUntilRenderFlush();
@@ -2937,6 +2955,7 @@ describe('EdtsZone real-keypress interactions', () => {
     const modifyCalls: ModifyEdtParams[] = [];
     const store = createAppStore();
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -2978,6 +2997,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // cursor -> "Change branch for this EDT"
       await press(instance, stdin, KEYS.enter); // open the branch-picker (Create new: base field focused first)
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name (pre-filled "main")
       await type(instance, stdin, '-y');
       await press(instance, stdin, KEYS.enter); // confirm -> collision
@@ -3017,6 +3037,7 @@ describe('EdtsZone real-keypress interactions', () => {
     const modifyCalls: ModifyEdtParams[] = [];
     const store = createAppStore();
     store.setState({
+      listBranches: async () => ({ ok: true, data: [] }),
       edts: [active],
       edtsStatus: 'idle',
       activeEdt: 'active-ulid',
@@ -3057,6 +3078,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.tab); // edts -> edt-services -> other-services
       await press(instance, stdin, KEYS.enter); // open Add to EDT (Create new: base field focused, name pre-filled "feature-y")
+      await settleBranches(instance); // let the picker's own listBranches() resolve
       await press(instance, stdin, KEYS.enter); // advance base -> name
       await press(instance, stdin, KEYS.enter); // confirm -> collision
       await instance.waitUntilRenderFlush();
@@ -3272,7 +3294,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // open the contextual menu
       await press(instance, stdin, KEYS.down); // -> Change branch
       await press(instance, stdin, KEYS.enter); // open the shared branch-picker
-      expect(footerId(store)).toBe('branch-picker-base');
+      expect(footerIdOf(store)).toBe('branch-picker-base');
 
       // Only the output *written since* Escape proves the menu is back in the *current*
       // render, not merely present somewhere earlier in the accumulated log (same technique
@@ -3515,7 +3537,7 @@ describe('EdtsZone quick-pick dialog', () => {
       expect(rejectedFrame).toContain('DELETE EDT');
       // The existing delete rejection message, reached via the picker.
       expect(rejectedFrame).toContain('active EDT');
-      expect(footerId(store)).toBe('dismiss');
+      expect(footerIdOf(store)).toBe('dismiss');
       expect(rejectedFrame).not.toContain('confirm');
     } finally {
       instance.unmount();
@@ -4087,7 +4109,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       expect(frame).toContain('svc-a (2 file(s))');
       expect(frame).toContain('a.ts');
       expect(frame).toContain('lib/b.ts');
-      expect(footerId(store)).toBe('wizard-pause');
+      expect(footerIdOf(store)).toBe('wizard-pause');
       expect(logged).toHaveLength(0);
 
       await press(instance, stdin, 'r'); // still blocked -> panel refreshed
@@ -4134,7 +4156,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       let frame = lastWizardFrame(stdout);
       expect(frame).toContain("CONFIRM OVERWRITE");
       expect(frame).toContain('lib/b.ts');
-      expect(footerId(store)).toBe('overwrite-confirm');
+      expect(footerIdOf(store)).toBe('overwrite-confirm');
 
       await press(instance, stdin, KEYS.enter); // back
       frame = lastWizardFrame(stdout);
