@@ -60,6 +60,7 @@ import {
   resolutionRepos,
   type LocalBranchList,
 } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above the splitter,
 // both section headers, and the loading/error/issues lines) subtracted from the window size
@@ -735,6 +736,12 @@ export function EdtsZone({
       return;
     }
 
+    if (input === 'R' && (edtsStatus === 'error' || status === 'error')) {
+      void loadEdtsBranches();
+      void loadEdts();
+      return;
+    }
+
     // Opens the issues detail dialog from any pane, like the summary line's "[i] details" hint —
     // only reachable when there's actually something to show.
     if (input === 'i' && issuesSummary !== null) {
@@ -821,10 +828,10 @@ export function EdtsZone({
               first={
               <>
               <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
-              {edtsLoading ? <Text color={colors['text-dim']}>Loading EDTs…</Text> : null}
-              {edtsStatus === 'error' ? <Text color={colors.error}>Failed to load EDTs</Text> : null}
+              {edtsLoading ? <StateLine kind="loading" subject="EDTs" /> : null}
+              {edtsStatus === 'error' ? <StateLine kind="error" subject="EDTs" retry /> : null}
               {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
-                <Text color={colors['text-dim']}>No EDTs yet.</Text>
+                <StateLine kind="empty" subject="EDTs" />
               ) : null}
               {edtsRows.map((entry, index) => (
                 <ListRow
@@ -853,8 +860,8 @@ export function EdtsZone({
               {/* issuesSummary counts unreachable/error services across the whole list, so it
                   shows once here, above both groups, never nested under one where a flagged
                   service in the other would go unreported. */}
-              {loading ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-              {status === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+              {loading ? <StateLine kind="loading" subject="services" /> : null}
+              {status === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
               {/* Colored by severity (not the uniform dim gray of other DimAnnotation lines) so a
                   listing problem is noticed, not skimmed past — plus an `[i] details` hint into
                   the read-only issues dialog. */}
@@ -941,8 +948,8 @@ export function EdtsZone({
                     : 'No EDT selected.'}
                 </DetailPane>
                 {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
-                {edtActionLogStatus === 'loading' && <DimAnnotation text="Loading action history…" />}
-                {edtActionLogStatus === 'error' && <DimAnnotation text="Failed to load action history" />}
+                {edtActionLogStatus === 'loading' && <StateLine kind="loading" subject="action history" />}
+                {edtActionLogStatus === 'error' && <StateLine kind="error" subject="action history" />}
               </>
             ) : paneFocus === 'edt-services' ? (
               <>

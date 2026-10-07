@@ -82,6 +82,7 @@ import {
   type LogsPaneFocus,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
@@ -554,6 +555,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         return;
       }
 
+      if (input === 'R' && servicesStatus === 'error') {
+        void loadEdtsBranches();
+        return;
+      }
+
       const paneStep = resolveFocusStep(input, key, LOGS_PANE_FOCUS_NAV.mode);
       if (paneStep !== null) {
         setPaneFocus((current) => cycleLogsPaneFocus(current, paneStep));
@@ -772,8 +778,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
             first={
             <Box flexDirection="column" flexGrow={1} paddingX={spacing['pane-padding-x']} minHeight={0} overflow="hidden">
               <Text color={paneFocus === 'edt-list' ? colors.accent : colors['text-dim']}>ACTIVE EDT MEMBERS</Text>
-              {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-              {servicesStatus === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+              {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
+              {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
               {focusedEdt === undefined ? <DimAnnotation text="No active EDT." /> : null}
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
                 <DimAnnotation text="No services in the active EDT." />

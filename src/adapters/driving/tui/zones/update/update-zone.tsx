@@ -46,6 +46,7 @@ import {
   toggleUpdateConfigRow,
   type BranchAutocompleteState,
 } from './update-config-dialog.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -692,6 +693,11 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      if (input === 'R' && servicesStatus === 'error') {
+        void loadEdtsBranches();
+        void loadEdts();
+        return;
+      }
       // The service list's own cursor — moves regardless of run state (browsing is harmless
       // mid-run); none of the triggers below use arrow/Home/End.
       const jump = resolveSelectionJump(key);
@@ -786,8 +792,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         first={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <Text color={colors['text-dim']}>SERVICES</Text>
-            {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-            {servicesStatus === 'error' ? <Text color={colors.error}>Failed to load services</Text> : null}
+            {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
+            {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry /> : null}
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
               <Text color={colors['text-dim']}>No managed services found.</Text>
             ) : null}

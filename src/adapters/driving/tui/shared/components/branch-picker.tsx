@@ -9,6 +9,7 @@ import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
 import { DimAnnotation } from './dim-annotation.js';
 import { BranchAutocompleteInput, clampAutocompletePickCursor, handleBranchAutocompleteKey, isBranchAutocompleteExactMatch, matchBranchesBySubstring } from './branch-autocomplete-input.js';
+import { StateLine } from './state-line.js';
 
 export type BranchPickerMode = 'pick-existing' | 'create-new' | 'rename-current';
 
@@ -481,8 +482,8 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
       </Text>
       {pickExistingHostsAutocomplete ? null : (
         <>
-          {branchesStatus === 'loading' ? <Text color={colors['text-dim']}>Loading branches…</Text> : null}
-          {branchesStatus === 'error' ? <Text color={colors.error}>Failed to load branches.</Text> : null}
+          {branchesStatus === 'loading' ? <StateLine kind="loading" subject="branches" /> : null}
+          {branchesStatus === 'error' ? <StateLine kind="error" subject="branches" /> : null}
         </>
       )}
 

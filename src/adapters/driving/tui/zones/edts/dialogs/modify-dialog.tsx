@@ -35,6 +35,7 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
+import { StateLine } from '../../../shared/components/state-line.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -380,8 +381,8 @@ export function ModifyDialogView({
         ) : (
           <>
             <TextInputLine label="Topic" value={dialog.topic} cursor={dialog.topicCursor} focused={dialog.formFocus === 'topic'} />
-            {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-            {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
+            {candidateState === 'loading' ? <StateLine kind="loading" subject="services" /> : null}
+            {candidateState === 'empty' ? <StateLine kind="empty" subject="registered services" text="No registered services available." /> : null}
             {candidateState === 'ready'
               ? candidates.map((candidate, index) => {
                   const branch =

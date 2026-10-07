@@ -86,6 +86,7 @@ import {
 } from './routes-request.logic.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -1304,10 +1305,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Box flexDirection="row">
-          <Spinner />
-          <Text color={colors['text-dim']}> Loading routes…</Text>
-        </Box>
+        <StateLine kind="loading" subject="routes" />
       </Box>
     );
   }
@@ -1436,7 +1434,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             ) : null}
             <Box ref={listAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
               {visibleRoutes.length === 0 ? (
-                <Text color={colors['text-dim']}>No routes match the filter.</Text>
+                <StateLine kind="empty" subject="routes" text="No routes match the filter." />
               ) : (
                 <BoundedList
                   items={visibleRoutes}

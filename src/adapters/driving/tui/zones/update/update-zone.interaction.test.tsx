@@ -4,7 +4,7 @@
 // `:update-service` handoff and the service quick-pick.
 import { createElement } from 'react';
 import { render } from 'ink';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../core/result.js';
 import { ok } from '../../../../../core/result.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
@@ -241,6 +241,25 @@ describe('UpdateZone update triggers (real keypress)', () => {
     });
     return store;
   }
+
+  it('R retries the service load only while it is in error, and the error line advertises it', async () => {
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = storeWithServices();
+    store.setState({ edtsBranchesStatus: 'error', loadEdtsBranches });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await waitForOutput(instance, stdout, 'Failed to load services.');
+      expect(stdout.output).toContain('[R]');
+      const callsBefore = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdtsBranches.mock.calls.length).toBe(callsBefore + 1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 
   it('p on the highlighted row reaches openUpdateConfig (unwired: explicit error, never a throw)', async () => {
     const store = storeWithServices();
