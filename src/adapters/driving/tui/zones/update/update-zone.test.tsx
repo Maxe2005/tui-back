@@ -535,7 +535,7 @@ describe('UpdateZone rendering', () => {
   });
 
   it('the idle prompt names all three triggers (main g, all-repos a, single-service p) plus the Enter menu', async () => {
-    expect(UPDATE_IDLE_PROMPT).toContain('[G]');
+    expect(UPDATE_IDLE_PROMPT).toContain('[M]');
     expect(UPDATE_IDLE_PROMPT).toContain('[P]');
     expect(UPDATE_IDLE_PROMPT).toContain('[Enter]');
     expect(UPDATE_ALL_REPOS_PROMPT).toContain('[A]');

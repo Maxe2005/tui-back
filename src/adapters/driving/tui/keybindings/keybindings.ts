@@ -185,8 +185,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     footer: { key: 'm/a/p', verb: 'configure', zone: 'update' },
   },
   {
-    keys: 'Ctrl+N (Update config)',
-    description: 'Update config, two-panel screen: start the run (Enter starts it in the plain list)',
+    keys: 'Enter (Update config)',
+    description: 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box',
   },
   {
     keys: 'R (load error)',

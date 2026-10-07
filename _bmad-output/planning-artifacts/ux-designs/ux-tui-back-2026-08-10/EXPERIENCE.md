@@ -239,7 +239,8 @@ The same intent uses the same key, wording and component in every zone and dialo
 |---|---|
 | Routes: `Ctrl+R` = fire request | Routes has text fields, so a bare letter cannot be used; `Ctrl+Enter` is not distinguishable from `Enter` on common terminals. |
 | Logs: `R` = restart service | Same "run again" family as retry; letter already established. |
-| Two-panel screens (wizard step 3, switch resolution, Update config): `Ctrl+N` confirms | `Enter` opens or edits the focused row there, so it cannot also confirm; the same chord is the wizard's next-step key. The plain Update config list (single service) confirms with `Enter`. |
+| Two-panel screens (wizard step 3, switch resolution): `Ctrl+N` confirms | `Enter` opens or edits the focused row there, so it cannot also confirm; the same chord is the wizard's next-step key. |
+| Update config: the run starts only from the `[ Start run ]` line (`Enter` on it) | One dialog for every scope (the plain list is gone); `Enter` on a table row opens the per-service box, so the start action is an explicit last stop of the global panel instead of a chord. |
 | `FilterablePickList`: `Home`/`End` move the text caret | The filter text field has focus, so the keys belong to the caret; `↑`/`↓` move the cursor. |
 | Routes raw body editor: `Esc` closes and keeps the text, `Enter` is a newline | A multi-line editor needs `Enter` for newlines; discarding a hand-typed body on `Esc` would lose work. |
 | Branch lists: no `[R] retry` hint | A bare letter would type into the focused text field; branch lists reload on reopening the field. |

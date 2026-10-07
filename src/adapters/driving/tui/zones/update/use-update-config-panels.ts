@@ -52,11 +52,11 @@ export interface UpdateConfigPanelsController {
   handleKey: (input: string, key: PanelsKey & { escape?: boolean }) => void;
 }
 
-const INITIAL_VIEW: PanelsViewState = { focus: 'panel', panelCursor: 0, tableCursor: 0, edtField: null };
+const INITIAL_VIEW: PanelsViewState = { focus: 'table', panelCursor: 0, tableCursor: 0, edtField: null };
 
 export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): UpdateConfigPanelsController {
   const { draft } = input;
-  const panelsOpen = draft !== null && draft.layout !== 'simple';
+  const panelsOpen = draft !== null;
   const [view, setViewState] = useState<PanelsViewState>(INITIAL_VIEW);
   const [box, setBoxState] = useState<ServiceBoxState | null>(null);
   // Keys can arrive faster than React re-renders (key repeat, paste): the handler reads the

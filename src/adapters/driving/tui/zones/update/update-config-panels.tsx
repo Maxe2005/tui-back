@@ -26,16 +26,18 @@ import type { ServiceBoxContext, ServiceBoxState } from './update-service-box.lo
 
 export const PANELS_TITLE_EDT = 'CONFIGURE UPDATE';
 export const PANELS_TITLE_ALL = 'CONFIGURE ALL-REPOS UPDATE';
+export const PANELS_TITLE_SERVICE = 'CONFIGURE SERVICE UPDATE';
+export const START_RUN_LABEL = '[ Start run ]';
 export const PANELS_GLOBAL_TITLE = 'GLOBAL SETTINGS';
 export const PANELS_TABLE_TITLE = 'SUMMARY AND PER-SERVICE EXCEPTIONS';
 // Two hint lines of at most ~70 characters each, so an 80-column terminal never truncates a key.
 export const PANELS_HINTS_PANEL = [
   formatHints([['Tab', 'table'], [KEY_UP_DOWN, 'move'], ['Space', 'change']]),
-  formatHints([['Ctrl+N', 'start run'], ['Esc', 'cancel']]),
+  formatHints([['Enter', 'edit EDT / start run'], ['Esc', 'cancel']]),
 ] as const;
 export const PANELS_HINTS_TABLE = [
   formatHints([['Tab', 'settings'], [KEY_UP_DOWN, 'move'], ['Space', 'select'], ['Enter', 'configure']]),
-  formatHints([['Ctrl+R', 'back to global'], ['Ctrl+N', 'start run'], ['Esc', 'cancel']]),
+  formatHints([['Ctrl+R', 'back to global'], ['Esc', 'cancel']]),
 ] as const;
 export const PANELS_TOO_SMALL = `Terminal too small: enlarge it (at least ${CONFIG_MIN_ROWS} rows).`;
 export const EDT_PLACEHOLDER = '<none>';
@@ -140,6 +142,15 @@ function GlobalLines({
             </GlobalRow>
           );
         }
+        if (line === 'start') {
+          return (
+            <GlobalRow key={line} focused={focusedLine(line)} label="">
+              <Text color={focusedLine(line) ? colors.accent : colors.text} bold={focusedLine(line)}>
+                {START_RUN_LABEL}
+              </Text>
+            </GlobalRow>
+          );
+        }
         const on = line === 'migrations' ? draft.runMigrations : draft.cleanRestart;
         return (
           <GlobalRow key={line} focused={focusedLine(line)} label={line === 'migrations' ? 'Migrations' : 'Clean restart'}>
@@ -172,7 +183,8 @@ export function UpdateConfigPanels({
   box: ServiceBoxState | null;
   boxContext: ServiceBoxContext | null;
 }) {
-  const title = draft.scope === 'all' ? PANELS_TITLE_ALL : PANELS_TITLE_EDT;
+  const title =
+    draft.layout === 'service-panels' ? PANELS_TITLE_SERVICE : draft.scope === 'all' ? PANELS_TITLE_ALL : PANELS_TITLE_EDT;
   if (budget.tooSmall) {
     return (
       <ModalDialog title={title} open>

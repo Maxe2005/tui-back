@@ -44,15 +44,15 @@ export function rowMode(row: UpdateConfigRow): 'global' | 'custom' {
   return row.origin === 'manual' || row.migrations !== 'follow' || row.cleanRestart !== 'follow' ? 'custom' : 'global';
 }
 
-export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart';
+export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart' | 'start';
 
 export function globalLines(draft: UpdateConfigDraft): GlobalLine[] {
   if (draft.layout !== 'edt-panels') {
-    return ['migrations', 'cleanRestart'];
+    return ['migrations', 'cleanRestart', 'start'];
   }
   return draft.strategy.kind === 'shared'
-    ? ['source', 'migrations', 'cleanRestart']
-    : ['source', 'edt', 'migrations', 'cleanRestart'];
+    ? ['source', 'migrations', 'cleanRestart', 'start']
+    : ['source', 'edt', 'migrations', 'cleanRestart', 'start'];
 }
 
 export function clampPanelCursor(draft: UpdateConfigDraft, cursor: number): number {
@@ -176,11 +176,7 @@ export function resolvePanelsKey(
     return step.type === 'commit' ? { type: 'edt-commit', value: step.value } : { type: 'edt-cancel' };
   }
   if (key.ctrl === true) {
-    const letter = input.toLowerCase();
-    if (letter === 'n') {
-      return { type: 'confirm' };
-    }
-    return letter === 'r' && view.focus === 'table' ? { type: 'reset-row' } : { type: 'ignore' };
+    return input.toLowerCase() === 'r' && view.focus === 'table' ? { type: 'reset-row' } : { type: 'ignore' };
   }
   if (key.meta === true) {
     return { type: 'ignore' };
@@ -221,6 +217,9 @@ export function resolvePanelsKey(
       return { type: 'edit-edt', initial: '' };
     }
     return isPrintable(input, key) ? { type: 'edit-edt', initial: input } : { type: 'ignore' };
+  }
+  if (line === 'start') {
+    return key.return === true ? { type: 'confirm' } : { type: 'ignore' };
   }
   if (line !== undefined && input === ' ') {
     return { type: 'toggle-global', line };

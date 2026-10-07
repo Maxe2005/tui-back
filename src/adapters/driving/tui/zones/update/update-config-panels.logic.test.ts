@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyMergeStrategy,
-  commitUpdateConfigBranchEdit,
   confirmUpdateConfigDraft,
   createUpdateConfigDraft,
   type MergeStrategy,
@@ -73,9 +72,10 @@ describe('effective values', () => {
 
 describe('global lines', () => {
   it('shows the EDT line only under From EDT, and no source lines for all-repos', () => {
-    expect(globalLines(edtDraft())).toEqual(['source', 'migrations', 'cleanRestart']);
-    expect(globalLines(toggleMergeSource(edtDraft()))).toEqual(['source', 'edt', 'migrations', 'cleanRestart']);
-    expect(globalLines(createUpdateConfigDraft('all', ROWS, { layout: 'all-panels' }))).toEqual(['migrations', 'cleanRestart']);
+    expect(globalLines(edtDraft())).toEqual(['source', 'migrations', 'cleanRestart', 'start']);
+    expect(globalLines(toggleMergeSource(edtDraft()))).toEqual(['source', 'edt', 'migrations', 'cleanRestart', 'start']);
+    expect(globalLines(createUpdateConfigDraft('all', ROWS, { layout: 'all-panels' }))).toEqual(['migrations', 'cleanRestart', 'start']);
+    expect(globalLines(createUpdateConfigDraft('edt', ROWS.slice(0, 1)))).toEqual(['migrations', 'cleanRestart', 'start']);
   });
 });
 
@@ -115,7 +115,8 @@ describe('row exceptions', () => {
   });
 
   it('keeps a manual branch across a strategy change and Ctrl+R forgets every exception', () => {
-    const manual = commitUpdateConfigBranchEdit(edtDraft(), 0, 'release/2');
+    const start = edtDraft();
+    const manual = setRow(start, 0, { ...start.rows[0]!, sourceBranch: 'release/2', origin: 'manual' });
     const withToggles = setRow(manual, 0, { ...manual.rows[0]!, migrations: 'off', cleanRestart: 'on' });
     const changed = toggleMergeSource(withToggles);
     expect(changed.rows[0]).toMatchObject({ sourceBranch: 'release/2', origin: 'manual' });
@@ -138,17 +139,19 @@ describe('row exceptions', () => {
 });
 
 describe('resolvePanelsKey', () => {
-  it('Tab switches focus and Ctrl+N confirms from either panel (y and Enter do not)', () => {
+  it('Tab switches focus and only Enter on the Start run line confirms (y, Ctrl+N and Enter elsewhere do not)', () => {
     expect(resolvePanelsKey('', { tab: true }, VIEW, edtDraft(), [])).toEqual({ type: 'switch-focus' });
-    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'confirm' });
-    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('', { return: true }, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'confirm' });
+    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'ignore' });
+    expect(resolvePanelsKey('n', { ctrl: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toEqual({ type: 'ignore' });
+    expect(resolvePanelsKey(' ', {}, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'ignore' });
     expect(resolvePanelsKey('', { return: true }, { ...VIEW, panelCursor: 1 }, edtDraft(), [])).toEqual({ type: 'ignore' });
     expect(resolvePanelsKey('y', {}, VIEW, edtDraft(), [])).toEqual({ type: 'ignore' });
   });
 
   it('Home/End jump to the first and last line of the focused panel or table', () => {
-    expect(resolvePanelsKey('', { end: true }, VIEW, edtDraft(), [])).toMatchObject({ type: 'move-panel', cursor: 2 });
-    expect(resolvePanelsKey('', { home: true }, { ...VIEW, panelCursor: 2 }, edtDraft(), [])).toEqual({ type: 'move-panel', cursor: 0 });
+    expect(resolvePanelsKey('', { end: true }, VIEW, edtDraft(), [])).toMatchObject({ type: 'move-panel', cursor: 3 });
+    expect(resolvePanelsKey('', { home: true }, { ...VIEW, panelCursor: 3 }, edtDraft(), [])).toEqual({ type: 'move-panel', cursor: 0 });
     expect(resolvePanelsKey('', { end: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toMatchObject({ type: 'move-table' });
   });
 

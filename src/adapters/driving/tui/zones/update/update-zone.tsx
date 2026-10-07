@@ -33,19 +33,10 @@ import {
   partitionUpdateServiceRows,
   resolveEditorCommand,
 } from './update-zone.logic.js';
-import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
-import {
-  beginUpdateConfigBranchEdit,
-  clampUpdateConfigCursor,
-  commitUpdateConfigBranchEdit,
-  resolveUpdateConfigKey,
-  toggleUpdateConfigRow,
-  type BranchAutocompleteState,
-} from './update-config-dialog.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
@@ -54,7 +45,7 @@ import { StateLine } from '../../shared/components/state-line.js';
 // EDTS_SERVICE_LISTS_CHROME_ROWS.
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
-export const UPDATE_IDLE_PROMPT = '[G] EDT update, [P] this service, [Enter] for service actions.';
+export const UPDATE_IDLE_PROMPT = '[M] EDT update, [P] this service, [Enter] for service actions.';
 export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
 export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
@@ -395,13 +386,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // The service list's selection cursor — zone-local UI state (only cross-visit/cross-run state
   // belongs in update-slice.ts).
   const [serviceCursor, setServiceCursor] = useState(0);
-  // The config screen's keyboard cursor + in-progress branch edit — zone-local UI state. The draft
-  // itself (rows, toggles, error) is run state in the store. The edit hosts the shared
-  // autocomplete state; its branch source lives in the two states below, fetched once per edit.
-  const [configCursor, setConfigCursor] = useState(0);
-  const [configEditing, setConfigEditing] = useState<BranchAutocompleteState | null>(null);
-  const [configBranches, setConfigBranches] = useState<string[]>([]);
-  const [configBranchesStatus, setConfigBranchesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -495,20 +479,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     setEditorError(null);
   }, [updateBlocker]);
 
-  // A newly opened config screen always starts browsing on its first row with no branch
-  // edit in flight. Keyed on the open boolean — never the draft object — so a toggle or
-  // branch commit (which replaces the draft) doesn't snap the cursor back to 0 or wipe an
-  // edit session.
-  const isUpdateConfigOpen = updateConfig !== null;
-  useEffect(() => {
-    if (isUpdateConfigOpen) {
-      setConfigCursor(0);
-      setConfigEditing(null);
-      setConfigBranches([]);
-      setConfigBranchesStatus('loading');
-    }
-  }, [isUpdateConfigOpen]);
-
   // A newly opened service pick always starts unfiltered on its first row. The single reset point
   // is the pick *closing* — whoever closed it (Enter, Esc, or the store on a run start/reset) —
   // so the next open never paints a frame of the previous session's filter. Keyed on the open
@@ -539,36 +509,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);
 
-  // Fetches the edited row's own listBranches(repoPath) once per branch-edit session —
-  // the same shape as the EDT zone's own branch-picker effect (keyed on primitives, stale
-  // responses dropped). Opening an edit resets the source to loading (see the begin-edit
-  // dispatch below); closing it leaves the last source in place, unused until the next
-  // edit re-arms it.
-  const editingRepoPath =
-    updateConfig !== null && configEditing !== null
-      ? (updateConfig.rows[clampUpdateConfigCursor(updateConfig, configCursor)]?.repoPath ?? null)
-      : null;
-  const isConfigEditing = configEditing !== null;
-  useEffect(() => {
-    if (editingRepoPath === null || !isConfigEditing || configBranchesStatus !== 'loading') {
-      return;
-    }
-    let cancelled = false;
-    const repoPath = editingRepoPath;
-    void (async () => {
-      const result = await listBranchesAction(repoPath);
-      if (cancelled) {
-        return;
-      }
-      setConfigBranches(result.ok ? result.data : []);
-      setConfigBranchesStatus(result.ok ? 'ready' : 'error');
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingRepoPath, isConfigEditing, configBranchesStatus, listBranchesAction]);
-
   useInput(
     (input, key) => {
       // While a repo waits on the resolution seam, the menu owns every keystroke — `q` must not
@@ -596,47 +536,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // While the pre-run configuration screen is open it owns every keystroke — the run starts
       // only through its confirm path, with exactly the confirmed configuration.
       if (updateConfig !== null) {
-        if (updateConfig.layout !== 'simple') {
-          configPanels.handleKey(input, key);
-          return;
-        }
-        const step = resolveUpdateConfigKey(
-          input,
-          key,
-          { cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing },
-          updateConfig,
-          configBranches,
-        );
-        if (step.type === 'move') {
-          setConfigCursor(step.cursor);
-        } else if (step.type === 'toggle') {
-          setUpdateConfig(toggleUpdateConfigRow(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor)));
-        } else if (step.type === 'begin-edit') {
-          const editing = beginUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor));
-          if (editing !== null) {
-            setConfigEditing(editing);
-            // Re-arm the per-row branch source: a fresh edit always starts loading, and the
-            // effect above fetches this row's own listBranches once.
-            setConfigBranches([]);
-            setConfigBranchesStatus('loading');
-          }
-        } else if (step.type === 'edit') {
-          setConfigEditing(step.editing);
-        } else if (step.type === 'commit-edit') {
-          if (configEditing !== null) {
-            setUpdateConfig(
-              commitUpdateConfigBranchEdit(updateConfig, clampUpdateConfigCursor(updateConfig, configCursor), configEditing.value),
-            );
-            setConfigEditing(null);
-          }
-        } else if (step.type === 'cancel-edit') {
-          setConfigEditing(null);
-        } else if (step.type === 'confirm') {
-          void confirmUpdateConfig();
-        } else if (step.type === 'cancel') {
-          setConfigEditing(null);
-          closeUpdateConfig();
-        }
+        configPanels.handleKey(input, key);
         return;
       }
       // While the service quick-pick is open it owns every keystroke — the shared pick reducer
@@ -907,7 +807,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
         <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
-      {updateConfig !== null && updateConfig.layout !== 'simple' ? (
+      {updateConfig !== null ? (
         <UpdateConfigPanels
           draft={updateConfig}
           view={configPanels.view}
@@ -917,15 +817,6 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           edtStatus={configPanels.edtStatus}
           box={configPanels.box}
           boxContext={configPanels.boxContext}
-        />
-      ) : null}
-      {updateConfig !== null && updateConfig.layout === 'simple' ? (
-        <UpdateConfigDialog
-          draft={updateConfig}
-          view={{ cursor: clampUpdateConfigCursor(updateConfig, configCursor), editing: configEditing }}
-          branches={configBranches}
-          branchesStatus={configBranchesStatus}
-          maxRows={branchDropdownMaxRows}
         />
       ) : null}
       {serviceMenu !== null ? (

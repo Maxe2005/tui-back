@@ -1208,7 +1208,7 @@ describe('update slice: pre-run configuration screen', () => {
       runMigrations: true,
       cleanRestart: false,
       error: null,
-      layout: 'simple',
+      layout: 'service-panels',
       strategy: { kind: 'shared' },
     })).not.toThrow();
     expect(store.getState().updateConfig).toBeNull();
@@ -2077,9 +2077,9 @@ describe('update slice: merge source from another EDT', () => {
     expect(await store.getState().listMergeSourceEdts()).toEqual([]);
   });
 
-  it('does not offer the panel on a single-service config', async () => {
+  it('opens the two-panel screen without the merge source on a single-service config', async () => {
     const store = createAppStore(depsWithSibling());
     await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
-    expect(store.getState().updateConfig!.layout).toBe('simple');
+    expect(store.getState().updateConfig!.layout).toBe('service-panels');
   });
 });

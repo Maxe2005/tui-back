@@ -326,7 +326,7 @@ export function buildRowView(
     const targetError = issue === null ? null : rowIssueMessage(issue);
     const common = { path, service, mode: 'global' as const, modeLabel: ROW_MODE_LABELS.global, target: name, targetError };
     if (resolution.kind === 'loading') {
-      return { ...common, base: 'Chargement…', baseStatus: 'loading', error: ROW_ERRORS.loading, plan: null };
+      return { ...common, base: 'Loading…', baseStatus: 'loading', error: ROW_ERRORS.loading, plan: null };
     }
     if (resolution.kind === 'load-error') {
       // The real cause (e.g. git's own message), not only the generic label.

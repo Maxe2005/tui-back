@@ -6,19 +6,7 @@
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../core/scripts/group-update.js';
 import type { MergeSourceError, MergeSourceOrigin, MergeSourceRow } from '../../../../../core/scripts/resolve-merge-sources.js';
 import type { TextEditKey, TextInputState } from '../../shared/components/text-edit.js';
-import {
-  createBranchAutocompleteState,
-  handleBranchAutocompleteKey,
-  isBranchAutocompleteExactMatch,
-  matchBranchesBySubstring,
-  clampAutocompletePickCursor,
-  type BranchAutocompleteState,
-} from '../../shared/components/branch-autocomplete-input.js';
-import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
-import {
-  toggleMemberSelection,
-  validateBranchEditValue,
-} from '../edts/edts-zone.logic.js';
+import type { BranchAutocompleteState } from '../../shared/components/branch-autocomplete-input.js';
 
 export type { TextInputState, TextEditKey };
 export type { BranchAutocompleteState };
@@ -58,7 +46,7 @@ export type MergeStrategy =
 
 // `simple`: the plain checklist (single-service config). `edt-panels`/`all-panels`: the two
 // panels — the merge-source lines exist only in EDT scope.
-export type ConfigLayout = 'simple' | 'edt-panels' | 'all-panels';
+export type ConfigLayout = 'service-panels' | 'edt-panels' | 'all-panels';
 
 // The store-owned draft (live run state lives in Zustand): the run `scope`, one row per
 // targeted service, the two run-wide toggles, and the current inline `error` (null when
@@ -106,7 +94,7 @@ export function createUpdateConfigDraft(
     runMigrations: true,
     cleanRestart: false,
     error: null,
-    layout: options.layout ?? 'simple',
+    layout: options.layout ?? 'service-panels',
     strategy: { kind: 'shared' },
   };
 }
@@ -136,109 +124,6 @@ function followStrategy(row: UpdateConfigRow, strategy: MergeStrategy): UpdateCo
     sourceBranch: resolved?.source ?? '',
     origin: 'edt',
     ...(resolved?.error !== undefined ? { sourceError: resolved.error } : {}),
-  };
-}
-
-// An unresolved row opens the editor on its manifest `sharedBranch`, not on the empty source.
-function editorSeed(row: UpdateConfigRow): string {
-  return row.sourceError !== undefined ? row.sharedBranch : row.sourceBranch;
-}
-
-// The focusable rows: every service row in order, then the migrate toggle, then the
-// clean-restart toggle.
-export function updateConfigRowCount(draft: UpdateConfigDraft): number {
-  return draft.rows.length + 2;
-}
-
-export function isMigrateRow(draft: UpdateConfigDraft, index: number): boolean {
-  return index === draft.rows.length;
-}
-
-export function isCleanRestartRow(draft: UpdateConfigDraft, index: number): boolean {
-  return index === draft.rows.length + 1;
-}
-
-// Space on a row: a service row flips its selection (via the shared `toggleMemberSelection`
-// over the selected repoPaths — rows are deduped upstream so repoPaths are unique); a
-// toggle row flips its uniform run-wide switch. Out-of-range cursors leave the draft
-// untouched. Any edit clears the current inline error.
-export function toggleUpdateConfigRow(draft: UpdateConfigDraft, index: number): UpdateConfigDraft {
-  if (isMigrateRow(draft, index)) {
-    return { ...draft, runMigrations: !draft.runMigrations, error: null };
-  }
-  if (isCleanRestartRow(draft, index)) {
-    return { ...draft, cleanRestart: !draft.cleanRestart, error: null };
-  }
-  const row = draft.rows[index];
-  if (row === undefined) {
-    return draft;
-  }
-  const selected = toggleMemberSelection(
-    draft.rows.filter((candidate) => candidate.selected).map((candidate) => candidate.repoPath),
-    row.repoPath,
-  );
-  return {
-    ...draft,
-    rows: draft.rows.map((candidate) => ({ ...candidate, selected: selected.includes(candidate.repoPath) })),
-    error: null,
-  };
-}
-
-// `e` on a service row opens the branch editor pre-filled with the row's current
-// source branch (caret at the end, the TextInputLine convention) hosting the shared
-// autocomplete state (pickCursor 0 — a freshly focused field proposes the whole list).
-// Toggle rows and out-of-range cursors have no branch to edit.
-export function beginUpdateConfigBranchEdit(draft: UpdateConfigDraft, index: number): BranchAutocompleteState | null {
-  const row = draft.rows[index];
-  if (row === undefined) {
-    return null;
-  }
-  return createBranchAutocompleteState({ value: editorSeed(row) });
-}
-
-// One branch-editor keystroke — delegates to the shared autocomplete reducer (typing at the
-// caret via `nextTextInputValue`, Left/Right/Home/End preserving the highlight, Up/Down
-// moving it; Ctrl/Meta stay inert). `branches` is the edited row's own `listBranches()`
-// result (empty while loading — the field stays usable). Kept as a thin wrapper so the
-// reducer stays directly unit-testable through resolveUpdateConfigKey.
-export function stepUpdateConfigBranchEdit(
-  current: BranchAutocompleteState,
-  input: string,
-  key: TextEditKey,
-  branches: readonly string[] = [],
-): BranchAutocompleteState {
-  const result = handleBranchAutocompleteKey(current, branches, input, key);
-  if (result.type === 'insert') {
-    return result.state;
-  }
-  if (result.type === 'commit-through') {
-    return current;
-  }
-  return result.state;
-}
-
-// Commits a branch edit back into the row: a blank value is rejected inline (the
-// create-dialog `validateBranchEditValue` convention — block confirm, keep the dialog
-// open) and the row keeps its previous branch.
-export function commitUpdateConfigBranchEdit(draft: UpdateConfigDraft, index: number, value: string): UpdateConfigDraft {
-  const row = draft.rows[index];
-  if (row === undefined) {
-    return draft;
-  }
-  const violation = validateBranchEditValue(value);
-  if (violation !== null) {
-    return { ...draft, error: violation };
-  }
-  return {
-    ...draft,
-    rows: draft.rows.map((candidate, candidateIndex) => {
-      if (candidateIndex !== index) {
-        return candidate;
-      }
-      const { sourceError: _cleared, ...rest } = candidate;
-      return { ...rest, sourceBranch: value, origin: 'manual' };
-    }),
-    error: null,
   };
 }
 
@@ -286,108 +171,4 @@ export function confirmUpdateConfigDraft(
       cleanRestart: draft.cleanRestart,
     },
   };
-}
-
-// Zone-local view state: the keyboard cursor over the focusable rows plus the in-progress
-// branch edit (null when browsing) — the edit hosts the shared autocomplete state, fed by
-// the edited row's own `listBranches()` result (see the zone's fetch-once-per-edit effect).
-export interface UpdateConfigViewState {
-  cursor: number;
-  editing: BranchAutocompleteState | null;
-}
-
-export function clampUpdateConfigCursor(draft: UpdateConfigDraft, cursor: number): number {
-  const count = updateConfigRowCount(draft);
-  if (count === 0) {
-    return 0;
-  }
-  return Math.min(Math.max(cursor, 0), count - 1);
-}
-
-export type UpdateConfigInputKey = {
-  upArrow?: boolean;
-  downArrow?: boolean;
-  leftArrow?: boolean;
-  rightArrow?: boolean;
-  home?: boolean;
-  end?: boolean;
-  return?: boolean;
-  escape?: boolean;
-  backspace?: boolean;
-  delete?: boolean;
-  ctrl?: boolean;
-  meta?: boolean;
-  tab?: boolean;
-  shift?: boolean;
-};
-
-export type UpdateConfigStep =
-  | { type: 'move'; cursor: number }
-  | { type: 'toggle' }
-  | { type: 'begin-edit' }
-  | { type: 'edit'; editing: BranchAutocompleteState }
-  | { type: 'commit-edit' }
-  | { type: 'cancel-edit' }
-  | { type: 'confirm' }
-  | { type: 'cancel' }
-  | { type: 'ignore' };
-
-// The dialog's keystroke reducer. Browse mode: arrows/Home/End move (the
-// edts-zone cursor vocabulary), Space toggles, `e` opens the branch editor on a
-// service row, Enter confirms the run, Esc cancels. Branch-edit
-// mode: the editor hosts the shared autocomplete — `Enter` on a non-empty list first
-// `insert`s (fills the text, editing continues) and only the next confirm commits via the
-// existing `commitUpdateConfigBranchEdit` path (blank still rejected inline) — except when
-// the text already exactly matches a listed branch, where inserting would be a no-op and
-// the commit runs at once instead (same idempotent-submit rule pick-existing follows);
-// `Enter` with zero matches is a `commit-through` straight to that same commit path. Esc
-// cancels the edit (never the dialog), everything else steps the shared reducer.
-export function resolveUpdateConfigKey(
-  input: string,
-  key: UpdateConfigInputKey,
-  view: UpdateConfigViewState,
-  draft: UpdateConfigDraft,
-  branches: readonly string[] = [],
-): UpdateConfigStep {
-  if (view.editing !== null) {
-    if (key.escape === true) {
-      return { type: 'cancel-edit' };
-    }
-    if (key.return === true) {
-      const matches = matchBranchesBySubstring(view.editing.value, branches);
-      if (matches.length === 0) {
-        return { type: 'commit-edit' };
-      }
-      if (isBranchAutocompleteExactMatch(view.editing.value, branches)) {
-        return { type: 'commit-edit' };
-      }
-      const highlighted = matches[clampAutocompletePickCursor(view.editing.pickCursor, matches.length)]!;
-      return { type: 'edit', editing: { value: highlighted, cursor: highlighted.length, pickCursor: 0 } };
-    }
-    if (key.ctrl === true || key.meta === true) {
-      return { type: 'ignore' };
-    }
-    return { type: 'edit', editing: stepUpdateConfigBranchEdit(view.editing, input, key, branches) };
-  }
-  if (key.ctrl === true || key.meta === true) {
-    return { type: 'ignore' };
-  }
-  if (key.escape === true) {
-    return { type: 'cancel' };
-  }
-  const count = updateConfigRowCount(draft);
-  const cursor = nextCursorForKey(key, view.cursor, count);
-  if (cursor !== null) {
-    return { type: 'move', cursor };
-  }
-  if (input === ' ') {
-    return { type: 'toggle' };
-  }
-  if (input === 'e' || input === 'E') {
-    return draft.rows[view.cursor] !== undefined ? { type: 'begin-edit' } : { type: 'ignore' };
-  }
-  if (key.return === true) {
-    return { type: 'confirm' };
-  }
-  return { type: 'ignore' };
 }

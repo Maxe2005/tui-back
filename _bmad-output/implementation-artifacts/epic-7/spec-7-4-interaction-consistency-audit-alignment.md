@@ -80,7 +80,7 @@ Proposed canonical choices (to validate): Up/Down clamp + Home/End, no vim keys,
 Commits on this branch after the validated table: list-cursor/box-line helpers, Enter-only confirm + `g` freed + Tab via the focus primitive, `formatHints` + Update config screens in English, one hint format (footer, Routes, registry, reset), `StateLine` + `R` retry, Home/End in settings/registry/reset, `ModalDialog` callbacks dropped + quick-pick titles, French to English translation + Ctrl+T rename, help rows sync, footer generated from the keybinding list.
 
 Decisions taken while implementing (all recorded as deviations in EXPERIENCE.md where they depart from the table):
-- Update config, plain list: `Enter` starts the run, `e` edits the branch (Enter no longer edits or toggles). Two-panel screen: `Ctrl+N` starts from either panel (Enter opens/edits the focused row there), like wizard step 3 and switch resolution.
+- Update config: merged into one two-panel dialog (see "Merged Update config dialog" below); the run starts only from the `[ Start run ]` line.
 - Update: group trigger `g` is now `m`; Logs global-filter engagement `g` is now `i`. `g`/`G` are bound to nothing.
 - `F2` cannot be bound: Ink 7.1.1 `useInput` yields empty input and no flag for function keys. BranchPicker rename is `Ctrl+T` (needs your confirmation). `Ctrl+R` is back-to-global everywhere it applies, Routes keeps `Ctrl+R` fire.
 - Quit-mid-run confirm: Enter/Esc only. Settings clear-history actions: Enter only.
@@ -115,22 +115,11 @@ Tests changed only for a deliberate binding or wording change:
 - Unify the three branch autocompletes (`BranchAutocompleteInput`, `SuggestField`, `BranchPicker`'s own).
 - `TextInputLine` still prints its own `[Enter] confirm  [Esc] cancel` under dialogs that also show a footer.
 - Settings annotations still use prose ("Space to toggle ...") instead of the hint format; `DimAnnotation` zone hints in EDTs (`[Enter] switch/modify  [Tab] focus`) are not yet routed through `formatHints`.
-- Update config dialog merge (below): waiting for approval.
 
-## Proposed key path for the merged Update config dialog (AWAITING HUMAN APPROVAL, not implemented)
+## Merged Update config dialog (approved and implemented)
 
-Goal: one dialog for global parameters plus per-service parameters, replacing the plain list (`update-config-dialog.*`, used for `p` single-service) and the two-panel screen. Every scope (EDT members, all repos, one service) opens the two-panel screen; the single-service case simply has a one-row table.
+Approved answers: `[ Start run ]` is the only way to start (no Ctrl+N chord), single-service scope hides Merge source, the plain dialog is deleted, `Ctrl+T` rename confirmed.
 
-Layout: `GLOBAL SETTINGS` panel on top (merge source, EDT source, migrations, clean restart), per-service table below, one-line status/error, two hint lines.
+Implemented key path: every scope opens the two-panel screen (layouts `edt-panels`, `all-panels`, `service-panels`; a single service is a one-row table with no merge source line). Opens with focus on the table. `Tab`/`Shift+Tab` toggle table and global panel. Table: arrows/Home/End, `Space` select, `Enter` opens the per-service box, `Ctrl+R` back to global. Box: arrows/Home/End/Tab move lines, `Space`/Left/Right flip, `Enter` edit or apply, `Ctrl+R` back to global, `Esc` closes. Global panel: arrows/Home/End, `Space` changes, `Enter` edits the EDT source, `Enter` on the last line `[ Start run ]` starts the run. `Esc` closes the innermost layer, then cancels.
 
-Key path:
-1. Opens with focus on the table, cursor on the first selected row (single service: that row).
-2. `Tab` / `Shift+Tab`: toggle focus between the table and the global panel (shared focus-navigation primitive, `tab` mode, two stops).
-3. Table: `↑`/`↓`/`Home`/`End` move; `Space` selects or deselects the row; `Enter` opens the per-service box for that row; `Ctrl+R` returns the row to the global parameters.
-4. Per-service box: `↑`/`↓`/`Home`/`End`/`Tab`/`Shift+Tab` move between lines; `Space`/`←`/`→` flip migrations and clean restart (follow global / no / yes); `Enter` on the branch line edits it (autocomplete, `Enter` commits, `Esc` cancels), `Enter` on `[ Apply ]` applies; `Ctrl+R` back to global; `Esc` closes.
-5. Global panel: `↑`/`↓`/`Home`/`End` move; `Space` (or `←`/`→` on the merge source) changes the value; `Enter` on the EDT source line edits it; typing on it starts the edit.
-6. Start: `Ctrl+N` from anywhere, plus a `[ Start run ]` line as the last stop of the global panel (`Enter` on it starts), so the action is also discoverable from the keyboard path. The table's `Enter` keeps opening the box, hence the extra stop.
-7. `Esc` closes the innermost layer first (box field, box, EDT edit), then cancels the dialog.
-8. Hints (formatHints): table `[Tab] settings  [↑/↓] move  [Space] select  [Enter] configure` / `[Ctrl+R] back to global  [Ctrl+N] start run  [Esc] cancel`; panel `[Tab] table  [↑/↓] move  [Space] change` / `[Ctrl+N] start run  [Esc] cancel`.
-
-Open questions for you: (a) keep `Ctrl+N` as the global start chord or drop it in favour of the `[ Start run ]` stop only; (b) one-service scope: skip the global panel's `Merge source` line (a single service has no EDT strategy) or keep it; (c) delete `UpdateConfigDialog`, `resolveUpdateConfigKey` and their tests once merged (about 600 lines).
+Removed: `UpdateConfigDialog`, `resolveUpdateConfigKey`, the single-row cursor/edit helpers and their tests, the zone's branch-edit state. Tests changed for this: `update-config-dialog.test.ts` (draft and confirm tests only; setup uses `setRow`/`toggleRowSelection`), `update-config-panels.logic.test.ts` (Start run line, no Ctrl+N), `update-zone.interaction.test.tsx` (branch edit through the service box, `Failed to load.`, `CONFIGURE SERVICE UPDATE`, table-first focus, Start run), `update-slice.test.ts` (`service-panels` layout), `update-zone.test.tsx` (`[M]` idle prompt), `keybindings.test.ts` (Enter row replaces Ctrl+N row), suggest-field strings now English (`Loading…`, `N more`).

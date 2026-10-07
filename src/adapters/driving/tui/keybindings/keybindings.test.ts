@@ -61,7 +61,7 @@ const EXPECTED = [
   ['i (Logs)', 'Logs: toggle the focused pane between following and ignoring the global filter'],
   ['R (Logs)', "Logs: restart the focused pane's service"],
   ['m / a / p (Update)', 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service'],
-  ['Ctrl+N (Update config)', 'Update config, two-panel screen: start the run (Enter starts it in the plain list)'],
+  ['Enter (Update config)', 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box'],
   ['R (load error)', 'EDTs, Update and Logs: retry a failed list load'],
   ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane'],
   ['Ctrl+T (branch picker)', 'Branch picker: rename the highlighted branch'],
