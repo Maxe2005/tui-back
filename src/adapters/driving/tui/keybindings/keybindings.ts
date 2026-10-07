@@ -41,12 +41,12 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: focusNavKeysLabel('tab'),
-    description: 'Cycle forward / Shift+Tab backward (between panes, form fields / resizable boundaries)',
+    description: 'Cycle focus (between panes, form fields / resizable boundaries); Shift+Tab reverses',
   },
   {
     keys: 'Ctrl+W',
     description:
-      'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, arrows resize, Enter/Esc exits)',
+      'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)',
   },
   {
     keys: '/',

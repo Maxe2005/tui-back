@@ -13,6 +13,7 @@ import { FailedResultList } from '../../../shared/components/failed-result-list.
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/text-input-line.js';
 import { nextTextInputValue } from '../../../shared/components/text-edit.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   createPickerSession,
@@ -34,7 +35,6 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
-import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
