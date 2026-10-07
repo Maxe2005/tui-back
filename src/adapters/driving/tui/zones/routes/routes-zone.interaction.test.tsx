@@ -1278,6 +1278,44 @@ describe('RoutesZone saved requests', () => {
     }
   });
 
+  it('selecting a saved request for another route moves the cursor onto it', async () => {
+    const port = fakeSavedPort([record('for-users', { query: { q: 'saved' } })]);
+    const store = seedSaved(port, [{ ...record('for-users', { query: { q: 'saved' } }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().routesSelected).toBe(0);
+      await press(instance, stdin, 's');
+      expect(lastFrame(stdout)).toContain('for-users');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(store.getState().routesSelected).toBe(1);
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      expect(store.getState().routesPaneTab).toBe('request');
+      expect(lastFrame(stdout)).toContain('saved');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('a saved request from another repo stays in the picker with an error line', async () => {
+    const port = fakeSavedPort([record('other-repo', { repoPath: '/repos/other', path: '/elsewhere' })]);
+    const store = seedSaved(port, [{ ...record('other-repo', { repoPath: '/repos/other', path: '/elsewhere' }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 's');
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(lastFrame(stdout)).toContain('Saved requests');
+      expect(lastFrame(stdout)).toContain('not this repo');
+      expect(store.getState().routesPaneFocus).toBe('list');
+      expect(store.getState().routesSelected).toBe(0);
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('a stale row never loads, and d deletes it through a confirm', async () => {
     const port = fakeSavedPort([record('stale-one', { path: '/vanished' })]);
     const cached = [{ ...record('stale-one', { path: '/vanished' }), stale: true }];

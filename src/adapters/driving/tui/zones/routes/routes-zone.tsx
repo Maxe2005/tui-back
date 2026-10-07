@@ -87,6 +87,7 @@ import {
   nextRequestSection,
   removeRequestRow,
   resolveFireBlock,
+  resolveRouteIndex,
   seedRequestDraft,
   setRequestRowValue,
   type RequestDraft,
@@ -1059,6 +1060,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // The saved picker owns every key while open: Esc closes, `d` on a stale row (with an
       // empty filter — while filtering, the input owns every key) asks to delete it, Enter
       // loads a fresh row (a stale row is blocked with an error line), and everything else filters.
+      // Loading first moves the list cursor onto the saved request's route — the pane always
+      // reflects the cursor — clearing the list filter when it hides that route; a route from
+      // another repo cannot load here and stays in the picker with an error line.
       if (pickerOpen) {
         if (key.escape === true) {
           setPickerOpen(false);
@@ -1086,6 +1090,19 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
           return;
         }
         const targetName = outcome.item.value.name;
+        const savedTarget = outcome.item.value;
+        const visibleAt = resolveRouteIndex(visibleRoutes, savedTarget.method, savedTarget.path);
+        if (visibleAt === null) {
+          const unfilteredAt = resolveRouteIndex(routes ?? [], savedTarget.method, savedTarget.path);
+          if (unfilteredAt === null) {
+            setPickerError(`"${targetName}" targets ${savedTarget.repoPath}, not this repo — switch repo to load it`);
+            return;
+          }
+          setFilter({ value: '', cursor: 0 });
+          setSelected(unfilteredAt);
+        } else {
+          setSelected(visibleAt);
+        }
         setPickerOpen(false);
         void (async () => {
           const loaded = await loadSavedRequest(targetName);

@@ -12,6 +12,7 @@ import {
   nextRequestSection,
   removeRequestRow,
   resolveFireBlock,
+  resolveRouteIndex,
   seedRequestDraft,
   setRequestRowValue,
   substitutePathParams,
@@ -61,6 +62,27 @@ describe('seedRequestDraft', () => {
 
   it('extracts template names in order, deduplicated', () => {
     expect(extractPathParamNames('/a/{x}/b/{y}/{x}')).toEqual(['x', 'y']);
+  });
+});
+
+describe('resolveRouteIndex', () => {
+  const list = [
+    { method: 'GET', path: '/health' },
+    { method: 'GET', path: '/users' },
+  ];
+
+  it('finds the exact route index', () => {
+    expect(resolveRouteIndex(list, 'GET', '/users')).toBe(1);
+  });
+
+  it('normalizes method case and surrounding blanks', () => {
+    expect(resolveRouteIndex(list, 'get', '  /health ')).toBe(0);
+  });
+
+  it('returns null when no route matches', () => {
+    expect(resolveRouteIndex(list, 'POST', '/users')).toBeNull();
+    expect(resolveRouteIndex(list, 'GET', '/vanished')).toBeNull();
+    expect(resolveRouteIndex([], 'GET', '/users')).toBeNull();
   });
 });
 
