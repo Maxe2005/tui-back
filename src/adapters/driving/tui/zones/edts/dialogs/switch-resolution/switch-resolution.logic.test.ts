@@ -62,6 +62,18 @@ function type(text: string): Array<[string, TextEditKey]> {
   return [...text].map((char) => [char, {}]);
 }
 
+const SHIFT_TAB: [string, TextEditKey] = ['', { tab: true, shift: true }];
+
+describe('switch-resolution Shift+Tab', () => {
+  it('toggles between the global panel and the rows panel (two stops)', () => {
+    const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
+    expect(state.panel).toBe('global');
+    const toRows = press(state, SHIFT_TAB);
+    expect(toRows.panel).toBe('rows');
+    expect(press(toRows, SHIFT_TAB).panel).toBe('global');
+  });
+});
+
 describe('switch-resolution rows', () => {
   it('pins the footer verbatim', () => {
     expect(SWITCH_RESOLUTION_FOOTER).toBe('[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch');

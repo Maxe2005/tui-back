@@ -72,6 +72,7 @@ export const KEYS = {
   enter: '\r',
   escape: '\x1b',
   tab: '\t',
+  shiftTab: '\x1b[Z',
   space: ' ',
   backspace: '\x7f',
   up: '\x1b[A',

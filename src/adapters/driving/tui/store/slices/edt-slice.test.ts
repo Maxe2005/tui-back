@@ -62,6 +62,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
@@ -246,6 +248,28 @@ describe('edt slice — switch dirty-repo seam', () => {
 
     expect(result.ok).toBe(true);
     expect(store.getState().switchDirtyRepos).toBeNull();
+  });
+});
+
+describe('edt slice — update-in-progress lock', () => {
+  it('switchEdt and activateEdt are refused while a group update runs, touching nothing', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    store.setState({ updateStatus: 'running' });
+
+    const switched = await store.getState().switchEdt({ topic: 'target-topic' });
+    const activated = await store.getState().activateEdt({ topic: 'target-topic' });
+
+    expect(switched).toMatchObject({ ok: false, error: { code: 'update-in-progress' } });
+    expect(activated).toMatchObject({ ok: false, error: { code: 'update-in-progress' } });
+    expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+  });
+
+  it('switchEdt works again once the run is over', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'done' });
+
+    expect((await store.getState().switchEdt({ topic: 'target-topic' })).ok).toBe(true);
   });
 });
 

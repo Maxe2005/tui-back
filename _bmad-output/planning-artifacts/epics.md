@@ -121,6 +121,7 @@ UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bo
 UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
 UX-DR35 (added 2026-10-01, Sprint Change Proposal, Story 7.3): Every zone builds its layout through one shared zone-layout contract declaring its panes and the boundaries between them (orientation, default ratio, min/max); the contract provides splitter rendering, accent recoloring when targeted, Ctrl+W resize-mode, Tab boundary cycling and per-zone persisted ratios — no zone hand-rolls a split.
 UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason. Amended 2026-10-05 (Sprint Change Proposal, Story 7.7): Shift+Tab always reverses Tab; every zone declares focus movement through one shared navigation primitive (H/V arrows, Tab/Shift+Tab, Ctrl+N/P per zone).
+UX-DR37 (added 2026-10-07, Sprint Change Proposal, Story 7.9): Bounded-rendering contract — at every moment, whatever the terminal size, pane ratios, message length or number of accumulated entries, the TUI is legible and coherent: no rendered region (zone body, pane, dialog, row, text) may exceed the space it is given on either axis. Overflow is always resolved by a visible, deliberate treatment (ellipsis truncation, a windowed scroll region with more-above/below indicators, or an explicit "terminal too small" screen) — never by silent clipping or by letting Ink's layout push other lines off-screen. Enforced by shared primitives plus a guard test and a size-matrix render test so the defect class cannot be reintroduced.
 UX-DR10 amended 2026-10-01: resize-mode is available in every zone (UX-DR35), not only the EDTs zone.
 UX-DR19 amended 2026-10-01: see EXPERIENCE.md State Patterns › Dashboard (container status + branches + divergence per member, working-tree alerts, quick actions, registry health, operation in progress).
 UX-DR21 amended 2026-10-01: adds the merge-source strategy states (FR-28).
@@ -176,7 +177,91 @@ A developer can run a group update (pull, migrate, restart) scoped to the active
 **FRs covered:** FR-10, FR-11, FR-12
 **Implementation notes:** Update zone (UX-DR21), reuses Epic 2's git safety gate (AD-8), detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic.
 
-### Epic 4: `shared-types` Propagation & Smart Update
+#### Story 3.13: Non-Blocking Subprocess Execution — Live, Navigable Update
+
+> Added 2026-10-07. Fixes the TUI freezing for the whole duration of a group update: Story 3.10's live tracking cannot render while the event loop is blocked.
+
+As a developer,
+I want the TUI to stay responsive while an update runs,
+So that I can follow each service's progress in real time and keep using the tool in parallel.
+
+**Acceptance Criteria:**
+
+**Given** a group update is running (pull, merge, migration, restart) **When** a git, migration, restart or container subprocess is in flight **Then** the TUI keeps redrawing and accepts keyboard input — no `spawnSync` / `execFileSync` remains on any path used by the update.
+
+**Given** the driven adapters (git, migration, restart, container, docker) **When** they run a subprocess **Then** they do so through one shared asynchronous process helper that returns the same `{status, stdout, stderr, error?}` shape, so every existing error code and message is unchanged and the never-throw `Result` invariant holds.
+
+**Given** an update in progress **When** the developer navigates to another zone **Then** per-service phases (Story 3.10) keep updating live and the run's state is intact when they return; actions that would conflict with the running update (a second update, an EDT switch) are rejected with a clear message via the existing action lock.
+
+**Implementation notes:** `core/ports` signatures are already `Promise<Result<…>>` — no core change beyond callers that relied on synchronous behavior. Migrate adapter by adapter (migration, restart, container, git, docker), one commit each.
+
+### Story 3.14: Update Zone — Member/Other Service Grouping & Last-Update Recap View
+
+> Added 2026-10-07. Gives the Update zone the same member/other split as the EDT and Logs zones and a no-focus recap view.
+
+As a developer,
+I want the service list split into EDT members and other services, and a recap view when no service is focused,
+So that I see at a glance what a group update will touch and what the last update did.
+
+**Acceptance Criteria:**
+
+**Given** the Update zone's service list **When** it renders **Then** it is split into two titled groups, `EDT members` (services that the active EDT's group update will touch) and `Others`, in the same visual style as the EDT and Logs zones.
+
+**Given** the service list **When** the developer presses `Esc` **Then** no service is focused and the right pane shows the **last-update recap**: its context (from → to: source branch or EDT, target branch or EDT) and the per-service results of the services it covered; the pane footer `[G] EDT update, [P] this service, [Enter] for service actions. Press [A] for all-repos maintenance mode (every managed repo).` is shown on this view **only**, never on per-service views.
+
+**Given** the recap view **When** the developer presses `↑` or `↓` **Then** focus returns to a service and the per-service view replaces the recap.
+
+**Given** no update has run in this session **When** the recap view opens **Then** it states that no update has run yet. The recap lives in memory only; it is not persisted across restarts.
+
+### Story 3.15: Update Zone — Per-Service Detail Pane (Last Run & Live Step Tracking)
+
+> Added 2026-10-07. Extends Story 3.10's live tracking into a clear, glyph-rich per-service pane.
+
+As a developer,
+I want the right pane to show information specific to the focused service — its last update or its live progress,
+So that I can follow each step of an update in real time.
+
+**Acceptance Criteria:**
+
+**Given** a focused service with no update in progress for it (none running, or already finished while others still run) **When** the pane renders **Then** it shows the context of its last update (from → to: branch and EDT) and the result of each main component — merge, migration, restart — as separate, spaced, glyph-prefixed blocks.
+
+**Given** a focused service that an update is currently processing **When** the pane renders **Then** a clear running indicator is shown and each step (merge, migration, restart) displays its state live: pending, in progress (with the interaction prompt when a blocker needs resolving), or done (with its result), updating in real time.
+
+**Given** a run in progress **When** the service list renders **Then** it keeps only the services being updated.
+
+### Story 3.16: Global "Update in Progress" Status & Action Locks
+
+> Added 2026-10-07.
+
+As a developer,
+I want the whole tool to know an update is running and refuse conflicting actions,
+So that I can keep working in parallel without corrupting a run.
+
+**Acceptance Criteria:**
+
+**Given** a group update is running **When** the developer looks at the Update tab **Then** it carries a dedicated "update in progress" status visible from every zone.
+
+**Given** a run in progress **When** the developer attempts a second update (any entry point), an EDT switch, an EDT creation with activation/switch, or a standalone service restart **Then** the action is rejected with a clear message naming the running update; EDT creation without switch stays allowed.
+
+**Given** a run in progress **When** the developer uses logs or other zones **Then** they stay usable; known degraded behavior (e.g. logs of restarting containers) is documented, not blocked.
+
+### Story 3.17: Update Zone — Global Default View & Resizable Member/Other Panes
+
+> Added 2026-10-07. Follow-up to 3.14: the zone opens on the global recap and the two service groups become real, independently resizable panes like the EDTs zone's.
+
+As a developer,
+I want the Update tab to open on the global view and its EDT members / other services to be two distinct, resizable panes,
+So that I get the overview first and can size each group to what I'm looking at.
+
+**Acceptance Criteria:**
+
+**Given** the Update tab opens **When** it first renders **Then** no service is focused and the right pane shows the global recap view (with its footer prompt); an arrow key focuses a service.
+
+**Given** the service list **When** it renders **Then** `EDT MEMBERS` and `OTHER SERVICES` are two distinct panes separated by a splitter (as in the EDTs zone), each with its own bounded list, and the boundary is declared in the zone layout contract so `Ctrl+W` resizes it and `Tab` cycles it with the list/detail boundary.
+
+**Given** no service is focused **When** the developer presses `p` or `Enter` **Then** nothing opens — they act on a focused service only.
+
+## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
 **FRs covered:** FR-13, FR-14, FR-15, FR-30, FR-31
 **Implementation notes:** First company-specific module, validating AD-4/AD-5 (AD-18); shared-types zone (UX-DR24). Prerequisites: Epic 7 done; Epic 3 merged into `devlopment` for Stories 4.4/4.5 (Sprint Change Proposal 2026-10-05).
@@ -196,7 +281,7 @@ A developer can discover a repo's routes, fire a request with automatic dev-mode
 
 A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
 **FRs covered:** FR-29, FR-32, FR-33 (plus completion of UX-DR10, UX-DR19)
-**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.4 → 7.5/7.6.
+**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.9 (added 2026-10-07: bounded-rendering audit & enforcement, AD-19, UX-DR37) → 7.4 → 7.5/7.6.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 
@@ -3080,3 +3165,38 @@ As a developer, after a group update I want the detail pane to report per servic
 **Given** the CLI **When** a run ends **Then** the same details ride the JSON line.
 
 **Given** a zone has a pending background event **When** on the Dashboard **Then** its tab shows the counter badge (UX-DR19 background-event state).
+
+### Story 7.9: Bounded-Rendering Audit, Global Fix & Regression Guard (UX-DR37)
+
+> Added 2026-10-07 (Sprint Change Proposal `sprint-change-proposal-2026-10-07.md`). Runs after 7.3/7.7 (it builds on `ZoneLayout`, `bounded-list` and the focus primitive) and before 7.4 (the alignment phase then consumes the bounded primitives) and 7.5/7.6 (the Dashboard is built bounded from day one). Generalizes Story 5.5's fix — applied then to Logs/EDTs only — to the whole tool.
+
+As a developer, I want every region of the TUI — zones, panes, dialogs, rows, error messages — to stay inside the space it is given, whatever the terminal size, pane ratios or volume of messages, and I want that rule enforced so it cannot regress, so that the tool is readable and coherent at all times and lines never silently vanish.
+
+**Acceptance Criteria:**
+
+**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/epic-7/` **before any code change**) of every rendered surface — zone bodies, `ZoneLayout` panes, the 20+ `ModalDialog` consumers and their children, `DetailPane`, Update service boxes/detail/issue log, error and `DimAnnotation` messages, Dashboard, shared-types, the command bar, `?` help, footer, top bar — recording for each: its height source (fixed / measured / unbounded), its width source, how long or multi-line text is treated (wrap / truncate / unbounded), whether appendable content (issue logs, error lists, log lines, history) is capped, and a verdict (bounded / partially bounded / unbounded).
+
+**Given** the inventory **When** the unbounded and partially bounded surfaces are listed **Then** each is reproduced at least once with a failing test (or a documented manual repro for Ink-level behavior that tests cannot show) before it is patched, and the developer validates the inventory and the chosen mechanisms before the patch phase starts.
+
+**Given** the layout chain **When** the foundation is in place **Then** the available height and width flow down explicitly: the shell computes the zone body's space from `useWindowSize()` minus the top bar and footer actually rendered, exposes it through a shared bounds context/hook, `ZoneLayout` derives each pane's bounds from the zone bounds and its ratios, and every pane clips (`overflow="hidden"`, explicit height) as a last-resort safety net — clipping is the net, never the plan.
+
+**Given** any text rendered by the tool **When** it may be longer than its line **Then** it goes through a shared text primitive that truncates with an ellipsis by default; multi-line or wrapped text is allowed only through an explicit clamped-paragraph primitive (`maxLines`, trailing "… +N lines"); raw `<Text>` from `ink` is no longer used for dynamic content outside `shared/`.
+
+**Given** an error or status message (core `error.message`, git/docker/process output, stream errors) **When** displayed anywhere **Then** it is normalized first (newlines collapsed, ANSI/control characters stripped, length capped) and shown through the bounded primitives; the full text stays available where it was already (logs, CLI JSON line).
+
+**Given** any content that grows over time or with data (Update issue log and run steps, failed-result lists, switch-resolution rows, registry/issue lists, Dashboard sections, history grids, endless repeated errors) **When** it exceeds its region **Then** it renders through a scroll region (the `bounded-list` primitive, generalized to heterogeneous blocks) with more-above/below indicators and a cursor/scroll key where interaction is expected; in-memory collections fed by streams or retries are capped (oldest dropped, with a visible "N older hidden" line).
+
+**Given** any `ModalDialog` **When** its content exceeds the terminal **Then** the dialog is bounded to the window (title and footer rows preserved, body scrolls internally, `maxHeight` no longer optional) and recomputes live on resize — no dialog can push the screen past the terminal height.
+
+**Given** pane boundaries moved with `Ctrl+W` (or restored from persistence, or after the terminal shrinks) **When** a pane would get less than its minimum **Then** minimums are enforced in absolute rows/columns, not only as ratios, so neither side collapses to an unreadable sliver; ratios stay valid at every terminal size.
+
+**Given** a terminal below the minimum usable size **When** rendered **Then** the app shows a single explicit "Terminal too small — need at least C×R (now c×r)" screen instead of a corrupted layout, and returns to the normal view live as soon as the terminal grows back; the minimum is a named constant, justified in the inventory.
+
+**Given** the regression guard **When** `npm test` runs **Then** (a) a render-matrix test renders every zone and every dialog at several terminal sizes (e.g. 120×40, 80×24, 60×15, minimum) with adversarial fixtures (very long and multi-line errors, hundreds of entries, many services, extreme pane ratios) and asserts that no frame has more lines than the terminal rows nor any line wider than its columns, and that key anchors (top bar, footer, cursor row) remain visible; (b) a static guard test fails on a raw `Text`/`Box`-with-unbounded-content pattern or an un-windowed `.map()` over a growing collection outside the approved primitives (allow-list explicit, starting empty); (c) a new zone or dialog is covered by the matrix automatically via the zone/dialog registry, with a failing test if one is missing.
+
+**Given** a terminal large enough that nothing overflowed before **When** any zone is used **Then** visible behavior is unchanged — this is a defect fix, a foundation and a guard, not a redesign.
+
+**Given** the result **When** reviewed **Then** AD-19 is recorded in the architecture spine, the contract (UX-DR37) in EXPERIENCE.md Interaction Primitives, `AGENTS.md` › Code conventions states the rule in two lines, and existing tests change only where a rendering deliberately changed (each listed in the story file).
+
+**Implementation notes:** commits split audit → foundation (bounds context, text primitives, message normalizer, scroll region, bounded `ModalDialog`, min-size screen) → one patch commit per zone/dialog family → guard tests last (so the guard lands green). Build on `zone-layout.tsx`, `bounded-list.tsx`, `use-element-size.ts`, `keybinding-help.tsx` windowing; do not introduce a third scrolling mechanism. If the patch list proves larger than one story, split the remainder into follow-ups (7.9b…) from the validated inventory, but the foundation and the guard ship in 7.9 itself. AD-19, UX-DR37; relates to Story 5.5 (precedent), Story 7.3 (layout contract), Story 7.4 (alignment consumes these primitives).
+

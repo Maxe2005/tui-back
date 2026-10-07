@@ -108,12 +108,37 @@ export function formatServiceOutcomeDetail(lastOutcome: GroupUpdateRepoResult | 
   if (lastOutcome === undefined) {
     return 'idle';
   }
+  const runLines = formatRunDetailLines(lastOutcome.run);
   if (lastOutcome.outcome === 'updated') {
-    return 'updated';
+    return ['updated', ...runLines].join('\n');
   }
   const code = lastOutcome.detail?.code ?? lastOutcome.outcome;
   const message = lastOutcome.detail?.message !== undefined ? `: ${lastOutcome.detail.message}` : '';
-  return `${lastOutcome.outcome} (${code})${message}`;
+  return [`${lastOutcome.outcome} (${code})${message}`, ...runLines].join('\n');
+}
+
+// The merge and migrate lines of the last run; either is absent when core could not read it.
+// The migration excerpt is collapsed to one line for the pane.
+function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
+  const lines: string[] = [];
+  const merge = run?.merge;
+  if (merge?.kind === 'up-to-date') {
+    lines.push('merge: already up to date');
+  } else if (merge?.kind === 'advanced') {
+    lines.push(
+      merge.files === undefined || merge.insertions === undefined || merge.deletions === undefined
+        ? 'merge: updated (diff unavailable)'
+        : `merge: +${merge.insertions}/\u2212${merge.deletions} lines, ${merge.files} ${merge.files === 1 ? 'file' : 'files'}`,
+    );
+  }
+  const migrations = run?.migrations;
+  if (migrations?.kind === 'none') {
+    lines.push('migrations: none');
+  } else if (migrations?.kind === 'ran') {
+    const excerpt = migrations.outputExcerpt.replace(/\s*\r?\n\s*/g, ' \u21b5 ').trim();
+    lines.push(`migrations: ran (${migrations.command})${excerpt !== '' ? ` \u2014 ${excerpt}` : ''}`);
+  }
+  return lines;
 }
 
 // One entry of the live per-service issue log. `kind` is the blocker kind
@@ -219,4 +244,209 @@ export function mergeLastServiceOutcomes(
     next[result.service] = result;
   }
   return next;
+}
+
+// The two service panes (EDT members above, other services below), each a contiguous slice of
+// the members-first flat row array — the selection cursor stays an index into that flat array,
+// so `offset` converts a pane-local index and back.
+export const UPDATE_MEMBERS_HEADER = 'EDT MEMBERS';
+export const UPDATE_OTHERS_HEADER = 'OTHER SERVICES';
+
+export interface UpdateServicePanes {
+  members: UpdateServiceRow[];
+  others: UpdateServiceRow[];
+}
+
+export function splitUpdateServiceRows(rows: readonly UpdateServiceRow[]): UpdateServicePanes {
+  return { members: rows.filter((row) => row.isMember), others: rows.filter((row) => !row.isMember) };
+}
+
+// The rows each pane may draw, from the total list budget and the splitter ratio: the header
+// takes one line per pane and a pane never gets less than one list row.
+export function resolveUpdatePaneRows(totalRows: number, membersRatio: number): { members: number; others: number } {
+  const usable = Math.max(2, Math.floor(totalRows) - 2);
+  const members = Math.min(usable - 1, Math.max(1, Math.round(usable * membersRatio)));
+  return { members, others: Math.max(1, usable - members) };
+}
+
+// The recap view's body: the last run's context (who it covered, from which sources to which
+// branches) followed by one line per covered service. `sources` are the confirmed per-service
+// merge sources (empty: the manifest shared branches); `branches` the services' current
+// branches. Null when no run has finished in this session.
+export interface LastUpdateRecap {
+  title: string;
+  contextLines: string[];
+  resultLines: string[];
+}
+
+export function formatLastUpdateRecap(
+  topic: string | null,
+  results: readonly GroupUpdateRepoResult[],
+  selection: readonly GroupUpdateSelectionItem[] | null,
+  branchByService: Readonly<Record<string, string | null>>,
+): LastUpdateRecap | null {
+  if (topic === null) {
+    return null;
+  }
+  const isAll = topic === 'all-repos';
+  const title = isAll ? 'Last update — all repos' : `Last update — EDT "${topic}"`;
+  const contextLines = [
+    isAll ? 'Scope: every managed repo' : `Scope: members of EDT "${topic}"`,
+    `Services covered: ${String(results.length)}`,
+  ];
+  const resultLines = results.map((row) => {
+    const glyph = row.outcome === 'updated' ? '✔' : row.outcome === 'skipped' ? '○' : '✖';
+    const source = selection?.find((item) => item.service === row.service)?.sourceBranch ?? 'shared branch';
+    const target = branchByService[row.service] ?? '?';
+    const detail =
+      row.detail !== undefined ? ` (${row.detail.code})${row.detail.message !== '' ? `: ${row.detail.message.replace(/\s+/g, ' ').trim()}` : ''}` : '';
+    return `${glyph} ${row.service}  ${source} → ${target}  ${row.outcome}${detail}`;
+  });
+  return { title, contextLines, resultLines };
+}
+
+// The recap view toggle: `Esc` drops service focus (the right pane shows the last-update
+// recap); any list-navigation key hands focus back to the remembered service without moving it.
+// `handled` tells the dispatcher the key is consumed.
+export function resolveRecapToggle(
+  recapActive: boolean,
+  key: { escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
+): { recapActive: boolean; handled: boolean } {
+  if (key.escape === true) {
+    return { recapActive: true, handled: !recapActive };
+  }
+  const navigates = key.upArrow === true || key.downArrow === true || key.home === true || key.end === true;
+  if (recapActive && navigates) {
+    return { recapActive: false, handled: true };
+  }
+  return { recapActive, handled: false };
+}
+
+// The per-service step tracker behind the detail pane. One service's update is three
+// user-visible steps: the merge (core's `pulling` and `merging` phases are both "bringing the
+// source in"), the migration, and the restart. Each step is pending, running, done, failed or
+// skipped (never reached, or switched off for the run).
+export type UpdateStepKey = 'merge' | 'migration' | 'restart';
+export type UpdateStepState = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+export type ServiceStepStates = Record<UpdateStepKey, UpdateStepState>;
+
+export const UPDATE_STEP_ORDER: readonly UpdateStepKey[] = ['merge', 'migration', 'restart'];
+
+export const PENDING_STEPS: ServiceStepStates = Object.freeze({ merge: 'pending', migration: 'pending', restart: 'pending' });
+
+function stepOfPhase(phase: UpdatePhase): UpdateStepKey {
+  return phase === 'pulling' || phase === 'merging' ? 'merge' : phase === 'migrating' ? 'migration' : 'restart';
+}
+
+// A live phase emission: every earlier step that is still pending or running is done (a step
+// that was switched off, e.g. migrations disabled, is marked skipped when the next one starts
+// without it ever running), and the emitted phase's step runs.
+export function advanceServiceSteps(current: ServiceStepStates | undefined, phase: UpdatePhase): ServiceStepStates {
+  const next: ServiceStepStates = { ...(current ?? PENDING_STEPS) };
+  const active = stepOfPhase(phase);
+  const activeIndex = UPDATE_STEP_ORDER.indexOf(active);
+  UPDATE_STEP_ORDER.forEach((step, index) => {
+    if (index < activeIndex) {
+      if (next[step] === 'running') {
+        next[step] = 'done';
+      } else if (next[step] === 'pending') {
+        next[step] = 'skipped';
+      }
+    }
+  });
+  next[active] = 'running';
+  return next;
+}
+
+// The run's final row settles whatever was still in flight: an updated service finished every
+// step it started; a failed one fails the step it died in (a pending step stays skipped); a
+// skipped one never ran anything.
+export function finalizeServiceSteps(current: ServiceStepStates | undefined, result: GroupUpdateRepoResult): ServiceStepStates {
+  const next: ServiceStepStates = { ...(current ?? PENDING_STEPS) };
+  for (const step of UPDATE_STEP_ORDER) {
+    if (next[step] === 'running') {
+      next[step] = result.outcome === 'updated' ? 'done' : result.outcome === 'failed' ? 'failed' : 'skipped';
+    } else if (next[step] === 'pending') {
+      next[step] = 'skipped';
+    }
+  }
+  return next;
+}
+
+export const UPDATE_STEP_LABELS: Record<UpdateStepKey, string> = {
+  merge: 'Merge',
+  migration: 'Migration',
+  restart: 'Restart',
+};
+
+export const UPDATE_STEP_GLYPHS: Record<UpdateStepState, string> = {
+  pending: '○',
+  running: '◐',
+  done: '✔',
+  failed: '✖',
+  skipped: '–',
+};
+
+const UPDATE_STEP_WORDS: Record<UpdateStepState, string> = {
+  pending: 'waiting',
+  running: 'in progress',
+  done: 'done',
+  failed: 'failed',
+  skipped: 'not run',
+};
+
+// One step's headline + optional detail lines, built from the state and the run detail core
+// reported (merge diff, migration command/excerpt) once the service finished.
+export interface UpdateStepView {
+  key: UpdateStepKey;
+  state: UpdateStepState;
+  headline: string;
+  detail: string[];
+}
+
+export function buildServiceStepViews(
+  steps: ServiceStepStates,
+  result: GroupUpdateRepoResult | undefined,
+): UpdateStepView[] {
+  return UPDATE_STEP_ORDER.map((key) => {
+    const state = steps[key];
+    const headline = `${UPDATE_STEP_GLYPHS[state]} ${UPDATE_STEP_LABELS[key]} — ${UPDATE_STEP_WORDS[state]}`;
+    const detail: string[] = [];
+    if (key === 'merge' && state === 'done') {
+      const merge = result?.run?.merge;
+      if (merge?.kind === 'up-to-date') {
+        detail.push('already up to date');
+      } else if (merge?.kind === 'advanced') {
+        detail.push(
+          merge.files === undefined || merge.insertions === undefined || merge.deletions === undefined
+            ? 'updated (diff unavailable)'
+            : `+${merge.insertions} / −${merge.deletions} lines in ${merge.files} ${merge.files === 1 ? 'file' : 'files'}`,
+        );
+      }
+    }
+    if (key === 'migration' && state === 'done') {
+      const migrations = result?.run?.migrations;
+      if (migrations?.kind === 'none') {
+        detail.push('no migration command');
+      } else if (migrations?.kind === 'ran') {
+        detail.push(`ran: ${migrations.command}`);
+        const excerpt = migrations.outputExcerpt.replace(/\s*\r?\n\s*/g, ' ↵ ').trim();
+        if (excerpt !== '') {
+          detail.push(excerpt);
+        }
+      }
+    }
+    if (state === 'failed' && result?.detail !== undefined) {
+      detail.push(`${result.detail.code}: ${result.detail.message.replace(/\s+/g, ' ').trim()}`);
+    }
+    return { key, state, headline, detail };
+  });
+}
+
+// The last-update context line: where the service came from and where it went. `source` is the
+// confirmed override, else the manifest's shared branch; `target` the service's branch, and the
+// EDT topic of the run when it had one.
+export function formatServiceUpdateContext(source: string | undefined, target: string | null, topic: string | null): string {
+  const edt = topic !== null && topic !== 'all-repos' ? ` (EDT ${topic})` : '';
+  return `${source ?? 'shared branch'} → ${target ?? '?'}${edt}`;
 }

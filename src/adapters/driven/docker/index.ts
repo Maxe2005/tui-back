@@ -1,11 +1,13 @@
 // adapters/driven/docker: the driven implementation of core's DockerPort. Shells the `docker`
 // binary (no dockerode): `spawn` for the long-lived `-f` tail, one per active pane, and
-// bounded `spawnSync` calls for the reachability probe, the older-lines fetch, health and
-// restart. These sync calls only ever run from async store actions, never from a render.
+// bounded one-shot calls: the reachability probe (the only `spawnSync`, since streamLogs must
+// report an unavailable container synchronously) and the asynchronous older-lines fetch,
+// health and restart.
 // Pure line parsing lives in ./index.logic.ts.
-import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { DockerErrorLike, DockerPort, HealthState, LogLine } from '../../../core/ports/docker.js';
+import { runProcess, type ProcessResult } from '../process.js';
 import { createLineSplitter, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
 
 // A hung/unresponsive docker daemon must never freeze the whole TUI process — `spawnSync`
@@ -132,8 +134,7 @@ function streamLogs(
 // slice's poll keeps last-known health; a definitive non-zero inspect (container missing,
 // daemon reporting an error for this name) is `ok('down')`, never thrown.
 async function getContainerHealth(container: string): Promise<Result<HealthState>> {
-  const result = spawnSync('docker', ['inspect', '--format', '{{.State.Running}} {{.State.Restarting}}', '--', container], {
-    encoding: 'utf8',
+  const result = await runProcess('docker', ['inspect', '--format', '{{.State.Running}} {{.State.Restarting}}', '--', container], {
     timeout: DOCKER_SPAWN_TIMEOUT_MS,
   });
   if (result.status === null) {
@@ -149,8 +150,7 @@ async function getContainerHealth(container: string): Promise<Result<HealthState
 // spawnSync; any failure is `err('docker-unavailable', ...)` so the slice surfaces it inline
 // on the pane.
 async function restartContainer(container: string): Promise<Result<void>> {
-  const result = spawnSync('docker', ['restart', '--', container], {
-    encoding: 'utf8',
+  const result = await runProcess('docker', ['restart', '--', container], {
     timeout: DOCKER_RESTART_TIMEOUT_MS,
   });
   if (result.status !== 0) {
@@ -160,10 +160,10 @@ async function restartContainer(container: string): Promise<Result<void>> {
 }
 
 async function fetchLogsBefore(container: string, beforeCursor: string, count: number): Promise<Result<LogLine[]>> {
-  const result = spawnSync(
+  const result = await runProcess(
     'docker',
     ['logs', '--until', beforeCursor, '--tail', String(count), '--timestamps', '--', container],
-    { encoding: 'utf8', timeout: DOCKER_SPAWN_TIMEOUT_MS },
+    { timeout: DOCKER_SPAWN_TIMEOUT_MS },
   );
   if (result.status !== 0) {
     return err('docker-unavailable', `"docker logs --until" failed for "${container}": ${spawnFailureDetail(result)}`);
@@ -178,7 +178,7 @@ async function fetchLogsBefore(container: string, beforeCursor: string, count: n
 // Same as the git adapter's spawnFailureDetail: when the binary itself cannot be spawned
 // (status === null — e.g. docker missing from PATH, or the call timed out), stderr is
 // undefined, so the message must come from the spawn error's own fields.
-function spawnFailureDetail(result: SpawnSyncReturns<string>): string {
+function spawnFailureDetail(result: Pick<ProcessResult, 'status' | 'stderr' | 'error'>): string {
   if (result.status === null) {
     const spawnError = result.error as (NodeJS.ErrnoException & Error) | undefined;
     const message = spawnError?.message;

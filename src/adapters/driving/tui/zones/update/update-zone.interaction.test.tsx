@@ -54,10 +54,10 @@ async function waitForOutput(
   }
 }
 
-function mount(store: ReturnType<typeof createAppStore>) {
+function mount(store: ReturnType<typeof createAppStore>, initialRecap = false) {
   const stdout = new FakeTtyStdout();
   const stdin = fakeInteractiveTtyStdin();
-  const instance = render(createElement(UpdateZone, { useStore: store }), {
+  const instance = render(createElement(UpdateZone, { useStore: store, initialRecap }), {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stdin,
     interactive: true,
@@ -795,6 +795,33 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
         rows: [{ service: 'svc-a', repoPath: '/repo/a', selected: true }],
       });
       expect(store.getState().updateStatus).toBe('idle');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('opens on the global view with no service focused, two distinct panes, and an arrow focuses a service', async () => {
+    const store = storeWithTwoMembers();
+    store.setState({ edtsBranches: [ROW_A, ROW_B, { ...ROW_B, service: 'svc-other', path: '/repo/other' }] });
+
+    const { instance, stdout, stdin } = mount(store, true);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('EDT MEMBERS');
+      expect(stdout.output).toContain('OTHER SERVICES');
+      expect(stdout.output).toContain('[G] EDT update');
+      expect(stdout.output).toContain('No update has run yet in this session.');
+
+      // Without a focused service, p opens nothing.
+      await press(instance, stdin, 'p');
+      expect(store.getState().updateConfig).toBeNull();
+      expect(store.getState().updateErrorCode).toBeNull();
+
+      const before = stdout.output.length;
+      await press(instance, stdin, KEYS.down);
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(before)).not.toContain('[G] EDT update');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

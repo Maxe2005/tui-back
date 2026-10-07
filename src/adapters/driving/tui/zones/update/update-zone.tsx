@@ -13,7 +13,7 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import {
   BoundedList,
   DetailPane,
-  ListDetailSplit,
+  ZoneLayout,
   ListRow,
   ModalDialog,
   Spinner,
@@ -27,12 +27,20 @@ import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import {
   deriveUpdateServiceStatus,
+  formatLastUpdateRecap,
   formatLiveServiceDetail,
+  formatServiceUpdateContext,
   formatServiceOutcomeDetail,
   isServiceTargetedByRun,
   partitionUpdateServiceRows,
   resolveEditorCommand,
+  resolveRecapToggle,
+  resolveUpdatePaneRows,
+  splitUpdateServiceRows,
+  UPDATE_MEMBERS_HEADER,
+  UPDATE_OTHERS_HEADER,
 } from './update-zone.logic.js';
+import { UpdateServiceDetail } from './update-service-detail.js';
 import { UpdateConfigDialog } from './update-config-dialog.js';
 import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
@@ -55,6 +63,7 @@ const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
 export const UPDATE_IDLE_PROMPT = '[G] EDT update, [P] this service, [Enter] for service actions.';
 export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
+export const UPDATE_NO_RECAP = 'No update has run yet in this session.';
 export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
@@ -319,7 +328,9 @@ export function launchEditor(repoPath: string, configured = ''): LaunchEditorRes
   return { ok: true };
 }
 
-export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) {
+// The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
+// key focuses a service. Tests pass `initialRecap={false}` to start on a service.
+export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { useStore?: AppStore; initialRecap?: boolean }) {
   const updateStatus = useStore((state) => state.updateStatus);
   const updateResults = useStore((state) => state.updateResults);
   const updateNote = useStore((state) => state.updateNote);
@@ -368,9 +379,12 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const lastServiceOutcomes = useStore((state) => state.lastServiceOutcomes);
   const liveServicePhase = useStore((state) => state.liveServicePhase);
   const liveServiceIssues = useStore((state) => state.liveServiceIssues);
+  const liveServiceSteps = useStore((state) => state.liveServiceSteps);
+  const updateNotice = useStore((state) => state.updateNotice);
+  const liveServiceDone = useStore((state) => state.liveServiceDone);
+  const lastServiceRuns = useStore((state) => state.lastServiceRuns);
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
   const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
-  const ratio = useStore((state) => state.splitterRatios.update);
   // The shared branch autocomplete's visible row cap + the edited row's own branch source —
   // the same store actions the EDT zone's own picker sessions use (never `deps.git`
   // directly).
@@ -395,6 +409,9 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // The service list's selection cursor — zone-local UI state (only cross-visit/cross-run state
   // belongs in update-slice.ts).
   const [serviceCursor, setServiceCursor] = useState(0);
+  // Whether service focus is dropped (`Esc`): the right pane then shows the last-update recap
+  // and the idle footer prompt; an arrow key hands focus back. Zone-local UI state.
+  const [recapActive, setRecapActive] = useState(initialRecap);
   // The config screen's keyboard cursor + in-progress branch edit — zone-local UI state. The draft
   // itself (rows, toggles, error) is run state in the store. The edit hosts the shared
   // autocomplete state; its branch source lives in the two states below, fetched once per edit.
@@ -428,9 +445,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   const rows = servicesStatus === 'error' ? [] : (services ?? []);
   const focusedEdt = (edts ?? []).find((entry) => entry.ulid === activeEdt);
-  const serviceRows = partitionUpdateServiceRows(rows, focusedEdt);
-  const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
-  const selectedServiceRow = serviceRows[clampedServiceCursor];
+  const allServiceRows = partitionUpdateServiceRows(rows, focusedEdt);
   // The open row-local menu's visible rows — the restart row drops out for a container-less
   // service without a recipe (see describeServiceRestart), and the cursor clamps with it so
   // a row that arrived while browsing never points past the last visible item.
@@ -445,8 +460,18 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const isAllRun = updateScope === 'all';
   const runningMemberPaths = new Set(edtMembers.map((member) => member.repoPath));
   const runTarget = { scope: isAllRun ? ('all' as const) : ('edt' as const), memberPaths: runningMemberPaths, selection: updateSelection };
-  const isRowTargeted = (row: { service: string; path: string }): boolean =>
+  // Whether the in-flight run covers this row at all (finished services included), vs.
+  // `isRowTargeted`: covered and still being processed.
+  const isRowInRun = (row: { service: string; path: string }): boolean =>
     updateStatus === 'running' && isServiceTargetedByRun(row, runTarget);
+  const isRowTargeted = (row: { service: string; path: string }): boolean => isRowInRun(row) && liveServiceDone[row.service] !== true;
+  // During a run the list keeps only the services the run covers.
+  const serviceRows = updateStatus === 'running' ? allServiceRows.filter(isRowInRun) : allServiceRows;
+  const panes = splitUpdateServiceRows(serviceRows);
+  const clampedServiceCursor = serviceRows.length === 0 ? 0 : Math.min(serviceCursor, serviceRows.length - 1);
+  const selectedServiceRow = serviceRows[clampedServiceCursor];
+  // Triggers act on a focused service only — never on the remembered cursor behind the recap.
+  const focusedServiceRow = recapActive ? undefined : selectedServiceRow;
   const runningMembers = edtMembers.filter((member) => isRowTargeted({ service: member.service, path: member.repoPath }));
   // A narrowed all-scope run (a single service outside the active EDT) names its selected
   // rows — the generic "loading members" line is only for the unfiltered all-repos run.
@@ -529,8 +554,8 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       return;
     }
     clearUpdateServiceSelectionRequest();
-    if (selectedServiceRow !== undefined) {
-      void openUpdateConfig({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+    if (focusedServiceRow !== undefined) {
+      void openUpdateConfig({ service: focusedServiceRow.service, repoPath: focusedServiceRow.path });
     } else {
       void openUpdateServicePick();
     }
@@ -693,6 +718,13 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
+      // `Esc` drops service focus onto the last-update recap; an arrow key restores it (the
+      // remembered service, unmoved).
+      const recapToggle = resolveRecapToggle(recapActive, key);
+      if (recapToggle.handled) {
+        setRecapActive(recapToggle.recapActive);
+        return;
+      }
       // The service list's own cursor — moves regardless of run state (browsing is harmless
       // mid-run); none of the triggers below use arrow/Home/End.
       const jump = resolveSelectionJump(key);
@@ -724,14 +756,14 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         return;
       }
       if (trigger === 'open-single-config') {
-        if (selectedServiceRow !== undefined) {
-          void openUpdateConfig({ service: selectedServiceRow.service, repoPath: selectedServiceRow.path });
+        if (focusedServiceRow !== undefined) {
+          void openUpdateConfig({ service: focusedServiceRow.service, repoPath: focusedServiceRow.path });
         }
         return;
       }
       if (trigger === 'open-service-menu') {
-        if (selectedServiceRow !== undefined) {
-          const target = { service: selectedServiceRow.service, repoPath: selectedServiceRow.path };
+        if (focusedServiceRow !== undefined) {
+          const target = { service: focusedServiceRow.service, repoPath: focusedServiceRow.path };
           setServiceMenu(target);
           // Offered until the manifest says otherwise — a slow lookup must never hide the
           // row, only a confirmed container-less-without-recipe manifest does.
@@ -754,7 +786,35 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   // This zone's service-list chrome budget (an approximation, like edts-zone.tsx/logs-zone.tsx).
   const windowSize = useWindowSize();
   const serviceListMaxVisibleRows = Math.max(windowSize.rows - UPDATE_SERVICE_LIST_CHROME_ROWS, 3);
+  const membersRatio = useStore((state) => state.splitterRatios.update[1]) ?? 0.4;
+  const paneRows = resolveUpdatePaneRows(serviceListMaxVisibleRows, membersRatio);
+  // Pane-local cursor: members come first in the flat row array, so others are offset by them.
+  const cursorInMembers = clampedServiceCursor < panes.members.length;
+  const renderServiceRow = (row: (typeof serviceRows)[number], index: number) => {
+    const health = updateServiceHealth[row.path] ?? 'down';
+    const lastOutcome = lastServiceOutcomes[row.service];
+    const isTargeted = isRowTargeted(row);
+    // The coarse standalone-restart flag (the in-flight map holds this service's resolved
+    // repoPath) and the live phase, which refines the glyph to `migrating`.
+    const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
+    const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
+    return (
+      <Box key={row.path} flexDirection="row">
+        <StatusBadge state={status} />
+        {status === 'no-container' ? (
+          <Box marginLeft={1}>
+            <Text color={colors['text-dim']}>no container</Text>
+          </Box>
+        ) : null}
+        <Box marginLeft={1} flexGrow={1} minWidth={0}>
+          <ListRow label={row.service} meta={formatServiceMeta(row)} selected={!recapActive && index === clampedServiceCursor} />
+        </Box>
+      </Box>
+    );
+  };
 
+  const branchByService = Object.fromEntries(serviceRows.map((row) => [row.service, row.branch]));
+  const recap = formatLastUpdateRecap(updateTopic, updateResults, updateSelection, branchByService);
   const selectedLastOutcome = selectedServiceRow !== undefined ? lastServiceOutcomes[selectedServiceRow.service] : undefined;
 
   // The live per-service view — while a run targets the selected service the detail pane shows
@@ -766,6 +826,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const isSelectedTargeted = selectedServiceRow !== undefined && isRowTargeted(selectedServiceRow);
   const isSelectedRestarting =
     selectedServiceRow !== undefined && serviceRestartInFlight[resolvePath(selectedServiceRow.path)] !== undefined;
+  const selectedRun = selectedServiceRow !== undefined ? lastServiceRuns[selectedServiceRow.service] : undefined;
   const showLiveDetail = isSelectedTargeted || isSelectedRestarting;
   const detailBody =
     selectedServiceRow === undefined
@@ -781,10 +842,10 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <Box paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>UPDATE</Text>
       </Box>
-      <ListDetailSplit
-        ratio={ratio[0]}
-        listSplitterTargeted={resizeMode?.zone === 'update' && resizeMode.targetBoundary === 0}
-        list={
+      <ZoneLayout
+        zoneId="update"
+        useStore={useStore}
+        first={
           <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
             <Text color={colors['text-dim']}>SERVICES</Text>
             {servicesStatus === 'loading' && rows.length === 0 ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
@@ -792,43 +853,85 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
               <Text color={colors['text-dim']}>No managed services found.</Text>
             ) : null}
-            {/* Every row always carries exactly one glyph from the closed
+            {/* Two distinct panes like the EDTs zone's, resizable through boundary 1. Every row
+                always carries exactly one glyph from the closed
                 up/down/restarting/updating/migrating/error set — never blank, never bridged
                 through a generic state. */}
-            <BoundedList
-              items={serviceRows}
-              maxVisibleRows={serviceListMaxVisibleRows}
-              cursorIndex={clampedServiceCursor}
-              renderItem={(row, index) => {
-                const health = updateServiceHealth[row.path] ?? 'down';
-                const lastOutcome = lastServiceOutcomes[row.service];
-                const isTargeted = isRowTargeted(row);
-                // The coarse standalone-restart flag (the in-flight map holds this service's
-                // resolved repoPath) and the live phase, which refines the glyph to `migrating`.
-                const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
-                const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
-                return (
-                  <Box key={row.path} flexDirection="row">
-                    <StatusBadge state={status} />
-                    {status === 'no-container' ? (
-                      <Box marginLeft={1}>
-                        <Text color={colors['text-dim']}>no container</Text>
-                      </Box>
-                    ) : null}
-                    <Box marginLeft={1} flexGrow={1} minWidth={0}>
-                      <ListRow label={row.service} meta={formatServiceMeta(row)} selected={index === clampedServiceCursor} />
-                    </Box>
-                  </Box>
-                );
-              }}
+            <ZoneLayout
+              zoneId="update"
+              boundary={1}
+              useStore={useStore}
+              first={
+                <>
+                  <Text color={!recapActive && cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_MEMBERS_HEADER}</Text>
+                  {panes.members.length === 0 ? <Text color={colors['text-dim']}>No services in this EDT.</Text> : null}
+                  <BoundedList
+                    items={panes.members}
+                    maxVisibleRows={paneRows.members}
+                    cursorIndex={cursorInMembers ? clampedServiceCursor : undefined}
+                    renderItem={(row, index) => renderServiceRow(row, index)}
+                  />
+                </>
+              }
+              second={
+                <>
+                  <Text color={!recapActive && !cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_OTHERS_HEADER}</Text>
+                  {panes.others.length === 0 ? <Text color={colors['text-dim']}>No other services.</Text> : null}
+                  <BoundedList
+                    items={panes.others}
+                    maxVisibleRows={paneRows.others}
+                    cursorIndex={cursorInMembers ? undefined : clampedServiceCursor - panes.members.length}
+                    renderItem={(row, index) => renderServiceRow(row, panes.members.length + index)}
+                  />
+                </>
+              }
             />
           </Box>
         }
-        detail={
+        second={
           <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
-            <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>
-              {detailBody}
-            </DetailPane>
+            {!recapActive ? (
+              selectedServiceRow !== undefined &&
+              !isSelectedRestarting &&
+              (isSelectedTargeted || selectedRun !== undefined || selectedLastOutcome === undefined) ? (
+                <UpdateServiceDetail
+                  service={selectedServiceRow.service}
+                  mode={isSelectedTargeted ? 'live' : selectedRun !== undefined ? 'last' : 'never'}
+                  context={
+                    selectedRun !== undefined && !isSelectedTargeted
+                      ? formatServiceUpdateContext(selectedRun.source, selectedRun.target, selectedRun.topic)
+                      : null
+                  }
+                  steps={isSelectedTargeted ? liveServiceSteps[selectedServiceRow.service] : selectedRun?.steps}
+                  result={isSelectedTargeted ? undefined : selectedRun?.result}
+                  issues={selectedLiveIssues}
+                />
+              ) : (
+                <DetailPane title={selectedServiceRow !== undefined ? selectedServiceRow.service : 'Service'}>{detailBody}</DetailPane>
+              )
+            ) : null}
+            {!recapActive && updateStatus === 'running' ? (
+              <Box>
+                <Spinner />
+                <Text color={colors.text}> {runningLabel}</Text>
+              </Box>
+            ) : null}
+            {updateNotice !== null ? (
+              <Text color={colors.warning}>
+                ⚠ {updateNotice.message} ({updateNotice.code})
+              </Text>
+            ) : null}
+            {updateStatus === 'error' ? (
+              <Box flexDirection="column">
+                <Text color={colors.error}>
+                  {updateError ?? 'Group update failed.'}
+                  {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
+                </Text>
+                {recapActive ? <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text> : null}
+              </Box>
+            ) : null}
+            {recapActive ? (
+              <Box flexDirection="column">
             {updateStatus === 'running' ? (
               <Box flexDirection="column">
                 <Box>
@@ -865,13 +968,24 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 </Box>
               ) : (
                 <Box flexDirection="column">
-                  {updateResults.map((row, index) => (
-                    // Duplicate service names occur within one EDT — key by service + index so
-                    // React never drops a same-named row.
-                    <Text key={`${row.service}-${index}`} color={colors.text}>
-                      {formatUpdateRow(row)}
-                    </Text>
-                  ))}
+                  {recap !== null ? (
+                    <Box flexDirection="column">
+                      <Text bold color={colors.text}>
+                        {recap.title}
+                      </Text>
+                      {recap.contextLines.map((line) => (
+                        <Text key={line} color={colors['text-dim']}>
+                          {line}
+                        </Text>
+                      ))}
+                      {recap.resultLines.map((line, index) => (
+                        // Duplicate service names occur within one EDT — key by line + index.
+                        <Text key={`${line}-${index}`} color={colors.text}>
+                          {line}
+                        </Text>
+                      ))}
+                    </Box>
+                  ) : null}
                   <DetailPane
                     title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
                     summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
@@ -881,19 +995,13 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 </Box>
               )
             ) : null}
-            {updateStatus === 'error' ? (
-              <Box flexDirection="column">
-                <Text color={colors.error}>
-                  {updateError ?? 'Group update failed.'}
-                  {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
-                </Text>
-                <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text>
-              </Box>
-            ) : null}
             {updateStatus === 'idle' ? (
               <Box flexDirection="column">
                 <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
                 <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
+                <Text color={colors['text-dim']}>{UPDATE_NO_RECAP}</Text>
+              </Box>
+            ) : null}
               </Box>
             ) : null}
           </Box>

@@ -663,8 +663,8 @@ describe('UpdateZone rendering', () => {
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
-    expect(output).toContain('✔ svc-a — updated');
-    expect(output).toContain('✖ svc-b — failed (merge-conflict): conflict');
+    expect(output).toContain('✔ svc-a  shared branch → ?  updated');
+    expect(output).toContain('✖ svc-b  shared branch → ?  failed (merge-conflict): conflict');
     expect(output).toContain('1 updated, 0 skipped, 1 failed');
     // Enter opens the row-local service menu — the follow-up hint promises the menu, never a
     // direct re-run.
@@ -685,8 +685,8 @@ describe('UpdateZone rendering', () => {
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
-    expect(output).toContain('✔ route-explorer — updated');
-    expect(output).toContain('✖ route-explorer — failed (merge-conflict): conflict');
+    expect(output).toContain('✔ route-explorer');
+    expect(output).toContain('✖ route-explorer');
   });
 
   it('done with a zero-member no-op note renders the note, never the zeroed counts pane', async () => {
@@ -860,6 +860,55 @@ describe('formatServiceOutcomeDetail', () => {
   });
 });
 
+describe('formatServiceOutcomeDetail — run detail', () => {
+  it('renders already up to date and no migrations', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'none' } },
+      }),
+    ).toBe('updated\nmerge: already up to date\nmigrations: none');
+  });
+
+  it('renders the diffstat for an advancing merge and the collapsed migration excerpt', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: {
+          merge: { kind: 'advanced', files: 3, insertions: 10, deletions: 4 },
+          migrations: { kind: 'ran', command: 'npm run m', outputExcerpt: 'a\nb' },
+        },
+      }),
+    ).toBe('updated\nmerge: +10/\u22124 lines, 3 files\nmigrations: ran (npm run m) \u2014 a \u21b5 b');
+  });
+
+  it('singularizes one file and omits the dash for an empty excerpt', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: {
+          merge: { kind: 'advanced', files: 1, insertions: 1, deletions: 0 },
+          migrations: { kind: 'ran', command: 'm', outputExcerpt: '' },
+        },
+      }),
+    ).toBe('updated\nmerge: +1/\u22120 lines, 1 file\nmigrations: ran (m)');
+  });
+
+  it('flags an unavailable diff and keeps run detail on a container-less skipped row', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'skipped',
+        detail: { code: 'no-container', message: 'no container' },
+        run: { merge: { kind: 'advanced' } },
+      }),
+    ).toBe('skipped (no-container): no container\nmerge: updated (diff unavailable)');
+  });
+});
+
 describe('formatLiveServiceDetail', () => {
   it('renders the current step with no issues', () => {
     expect(formatLiveServiceDetail('pulling', [])).toBe('step: pulling');
@@ -972,15 +1021,15 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('svc-a');
     expect(output).toContain('svc-b');
     // No health poll has resolved yet, so the glyph falls back to StatusBadge's down glyph.
     expect(output).toContain('○');
     // The first row (svc-a, the EDT member) is selected by default; no run has ever
-    // targeted it, so the detail pane reads "idle".
-    expect(output).toContain('idle');
+    // targeted it, so the detail pane says so.
+    expect(output).toContain('No update has run for this service yet.');
   });
 
   it('updating: only the service targeted by the in-flight EDT-scoped run shows the updating glyph — the non-targeted service keeps its raw-health glyph', async () => {
@@ -995,7 +1044,7 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
     const lines = output.split('\n');
 
     // Isolate each service's own *list row* line (identified by its unique meta text "+0/-0",
@@ -1004,18 +1053,15 @@ describe('UpdateZone service-list shell rendering', () => {
     // isTargeted collapsed to bare `updateStatus === 'running'`) fails this test.
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
     const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
-    expect(svcARow).toBeDefined();
-    expect(svcBRow).toBeDefined();
 
     // svc-a is the active EDT's sole member — targeted by this EDT-scoped run.
     expect(svcARow).toContain('⇄');
-    expect(svcARow).not.toContain('○');
+    // (the detail pane shares the terminal line, so only the list column is checked)
+    expect(svcARow?.slice(0, 40)).not.toContain('○');
 
-    // svc-b is not an EDT member and no run has ever targeted it — no health poll has
-    // resolved yet either, so it still shows the raw-health `down` fallback, never
-    // 'updating'.
-    expect(svcBRow).toContain('○');
-    expect(svcBRow).not.toContain('⇄');
+    // svc-b is not an EDT member: during a run the list keeps only the services being
+    // updated, so it is gone.
+    expect(svcBRow).toBeUndefined();
   });
 
   it('updating: a single-service run inside the EDT marks only the selected member — the other member keeps its own glyph', async () => {
@@ -1033,14 +1079,13 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: true }));
     const lines = output.split('\n');
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
     const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
 
     expect(svcBRow).toContain('⇄');
-    expect(svcARow).toContain('○');
-    expect(svcARow).not.toContain('⇄');
+    expect(svcARow).toBeUndefined();
     // The running-members spinner list names the selected member only.
     expect(output).toContain('svc-b (development)');
     expect(output).not.toContain('svc-a (feat/a)');
@@ -1060,13 +1105,13 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
     const lines = output.split('\n');
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
     const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
 
     expect(svcBRow).toContain('⇄');
-    expect(svcARow).not.toContain('⇄');
+    expect(svcARow).toBeUndefined();
     expect(output).toContain(UPDATE_SELECTION_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_ALL_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_LOADING_MEMBERS);
@@ -1086,7 +1131,7 @@ describe('UpdateZone service-list shell rendering', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('✖');
     expect(output).toContain('failed (merge-conflict): Automatic merge failed');
@@ -1138,6 +1183,8 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
@@ -1220,7 +1267,7 @@ describe('UpdateZone health-poll wiring against real (fake-port) deps', () => {
     });
 
     const stdout = new FakeTtyStdout();
-    const instance = render(createElement(UpdateZone, { useStore: store }), {
+    const instance = render(createElement(UpdateZone, { useStore: store, initialRecap: false }), {
       stdout: stdout as unknown as NodeJS.WriteStream,
       stdin: fakeTtyStdin(),
       interactive: false,
@@ -1267,6 +1314,7 @@ describe('UpdateZone live per-service detail', () => {
       activeEdt: 'edt-1',
       updateStatus: 'running',
       liveServicePhase: { 'svc-a': 'pulling' },
+      liveServiceSteps: { 'svc-a': { merge: 'running', migration: 'pending', restart: 'pending' } },
       liveServiceIssues: {
         'svc-a': [
           { kind: 'dirty-worktree', detail: '/repo/a', resolved: false },
@@ -1278,12 +1326,14 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     // The first row (svc-a, the EDT member) is selected and targeted — the live view
     // replaces the last-outcome view that would otherwise read "updated".
-    expect(output).toContain('step: pulling');
-    expect(output).toContain('○ dirty-worktree — /repo/a (unresolved)');
+    expect(output).toContain('UPDATE IN PROGRESS');
+    expect(output).toContain('◐ Merge — in progress');
+    expect(output).toContain('○ Migration — waiting');
+    expect(output).toContain('⚠ dirty-worktree — /repo/a (needs your input)');
     expect(output).toContain('✔ merge-conflict — /repo/a (resolved)');
   });
 
@@ -1299,9 +1349,10 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
-    expect(output).toContain('step: starting');
+    expect(output).toContain('UPDATE IN PROGRESS');
+    expect(output).toContain('○ Merge — waiting');
   });
 
   it('running with the migrate phase targeted shows the migrating glyph on that service’s own row', async () => {
@@ -1313,37 +1364,70 @@ describe('UpdateZone live per-service detail', () => {
       activeEdt: 'edt-1',
       updateStatus: 'running',
       liveServicePhase: { 'svc-a': 'migrating' },
+      liveServiceSteps: { 'svc-a': { merge: 'done', migration: 'running', restart: 'pending' } },
       loadEdtsBranches: noopLoad,
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
     const lines = output.split('\n');
     const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
 
     expect(svcARow).toBeDefined();
     expect(svcARow).toContain('⇒');
-    expect(output).toContain('step: migrating');
+    expect(output).toContain('✔ Merge — done');
+    expect(output).toContain('◐ Migration — in progress');
   });
 
-  it('running with a non-targeted service selected keeps the last-outcome view, never the live step', async () => {
+  it('a rejected trigger raises a notice without leaving the running view', async () => {
     const store = createAppStore();
     store.setState({
-      edtsBranches: [SERVICE_B],
+      edtsBranches: [SERVICE_A],
       edtsBranchesStatus: 'idle',
       edts: [ACTIVE_EDT],
       activeEdt: 'edt-1',
       updateStatus: 'running',
-      liveServicePhase: { 'svc-a': 'pulling' },
+      updateNotice: { code: 'update-already-running', message: 'A group update is already in progress' },
       loadEdtsBranches: noopLoad,
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
-    // svc-b is selected but no EDT-scoped run targets it — the idle last-outcome view.
-    expect(output).not.toContain('step:');
-    expect(output).toContain('idle');
+    expect(output).toContain('⚠ A group update is already in progress (update-already-running)');
+    expect(output).toContain('UPDATE IN PROGRESS');
+  });
+
+  it('a service finished mid-run shows its last update while the run is still going', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServiceDone: { 'svc-a': true },
+      lastServiceRuns: {
+        'svc-a': {
+          steps: { merge: 'done', migration: 'done', restart: 'done' },
+          result: { service: 'svc-a', outcome: 'updated', run: { merge: { kind: 'up-to-date' } } },
+          source: 'develop',
+          target: 'feat/a',
+          topic: 'demo',
+        },
+      },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
+
+    expect(output).not.toContain('UPDATE IN PROGRESS');
+    expect(output).toContain('last update');
+    expect(output).toContain('develop → feat/a (EDT demo)');
+    expect(output).toContain('✔ Merge — done');
+    expect(output).toContain('already up to date');
+    expect(output).toContain('✔ Restart — done');
   });
 
   it('done reverts to the final per-service outcome even with a stale live phase in the map', async () => {
@@ -1362,7 +1446,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).not.toContain('step:');
   });
@@ -1382,7 +1466,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('step: restarting');
   });
@@ -1401,7 +1485,7 @@ describe('UpdateZone live per-service detail', () => {
       loadEdts: noopLoad,
     });
 
-    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
 
     expect(output).toContain('step: starting');
   });

@@ -3,7 +3,7 @@
 // member repo — non-interactive, output captured, no TTY or stdin. `GIT_TERMINAL_PROMPT=0`
 // keeps a credential-requiring remote from hanging on a prompt. The shell is injectable so
 // integration tests can stub it.
-import { spawnSync } from 'node:child_process';
+import { runProcess } from '../process.js';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 
@@ -29,9 +29,8 @@ export async function runMigration(
   // result, but invalid arguments throw synchronously — never let that escape the
   // Result envelope (the core never-throw invariant).
   try {
-    const result = spawnSync(shell, ['-c', command], {
+    const result = await runProcess(shell, ['-c', command], {
       cwd: repoPath,
-      encoding: 'utf8',
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     });
     if (result.status !== 0) {

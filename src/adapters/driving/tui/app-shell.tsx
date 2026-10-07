@@ -10,10 +10,12 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
 import { SettingsScreen } from './shared/settings-screen.js';
+import { resolveFocusStep } from './shared/keys/focus-navigation.js';
 import { colors } from './shared/theme/theme.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
 import { getZoneScreen } from './zones/index.js';
 import { ALL_ZONE_IDS, ZONES, nextZoneId, resolveReachableZones, zoneGatedStatus, type ZoneId } from './zones/zones.js';
+import { boundaryOrientation, hasResizableBoundary } from './zones/zone-layouts.js';
 
 // The Ctrl+W keyboard resize-mode's per-keypress step: ~12 positions across the
 // MIN_LIST_RATIO..MAX_LIST_RATIO (0.2..0.8) clamp range.
@@ -77,31 +79,31 @@ export function resolveZoneArrowSwitch(
   return null;
 }
 
-// Ctrl+W engages resize-mode only while the EDTs zone is active — a no-op elsewhere. Ink
-// delivers a ctrl+letter combo as `input === '<letter>'` with `key.ctrl: true` (see ink's
+// Ctrl+W engages resize-mode in any zone whose layout declares at least one boundary — a no-op
+// in a single-pane zone. Ink delivers a ctrl+letter combo as `input === '<letter>'` with `key.ctrl: true` (see ink's
 // parse-keypress.js), never a distinct `key` flag of its own.
 export function shouldEnterResizeMode(
   input: string,
   key: { ctrl?: boolean },
   activeZone: ZoneId,
 ): boolean {
-  return key.ctrl === true && input === 'w' && activeZone === 'edts';
+  return key.ctrl === true && input === 'w' && hasResizableBoundary(activeZone);
 }
 
-// Boundary 0 is always the vertical list<->detail split; every other boundary is one of the
-// zone's horizontal sub-splits. The arrow axis follows the boundary's orientation: `←`/`→`
-// for the vertical boundary, `↑`/`↓` for a horizontal one.
-export function isVerticalResizeBoundary(boundaryIndex: number): boolean {
-  return boundaryIndex === 0;
+// The arrow axis follows the boundary's declared orientation: `←`/`→` for a vertical boundary,
+// `↑`/`↓` for a horizontal one.
+export function isVerticalResizeBoundary(zone: ZoneId, boundaryIndex: number): boolean {
+  return boundaryOrientation(zone, boundaryIndex) === 'vertical';
 }
 
 // Returns the signed step to apply to the targeted boundary's ratio, or null when the
 // keypress doesn't move it (letting the caller fall through to Tab/Enter/Esc handling).
 export function resolveResizeStep(
   key: { upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean },
+  zone: ZoneId,
   targetBoundary: number,
 ): number | null {
-  if (isVerticalResizeBoundary(targetBoundary)) {
+  if (isVerticalResizeBoundary(zone, targetBoundary)) {
     if (key.leftArrow) {
       return -RESIZE_STEP;
     }
@@ -159,6 +161,7 @@ export function AppShell({
   const edts = useStore((state) => state.edts);
   const loadEdts = useStore((state) => state.loadEdts);
   const zoneEvents = useStore((state) => state.zoneEvents);
+  const updateRunning = useStore((state) => state.updateStatus === 'running');
   const setActiveZone = useStore((state) => state.setActiveZone);
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
@@ -271,19 +274,20 @@ export function AppShell({
     }
 
     // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
-    // exclusion as the zone-switch block below; entering additionally requires the EDTs zone
-    // to be active (shouldEnterResizeMode).
+    // exclusion as the zone-switch block below; entering additionally requires the active zone
+    // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
     if (!helpOpen && !filterOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
       if (state.resizeMode !== null) {
-        if (key.tab) {
-          state.cycleResizeTargetBoundary();
+        const boundaryStep = resolveFocusStep(input, key, 'tab');
+        if (boundaryStep !== null) {
+          state.cycleResizeTargetBoundary(boundaryStep);
           return;
         }
         if (shouldExitResizeMode(key)) {
           state.exitResizeMode();
           return;
         }
-        const step = resolveResizeStep(key, state.resizeMode.targetBoundary);
+        const step = resolveResizeStep(key, state.resizeMode.zone, state.resizeMode.targetBoundary);
         if (step !== null) {
           const zoneRatios = state.splitterRatios[state.resizeMode.zone];
           const current = zoneRatios[state.resizeMode.targetBoundary];
@@ -294,7 +298,7 @@ export function AppShell({
         return;
       }
 
-      if (shouldEnterResizeMode(input, key, activeZone)) {
+      if (shouldEnterResizeMode(input, key, activeZone) && !(activeZone === 'logs' && state.logsFullscreenTarget !== null)) {
         state.enterResizeMode(activeZone);
         return;
       }
@@ -378,7 +382,7 @@ export function AppShell({
   return (
     <Box flexDirection="column" height={rows} overflow="hidden">
       <TopBar activeEdt={activeEdt} edts={edts} />
-      <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} />
+      <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} />
       <ZoneScreen useStore={useStore} />
       <KeybindingHelp useStore={useStore} />
       {filterOpen && (
@@ -398,7 +402,7 @@ export function AppShell({
       {commandBarOpen && (
         <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}
-      <Footer />
+      <Footer zone={activeZone} />
     </Box>
   );
 }

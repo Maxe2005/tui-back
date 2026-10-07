@@ -3,7 +3,7 @@
 // repo's own manifest, never the caller) before any `git` invocation, and with an `edtId` a
 // branch owned by another EDT. Shells git via child_process; `--` terminates options for
 // `git branch`/`git stash`, and `git checkout <branch> --` forces a revision, never a pathspec.
-import { spawnSync } from 'node:child_process';
+import { runProcess } from '../process.js';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
@@ -37,6 +37,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
     discardAll: (repoPath) => discardAll(repoPath),
     diffNameOnly: (repoPath, from, to) => diffNameOnly(repoPath, from, to),
+    headRevision: (repoPath) => headRevision(repoPath),
+    diffStat: (repoPath, from, to) => diffStat(repoPath, from, to),
     discardPathsToHead: (repoPath, paths) => discardPathsToHead(repoPath, paths),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
@@ -108,7 +110,7 @@ export async function createBranch(
     return allowed;
   }
 
-  const target = showRef(repoPath, branchName);
+  const target = await showRef(repoPath, branchName);
   if (target.kind === 'exists') {
     return err('branch-exists', `Branch "${branchName}" already exists in ${repoPath}`);
   }
@@ -119,13 +121,13 @@ export async function createBranch(
   // The base may be a local branch or a remote-tracking ref (`origin/release`). A local
   // branch wins when both exist; the resolved *full* ref is what git receives, so the start
   // point can never be re-interpreted (e.g. as a same-named tag).
-  const localBase = showFullRef(repoPath, `refs/heads/${baseBranch}`);
+  const localBase = await showFullRef(repoPath, `refs/heads/${baseBranch}`);
   if (localBase.kind === 'error') {
     return err('git-create-branch-error', `Cannot verify base branch state in ${repoPath}: ${localBase.detail}`);
   }
   let baseRef = `refs/heads/${baseBranch}`;
   if (localBase.kind === 'missing') {
-    const remoteBase = showFullRef(repoPath, `refs/remotes/${baseBranch}`);
+    const remoteBase = await showFullRef(repoPath, `refs/remotes/${baseBranch}`);
     if (remoteBase.kind === 'missing') {
       return err('base-branch-missing', `Base branch "${baseBranch}" does not exist in ${repoPath}`);
     }
@@ -137,9 +139,8 @@ export async function createBranch(
 
   // `--no-track`: a branch cut from `origin/x` must not inherit `origin/x` as its upstream
   // (that would skew ahead/behind); harmless for a local base.
-  const created = spawnSync('git', ['branch', '--no-track', '--', branchName, baseRef], {
+  const created = await runProcess('git', ['branch', '--no-track', '--', branchName, baseRef], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (created.status !== 0) {
     return err('git-create-branch-error', `git branch failed in ${repoPath}: ${spawnFailureDetail(created)}`);
@@ -164,7 +165,7 @@ export async function deleteBranch(
     return allowed;
   }
 
-  const target = showRef(repoPath, branchName);
+  const target = await showRef(repoPath, branchName);
   if (target.kind === 'missing') {
     return ok(undefined);
   }
@@ -173,7 +174,7 @@ export async function deleteBranch(
   }
 
   const flag = force ? '-D' : '-d';
-  const deleted = spawnSync('git', ['branch', flag, '--', branchName], { cwd: repoPath, encoding: 'utf8' });
+  const deleted = await runProcess('git', ['branch', flag, '--', branchName], { cwd: repoPath });
   if (deleted.status !== 0) {
     return err('git-delete-branch-error', `git branch ${flag} failed in ${repoPath}: ${spawnFailureDetail(deleted)}`);
   }
@@ -186,7 +187,7 @@ export async function deleteBranch(
 // successful answers, never a Result error; anything else (missing ref, not a git repo, ...)
 // is a genuine git error. Never a safety gate itself, unlike assertAllowedBranch.
 export async function isBranchMerged(repoPath: string, branchName: string, into: string): Promise<Result<boolean>> {
-  const result = spawnSync('git', ['merge-base', '--is-ancestor', branchName, into], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['merge-base', '--is-ancestor', branchName, into], { cwd: repoPath });
   if (result.status === 0) {
     return ok(true);
   }
@@ -197,7 +198,7 @@ export async function isBranchMerged(repoPath: string, branchName: string, into:
 }
 
 export async function currentBranch(repoPath: string): Promise<Result<string>> {
-  const result = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-current-branch-error', `git rev-parse failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -238,14 +239,14 @@ export async function aheadBehind(repoPath: string): Promise<Result<{ ahead: num
   // `git config --get`'s exit-code taxonomy is 0 = found, 1 = key genuinely not set —
   // anything else (including status === null, e.g. the git binary itself missing) is a real
   // spawn/git failure, never evidence of "no upstream configured".
-  const remoteConfig = readBranchConfig(repoPath, branch, 'remote');
+  const remoteConfig = await readBranchConfig(repoPath, branch, 'remote');
   if (remoteConfig.kind === 'error') {
     return err(
       'unknown-offline',
       `Cannot read upstream remote config for branch "${branch}" in ${repoPath}: ${remoteConfig.detail}`,
     );
   }
-  const mergeConfig = readBranchConfig(repoPath, branch, 'merge');
+  const mergeConfig = await readBranchConfig(repoPath, branch, 'merge');
   if (mergeConfig.kind === 'error') {
     return err(
       'unknown-offline',
@@ -259,9 +260,8 @@ export async function aheadBehind(repoPath: string): Promise<Result<{ ahead: num
     return err('no-upstream', `No upstream configured for branch "${branch}" in ${repoPath}`);
   }
 
-  const upstreamRef = spawnSync('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], {
+  const upstreamRef = await runProcess('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (upstreamRef.status !== 0) {
     // Configured (step 2 passed) but the remote-tracking ref itself can't be resolved right
@@ -274,9 +274,8 @@ export async function aheadBehind(repoPath: string): Promise<Result<{ ahead: num
   }
   const upstream = String(upstreamRef.stdout).trim();
 
-  const counted = spawnSync('git', ['rev-list', '--left-right', '--count', `${upstream}...${branch}`], {
+  const counted = await runProcess('git', ['rev-list', '--left-right', '--count', `${upstream}...${branch}`], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (counted.status !== 0) {
     return err('unknown-offline', `Cannot count divergence for branch "${branch}" in ${repoPath}: ${spawnFailureDetail(counted)}`);
@@ -302,8 +301,8 @@ interface BranchConfigOutcome {
   detail: string;
 }
 
-function readBranchConfig(repoPath: string, branch: string, key: 'remote' | 'merge'): BranchConfigOutcome {
-  const result = spawnSync('git', ['config', '--get', `branch.${branch}.${key}`], { cwd: repoPath, encoding: 'utf8' });
+async function readBranchConfig(repoPath: string, branch: string, key: 'remote' | 'merge'): Promise<BranchConfigOutcome> {
+  const result = await runProcess('git', ['config', '--get', `branch.${branch}.${key}`], { cwd: repoPath });
   if (result.status === 0) {
     return { kind: 'set', value: String(result.stdout).trim(), detail: '' };
   }
@@ -318,7 +317,7 @@ function readBranchConfig(repoPath: string, branch: string, key: 'remote' | 'mer
 // as a revision, never a pathspec. Assumes branchName exists locally and the working tree is
 // clean (callers stash first) — this method never creates a branch and never gates.
 export async function checkoutBranch(repoPath: string, branchName: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['checkout', branchName, '--'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['checkout', branchName, '--'], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-checkout-error', `git checkout failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -328,7 +327,7 @@ export async function checkoutBranch(repoPath: string, branchName: string): Prom
 // `git status --porcelain` is non-empty iff the working tree has tracked or untracked
 // changes; this is the trigger for stashSave before any checkout touches the repo.
 export async function hasUncommittedChanges(repoPath: string): Promise<Result<boolean>> {
-  const result = spawnSync('git', ['status', '--porcelain'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['status', '--porcelain'], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -338,7 +337,7 @@ export async function hasUncommittedChanges(repoPath: string): Promise<Result<bo
 // `-u` stashes untracked files too (tracked + untracked); `-m` tags the stash with `message`
 // so restoreStash can find it later by content, not stack position.
 export async function stashSave(repoPath: string, message: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['stash', 'push', '-u', '-m', message], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['stash', 'push', '-u', '-m', message], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-stash-error', `git stash push failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -358,7 +357,7 @@ export async function restoreStash(repoPath: string, message: string): Promise<R
     return ok(undefined);
   }
 
-  const popped = spawnSync('git', ['stash', 'pop', found.data], { cwd: repoPath, encoding: 'utf8' });
+  const popped = await runProcess('git', ['stash', 'pop', found.data], { cwd: repoPath });
   if (popped.status !== 0) {
     return err('git-stash-pop-error', `git stash pop ${found.data} failed in ${repoPath}: ${spawnFailureDetail(popped)}`);
   }
@@ -369,7 +368,7 @@ export async function restoreStash(repoPath: string, message: string): Promise<R
 // the stash ref (e.g. `stash@{0}`) of the first match, or null when none of repoPath's
 // stashes carry `tag` in their subject.
 export async function findStashRef(repoPath: string, tag: string): Promise<Result<string | null>> {
-  const list = spawnSync('git', ['stash', 'list', '--format=%gd %s'], { cwd: repoPath, encoding: 'utf8' });
+  const list = await runProcess('git', ['stash', 'list', '--format=%gd %s'], { cwd: repoPath });
   if (list.status !== 0) {
     return err('git-stash-list-error', `git stash list failed in ${repoPath}: ${spawnFailureDetail(list)}`);
   }
@@ -395,7 +394,7 @@ export async function hasStash(repoPath: string, tag: string): Promise<Result<bo
 
 // Reuses showRef's exit-code taxonomy (0 exists / 1 missing / other real error).
 export async function branchExistsLocally(repoPath: string, branchName: string): Promise<Result<boolean>> {
-  const outcome = showRef(repoPath, branchName);
+  const outcome = await showRef(repoPath, branchName);
   if (outcome.kind === 'error') {
     return err('git-branch-check-error', `Cannot verify branch state in ${repoPath}: ${outcome.detail}`);
   }
@@ -407,9 +406,8 @@ export async function branchExistsLocally(repoPath: string, branchName: string):
 // branchExistsLocally reports false (a member's own branch is never auto-fetched — the
 // switch fails for that repo instead).
 export async function fetchBranch(repoPath: string, branchName: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['fetch', 'origin', `${branchName}:${branchName}`], {
+  const result = await runProcess('git', ['fetch', 'origin', `${branchName}:${branchName}`], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (result.status !== 0) {
     return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
@@ -425,9 +423,8 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
 // prompt. Together with `--no-edit` on the merge path, no git invocation here can open an
 // editor or prompt.
 export async function pullBranch(repoPath: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['pull', '--ff-only'], {
+  const result = await runProcess('git', ['pull', '--ff-only'], {
     cwd: repoPath,
-    encoding: 'utf8',
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
   });
   if (result.status !== 0) {
@@ -443,7 +440,7 @@ export async function pullBranch(repoPath: string): Promise<Result<void>> {
 // its human-readable output — so the caller can abort and report `merge-conflict` instead
 // of a generic merge failure.
 export async function mergeBranch(repoPath: string, branch: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['merge', '--no-edit', branch], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['merge', '--no-edit', branch], { cwd: repoPath });
   if (result.status !== 0) {
     const merging = await isMergeInProgress(repoPath);
     if (merging.ok && merging.data) {
@@ -457,7 +454,7 @@ export async function mergeBranch(repoPath: string, branch: string): Promise<Res
 // `git merge --abort` cancels the in-progress merge, restoring the pre-run
 // HEAD. Abort cancels only the attempted merge, never developer work.
 export async function abortMerge(repoPath: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['merge', '--abort'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['merge', '--abort'], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-merge-abort-error', `git merge --abort failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -471,9 +468,8 @@ export async function abortMerge(repoPath: string): Promise<Result<void>> {
 // status === null, which is a real environment failure) reads as missing — the merge
 // already failed, so this is only a classifier, never the reported error.
 export async function isMergeInProgress(repoPath: string): Promise<Result<boolean>> {
-  const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], {
+  const result = await runProcess('git', ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (result.status === null) {
     return err('git-merge-check-error', `Cannot check merge state in ${repoPath}: ${spawnFailureDetail(result)}`);
@@ -492,7 +488,7 @@ export async function listDirtyPaths(
   opts?: { expandUntracked?: boolean },
 ): Promise<Result<string[]>> {
   const args = opts?.expandUntracked === true ? ['status', '--porcelain', '--untracked-files=all'] : ['status', '--porcelain'];
-  const result = spawnSync('git', args, { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', args, { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -528,7 +524,7 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
   if (paths.length === 0) {
     return ok(undefined);
   }
-  const result = spawnSync('git', ['checkout', '--', ...paths], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['checkout', '--', ...paths], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-discard-error', `git checkout -- failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -542,15 +538,51 @@ export async function discardPaths(repoPath: string, paths: string[]): Promise<R
 // forces both arguments to be read as revisions. A large maxBuffer keeps a big diff from
 // failing with ENOBUFS.
 export async function diffNameOnly(repoPath: string, from: string, to: string): Promise<Result<string[]>> {
-  const result = spawnSync('git', ['diff', '--name-only', '--no-renames', '-z', from, to, '--'], {
+  const result = await runProcess('git', ['diff', '--name-only', '--no-renames', '-z', from, to, '--'], {
     cwd: repoPath,
-    encoding: 'utf8',
     maxBuffer: LARGE_OUTPUT_BUFFER,
   });
   if (result.status !== 0) {
     return err('git-diff-error', `git diff --name-only ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(String(result.stdout).split('\0').filter((path) => path !== ''));
+}
+
+export async function headRevision(repoPath: string): Promise<Result<string>> {
+  const result = await runProcess('git', ['rev-parse', 'HEAD'], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-rev-parse-error', `git rev-parse HEAD failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).trim());
+}
+
+// `--numstat -z` rows are `ins\tdel\tpath\0`; binary files report `-` for both counts and
+// count as a file with 0 lines. `--no-renames` keeps one row per path, no extra NUL fields.
+export async function diffStat(
+  repoPath: string,
+  from: string,
+  to: string,
+): Promise<Result<{ files: number; insertions: number; deletions: number }>> {
+  const result = await runProcess('git', ['diff', '--numstat', '--no-renames', '-z', from, to, '--'], {
+    cwd: repoPath,
+    maxBuffer: LARGE_OUTPUT_BUFFER,
+  });
+  if (result.status !== 0) {
+    return err('git-diff-error', `git diff --numstat ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  let files = 0;
+  let insertions = 0;
+  let deletions = 0;
+  for (const row of String(result.stdout).split('\0')) {
+    if (row === '') {
+      continue;
+    }
+    const [ins, del] = row.split('\t');
+    files += 1;
+    insertions += Number(ins) || 0;
+    deletions += Number(del) || 0;
+  }
+  return ok({ files, insertions, deletions });
 }
 
 // 64 MiB: the stdout budget of the path-listing calls above/below (spawnSync's default is 1 MiB).
@@ -579,11 +611,11 @@ export async function discardPathsToHead(repoPath: string, paths: string[]): Pro
     return ok(undefined);
   }
   const git = (args: string[], maxBuffer?: number) =>
-    spawnSync('git', ['--literal-pathspecs', ...args], { cwd: repoPath, encoding: 'utf8', ...(maxBuffer ? { maxBuffer } : {}) });
+    runProcess('git', ['--literal-pathspecs', ...args], { cwd: repoPath, ...(maxBuffer ? { maxBuffer } : {}) });
   const chunks = chunked(paths);
 
   for (const chunk of chunks) {
-    const reset = git(['reset', '-q', '--', ...chunk]);
+    const reset = await git(['reset', '-q', '--', ...chunk]);
     if (reset.status !== 0) {
       return err('git-discard-error', `git reset -- failed in ${repoPath}; nothing was discarded: ${spawnFailureDetail(reset)}`);
     }
@@ -591,7 +623,7 @@ export async function discardPathsToHead(repoPath: string, paths: string[]): Pro
 
   const inHead = new Set<string>();
   for (const chunk of chunks) {
-    const listed = git(['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...chunk], LARGE_OUTPUT_BUFFER);
+    const listed = await git(['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...chunk], LARGE_OUTPUT_BUFFER);
     if (listed.status !== 0) {
       return err(
         'git-discard-error',
@@ -606,13 +638,13 @@ export async function discardPathsToHead(repoPath: string, paths: string[]): Pro
   }
 
   for (const chunk of chunked(paths.filter((path) => inHead.has(path)))) {
-    const restored = git(['checkout', 'HEAD', '--', ...chunk]);
+    const restored = await git(['checkout', 'HEAD', '--', ...chunk]);
     if (restored.status !== 0) {
       return err('git-discard-error', `git checkout HEAD -- failed in ${repoPath}: ${spawnFailureDetail(restored)}`);
     }
   }
   for (const chunk of chunked(paths.filter((path) => !inHead.has(path)))) {
-    const cleaned = git(['clean', '-f', '-q', '--', ...chunk]);
+    const cleaned = await git(['clean', '-f', '-q', '--', ...chunk]);
     if (cleaned.status !== 0) {
       return err(
         'git-discard-error',
@@ -629,14 +661,14 @@ export async function discardPathsToHead(repoPath: string, paths: string[]): Pro
 // build output — always survive) and never `-ff` (a nested repository is never removed).
 // Only switch.ts calls this, under an explicit per-repo `discard` resolution.
 export async function discardAll(repoPath: string): Promise<Result<void>> {
-  const reset = spawnSync('git', ['reset', '--hard'], { cwd: repoPath, encoding: 'utf8' });
+  const reset = await runProcess('git', ['reset', '--hard'], { cwd: repoPath });
   if (reset.status !== 0) {
     return err(
       'git-discard-error',
       `discardAll step 1/2 (git reset --hard) failed in ${repoPath}; untracked files were not cleaned: ${spawnFailureDetail(reset)}`,
     );
   }
-  const clean = spawnSync('git', ['clean', '-fd'], { cwd: repoPath, encoding: 'utf8' });
+  const clean = await runProcess('git', ['clean', '-fd'], { cwd: repoPath });
   if (clean.status !== 0) {
     return err(
       'git-discard-error',
@@ -652,7 +684,7 @@ export async function discardAll(repoPath: string): Promise<Result<void>> {
 // (status === null) is a real failure; an unresolvable git dir (not a repo, ...) reads as
 // "no rebase in progress", never a throw. The tool never touches a rebase — detection only.
 export async function isRebaseInProgress(repoPath: string): Promise<Result<boolean>> {
-  const result = spawnSync('git', ['rev-parse', '--git-dir'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['rev-parse', '--git-dir'], { cwd: repoPath });
   if (result.status === null) {
     return err('git-rebase-check-error', `Cannot check rebase state in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -666,7 +698,7 @@ export async function isRebaseInProgress(repoPath: string): Promise<Result<boole
 // Unmerged-path check (`git diff --name-only --diff-filter=U` non-empty):
 // the re-verification gate before finalizeMerge. Any git failure is a controlled error.
 export async function hasUnmergedPaths(repoPath: string): Promise<Result<boolean>> {
-  const result = spawnSync('git', ['diff', '--name-only', '--diff-filter=U'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['diff', '--name-only', '--diff-filter=U'], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-unmerged-check-error', `Cannot check unmerged paths in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -677,7 +709,7 @@ export async function hasUnmergedPaths(repoPath: string): Promise<Result<boolean
 // clean. `--no-edit` keeps it non-interactive (no editor). Never resolves conflict content
 // itself.
 export async function finalizeMerge(repoPath: string): Promise<Result<void>> {
-  const result = spawnSync('git', ['commit', '--no-edit'], { cwd: repoPath, encoding: 'utf8' });
+  const result = await runProcess('git', ['commit', '--no-edit'], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-commit-error', `git commit --no-edit failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -688,9 +720,8 @@ export async function finalizeMerge(repoPath: string): Promise<Result<void>> {
 // `refs/remotes/...`), mirroring branchExistsLocally's local-only scope. One branch name per
 // line; blank lines (a trailing newline on the last ref) are filtered out.
 export async function listBranches(repoPath: string): Promise<Result<string[]>> {
-  const result = spawnSync('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], {
+  const result = await runProcess('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (result.status !== 0) {
     return err('git-list-branches-error', `git for-each-ref failed in ${repoPath}: ${spawnFailureDetail(result)}`);
@@ -722,7 +753,7 @@ export async function renameBranch(
     return allowed;
   }
 
-  const source = showRef(repoPath, oldName);
+  const source = await showRef(repoPath, oldName);
   if (source.kind === 'missing') {
     return err('branch-missing', `Branch "${oldName}" does not exist in ${repoPath}`);
   }
@@ -737,7 +768,7 @@ export async function renameBranch(
     return ok(undefined);
   }
 
-  const target = showRef(repoPath, newName);
+  const target = await showRef(repoPath, newName);
   if (target.kind === 'exists') {
     return err('branch-exists', `Branch "${newName}" already exists in ${repoPath}`);
   }
@@ -745,7 +776,7 @@ export async function renameBranch(
     return err('git-rename-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
   }
 
-  const renamed = spawnSync('git', ['branch', '-m', '--', oldName, newName], { cwd: repoPath, encoding: 'utf8' });
+  const renamed = await runProcess('git', ['branch', '-m', '--', oldName, newName], { cwd: repoPath });
   if (renamed.status !== 0) {
     return err('git-rename-branch-error', `git branch -m failed in ${repoPath}: ${spawnFailureDetail(renamed)}`);
   }
@@ -758,9 +789,8 @@ export async function renameBranch(
 // (non-empty `%(symref)`, i.e. `<remote>/HEAD`) are dropped — a real branch whose name ends
 // in `/HEAD` (e.g. `origin/release/HEAD`) is kept. Never fetches.
 export async function listRemoteBranches(repoPath: string): Promise<Result<string[]>> {
-  const result = spawnSync('git', ['for-each-ref', '--format=%(refname)%09%(symref)', 'refs/remotes/'], {
+  const result = await runProcess('git', ['for-each-ref', '--format=%(refname)%09%(symref)', 'refs/remotes/'], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (result.status !== 0) {
     return err(
@@ -796,7 +826,7 @@ export async function createTrackingBranch(
     return allowed;
   }
 
-  const target = showRef(repoPath, localName);
+  const target = await showRef(repoPath, localName);
   if (target.kind === 'exists') {
     return err('branch-exists', `Branch "${localName}" already exists in ${repoPath}`);
   }
@@ -804,7 +834,7 @@ export async function createTrackingBranch(
     return err('git-create-branch-error', `Cannot verify branch state in ${repoPath}: ${target.detail}`);
   }
 
-  const remote = showFullRef(repoPath, `refs/remotes/${remoteRef}`);
+  const remote = await showFullRef(repoPath, `refs/remotes/${remoteRef}`);
   if (remote.kind === 'missing') {
     return err('remote-branch-missing', `Remote branch "${remoteRef}" does not exist in ${repoPath}`);
   }
@@ -812,9 +842,8 @@ export async function createTrackingBranch(
     return err('git-create-branch-error', `Cannot verify remote branch state in ${repoPath}: ${remote.detail}`);
   }
 
-  const created = spawnSync('git', ['branch', '--track', '--', localName, `refs/remotes/${remoteRef}`], {
+  const created = await runProcess('git', ['branch', '--track', '--', localName, `refs/remotes/${remoteRef}`], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (created.status !== 0) {
     return err('git-create-branch-error', `git branch --track failed in ${repoPath}: ${spawnFailureDetail(created)}`);
@@ -846,14 +875,13 @@ function spawnFailureDetail(result: { status: number | null; stderr: string; err
   return stderr !== '' ? stderr : `exit ${String(result.status)}`;
 }
 
-function showRef(repoPath: string, branchName: string): ShowRefOutcome {
-  return showFullRef(repoPath, `refs/heads/${branchName}`);
+async function showRef(repoPath: string, branchName: string): Promise<ShowRefOutcome> {
+  return await showFullRef(repoPath, `refs/heads/${branchName}`);
 }
 
-function showFullRef(repoPath: string, fullRef: string): ShowRefOutcome {
-  const result = spawnSync('git', ['show-ref', '--verify', '--quiet', fullRef], {
+async function showFullRef(repoPath: string, fullRef: string): Promise<ShowRefOutcome> {
+  const result = await runProcess('git', ['show-ref', '--verify', '--quiet', fullRef], {
     cwd: repoPath,
-    encoding: 'utf8',
   });
   if (result.status === 0) {
     return { kind: 'exists', detail: '' };

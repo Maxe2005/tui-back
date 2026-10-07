@@ -13,10 +13,10 @@ const EXPECTED = [
     'Esc',
     'Cancel, always (close modal, exit splitter resize-mode, clear active filter)',
   ],
-  ['Tab', 'Cycle (between form fields / resizable boundaries)'],
+  ['Tab / Shift+Tab', 'Cycle focus (between panes, form fields / resizable boundaries); Shift+Tab reverses'],
   [
     'Ctrl+W',
-    'Keyboard resize-mode on the active splitter (arrows resize, Enter/Esc exits)',
+    "Keyboard resize-mode on the active zone's splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)",
   ],
   ['/', 'Open filter within the current zone'],
   [':', 'Open command entry'],
@@ -58,10 +58,11 @@ const EXPECTED = [
     'Esc (switch resolution)',
     'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
   ],
+  ['W (Logs)', 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)'],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
-  it('lists exactly the 32 canonical bindings in documented order', () => {
+  it('lists exactly the canonical bindings in documented order', () => {
     expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
       EXPECTED.map(([keys]) => keys),

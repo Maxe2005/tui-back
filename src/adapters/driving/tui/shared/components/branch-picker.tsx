@@ -4,6 +4,7 @@
 // `handleBranchPickerKey` is the pure reducer edts-zone.tsx's useInput calls; `BranchPicker`
 // only renders and never captures input.
 import { Box, Text } from 'ink';
+import { resolveFocusStep, stepFocus, type FocusNavDirection } from '../keys/focus-navigation.js';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
 import { DimAnnotation } from './dim-annotation.js';
@@ -14,13 +15,15 @@ export type BranchPickerMode = 'pick-existing' | 'create-new' | 'rename-current'
 // Mode switch defaults to Create new — Tab cycles Pick existing -> Create new -> Rename current
 // -> (back to) Pick existing, skipping Rename current when the entry point has no current
 // member branch to rename (Add-to-EDT).
-export function cycleBranchPickerMode(mode: BranchPickerMode, hasCurrentBranch: boolean): BranchPickerMode {
-  const order: BranchPickerMode[] = hasCurrentBranch
+export function cycleBranchPickerMode(
+  mode: BranchPickerMode,
+  hasCurrentBranch: boolean,
+  direction: FocusNavDirection = 'next',
+): BranchPickerMode {
+  const stops: BranchPickerMode[] = hasCurrentBranch
     ? ['pick-existing', 'create-new', 'rename-current']
     : ['pick-existing', 'create-new'];
-  const idx = order.indexOf(mode);
-  const safeIdx = idx === -1 ? 0 : idx;
-  return order[(safeIdx + 1) % order.length];
+  return stepFocus(stops, mode, direction);
 }
 
 // Case-insensitive prefix match — same convention as commands.ts's matchCommands.
@@ -132,6 +135,7 @@ type TextEditKey = {
   return?: boolean;
   escape?: boolean;
   tab?: boolean;
+  shift?: boolean;
   upArrow?: boolean;
   downArrow?: boolean;
   leftArrow?: boolean;
@@ -214,8 +218,12 @@ export function handleBranchPickerKey(
 
   // Tab cycles the mode switch — never while a Pick-existing row-rename sub-view is open
   // (Escape closes that back to the list first).
-  if (key.tab && !(state.mode === 'pick-existing' && state.renameSub !== null)) {
-    const nextMode = cycleBranchPickerMode(state.mode, state.hasCurrentBranch);
+  const modeStep = resolveFocusStep(input, key, 'tab');
+  if (modeStep !== null && state.mode === 'pick-existing' && state.renameSub !== null) {
+    return { type: 'update', state };
+  }
+  if (modeStep !== null) {
+    const nextMode = cycleBranchPickerMode(state.mode, state.hasCurrentBranch, modeStep);
     // Always closes Create-new's other-members sub-list on any mode change — otherwise a
     // Tab-away-then-back-to-Create-new leaves it open and the next Enter on the name field gets
     // swallowed into "pick from list" instead of submitting.

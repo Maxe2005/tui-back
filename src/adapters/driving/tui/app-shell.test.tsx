@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
 import {
   AppShell,
@@ -37,6 +37,20 @@ describe('help-open decision helpers', () => {
 });
 
 describe('AppShell', () => {
+  it('advertises W wrap-all and ^W resize in the Logs footer, and no [W] hint in another zone', async () => {
+    const store = createAppStore();
+    const onQuit = vi.fn();
+    store.getState().setActiveZone('logs');
+    const logsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(logsOutput).toContain('[W] wrap all');
+    expect(logsOutput).toContain('^W resize');
+
+    store.getState().setActiveZone('edts');
+    const edtsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(edtsOutput).toContain('^W resize');
+    expect(edtsOutput).not.toContain('[W] wrap all');
+  });
+
   const onQuit = () => {};
 
   it('shows the top bar, six-zone tab bar, and footer simultaneously', async () => {
@@ -245,7 +259,7 @@ describe('AppShell', () => {
 
     describe('resize-mode dispatch helpers (Ctrl+W)', () => {
       describe('shouldEnterResizeMode', () => {
-        it('is true for ctrl+w while the EDTs zone is active', () => {
+        it('is true for ctrl+w in every zone declaring a boundary', () => {
           expect(shouldEnterResizeMode('w', { ctrl: true }, 'edts')).toBe(true);
         });
 
@@ -257,42 +271,40 @@ describe('AppShell', () => {
           expect(shouldEnterResizeMode('q', { ctrl: true }, 'edts')).toBe(false);
         });
 
-        it('is false while any other zone is active', () => {
+        it('is true in every zone, each declaring at least one boundary', () => {
           for (const zone of ZONES) {
-            if (zone.id === 'edts') {
-              continue;
-            }
-            expect(shouldEnterResizeMode('w', { ctrl: true }, zone.id)).toBe(false);
+            expect(shouldEnterResizeMode('w', { ctrl: true }, zone.id)).toBe(true);
           }
         });
       });
 
       describe('isVerticalResizeBoundary', () => {
-        it('is true only for boundary 0', () => {
-          expect(isVerticalResizeBoundary(0)).toBe(true);
-          expect(isVerticalResizeBoundary(1)).toBe(false);
-          expect(isVerticalResizeBoundary(2)).toBe(false);
+        it('follows the zone spec: EDTs boundary 0 vertical, 1/2 horizontal; Logs boundary 0 vertical', () => {
+          expect(isVerticalResizeBoundary('edts', 0)).toBe(true);
+          expect(isVerticalResizeBoundary('edts', 1)).toBe(false);
+          expect(isVerticalResizeBoundary('edts', 2)).toBe(false);
+          expect(isVerticalResizeBoundary('logs', 0)).toBe(true);
         });
       });
 
       describe('resolveResizeStep', () => {
         it('boundary 0 (vertical): leftArrow/rightArrow move it, upArrow/downArrow do not', () => {
-          expect(resolveResizeStep({ leftArrow: true }, 0)).toBe(-RESIZE_STEP);
-          expect(resolveResizeStep({ rightArrow: true }, 0)).toBe(RESIZE_STEP);
-          expect(resolveResizeStep({ upArrow: true }, 0)).toBeNull();
-          expect(resolveResizeStep({ downArrow: true }, 0)).toBeNull();
+          expect(resolveResizeStep({ leftArrow: true }, 'edts', 0)).toBe(-RESIZE_STEP);
+          expect(resolveResizeStep({ rightArrow: true }, 'edts', 0)).toBe(RESIZE_STEP);
+          expect(resolveResizeStep({ upArrow: true }, 'edts', 0)).toBeNull();
+          expect(resolveResizeStep({ downArrow: true }, 'edts', 0)).toBeNull();
         });
 
         it('boundary 1/2 (horizontal): upArrow/downArrow move it, leftArrow/rightArrow do not', () => {
-          expect(resolveResizeStep({ upArrow: true }, 1)).toBe(-RESIZE_STEP);
-          expect(resolveResizeStep({ downArrow: true }, 1)).toBe(RESIZE_STEP);
-          expect(resolveResizeStep({ leftArrow: true }, 2)).toBeNull();
-          expect(resolveResizeStep({ rightArrow: true }, 2)).toBeNull();
+          expect(resolveResizeStep({ upArrow: true }, 'edts', 1)).toBe(-RESIZE_STEP);
+          expect(resolveResizeStep({ downArrow: true }, 'edts', 1)).toBe(RESIZE_STEP);
+          expect(resolveResizeStep({ leftArrow: true }, 'edts', 2)).toBeNull();
+          expect(resolveResizeStep({ rightArrow: true }, 'edts', 2)).toBeNull();
         });
 
         it('returns null for a non-arrow key', () => {
-          expect(resolveResizeStep({}, 0)).toBeNull();
-          expect(resolveResizeStep({}, 1)).toBeNull();
+          expect(resolveResizeStep({}, 'edts', 0)).toBeNull();
+          expect(resolveResizeStep({}, 'edts', 1)).toBeNull();
         });
       });
 
@@ -456,6 +468,10 @@ it('shouldQuit returns true for q', () => {
         // Live per-service run tracking + issue log
         liveServicePhase: {},
         liveServiceIssues: {},
+        liveServiceSteps: {},
+        liveServiceDone: {},
+        updateNotice: null,
+        lastServiceRuns: {},
         // Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],
