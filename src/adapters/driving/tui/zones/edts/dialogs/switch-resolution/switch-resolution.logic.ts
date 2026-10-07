@@ -11,6 +11,7 @@ import { resolveFocusStep, stepFocus } from '../../../../shared/keys/focus-navig
 import { suggestBranchNameFromTopic, TWO_PANEL_NAV } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
+import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
 export type ResolutionAction = 'adopt' | 'discard';
 
@@ -370,13 +371,12 @@ export function reduceResolutionBoxKey(
   if (key.escape) {
     return { type: 'close' };
   }
-  if (key.upArrow || key.downArrow) {
-    const lines = boxLines(box);
-    const index = lines.indexOf(box.line) + (key.downArrow ? 1 : -1);
-    return { type: 'update', box: { ...box, line: lines[Math.min(Math.max(index, 0), lines.length - 1)] ?? box.line } };
+  const moved = moveBoxLine(boxLines(box), box.line, input, key);
+  if (moved !== null) {
+    return { type: 'update', box: { ...box, line: moved } };
   }
   if (box.line === 'action') {
-    if (input === ' ' || key.tab || key.leftArrow || key.rightArrow) {
+    if (input === ' ' || key.leftArrow || key.rightArrow) {
       // With no outgoing EDT only Écraser is offered.
       return row.hasOutgoing ? { type: 'update', box: { ...box, action: box.action === 'adopt' ? 'discard' : 'adopt', error: null } } : { type: 'update', box };
     }

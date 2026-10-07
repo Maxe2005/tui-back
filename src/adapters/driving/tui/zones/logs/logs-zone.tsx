@@ -174,7 +174,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Wrap/truncate is per pane (keyed by repoPath), so 'w' targets just the sub-focused/fullscreen
   // pane, with Shift+W as the explicit "apply to every open pane" (see isWrapAllLogsKey).
   const [paneWrap, setPaneWrap] = useState<Record<string, boolean>>({});
-  // The global filter every pane is engaged with by default, the per-pane engagement flags ('g'
+  // The global filter every pane is engaged with by default, the per-pane engagement flags ('i'
   // opts a single pane out), and each pane's own filter ('f'). Ephemeral UI state — never
   // persisted.
   const [globalFilter, setGlobalFilter] = useState<LogFilterSpec>(DEFAULT_LOG_FILTER);
@@ -407,7 +407,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           setHistoryGridCursor(null);
           return;
         }
-        if (key.tab) {
+        if (resolveFocusStep(input, key, 'tab') !== null) {
           // Text and regex are distinct (scope, mode) history lists — flipping mode mid-recall
           // drops any browsing state (a stale `index`/`savedDraft` would be reused against the new
           // mode's list on the next ↑/↓). Like a printable char/Backspace while browsing, the
@@ -499,7 +499,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           closeLogsFullscreen();
           return;
         }
-        // `/`/`f`/`g` — same bare-key-scopes-to-one-pane idiom as `c`/`w` below, fullscreen's one
+        // `/`/`f`/`i` — same bare-key-scopes-to-one-pane idiom as `c`/`w` below, fullscreen's one
         // pane standing in for "the sub-focused grid pane".
         if (input === '/') {
           openGlobalFilterEditor();
@@ -509,7 +509,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           openPaneFilterEditor(logsFullscreenTarget);
           return;
         }
-        if (input === 'g') {
+        if (input === 'i') {
           setPaneFilterEngaged((current) => toggleGlobalFilterEngagement(current, logsFullscreenTarget));
           return;
         }
@@ -707,7 +707,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
-      // `f` opens the sub-focused pane's own filter editor; `g` toggles its engagement with the
+      // `f` opens the sub-focused pane's own filter editor; `i` toggles its engagement with the
       // global filter — same bare-key-scopes-to-one-pane idiom as `c`/`w` above.
       if (input === 'f') {
         const focused = activePanes[subFocus];
@@ -716,7 +716,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
-      if (input === 'g') {
+      if (input === 'i') {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
           setPaneFilterEngaged((current) => toggleGlobalFilterEngagement(current, focused.path));
@@ -865,7 +865,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       '[R] restart focused pane',
                       '[/] edit global filter',
                       "[f] edit this pane's filter",
-                      '[g] toggle global (pane)',
+                      '[i] toggle global filter (pane)',
                       '[Esc] clear filter (cascade)',
                     ]}
                     maxVisibleRows={hintsMaxVisibleRows}

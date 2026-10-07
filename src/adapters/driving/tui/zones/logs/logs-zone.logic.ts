@@ -565,7 +565,7 @@ export function isPaneEngagedInGlobalFilter(engagedByPath: Readonly<Record<strin
   return engagedByPath[repoPath] ?? DEFAULT_PANE_GLOBAL_FILTER_ENGAGED;
 }
 
-// The `g` key's toggle (an explicit flip, either direction).
+// The `i` key's toggle (an explicit flip, either direction).
 export function toggleGlobalFilterEngagement(engagedByPath: Readonly<Record<string, boolean>>, repoPath: string): Record<string, boolean> {
   return { ...engagedByPath, [repoPath]: !isPaneEngagedInGlobalFilter(engagedByPath, repoPath) };
 }

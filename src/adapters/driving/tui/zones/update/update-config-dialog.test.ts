@@ -214,28 +214,27 @@ describe('resolveUpdateConfigKey', () => {
     });
   });
 
-  it('toggles on Space, begins a branch edit on e/Enter over a service row', () => {
+  it('toggles on Space, begins a branch edit on e over a service row', () => {
     const created = draft();
 
     expect(resolveUpdateConfigKey(' ', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'toggle' });
     expect(resolveUpdateConfigKey('e', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'begin-edit' });
-    expect(resolveUpdateConfigKey('', { return: true }, { cursor: 1, editing: null }, created)).toEqual({
-      type: 'begin-edit',
-    });
   });
 
-  it('toggles on Enter over a toggle row, ignores e there', () => {
+  it('Enter never toggles or edits, it confirms; e is ignored over a toggle row', () => {
     const created = draft();
 
-    expect(resolveUpdateConfigKey('', { return: true }, { cursor: 2, editing: null }, created)).toEqual({ type: 'toggle' });
+    expect(resolveUpdateConfigKey('', { return: true }, { cursor: 1, editing: null }, created)).toEqual({ type: 'confirm' });
+    expect(resolveUpdateConfigKey('', { return: true }, { cursor: 2, editing: null }, created)).toEqual({ type: 'confirm' });
     expect(resolveUpdateConfigKey('e', {}, { cursor: 2, editing: null }, created)).toEqual({ type: 'ignore' });
   });
 
-  it('confirms on y, cancels the dialog on Esc, ignores anything else', () => {
+  it('confirms on Enter (y is no longer a start key), cancels the dialog on Esc, ignores anything else', () => {
     const created = draft();
 
-    expect(resolveUpdateConfigKey('y', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'confirm' });
-    expect(resolveUpdateConfigKey('Y', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'confirm' });
+    expect(resolveUpdateConfigKey('', { return: true }, { cursor: 0, editing: null }, created)).toEqual({ type: 'confirm' });
+    expect(resolveUpdateConfigKey('y', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'ignore' });
+    expect(resolveUpdateConfigKey('Y', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'ignore' });
     expect(resolveUpdateConfigKey('', { escape: true }, { cursor: 0, editing: null }, created)).toEqual({ type: 'cancel' });
     expect(resolveUpdateConfigKey('q', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'ignore' });
     expect(resolveUpdateConfigKey('a', {}, { cursor: 0, editing: null }, created)).toEqual({ type: 'ignore' });

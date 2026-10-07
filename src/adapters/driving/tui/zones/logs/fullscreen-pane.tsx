@@ -103,7 +103,7 @@ export function FullscreenPane({
         ))}
       </Box>
       <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate  [R] restart" />
-      <DimAnnotation text="[/] global filter  [f] pane filter  [g] toggle global engagement" />
+      <DimAnnotation text="[/] global filter  [f] pane filter  [i] toggle global engagement" />
     </Box>
   );
 }

@@ -61,11 +61,11 @@ export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
 export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
-export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? ([y]/[n])';
-export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted? ([y]/[n])';
+export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? [Enter] confirm  [Esc] cancel';
+export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted? [Enter] confirm  [Esc] cancel';
 export const UPDATE_ALL_CONFIRM_TITLE = 'ALL-REPOS UPDATE';
 export const UPDATE_ALL_CONFIRM_BODY =
-  'Update every managed repo (outside the active EDT too)? Press [Enter] to confirm, [Esc] to cancel.';
+  'Update every managed repo (outside the active EDT too)? [Enter] confirm  [Esc] cancel';
 
 // Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
 // always exactly one rendered line.
@@ -138,11 +138,11 @@ export function shouldOpenAllConfirm(input: string, updateStatus: string): boole
   return (input === 'a' || input === 'A') && updateStatus !== 'running';
 }
 
-// The EDT-scoped main trigger — `g` while idle/done/error opens the config pre-scoped to every
+// The EDT-scoped main trigger — `m` while idle/done/error opens the config pre-scoped to every
 // EDT member (never while a run is in flight — a second trigger is rejected by the same guard as
 // every other scope).
 export function shouldOpenEdtConfig(input: string, updateStatus: string): boolean {
-  return (input === 'g' || input === 'G') && updateStatus !== 'running';
+  return (input === 'm' || input === 'M') && updateStatus !== 'running';
 }
 
 // The single-service trigger — `p` while idle/done/error opens the config pre-scoped to the
@@ -152,7 +152,7 @@ export function shouldOpenSingleConfig(input: string, updateStatus: string): boo
 }
 
 // The trigger mapping — `a` opens the pre-run configuration screen pre-scoped to every managed
-// repo, `g` to the EDT, `p` to the highlighted row; `Enter` opens the per-service action menu
+// repo, `m` to the EDT members, `p` to the highlighted row; `Enter` opens the per-service action menu
 // for the selected row (Update this service / Clean restart / Cancel). No trigger ever starts
 // an unconfigured run. Pure because the zone's `useInput` is never driven in tests, so an inline
 // mapping would let a wiring regression back to a direct `runGroupUpdate` go undetected.
@@ -198,10 +198,10 @@ export function resolveAllConfirm(input: string, key: { return?: boolean; escape
 export type QuitConfirmDecision = 'confirm' | 'cancel';
 
 export function resolveQuitConfirm(input: string, key: { return?: boolean; escape?: boolean }): QuitConfirmDecision | null {
-  if (input === 'y' || input === 'Y' || key.return === true) {
+  if (key.return === true) {
     return 'confirm';
   }
-  if (input === 'n' || input === 'N' || key.escape === true) {
+  if (key.escape === true) {
     return 'cancel';
   }
   return null;
@@ -710,7 +710,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      // `a`/`g`/`p` pre-scope the pre-run configuration screen to every managed repo, the EDT,
+      // `a`/`m`/`p` pre-scope the pre-run configuration screen to every managed repo, the EDT,
       // or the highlighted row; `Enter` opens the row-local action menu — no git/docker action
       // runs before a choice is confirmed through its own path.
       const trigger = resolveUpdateTrigger(input, key, updateStatus);

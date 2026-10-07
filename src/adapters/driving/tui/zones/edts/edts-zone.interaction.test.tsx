@@ -1502,7 +1502,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await reachStep3(instance, stdin, 'demo', 1);
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open the box
-      await press(instance, stdin, KEYS.tab); // Tab on the Mode line toggles too
+      await press(instance, stdin, KEYS.space); // Space on the Mode line toggles
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter);
       await type(instance, stdin, 'prod');

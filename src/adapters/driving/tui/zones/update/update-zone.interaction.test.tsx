@@ -164,7 +164,7 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // row 0 is a service row -> begin branch edit
+      await press(instance, stdin, 'e'); // row 0 is a service row -> begin branch edit
       await waitForOutput(instance, stdout, 'development-hotfix');
 
       // The zone threaded its own listBranches result plus the live store cap into the
@@ -191,7 +191,7 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // row 0 is a service row -> begin branch edit
+      await press(instance, stdin, 'e'); // row 0 is a service row -> begin branch edit
       await waitForOutput(instance, stdout, 'Failed to load branches.');
 
       expect(stdout.output).toContain('Merge from');
@@ -259,13 +259,13 @@ describe('UpdateZone update triggers (real keypress)', () => {
     }
   });
 
-  it('g reaches openUpdateConfig pre-scoped to the EDT (unwired: explicit error, never a throw)', async () => {
+  it('m reaches openUpdateConfig pre-scoped to the EDT (unwired: explicit error, never a throw)', async () => {
     const store = storeWithServices();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await waitForOutput(instance, stdout, 'No ports wired into the TUI store');
 
       expect(store.getState().updateConfig).toBeNull();
@@ -276,14 +276,14 @@ describe('UpdateZone update triggers (real keypress)', () => {
     }
   });
 
-  it('g mid-run is ignored — no screen, no error, the run keeps its status', async () => {
+  it('m mid-run is ignored — no screen, no error, the run keeps its status', async () => {
     const store = storeWithServices();
     store.setState({ updateStatus: 'running' });
 
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await instance.waitUntilRenderFlush();
 
       expect(store.getState().updateConfig).toBeNull();
@@ -643,7 +643,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
   });
 });
 
-// The zone keys dispatch through to the openers with their args on a wired store — `g` opens the
+// The zone keys dispatch through to the openers with their args on a wired store — `m` opens the
 // draft EDT-scoped with every member pre-selected, `p` opens a one-row draft for the highlighted
 // row (the unwired trigger tests above stop at store-not-wired before reading any arg).
 describe('UpdateZone wired dispatch args (real keypress)', () => {
@@ -709,13 +709,13 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     return store;
   }
 
-  it('g opens the draft EDT-scoped with all members pre-selected', async () => {
+  it('m opens the draft EDT-scoped with all members pre-selected', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
 
       expect(store.getState().updateConfig).toMatchObject({
@@ -738,7 +738,7 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
       await press(instance, stdin, '\t');
       await press(instance, stdin, '\r');
@@ -754,13 +754,13 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 
-  it('From EDT with no EDT chosen blocks the run: Space on the source line, Esc, then y is refused', async () => {
+  it('From EDT with no EDT chosen blocks the run: Space on the source line, Esc, then Enter on a panel line is refused', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
       await press(instance, stdin, ' ');
       await waitForOutput(instance, stdout, '✖ aucun EDT choisi');
@@ -769,8 +769,10 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
       // Tab below is not read as Meta+Tab.
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
       await press(instance, stdin, '\t');
-      await waitForOutput(instance, stdout, '[Ctrl+R] Revenir au global');
-      await press(instance, stdin, 'y');
+      await waitForOutput(instance, stdout, 'Revenir au global');
+      await press(instance, stdin, '\t');
+      await press(instance, stdin, '\u001b[B');
+      await press(instance, stdin, '\r');
       await waitForOutput(instance, stdout, 'Source de merge non résolue');
 
       expect(store.getState().updateConfig?.strategy.kind).toBe('edt-pending');

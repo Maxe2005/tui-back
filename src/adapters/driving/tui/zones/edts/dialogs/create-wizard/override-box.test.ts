@@ -66,10 +66,11 @@ describe('openOverrideBox', () => {
 });
 
 describe('reduceOverrideBoxKey', () => {
-  it('Space or Tab on the Mode line toggles the mode; lines follow the mode and the rename checkbox', () => {
+  it('Space or Left/Right on the Mode line toggles the mode, Tab moves to the next line; lines follow the mode and the rename checkbox', () => {
     const toggled = updated(press(box(), ' '));
     expect(toggled.mode).toBe('existing');
-    expect(updated(press(toggled, '', { tab: true })).mode).toBe('create');
+    expect(updated(press(toggled, '', { rightArrow: true })).mode).toBe('create');
+    expect(updated(press(box(), '', { tab: true }))).toMatchObject({ mode: 'create', line: 'base' });
     expect(overrideBoxLines(box())).toEqual(['mode', 'base', 'name', 'apply']);
     expect(overrideBoxLines({ mode: 'existing', rename: false })).toEqual(['mode', 'existing', 'rename', 'apply']);
     expect(overrideBoxLines({ mode: 'existing', rename: true })).toEqual(['mode', 'existing', 'rename', 'newName', 'apply']);

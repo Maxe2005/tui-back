@@ -11,6 +11,7 @@ import {
 } from '../../../../shared/components/branch-autocomplete-input.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
 import { checkPlan, type PlanIssue } from './wizard.logic.js';
+import { nextBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
 export type OverrideBoxMode = 'create' | 'existing';
 
@@ -231,14 +232,12 @@ export function reduceOverrideBoxKey(box: OverrideBoxState, context: OverrideBox
   if (key.escape) {
     return { type: 'close' };
   }
-  if (key.upArrow || key.downArrow) {
-    const lines = overrideBoxLines(box);
-    const index = lines.indexOf(box.line) + (key.downArrow ? 1 : -1);
-    const line = lines[Math.min(Math.max(index, 0), lines.length - 1)] ?? box.line;
-    return update({ ...box, line });
+  const moved = nextBoxLine(overrideBoxLines(box), box.line, input, key);
+  if (moved !== null) {
+    return update({ ...box, line: moved });
   }
   if (box.line === 'mode') {
-    if (input === ' ' || key.tab) {
+    if (input === ' ' || key.leftArrow || key.rightArrow) {
       return update({ ...box, mode: box.mode === 'create' ? 'existing' : 'create', error: null });
     }
     return key.return ? update({ ...box, line: nextLine(box) }) : update(box);

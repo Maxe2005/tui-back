@@ -208,10 +208,9 @@ describe('shouldConfirmQuit / resolveQuitConfirm', () => {
   });
 
   it('confirms on y/Enter, cancels on n/Escape, ignores everything else', () => {
-    expect(resolveQuitConfirm('y', {})).toBe('confirm');
-    expect(resolveQuitConfirm('Y', {})).toBe('confirm');
+    expect(resolveQuitConfirm('y', {})).toBeNull();
+    expect(resolveQuitConfirm('n', {})).toBeNull();
     expect(resolveQuitConfirm('', { return: true })).toBe('confirm');
-    expect(resolveQuitConfirm('n', {})).toBe('cancel');
     expect(resolveQuitConfirm('', { escape: true })).toBe('cancel');
     expect(resolveQuitConfirm('q', {})).toBeNull();
   });
@@ -281,12 +280,12 @@ describe('resolveUpdateTrigger (a / Enter)', () => {
 });
 
 describe('shouldOpenEdtConfig / shouldOpenSingleConfig', () => {
-  it('opens the edt-scoped config on g/G while idle/done/error, never mid-run', () => {
-    expect(shouldOpenEdtConfig('g', 'idle')).toBe(true);
-    expect(shouldOpenEdtConfig('G', 'done')).toBe(true);
-    expect(shouldOpenEdtConfig('g', 'error')).toBe(true);
-    expect(shouldOpenEdtConfig('g', 'running')).toBe(false);
-    expect(shouldOpenEdtConfig('G', 'running')).toBe(false);
+  it('opens the edt-scoped config on m/M while idle/done/error, never mid-run', () => {
+    expect(shouldOpenEdtConfig('m', 'idle')).toBe(true);
+    expect(shouldOpenEdtConfig('M', 'done')).toBe(true);
+    expect(shouldOpenEdtConfig('m', 'error')).toBe(true);
+    expect(shouldOpenEdtConfig('m', 'running')).toBe(false);
+    expect(shouldOpenEdtConfig('M', 'running')).toBe(false);
     expect(shouldOpenEdtConfig('x', 'idle')).toBe(false);
     expect(shouldOpenEdtConfig('a', 'idle')).toBe(false);
   });
@@ -303,10 +302,10 @@ describe('shouldOpenEdtConfig / shouldOpenSingleConfig', () => {
 });
 
 describe('resolveUpdateTrigger (g / p)', () => {
-  it('opens the edt-scoped config on g/G while idle/done/error', () => {
-    expect(resolveUpdateTrigger('g', {}, 'idle')).toBe('open-edt-config');
-    expect(resolveUpdateTrigger('G', {}, 'done')).toBe('open-edt-config');
-    expect(resolveUpdateTrigger('g', {}, 'error')).toBe('open-edt-config');
+  it('opens the edt-scoped config on m/M while idle/done/error', () => {
+    expect(resolveUpdateTrigger('m', {}, 'idle')).toBe('open-edt-config');
+    expect(resolveUpdateTrigger('M', {}, 'done')).toBe('open-edt-config');
+    expect(resolveUpdateTrigger('m', {}, 'error')).toBe('open-edt-config');
   });
 
   it('opens the single-service config on p/P while idle/done/error', () => {
@@ -316,8 +315,8 @@ describe('resolveUpdateTrigger (g / p)', () => {
   });
 
   it('yields none for g/p mid-run — a second trigger never starts a direct unconfigured run', () => {
-    expect(resolveUpdateTrigger('g', {}, 'running')).toBe('none');
-    expect(resolveUpdateTrigger('G', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('m', {}, 'running')).toBe('none');
+    expect(resolveUpdateTrigger('M', {}, 'running')).toBe('none');
     expect(resolveUpdateTrigger('p', {}, 'running')).toBe('none');
     expect(resolveUpdateTrigger('P', {}, 'running')).toBe('none');
   });

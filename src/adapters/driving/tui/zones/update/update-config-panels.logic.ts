@@ -10,7 +10,7 @@ import {
 } from '../../shared/components/suggest-field.logic.js';
 import type { TextEditKey } from '../../shared/components/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { moveSelection, resolveSelectionDirection } from '../edts/edts-zone.logic.js';
+import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import {
   applyMergeStrategy,
   type ToggleOverride,
@@ -122,7 +122,14 @@ export interface PanelsViewState {
   edtField: SuggestFieldState | null;
 }
 
-export type PanelsKey = TextEditKey & { upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean };
+export type PanelsKey = TextEditKey & {
+  upArrow?: boolean;
+  downArrow?: boolean;
+  leftArrow?: boolean;
+  rightArrow?: boolean;
+  home?: boolean;
+  end?: boolean;
+};
 
 export type PanelsStep =
   | { type: 'move-panel'; cursor: number }
@@ -149,7 +156,6 @@ function isPrintable(input: string, key: PanelsKey): boolean {
     !key.meta &&
     !key.return &&
     !key.escape &&
-    !key.tab &&
     !key.backspace &&
     !key.delete
   );
@@ -181,21 +187,16 @@ export function resolvePanelsKey(
   if (resolveFocusStep(input, key, 'tab') !== null) {
     return { type: 'switch-focus' };
   }
-  // On the EDT line a typed `y` starts the filter like any other letter.
-  const onEdtLine = view.focus === 'panel' && globalLines(draft)[view.panelCursor] === 'edt';
-  if ((input === 'y' || input === 'Y') && !onEdtLine) {
-    return { type: 'confirm' };
-  }
-  const direction = resolveSelectionDirection({
+  const cursorKey = {
     upArrow: key.upArrow === true,
     downArrow: key.downArrow === true,
-    home: false,
-    end: false,
-    tab: false,
-  });
+    home: key.home === true,
+    end: key.end === true,
+  };
   if (view.focus === 'table') {
-    if (direction !== null) {
-      return { type: 'move-table', cursor: moveSelection(view.tableCursor, direction, draft.rows.length) };
+    const cursor = nextCursorForKey(cursorKey, view.tableCursor, draft.rows.length);
+    if (cursor !== null) {
+      return { type: 'move-table', cursor };
     }
     if (input === ' ') {
       return { type: 'toggle-row' };
@@ -203,14 +204,16 @@ export function resolvePanelsKey(
     return key.return === true && draft.rows[view.tableCursor] !== undefined ? { type: 'open-box' } : { type: 'ignore' };
   }
   const lines = globalLines(draft);
-  if (direction !== null) {
-    return { type: 'move-panel', cursor: moveSelection(view.panelCursor, direction, lines.length) };
+  const panelCursor = nextCursorForKey(cursorKey, view.panelCursor, lines.length);
+  if (panelCursor !== null) {
+    return { type: 'move-panel', cursor: panelCursor };
   }
   const line = lines[view.panelCursor];
   if (line === 'source') {
-    return input === ' ' || key.return === true || key.leftArrow === true || key.rightArrow === true
-      ? { type: 'toggle-source' }
-      : { type: 'ignore' };
+    if (key.return === true) {
+      return { type: 'confirm' };
+    }
+    return input === ' ' || key.leftArrow === true || key.rightArrow === true ? { type: 'toggle-source' } : { type: 'ignore' };
   }
   if (line === 'edt') {
     if (key.return === true) {
@@ -218,7 +221,10 @@ export function resolvePanelsKey(
     }
     return isPrintable(input, key) ? { type: 'edit-edt', initial: input } : { type: 'ignore' };
   }
-  if (line !== undefined && (input === ' ' || key.return === true)) {
+  if (key.return === true) {
+    return { type: 'confirm' };
+  }
+  if (line !== undefined && input === ' ') {
     return { type: 'toggle-global', line };
   }
   return { type: 'ignore' };

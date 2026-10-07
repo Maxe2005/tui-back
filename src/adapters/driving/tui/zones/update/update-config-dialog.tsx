@@ -19,7 +19,7 @@ import {
 
 export const UPDATE_CONFIG_TITLE_EDT = 'CONFIGURE GROUP UPDATE';
 export const UPDATE_CONFIG_TITLE_ALL = 'CONFIGURE ALL-REPOS UPDATE';
-export const UPDATE_CONFIG_HINTS = '[Space] toggle  [e]/[Enter] edit branch  [y] start run  [Esc] cancel';
+export const UPDATE_CONFIG_HINTS = '[Space] toggle  [e] edit branch  [Enter] start run  [Esc] cancel';
 export const UPDATE_CONFIG_MIGRATE_LABEL = 'Run migrations';
 export const UPDATE_CONFIG_CLEAN_LABEL = 'Clean restart';
 

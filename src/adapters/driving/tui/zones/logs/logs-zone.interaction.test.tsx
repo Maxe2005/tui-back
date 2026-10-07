@@ -237,7 +237,7 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // `g` toggles that one pane's engagement with the global filter — reflected back via the
+  // `i` toggles that one pane's engagement with the global filter — reflected back via the
   // pane's own "global filter: off" annotation.
   it('"g" toggles the sub-focused pane\'s engagement with the global filter', async () => {
     const store = seedStore();
@@ -248,7 +248,7 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, ' '); // select api-gateway
       await press(instance, stdin, KEYS.tab); // other-list -> panes
 
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'i');
       expect(stdout.output).toContain('global filter: off');
     } finally {
       instance.unmount();
@@ -454,9 +454,9 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // The editor's text capture must never let '/', 'f', 'g' fall through to the global shortcuts
+  // The editor's text capture must never let '/', 'f', 'i' fall through to the global shortcuts
   // they'd otherwise trigger (open global editor / open pane editor / toggle global engagement).
-  it('typing "/", "f", "g" while the editor is open appends them to the query rather than triggering global shortcuts', async () => {
+  it('typing "/", "f", "i" while the editor is open appends them to the query rather than triggering global shortcuts', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -465,10 +465,10 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, '/');
       expect(stdout.output).toContain('GLOBAL LOG FILTER');
 
-      await press(instance, stdin, '/fg');
+      await press(instance, stdin, '/fi');
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
-      expect(lastFrame).toContain('Text: /fg');
-      // Still just the one (global) editor open — none of '/', 'f', 'g' reopened a second
+      expect(lastFrame).toContain('Text: /fi');
+      // Still just the one (global) editor open — none of '/', 'f', 'i' reopened a second
       // editor or toggled anything else while it was already open.
       expect(stdout.output).not.toContain('PANE LOG FILTER');
     } finally {

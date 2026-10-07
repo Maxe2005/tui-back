@@ -14,11 +14,8 @@ import {
   clampAutocompletePickCursor,
   type BranchAutocompleteState,
 } from '../../shared/components/branch-autocomplete-input.js';
+import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import {
-  moveSelection,
-  jumpSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   toggleMemberSelection,
   validateBranchEditValue,
 } from '../edts/edts-zone.logic.js';
@@ -187,7 +184,7 @@ export function toggleUpdateConfigRow(draft: UpdateConfigDraft, index: number): 
   };
 }
 
-// Enter/`e` on a service row opens the branch editor pre-filled with the row's current
+// `e` on a service row opens the branch editor pre-filled with the row's current
 // source branch (caret at the end, the TextInputLine convention) hosting the shared
 // autocomplete state (pickCursor 0 — a freshly focused field proposes the whole list).
 // Toggle rows and out-of-range cursors have no branch to edit.
@@ -353,8 +350,8 @@ export type UpdateConfigStep =
   | { type: 'ignore' };
 
 // The dialog's keystroke reducer. Browse mode: arrows/Home/End move (the
-// edts-zone cursor vocabulary), Space toggles, `e`/Enter opens the branch editor on a
-// service row (Enter toggles a toggle row), `y` confirms the run, Esc cancels. Branch-edit
+// edts-zone cursor vocabulary), Space toggles, `e` opens the branch editor on a
+// service row, Enter confirms the run, Esc cancels. Branch-edit
 // mode: the editor hosts the shared autocomplete — `Enter` on a non-empty list first
 // `insert`s (fills the text, editing continues) and only the next confirm commits via the
 // existing `commitUpdateConfigBranchEdit` path (blank still rejected inline) — except when
@@ -396,34 +393,18 @@ export function resolveUpdateConfigKey(
     return { type: 'cancel' };
   }
   const count = updateConfigRowCount(draft);
-  // `resolveSelectionJump`/`resolveSelectionDirection` read Ink's required-boolean
-  // `NavigationKey`; the dialog's own key shape is partial, so it is normalized first.
-  const navigationKey = {
-    upArrow: key.upArrow === true,
-    downArrow: key.downArrow === true,
-    home: key.home === true,
-    end: key.end === true,
-    tab: key.tab === true,
-  };
-  const jump = resolveSelectionJump(navigationKey);
-  if (jump !== null) {
-    return { type: 'move', cursor: jumpSelection(jump, count) };
-  }
-  const direction = resolveSelectionDirection(navigationKey);
-  if (direction !== null) {
-    return { type: 'move', cursor: moveSelection(view.cursor, direction, count) };
+  const cursor = nextCursorForKey(key, view.cursor, count);
+  if (cursor !== null) {
+    return { type: 'move', cursor };
   }
   if (input === ' ') {
     return { type: 'toggle' };
-  }
-  if (input === 'y' || input === 'Y') {
-    return { type: 'confirm' };
   }
   if (input === 'e' || input === 'E') {
     return draft.rows[view.cursor] !== undefined ? { type: 'begin-edit' } : { type: 'ignore' };
   }
   if (key.return === true) {
-    return draft.rows[view.cursor] !== undefined ? { type: 'begin-edit' } : { type: 'toggle' };
+    return { type: 'confirm' };
   }
   return { type: 'ignore' };
 }
