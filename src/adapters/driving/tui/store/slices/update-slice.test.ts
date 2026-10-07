@@ -1582,6 +1582,30 @@ describe('live per-service run tracking', () => {
     expect(store.getState().liveServicePhase).toEqual({});
   });
 
+  it('steps advance live and settle into the last-run snapshot', async () => {
+    let releaseMigration: (() => void) | undefined;
+    const migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve;
+    });
+    const migration: MigrationPort = {
+      run: vi.fn(async () => {
+        await migrationGate;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
+    expect(store.getState().liveServiceSteps['svc-a']).toEqual({ merge: 'done', migration: 'running', restart: 'pending' });
+
+    releaseMigration?.();
+    await run;
+
+    expect(store.getState().liveServiceSteps).toEqual({});
+    expect(store.getState().lastServiceRuns['svc-a']?.steps).toEqual({ merge: 'done', migration: 'done', restart: 'done' });
+  });
+
   it('a blocker appends an unresolved issue, resolved once the run re-verifies and moves on', async () => {
     const base = fakeDeps();
     let dirtyReads = 0;
