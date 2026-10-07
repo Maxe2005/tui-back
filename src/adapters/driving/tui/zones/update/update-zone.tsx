@@ -378,6 +378,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
   const liveServicePhase = useStore((state) => state.liveServicePhase);
   const liveServiceIssues = useStore((state) => state.liveServiceIssues);
   const liveServiceSteps = useStore((state) => state.liveServiceSteps);
+  const updateNotice = useStore((state) => state.updateNotice);
   const liveServiceDone = useStore((state) => state.liveServiceDone);
   const lastServiceRuns = useStore((state) => state.lastServiceRuns);
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
@@ -891,6 +892,11 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = false }: { u
                 <Spinner />
                 <Text color={colors.text}> {runningLabel}</Text>
               </Box>
+            ) : null}
+            {updateNotice !== null ? (
+              <Text color={colors.warning}>
+                ⚠ {updateNotice.message} ({updateNotice.code})
+              </Text>
             ) : null}
             {updateStatus === 'error' ? (
               <Box flexDirection="column">

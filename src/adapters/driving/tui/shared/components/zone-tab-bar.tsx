@@ -25,6 +25,7 @@ export function resolveZoneTabState(
   activeZone: ZoneId,
   eventCount: number,
   status: GatedTabStatus = 'enabled',
+  busy = false,
 ): ZoneTabState {
   const active = zone.id === activeZone;
   const disabled = status === 'disabled';
@@ -40,11 +41,14 @@ export function resolveZoneTabState(
         ? typography['active-tab'].bold
         : typography.label.bold,
     strikethrough: disabled ? typography['disabled-tab'].strikethrough : false,
-    // Never a badge on a disabled tab, regardless of pending events.
+    // Never a badge on a disabled tab, regardless of pending events. A busy tab (a group update
+    // is running) carries its status badge even while active, so the whole tool shows the run.
     badge:
-      !active && !disabled && eventCount > 0
-        ? { text: `●${eventCount}`, color: colors[zone.statusColor] }
-        : null,
+      busy && !disabled
+        ? { text: '⇄ updating', color: active ? colors.background : colors.info }
+        : !active && !disabled && eventCount > 0
+          ? { text: `●${eventCount}`, color: colors[zone.statusColor] }
+          : null,
   };
 }
 
@@ -52,17 +56,20 @@ export function ZoneTabBar({
   activeZone,
   events,
   tabVisibility = DEFAULT_TAB_VISIBILITY,
+  updateRunning = false,
 }: {
   activeZone: ZoneId;
   events: Record<ZoneId, number>;
   tabVisibility?: ResolveTabVisibilityData;
+  // A group update is in flight: the Update tab shows its status badge from any zone.
+  updateRunning?: boolean;
 }) {
   return (
     <Box backgroundColor={colors.background}>
       {ZONES.map((zone) => ({ zone, status: zoneGatedStatus(zone.id, tabVisibility) }))
         .filter(({ status }) => status !== 'omitted')
         .map(({ zone, status }) => {
-          const state = resolveZoneTabState(zone, activeZone, events[zone.id], status);
+          const state = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update');
           return (
             <Box
               key={zone.id}

@@ -6,6 +6,24 @@ import { resolveZoneTabState } from './zone-tab-bar.js';
 import { renderToString } from './render-to-string.js';
 import { ZoneTabBar } from './zone-tab-bar.js';
 
+const ZERO_EVENTS = { dashboard: 0, edts: 0, update: 0, logs: 0, routes: 0, 'shared-types': 0 };
+
+describe('resolveZoneTabState — busy', () => {
+  const updateZone = ZONES.find((zone) => zone.id === 'update')!;
+
+  it('a busy tab carries the updating badge whether or not it is active', () => {
+    expect(resolveZoneTabState(updateZone, 'dashboard', 0, 'enabled', true).badge).toEqual({ text: '⇄ updating', color: colors.info });
+    expect(resolveZoneTabState(updateZone, 'update', 0, 'enabled', true).badge).toEqual({ text: '⇄ updating', color: colors.background });
+  });
+
+  it('the badge shows in the rendered bar only when the update runs', async () => {
+    const running = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} updateRunning />);
+    const idle = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} />);
+    expect(running).toContain('⇄ updating');
+    expect(idle).not.toContain('⇄ updating');
+  });
+});
+
 describe('resolveZoneTabState', () => {
   it('resolves the active zone: accent fill, bold, background-colored text', () => {
     const zone = ZONES[0];

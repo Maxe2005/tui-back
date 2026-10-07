@@ -1379,6 +1379,25 @@ describe('UpdateZone live per-service detail', () => {
     expect(output).toContain('◐ Migration — in progress');
   });
 
+  it('a rejected trigger raises a notice without leaving the running view', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      updateNotice: { code: 'update-already-running', message: 'A group update is already in progress' },
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store }));
+
+    expect(output).toContain('⚠ A group update is already in progress (update-already-running)');
+    expect(output).toContain('UPDATE IN PROGRESS');
+  });
+
   it('a service finished mid-run shows its last update while the run is still going', async () => {
     const store = createAppStore();
     store.setState({

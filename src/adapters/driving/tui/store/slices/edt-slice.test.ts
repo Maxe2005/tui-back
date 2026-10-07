@@ -251,6 +251,28 @@ describe('edt slice — switch dirty-repo seam', () => {
   });
 });
 
+describe('edt slice — update-in-progress lock', () => {
+  it('switchEdt and activateEdt are refused while a group update runs, touching nothing', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    store.setState({ updateStatus: 'running' });
+
+    const switched = await store.getState().switchEdt({ topic: 'target-topic' });
+    const activated = await store.getState().activateEdt({ topic: 'target-topic' });
+
+    expect(switched).toMatchObject({ ok: false, error: { code: 'update-in-progress' } });
+    expect(activated).toMatchObject({ ok: false, error: { code: 'update-in-progress' } });
+    expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+  });
+
+  it('switchEdt works again once the run is over', async () => {
+    const store = createAppStore(fakeDeps());
+    store.setState({ updateStatus: 'done' });
+
+    expect((await store.getState().switchEdt({ topic: 'target-topic' })).ok).toBe(true);
+  });
+});
+
 function calls(fn: unknown): Array<unknown[]> {
   return (fn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
 }

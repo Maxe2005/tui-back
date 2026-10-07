@@ -159,6 +159,7 @@ export function AppShell({
   const edts = useStore((state) => state.edts);
   const loadEdts = useStore((state) => state.loadEdts);
   const zoneEvents = useStore((state) => state.zoneEvents);
+  const updateRunning = useStore((state) => state.updateStatus === 'running');
   const setActiveZone = useStore((state) => state.setActiveZone);
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
@@ -378,7 +379,7 @@ export function AppShell({
   return (
     <Box flexDirection="column" height={rows} overflow="hidden">
       <TopBar activeEdt={activeEdt} edts={edts} />
-      <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} />
+      <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} />
       <ZoneScreen useStore={useStore} />
       <KeybindingHelp useStore={useStore} />
       {filterOpen && (

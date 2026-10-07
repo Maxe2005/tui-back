@@ -341,8 +341,8 @@ describe('update slice', () => {
     // Double-Enter feedback instead of silence: the second call is rejected with the
     // run-in-flight code while the first run continues underneath.
     await store.getState().runGroupUpdate();
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
 
     resolveFetch?.();
     await first;
@@ -844,8 +844,8 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().openUpdateConfig('edt');
 
     expect(store.getState().updateConfig).toBeNull();
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
   });
 
   it('openUpdateConfig(edt) on a zero-member EDT fails no-services-selected with no screen', async () => {
@@ -1431,8 +1431,8 @@ describe('update slice: pre-run configuration screen', () => {
 
     await store.getState().runServiceRestart('/repo/a');
 
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
     expect(deps.container!.restart).not.toHaveBeenCalled();
 
     resolveFetch?.();
@@ -1927,8 +1927,8 @@ describe('update slice: single-service command dialog', () => {
 
     expect(store.getState().updateConfig).toBeNull();
     expect(store.getState().updateServiceSelectRequest).toBe(false);
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
   });
 
   it('openUpdateServiceDialog on an unwired store degrades to store-not-wired', async () => {
@@ -2003,8 +2003,8 @@ describe('update slice: single-service command dialog', () => {
     await store.getState().openUpdateServicePick();
 
     expect(store.getState().updateServicePick).toBeNull();
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
   });
 
   it('closeUpdateServicePick closes an open pick and is a no-op when closed', async () => {
