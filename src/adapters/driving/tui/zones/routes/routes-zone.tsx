@@ -209,6 +209,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
   const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
   const windowSize = useWindowSize();
+  // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
+  // (the repo path wraps or unwraps, changing the list's height). Subscribing here makes this
+  // zone re-render too, so useElementSize re-measures instead of keeping a stale list budget.
+  useStore((state) => state.splitterRatios.routes);
   const [listAreaRef, listAreaSize] = useElementSize();
   const [responseAreaRef, responseAreaSize] = useElementSize();
   const [bodyAreaRef, bodyAreaSize] = useElementSize();
@@ -1815,7 +1819,11 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             </Text>
             {routesRepoPath ? <DimAnnotation text={routesRepoPath} /> : null}
             {filterEditing ? (
-              <TextInputLine label="Filter" value={filter.value} cursor={filter.cursor} focused />
+              // TextInputLine's box grows (flexGrow) to measure its width; in this column pane that
+              // would also grow vertically and eat half the free height, so wrap it to keep one row.
+              <Box flexShrink={0}>
+                <TextInputLine label="Filter" value={filter.value} cursor={filter.cursor} focused />
+              </Box>
             ) : filterActive ? (
               <Text color={colors.accent} wrap="truncate-end">Filter: {filter.value}</Text>
             ) : null}

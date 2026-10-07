@@ -87,6 +87,9 @@ import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelecti
 
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
+  // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout; subscribing here re-renders the
+  // grid panes too, so their useElementSize re-measures instead of keeping a stale row budget.
+  useStore((state) => state.splitterRatios.logs);
   const services = useStore((state) => state.edtsBranches);
   const servicesStatus = useStore((state) => state.edtsBranchesStatus);
   const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
