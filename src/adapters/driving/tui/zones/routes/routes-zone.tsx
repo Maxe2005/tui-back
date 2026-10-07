@@ -13,6 +13,8 @@ import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { FooterContext } from '../../shared/components/footer-context.js';
+import type { FooterContextId } from '../../keybindings/index.js';
 import { JsonEmptyState, JsonRawFallback, JsonTree, JsonRawEditor, JsonTreeEditor } from '../../shared/components/json-tree/json-tree.js';
 import {
   addEntryAtPath,
@@ -1327,52 +1329,51 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const filterActive = filter.value !== '';
   const treeActive = treeFocused && classification !== null;
   const focusedEditable = focused !== undefined && canEditRouteBody(focused);
-  const listHint = filterEditing
-    ? '[Enter] apply  [Esc] clear'
-    : paneFocused
-      ? '[Esc] back to the list'
-      : focusedEditable
-        ? '[Enter] request  [/ f] filter  [e] edit body  [Home/End] jump'
-        : '[Enter] request  [/ f] filter  [Home/End] jump';
-  // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
-  // tabs lead it.
-  const paneKeys = '[Ctrl+R] fire  [Ctrl+←/→] tab';
-  const treeHint = !treeActive
+  const treeContext: FooterContextId | null = !treeActive
     ? null
     : classification?.kind === 'raw'
-      ? `[Esc] request  [↑/↓] scroll  ${paneKeys}`
+      ? 'routes-response-raw'
       : classification?.kind === 'empty'
-        ? `[Esc] request  ${paneKeys}`
+        ? 'routes-response-empty'
         : filterPanelOpen
-          ? '[Esc/f] close  [↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear'
-          : `[Esc] request  [↑/↓] move  [←/→] fold  [h/H] filter  [f] rules  [+/-] level  ${paneKeys}`;
-  // Footer hints reflect editor focus — the sub-editor owns its line while open, the tree mode
-  // lists the edit keys. `[a]` only shows when an add target exists (UX-DR7: never hint an
+          ? 'routes-rules-panel'
+          : 'routes-response-tree';
+  // The footer reflects editor focus — the sub-editor owns the line while open, the tree mode
+  // lists the edit keys. The add key only shows when an add target exists (UX-DR7: never hint an
   // inert key — scalar roots and empty drafts take `r`).
   const editorSelectedRow = editorOpen ? editorRows[clampedEditorSelected] : undefined;
   const editorCanAdd =
     editorSelectedRow !== undefined && editorDraft !== undefined && resolveAddParentPath(editorDraft, editorSelectedRow.path) !== null;
-  const editorHint: string | null = !editorOpen
+  const editorContext: FooterContextId | null = !editorOpen
     ? null
     : rawEditor !== null
-      ? '[Esc] done  [Enter] newline'
+      ? 'routes-body-raw'
       : scalarEdit !== null || addPrompt !== null
-        ? '[Enter] confirm  [Esc] cancel'
+        ? 'confirm'
         : filterPanelOpen
-          ? '[Esc/f] close  [↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear'
-          : `[Esc] list  [Tab] section  [Enter] edit  ${editorCanAdd ? '[a] add  ' : ''}[d] delete  [t] type  [r] raw  [←/→] fold  [h/H] filter  ${paneKeys}`;
+          ? 'routes-rules-panel'
+          : editorCanAdd
+            ? 'routes-body-tree-add'
+            : 'routes-body-tree';
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
-  const requestHint: string | null =
+  const requestContext: FooterContextId | null =
     !paneFocused || paneTab !== 'request'
       ? null
       : section === 'body'
-        ? (editorHint ?? `[Esc] list  [Tab] section  ${paneKeys}`)
+        ? (editorContext ?? 'routes-section')
         : rowEdit !== null || rowAddPrompt !== null
-          ? '[Enter] confirm  [Esc] cancel'
-          : `[Esc] list  [Tab] section  ${rowSectionRows.length > 0 ? '[↑/↓] move  [Enter] edit  ' : ''}${
-              section === 'params' ? '' : `[a] add  ${rowSectionRows.length > 0 ? '[d] delete  ' : ''}`
-            }${paneKeys}`;
-  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[Esc] request  ${paneKeys}`) : null;
+          ? 'confirm'
+          : section === 'params'
+            ? rowSectionRows.length > 0
+              ? 'routes-rows-readonly'
+              : 'routes-section'
+            : rowSectionRows.length > 0
+              ? 'routes-rows'
+              : 'routes-rows-empty';
+  const paneContext: FooterContextId | null =
+    paneTab === 'request' ? requestContext : paneFocused ? (treeContext ?? 'routes-response-empty') : null;
+  const listContext: FooterContextId = filterEditing ? 'routes-filter' : focusedEditable ? 'routes-list-editable' : 'routes-list';
+  const footerContext = paneFocused ? paneContext : listContext;
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1418,6 +1419,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
+      <FooterContext owner="routes" id={footerContext} useStore={useStore} />
       <ZoneLayout
         zoneId="routes"
         useStore={useStore}
@@ -1447,7 +1449,6 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 />
               )}
             </Box>
-            <DimAnnotation text={listHint} />
           </Box>
         }
         second={
@@ -1469,11 +1470,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
               />
             ) : null}
             {focused && paneTab === 'response' ? (
-              <RoutesResponseTab response={paneResponse} focused={paneFocused} areaRef={responseAreaRef}>
+              <RoutesResponseTab response={paneResponse} areaRef={responseAreaRef}>
                 {responseNode}
               </RoutesResponseTab>
             ) : null}
-            {paneHint !== null ? <DimAnnotation text={paneHint} /> : null}
           </Box>
         }
       />

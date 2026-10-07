@@ -99,7 +99,6 @@ describe('JsonTree', () => {
     expect(output).toContain('[n] hide nulls: on');
     expect(output).toContain('2 hidden · 2 rules');
     expect(output).toContain('› [2] only "id"');
-    expect(output).toContain('[Space] remove');
   });
 
   it('shows no panel when closed', async () => {
@@ -276,11 +275,10 @@ describe('JsonTreeEditor', () => {
 });
 
 describe('JsonRawEditor', () => {
-  it('renders the buffer with its newline/done hints', async () => {
+  it('renders the buffer under its Raw JSON title', async () => {
     const output = await renderToString(<JsonRawEditor input={{ value: '{"a":1}', cursor: 7 }} error={null} maxVisibleRows={10} />);
     expect(output).toContain('{"a":1}');
-    expect(output).toContain('[Enter] newline');
-    expect(output).toContain('[Esc] done');
+    expect(output).toContain('Raw JSON');
   });
 
   it('keeps parse errors visible with the buffer preserved', async () => {
