@@ -2,7 +2,7 @@
 title: 'Story 7.3: Shared zone layout contract & Ctrl+W resize in every zone (UX-DR35)'
 type: 'feature'
 created: '2026-10-07'
-status: 'in-review'
+status: 'done'
 baseline_commit: '13edecf001e8efcfc57272f292e12ad8db1b4eeb'
 review_loop_iteration: 0
 context:
@@ -86,3 +86,40 @@ Boundary count 0 = single-pane zone (contract supports it; Ctrl+W no-op, no foot
 - `npm test` -- expected: all pass
 - `npm run typecheck` -- expected: clean
 - `npm run depcheck` -- expected: clean
+
+## Suggested Review Order
+
+**Layout contract**
+
+- Single per-zone spec of boundaries: orientation, default ratio, min, max.
+  [`zone-layouts.ts:19`](../../../src/adapters/driving/tui/zones/zone-layouts.ts#L19)
+
+- Shared split primitive: reads ratio from the store, recolors targeted splitter.
+  [`zone-layout.tsx:18`](../../../src/adapters/driving/tui/shared/components/zone-layout.tsx#L18)
+
+- Per-boundary clamp, finite even when no spec exists.
+  [`zone-layouts.ts:42`](../../../src/adapters/driving/tui/zones/zone-layouts.ts#L42)
+
+**Resize everywhere**
+
+- Entry gate no longer EDTs-only; Logs fullscreen excluded.
+  [`app-shell.tsx:298`](../../../src/adapters/driving/tui/app-shell.tsx#L298)
+
+- Footer advertises resize only for zones with a boundary.
+  [`footer.tsx:21`](../../../src/adapters/driving/tui/shared/components/footer.tsx#L21)
+
+- Defaults and wrong-length fallback derived from the specs.
+  [`navigation-slice.ts:144`](../../../src/adapters/driving/tui/store/slices/navigation-slice.ts#L144)
+
+**Logs**
+
+- Wrap-all moves to Shift+W, freeing Ctrl+W.
+  [`logs-zone.logic.ts:362`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L362)
+
+- List column width now follows the persisted ratio.
+  [`logs-zone.logic.ts:179`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L179)
+
+**Zone migration**
+
+- EDTs: three boundaries through nested layouts, behavior unchanged.
+  [`edts-zone.tsx:806`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L806)
