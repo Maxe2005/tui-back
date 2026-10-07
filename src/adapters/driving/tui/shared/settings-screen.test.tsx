@@ -567,6 +567,11 @@ describe('resolveGeneralSettingsKey (General tab row list + editor command field
   const quitRow = GENERAL_SETTINGS_ROWS.indexOf('quit-shortcut');
   const editorRow = GENERAL_SETTINGS_ROWS.indexOf('editor-command');
 
+  it('Home/End jump to the first and last row', () => {
+    expect(resolveGeneralSettingsKey('', { end: true }, { cursor: 0, editing: null })).toEqual({ type: 'move', cursor: GENERAL_SETTINGS_ROWS.length - 1 });
+    expect(resolveGeneralSettingsKey('', { home: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: 0 });
+  });
+
   it('Up/Down move the row cursor, clamped at both ends', () => {
     expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
     expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });

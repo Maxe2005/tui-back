@@ -231,6 +231,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'candidates') {
+      if (key.home || key.end) {
+        setCursor(key.home ? 0 : Math.max(candidates.length - 1, 0));
+        return;
+      }
       if (key.downArrow) {
         setCursor((current) => moveCandidateCursor(current, 'down', candidates.length));
         return;
@@ -255,6 +259,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'clean-candidates' && staleCandidates.length > 0) {
+      if (key.home || key.end) {
+        setCleanCursor(key.home ? 0 : Math.max(staleCandidates.length - 1, 0));
+        return;
+      }
       if (key.downArrow) {
         setCleanCursor((current) => moveCandidateCursor(current, 'down', staleCandidates.length));
         return;

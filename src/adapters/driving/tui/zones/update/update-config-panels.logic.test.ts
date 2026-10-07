@@ -146,6 +146,12 @@ describe('resolvePanelsKey', () => {
     expect(resolvePanelsKey('y', {}, VIEW, edtDraft(), [])).toEqual({ type: 'ignore' });
   });
 
+  it('Home/End jump to the first and last line of the focused panel or table', () => {
+    expect(resolvePanelsKey('', { end: true }, VIEW, edtDraft(), [])).toMatchObject({ type: 'move-panel', cursor: 2 });
+    expect(resolvePanelsKey('', { home: true }, { ...VIEW, panelCursor: 2 }, edtDraft(), [])).toEqual({ type: 'move-panel', cursor: 0 });
+    expect(resolvePanelsKey('', { end: true }, { ...VIEW, focus: 'table' }, edtDraft(), [])).toMatchObject({ type: 'move-table' });
+  });
+
   it('Shift+Tab switches focus too, Ctrl+Tab does not', () => {
     expect(resolvePanelsKey('', { tab: true, shift: true }, VIEW, edtDraft(), [])).toEqual({ type: 'switch-focus' });
     expect(resolvePanelsKey('', { tab: true, ctrl: true }, VIEW, edtDraft(), [])).not.toEqual({ type: 'switch-focus' });

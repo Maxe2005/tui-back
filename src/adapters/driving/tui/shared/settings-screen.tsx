@@ -174,6 +174,9 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
     }
     return { type: 'edit', editing: nextTextInputValue(view.editing, input, key) };
   }
+  if (key.home || key.end) {
+    return { type: 'move', cursor: key.home ? 0 : GENERAL_SETTINGS_ROWS.length - 1 };
+  }
   if (key.upArrow) {
     return { type: 'move', cursor: moveHintCursor(view.cursor, 'up', GENERAL_SETTINGS_ROWS.length) };
   }
@@ -461,6 +464,10 @@ export function SettingsScreen({
       // clears that one service's two lists (text + regex), Esc (handled above) steps back to
       // the "Clear history" group's row list.
       if (logsClearServiceOpen) {
+        if (key.home || key.end) {
+          setLogsClearServiceCursor(key.home ? 0 : Math.max(logsServices.length - 1, 0));
+          return;
+        }
         if (key.upArrow) {
           setLogsClearServiceCursor((current) => moveHintCursor(current, 'up', logsServices.length));
           return;
@@ -469,7 +476,7 @@ export function SettingsScreen({
           setLogsClearServiceCursor((current) => moveHintCursor(current, 'down', logsServices.length));
           return;
         }
-        if (key.return || input === ' ') {
+        if (key.return) {
           const service = logsServices[logsClearServiceCursor];
           if (service) {
             clearServiceFilterHistory(service.path);
@@ -481,6 +488,10 @@ export function SettingsScreen({
       // "Clear history" is the one Logs group with more than one field — its own small Up/Down
       // row list, Enter triggers whichever action is highlighted.
       if (logsGroup === 'clear-history') {
+        if (key.home || key.end) {
+          setLogsClearRowCursor(key.home ? 0 : Math.max(LOGS_CLEAR_ROWS.length - 1, 0));
+          return;
+        }
         if (key.upArrow) {
           setLogsClearRowCursor((current) => moveHintCursor(current, 'up', LOGS_CLEAR_ROWS.length));
           return;
@@ -490,7 +501,7 @@ export function SettingsScreen({
           return;
         }
         const row = LOGS_CLEAR_ROWS[logsClearRowCursor];
-        if (row === 'clear-global' && (key.return || input === ' ')) {
+        if (row === 'clear-global' && key.return) {
           clearGlobalFilterHistory();
           return;
         }
@@ -563,6 +574,10 @@ export function SettingsScreen({
       }
 
       // logsGroup === null: the group-list level — Up/Down navigates, Enter drills in.
+      if (key.home || key.end) {
+        setLogsGroupCursor(key.home ? 0 : Math.max(LOGS_SETTINGS_GROUPS.length - 1, 0));
+        return;
+      }
       if (key.upArrow) {
         setLogsGroupCursor((current) => moveHintCursor(current, 'up', LOGS_SETTINGS_GROUPS.length));
         return;
@@ -586,6 +601,10 @@ export function SettingsScreen({
 
     if (!drilledIn) {
       // The group-list level — Up/Down navigates, Enter drills in.
+      if (key.home || key.end) {
+        setGroupCursor(key.home ? 0 : Math.max(SETTINGS_GROUPS.length - 1, 0));
+        return;
+      }
       if (key.upArrow) {
         setGroupCursor((current) => moveHintCursor(current, 'up', SETTINGS_GROUPS.length));
         return;
@@ -604,6 +623,10 @@ export function SettingsScreen({
     }
 
     if (edtsGroup === 'hint-visibility') {
+      if (key.home || key.end) {
+        setHintCursor(key.home ? 0 : Math.max(HIDEABLE_ACTION_HINTS.length - 1, 0));
+        return;
+      }
       if (key.upArrow) {
         setHintCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_HINTS.length));
         return;
@@ -648,6 +671,10 @@ export function SettingsScreen({
     }
 
     // edtsGroup === 'action-types'
+    if (key.home || key.end) {
+      setActionTypeCursor(key.home ? 0 : Math.max(HIDEABLE_ACTION_TYPES.length - 1, 0));
+      return;
+    }
     if (key.upArrow) {
       setActionTypeCursor((current) => moveHintCursor(current, 'up', HIDEABLE_ACTION_TYPES.length));
       return;
