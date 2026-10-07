@@ -29,9 +29,9 @@ export function handleNameStepInput(
 export function NameStepView({ dialog, availability }: { dialog: CreateDialogState; availability: NameAvailability }) {
   return (
     <Box flexDirection="column">
-      <TextInputLine label="Nom" value={dialog.topic} cursor={dialog.topicCursor} focused={true} />
-      {availability === 'available' ? <Text color={colors.success}>✔ disponible</Text> : null}
-      {availability === 'taken' ? <Text color={colors.error}>✖ déjà pris</Text> : null}
+      <TextInputLine label="Name" value={dialog.topic} cursor={dialog.topicCursor} focused={true} />
+      {availability === 'available' ? <Text color={colors.success}>✔ available</Text> : null}
+      {availability === 'taken' ? <Text color={colors.error}>✖ already taken</Text> : null}
     </Box>
   );
 }

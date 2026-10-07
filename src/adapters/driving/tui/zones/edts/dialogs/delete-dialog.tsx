@@ -22,6 +22,7 @@ import {
   type DeleteDialogState,
   type EdtDialogState,
 } from '../edts-zone.logic.js';
+import { StateLine } from '../../../shared/components/state-line.js';
 
 export type DeleteDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -120,7 +121,7 @@ export function createDeleteDialogHandlers(deps: DeleteDialogDeps) {
 
 export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
   return (
-    <ModalDialog title="DELETE EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="DELETE EDT" open={true}>
       <Box flexDirection="column">
         {dialog.rejected ? (
           <>
@@ -128,7 +129,7 @@ export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
             <Text color={colors.text}>[Esc] cancel</Text>
           </>
         ) : dialog.memberRows === null ? (
-          <DimAnnotation text="Loading member status…" />
+          <StateLine kind="loading" subject="member status" />
         ) : (
           <>
             <Text color={colors.text}>Delete EDT "{dialog.target.topic}"?</Text>

@@ -542,7 +542,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   });
 
   return (
-    <ModalDialog title="COMMAND" open onConfirm={() => {}} onCancel={onClose}>
+    <ModalDialog title="COMMAND" open>
       <Box flexDirection="column">
         <Text color={colors.text}>
           :<Text color={colors.accent}>{query}</Text>

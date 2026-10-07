@@ -67,8 +67,6 @@ export function KeybindingHelp({
   return (
     <ModalDialog
       title="KEYBINDINGS"
-      onConfirm={() => {}}
-      onCancel={closeHelp}
       open={helpOpen}
     >
       {visible.map((entry) => (

@@ -237,9 +237,9 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // `g` toggles that one pane's engagement with the global filter — reflected back via the
+  // `i` toggles that one pane's engagement with the global filter — reflected back via the
   // pane's own "global filter: off" annotation.
-  it('"g" toggles the sub-focused pane\'s engagement with the global filter', async () => {
+  it('"i" toggles the sub-focused pane\'s engagement with the global filter', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -248,7 +248,7 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, ' '); // select api-gateway
       await press(instance, stdin, KEYS.tab); // other-list -> panes
 
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'i');
       expect(stdout.output).toContain('global filter: off');
     } finally {
       instance.unmount();
@@ -268,6 +268,79 @@ describe('LogsZone real-keypress interactions', () => {
 
       await pressEscape(instance, stdin);
       expect(stdout.output).toContain('global filter: off');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('R retries the service load while it is in error and no pane is open', async () => {
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = seedStore({ edtsBranchesStatus: 'error', loadEdtsBranches });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      const before = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdtsBranches.mock.calls.length).toBe(before + 1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('R does nothing to the loader while the services loaded fine', async () => {
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = seedStore({ loadEdtsBranches });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      const before = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdtsBranches.mock.calls.length).toBe(before);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc in the global filter editor discards the draft and restores the previous filter', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, ' '); // select api-gateway so a pane shows the filter state
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'apple');
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('LOGS'))).toContain('global filter: text "apple"');
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, 'x');
+      expect(stdout.output.slice(stdout.output.lastIndexOf('LOGS'))).toContain('global filter: text "applex"');
+      await pressEscape(instance, stdin);
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
+      expect(lastFrame).toContain('global filter: text "apple"');
+      expect(lastFrame).not.toContain('GLOBAL LOG FILTER');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Shift+Tab in the filter editor flips text and regex like Tab (two modes: both directions toggle)', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '/');
+      await press(instance, stdin, KEYS.shiftTab);
+      expect(stdout.output).toContain('Regex:');
+      await press(instance, stdin, KEYS.shiftTab);
+      const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      expect(lastFrame).toContain('Text:');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -454,9 +527,9 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // The editor's text capture must never let '/', 'f', 'g' fall through to the global shortcuts
+  // The editor's text capture must never let '/', 'f', 'i' fall through to the global shortcuts
   // they'd otherwise trigger (open global editor / open pane editor / toggle global engagement).
-  it('typing "/", "f", "g" while the editor is open appends them to the query rather than triggering global shortcuts', async () => {
+  it('typing "/", "f", "i" while the editor is open appends them to the query rather than triggering global shortcuts', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -465,10 +538,10 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, '/');
       expect(stdout.output).toContain('GLOBAL LOG FILTER');
 
-      await press(instance, stdin, '/fg');
+      await press(instance, stdin, '/fi');
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
-      expect(lastFrame).toContain('Text: /fg');
-      // Still just the one (global) editor open — none of '/', 'f', 'g' reopened a second
+      expect(lastFrame).toContain('Text: /fi');
+      // Still just the one (global) editor open — none of '/', 'f', 'i' reopened a second
       // editor or toggled anything else while it was already open.
       expect(stdout.output).not.toContain('PANE LOG FILTER');
     } finally {

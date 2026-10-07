@@ -467,7 +467,7 @@ describe('RoutesZone body editor', () => {
       expect(frame).toContain('name');
       expect(frame).toContain('"ada"');
       expect(frame).toContain('0 lines hidden — still sent');
-      expect(frame).toContain('[enter] edit');
+      expect(frame).toContain('[Enter] edit');
       expect(frame).toContain('[a] add');
       expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
     } finally {
@@ -559,7 +559,7 @@ describe('RoutesZone body editor', () => {
       expect(lastFrame(stdout)).toContain('▸ BODY');
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('▸ BODY');
-      expect(lastFrame(stdout)).toContain('[enter] request');
+      expect(lastFrame(stdout)).toContain('[Enter] request');
     } finally {
       instance.unmount();
     }
@@ -941,7 +941,7 @@ describe('RoutesZone request step & sub-tabs', () => {
       expect(store.getState().routesPaneFocus).toBe('detail');
       expect(store.getState().routesPaneTab).toBe('request');
       expect(store.getState().zoneInputCaptured).toBe(true);
-      expect(lastFrame(stdout)).toContain('[ctrl+r] fire');
+      expect(lastFrame(stdout)).toContain('[Ctrl+R] fire');
       await pressEscape(instance, stdin);
       expect(store.getState().routesPaneFocus).toBe('list');
       expect(store.getState().zoneInputCaptured).toBe(false);

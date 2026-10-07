@@ -96,7 +96,7 @@ export function UpdateServiceMenuDialog({
   items?: readonly ServiceMenuItem[];
 }) {
   return (
-    <ModalDialog title={UPDATE_SERVICE_MENU_TITLE} open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title={UPDATE_SERVICE_MENU_TITLE} open>
       <Box flexDirection="column">
         <Text color={colors.text}>{service}</Text>
         {items.map((item, index) => (

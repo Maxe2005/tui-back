@@ -15,7 +15,7 @@ export type IssuesDialogViewProps = {
 
 export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps) {
   return (
-    <ModalDialog title="SERVICE LISTING ISSUES" onConfirm={() => {}} onCancel={() => {}} open={true} maxHeight={20}>
+    <ModalDialog title="SERVICE LISTING ISSUES" open={true} maxHeight={20}>
       <Box flexDirection="column">
         {unreachable.length === 0 && errors.length === 0 ? <Text color={colors.text}>No issues.</Text> : null}
         {unreachable.map((path) => {

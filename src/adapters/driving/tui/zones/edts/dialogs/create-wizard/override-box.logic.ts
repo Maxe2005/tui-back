@@ -1,7 +1,7 @@
-// tui/zones/edts/dialogs/create-wizard: the "Configurer <service>" override box's state, pure key
+// tui/zones/edts/dialogs/create-wizard: the "Configure <service>" override box's state, pure key
 // reducer and Apply validation, kept apart from its Ink view (override-box.tsx) so
-// edts-zone.logic.ts can type its state without importing a view file. Two modes: Créer nouvelle
-// (base branch + new name) and Choisir existante (existing branch, optionally renamed).
+// edts-zone.logic.ts can type its state without importing a view file. Two modes: Create new
+// (base branch + new name) and Choose existing (existing branch, optionally renamed).
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import {
   createBranchAutocompleteState,
@@ -11,6 +11,7 @@ import {
 } from '../../../../shared/components/branch-autocomplete-input.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
 import { checkPlan, type PlanIssue } from './wizard.logic.js';
+import { nextBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
 export type OverrideBoxMode = 'create' | 'existing';
 
@@ -48,27 +49,27 @@ export type OverrideBoxKeyResult =
   | { type: 'apply'; plan: MemberBranchPlan };
 
 export const OVERRIDE_BOX_ERRORS = {
-  listsUnavailable: 'Branches de ce service indisponibles — impossible de valider',
-  baseRequired: 'Branche de base requise',
-  baseNotFound: 'Branche de base introuvable dans ce service',
-  nameRequired: 'Nom de branche requis',
-  existingRequired: 'Branche existante requise',
-  existingNotFound: 'Branche introuvable dans ce service',
-  newNameRequired: 'Nouveau nom requis',
-  noMatch: 'Aucune branche correspondante',
+  listsUnavailable: 'Branches of this service are unavailable — cannot validate',
+  baseRequired: 'Base branch required',
+  baseNotFound: 'Base branch not found in this service',
+  nameRequired: 'Branch name required',
+  existingRequired: 'Existing branch required',
+  existingNotFound: 'Branch not found in this service',
+  newNameRequired: 'New name required',
+  noMatch: 'No matching branch',
 } as const;
 
 // Every protected-branch message names the branch and the service whose manifest protects it.
 export function protectedNameError(name: string, service: string): string {
-  return `« ${name} » est protégée par le manifeste de ${service}`;
+  return `“${name}” is protected by the manifest of ${service}`;
 }
 
 export function protectedExistingError(name: string, service: string): string {
-  return `« ${name} » est protégée par le manifeste de ${service} — cochez « Renommer la branche locale »`;
+  return `“${name}” is protected by the manifest of ${service} — tick “Rename the local branch”`;
 }
 
 export function shadowedRemoteError(localName: string): string {
-  return `La branche locale « ${localName} » existe déjà — choisissez « ${localName} » ou renommez`;
+  return `The local branch “${localName}” already exists — choose “${localName}” or rename`;
 }
 
 function textState(value: string): TextInputState {
@@ -76,7 +77,7 @@ function textState(value: string): TextInputState {
 }
 
 // Opens the box for one row: an existing override is loaded back as-is; a global row starts
-// in "Créer nouvelle" pre-filled with the row's current base and the global name.
+// in "Create new" pre-filled with the row's current base and the global name.
 export function openOverrideBox(path: string, init: { override?: MemberBranchPlan; base: string; name: string }): OverrideBoxState {
   const { override } = init;
   const createBase = override?.kind === 'create' ? override.base : init.base;
@@ -112,15 +113,15 @@ export function overrideBoxBranches(context: Pick<OverrideBoxContext, 'local' | 
 }
 
 export function protectedSourceError(branch: string, service: string): string {
-  return `« ${branch} » est une branche locale protégée par le manifeste de ${service} — elle ne peut être ni reprise ni renommée`;
+  return `“${branch}” is a local branch protected by the manifest of ${service} — it can be neither reused nor renamed`;
 }
 
 export function existingTargetError(name: string): string {
-  return `La branche « ${name} » existe déjà dans ce service`;
+  return `The branch “${name}” already exists in this service`;
 }
 
 export function noopRenameError(name: string): string {
-  return `« ${name} » est déjà le nom local de cette branche — décochez « Renommer la branche locale » ou changez le nom`;
+  return `“${name}” is already the local name of this branch — untick “Rename the local branch” or change the name`;
 }
 
 // The box's wording of wizard.logic.ts's shared PlanIssue (the rows use a short form).
@@ -205,9 +206,9 @@ function reduceAutocompleteField(
 // `↑/↓` move between lines; `Space`/`Tab` toggle the mode on the Mode line; `Space` toggles the
 // rename checkbox; `Enter` enters the focused field, and inside a field commits and focuses the
 // next line; `Esc` leaves the field, or closes the box without applying; `Enter` on
-// `[ Appliquer ]` validates and applies; `Ctrl+R` reverts the row to the global strategy.
+// `[ Apply ]` validates and applies; `Ctrl+R` reverts the row to the global strategy.
 export function reduceOverrideBoxKey(box: OverrideBoxState, context: OverrideBoxContext, input: string, key: TextEditKey): OverrideBoxKeyResult {
-  // Ctrl+R: "Revenir à la stratégie globale" — wins from any line, in or out of a field.
+  // Ctrl+R: back to the global strategy — wins from any line, in or out of a field.
   if (key.ctrl && input.toLowerCase() === 'r') {
     return { type: 'revert' };
   }
@@ -231,14 +232,12 @@ export function reduceOverrideBoxKey(box: OverrideBoxState, context: OverrideBox
   if (key.escape) {
     return { type: 'close' };
   }
-  if (key.upArrow || key.downArrow) {
-    const lines = overrideBoxLines(box);
-    const index = lines.indexOf(box.line) + (key.downArrow ? 1 : -1);
-    const line = lines[Math.min(Math.max(index, 0), lines.length - 1)] ?? box.line;
-    return update({ ...box, line });
+  const moved = nextBoxLine(overrideBoxLines(box), box.line, input, key);
+  if (moved !== null) {
+    return update({ ...box, line: moved });
   }
   if (box.line === 'mode') {
-    if (input === ' ' || key.tab) {
+    if (input === ' ' || key.leftArrow || key.rightArrow) {
       return update({ ...box, mode: box.mode === 'create' ? 'existing' : 'create', error: null });
     }
     return key.return ? update({ ...box, line: nextLine(box) }) : update(box);

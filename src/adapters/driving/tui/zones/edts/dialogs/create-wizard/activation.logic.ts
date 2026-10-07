@@ -5,11 +5,12 @@
 import type { ActivationBlockedRepo } from '../../../../../../../core/edt/activate.js';
 import type { TextEditKey } from '../../../../shared/components/text-edit.js';
 import type { ActivationState } from '../../edts-zone.logic.js';
+import { formatHints } from '../../../../shared/components/hints.js';
 
-export const ACTIVATION_PAUSE_FOOTER = "[R] Réessayer • [E] Écraser • [Esc] Arrêter (l'EDT reste créé mais inactif)";
-export const OVERWRITE_CONFIRM_FOOTER = '[Ctrl+E] Écraser définitivement • [Entrée] / [Esc] Retour';
-export const ACTIVATION_RADIO_FOOTER = "[Espace/↑↓] Choisir • [Entrée] Créer l'EDT";
-export const ACTIVATION_FIRST_FOOTER = "[Entrée] Créer et activer l'EDT";
+export const ACTIVATION_PAUSE_FOOTER = formatHints([['R', 'retry'], ['E', 'overwrite'], ['Esc', 'stop (the EDT stays created but inactive)']]);
+export const OVERWRITE_CONFIRM_FOOTER = formatHints([['Ctrl+E', 'overwrite for good'], ['Enter/Esc', 'back']]);
+export const ACTIVATION_RADIO_FOOTER = formatHints([['Space/↑/↓', 'choose'], ['Enter', 'create the EDT']]);
+export const ACTIVATION_FIRST_FOOTER = formatHints([['Enter', 'create and activate the EDT']]);
 
 export type ActivationConfirmLine = { key: string; text: string; kind: 'head' | 'file' };
 
@@ -17,7 +18,7 @@ export type ActivationConfirmLine = { key: string; text: string; kind: 'head' | 
 export function overwriteConfirmLines(blocked: readonly ActivationBlockedRepo[]): ActivationConfirmLine[] {
   const lines: ActivationConfirmLine[] = [];
   for (const repo of blocked) {
-    lines.push({ key: `${repo.repoPath}:head`, text: `${repo.service} (${repo.paths.length} fichier(s))`, kind: 'head' });
+    lines.push({ key: `${repo.repoPath}:head`, text: `${repo.service} (${repo.paths.length} file(s))`, kind: 'head' });
     for (const path of repo.paths) {
       lines.push({ key: `${repo.repoPath}:${path}`, text: `    ${path}`, kind: 'file' });
     }
@@ -43,7 +44,7 @@ function isCtrl(input: string, key: TextEditKey, letter: string): boolean {
 //   - The pause panel (first-EDT pre-flight found files at risk): `R` retry, `E` open the
 //     overwrite confirmation, `Esc` stop (the EDT stays created, not active).
 //   - The overwrite confirmation: lists every file, `↑`/`↓` scroll it, `Ctrl+E` confirms,
-//     `Enter`/`Esc` mean Retour.
+//     `Enter`/`Esc` go back.
 export function reduceActivationKey(state: ActivationState, input: string, key: TextEditKey): ActivationState {
   if (state.decision !== null || state.outcome !== null) {
     return state;

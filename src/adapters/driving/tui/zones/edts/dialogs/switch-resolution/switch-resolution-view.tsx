@@ -1,6 +1,6 @@
 // tui/zones/edts/dialogs/switch-resolution: the SWITCH EDT resolution view's Ink rendering — the
 // intro, Panel A (global strategy), Panel B (the shared BranchPlanTable, then the read-only dim
-// state-1 rows), the "Configurer <service>" box and the discard confirmation. State and key
+// state-1 rows), the "Configure <service>" box and the discard confirmation. State and key
 // handling live in switch-resolution.logic.ts.
 import { Box, Text } from 'ink';
 import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
@@ -23,11 +23,12 @@ import {
   type SwitchResolutionBox,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
+import { formatHints } from '../../../../shared/components/hints.js';
 
-const COLUMN_HEADERS = ['Service', 'Portée', 'Branche actuelle', 'Action', 'Branche cible'] as const;
+const COLUMN_HEADERS = ['Service', 'Scope', 'Current branch', 'Action', 'Target branch'] as const;
 
-export const RESOLUTION_BOX_FOOTER = '[↑/↓] Ligne • [Espace] Action • [Entrée] Éditer / Appliquer • [Ctrl+R] Revenir à la stratégie globale • [Esc] Fermer';
-export const DISCARD_CONFIRM_FOOTER = '[Ctrl+E] Écraser définitivement • [Entrée] / [Esc] Retour';
+export const RESOLUTION_BOX_FOOTER = formatHints([['↑/↓/Tab', 'move'], ['Space/←/→', 'action'], ['Enter', 'edit / apply'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
+export const DISCARD_CONFIRM_FOOTER = formatHints([['Ctrl+E', 'overwrite for good'], ['Enter/Esc', 'back']]);
 
 function Marker({ focused }: { focused: boolean }) {
   return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
@@ -53,27 +54,27 @@ function ResolutionBoxView({ box, row, lists }: { box: SwitchResolutionBox; row:
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
       <Text color={colors.accent} bold>
-        Configurer {repo.service}
+        Configure {repo.service}
       </Text>
       <Box>
         <Marker focused={focused('action')} />
         <Text color={focused('action') ? colors.accent : colors.text}>
           {hasOutgoing
-            ? `Action : ${box.action === 'adopt' ? '(•)' : '( )'} Adopter ${box.action === 'discard' ? '(•)' : '( )'} Écraser`
-            : 'Action : (•) Écraser'}
+            ? `Action: ${box.action === 'adopt' ? '(•)' : '( )'} Adopt ${box.action === 'discard' ? '(•)' : '( )'} Discard`
+            : 'Action: (•) Discard'}
         </Text>
       </Box>
       {box.action === 'adopt' ? (
         <Box>
           <Marker focused={focused('branch')} />
-          <TextInputLine label="Branche" value={box.branch.value} cursor={box.branch.cursor} focused={focused('branch') && box.editing} />
+          <TextInputLine label="Branch" value={box.branch.value} cursor={box.branch.cursor} focused={focused('branch') && box.editing} />
         </Box>
       ) : null}
       {error !== null ? <Text color={colors.error}>✖ {error}</Text> : null}
       <Box>
         <Marker focused={focused('apply')} />
         <Text color={focused('apply') ? colors.accent : colors.text} bold={focused('apply')}>
-          [ Appliquer ]
+          [ Apply ]
         </Text>
       </Box>
       <Text color={colors['text-dim']}>{RESOLUTION_BOX_FOOTER}</Text>
@@ -92,7 +93,7 @@ export function discardConfirmLines(rows: readonly ResolutionRow[]): ConfirmLine
     const paths = row.repo.dirtyPaths;
     lines.push({
       key: `${row.repo.repoPath}:head`,
-      text: paths !== undefined ? `${row.repo.service} (${paths.length} fichier(s))` : `${row.repo.service} (liste des fichiers indisponible)`,
+      text: paths !== undefined ? `${row.repo.service} (${paths.length} file(s))` : `${row.repo.service} (file list unavailable)`,
       color: colors.warning,
     });
     for (const path of paths ?? []) {
@@ -118,17 +119,17 @@ function DiscardConfirmView({
   return (
     <Box flexDirection="column">
       <Text color={colors.error} bold>
-        CONFIRMER L'ÉCRASEMENT
+        CONFIRM OVERWRITE
       </Text>
       <Text color={colors.text}>
-        Les fichiers suivants (modifications suivies et fichiers non suivis) seront définitivement détruits. Cette action est irréversible. Les fichiers ignorés par git sont conservés.
+        The following files (tracked changes and untracked files) will be permanently destroyed. This cannot be undone. Files ignored by git are kept.
       </Text>
       <BoundedList
         items={lines}
         maxVisibleRows={maxVisibleRows}
         cursorIndex={cursor}
-        moreAboveLabel="fichiers au-dessus"
-        moreBelowLabel="fichiers en dessous"
+        moreAboveLabel="files above"
+        moreBelowLabel="files below"
         renderItem={(line) => (
           <Text key={line.key} color={line.color} wrap="truncate-end">
             {line.text}
@@ -177,33 +178,33 @@ export function SwitchResolutionView({
     <Box flexDirection="column">
       <Text color={colors.text}>
         {outgoing !== null
-          ? `Vous quittez l'EDT « ${outgoing} » pour « ${targetTopic} ». Ces services ont des modifications non commitées hors de « ${outgoing} » : adoptez-les dans « ${outgoing} » ou écrasez-les. Les services membres de « ${outgoing} » sont mis de côté automatiquement.`
-          : `Bascule vers « ${targetTopic} » : ces services ont des modifications non commitées. Les services membres de l'EDT quitté sont mis de côté automatiquement.`}
+          ? `You are leaving the EDT “${outgoing}” for “${targetTopic}”. These services have uncommitted changes outside “${outgoing}”: adopt them into “${outgoing}” or discard them. Member services of “${outgoing}” are stashed automatically.`
+          : `Switch to “${targetTopic}”: these services have uncommitted changes. Member services of the EDT being left are stashed automatically.`}
       </Text>
-      <PanelTitle text="STRATÉGIE GLOBALE" focused={globalFocused} />
+      <PanelTitle text="GLOBAL STRATEGY" focused={globalFocused} />
       <Box>
         <Marker focused={lineFocused('action')} />
         <Text color={lineFocused('action') ? colors.accent : colors.text}>
           {outgoing !== null
-            ? `Action par défaut : ${state.globalAction === 'adopt' ? '(•)' : '( )'} Adopter dans ${outgoing}  ${state.globalAction === 'discard' ? '(•)' : '( )'} Écraser`
-            : 'Action par défaut : (•) Écraser'}
+            ? `Default action: ${state.globalAction === 'adopt' ? '(•)' : '( )'} Adopt into ${outgoing}  ${state.globalAction === 'discard' ? '(•)' : '( )'} Discard`
+            : 'Default action: (•) Discard'}
         </Text>
       </Box>
       {outgoing === null ? (
-        <Text color={colors['text-dim']}>{'  '}Aucun EDT sortant : il n'y a aucun EDT où adopter ce travail, seul l'écrasement est possible.</Text>
+        <Text color={colors['text-dim']}>{'  '}No outgoing EDT: there is no EDT to adopt this work into, only discarding is possible.</Text>
       ) : null}
       {outgoing !== null && state.globalAction === 'adopt' ? (
         <Box>
           <Marker focused={lineFocused('name')} />
           <TextInputLine
-            label="Nom global de la branche"
+            label="Global branch name"
             value={state.globalName.value}
             cursor={state.globalName.cursor}
             focused={lineFocused('name') && state.editing}
           />
         </Box>
       ) : null}
-      <PanelTitle text="SERVICES CONCERNÉS" focused={rowsFocused} />
+      <PanelTitle text="AFFECTED SERVICES" focused={rowsFocused} />
       <BranchPlanTable
         headers={COLUMN_HEADERS}
         rows={rows}
@@ -217,7 +218,7 @@ export function SwitchResolutionView({
       {stashed.map((repo) => (
         <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">
           {'  '}
-          {repo.service} — sera mis de côté pour {outgoing ?? "l'EDT quitté"} (restauré au retour)
+          {repo.service} — will be stashed for {outgoing ?? 'the EDT being left'} (restored on return)
         </Text>
       ))}
       {blocked !== undefined ? (
@@ -227,7 +228,7 @@ export function SwitchResolutionView({
       ) : null}
       {state.error !== null ? <Text color={colors.error}>✖ {state.error}</Text> : null}
       {listsPending ? (
-        <Text color={colors['text-dim']}>Branches locales en cours de chargement ou indisponibles — la vérification « existe déjà » est ignorée pour ces services.</Text>
+        <Text color={colors['text-dim']}>Local branches are loading or unavailable — the “already exists” check is skipped for these services.</Text>
       ) : null}
       <Text color={colors['text-dim']}>{SWITCH_RESOLUTION_FOOTER}</Text>
     </Box>

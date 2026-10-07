@@ -23,7 +23,7 @@ export function RoutesResponseTab({
   children: ReactNode;
 }) {
   if (response === undefined) {
-    return <Text color={colors['text-dim']}>{focused ? 'No response yet — [ctrl+r] fires the request.' : 'No response yet.'}</Text>;
+    return <Text color={colors['text-dim']}>{focused ? 'No response yet — [Ctrl+R] fires the request.' : 'No response yet.'}</Text>;
   }
   if (response.status === 'firing') {
     return (

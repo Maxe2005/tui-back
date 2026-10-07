@@ -4,6 +4,7 @@
 // only on exactly `reset`). Esc cancels from any step — nothing was written yet.
 import { resolveResetCategories, type ResetCategory } from '../../../../core/scripts/reset-tool.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
 
 export type ResetScreenStep = 'select' | 'summary' | 'confirm';
 
@@ -84,11 +85,9 @@ export function handleResetScreenKey(
   }
 
   if (state.step === 'select') {
-    if (key.upArrow) {
-      return { state: { ...state, cursor: Math.max(0, state.cursor - 1) }, action: NONE };
-    }
-    if (key.downArrow) {
-      return { state: { ...state, cursor: Math.min(RESET_SCREEN_ROWS.length - 1, state.cursor + 1) }, action: NONE };
+    const cursor = nextCursorForKey(key, state.cursor, RESET_SCREEN_ROWS.length);
+    if (cursor !== null) {
+      return { state: { ...state, cursor }, action: NONE };
     }
     if (input === ' ') {
       const category = RESET_SCREEN_ROWS[state.cursor];

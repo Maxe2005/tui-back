@@ -1203,7 +1203,7 @@ describe('AppShell command-entry bar (:)', () => {
       // action and opens the create wizard — so the dialog itself, not the transient
       // currentEdtAction flag, is what proves the command actually ran.
       expect(store.getState().activeZone).toBe('edts');
-      expect(stdout.output).toContain("EDT Wizard: Création d'un espace de travail");
+      expect(stdout.output).toContain("CREATE EDT");
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

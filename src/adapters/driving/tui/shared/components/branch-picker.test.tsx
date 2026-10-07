@@ -335,12 +335,20 @@ describe('handleBranchPickerKey — Pick existing', () => {
     expect(left.state.pickCursor).toBe(1);
   });
 
-  it('Ctrl+R on a row opens its inline rename field, pre-filled with the selected branch', () => {
+  it('Ctrl+T on a row opens its inline rename field, pre-filled with the selected branch', () => {
     const state = pickState({ pickCursor: 1 });
-    const result = handleBranchPickerKey(state, ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
+    const result = handleBranchPickerKey(state, ['feature-x', 'shared-feature'], [], 't', { ctrl: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
       expect(result.state.renameSub).toEqual({ oldName: 'shared-feature', value: 'shared-feature', cursor: 'shared-feature'.length, error: null });
+    }
+  });
+
+  it('Ctrl+R no longer opens the rename field (it is back-to-global elsewhere)', () => {
+    const result = handleBranchPickerKey(pickState({ pickCursor: 1 }), ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub).toBeNull();
     }
   });
 

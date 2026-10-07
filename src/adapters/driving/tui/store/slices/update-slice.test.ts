@@ -939,7 +939,7 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().confirmUpdateConfig();
 
     expect(store.getState().updateConfig).not.toBeNull();
-    expect(store.getState().updateConfig?.error).toContain('Aucun service sélectionné');
+    expect(store.getState().updateConfig?.error).toContain('No services selected');
     expect(store.getState().updateStatus).toBe('idle');
     expect(deps.git.fetch).not.toHaveBeenCalled();
     expect(deps.git.pull).not.toHaveBeenCalled();
@@ -962,7 +962,7 @@ describe('update slice: pre-run configuration screen', () => {
     await store.getState().confirmUpdateConfig();
 
     expect(store.getState().updateConfig).not.toBeNull();
-    expect(store.getState().updateConfig?.error).toContain('pas de branche source');
+    expect(store.getState().updateConfig?.error).toContain('empty source branch');
     expect(store.getState().updateStatus).toBe('idle');
     expect(deps.git.fetch).not.toHaveBeenCalled();
     expect(deps.git.pull).not.toHaveBeenCalled();
@@ -1208,7 +1208,7 @@ describe('update slice: pre-run configuration screen', () => {
       runMigrations: true,
       cleanRestart: false,
       error: null,
-      layout: 'simple',
+      layout: 'service-panels',
       strategy: { kind: 'shared' },
     })).not.toThrow();
     expect(store.getState().updateConfig).toBeNull();
@@ -2042,10 +2042,10 @@ describe('update slice: merge source from another EDT', () => {
 
     await store.getState().chooseMergeSourceEdt('edt-1');
     expect(store.getState().updateConfig!.strategy.kind).toBe('shared');
-    expect(store.getState().updateConfig!.error).toContain('propre source');
+    expect(store.getState().updateConfig!.error).toContain('own merge source');
 
     await store.getState().chooseMergeSourceEdt('gone');
-    expect(store.getState().updateConfig!.error).toContain("n'existe plus");
+    expect(store.getState().updateConfig!.error).toContain('no longer exists');
   });
 
   it('drops a resolution that lands after the developer went back to shared branches', async () => {
@@ -2077,9 +2077,9 @@ describe('update slice: merge source from another EDT', () => {
     expect(await store.getState().listMergeSourceEdts()).toEqual([]);
   });
 
-  it('does not offer the panel on a single-service config', async () => {
+  it('opens the two-panel screen without the merge source on a single-service config', async () => {
     const store = createAppStore(depsWithSibling());
     await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
-    expect(store.getState().updateConfig!.layout).toBe('simple');
+    expect(store.getState().updateConfig!.layout).toBe('service-panels');
   });
 });

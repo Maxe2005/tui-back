@@ -1,8 +1,12 @@
+import type { ZoneId } from '../zones/zones.js';
 import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
 
+// `footer` marks a row the footer advertises too (with `zone` when only that zone shows it), so
+// the footer and the ? help are generated from this one list.
 export type Keybinding = {
   keys: string;
   description: string;
+  footer?: { key: string; verb: string; zone?: ZoneId };
 };
 
 // The subset of Ink's `Key` type every list-navigation pure function reads, shared so the
@@ -20,10 +24,12 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '↑ / ↓',
     description: 'Move highlight up/down within a list',
+    footer: { key: '↑/↓', verb: 'move' },
   },
   {
     keys: 'Home / End',
     description: 'Jump to top/bottom of the current list',
+    footer: { key: 'Home/End', verb: 'top/bottom' },
   },
   {
     keys: 'Space',
@@ -47,22 +53,27 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+W',
     description:
       'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)',
+    footer: { key: 'Ctrl+W', verb: 'resize' },
   },
   {
     keys: '/',
     description: 'Open filter within the current zone',
+    footer: { key: '/', verb: 'filter' },
   },
   {
     keys: ':',
     description: 'Open command entry',
+    footer: { key: ':', verb: 'cmd' },
   },
   {
     keys: '?',
     description: 'Open the keybinding-help screen',
+    footer: { key: '?', verb: 'help' },
   },
   {
     keys: 'q',
     description: "Quit (confirms first if a run is in progress; disable in :settings' General tab)",
+    footer: { key: 'q', verb: 'quit' },
   },
   {
     keys: ':quit',
@@ -76,6 +87,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '← / →',
     description: 'Switch to previous/next zone tab, wrapping at the ends',
+    footer: { key: '←/→', verb: 'zone' },
   },
   // Wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
   {
@@ -96,11 +108,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Enter (wizard Step 3)',
     description: 'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   },
-  // Scoped to the create-EDT wizard's Step 3 "Configurer <service>" box — no collision:
-  // BranchPicker's own Ctrl+R (rename a row) lives in other modals.
+  // Back to global in every per-service box or table; the branch picker's rename is Ctrl+T.
   {
     keys: 'Ctrl+R',
-    description: 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy',
+    description: 'Per-service box or table (wizard Step 3, switch resolution, Update config): revert the service to the global strategy',
   },
   // Scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause panel and its
   // overwrite confirmation).
@@ -136,15 +147,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'Ctrl+N (switch resolution)',
-    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
-  },
-  {
-    keys: 'Ctrl+R (switch resolution)',
-    description: 'Switch EDT, "Configurer" box: return the service to the global strategy',
+    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Discard] row asks a second confirmation)',
   },
   {
     keys: 'Space / ← → (switch resolution)',
-    description: 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser',
+    description: 'Switch EDT, global strategy and "Configure" box: toggle the action between Adopt and Discard',
   },
   {
     keys: '↑ / ↓ (switch discard confirmation)',
@@ -162,5 +169,35 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'W (Logs)',
     description: 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)',
+    footer: { key: 'W', verb: 'wrap all', zone: 'logs' },
+  },
+  {
+    keys: 'i (Logs)',
+    description: 'Logs: toggle the focused pane between following and ignoring the global filter',
+  },
+  {
+    keys: 'R (Logs)',
+    description: 'Logs: restart the focused pane\'s service',
+  },
+  {
+    keys: 'm / a / p (Update)',
+    description: 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service',
+    footer: { key: 'm/a/p', verb: 'configure', zone: 'update' },
+  },
+  {
+    keys: 'Enter (Update config)',
+    description: 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box',
+  },
+  {
+    keys: 'R (load error)',
+    description: 'EDTs, Update and Logs: retry a failed list load',
+  },
+  {
+    keys: 'Ctrl+R (Routes)',
+    description: 'Routes: fire the request of the open pane',
+  },
+  {
+    keys: 'Ctrl+T (branch picker)',
+    description: 'Branch picker: rename the highlighted branch',
   },
 ];

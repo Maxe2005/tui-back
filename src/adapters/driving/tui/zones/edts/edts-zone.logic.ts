@@ -147,50 +147,13 @@ export function explainUnreachable(): IssueExplanation {
   };
 }
 
-// The arrow-key row-focus transition, interpreted as a pure function so it is unit-testable
-// (renderToString's fake stdin never invokes useInput). Arrows/Home/End only — they produce an
-// empty `input` in Ink, so only `key` flags are read. Generic over "current index, length", so
-// every list here (EDT selector, member checklists) reuses it.
-export type SelectionDirection = 'up' | 'down';
-
-export function resolveSelectionDirection(key: NavigationKey): SelectionDirection | null {
-  if (key.downArrow) {
-    return 'down';
-  }
-  if (key.upArrow) {
-    return 'up';
-  }
-  return null;
-}
-
-export function moveSelection(current: number, direction: SelectionDirection, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
-}
-
-// Home/End jump to top/bottom, a pure function for the same testability reason as
-// resolveSelectionDirection.
-export type SelectionJump = 'top' | 'bottom';
-
-export function resolveSelectionJump(key: NavigationKey): SelectionJump | null {
-  if (key.home) {
-    return 'top';
-  }
-  if (key.end) {
-    return 'bottom';
-  }
-  return null;
-}
-
-export function jumpSelection(jump: SelectionJump, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  return jump === 'top' ? 0 : length - 1;
-}
+export {
+  jumpSelection,
+  moveSelection,
+  resolveSelectionDirection,
+  resolveSelectionJump,
+} from '../../shared/keys/list-cursor.js';
+export type { SelectionDirection, SelectionJump } from '../../shared/keys/list-cursor.js';
 
 // ---- Base-view focus and forms -----------------------------------------------------------
 
@@ -270,9 +233,9 @@ export type CreateFormFocus = FormFocus;
 
 // ---- Create wizard Step 3 ----------------------------------------------------------------
 // The "global strategy + per-service exceptions" state. A row override is exactly core's
-// MemberBranchPlan: `create` renders as [Créer (Perso)], `existing` as [Existante] — or
-// [Renommer] once `renameTo` is set. A path with no override follows Panel A's global rule
-// ([Créer (Global)]).
+// MemberBranchPlan: `create` renders as [Create (Custom)], `existing` as [Existante] — or
+// [Rename] once `renameTo` is set. A path with no override follows Panel A's global rule
+// ([Create (Global)]).
 export type RowOverride = MemberBranchPlan;
 
 // One service's branch lists, loaded once per Step 3 entry (a failed load is retried on the
@@ -299,7 +262,7 @@ export type BranchStepState = {
   overrides: Readonly<Record<string, RowOverride>>;
   lists: Readonly<Record<string, BranchListState>>;
   box: OverrideBoxState | null;
-  // The root-EDT members already given their seeded [Créer (Perso)] override — each path is
+  // The root-EDT members already given their seeded [Create (Custom)] override — each path is
   // seeded at most once, so a row the developer reset to global stays global.
   seededPaths: readonly string[];
 };

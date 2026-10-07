@@ -20,7 +20,7 @@ const draft = () =>
   createUpdateConfigDraft('edt', [{ service: 'api', repoPath: '/r/api', sourceBranch: 'development' }], { layout: 'edt-panels' });
 
 describe('service box', () => {
-  it('only offers `oui` for declared actions', () => {
+  it('only offers `on` for declared actions', () => {
     expect(cycleToggle('off', true)).toBe('on');
     expect(cycleToggle('off', false)).toBe('follow');
   });
@@ -35,6 +35,16 @@ describe('service box', () => {
     expect(next).toMatchObject({ type: 'update', box: { migrations: 'off' } });
     const restart = { ...box, line: 'restart' as const };
     expect(reduceServiceBoxKey(restart, CONTEXT, ' ', {})).toMatchObject({ box: { cleanRestart: 'follow' } });
+  });
+
+  it('Tab and Shift+Tab move between lines and never flip a toggle or type a character', () => {
+    const start = { ...openServiceBox(draft(), 0)!, line: 'migrations' as const };
+    const forward = reduceServiceBoxKey(start, CONTEXT, '', { tab: true });
+    expect(forward).toMatchObject({ type: 'update', box: { line: 'restart', migrations: 'follow', cleanRestart: 'follow' } });
+    const back = reduceServiceBoxKey(start, CONTEXT, '', { tab: true, shift: true });
+    expect(back).toMatchObject({ box: { line: 'branch', migrations: 'follow' } });
+    const onBranch = openServiceBox(draft(), 0)!;
+    expect(reduceServiceBoxKey(onBranch, CONTEXT, '', { tab: true })).toMatchObject({ box: { line: 'migrations', editing: false, branch: onBranch.branch } });
   });
 
   it('refuses a branch outside the list in the field and in apply', () => {

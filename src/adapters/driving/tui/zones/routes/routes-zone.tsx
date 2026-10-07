@@ -86,6 +86,7 @@ import {
 } from './routes-request.logic.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -1260,7 +1261,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      const jump = resolveSelectionJump({ ...key, upArrow: false, downArrow: false, tab: false });
+      const jump = resolveSelectionJump(key);
       if (jump !== null) {
         setSelected(jumpSelection(jump, visibleRoutes.length));
         return;
@@ -1304,10 +1305,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Box flexDirection="row">
-          <Spinner />
-          <Text color={colors['text-dim']}> Loading routes…</Text>
-        </Box>
+        <StateLine kind="loading" subject="routes" />
       </Box>
     );
   }
@@ -1330,24 +1328,24 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const treeActive = treeFocused && classification !== null;
   const focusedEditable = focused !== undefined && canEditRouteBody(focused);
   const listHint = filterEditing
-    ? '[enter] apply  [esc] clear'
+    ? '[Enter] apply  [Esc] clear'
     : paneFocused
-      ? '[esc] back to the list'
+      ? '[Esc] back to the list'
       : focusedEditable
-        ? '[enter] request  [/ f] filter  [e] edit body  [home/end] jump'
-        : '[enter] request  [/ f] filter  [home/end] jump';
+        ? '[Enter] request  [/ f] filter  [e] edit body  [Home/End] jump'
+        : '[Enter] request  [/ f] filter  [Home/End] jump';
   // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
   // tabs lead it.
-  const paneKeys = '[ctrl+r] fire · [ctrl+←→] tab';
+  const paneKeys = '[Ctrl+R] fire  [Ctrl+←/→] tab';
   const treeHint = !treeActive
     ? null
     : classification?.kind === 'raw'
-      ? `[esc] request · [↑↓] scroll · ${paneKeys}`
+      ? `[Esc] request  [↑/↓] scroll  ${paneKeys}`
       : classification?.kind === 'empty'
-        ? `[esc] request · ${paneKeys}`
+        ? `[Esc] request  ${paneKeys}`
         : filterPanelOpen
-          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : `[esc] request · [↑↓] move · [←→] fold · [h/H] filter · [f] rules · [+/-] level · ${paneKeys}`;
+          ? '[Esc/f] close  [↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear'
+          : `[Esc] request  [↑/↓] move  [←/→] fold  [h/H] filter  [f] rules  [+/-] level  ${paneKeys}`;
   // Footer hints reflect editor focus — the sub-editor owns its line while open, the tree mode
   // lists the edit keys. `[a]` only shows when an add target exists (UX-DR7: never hint an
   // inert key — scalar roots and empty drafts take `r`).
@@ -1357,24 +1355,24 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const editorHint: string | null = !editorOpen
     ? null
     : rawEditor !== null
-      ? '[esc] done · [enter] newline'
+      ? '[Esc] done  [Enter] newline'
       : scalarEdit !== null || addPrompt !== null
-        ? '[enter] confirm · [esc] cancel'
+        ? '[Enter] confirm  [Esc] cancel'
         : filterPanelOpen
-          ? '[esc/f] close · [↑↓] select · [space] remove · [1-9] remove · [n] nulls · [c] clear'
-          : `[esc] list · [tab] section · [enter] edit · ${editorCanAdd ? '[a] add · ' : ''}[d] delete · [t] type · [r] raw · [←→] fold · [h/H] filter · ${paneKeys}`;
+          ? '[Esc/f] close  [↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear'
+          : `[Esc] list  [Tab] section  [Enter] edit  ${editorCanAdd ? '[a] add  ' : ''}[d] delete  [t] type  [r] raw  [←/→] fold  [h/H] filter  ${paneKeys}`;
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
   const requestHint: string | null =
     !paneFocused || paneTab !== 'request'
       ? null
       : section === 'body'
-        ? (editorHint ?? `[esc] list · [tab] section · ${paneKeys}`)
+        ? (editorHint ?? `[Esc] list  [Tab] section  ${paneKeys}`)
         : rowEdit !== null || rowAddPrompt !== null
-          ? '[enter] confirm · [esc] cancel'
-          : `[esc] list · [tab] section · ${rowSectionRows.length > 0 ? '[↑↓] move · [enter] edit · ' : ''}${
-              section === 'params' ? '' : `[a] add · ${rowSectionRows.length > 0 ? '[d] delete · ' : ''}`
+          ? '[Enter] confirm  [Esc] cancel'
+          : `[Esc] list  [Tab] section  ${rowSectionRows.length > 0 ? '[↑/↓] move  [Enter] edit  ' : ''}${
+              section === 'params' ? '' : `[a] add  ${rowSectionRows.length > 0 ? '[d] delete  ' : ''}`
             }${paneKeys}`;
-  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[esc] request · ${paneKeys}`) : null;
+  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[Esc] request  ${paneKeys}`) : null;
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1436,7 +1434,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             ) : null}
             <Box ref={listAreaRef} flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
               {visibleRoutes.length === 0 ? (
-                <Text color={colors['text-dim']}>No routes match the filter.</Text>
+                <StateLine kind="empty" subject="routes" text="No routes match the filter." />
               ) : (
                 <BoundedList
                   items={visibleRoutes}

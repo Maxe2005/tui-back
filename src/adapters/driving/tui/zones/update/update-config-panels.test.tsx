@@ -1,7 +1,7 @@
 // tui/zones/update: Ink rendering of the two-panel configuration — layout, effective cells,
 // scope differences, the service box and the height budget.
 import { describe, expect, it } from 'vitest';
-import { UpdateConfigPanels, PANELS_TOO_SMALL } from './update-config-panels.js';
+import { UpdateConfigPanels, PANELS_TOO_SMALL, PANELS_HINTS_TABLE } from './update-config-panels.js';
 import { applyMergeStrategy, createUpdateConfigDraft, type UpdateConfigDraft } from './update-config-dialog.logic.js';
 import { computeConfigBudget, setRow, toggleMergeSource, type PanelsViewState } from './update-config-panels.logic.js';
 import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
@@ -41,20 +41,20 @@ const lineCount = (output: string) => output.split('\n').length;
 describe('UpdateConfigPanels', () => {
   it('renders the global panel above the service table with the effective cells', async () => {
     const output = await render(draftWith(3), 30);
-    expect(output).toContain('PARAMÈTRES GLOBAUX');
-    expect(output).toContain('Source du merge');
+    expect(output).toContain('GLOBAL SETTINGS');
+    expect(output).toContain('Merge source');
     expect(output).toContain('(•) Shared branches');
-    expect(output).toContain('RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+    expect(output).toContain('SUMMARY AND PER-SERVICE EXCEPTIONS');
     expect(output).toContain('[x] svc-0');
     expect(output).toContain('✔ migrate');
-    expect(output).toContain('— aucune commande');
+    expect(output).toContain('— no command');
     expect(output).toContain('basic');
   });
 
   it('shows the EDT line under From EDT, with errors and the topic marker on rows', async () => {
     const pending = toggleMergeSource(draftWith(2));
-    expect(await render(pending, 30)).toContain('✖ aucun EDT choisi');
-    expect(await render(pending, 30)).toContain('<aucun>');
+    expect(await render(pending, 30)).toContain('✖ no EDT chosen');
+    expect(await render(pending, 30)).toContain('<none>');
     const resolved = applyMergeStrategy(draftWith(2), {
       kind: 'edt',
       ulid: 'U',
@@ -71,7 +71,7 @@ describe('UpdateConfigPanels', () => {
 
   it('all-repos has no merge-source lines', async () => {
     const output = await render(draftWith(2, 'all-panels'), 30);
-    expect(output).not.toContain('Source du merge');
+    expect(output).not.toContain('Merge source');
     expect(output).toContain('Migrations');
     expect(output).toContain('Clean restart');
   });
@@ -79,7 +79,7 @@ describe('UpdateConfigPanels', () => {
   it('marks personal rows', async () => {
     const draft = draftWith(2);
     const output = await render(setRow(draft, 0, { ...draft.rows[0]!, migrations: 'off' }), 30);
-    expect(output).toContain('perso');
+    expect(output).toContain('custom');
   });
 
   it('never exceeds the terminal height, even with many rows or an open EDT list', async () => {
@@ -106,10 +106,48 @@ describe('UpdateConfigPanels', () => {
       box,
       boxContext: { service: 'svc-1', branches: ['development', 'feat/x'], branchesStatus: 'ready', migrationDeclared: false, recipeDeclared: true },
     });
-    expect(output).toContain('Configurer svc-1');
+    expect(output).toContain('Configure svc-1');
     expect(output).toContain('<shared-branch>');
-    expect(output).toContain('— aucune commande déclarée');
-    expect(output).not.toContain('PARAMÈTRES GLOBAUX');
+    expect(output).toContain('— no command declared');
+    expect(output).not.toContain('GLOBAL SETTINGS');
     expect(lineCount(output)).toBeLessThanOrEqual(24);
+  });
+
+  it('a one-service screen fits a 20-row terminal where the table has one row, and asks for more below that', async () => {
+    const draft = createUpdateConfigDraft('edt', [{ service: 'svc-1', repoPath: '/repo/1', sourceBranch: 'development' }], { layout: 'service-panels' });
+    const fits = await render(draft, 20);
+    expect(fits).toContain('svc-1');
+    expect(fits).toContain('[ Start run ]');
+    expect(fits).not.toContain('Terminal too small');
+    expect(lineCount(fits)).toBeLessThanOrEqual(20);
+    expect(await render(draft, 19)).toContain('Terminal too small');
+  });
+
+  it('the table hints say how to start the run', () => {
+    expect(PANELS_HINTS_TABLE.join(' ')).toContain('Start run');
+  });
+
+  describe('branch autocomplete through the service box', () => {
+    const branches = ['development', 'dev-a', 'dev-b', 'dev-c', 'dev-d', 'dev-e', 'dev-f', 'zzz'];
+    async function renderBox(value: string, windowRows = 40) {
+      const draft = draftWith(2);
+      const box = { ...openServiceBox(draft, 0)!, editing: true, line: 'branch' as const, branch: createSuggestFieldState(value) };
+      return render(draft, windowRows, VIEW, {
+        box,
+        boxContext: { service: 'svc-1', branches, branchesStatus: 'ready', migrationDeclared: true, recipeDeclared: true },
+      });
+    }
+
+    it('marks an exact branch as valid and an unknown one as invalid', async () => {
+      expect(await renderBox('development')).toContain('✔');
+      expect(await renderBox('nope')).toContain('✖');
+    });
+
+    it('caps the list at the available lines with overflow indicators and hides the rest', async () => {
+      const output = await renderBox('dev', 28);
+      expect(output).toContain('↓');
+      expect(output).toContain('more');
+      expect(output).not.toContain('zzz');
+    });
   });
 });

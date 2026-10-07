@@ -210,7 +210,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   useInput((input, key) => {
     if (phase === 'root-input') {
       // Ctrl+L: "Clean stale entries" — never a plain "l" keypress, which must stay available
-      // as ordinary root-path text (like branch-picker.tsx's Ctrl+R).
+      // as ordinary root-path text (like branch-picker.tsx's Ctrl+T).
       if (key.ctrl && input.toLowerCase() === 'l') {
         void scanRegistryStaleEntries();
         return;
@@ -231,6 +231,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'candidates') {
+      if (key.home || key.end) {
+        setCursor(key.home ? 0 : Math.max(candidates.length - 1, 0));
+        return;
+      }
       if (key.downArrow) {
         setCursor((current) => moveCandidateCursor(current, 'down', candidates.length));
         return;
@@ -255,6 +259,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'clean-candidates' && staleCandidates.length > 0) {
+      if (key.home || key.end) {
+        setCleanCursor(key.home ? 0 : Math.max(staleCandidates.length - 1, 0));
+        return;
+      }
       if (key.downArrow) {
         setCleanCursor((current) => moveCandidateCursor(current, 'down', staleCandidates.length));
         return;
@@ -280,7 +288,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   });
 
   return (
-    <ModalDialog title="REPO REGISTRY" open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title="REPO REGISTRY" open>
       <Box flexDirection="column">
         <Box flexDirection="column">
           {MANIFEST_GUIDANCE_LINES.map((line) => (
@@ -294,7 +302,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
-            <DimAnnotation text="Type a path, then Enter to scan." />
+            <DimAnnotation text="Type a path  [Enter] scan" />
             <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
           </Box>
         ) : null}
@@ -337,7 +345,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 </Box>
               );
             })}
-            <DimAnnotation text="Space to toggle, Enter to register the selection." />
+            <DimAnnotation text="[Space] toggle  [Enter] register selection" />
           </Box>
         ) : null}
 
@@ -417,7 +425,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="Space to toggle, Enter to remove the selection." />
+                <DimAnnotation text="[Space] toggle  [Enter] remove selection" />
               </Box>
             )}
           </Box>

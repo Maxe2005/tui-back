@@ -76,7 +76,7 @@ describe('switch-resolution Shift+Tab', () => {
 
 describe('switch-resolution rows', () => {
   it('pins the footer verbatim', () => {
-    expect(SWITCH_RESOLUTION_FOOTER).toBe('[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch');
+    expect(SWITCH_RESOLUTION_FOOTER).toBe('[Tab] switch pane  [Enter] configure row  [Ctrl+N] confirm  [Esc] cancel switch');
   });
 
   it('global adopt: a shared-branch repo targets the outgoing slug, a non-shared one keeps its branch; state-1 rows are left out', () => {
@@ -86,7 +86,7 @@ describe('switch-resolution rows', () => {
       { kind: 'adopt', branch: 'mon-topic', source: 'global' },
       { kind: 'adopt', branch: 'feat/x', source: 'global' },
     ]);
-    expect(rows.map((row) => modeLabel(row.plan))).toEqual(['[Adopter (Global)]', '[Adopter (Global)]']);
+    expect(rows.map((row) => modeLabel(row.plan))).toEqual(['[Adopt (Global)]', '[Adopt (Global)]']);
     expect(buildResolutions(rows)).toEqual({
       '/repo/a': { kind: 'adopt', branch: 'mon-topic' },
       '/repo/b': { kind: 'adopt', branch: 'feat/x' },
@@ -101,7 +101,7 @@ describe('switch-resolution rows', () => {
     });
   });
 
-  it('no outgoing EDT: every row defaults to Écraser and Panel A cannot toggle to Adopter', () => {
+  it('no outgoing EDT: every row defaults to Discard and Panel A cannot toggle to Adopt', () => {
     const state = initialSwitchResolution(null, DIRTY);
     expect(state.globalAction).toBe('discard');
     expect(buildRows(DIRTY, globalOf(state)).every((row) => row.plan.kind === 'discard')).toBe(true);
@@ -111,11 +111,11 @@ describe('switch-resolution rows', () => {
   it('validateRow: empty, protected, existing-locally (≠ current) and detached HEAD are rejected', () => {
     const lists = { '/repo/a': { status: 'ready' as const, branches: ['taken', 'development'] } };
     const row = (branch: string, base = SHARED) => ({ repo: base, hasOutgoing: true, claims: [], plan: { kind: 'adopt' as const, branch, source: 'perso' as const } });
-    expect(validateRow(row(''), lists)).toBe('Nom de branche requis');
-    expect(validateRow(row('prod'), lists)).toBe('« prod » est protégée par le manifeste de svc-a');
+    expect(validateRow(row(''), lists)).toBe('Branch name required');
+    expect(validateRow(row('prod'), lists)).toBe('“prod” is protected by the manifest of svc-a');
     // A branch the repo's manifest does not list is not protected.
     expect(validateRow(row('prod', { ...SHARED, protectedBranches: [] }), lists)).toBeNull();
-    expect(validateRow(row('taken'), lists)).toContain('existe déjà');
+    expect(validateRow(row('taken'), lists)).toContain('already exists');
     expect(validateRow(row('fresh'), lists)).toBeNull();
     // The current branch itself may exist (adopting in place).
     expect(validateRow(row('feat/x', PERSONAL), { '/repo/b': { status: 'ready', branches: ['feat/x'] } })).toBeNull();
@@ -123,9 +123,9 @@ describe('switch-resolution rows', () => {
     expect(validateRow(row('taken'), { '/repo/a': { status: 'loading', branches: [] } })).toBeNull();
     const detached = repo({ service: 'svc-d', repoPath: '/repo/d', currentBranch: 'HEAD', currentBranchShared: false });
     expect(validateRow(row('HEAD', detached), {})).toBe(RESOLUTION_ERRORS.detachedHead);
-    expect(RESOLUTION_ERRORS.detachedHead).toBe('HEAD détachée ou branche illisible — seul Écraser est possible');
+    expect(RESOLUTION_ERRORS.detachedHead).toBe('Detached HEAD or unreadable branch — only Discard is possible');
     const noManifest = repo({ service: 'svc-m', repoPath: '/repo/m', sharedBranch: null });
-    expect(validateRow(row('fresh', noManifest), {})).toBe('manifeste illisible — impossible de valider la branche ; choisissez Écraser ou annulez');
+    expect(validateRow(row('fresh', noManifest), {})).toBe('unreadable manifest — cannot validate the branch; choose Discard or cancel');
     expect(validateRow({ repo: detached, hasOutgoing: true, claims: [], plan: { kind: 'discard', source: 'perso' } }, {})).toBeNull();
   });
 
@@ -144,7 +144,7 @@ describe('switch-resolution rows', () => {
     expect(validateRow(rows[1]!, {})).toBeNull();
 
     const kept = { ...rows[1]!, plan: { kind: 'adopt' as const, branch: 'feat/x', source: 'perso' as const } };
-    expect(validateRow(kept, {})).toBe("utilisée par l'EDT « Other » — la reprendre casserait cet EDT");
+    expect(validateRow(kept, {})).toBe("used by the EDT “Other” — reusing it would break that EDT");
     // The box pre-fills the global name for such a row, and rejects the claimed branch too.
     const opened = press(ready(state), TAB, DOWN, ENTER);
     expect(opened.box?.branch.value).toBe('mon-topic');
@@ -152,7 +152,7 @@ describe('switch-resolution rows', () => {
 });
 
 describe('reduceSwitchResolutionKey', () => {
-  it('Ctrl+N with every row valid and none Écraser proceeds with exactly buildResolutions(rows)', () => {
+  it('Ctrl+N with every row valid and none Discard proceeds with exactly buildResolutions(rows)', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     const next = press(state, CTRL_N);
     expect(next.decision).toEqual({ kind: 'proceed', resolutions: buildResolutions(buildRows(DIRTY, globalOf(state))) });
@@ -167,7 +167,16 @@ describe('reduceSwitchResolutionKey', () => {
     expect(buildRows(DIRTY, globalOf(next)).map((row) => row.plan.kind === 'adopt' && row.plan.branch)).toEqual(['wip', 'feat/x']);
   });
 
-  it('a Perso override stops following Panel A; Ctrl+R in the box returns the row to Global', () => {
+  it('Tab and Shift+Tab move lines inside the box without flipping the action or typing', () => {
+    const opened = press(ready(initialSwitchResolution('Mon Topic', DIRTY)), TAB, DOWN, ENTER);
+    expect(opened.box).toMatchObject({ line: 'action', action: 'adopt' });
+    const forward = press(opened, TAB);
+    expect(forward.box).toMatchObject({ line: 'branch', action: 'adopt', branch: opened.box!.branch });
+    const back = press(forward, ['', { tab: true, shift: true }]);
+    expect(back.box).toMatchObject({ line: 'action', action: 'adopt' });
+  });
+
+  it('a Custom override stops following Panel A; Ctrl+R in the box returns the row to Global', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     // Panel B, row 2 (svc-b), open the box, edit the branch to feat/y, apply.
     const opened = press(state, TAB, DOWN, ENTER);
@@ -176,8 +185,8 @@ describe('reduceSwitchResolutionKey', () => {
     expect(applied.box).toBeNull();
     expect(applied.overrides['/repo/b']).toEqual({ kind: 'adopt', branch: 'feat/y' });
     const rows = buildRows(DIRTY, globalOf(applied));
-    expect(modeLabel(rows[1]!.plan)).toBe('[Adopter (Perso)]');
-    // Switching Panel A to Écraser leaves the Perso row alone.
+    expect(modeLabel(rows[1]!.plan)).toBe('[Adopt (Custom)]');
+    // Switching Panel A to Discard leaves the Custom row alone.
     const globalDiscard = press(applied, TAB, SPACE);
     expect(buildRows(DIRTY, globalOf(globalDiscard)).map((row) => row.plan.kind)).toEqual(['discard', 'adopt']);
     const reverted = press(applied, ENTER, CTRL_R);
@@ -188,7 +197,7 @@ describe('reduceSwitchResolutionKey', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     const opened = press(state, TAB, ENTER); // svc-a box, pre-filled mon-topic
     const typed = press(opened, DOWN, ENTER, ...[...Array(9)].map(() => BACKSPACE), ...type('prod'), ENTER, ENTER);
-    expect(typed.box?.error).toContain('protégée');
+    expect(typed.box?.error).toContain('protected');
     expect(typed.overrides).toEqual({});
 
     const emptyGlobal = press(state, DOWN, ENTER, ...[...Array(9)].map(() => BACKSPACE), ENTER, CTRL_N);
@@ -196,7 +205,7 @@ describe('reduceSwitchResolutionKey', () => {
     expect(emptyGlobal.error).toBe(RESOLUTION_ERRORS.blocked);
   });
 
-  it('any Écraser row opens the discard confirmation: Enter/Esc go back, only Ctrl+E proceeds', () => {
+  it('any Discard row opens the discard confirmation: Enter/Esc go back, only Ctrl+E proceeds', () => {
     const state = ready(initialSwitchResolution('Mon Topic', DIRTY));
     const confirming = press(state, SPACE, CTRL_N);
     expect(confirming.confirm).toEqual({ scroll: 0, error: null });
@@ -218,7 +227,7 @@ describe('reduceSwitchResolutionKey', () => {
     expect(confirming.confirm).not.toBeNull();
     const refused = reduceSwitchResolutionKey(confirming, dirty, 'e', { ctrl: true });
     expect(refused.decision).toBeNull();
-    expect(refused.confirm?.error).toBe('liste des fichiers indisponible pour svc-u — annulez et relancez la bascule');
+    expect(refused.confirm?.error).toBe('file list unavailable for svc-u — cancel and retry the switch');
   });
 
   it('Esc closes the innermost element first, then cancels the switch', () => {
@@ -235,7 +244,7 @@ describe('reduceSwitchResolutionKey', () => {
     expect(press(boxOpen, ESC, ESC).decision).toEqual({ kind: 'cancel' });
   });
 
-  it('a detached-HEAD row must be Écraser: adopt blocks Ctrl+N', () => {
+  it('a detached-HEAD row must be Discard: adopt blocks Ctrl+N', () => {
     const detached = repo({ service: 'svc-d', repoPath: '/repo/d', currentBranch: 'HEAD', currentBranchShared: false });
     const dirty = [detached];
     const state = ready(initialSwitchResolution('Mon Topic', dirty));

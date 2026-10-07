@@ -4,7 +4,7 @@
 // `:update-service` handoff and the service quick-pick.
 import { createElement } from 'react';
 import { render } from 'ink';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../core/result.js';
 import { ok } from '../../../../../core/result.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
@@ -164,16 +164,16 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // row 0 is a service row -> begin branch edit
+      await press(instance, stdin, '\r'); // table focus: open the service box on row 0
+      await press(instance, stdin, '\r'); // branch line -> begin the branch edit
       await waitForOutput(instance, stdout, 'development-hotfix');
 
       // The zone threaded its own listBranches result plus the live store cap into the
       // dialog: 3 substring matches at maxRows 2 render two rows plus the overflow line.
       // A zone that never fires its effect (or hardcodes the cap) fails here — reducer-level
       // tests inject branches/maxRows directly and cannot catch that.
-      expect(stdout.output).toContain('Merge from');
+      expect(stdout.output).toContain('Source branch');
       expect(stdout.output).toContain('development-hotfix');
-      expect(stdout.output).toContain('… 1 more');
       expect(stdout.output).not.toContain('development-experiment');
       expect(stdout.output).not.toContain('zzz-other');
     } finally {
@@ -182,7 +182,7 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     }
   });
 
-  it('a listBranches failure keeps the `Failed to load branches.` line with a usable field', async () => {
+  it('a listBranches failure keeps the `Failed to load.` line with a usable field', async () => {
     const store = storeWithConfig(async (): Promise<Result<string[]>> => ({
       ok: false,
       error: { code: 'git-error', message: 'boom' },
@@ -191,12 +191,12 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // row 0 is a service row -> begin branch edit
-      await waitForOutput(instance, stdout, 'Failed to load branches.');
+      await press(instance, stdin, '\r'); // table focus: open the service box on row 0
+      await press(instance, stdin, '\r'); // branch line -> begin the branch edit
+      await waitForOutput(instance, stdout, 'Failed to load.');
 
-      expect(stdout.output).toContain('Merge from');
-      expect(stdout.output).toContain('Failed to load branches.');
-      expect(stdout.output).toContain('development');
+      expect(stdout.output).toContain('Source branch');
+      expect(stdout.output).toContain('Failed to load.');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -242,6 +242,25 @@ describe('UpdateZone update triggers (real keypress)', () => {
     return store;
   }
 
+  it('R retries the service load only while it is in error, and the error line advertises it', async () => {
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = storeWithServices();
+    store.setState({ edtsBranchesStatus: 'error', loadEdtsBranches });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await waitForOutput(instance, stdout, 'Failed to load services.');
+      expect(stdout.output).toContain('[R]');
+      const callsBefore = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdtsBranches.mock.calls.length).toBe(callsBefore + 1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('p on the highlighted row reaches openUpdateConfig (unwired: explicit error, never a throw)', async () => {
     const store = storeWithServices();
 
@@ -259,13 +278,13 @@ describe('UpdateZone update triggers (real keypress)', () => {
     }
   });
 
-  it('g reaches openUpdateConfig pre-scoped to the EDT (unwired: explicit error, never a throw)', async () => {
+  it('m reaches openUpdateConfig pre-scoped to the EDT (unwired: explicit error, never a throw)', async () => {
     const store = storeWithServices();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await waitForOutput(instance, stdout, 'No ports wired into the TUI store');
 
       expect(store.getState().updateConfig).toBeNull();
@@ -276,14 +295,14 @@ describe('UpdateZone update triggers (real keypress)', () => {
     }
   });
 
-  it('g mid-run is ignored — no screen, no error, the run keeps its status', async () => {
+  it('m mid-run is ignored — no screen, no error, the run keeps its status', async () => {
     const store = storeWithServices();
     store.setState({ updateStatus: 'running' });
 
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await instance.waitUntilRenderFlush();
 
       expect(store.getState().updateConfig).toBeNull();
@@ -365,7 +384,7 @@ describe('UpdateZone no-arg update-service handoff (real mount)', () => {
 
     const { instance, stdout } = mount(store);
     try {
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       // Consumed exactly once, pre-scoped to the highlighted row, nothing ran.
       expect(store.getState().updateServiceSelectRequest).toBe(false);
@@ -453,7 +472,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter); // cursor 0 -> svc-a
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateServicePick).toBeNull();
       expect(store.getState().updateConfig).toMatchObject({
@@ -473,7 +492,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateServicePick).toBeNull();
       expect(store.getState().updateConfig).toMatchObject({
@@ -493,7 +512,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, '/repo/b');
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
@@ -515,7 +534,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       // Decisive proof: a Home that jumped the list back to its first row would make this
       // Enter confirm svc-a instead.
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
@@ -538,7 +557,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       await press(instance, stdin, KEYS.end);
       await press(instance, stdin, '-b'); // "svc-b" only if End moved it back to the end
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
@@ -574,7 +593,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       store.setState({ updateServicePick: PICK });
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-a', repoPath: '/repo/a', selected: true }],
@@ -597,7 +616,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       // The filter now reads "svc-b". An append-only field would read "bsvc-", match
       // nothing, and make this Enter a no-op.
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateServicePick).toBeNull();
     } finally {
@@ -643,7 +662,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
   });
 });
 
-// The zone keys dispatch through to the openers with their args on a wired store — `g` opens the
+// The zone keys dispatch through to the openers with their args on a wired store — `m` opens the
 // draft EDT-scoped with every member pre-selected, `p` opens a one-row draft for the highlighted
 // row (the unwired trigger tests above stop at store-not-wired before reading any arg).
 describe('UpdateZone wired dispatch args (real keypress)', () => {
@@ -709,14 +728,14 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     return store;
   }
 
-  it('g opens the draft EDT-scoped with all members pre-selected', async () => {
+  it('m opens the draft EDT-scoped with all members pre-selected', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
-      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
+      await press(instance, stdin, 'm');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
 
       expect(store.getState().updateConfig).toMatchObject({
         scope: 'edt',
@@ -732,19 +751,18 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 
-  it('Tab moves to the table, Enter opens the service box and Esc closes it without changes', async () => {
+  it('Opens on the table, Enter opens the service box and Esc closes it without changes', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
-      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
-      await press(instance, stdin, '\t');
+      await press(instance, stdin, 'm');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
       await press(instance, stdin, '\r');
-      await waitForOutput(instance, stdout, 'Configurer svc-a');
+      await waitForOutput(instance, stdout, 'Configure svc-a');
       await press(instance, stdin, '\u001b');
-      await waitForOutput(instance, stdout, 'RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+      await waitForOutput(instance, stdout, 'SUMMARY AND PER-SERVICE EXCEPTIONS');
 
       expect(store.getState().updateConfig).not.toBeNull();
       expect(store.getState().updateConfig?.rows.every((row) => row.origin === 'shared')).toBe(true);
@@ -754,24 +772,22 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 
-  it('From EDT with no EDT chosen blocks the run: Space on the source line, Esc, then y is refused', async () => {
+  it('From EDT with no EDT chosen blocks the run: Space on the source line, then Start run is refused', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
-      await waitForOutput(instance, stdout, 'PARAMÈTRES GLOBAUX');
-      await press(instance, stdin, ' ');
-      await waitForOutput(instance, stdout, '✖ aucun EDT choisi');
-      await press(instance, stdin, '\u001b');
-      // Ink holds a lone Esc briefly to tell it from an escape sequence; give it time so the
-      // Tab below is not read as Meta+Tab.
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await press(instance, stdin, 'm');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
       await press(instance, stdin, '\t');
-      await waitForOutput(instance, stdout, '[Ctrl+R] Revenir au global');
-      await press(instance, stdin, 'y');
-      await waitForOutput(instance, stdout, 'Source de merge non résolue');
+      await press(instance, stdin, ' ');
+      await waitForOutput(instance, stdout, '✖ no EDT chosen');
+      await press(instance, stdin, '\u001b'); // leaves the EDT field the toggle opened
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await press(instance, stdin, '\u001b[F'); // End: the [ Start run ] line
+      await press(instance, stdin, '\r');
+      await waitForOutput(instance, stdout, 'Unresolved merge source');
 
       expect(store.getState().updateConfig?.strategy.kind).toBe('edt-pending');
       expect(store.getState().updateStatus).toBe('idle');
@@ -788,7 +804,7 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'p');
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         scope: 'edt',

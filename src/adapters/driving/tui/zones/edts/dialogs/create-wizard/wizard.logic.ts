@@ -20,22 +20,22 @@ import {
 export const WIZARD_STEPS: readonly WizardStep[] = [1, 2, 3, 4];
 
 export const STEP_LABELS: Readonly<Record<WizardStep, string>> = {
-  1: '1. Nom',
+  1: '1. Name',
   2: '2. Services',
   3: '3. Branches',
   4: '4. Activation',
 };
 
 export const STEP_INTROS: Readonly<Record<WizardStep, string>> = {
-  1: 'Choisissez un nom unique pour ce nouvel espace de travail (EDT).',
-  2: 'Sélectionnez les services qui feront partie de cet EDT — au moins un.',
-  3: 'Choisissez une règle de branche commune, puis ajustez les services qui font exception.',
-  4: "Vérifiez le récapitulatif, puis choisissez si ce nouvel EDT devient l'espace actif.",
+  1: 'Pick a unique name for this new workspace (EDT).',
+  2: 'Select the services that will belong to this EDT — at least one.',
+  3: 'Pick a shared branch rule, then adjust the services that are exceptions.',
+  4: 'Review the summary, then choose whether this new EDT becomes the active workspace.',
 };
 
-export const EMPTY_NAME_ERROR = 'Le nom ne doit pas être vide';
-export const TAKEN_NAME_ERROR = 'Ce nom est déjà pris par un autre EDT';
-export const NO_SERVICE_ERROR = 'Sélectionnez au moins un service';
+export const EMPTY_NAME_ERROR = 'The name must not be empty';
+export const TAKEN_NAME_ERROR = 'This name is already taken by another EDT';
+export const NO_SERVICE_ERROR = 'Select at least one service';
 
 export type NameAvailability = 'empty' | 'available' | 'taken';
 
@@ -204,23 +204,23 @@ export function resolveGlobalBase(input: string, lists: BranchListState | undefi
 export type RowMode = 'global' | 'perso' | 'existing' | 'rename';
 
 export const ROW_MODE_LABELS: Readonly<Record<RowMode, string>> = {
-  global: '[Créer (Global)]',
-  perso: '[Créer (Perso)]',
-  existing: '[Existante]',
-  rename: '[Renommer]',
+  global: '[Create (Global)]',
+  perso: '[Create (Custom)]',
+  existing: '[Existing]',
+  rename: '[Rename]',
 };
 
 export const ROW_ERRORS = {
-  loading: 'chargement des branches en cours',
-  loadError: 'échec du chargement des branches',
-  notFound: 'branche introuvable',
-  emptyName: 'nom de branche vide',
+  loading: 'branches are loading',
+  loadError: 'failed to load branches',
+  notFound: 'branch not found',
+  emptyName: 'empty branch name',
   // Names the branch and its manifest. The short row form never repeats the service: the row and
   // canAdvance's `<service> : ` prefix already name it.
-  protected: (name: string) => `« ${name} » est protégée par le manifeste du service`,
-  exists: 'branche déjà existante',
-  noopRename: 'renommage sans effet',
-  shadowed: 'branche locale du même nom déjà existante',
+  protected: (name: string) => `“${name}” is protected by the service manifest`,
+  exists: 'branch already exists',
+  noopRename: 'rename has no effect',
+  shadowed: 'a local branch with the same name already exists',
 } as const;
 
 // Why a plan's target cannot work, checked inline (advisory — the git gate and core stay
@@ -297,7 +297,7 @@ export function rowIssueMessage(issue: PlanIssue): string {
   }
 }
 
-// One Panel B row, ready to render: display texts for the Base / Source and Branche cible
+// One Panel B row, ready to render: display texts for the Base / Source and Target branch
 // columns, the blocking error (if any, on the column it belongs to), and the resulting plan.
 export type RowView = {
   path: string;
@@ -326,11 +326,11 @@ export function buildRowView(
     const targetError = issue === null ? null : rowIssueMessage(issue);
     const common = { path, service, mode: 'global' as const, modeLabel: ROW_MODE_LABELS.global, target: name, targetError };
     if (resolution.kind === 'loading') {
-      return { ...common, base: 'Chargement…', baseStatus: 'loading', error: ROW_ERRORS.loading, plan: null };
+      return { ...common, base: 'Loading…', baseStatus: 'loading', error: ROW_ERRORS.loading, plan: null };
     }
     if (resolution.kind === 'load-error') {
       // The real cause (e.g. git's own message), not only the generic label.
-      const message = resolution.message.trim() === '' ? ROW_ERRORS.loadError : `${ROW_ERRORS.loadError} : ${resolution.message.trim()}`;
+      const message = resolution.message.trim() === '' ? ROW_ERRORS.loadError : `${ROW_ERRORS.loadError}: ${resolution.message.trim()}`;
       return { ...common, base: message, baseStatus: 'error', error: message, plan: null };
     }
     if (resolution.kind === 'not-found') {
@@ -421,11 +421,11 @@ export function isStep3Busy(state: Pick<CreateDialogState, 'step' | 'branches'>)
 // Overrides and loaded lists are kept.
 //
 // With a `seed` (edt-create-from's root EDT), each selected root member never
-// seeded before gets a [Créer (Perso)] override on its root-EDT branch, named after the global
+// seeded before gets a [Create (Custom)] override on its root-EDT branch, named after the global
 // name this entry settles on — once per path (`seededPaths`), so a row reset to global stays
 // global. A seeded override still exactly `{create, <root branch>, <previous global name>}` is
 // untouched, so it follows the new global name, the same way an untouched global name tracks
-// the slug. Non-root members get no override ([Créer (Global)]).
+// the slug. Non-root members get no override ([Create (Global)]).
 export function enterBranchStep(
   branches: BranchStepState,
   topic: string,
@@ -535,22 +535,22 @@ export function pruneToCandidates(selectedMembers: readonly string[], candidates
 // ---- Step 4: Activation -----------------------------------------------------------------------
 
 export const ACTIVATION_LABELS = {
-  firstEdt: 'Définir cet EDT comme espace actif immédiatement',
-  firstEdtExplanation: "Aucun EDT n'existe encore : il n'y a pas d'EDT sortant dont le travail serait à préserver.",
-  switchNow: 'Basculer immédiatement sur ce nouvel EDT',
-  stay: "Créer sans basculer (rester sur l'EDT courant)",
-  stashInfo: "Le travail non commité des services de l'EDT sortant est préservé automatiquement (stash).",
+  firstEdt: 'Make this EDT the active workspace immediately',
+  firstEdtExplanation: 'No EDT exists yet: there is no outgoing EDT whose work needs preserving.',
+  switchNow: 'Switch to this new EDT immediately',
+  stay: 'Create without switching (stay on the current EDT)',
+  stashInfo: 'Uncommitted work in the outgoing EDT services is preserved automatically (stash).',
   otherDirtyInfo:
-    "Le travail non commité de tout autre service vous est listé : vous choisirez de l'adopter dans l'EDT sortant ou de l'écraser.",
-  membersInfo: 'Les services membres passent sur leurs branches configurées.',
-  nonMembersInfo: 'Les services non membres reviennent sur leur propre branche partagée :',
-  stopped: "EDT créé mais non actif : l'activation a été interrompue.",
-  notActivated: "EDT créé mais non activé.",
+    'Uncommitted work in any other service is listed: you will choose to adopt it into the outgoing EDT or discard it.',
+  membersInfo: 'Member services move to their configured branches.',
+  nonMembersInfo: 'Non-member services go back to their own shared branch:',
+  stopped: 'EDT created but not active: activation was interrupted.',
+  notActivated: 'EDT created but not activated.',
 } as const;
 
 // The next step shown under the "created but not active" terminal messages.
 export function activateLaterHint(topic: string): string {
-  return `Activez-le plus tard via :edt-switch ${topic.trim()}`;
+  return `Activate it later with :edt-switch ${topic.trim()}`;
 }
 
 export type NonMemberReturn = { service: string; sharedBranch: string };
@@ -615,8 +615,8 @@ export function summarizeActivationResults(results: readonly SwitchEdtRepoResult
     }
     if (row.outcome === 'discarded') {
       const paths = row.detail?.discardedPaths ?? [];
-      return { service: row.service, message: `fichiers écrasés (${paths.length}) : ${paths.join(', ')} — puis basculé sur sa branche cible` };
+      return { service: row.service, message: `files overwritten (${paths.length}): ${paths.join(', ')} — then switched to its target branch` };
     }
-    return { service: row.service, message: 'basculé sur sa branche cible' };
+    return { service: row.service, message: 'switched to its target branch' };
   });
 }

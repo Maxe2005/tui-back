@@ -4,15 +4,13 @@ import { colors, spacing } from '../theme/theme.js';
 
 export type ModalDialogProps = {
   title: string;
-  onConfirm: () => void;
-  onCancel: () => void;
   open?: boolean;
   children?: ReactNode;
   maxHeight?: number | string;
 };
 
 export function ModalDialog(props: ModalDialogProps) {
-  const { title, onConfirm, onCancel, open = true, children, maxHeight } = props;
+  const { title, open = true, children, maxHeight } = props;
   if (!open) return null;
   return (
     <Box

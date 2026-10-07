@@ -52,11 +52,11 @@ export interface UpdateConfigPanelsController {
   handleKey: (input: string, key: PanelsKey & { escape?: boolean }) => void;
 }
 
-const INITIAL_VIEW: PanelsViewState = { focus: 'panel', panelCursor: 0, tableCursor: 0, edtField: null };
+const INITIAL_VIEW: PanelsViewState = { focus: 'table', panelCursor: 0, tableCursor: 0, edtField: null };
 
 export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): UpdateConfigPanelsController {
   const { draft } = input;
-  const panelsOpen = draft !== null && draft.layout !== 'simple';
+  const panelsOpen = draft !== null;
   const [view, setViewState] = useState<PanelsViewState>(INITIAL_VIEW);
   const [box, setBoxState] = useState<ServiceBoxState | null>(null);
   // Keys can arrive faster than React re-renders (key repeat, paste): the handler reads the
@@ -79,7 +79,8 @@ export function useUpdateConfigPanels(input: UseUpdateConfigPanelsInput): Update
   // Fresh view every time a panels screen opens.
   useEffect(() => {
     if (panelsOpen) {
-      setView(INITIAL_VIEW);
+      // A draft with no rows has no table to focus: open on the global panel.
+      setView(draft.rows.length === 0 ? { ...INITIAL_VIEW, focus: 'panel' } : INITIAL_VIEW);
       setBox(null);
       setEdtStatus('loading');
     }

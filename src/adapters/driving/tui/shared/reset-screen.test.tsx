@@ -108,7 +108,7 @@ describe('ResetScreen render', () => {
     const output = await renderToString(<ResetScreen useStore={store} initialState={state} />);
     expect(output).toContain('registry exploded');
     expect(output).toContain('cannot continue');
-    expect(output).not.toContain('Enter to continue');
+    expect(output).not.toContain('[Enter] continue');
   });
 
   it('running: shows progress and no key hints but waiting', async () => {
