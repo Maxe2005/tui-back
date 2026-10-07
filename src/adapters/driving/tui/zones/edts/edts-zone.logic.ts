@@ -12,6 +12,7 @@ import type { NavigationKey } from '../../shared/keys/navigation-key.js';
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
+import type { MenuItem } from '../../shared/components/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
@@ -647,11 +648,13 @@ export type ModifyDialogState = {
 // EDT / a visibly disabled Restart. Three ListRows inside the existing ModalDialog,
 // arrow/Home/End-navigable via the resolveSelectionDirection/moveSelection pair every list here
 // uses.
-export const SERVICE_ACTION_MENU_ITEMS = Object.freeze([
-  { label: 'Remove from EDT', disabled: false },
-  { label: 'Change branch for this EDT', disabled: false },
-  { label: 'Restart', disabled: true },
-] as const);
+export type ServiceActionValue = 'remove' | 'change-branch' | 'restart' | 'close';
+
+export const SERVICE_ACTION_MENU_ITEMS: readonly MenuItem<ServiceActionValue>[] = Object.freeze([
+  { value: 'remove', label: 'Remove from EDT' },
+  { value: 'change-branch', label: 'Change branch for this EDT' },
+  { value: 'restart', label: 'Restart', disabled: true, note: 'Available with Epic 5' },
+]);
 
 export type ServiceActionsDialogState = {
   kind: 'service-actions';

@@ -33,7 +33,8 @@ import {
   partitionUpdateServiceRows,
   resolveEditorCommand,
 } from './update-zone.logic.js';
-import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
+import { UPDATE_SERVICE_MENU_ESCAPE, UpdateServiceMenuDialog, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
+import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
@@ -205,16 +206,18 @@ export function resolveQuitConfirm(input: string, key: { return?: boolean; escap
 // continues) so a stray keystroke never cancels the run.
 export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
 
-export const UPDATE_BLOCKER_MENU_ITEMS = Object.freeze([
+export type UpdateBlockerMenuValue = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+
+export type UpdateBlockerMenuItem = MenuItem<UpdateBlockerMenuValue>;
+
+export const UPDATE_BLOCKER_MENU_ESCAPE: UpdateBlockerMenuValue = 'cancel-repo';
+
+export const UPDATE_BLOCKER_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Object.freeze([
   { value: 'stash', label: 'Stash changes and continue' },
   { value: 'edited', label: 'Open in editor, then retry' },
   { value: 'cancel-repo', label: 'Cancel this repo (continue with the rest)' },
   { value: 'cancel-run', label: 'Cancel the whole run' },
-] as const);
-
-export type UpdateBlockerMenuValue = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number]['value'];
-
-export type UpdateBlockerMenuItem = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number];
+]);
 
 // The choices offered for a blocker kind. A merge conflict drops `stash`: git refuses to
 // stash unmerged paths, and once the conflict is resolved and staged a stash silently
@@ -249,49 +252,6 @@ export function formatBlockerRetry(blocker: UpdateBlocker): string | null {
   }
   const reason = blocker.retryReason !== undefined && blocker.retryReason !== '' ? ` — ${blocker.retryReason}` : '';
   return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
-}
-
-export type BlockerMenuKey = {
-  upArrow?: boolean;
-  downArrow?: boolean;
-  home?: boolean;
-  end?: boolean;
-  return?: boolean;
-  escape?: boolean;
-};
-
-export type BlockerMenuStep = { type: 'move'; cursor: number } | { type: 'choose'; choice: UpdateBlockerMenuValue } | { type: 'ignore' };
-
-export function resolveBlockerMenuKey(
-  input: string,
-  key: BlockerMenuKey,
-  cursor: number,
-  items: readonly UpdateBlockerMenuItem[] = UPDATE_BLOCKER_MENU_ITEMS,
-): BlockerMenuStep {
-  const length = items.length;
-  if (key.home === true) {
-    return { type: 'move', cursor: 0 };
-  }
-  if (key.end === true) {
-    return { type: 'move', cursor: length - 1 };
-  }
-  if (key.upArrow === true) {
-    return { type: 'move', cursor: Math.max(0, cursor - 1) };
-  }
-  if (key.downArrow === true) {
-    return { type: 'move', cursor: Math.min(length - 1, cursor + 1) };
-  }
-  if (key.return === true) {
-    const item = items[cursor];
-    if (item === undefined) {
-      return { type: 'ignore' };
-    }
-    return { type: 'choose', choice: item.value };
-  }
-  if (key.escape === true) {
-    return { type: 'choose', choice: 'cancel-repo' };
-  }
-  return { type: 'ignore' };
 }
 
 // The driving-side editor launch — core only ever sees the `edited` choice. Spawns the resolved
@@ -514,7 +474,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // While a repo waits on the resolution seam, the menu owns every keystroke — `q` must not
       // open the quit-confirm underneath it (cancel the run through the menu instead).
       if (updateBlocker !== null) {
-        const step = resolveBlockerMenuKey(input, key, blockerCursor, blockerMenuItems(updateBlocker.kind));
+        const step = resolveMenuKey(key, blockerCursor, blockerMenuItems(updateBlocker.kind), UPDATE_BLOCKER_MENU_ESCAPE);
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -576,7 +536,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // service; clean restart runs the standalone single-service use-case for that repo alone.
       if (serviceMenu !== null) {
         const menuItems = visibleServiceMenuItems(serviceMenuRestartAvailable);
-        const step = resolveServiceMenuKey(input, key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems);
+        const step = resolveMenuKey(key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems, UPDATE_SERVICE_MENU_ESCAPE);
         if (step.type === 'move') {
           setServiceMenuCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -830,9 +790,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
             {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
             {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
-            {blockerMenuItems(updateBlocker.kind).map((item, index) => (
-              <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
-            ))}
+            <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
           </Box>
         ) : null}
       </ModalDialog>

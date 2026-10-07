@@ -18,6 +18,7 @@ import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
 import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
@@ -41,7 +42,7 @@ import {
   formatUpdateSummary,
   launchEditor,
   resolveAllConfirm,
-  resolveBlockerMenuKey,
+  UPDATE_BLOCKER_MENU_ESCAPE,
   blockerMenuItems,
   resolveQuitConfirm,
   resolveUpdateTrigger,
@@ -352,35 +353,35 @@ describe('toServicePickItems', () => {
   });
 });
 
-describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey', () => {
+describe('UPDATE_BLOCKER_MENU_ITEMS with the shared menu reducer', () => {
   it('offers exactly the four bounded choices in menu order', () => {
     expect(UPDATE_BLOCKER_MENU_ITEMS.map((item) => item.value)).toEqual(['stash', 'edited', 'cancel-repo', 'cancel-run']);
   });
 
   it('moves the cursor with arrows, clamped at the ends, and ignores anything else', () => {
-    expect(resolveBlockerMenuKey('', {}, 1)).toEqual({ type: 'ignore' });
-    expect(resolveBlockerMenuKey('', { downArrow: true }, 0)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveBlockerMenuKey('', { downArrow: true }, 3)).toEqual({ type: 'move', cursor: 3 });
-    expect(resolveBlockerMenuKey('', { upArrow: true }, 2)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveBlockerMenuKey('', { upArrow: true }, 0)).toEqual({ type: 'move', cursor: 0 });
-    expect(resolveBlockerMenuKey('q', {}, 0)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({}, 1, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ downArrow: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ downArrow: true }, 3, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 3 });
+    expect(resolveMenuKey({ upArrow: true }, 2, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ upArrow: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveMenuKey({}, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 
   it('jumps with Home/End', () => {
-    expect(resolveBlockerMenuKey('', { home: true }, 2)).toEqual({ type: 'move', cursor: 0 });
-    expect(resolveBlockerMenuKey('', { end: true }, 0)).toEqual({ type: 'move', cursor: 3 });
+    expect(resolveMenuKey({ home: true }, 2, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveMenuKey({ end: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 3 });
   });
 
   it('chooses the cursor row on Enter and answers cancel-repo on Escape', () => {
-    expect(resolveBlockerMenuKey('', { return: true }, 0)).toEqual({ type: 'choose', choice: 'stash' });
-    expect(resolveBlockerMenuKey('', { return: true }, 1)).toEqual({ type: 'choose', choice: 'edited' });
-    expect(resolveBlockerMenuKey('', { return: true }, 2)).toEqual({ type: 'choose', choice: 'cancel-repo' });
-    expect(resolveBlockerMenuKey('', { return: true }, 3)).toEqual({ type: 'choose', choice: 'cancel-run' });
-    expect(resolveBlockerMenuKey('', { escape: true }, 0)).toEqual({ type: 'choose', choice: 'cancel-repo' });
+    expect(resolveMenuKey({ return: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'stash' });
+    expect(resolveMenuKey({ return: true }, 1, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'edited' });
+    expect(resolveMenuKey({ return: true }, 2, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-repo' });
+    expect(resolveMenuKey({ return: true }, 3, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-run' });
+    expect(resolveMenuKey({ escape: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-repo' });
   });
 
   it('ignores Enter on an out-of-range cursor', () => {
-    expect(resolveBlockerMenuKey('', { return: true }, 9)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ return: true }, 9, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 });
 
@@ -506,9 +507,9 @@ describe('blockerMenuItems', () => {
 
   it('navigates the merge-conflict menu over its three rows', () => {
     const items = blockerMenuItems('merge-conflict');
-    expect(resolveBlockerMenuKey('', { return: true }, 0, items)).toEqual({ type: 'choose', choice: 'edited' });
-    expect(resolveBlockerMenuKey('', { end: true }, 0, items)).toEqual({ type: 'move', cursor: 2 });
-    expect(resolveBlockerMenuKey('', { return: true }, 2, items)).toEqual({ type: 'choose', choice: 'cancel-run' });
+    expect(resolveMenuKey({ return: true }, 0, items, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'edited' });
+    expect(resolveMenuKey({ end: true }, 0, items, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 2 });
+    expect(resolveMenuKey({ return: true }, 2, items, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-run' });
   });
 });
 

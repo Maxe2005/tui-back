@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
+import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { createAppStore } from '../../store/app-store.js';
 import { UpdateZone } from './update-zone.js';
@@ -7,39 +8,39 @@ import {
   UPDATE_SERVICE_MENU_ITEMS,
   UPDATE_SERVICE_MENU_TITLE,
   resolveServiceMenuChoice,
-  resolveServiceMenuKey,
+  UPDATE_SERVICE_MENU_ESCAPE,
   visibleServiceMenuItems,
   UpdateServiceMenuDialog,
 } from './update-service-menu-dialog.js';
 
-describe('UPDATE_SERVICE_MENU_ITEMS / resolveServiceMenuKey', () => {
+describe('UPDATE_SERVICE_MENU_ITEMS with the shared menu reducer', () => {
   it('offers Update this service, Clean restart, and Cancel in menu order', () => {
     expect(UPDATE_SERVICE_MENU_ITEMS.map((item) => item.value)).toEqual(['update', 'restart', 'cancel']);
   });
 
   it('moves the cursor with arrows, clamped at the ends, and ignores anything else', () => {
-    expect(resolveServiceMenuKey('', {}, 1)).toEqual({ type: 'ignore' });
-    expect(resolveServiceMenuKey('', { downArrow: true }, 0)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveServiceMenuKey('', { downArrow: true }, 2)).toEqual({ type: 'move', cursor: 2 });
-    expect(resolveServiceMenuKey('', { upArrow: true }, 2)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveServiceMenuKey('', { upArrow: true }, 0)).toEqual({ type: 'move', cursor: 0 });
-    expect(resolveServiceMenuKey('q', {}, 0)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({}, 1, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ downArrow: true }, 0, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ downArrow: true }, 2, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 2 });
+    expect(resolveMenuKey({ upArrow: true }, 2, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ upArrow: true }, 0, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveMenuKey({}, 0, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 
   it('jumps with Home/End', () => {
-    expect(resolveServiceMenuKey('', { home: true }, 2)).toEqual({ type: 'move', cursor: 0 });
-    expect(resolveServiceMenuKey('', { end: true }, 0)).toEqual({ type: 'move', cursor: 2 });
+    expect(resolveMenuKey({ home: true }, 2, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveMenuKey({ end: true }, 0, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 2 });
   });
 
   it('chooses the cursor row on Enter and cancels on Escape', () => {
-    expect(resolveServiceMenuKey('', { return: true }, 0)).toEqual({ type: 'choose', choice: 'update' });
-    expect(resolveServiceMenuKey('', { return: true }, 1)).toEqual({ type: 'choose', choice: 'restart' });
-    expect(resolveServiceMenuKey('', { return: true }, 2)).toEqual({ type: 'choose', choice: 'cancel' });
-    expect(resolveServiceMenuKey('', { escape: true }, 0)).toEqual({ type: 'choose', choice: 'cancel' });
+    expect(resolveMenuKey({ return: true }, 0, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'update' });
+    expect(resolveMenuKey({ return: true }, 1, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'restart' });
+    expect(resolveMenuKey({ return: true }, 2, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel' });
+    expect(resolveMenuKey({ escape: true }, 0, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel' });
   });
 
   it('ignores Enter on an out-of-range cursor', () => {
-    expect(resolveServiceMenuKey('', { return: true }, 9)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ return: true }, 9, UPDATE_SERVICE_MENU_ITEMS, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 
   it('drops the restart row when no restart is available, keeping update/cancel order', () => {
@@ -49,11 +50,11 @@ describe('UPDATE_SERVICE_MENU_ITEMS / resolveServiceMenuKey', () => {
 
   it('navigates and chooses within the visible rows when the restart row is hidden', () => {
     const items = visibleServiceMenuItems(false);
-    expect(resolveServiceMenuKey('', { downArrow: true }, 1, items)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveServiceMenuKey('', { end: true }, 0, items)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveServiceMenuKey('', { return: true }, 0, items)).toEqual({ type: 'choose', choice: 'update' });
-    expect(resolveServiceMenuKey('', { return: true }, 1, items)).toEqual({ type: 'choose', choice: 'cancel' });
-    expect(resolveServiceMenuKey('', { return: true }, 2, items)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ downArrow: true }, 1, items, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ end: true }, 0, items, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ return: true }, 0, items, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'update' });
+    expect(resolveMenuKey({ return: true }, 1, items, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel' });
+    expect(resolveMenuKey({ return: true }, 2, items, UPDATE_SERVICE_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 });
 
