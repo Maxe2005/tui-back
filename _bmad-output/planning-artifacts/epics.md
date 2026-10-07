@@ -3013,6 +3013,22 @@ As a developer, I want every zone to use the same keys, wording and components f
 
 **Implementation notes:** if the alignment list proves larger than one story, split the remainder into follow-up stories (7.4b…) from the validated table rather than growing this one.
 
+### Story 7.4b: Interaction Alignment Follow-up (UX-DR36)
+
+As a developer, I want the remaining UX-DR36 alignment items finished, so that the footer, menus, branch inputs and hints are consistent everywhere and cannot drift.
+
+**Acceptance Criteria:**
+
+**Given** any zone, dialog, modal or pane has focus **When** the footer renders **Then** it shows that context's hints, generated from the keybinding declarations (no zone-only footer, no hand-written strings).
+
+**Given** the three fixed menus (service actions, Update service menu, blocker) **When** aligned **Then** they share one menu list component/reducer.
+
+**Given** branch inputs **When** aligned **Then** `BranchAutocompleteInput`, `SuggestField` and `BranchPicker`'s autocomplete share one implementation, or the remaining separate one is documented as a deviation with its reason.
+
+**Given** hints and states **When** audited **Then** every hint goes through `formatHints` (guard test), `TextInputLine` no longer prints a duplicate hint under a footer, Settings and EDTs annotations use the hint format, `StateLine` is used for every loading/empty/error line, and `[R] retry` and the resize filter are derived from the keybinding declarations.
+
+**Given** shared helpers **When** reviewed **Then** settings and registry screens reuse the shared list-cursor reducer and the shared → keybindings → zones type-import layering is clean.
+
 ### Story 7.5: Dashboard — Workspace Summary & Last-Update Persistence (UX-DR19)
 
 As a developer, I want the Dashboard to show me my active EDT at a glance — each service's container status, active branch and divergence, and how the last update went — so that I know the state of my workspace the moment I open the tool.
