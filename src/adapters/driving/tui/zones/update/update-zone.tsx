@@ -24,7 +24,7 @@ import {
   type SummaryTone,
 } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatServiceMeta, jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
+import { formatServiceMeta } from '../edts/edts-zone.logic.js';
 import {
   deriveUpdateServiceStatus,
   formatLiveServiceDetail,
@@ -32,12 +32,18 @@ import {
   isServiceTargetedByRun,
   partitionUpdateServiceRows,
   resolveEditorCommand,
+  updateFooterContext,
 } from './update-zone.logic.js';
-import { UpdateServiceMenuDialog, resolveServiceMenuChoice, resolveServiceMenuKey, visibleServiceMenuItems } from './update-service-menu-dialog.js';
+import { UPDATE_SERVICE_MENU_ESCAPE, UpdateServiceMenuDialog, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
+import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { formatHint, formatHints } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
+import { updateConfigFooterContext } from './update-config-panels.logic.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -45,19 +51,15 @@ import { StateLine } from '../../shared/components/state-line.js';
 // EDTS_SERVICE_LISTS_CHROME_ROWS.
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
 
-export const UPDATE_IDLE_PROMPT = '[M] EDT update, [P] this service, [Enter] for service actions.';
-export const UPDATE_ALL_REPOS_PROMPT = 'Press [A] for all-repos maintenance mode (every managed repo).';
-export const UPDATE_INTERRUPTED_OFFER = 'Last update was interrupted — press [Enter] for service actions.';
+export const UPDATE_IDLE_PROMPT = formatHints([['M', 'EDT update'], ['P', 'this service'], ['Enter', 'service actions']]);
+export const UPDATE_ALL_REPOS_PROMPT = formatHint(['A', 'all-repos maintenance mode (every managed repo)']);
+export const UPDATE_INTERRUPTED_OFFER = `Last update was interrupted — ${formatHint(['Enter', 'service actions'])}`;
 export const UPDATE_RUNNING_LABEL = 'Updating member services…';
 export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
 export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
-export const UPDATE_LOADING_MEMBERS = 'Loading member services…';
 export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
-export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted? [Enter] confirm  [Esc] cancel';
-export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted? [Enter] confirm  [Esc] cancel';
-export const UPDATE_ALL_CONFIRM_TITLE = 'ALL-REPOS UPDATE';
-export const UPDATE_ALL_CONFIRM_BODY =
-  'Update every managed repo (outside the active EDT too)? [Enter] confirm  [Esc] cancel';
+export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted?';
+export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted?';
 
 // Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
 // always exactly one rendered line.
@@ -205,16 +207,18 @@ export function resolveQuitConfirm(input: string, key: { return?: boolean; escap
 // continues) so a stray keystroke never cancels the run.
 export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
 
-export const UPDATE_BLOCKER_MENU_ITEMS = Object.freeze([
+export type UpdateBlockerMenuValue = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+
+export type UpdateBlockerMenuItem = MenuItem<UpdateBlockerMenuValue>;
+
+export const UPDATE_BLOCKER_MENU_ESCAPE: UpdateBlockerMenuValue = 'cancel-repo';
+
+export const UPDATE_BLOCKER_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Object.freeze([
   { value: 'stash', label: 'Stash changes and continue' },
   { value: 'edited', label: 'Open in editor, then retry' },
   { value: 'cancel-repo', label: 'Cancel this repo (continue with the rest)' },
   { value: 'cancel-run', label: 'Cancel the whole run' },
-] as const);
-
-export type UpdateBlockerMenuValue = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number]['value'];
-
-export type UpdateBlockerMenuItem = (typeof UPDATE_BLOCKER_MENU_ITEMS)[number];
+]);
 
 // The choices offered for a blocker kind. A merge conflict drops `stash`: git refuses to
 // stash unmerged paths, and once the conflict is resolved and staged a stash silently
@@ -249,49 +253,6 @@ export function formatBlockerRetry(blocker: UpdateBlocker): string | null {
   }
   const reason = blocker.retryReason !== undefined && blocker.retryReason !== '' ? ` — ${blocker.retryReason}` : '';
   return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
-}
-
-export type BlockerMenuKey = {
-  upArrow?: boolean;
-  downArrow?: boolean;
-  home?: boolean;
-  end?: boolean;
-  return?: boolean;
-  escape?: boolean;
-};
-
-export type BlockerMenuStep = { type: 'move'; cursor: number } | { type: 'choose'; choice: UpdateBlockerMenuValue } | { type: 'ignore' };
-
-export function resolveBlockerMenuKey(
-  input: string,
-  key: BlockerMenuKey,
-  cursor: number,
-  items: readonly UpdateBlockerMenuItem[] = UPDATE_BLOCKER_MENU_ITEMS,
-): BlockerMenuStep {
-  const length = items.length;
-  if (key.home === true) {
-    return { type: 'move', cursor: 0 };
-  }
-  if (key.end === true) {
-    return { type: 'move', cursor: length - 1 };
-  }
-  if (key.upArrow === true) {
-    return { type: 'move', cursor: Math.max(0, cursor - 1) };
-  }
-  if (key.downArrow === true) {
-    return { type: 'move', cursor: Math.min(length - 1, cursor + 1) };
-  }
-  if (key.return === true) {
-    const item = items[cursor];
-    if (item === undefined) {
-      return { type: 'ignore' };
-    }
-    return { type: 'choose', choice: item.value };
-  }
-  if (key.escape === true) {
-    return { type: 'choose', choice: 'cancel-repo' };
-  }
-  return { type: 'ignore' };
 }
 
 // The driving-side editor launch — core only ever sees the `edited` choice. Spawns the resolved
@@ -402,6 +363,20 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     chooseMergeSourceEdt,
     listBranches: listBranchesAction,
   });
+
+  // The layer that owns the keyboard, in the same priority order as the key handler below.
+  useFooterContext(
+    'update',
+    updateFooterContext({
+      blocker: updateBlocker !== null,
+      config: updateConfig !== null ? updateConfigFooterContext(configPanels.view, configPanels.box) : null,
+      servicePick: updateServicePick !== null,
+      quitConfirm,
+      serviceMenu: serviceMenu !== null,
+      selectRequest: updateServiceSelectRequest,
+    }),
+    useStore,
+  );
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -514,7 +489,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // While a repo waits on the resolution seam, the menu owns every keystroke — `q` must not
       // open the quit-confirm underneath it (cancel the run through the menu instead).
       if (updateBlocker !== null) {
-        const step = resolveBlockerMenuKey(input, key, blockerCursor, blockerMenuItems(updateBlocker.kind));
+        const step = resolveMenuKey(key, blockerCursor, blockerMenuItems(updateBlocker.kind), UPDATE_BLOCKER_MENU_ESCAPE);
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -576,7 +551,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       // service; clean restart runs the standalone single-service use-case for that repo alone.
       if (serviceMenu !== null) {
         const menuItems = visibleServiceMenuItems(serviceMenuRestartAvailable);
-        const step = resolveServiceMenuKey(input, key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems);
+        const step = resolveMenuKey(key, Math.min(serviceMenuCursor, menuItems.length - 1), menuItems, UPDATE_SERVICE_MENU_ESCAPE);
         if (step.type === 'move') {
           setServiceMenuCursor(step.cursor);
         } else if (step.type === 'choose') {
@@ -694,7 +669,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
             {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={updateStatus !== 'running'} /> : null}
             {rows.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
-              <Text color={colors['text-dim']}>No managed services found.</Text>
+              <StateLine kind="empty" subject="managed services" text="No managed services found." />
             ) : null}
             {/* Every row always carries exactly one glyph from the closed
                 up/down/restarting/updating/migrating/error set — never blank, never bridged
@@ -747,7 +722,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                     </Box>
                   ))
                 ) : isAllRun || runningMembers.length === 0 ? (
-                  <Text color={colors['text-dim']}>{UPDATE_LOADING_MEMBERS}</Text>
+                  <StateLine kind="loading" subject="member services" />
                 ) : (
                   runningMembers.map((member) => (
                     <Box key={member.repoPath}>
@@ -830,9 +805,7 @@ export function UpdateZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
             {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
             {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
-            {blockerMenuItems(updateBlocker.kind).map((item, index) => (
-              <ListRow key={item.value} label={item.label} selected={index === blockerCursor} />
-            ))}
+            <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
           </Box>
         ) : null}
       </ModalDialog>

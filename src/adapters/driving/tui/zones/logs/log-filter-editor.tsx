@@ -13,6 +13,7 @@ import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import { historyEntryLabel, type FilterEditorState } from './logs-zone.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 // The filter-history grid browser's column gap — mirrors command-bar.tsx's grid spacing since
 // this grid renders inside the same kind of ModalDialog.
@@ -65,7 +66,7 @@ export function LogFilterEditor({
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
       {gridCursor !== null && gridLayout !== null ? (
         history.length === 0 ? (
-          <DimAnnotation text="No history for this filter yet." />
+          <StateLine kind="empty" subject="history for this filter" />
         ) : (
           <>
             {gridLayout.truncated.top ? <Text color={colors['text-dim']}>▲ more above</Text> : null}
@@ -95,13 +96,6 @@ export function LogFilterEditor({
           </>
         )
       ) : null}
-      <DimAnnotation
-        text={
-          gridCursor !== null
-            ? '[↑/↓/←/→] browse history  [Enter] recall  [Esc] close'
-            : '[Tab] text/regex  [Ctrl+←/→] level  [↑/↓] history  [Enter] apply  [Esc] cancel'
-        }
-      />
     </ModalDialog>
   );
 }

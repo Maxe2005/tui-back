@@ -9,6 +9,7 @@ import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
 import {
   COMMANDS,
   matchCommands,
@@ -16,6 +17,7 @@ import {
   runCommand as runCommandInZone,
   type Command,
 } from '../commands/commands.js';
+import { StateLine } from './components/state-line.js';
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same
 // query, with no intervening key, to reveal the grid.
@@ -385,6 +387,7 @@ export type CommandBarProps = {
 export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps) {
   // Read live from the store (the settings screen's Command Palette tab).
   const gridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  useFooterContext('command-bar', 'command', useStore);
   const [query, setQuery] = useState('');
   const [unknownCommand, setUnknownCommand] = useState(false);
   const [pending, setPending] = useState<TabPressState | null>(null);
@@ -554,7 +557,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
         ) : null}
 
         {gridShown && matches.length === 0 ? (
-          <Text color={colors['text-dim']}>No matching command.</Text>
+          <StateLine kind="empty" subject="commands" text="No matching command." />
         ) : null}
 
         {gridVisible ? (

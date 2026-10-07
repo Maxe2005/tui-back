@@ -5,7 +5,6 @@
 // unwinds sub-editors, then Response → Request, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
-import { jumpSelection, resolveSelectionJump } from '../edts/edts-zone.logic.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -13,6 +12,7 @@ import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { FooterContext } from '../../shared/components/footer-context.js';
 import { JsonEmptyState, JsonRawFallback, JsonTree, JsonRawEditor, JsonTreeEditor } from '../../shared/components/json-tree/json-tree.js';
 import {
   addEntryAtPath,
@@ -68,6 +68,8 @@ import {
   formatRouteRow,
   moveRoutesSelection,
   resolveEnterFireTarget,
+  routesFooterContext,
+  UNAVAILABLE_FOOTER_INPUT,
   resolveRoutesDirection,
 } from './routes-zone.logic.js';
 import {
@@ -87,6 +89,7 @@ import {
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // First-paint estimate of the route list's row budget (top bar + tab bar + footer + the
 // list pane's own header/filter/hint lines), used only until useElementSize has measured the
@@ -1285,8 +1288,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus === 'error' && routesError?.code === 'route-exploration-not-activated') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.text}>No route list for this repo.</Text>
+        <StateLine kind="empty" subject="routes" text="No route list for this repo." />
         <DimAnnotation text={routesError.message} />
       </Box>
     );
@@ -1295,6 +1299,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus === 'error') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <Text color={colors.error}>{routesError ? routesError.message : 'Route scan failed.'}</Text>
       </Box>
@@ -1304,6 +1309,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routesStatus !== 'ready' || routes === null) {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
         <StateLine kind="loading" subject="routes" />
       </Box>
@@ -1313,8 +1319,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (routes.length === 0) {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
+        <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.text}>No routes discovered for this repo.</Text>
+        <StateLine kind="empty" subject="routes" text="No routes discovered for this repo." />
       </Box>
     );
   }
@@ -1327,52 +1334,26 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   const filterActive = filter.value !== '';
   const treeActive = treeFocused && classification !== null;
   const focusedEditable = focused !== undefined && canEditRouteBody(focused);
-  const listHint = filterEditing
-    ? '[Enter] apply  [Esc] clear'
-    : paneFocused
-      ? '[Esc] back to the list'
-      : focusedEditable
-        ? '[Enter] request  [/ f] filter  [e] edit body  [Home/End] jump'
-        : '[Enter] request  [/ f] filter  [Home/End] jump';
-  // The pane owns its shortcut line at its bottom while it holds focus; the keys shared by both
-  // tabs lead it.
-  const paneKeys = '[Ctrl+R] fire  [Ctrl+←/→] tab';
-  const treeHint = !treeActive
-    ? null
-    : classification?.kind === 'raw'
-      ? `[Esc] request  [↑/↓] scroll  ${paneKeys}`
-      : classification?.kind === 'empty'
-        ? `[Esc] request  ${paneKeys}`
-        : filterPanelOpen
-          ? '[Esc/f] close  [↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear'
-          : `[Esc] request  [↑/↓] move  [←/→] fold  [h/H] filter  [f] rules  [+/-] level  ${paneKeys}`;
-  // Footer hints reflect editor focus — the sub-editor owns its line while open, the tree mode
-  // lists the edit keys. `[a]` only shows when an add target exists (UX-DR7: never hint an
+  // The footer reflects editor focus — the sub-editor owns the line while open, the tree mode
+  // lists the edit keys. The add key only shows when an add target exists (UX-DR7: never hint an
   // inert key — scalar roots and empty drafts take `r`).
   const editorSelectedRow = editorOpen ? editorRows[clampedEditorSelected] : undefined;
   const editorCanAdd =
     editorSelectedRow !== undefined && editorDraft !== undefined && resolveAddParentPath(editorDraft, editorSelectedRow.path) !== null;
-  const editorHint: string | null = !editorOpen
-    ? null
-    : rawEditor !== null
-      ? '[Esc] done  [Enter] newline'
-      : scalarEdit !== null || addPrompt !== null
-        ? '[Enter] confirm  [Esc] cancel'
-        : filterPanelOpen
-          ? '[Esc/f] close  [↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear'
-          : `[Esc] list  [Tab] section  [Enter] edit  ${editorCanAdd ? '[a] add  ' : ''}[d] delete  [t] type  [r] raw  [←/→] fold  [h/H] filter  ${paneKeys}`;
   const rowSectionRows = paneDraft !== null && section !== 'body' ? paneDraft[section] : [];
-  const requestHint: string | null =
-    !paneFocused || paneTab !== 'request'
-      ? null
-      : section === 'body'
-        ? (editorHint ?? `[Esc] list  [Tab] section  ${paneKeys}`)
-        : rowEdit !== null || rowAddPrompt !== null
-          ? '[Enter] confirm  [Esc] cancel'
-          : `[Esc] list  [Tab] section  ${rowSectionRows.length > 0 ? '[↑/↓] move  [Enter] edit  ' : ''}${
-              section === 'params' ? '' : `[a] add  ${rowSectionRows.length > 0 ? '[d] delete  ' : ''}`
-            }${paneKeys}`;
-  const paneHint = paneTab === 'request' ? requestHint : paneFocused ? (treeHint ?? `[Esc] request  ${paneKeys}`) : null;
+  const footerContext = routesFooterContext({
+    unavailable: false,
+    filterEditing,
+    paneFocused,
+    paneTab,
+    listEditable: focusedEditable,
+    filterPanelOpen,
+    responseKind: treeActive ? (classification?.kind ?? null) : null,
+    section,
+    rowEditing: rowEdit !== null || rowAddPrompt !== null,
+    rowCount: rowSectionRows.length,
+    editor: { open: editorOpen, raw: rawEditor !== null, editing: scalarEdit !== null || addPrompt !== null, canAdd: editorCanAdd },
+  });
 
   const bodyNode =
     rawEditor !== null && editorOpen ? (
@@ -1418,6 +1399,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
 
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
+      <FooterContext owner="routes" id={footerContext} useStore={useStore} />
       <ZoneLayout
         zoneId="routes"
         useStore={useStore}
@@ -1447,7 +1429,6 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 />
               )}
             </Box>
-            <DimAnnotation text={listHint} />
           </Box>
         }
         second={
@@ -1473,7 +1454,6 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
                 {responseNode}
               </RoutesResponseTab>
             ) : null}
-            {paneHint !== null ? <DimAnnotation text={paneHint} /> : null}
           </Box>
         }
       />

@@ -24,6 +24,7 @@ import {
   toggleMergeSource,
   toggleRowSelection,
   type PanelsViewState,
+  updateConfigFooterContext,
 } from './update-config-panels.logic.js';
 import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
 
@@ -206,12 +207,12 @@ describe('computeConfigBudget', () => {
     expect(roomy.tableRows).toBeGreaterThan(10);
   });
 
-  it('lets a one-service screen use a 20-row terminal and flags 19', () => {
+  it('lets a one-service screen use an 18-row terminal and flags 17', () => {
     const draft = createUpdateConfigDraft('edt', ROWS.slice(0, 1), { layout: 'service-panels' });
-    const fits = computeConfigBudget(20, draft, false, 5);
+    const fits = computeConfigBudget(18, draft, false, 5);
     expect(fits.tooSmall).toBe(false);
     expect(fits.tableRows).toBe(1);
-    expect(computeConfigBudget(19, draft, false, 5).tooSmall).toBe(true);
+    expect(computeConfigBudget(17, draft, false, 5).tooSmall).toBe(true);
   });
 
   it('gives the open EDT list lines taken from the table, never more than the setting', () => {
@@ -220,5 +221,16 @@ describe('computeConfigBudget', () => {
     const open = computeConfigBudget(30, draft, true, 5);
     expect(open.dropdownLines).toBeLessThanOrEqual(5);
     expect(open.tableRows + open.dropdownLines).toBe(closed.tableRows);
+  });
+});
+
+describe('updateConfigFooterContext', () => {
+  it('names the layer that owns the keyboard: field edit, service box, global panel or table', () => {
+    const view = { focus: 'panel' as const, edtField: null };
+    expect(updateConfigFooterContext(view, null)).toBe('update-config-global');
+    expect(updateConfigFooterContext({ ...view, focus: 'table' }, null)).toBe('update-config-table');
+    expect(updateConfigFooterContext({ ...view, edtField: createSuggestFieldState('') }, null)).toBe('branch-input');
+    expect(updateConfigFooterContext(view, { editing: false })).toBe('update-box');
+    expect(updateConfigFooterContext(view, { editing: true })).toBe('branch-input');
   });
 });

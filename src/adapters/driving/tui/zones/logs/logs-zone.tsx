@@ -9,6 +9,8 @@ import type { HealthState } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint } from '../../shared/components/hints.js';
+import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -19,11 +21,7 @@ import { LogFilterEditor } from './log-filter-editor.js';
 import { LogsGrid } from './logs-grid.js';
 import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
-  resolveSelectionDirection,
-  resolveSelectionJump,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import {
@@ -45,6 +43,8 @@ import {
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
+  logsFooterContext,
+  logsLegendHints,
   filterHistoryKeyString,
   filterVisibleLines,
   formatHealthLabel,
@@ -83,6 +83,7 @@ import {
   type VisibilityFlags,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
@@ -221,6 +222,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+  useFooterContext(
+    'logs',
+    logsFooterContext(filterEditor !== null, historyGridCursor !== null, {
+      open: logsFullscreenTarget !== null,
+      restartable: logsFullscreenTarget === null || logsPanes[logsFullscreenTarget]?.health !== 'no-container',
+    }),
+    useStore,
+  );
 
   // AppShell's global Left/Right zone-switch fires on the same keypress as this zone's useInput
   // (Ink dispatches to every mounted hook), so moving pane sub-focus with Left/Right would switch
@@ -783,9 +792,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               <Text color={paneFocus === 'edt-list' ? colors.accent : colors['text-dim']}>ACTIVE EDT MEMBERS</Text>
               {servicesStatus === 'loading' && rows.length === 0 ? <StateLine kind="loading" subject="services" /> : null}
               {servicesStatus === 'error' ? <StateLine kind="error" subject="services" retry={activePanes.length === 0} /> : null}
-              {focusedEdt === undefined ? <DimAnnotation text="No active EDT." /> : null}
+              {focusedEdt === undefined ? <StateLine kind="empty" subject="EDT" text="No active EDT." /> : null}
               {focusedEdt !== undefined && edtServices.length === 0 && servicesStatus !== 'error' ? (
-                <DimAnnotation text="No services in the active EDT." />
+                <StateLine kind="empty" subject="services" text="No services in the active EDT." />
               ) : null}
               {/* Bounded to edtListMaxVisibleRows, following the cursor only while this list owns
                   focus — otherwise the window anchors to the top. */}
@@ -810,7 +819,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
 
               <Text color={paneFocus === 'other-list' ? colors.accent : colors['text-dim']}>OTHER SERVICES</Text>
               {otherServices.length === 0 && servicesStatus !== 'loading' && servicesStatus !== 'error' ? (
-                <DimAnnotation text="No other managed services." />
+                <StateLine kind="empty" subject="services" text="No other managed services." />
               ) : null}
               <BoundedList
                 items={otherServices}
@@ -859,24 +868,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {filterEditor === null ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
                   <BoundedList
-                    items={[
-                      '[Space] toggle',
-                      '[Enter] preview',
-                      '[Ctrl+A] toggle all',
-                      `[t] timestamps ${visibility.showTimestamps ? 'on' : 'off'}`,
-                      `[o] stdout ${visibility.showStdout ? 'on' : 'off'}`,
-                      `[p] stderr ${visibility.showStderr ? 'on' : 'off'}`,
-                      '[Ctrl+↑/↓] scroll pane',
-                      '[c] clear focused pane',
-                      '[Ctrl+C] clear all panes',
-                      '[w] wrap/truncate this pane',
-                      '[W] wrap/truncate all',
-                      '[R] restart focused pane',
-                      '[/] edit global filter',
-                      "[f] edit this pane's filter",
-                      '[i] toggle global filter (pane)',
-                      '[Esc] clear filter (cascade)',
-                    ]}
+                    items={logsLegendHints(visibility).map(formatHint)}
                     maxVisibleRows={hintsMaxVisibleRows}
                     renderItem={(text, index) => <DimAnnotation key={index} text={text} />}
                   />

@@ -18,19 +18,19 @@ import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
+import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
 import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
 import {
-  UPDATE_ALL_CONFIRM_BODY,
-  UPDATE_ALL_CONFIRM_TITLE,
   UPDATE_ALL_REPOS_PROMPT,
   UPDATE_ALL_RUNNING_LABEL,
   UPDATE_BLOCKER_MENU_ITEMS,
   UPDATE_BLOCKER_TITLE,
   UPDATE_IDLE_PROMPT,
   UPDATE_INTERRUPTED_OFFER,
-  UPDATE_LOADING_MEMBERS,
+
   UPDATE_QUIT_CONFIRM_BODY,
   UPDATE_QUIT_CONFIRM_BODY_ALL,
   UPDATE_RUNNING_LABEL,
@@ -41,7 +41,7 @@ import {
   formatUpdateSummary,
   launchEditor,
   resolveAllConfirm,
-  resolveBlockerMenuKey,
+  UPDATE_BLOCKER_MENU_ESCAPE,
   blockerMenuItems,
   resolveQuitConfirm,
   resolveUpdateTrigger,
@@ -113,6 +113,8 @@ const SERVICE_B: ServiceBranchDivergence = {
   behind: 0,
   status: 'current',
 };
+
+const LOADING_MEMBERS = 'Loading member services…';
 
 describe('formatUpdateRow', () => {
   it('renders each outcome with a glyph paired to the outcome word, code, and message', () => {
@@ -352,35 +354,35 @@ describe('toServicePickItems', () => {
   });
 });
 
-describe('UPDATE_BLOCKER_MENU_ITEMS / resolveBlockerMenuKey', () => {
+describe('UPDATE_BLOCKER_MENU_ITEMS with the shared menu reducer', () => {
   it('offers exactly the four bounded choices in menu order', () => {
     expect(UPDATE_BLOCKER_MENU_ITEMS.map((item) => item.value)).toEqual(['stash', 'edited', 'cancel-repo', 'cancel-run']);
   });
 
   it('moves the cursor with arrows, clamped at the ends, and ignores anything else', () => {
-    expect(resolveBlockerMenuKey('', {}, 1)).toEqual({ type: 'ignore' });
-    expect(resolveBlockerMenuKey('', { downArrow: true }, 0)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveBlockerMenuKey('', { downArrow: true }, 3)).toEqual({ type: 'move', cursor: 3 });
-    expect(resolveBlockerMenuKey('', { upArrow: true }, 2)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveBlockerMenuKey('', { upArrow: true }, 0)).toEqual({ type: 'move', cursor: 0 });
-    expect(resolveBlockerMenuKey('q', {}, 0)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({}, 1, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ downArrow: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ downArrow: true }, 3, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 3 });
+    expect(resolveMenuKey({ upArrow: true }, 2, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveMenuKey({ upArrow: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveMenuKey({}, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 
   it('jumps with Home/End', () => {
-    expect(resolveBlockerMenuKey('', { home: true }, 2)).toEqual({ type: 'move', cursor: 0 });
-    expect(resolveBlockerMenuKey('', { end: true }, 0)).toEqual({ type: 'move', cursor: 3 });
+    expect(resolveMenuKey({ home: true }, 2, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 0 });
+    expect(resolveMenuKey({ end: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 3 });
   });
 
   it('chooses the cursor row on Enter and answers cancel-repo on Escape', () => {
-    expect(resolveBlockerMenuKey('', { return: true }, 0)).toEqual({ type: 'choose', choice: 'stash' });
-    expect(resolveBlockerMenuKey('', { return: true }, 1)).toEqual({ type: 'choose', choice: 'edited' });
-    expect(resolveBlockerMenuKey('', { return: true }, 2)).toEqual({ type: 'choose', choice: 'cancel-repo' });
-    expect(resolveBlockerMenuKey('', { return: true }, 3)).toEqual({ type: 'choose', choice: 'cancel-run' });
-    expect(resolveBlockerMenuKey('', { escape: true }, 0)).toEqual({ type: 'choose', choice: 'cancel-repo' });
+    expect(resolveMenuKey({ return: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'stash' });
+    expect(resolveMenuKey({ return: true }, 1, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'edited' });
+    expect(resolveMenuKey({ return: true }, 2, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-repo' });
+    expect(resolveMenuKey({ return: true }, 3, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-run' });
+    expect(resolveMenuKey({ escape: true }, 0, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-repo' });
   });
 
   it('ignores Enter on an out-of-range cursor', () => {
-    expect(resolveBlockerMenuKey('', { return: true }, 9)).toEqual({ type: 'ignore' });
+    expect(resolveMenuKey({ return: true }, 9, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'ignore' });
   });
 });
 
@@ -506,9 +508,9 @@ describe('blockerMenuItems', () => {
 
   it('navigates the merge-conflict menu over its three rows', () => {
     const items = blockerMenuItems('merge-conflict');
-    expect(resolveBlockerMenuKey('', { return: true }, 0, items)).toEqual({ type: 'choose', choice: 'edited' });
-    expect(resolveBlockerMenuKey('', { end: true }, 0, items)).toEqual({ type: 'move', cursor: 2 });
-    expect(resolveBlockerMenuKey('', { return: true }, 2, items)).toEqual({ type: 'choose', choice: 'cancel-run' });
+    expect(resolveMenuKey({ return: true }, 0, items, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'edited' });
+    expect(resolveMenuKey({ end: true }, 0, items, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'move', cursor: 2 });
+    expect(resolveMenuKey({ return: true }, 2, items, UPDATE_BLOCKER_MENU_ESCAPE)).toEqual({ type: 'choose', choice: 'cancel-run' });
   });
 });
 
@@ -557,7 +559,7 @@ describe('UpdateZone rendering', () => {
     expect(output).toContain('/repo/a');
     expect(output).toContain('svc-b');
     expect(output).toContain('Filter:');
-    expect(output).toContain('[Enter] confirm  [Esc] cancel');
+    expect(await footerContextOf(store, createElement(UpdateZone, { useStore: store }))).toBe('menu');
   });
 
   it('a closed service pick renders no pick modal', async () => {
@@ -589,7 +591,7 @@ describe('UpdateZone rendering', () => {
   });
 
   it('the interrupted offer routes through the service-actions menu, never a direct re-run', () => {
-    expect(UPDATE_INTERRUPTED_OFFER).toContain('for service actions');
+    expect(UPDATE_INTERRUPTED_OFFER).toContain('service actions');
     expect(UPDATE_INTERRUPTED_OFFER).not.toContain('to re-run');
   });
 
@@ -610,7 +612,7 @@ describe('UpdateZone rendering', () => {
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
     expect(output).toContain(UPDATE_RUNNING_LABEL);
-    expect(output).toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).toContain(LOADING_MEMBERS);
   });
 
   it('an all-repos run shows the all label with the generic loading line, never EDT member rows', async () => {
@@ -621,7 +623,7 @@ describe('UpdateZone rendering', () => {
 
     expect(output).toContain(UPDATE_ALL_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_RUNNING_LABEL);
-    expect(output).toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).toContain(LOADING_MEMBERS);
     expect(output).not.toContain('svc-a (feat/a)');
   });
 
@@ -1117,7 +1119,7 @@ describe('UpdateZone service-list shell rendering', () => {
     expect(svcARow).not.toContain('⇄');
     expect(output).toContain(UPDATE_SELECTION_RUNNING_LABEL);
     expect(output).not.toContain(UPDATE_ALL_RUNNING_LABEL);
-    expect(output).not.toContain(UPDATE_LOADING_MEMBERS);
+    expect(output).not.toContain(LOADING_MEMBERS);
   });
 
   it('error: a service whose last completed run failed shows the error glyph and the failure detail', async () => {

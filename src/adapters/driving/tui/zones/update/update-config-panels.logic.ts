@@ -8,6 +8,7 @@ import {
   validateSuggestValue,
   type SuggestFieldState,
 } from '../../shared/components/suggest-field.logic.js';
+import type { FooterContextId } from '../../keybindings/index.js';
 import type { TextEditKey } from '../../shared/components/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
@@ -120,6 +121,18 @@ export interface PanelsViewState {
   tableCursor: number;
   // The EDT field while it is being edited; null when browsing.
   edtField: SuggestFieldState | null;
+}
+
+// The footer context of the screen layer that owns the keyboard: a branch/EDT field being edited,
+// the per-service box, or the global panel / services table.
+export function updateConfigFooterContext(view: Pick<PanelsViewState, 'focus' | 'edtField'>, box: { editing: boolean } | null): FooterContextId {
+  if (box !== null) {
+    return box.editing ? 'branch-input' : 'update-box';
+  }
+  if (view.edtField !== null) {
+    return 'branch-input';
+  }
+  return view.focus === 'panel' ? 'update-config-global' : 'update-config-table';
 }
 
 export type PanelsKey = TextEditKey & {
@@ -248,12 +261,12 @@ export function checkEdtChoice(
 // Height budget (NFR-7): the modal shares the terminal with its chrome, so every block gets a
 // fixed line count and the table takes what is left, shrinking before anything can overflow.
 export const CONFIG_CHROME_ROWS = 10; // modal border + padding + title (6) plus the zone title and app chrome (4)
-export const CONFIG_MIN_ROWS = 22;
+export const CONFIG_MIN_ROWS = 21;
 // A one-service screen needs one table row, so it fits wherever the service box does.
-export const CONFIG_SERVICE_MIN_ROWS = 20;
-// Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1, footer 2.
-export const SERVICE_BOX_ROWS = 10;
-const FIXED_BODY_ROWS = 1 + 1 + 1 + 1 + 2; // panel A title, panel B title, table header, error line, hints
+export const CONFIG_SERVICE_MIN_ROWS = 18;
+// Fixed height of the service box: border 2, title 1, branch 1, toggles 2, apply 1, error 1.
+export const SERVICE_BOX_ROWS = 8;
+const FIXED_BODY_ROWS = 1 + 1 + 1 + 1; // panel A title, panel B title, table header, error line
 
 export interface ConfigBudget {
   tooSmall: boolean;

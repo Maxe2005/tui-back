@@ -1,9 +1,10 @@
 // tui/zones/update: Ink rendering of the two-panel configuration — layout, effective cells,
 // scope differences, the service box and the height budget.
 import { describe, expect, it } from 'vitest';
-import { UpdateConfigPanels, PANELS_TOO_SMALL, PANELS_HINTS_TABLE } from './update-config-panels.js';
+import { UpdateConfigPanels, PANELS_TOO_SMALL } from './update-config-panels.js';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import { applyMergeStrategy, createUpdateConfigDraft, type UpdateConfigDraft } from './update-config-dialog.logic.js';
-import { computeConfigBudget, setRow, toggleMergeSource, type PanelsViewState } from './update-config-panels.logic.js';
+import { CONFIG_CHROME_ROWS, CONFIG_MIN_ROWS, SERVICE_BOX_ROWS, computeConfigBudget, setRow, toggleMergeSource, type PanelsViewState } from './update-config-panels.logic.js';
 import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
 import { openServiceBox } from './update-service-box.logic.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
@@ -93,6 +94,31 @@ describe('UpdateConfigPanels', () => {
     }
   });
 
+  it('fits exactly the minimum height for several services, in both multi-service layouts', async () => {
+    for (const layout of ['edt-panels', 'all-panels'] as const) {
+      for (const count of [2, 3, 40]) {
+        const output = await render(draftWith(count, layout), CONFIG_MIN_ROWS);
+        expect(output).not.toContain('Terminal too small');
+        expect(lineCount(output)).toBeLessThanOrEqual(CONFIG_MIN_ROWS);
+      }
+    }
+    expect(await render(draftWith(3), CONFIG_MIN_ROWS - 1)).toContain('Terminal too small');
+  });
+
+  it('keeps the service box and its suggestion list inside the height it budgets', async () => {
+    const rows = CONFIG_CHROME_ROWS + SERVICE_BOX_ROWS + 5;
+    const draft = draftWith(3);
+    const budget = computeConfigBudget(rows, draft, false, 5, true);
+    expect(budget.boxDropdownLines).toBe(5);
+    const box = { ...openServiceBox(draft, 0)!, editing: true };
+    const many = Array.from({ length: 30 }, (_, index) => `branch-${index}`);
+    const output = await render(draft, rows, VIEW, {
+      box,
+      boxContext: { service: 'svc-0', branches: many, branchesStatus: 'ready', migrationDeclared: true, recipeDeclared: true },
+    });
+    expect(lineCount(output)).toBeLessThanOrEqual(rows - 2);
+  });
+
   it('asks for a bigger terminal below the minimum height instead of overflowing', async () => {
     const output = await render(draftWith(5), 15);
     expect(output).toContain(PANELS_TOO_SMALL.slice(0, 20));
@@ -113,18 +139,18 @@ describe('UpdateConfigPanels', () => {
     expect(lineCount(output)).toBeLessThanOrEqual(24);
   });
 
-  it('a one-service screen fits a 20-row terminal where the table has one row, and asks for more below that', async () => {
+  it('a one-service screen fits an 18-row terminal where the table has one row, and asks for more below that', async () => {
     const draft = createUpdateConfigDraft('edt', [{ service: 'svc-1', repoPath: '/repo/1', sourceBranch: 'development' }], { layout: 'service-panels' });
-    const fits = await render(draft, 20);
+    const fits = await render(draft, 18);
     expect(fits).toContain('svc-1');
     expect(fits).toContain('[ Start run ]');
     expect(fits).not.toContain('Terminal too small');
-    expect(lineCount(fits)).toBeLessThanOrEqual(20);
-    expect(await render(draft, 19)).toContain('Terminal too small');
+    expect(lineCount(fits)).toBeLessThanOrEqual(18);
+    expect(await render(draft, 17)).toContain('Terminal too small');
   });
 
-  it('the table hints say how to start the run', () => {
-    expect(PANELS_HINTS_TABLE.join(' ')).toContain('Start run');
+  it('the global-panel footer context says how to start the run', () => {
+    expect(JSON.stringify(FOOTER_CONTEXTS['update-config-global'].hints)).toContain('Start run');
   });
 
   describe('branch autocomplete through the service box', () => {

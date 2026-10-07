@@ -2,6 +2,7 @@
 // handling stays in LogsZone's useInput.
 import { Box, Text } from 'ink';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { formatHint } from '../../shared/components/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -19,6 +20,7 @@ import {
   type LogFilterSpec,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
+import { StateLine } from '../../shared/components/state-line.js';
 
 export function FullscreenPane({
   repoPath,
@@ -77,9 +79,9 @@ export function FullscreenPane({
           <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
         </Box>
         {noContainer ? null : displayHealth === 'restarting' ? (
-          <Text color={colors['text-dim']}> [R] restart requested — re-verifying…</Text>
+          <Text color={colors['text-dim']}> {formatHint(['R', 'restart requested — re-verifying…'])}</Text>
         ) : (
-          <Text color={colors['text-dim']}> [R] restart</Text>
+          <Text color={colors['text-dim']}> {formatHint(['R', 'restart'])}</Text>
         )}
       </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
@@ -92,9 +94,13 @@ export function FullscreenPane({
       {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
       <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
         {windowLines.length === 0 && !pane?.streamError ? (
-          <Text color={colors['text-dim']}>
-            {noContainer ? 'No container — no logs' : allLinesHiddenByFilters ? 'All lines hidden by filters' : 'Waiting for logs…'}
-          </Text>
+          noContainer ? (
+            <StateLine kind="empty" subject="logs" text="No container — no logs" />
+          ) : allLinesHiddenByFilters ? (
+            <StateLine kind="empty" subject="lines" text="All lines hidden by filters" />
+          ) : (
+            <StateLine kind="loading" verb="Waiting for" subject="logs" />
+          )
         ) : null}
         {windowLines.map((line, index) => (
           <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
@@ -102,8 +108,6 @@ export function FullscreenPane({
           </Text>
         ))}
       </Box>
-      <DimAnnotation text="[Esc] back  [↑/↓] scroll  [c] clear  [t/o/p] toggle timestamps/stdout/stderr  [w] wrap/truncate  [R] restart" />
-      <DimAnnotation text="[/] global filter  [f] pane filter  [i] toggle global engagement" />
     </Box>
   );
 }

@@ -7,12 +7,11 @@ import { resolve } from 'node:path';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
-import { resolveFocusStep, stepFocus } from '../../../../shared/keys/focus-navigation.js';
-import { suggestBranchNameFromTopic, TWO_PANEL_NAV } from '../../edts-zone.logic.js';
+import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
+import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
 import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
-import { formatHints } from '../../../../shared/components/hints.js';
 
 export type ResolutionAction = 'adopt' | 'discard';
 
@@ -87,8 +86,6 @@ export type SwitchResolutionState = {
   // Raised by the reducer; the zone dispatches it to the parked core call exactly once.
   decision: SwitchResolutionDecision | null;
 };
-
-export const SWITCH_RESOLUTION_FOOTER = formatHints([['Tab', 'switch pane'], ['Enter', 'configure row'], ['Ctrl+N', 'confirm'], ['Esc', 'cancel switch']]);
 
 export const RESOLUTION_MODE_LABELS = {
   adoptGlobal: '[Adopt (Global)]',

@@ -1,7 +1,7 @@
 // tui/shared/keys: the one list-cursor reducer — Up/Down clamp (no wrap), Home/End jump to top/bottom.
 // Pure functions so lists are unit-testable (renderToString's fake stdin never invokes useInput).
 
-import type { NavigationKey } from '../../keybindings/index.js';
+import type { NavigationKey } from './navigation-key.js';
 
 // Arrow/Home/End keys produce an empty `input` in Ink, so only `key` flags are read.
 export type SelectionDirection = 'up' | 'down';

@@ -213,10 +213,9 @@ describe('handleFilterablePickListKey — genuinely empty pool', () => {
 describe('FilterablePickList render', () => {
   const copy = { label: 'Filter', emptyText: 'Nothing to select', noMatchText: 'No match' };
 
-  it('renders the filter field, its hint line, and one row per match with the secondary text', async () => {
+  it('renders the filter field and one row per match with the secondary text', async () => {
     const output = await renderToString(<FilterablePickList {...copy} state={stateWith()} items={ITEMS} />);
     expect(output).toContain('Filter:');
-    expect(output).toContain('[Enter] confirm  [Esc] cancel');
     expect(output).toContain('alpha-api');
     expect(output).toContain('beta-api');
     expect(output).toContain('gateway');

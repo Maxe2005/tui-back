@@ -6,6 +6,8 @@ import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
+import type { Hint } from '../../shared/components/hints.js';
+import type { FooterContextId } from '../../keybindings/index.js';
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { spacing } from '../../shared/theme/theme.js';
 
@@ -396,6 +398,46 @@ export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityT
 }
 
 export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true };
+
+// The footer context while an overlay owns the keyboard: the filter editor (its history grid is
+// its own sub-mode) sits above the fullscreen pane it may have been opened from.
+// A service without a container has no restart, so its fullscreen pane never advertises one.
+export function logsFooterContext(
+  filterEditorOpen: boolean,
+  historyGridOpen: boolean,
+  fullscreen: { open: boolean; restartable: boolean },
+): FooterContextId | null {
+  if (filterEditorOpen) {
+    return historyGridOpen ? 'logs-filter-history' : 'logs-filter-edit';
+  }
+  if (!fullscreen.open) {
+    return null;
+  }
+  return fullscreen.restartable ? 'logs-fullscreen' : 'logs-fullscreen-no-container';
+}
+
+// The key legend under the service list; the stream toggles show their live state.
+export function logsLegendHints(visibility: VisibilityFlags): Hint[] {
+  const state = (on: boolean) => (on ? 'on' : 'off');
+  return [
+    ['Space', 'toggle'],
+    ['Enter', 'preview'],
+    ['Ctrl+A', 'toggle all'],
+    ['t', `timestamps ${state(visibility.showTimestamps)}`],
+    ['o', `stdout ${state(visibility.showStdout)}`],
+    ['p', `stderr ${state(visibility.showStderr)}`],
+    ['Ctrl+↑/↓', 'scroll pane'],
+    ['c', 'clear focused pane'],
+    ['Ctrl+C', 'clear all panes'],
+    ['w', 'wrap/truncate this pane'],
+    ['W', 'wrap/truncate all'],
+    ['R', 'restart focused pane'],
+    ['/', 'edit global filter'],
+    ['f', "edit this pane's filter"],
+    ['i', 'toggle global filter (pane)'],
+    ['Esc', 'clear filter (cascade)'],
+  ];
+}
 
 // Per-pane wrap/truncate state, keyed by repoPath — a pane absent from the map defaults to
 // truncate, matching the grid view's deliberate `truncate-end`.

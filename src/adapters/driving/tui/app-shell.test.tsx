@@ -364,6 +364,8 @@ it('shouldQuit returns true for q', () => {
         commandBarOpen: false,
         openCommandBar: () => {},
         closeCommandBar: () => {},
+        footerContexts: [],
+        setFooterContext: () => {},
         // Settings
         settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,

@@ -439,9 +439,7 @@ export function CreateWizardView({
   maxVisibleRows: number;
 }) {
   const breadcrumb = buildBreadcrumb(dialog, edtsRows, candidates);
-  const cancelHint = edtsRows.length > 0 ? '[Esc] cancel' : '[Esc] quit';
   const acknowledge = isActivationAcknowledge(dialog);
-  // Step navigation only exists before the create; afterwards Step 4's own footers apply.
   const created = dialog.activation.created !== null;
   return (
     <ModalDialog title={CREATE_WIZARD_TITLE} open={true}>
@@ -462,15 +460,9 @@ export function CreateWizardView({
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
         {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
         {dialog.submitting ? <DimAnnotation text={created ? 'Activating…' : 'Creating…'} /> : null}
-        {acknowledge ? (
-          <Text color={colors['text-dim']}>
-            {dialog.activation.outcome === null ? 'EDT created and activated, with per-service failures above  ' : ''}[Enter/Esc] close
-          </Text>
-        ) : created ? null : (
-          <Text color={colors['text-dim']}>
-            [Ctrl+→/Ctrl+N] next step  [Ctrl+←/Ctrl+P] previous step  {cancelHint}
-          </Text>
-        )}
+        {acknowledge && dialog.activation.outcome === null ? (
+          <Text color={colors['text-dim']}>EDT created and activated, with per-service failures above</Text>
+        ) : null}
       </Box>
     </ModalDialog>
   );

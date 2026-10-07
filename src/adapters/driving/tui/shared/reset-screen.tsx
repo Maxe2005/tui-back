@@ -3,11 +3,14 @@
 // each category's outcome and every git branch left behind. Every decision lives in
 // reset-screen.logic.ts; this component feeds it raw Ink keys. Danger styling: error-colored
 // border and title, never the accent.
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { TextInputLine } from './components/text-input-line.js';
+import { StateLine } from './components/state-line.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors, spacing } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
@@ -88,13 +91,15 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
   });
 
   let body;
-  let hint: string;
+  let note: ReactNode = null;
+  let context: FooterContextId | null;
   if (status === 'running') {
     body = <Text color={colors.warning}>Resetting…</Text>;
-    hint = 'Please wait.';
+    note = 'Please wait.';
+    context = 'busy';
   } else if (status === 'done') {
     body = <Lines lines={buildResetResultLines(result, error)} />;
-    hint = 'Enter or Esc to close.';
+    context = 'close';
   } else if (screen.step === 'select') {
     const locked = isEdtsLocked(screen);
     body = (
@@ -115,9 +120,9 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
         })}
       </Box>
     );
-    hint = selectedCategories(screen).length > 0
-      ? '[Space] toggle  [Enter] review  [Esc] cancel'
-      : '[Space] toggle  [Esc] cancel  (check at least one)';
+    const anyChecked = selectedCategories(screen).length > 0;
+    context = anyChecked ? 'reset-select' : 'reset-select-empty';
+    note = anyChecked ? null : 'Check at least one.';
   } else if (screen.step === 'summary') {
     body = (
       <Box flexDirection="column">
@@ -125,23 +130,26 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
         <Lines lines={buildResetSummaryLines(selectedCategories(screen), preview)} />
       </Box>
     );
-    hint =
-      preview?.status === 'ready'
-        ? '[Enter] continue  [Esc] cancel'
-        : preview?.status === 'error'
-          ? 'The summary could not be loaded, so the reset cannot continue.  [Esc] cancel'
-          : 'Loading the summary…  [Esc] cancel';
+    context = preview?.status === 'ready' ? 'reset-summary' : 'reset-wait';
+    if (preview?.status === 'error') {
+      note = <StateLine kind="error" subject="the summary" />;
+    } else if (preview?.status !== 'ready') {
+      note = <StateLine kind="loading" subject="the summary" />;
+    }
   } else {
     body = (
       <Box flexDirection="column">
         <Text color={colors.text}>
-          Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter to delete. This cannot be undone.
+          Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter. This permanently deletes the data and cannot be undone.
         </Text>
         <TextInputLine label="Confirm" value={screen.confirm.value} cursor={screen.confirm.cursor} focused />
       </Box>
     );
-    hint = 'Only the exact word executes.  [Esc] cancel';
+    context = 'reset-confirm';
+    note = 'Only the exact word executes.';
   }
+
+  useFooterContext('reset', context, useStore);
 
   return (
     <Box
@@ -156,7 +164,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
       </Text>
       <Text color={colors.text}>──</Text>
       {body}
-      <DimAnnotation text={hint} />
+      {typeof note === 'string' ? <DimAnnotation text={note} /> : note}
     </Box>
   );
 }

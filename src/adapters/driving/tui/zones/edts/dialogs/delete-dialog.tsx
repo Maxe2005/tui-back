@@ -12,10 +12,6 @@ import { colors } from '../../../shared/theme/theme.js';
 import {
   buildDeleteMemberRows,
   formatDeleteMemberMeta,
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   stripAssistedActionCodes,
   summarizeFailedResults,
   toggleDeleteDisposition,
@@ -23,6 +19,7 @@ import {
   type EdtDialogState,
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 
 export type DeleteDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -126,7 +123,6 @@ export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
         {dialog.rejected ? (
           <>
             <Text color={colors.error}>{dialog.error}</Text>
-            <Text color={colors.text}>[Esc] cancel</Text>
           </>
         ) : dialog.memberRows === null ? (
           <StateLine kind="loading" subject="member status" />
@@ -147,7 +143,6 @@ export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
                 </Box>
               ))
             )}
-            <Text color={colors.text}>[Space] toggle delete  [Enter] confirm  [Esc] cancel</Text>
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Deleting…" /> : null}
           </>

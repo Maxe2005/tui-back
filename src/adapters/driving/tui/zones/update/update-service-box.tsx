@@ -2,16 +2,11 @@
 // update-service-box.logic.ts). Height: SERVICE_BOX_ROWS (update-config-panels.logic.ts)
 // + the branch field's list (`dropdownLines`); every line is truncated, none can wrap.
 import { Box, Text } from 'ink';
-import { formatHints } from '../../shared/components/hints.js';
-import { SuggestField } from '../../shared/components/suggest-field.js';
+import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
 
-export const SERVICE_BOX_FOOTER = [
-  formatHints([['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'change']]),
-  formatHints([['Ctrl+R', 'back to global'], ['Esc', 'close']]),
-] as const;
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 
 const OPTION_LABEL: Record<ToggleOverride, (global: boolean) => string> = {
@@ -77,13 +72,13 @@ export function UpdateServiceBox({
       </Text>
       <Box>
         <Marker focused={focused('branch')} />
-        <SuggestField
+        <BranchAutocompleteInput
           label="Source branch"
           labelWidth={16}
           state={box.branch}
-          suggestions={context.branches}
+          branches={context.branches}
           placeholder={SHARED_BRANCH_PLACEHOLDER}
-          status={context.branchesStatus}
+          branchesStatus={context.branchesStatus}
           maxLines={dropdownLines}
           editing={box.editing}
           focused={focused('branch')}
@@ -116,11 +111,6 @@ export function UpdateServiceBox({
           ✖ {box.error}
         </Text>
       ) : null}
-      {SERVICE_BOX_FOOTER.map((line) => (
-        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
-          {line}
-        </Text>
-      ))}
     </Box>
   );
 }

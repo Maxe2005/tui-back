@@ -10,6 +10,7 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
 import { SettingsScreen } from './shared/settings-screen.js';
+import { useFooterContext } from './shared/hooks/use-footer-context.js';
 import { resolveFocusStep } from './shared/keys/focus-navigation.js';
 import { colors } from './shared/theme/theme.js';
 import { useAppStore, type AppStore, type AppState } from './store/app-store.js';
@@ -205,6 +206,7 @@ export function AppShell({
   const quitRequested = useStore((state) => state.quitRequested);
 
   const [filterOpen, setFilterOpen] = useState(false);
+  useFooterContext('filter', filterOpen ? 'dismiss' : null, useStore);
 
   // A single effect keyed on `registryScreenOpen` both fires the mount-time load (it starts
   // false) and reloads whenever the registry screen closes (registering may show/hide a gated
@@ -399,7 +401,7 @@ export function AppShell({
       {commandBarOpen && (
         <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}
-      <Footer zone={activeZone} />
+      <Footer zone={activeZone} useStore={useStore} />
     </Box>
   );
 }

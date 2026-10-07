@@ -8,7 +8,10 @@ import { Box, Text, useInput, type Key } from 'ink';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
-import { Spinner } from './components/spinner.js';
+import { StateLine } from './components/state-line.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors } from './theme/theme.js';
 import {
   useAppStore,
@@ -96,6 +99,18 @@ export function resolveRegistryScreenPhase(store: {
   return 'root-input';
 }
 
+// The footer context of a phase: only the three interactive phases advertise their own keys, every
+// other one just closes with Esc.
+export function registryFooterContext(phase: RegistryScreenPhase, hasStaleCandidates: boolean): FooterContextId {
+  if (phase === 'root-input') {
+    return 'registry-path';
+  }
+  if (phase === 'candidates') {
+    return 'registry-candidates';
+  }
+  return phase === 'clean-candidates' && hasStaleCandidates ? 'registry-stale' : 'dismiss';
+}
+
 // Root-path free-text entry. Ctrl/meta combos (e.g. Ctrl+W resize-mode, reserved elsewhere
 // in the app) and empty-input control keys (arrows, Enter, Esc — all handled separately by
 // their own key flags) are never appended as literal characters.
@@ -108,18 +123,6 @@ export function typeRootInputChar(current: string, input: string, key: Pick<Key,
 
 export function backspaceRootInput(current: string): string {
   return current.slice(0, -1);
-}
-
-// Candidate-list cursor movement (checkbox-list-item is a static row; the screen owns which row
-// is highlighted for Space/navigation).
-export type CandidateDirection = 'up' | 'down';
-
-export function moveCandidateCursor(current: number, direction: CandidateDirection, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
 }
 
 // Space toggles the highlighted candidate's checked state — checkbox-list-item's semantics:
@@ -200,12 +203,15 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const [cleanCursor, setCleanCursor] = useState(0);
   const [cleanExcluded, setCleanExcluded] = useState<Set<string>>(new Set());
 
+  const rootLabel = root.trim() === '' ? 'the root path' : root;
   const candidates = registryScanResult?.candidates ?? [];
   const clampedCursor = candidates.length === 0 ? 0 : Math.min(cursor, candidates.length - 1);
 
   const staleCandidates = registryCleanCandidates ?? [];
   const clampedCleanCursor = staleCandidates.length === 0 ? 0 : Math.min(cleanCursor, staleCandidates.length - 1);
   const selectedStalePaths = staleCandidates.map((candidate) => candidate.path).filter((path) => !cleanExcluded.has(path));
+
+  useFooterContext('registry', registryFooterContext(phase, staleCandidates.length > 0), useStore);
 
   useInput((input, key) => {
     if (phase === 'root-input') {
@@ -231,16 +237,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'candidates') {
-      if (key.home || key.end) {
-        setCursor(key.home ? 0 : Math.max(candidates.length - 1, 0));
-        return;
-      }
-      if (key.downArrow) {
-        setCursor((current) => moveCandidateCursor(current, 'down', candidates.length));
-        return;
-      }
-      if (key.upArrow) {
-        setCursor((current) => moveCandidateCursor(current, 'up', candidates.length));
+      const moved = nextCursorForKey(key, clampedCursor, candidates.length);
+      if (moved !== null) {
+        setCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -259,16 +258,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'clean-candidates' && staleCandidates.length > 0) {
-      if (key.home || key.end) {
-        setCleanCursor(key.home ? 0 : Math.max(staleCandidates.length - 1, 0));
-        return;
-      }
-      if (key.downArrow) {
-        setCleanCursor((current) => moveCandidateCursor(current, 'down', staleCandidates.length));
-        return;
-      }
-      if (key.upArrow) {
-        setCleanCursor((current) => moveCandidateCursor(current, 'up', staleCandidates.length));
+      const moved = nextCursorForKey(key, clampedCleanCursor, staleCandidates.length);
+      if (moved !== null) {
+        setCleanCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -302,27 +294,23 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
-            <DimAnnotation text="Type a path  [Enter] scan" />
-            <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
+            <DimAnnotation text="Type a path. Stale registry entries (unreachable or unmanaged) can be cleaned too." />
           </Box>
         ) : null}
 
         {phase === 'scanning' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Scanning {root}…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Scanning" subject={rootLabel} />
         ) : null}
 
         {phase === 'scan-error' ? (
           <Box flexDirection="column">
-            <Text color={colors.error}>Scan failed.</Text>
+            <StateLine kind="error" verb="Failed to scan" subject={rootLabel} />
             {registryScanError ? <DimAnnotation text={registryScanError} /> : null}
           </Box>
         ) : null}
 
         {phase === 'empty' ? (
-          <Text color={colors['text-dim']}>No manifest-carrying repos found here.</Text>
+          <StateLine kind="empty" subject="manifest-carrying repos" text="No manifest-carrying repos found here." />
         ) : null}
 
         {phase === 'candidates' ? (
@@ -345,15 +333,11 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 </Box>
               );
             })}
-            <DimAnnotation text="[Space] toggle  [Enter] register selection" />
           </Box>
         ) : null}
 
         {phase === 'registering' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Registering…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Registering" subject="" />
         ) : null}
 
         {phase === 'results' ? (
@@ -367,27 +351,23 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 {result.detail ? <DimAnnotation text={result.detail} /> : null}
               </Box>
             ))}
-            <DimAnnotation text="Esc to close." />
           </Box>
         ) : null}
 
         {phase === 'clean-candidates' ? (
           <Box flexDirection="column">
             {registryCleanScanStatus === 'loading' ? (
-              <Box>
-                <Spinner />
-                <Text color={colors.text}> Scanning the registry for stale entries…</Text>
-              </Box>
+              <StateLine kind="loading" verb="Scanning" subject="the registry for stale entries" />
             ) : registryCleanScanStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error}>Scan failed.</Text>
+                <StateLine kind="error" verb="Failed to scan" subject="the registry for stale entries" />
                 {registryCleanScanError ? <DimAnnotation text={registryCleanScanError} /> : null}
               </Box>
             ) : staleCandidates.length === 0 ? (
               // Zero candidates is an explicit, visible state, never silent — same convention
               // as the scan flow's own 'empty' phase.
               <Box flexDirection="column">
-                <Text color={colors['text-dim']}>No stale registry entries found.</Text>
+                <StateLine kind="empty" subject="stale registry entries" text="No stale registry entries found." />
                 {registryCleanErrors.length > 0 ? (
                   <DimAnnotation
                     text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
@@ -395,7 +375,6 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="Esc to close." />
               </Box>
             ) : (
               <Box flexDirection="column">
@@ -425,17 +404,13 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="[Space] toggle  [Enter] remove selection" />
               </Box>
             )}
           </Box>
         ) : null}
 
         {phase === 'cleaning' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Removing stale entries…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Removing" subject="stale entries" />
         ) : null}
 
         {phase === 'clean-results' ? (
@@ -449,7 +424,6 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
               </Box>
             ))}
-            <DimAnnotation text="Esc to close." />
           </Box>
         ) : null}
       </Box>

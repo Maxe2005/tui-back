@@ -86,7 +86,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key, current.branchPicker.branchesStatus);
     if (result.type === 'cancel') {
       deps.setDialog({ kind: 'none' });
       return;

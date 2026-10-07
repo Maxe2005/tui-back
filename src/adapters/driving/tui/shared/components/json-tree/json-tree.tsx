@@ -5,6 +5,7 @@
 import { Box, Text } from 'ink';
 import { BoundedList } from '../bounded-list.js';
 import { colors, jsonTreeColors, spacing } from '../../theme/theme.js';
+import { formatHint } from '../hints.js';
 import { TextInputLine } from '../text-input-line.js';
 import type { TextInputState } from '../text-edit.js';
 import {
@@ -89,8 +90,7 @@ export function JsonTreeFilterPanel({ rules, hideNulls, cursor }: { rules: reado
           )
         }
       />
-      <Text color={colors.text}>{`  [n] hide nulls: ${hideNulls ? 'on' : 'off'}`}</Text>
-      <Text color={colors['text-dim']}>[↑/↓] select  [Space] remove  [1-9] remove  [n] nulls  [c] clear  [f] close</Text>
+      <Text color={colors.text}>{`  ${formatHint(['n', `hide nulls: ${hideNulls ? 'on' : 'off'}`])}`}</Text>
     </Box>
   );
 }
@@ -144,7 +144,7 @@ export function JsonRawEditor({ input, error, maxVisibleRows }: { input: TextInp
   const lineBudget = Math.max(0, maxVisibleRows - chrome);
   return (
     <Box flexDirection="column">
-      <Text color={colors['text-dim']}>Raw JSON — [Enter] newline  [Esc] done</Text>
+      <Text color={colors['text-dim']}>Raw JSON</Text>
       {error !== null && error !== '' ? <Text color={colors.error} wrap="truncate-end">{`✖ ${error}`}</Text> : null}
       <BoundedList
         items={lines}

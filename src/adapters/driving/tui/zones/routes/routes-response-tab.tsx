@@ -5,7 +5,8 @@
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
 import { DetailPane } from '../../shared/components/detail-pane.js';
-import { Spinner } from '../../shared/components/spinner.js';
+import { formatHint } from '../../shared/components/hints.js';
+import { StateLine } from '../../shared/components/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RouteResponse } from '../../store/slices/routes-slice.js';
 import { formatFireError, formatFireStatus } from './routes-zone.logic.js';
@@ -23,14 +24,11 @@ export function RoutesResponseTab({
   children: ReactNode;
 }) {
   if (response === undefined) {
-    return <Text color={colors['text-dim']}>{focused ? 'No response yet — [Ctrl+R] fires the request.' : 'No response yet.'}</Text>;
+    return <StateLine kind="empty" subject="response" text={focused ? `No response yet — ${formatHint(['Ctrl+R', 'fire'])}` : undefined} />;
   }
   if (response.status === 'firing') {
     return (
-      <Box flexDirection="row">
-        <Spinner />
-        <Text color={colors['text-dim']}> Firing…</Text>
-      </Box>
+      <StateLine kind="loading" verb="Firing" subject="" />
     );
   }
   if (response.status === 'error') {

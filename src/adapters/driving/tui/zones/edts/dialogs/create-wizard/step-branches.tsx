@@ -6,18 +6,15 @@
 import { Box, Text, type Key } from 'ink';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
-import { resolveFocusStep, stepFocus } from '../../../../shared/keys/focus-navigation.js';
+import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { TWO_PANEL_NAV, type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../edts-zone.logic.js';
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from './wizard.logic.js';
-import { formatHints } from '../../../../shared/components/hints.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
-export const STEP3_FOOTER = formatHints([['Tab', 'switch pane'], ['Enter', 'configure row'], ['Ctrl+N', 'next step']]);
-
 export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {
   const lists = state.branches.lists[path];
   const candidate = candidates.find((entry) => entry.path === path);
@@ -260,14 +257,13 @@ export function BranchStepView({
         cursor={branches.rowCursor}
         focused={rowsFocused}
         maxVisibleRows={maxVisibleRows}
-        labels={{ moreAbove: 'services au-dessus', moreBelow: 'services en dessous' }}
+        labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
       {blocked !== undefined ? (
         <Text color={colors.error}>
           ✖ {blocked.service} : {blocked.error}
         </Text>
       ) : null}
-      <Text color={colors['text-dim']}>{STEP3_FOOTER}</Text>
     </Box>
   );
 }

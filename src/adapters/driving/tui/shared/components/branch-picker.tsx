@@ -4,6 +4,7 @@
 // `handleBranchPickerKey` is the pure reducer edts-zone.tsx's useInput calls; `BranchPicker`
 // only renders and never captures input.
 import { Box, Text } from 'ink';
+import type { FooterContextId } from '../../keybindings/index.js';
 import { resolveFocusStep, stepFocus, type FocusNavDirection } from '../keys/focus-navigation.js';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
@@ -27,10 +28,25 @@ export function cycleBranchPickerMode(
   return stepFocus(stops, mode, direction);
 }
 
-// Case-insensitive prefix match — same convention as commands.ts's matchCommands.
-export function matchBranchesByPrefix(query: string, branches: readonly string[]): string[] {
-  const needle = query.toLowerCase();
-  return branches.filter((branch) => branch.toLowerCase().startsWith(needle));
+// The footer context of the picker's current field, so the footer lists exactly the keys live
+// there. A rename sub-view of Pick existing is a plain text edit.
+export function branchPickerFooterContext(
+  state: Pick<BranchPickerState, 'mode' | 'renameSub' | 'baseFocused' | 'nameSubListOpen'>,
+  hasOtherMemberBranches: boolean,
+): FooterContextId {
+  if (state.mode === 'rename-current') {
+    return 'branch-picker-rename';
+  }
+  if (state.mode === 'pick-existing') {
+    return state.renameSub !== null ? 'confirm' : 'branch-picker-pick';
+  }
+  if (state.baseFocused) {
+    return 'branch-picker-base';
+  }
+  if (state.nameSubListOpen) {
+    return 'branch-picker-members';
+  }
+  return hasOtherMemberBranches ? 'branch-picker-name-members' : 'branch-picker-name';
 }
 
 // The picker's confirmed result — the caller (edts-zone.tsx) decides what to do with it:
@@ -60,6 +76,8 @@ export type BranchPickerState = {
   baseBranch: string;
   // baseBranch's own caret position.
   baseBranchCursor: number;
+  // The highlighted suggestion of the base-branch autocomplete.
+  basePickCursor: number;
   baseFocused: boolean; // true: base-branch field focused; false: name field focused
   nameValue: string;
   // nameValue's own caret position.
@@ -91,6 +109,7 @@ export function createBranchPickerState(params: {
     currentBranch: params.currentBranch,
     baseBranch: params.defaultBaseBranch,
     baseBranchCursor: params.defaultBaseBranch.length,
+    basePickCursor: 0,
     baseFocused: true,
     nameValue: params.suggestedName,
     nameValueCursor: params.suggestedName.length,
@@ -206,6 +225,7 @@ export function handleBranchPickerKey(
   otherMemberBranches: readonly string[],
   input: string,
   key: TextEditKey,
+  branchesStatus: 'loading' | 'ready' | 'error' = 'ready',
 ): BranchPickerKeyResult {
   if (key.escape) {
     if (state.mode === 'pick-existing' && state.renameSub !== null) {
@@ -235,6 +255,7 @@ export function handleBranchPickerKey(
           ...state,
           mode: nextMode,
           renameSub: { oldName: state.currentBranch, value: state.currentBranch, cursor: state.currentBranch.length, error: null },
+          basePickCursor: 0,
           nameSubListOpen: false,
           nameSubListCursor: 0,
           error: null,
@@ -244,12 +265,12 @@ export function handleBranchPickerKey(
     const clearedRename = state.mode === 'rename-current' ? null : state.renameSub;
     return {
       type: 'update',
-      state: { ...state, mode: nextMode, renameSub: clearedRename, baseFocused: true, nameSubListOpen: false, nameSubListCursor: 0, error: null },
+      state: { ...state, mode: nextMode, renameSub: clearedRename, baseFocused: true, basePickCursor: 0, nameSubListOpen: false, nameSubListCursor: 0, error: null },
     };
   }
 
   if (state.mode === 'create-new') {
-    return handleCreateNewKey(state, branches, otherMemberBranches, input, key);
+    return handleCreateNewKey(state, branches, otherMemberBranches, input, key, branchesStatus);
   }
   if (state.mode === 'pick-existing') {
     return handlePickExistingKey(state, branches, input, key);
@@ -263,26 +284,35 @@ function handleCreateNewKey(
   otherMemberBranches: readonly string[],
   input: string,
   key: TextEditKey,
+  branchesStatus: 'loading' | 'ready' | 'error',
 ): BranchPickerKeyResult {
   if (state.baseFocused) {
+    // The base-branch field is the shared autocomplete: Enter fills in the highlighted
+    // suggestion, and moves on to the name once the field already holds a listed branch (or
+    // nothing is suggested, so a free-typed ref is still accepted). An empty field keeps the
+    // default and advances; free text is never accepted before the branch list can validate it.
     if (key.return) {
-      return { type: 'update', state: { ...state, baseFocused: false } };
-    }
-    if (key.downArrow || key.upArrow) {
-      const matches = matchBranchesByPrefix(state.baseBranch, branches);
-      if (matches.length === 0) {
+      if (state.baseBranch.trim() === '') {
+        return { type: 'update', state: { ...state, baseFocused: false } };
+      }
+      if (branchesStatus !== 'ready') {
         return { type: 'update', state };
       }
-      const dir = key.downArrow ? 1 : -1;
-      const idx = matches.indexOf(state.baseBranch);
-      const nextIdx = ((idx === -1 ? 0 : idx) + dir + matches.length) % matches.length;
-      const nextBaseBranch = matches[nextIdx];
-      // Cycling through suggestions is a programmatic overwrite — the caret jumps to the new
-      // value's end, like every other suggestion/retry reseed in this file.
-      return { type: 'update', state: { ...state, baseBranch: nextBaseBranch, baseBranchCursor: nextBaseBranch.length } };
+      if (matchBranchesBySubstring(state.baseBranch, branches).length === 0 || isBranchAutocompleteExactMatch(state.baseBranch, branches)) {
+        return { type: 'update', state: { ...state, baseFocused: false } };
+      }
     }
-    const editedBase = applyTextInput({ value: state.baseBranch, cursor: state.baseBranchCursor }, input, key);
-    return { type: 'update', state: { ...state, baseBranch: editedBase.value, baseBranchCursor: editedBase.cursor } };
+    const delegated = handleBranchAutocompleteKey(
+      { value: state.baseBranch, cursor: state.baseBranchCursor, pickCursor: state.basePickCursor },
+      branches,
+      input,
+      key,
+    );
+    if (delegated.type === 'commit-through') {
+      return { type: 'update', state: { ...state, baseFocused: false } };
+    }
+    const next = delegated.state;
+    return { type: 'update', state: { ...state, baseBranch: next.value, baseBranchCursor: next.cursor, basePickCursor: next.pickCursor } };
   }
 
   // Name field focused
@@ -433,10 +463,9 @@ export type BranchPickerProps = {
   branches: readonly string[];
   branchesStatus: 'loading' | 'ready' | 'error';
   otherMemberBranches: readonly string[];
-  // The shared autocomplete's visible row cap — threaded from
-  // `settings.edts.branchDropdownMaxRows` (no per-service override, no new setting of its
-  // own). Only the pick-existing filter reads it (via BranchAutocompleteInput); create-new /
-  // rename-current never do.
+  // The shared autocomplete's line budget — threaded from `settings.edts.branchDropdownMaxRows`
+  // (no per-service override, no new setting of its own). Read by the pick-existing filter and
+  // create-new's base branch; rename-current never shows a list.
   maxRows: number;
   // Create-EDT's base-branch step repurposes "Create new" mode's Name field to mean "the base
   // branch itself" — that session never creates a branch (see create-wizard/step-branches.tsx's
@@ -447,40 +476,23 @@ export type BranchPickerProps = {
   hideNestedBaseField?: boolean;
 };
 
-// The create-new base-branch candidate list (create-new stays prefix-matched). Pick-existing
-// uses the shared BranchAutocompleteInput below instead.
-function FilterableBranchList({ matches, highlightedIndex }: { matches: readonly string[]; highlightedIndex: number }) {
-  if (matches.length === 0) {
-    return null;
-  }
-  return (
-    <Box flexDirection="column" paddingLeft={2}>
-      {matches.map((branch, index) => (
-        <Text key={branch} color={index === highlightedIndex ? colors.accent : colors.text}>
-          {index === highlightedIndex ? '› ' : '  '}
-          {branch}
-        </Text>
-      ))}
-    </Box>
-  );
-}
-
 export function BranchPicker({ state, branches, branchesStatus, otherMemberBranches, maxRows, hideNestedBaseField = false }: BranchPickerProps) {
   const modes: BranchPickerMode[] = state.hasCurrentBranch
     ? ['pick-existing', 'create-new', 'rename-current']
     : ['pick-existing', 'create-new'];
-  // Pick-existing hosts the shared autocomplete (which owns its own Loading/Failed lines) —
-  // the top-level status lines below stay for create-new/rename-current only, so the mode
+  // An open autocomplete (pick-existing's filter, create-new's focused base branch) owns its own
+  // Loading/Failed line — the top-level status lines below stay for the other fields, so a mode
   // never renders the same line twice.
-  const pickExistingHostsAutocomplete = state.mode === 'pick-existing' && state.renameSub === null;
+  const baseFieldShown = !(hideNestedBaseField && !state.baseFocused);
+  const hostsOpenAutocomplete =
+    (state.mode === 'pick-existing' && state.renameSub === null) || (state.mode === 'create-new' && state.baseFocused && baseFieldShown);
 
   return (
     <Box flexDirection="column">
       <Text color={colors.text}>
         {modes.map((mode) => (mode === state.mode ? `[${MODE_LABELS[mode]}]` : ` ${MODE_LABELS[mode]} `)).join(' ')}
-        {'  [Tab] switch mode'}
       </Text>
-      {pickExistingHostsAutocomplete ? null : (
+      {hostsOpenAutocomplete ? null : (
         <>
           {branchesStatus === 'loading' ? <StateLine kind="loading" subject="branches" /> : null}
           {branchesStatus === 'error' ? <StateLine kind="error" subject="branches" /> : null}
@@ -489,17 +501,16 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
 
       {state.mode === 'create-new' ? (
         <Box flexDirection="column">
-          {hideNestedBaseField && !state.baseFocused ? null : (
-            <>
-              <TextInputLine label="Base branch" value={state.baseBranch} cursor={state.baseBranchCursor} focused={state.baseFocused} />
-              {state.baseFocused ? (
-                <FilterableBranchList
-                  matches={matchBranchesByPrefix(state.baseBranch, branches)}
-                  highlightedIndex={matchBranchesByPrefix(state.baseBranch, branches).indexOf(state.baseBranch)}
-                />
-              ) : null}
-            </>
-          )}
+          {baseFieldShown ? (
+            <BranchAutocompleteInput
+              label="Base branch"
+              state={{ value: state.baseBranch, cursor: state.baseBranchCursor, pickCursor: state.basePickCursor }}
+              branches={branches}
+              branchesStatus={branchesStatus}
+              maxLines={maxRows}
+              editing={state.baseFocused}
+            />
+          ) : null}
           <TextInputLine
             label={hideNestedBaseField ? 'Base branch' : 'Name'}
             value={state.nameValue}
@@ -508,17 +519,17 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
           />
           {otherMemberBranches.length > 0 ? (
             <Box flexDirection="column" paddingLeft={2}>
-              <Text color={colors['text-dim']}>
-                {state.nameSubListOpen ? "Other members' branches ([Enter] pick, [Esc] close):" : "[↓] other members' branches"}
-              </Text>
-              {state.nameSubListOpen
-                ? otherMemberBranches.map((branch, index) => (
+              {state.nameSubListOpen ? (
+                <>
+                  <Text color={colors['text-dim']}>Other members' branches:</Text>
+                  {otherMemberBranches.map((branch, index) => (
                     <Text key={branch} color={index === state.nameSubListCursor ? colors.accent : colors.text}>
                       {index === state.nameSubListCursor ? '› ' : '  '}
                       {branch}
                     </Text>
-                  ))
-                : null}
+                  ))}
+                </>
+              ) : null}
             </Box>
           ) : null}
         </Box>
@@ -537,10 +548,9 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
               state={{ value: state.pickQuery, cursor: state.pickQueryCursor, pickCursor: state.pickCursor }}
               branches={branches}
               branchesStatus={branchesStatus}
-              maxRows={maxRows}
+              maxLines={maxRows}
               focused
             />
-            <Text color={colors['text-dim']}>[Enter] fill in  [Enter] again to set branch  [Ctrl+T] rename this branch</Text>
           </Box>
         )
       ) : null}

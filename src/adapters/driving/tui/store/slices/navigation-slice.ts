@@ -6,6 +6,7 @@ import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibility
 import { stepFocus, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../zones/zone-layouts.js';
 import { ZONES, type ZoneId } from '../../zones/zones.js';
+import type { FooterContextEntry, FooterContextId, FooterOwner } from '../../keybindings/index.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 export type ZoneEvents = Record<ZoneId, number>;
@@ -86,6 +87,11 @@ export type NavigationSlice = {
   commandBarOpen: boolean;
   openCommandBar: () => void;
   closeCommandBar: () => void;
+  // The footer's live context, one entry per owner (a zone, the help, a screen) in the order the
+  // owners first registered; the last entry wins, and an owner clearing itself (null) hands the
+  // footer back to the previous owner, ultimately to the zone hints.
+  footerContexts: readonly FooterContextEntry[];
+  setFooterContext: (owner: FooterOwner, id: FooterContextId | null) => void;
 };
 
 function boundaryIndices(count: number): number[] {
@@ -241,5 +247,22 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
     commandBarOpen: false,
     openCommandBar: () => set({ commandBarOpen: true }),
     closeCommandBar: () => set({ commandBarOpen: false }),
+    footerContexts: [],
+    setFooterContext: (owner, id) =>
+      set((state) => {
+        const existing = state.footerContexts.findIndex((entry) => entry.owner === owner);
+        if (id === null) {
+          return existing === -1
+            ? state
+            : { footerContexts: state.footerContexts.filter((entry) => entry.owner !== owner) };
+        }
+        if (existing === -1) {
+          return { footerContexts: [...state.footerContexts, { owner, id }] };
+        }
+        if (state.footerContexts[existing]!.id === id) {
+          return state;
+        }
+        return { footerContexts: state.footerContexts.map((entry, index) => (index === existing ? { owner, id } : entry)) };
+      }),
   });
 }

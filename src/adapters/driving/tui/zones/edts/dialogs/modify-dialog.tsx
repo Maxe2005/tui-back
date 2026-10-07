@@ -20,12 +20,8 @@ import {
   cycleFormFocus,
   FORM_FOCUS_NAV,
   findRetryableFailedRow,
-  jumpSelection,
-  moveSelection,
   resolveModifyEnterAction,
   resolveModifyOps,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   suggestBranchForNewMember,
   summarizeFailedResults,
   toggleMemberSelection,
@@ -36,6 +32,7 @@ import {
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -212,7 +209,7 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
 
   function handleModifyBranchPickerInput(current: ModifyDialogState, session: BranchPickerSession, input: string, key: Key) {
     const otherMemberBranches = Array.from(new Set(current.target.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchPicker: null } : prev));
       return;

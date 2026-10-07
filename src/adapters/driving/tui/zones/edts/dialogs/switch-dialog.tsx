@@ -181,7 +181,6 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
         ) : null;
       })}
       {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
-      <Text color={colors['text-dim']}>[Enter/Esc] close</Text>
     </>
   );
 }
@@ -217,12 +216,10 @@ export function SwitchDialogView({
         ) : dialog.blocked ? (
           <>
             <Text color={colors.warning}>Cannot switch away: an action is in progress on the current EDT.</Text>
-            <Text color={colors.text}>[Enter] force switch anyway  [Esc] cancel</Text>
           </>
         ) : (
           <>
             <Text color={colors.text}>Switch to "{dialog.target.topic}"?</Text>
-            <Text color={colors.text}>[Enter] confirm  [Esc] cancel</Text>
           </>
         )}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
   applyLogFilters,
@@ -25,6 +26,8 @@ import {
   isPaneWrapped,
   isRestartingDisplay,
   isSelectAllKey,
+  logsFooterContext,
+  logsLegendHints,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
@@ -835,5 +838,30 @@ describe('computeLogsLayout list ratio', () => {
       const listColumns = Math.floor((base.windowColumns - 1) * ratio);
       expect(listColumns + 1 + result.layout.cellWidth * result.layout.cols).toBeLessThanOrEqual(base.windowColumns);
     }
+  });
+});
+
+describe('logsFooterContext', () => {
+  const closed = { open: false, restartable: true };
+  const full = { open: true, restartable: true };
+
+  it('puts the filter editor (and its history grid) above the fullscreen pane', () => {
+    expect(logsFooterContext(false, false, closed)).toBeNull();
+    expect(logsFooterContext(false, false, full)).toBe('logs-fullscreen');
+    expect(logsFooterContext(true, false, full)).toBe('logs-filter-edit');
+    expect(logsFooterContext(true, true, full)).toBe('logs-filter-history');
+  });
+
+  it('never advertises a restart for a pane without a container', () => {
+    expect(logsFooterContext(false, false, { open: true, restartable: false })).toBe('logs-fullscreen-no-container');
+    expect(JSON.stringify(FOOTER_CONTEXTS['logs-fullscreen-no-container'].hints)).not.toContain('restart');
+  });
+});
+
+describe('logsLegendHints', () => {
+  it('shows the live state of the stream toggles', () => {
+    const hints = logsLegendHints({ showTimestamps: true, showStdout: false, showStderr: true });
+    expect(hints).toContainEqual(['t', 'timestamps on']);
+    expect(hints).toContainEqual(['o', 'stdout off']);
   });
 });

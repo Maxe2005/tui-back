@@ -16,7 +16,6 @@ import {
   type OverrideBoxLine,
   type OverrideBoxState,
 } from './override-box.logic.js';
-import { formatHints } from '../../../../shared/components/hints.js';
 
 function LineMarker({ focused }: { focused: boolean }) {
   return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
@@ -49,7 +48,7 @@ function BoxField({
           state={autocomplete}
           branches={overrideBoxBranches(context)}
           branchesStatus={status}
-          maxRows={maxRows}
+          maxLines={maxRows}
           focused={true}
         />
       </Box>
@@ -62,9 +61,6 @@ function BoxField({
     </Box>
   );
 }
-
-export const OVERRIDE_BOX_FOOTER =
-  formatHints([['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'mode'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
 
 export function OverrideBoxView({
   box,
@@ -132,7 +128,6 @@ export function OverrideBoxView({
         </Text>
       </Box>
       {box.error !== null ? <Text color={colors.error}>✖ {box.error}</Text> : null}
-      <Text color={colors['text-dim']}>{OVERRIDE_BOX_FOOTER}</Text>
     </Box>
   );
 }

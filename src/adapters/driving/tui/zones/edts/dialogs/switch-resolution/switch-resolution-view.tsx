@@ -16,19 +16,15 @@ import {
   globalOf,
   modeLabel,
   scopeLabel,
-  SWITCH_RESOLUTION_FOOTER,
   validateRow,
   type LocalBranchList,
   type ResolutionRow,
   type SwitchResolutionBox,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
-import { formatHints } from '../../../../shared/components/hints.js';
 
 const COLUMN_HEADERS = ['Service', 'Scope', 'Current branch', 'Action', 'Target branch'] as const;
 
-export const RESOLUTION_BOX_FOOTER = formatHints([['↑/↓/Tab', 'move'], ['Space/←/→', 'action'], ['Enter', 'edit / apply'], ['Ctrl+R', 'back to global strategy'], ['Esc', 'close']]);
-export const DISCARD_CONFIRM_FOOTER = formatHints([['Ctrl+E', 'overwrite for good'], ['Enter/Esc', 'back']]);
 
 function Marker({ focused }: { focused: boolean }) {
   return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
@@ -77,7 +73,6 @@ function ResolutionBoxView({ box, row, lists }: { box: SwitchResolutionBox; row:
           [ Apply ]
         </Text>
       </Box>
-      <Text color={colors['text-dim']}>{RESOLUTION_BOX_FOOTER}</Text>
     </Box>
   );
 }
@@ -137,7 +132,6 @@ function DiscardConfirmView({
         )}
       />
       {error !== null ? <Text color={colors.error}>✖ {error}</Text> : null}
-      <Text color={colors['text-dim']}>{DISCARD_CONFIRM_FOOTER}</Text>
     </Box>
   );
 }
@@ -213,7 +207,7 @@ export function SwitchResolutionView({
         cursor={state.rowCursor}
         focused={rowsFocused}
         maxVisibleRows={maxVisibleRows}
-        labels={{ moreAbove: 'services au-dessus', moreBelow: 'services en dessous' }}
+        labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
       {stashed.map((repo) => (
         <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">
@@ -230,7 +224,6 @@ export function SwitchResolutionView({
       {listsPending ? (
         <Text color={colors['text-dim']}>Local branches are loading or unavailable — the “already exists” check is skipped for these services.</Text>
       ) : null}
-      <Text color={colors['text-dim']}>{SWITCH_RESOLUTION_FOOTER}</Text>
     </Box>
   );
 }

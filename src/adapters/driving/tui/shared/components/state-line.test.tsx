@@ -9,7 +9,20 @@ describe('resolveStateLineText', () => {
     expect(resolveStateLineText({ kind: 'error', subject: 'services' })).toBe('Failed to load services.');
   });
 
+  it('takes another verb for the operation that is running or failed', () => {
+    expect(resolveStateLineText({ kind: 'loading', subject: '/repos', verb: 'Scanning' })).toBe('Scanning /repos…');
+    expect(resolveStateLineText({ kind: 'error', subject: '/repos', verb: 'Failed to scan' })).toBe('Failed to scan /repos.');
+  });
+
   it('advertises [R] retry only when the host binds it', () => {
     expect(resolveStateLineText({ kind: 'error', subject: 'EDTs', retry: true })).toBe('Failed to load EDTs. [R] retry');
+  });
+});
+
+describe('resolveStateLineText with blank parts', () => {
+  it('leaves no stray space or doubled punctuation when verb or subject is blank', () => {
+    expect(resolveStateLineText({ kind: 'error', subject: '', verb: 'Failed to scan' })).toBe('Failed to scan.');
+    expect(resolveStateLineText({ kind: 'error', subject: '  ', verb: 'Failed to scan', retry: true })).toBe('Failed to scan. [R] retry');
+    expect(resolveStateLineText({ kind: 'loading', subject: '', verb: 'Registering' })).toBe('Registering…');
   });
 });
