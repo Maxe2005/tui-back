@@ -800,4 +800,29 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
       await instance.waitUntilExit();
     }
   });
+
+  it('lists members and other services under their own headers, with the footer prompt hidden until Esc', async () => {
+    const store = storeWithTwoMembers();
+    store.setState({ edtsBranches: [ROW_A, ROW_B, { ...ROW_B, service: 'svc-other', path: '/repo/other' }] });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('EDT MEMBERS');
+      expect(stdout.output).toContain('OTHER SERVICES');
+      expect(stdout.output).not.toContain('[G] EDT update');
+
+      await pressEscape(instance, stdin);
+      await waitForOutput(instance, stdout, '[G] EDT update');
+      expect(stdout.output).toContain('No update has run yet in this session.');
+
+      const before = stdout.output.length;
+      await press(instance, stdin, KEYS.down);
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(before)).not.toContain('[G] EDT update');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });

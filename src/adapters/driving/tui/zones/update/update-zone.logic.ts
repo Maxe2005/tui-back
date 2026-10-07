@@ -245,3 +245,93 @@ export function mergeLastServiceOutcomes(
   }
   return next;
 }
+
+// One line of the Update zone's grouped service list: a group header or a service row. The
+// cursor moves over rows only; headers are skipped by construction (the list renders from
+// these entries while selection stays an index into the flat row array).
+export type UpdateListEntry = { kind: 'header'; label: string } | { kind: 'row'; row: UpdateServiceRow; rowIndex: number };
+
+export const UPDATE_MEMBERS_HEADER = 'EDT MEMBERS';
+export const UPDATE_OTHERS_HEADER = 'OTHER SERVICES';
+
+// Splits the (members-first) flat rows into the two titled groups the EDT and Logs zones use,
+// so the list shows at a glance which services a group update will touch. An empty group
+// carries no header.
+export function buildUpdateListEntries(rows: readonly UpdateServiceRow[]): UpdateListEntry[] {
+  const entries: UpdateListEntry[] = [];
+  const groups: Array<[string, boolean]> = [
+    [UPDATE_MEMBERS_HEADER, true],
+    [UPDATE_OTHERS_HEADER, false],
+  ];
+  for (const [label, isMember] of groups) {
+    const indexes = rows.flatMap((row, rowIndex) => (row.isMember === isMember ? [rowIndex] : []));
+    if (indexes.length === 0) {
+      continue;
+    }
+    entries.push({ kind: 'header', label });
+    for (const rowIndex of indexes) {
+      entries.push({ kind: 'row', row: rows[rowIndex] as UpdateServiceRow, rowIndex });
+    }
+  }
+  return entries;
+}
+
+// The entry index holding the given row index, so the bounded window keeps the selected row
+// (and its header, when it is the group's first row) in view. Undefined when there is none.
+export function entryIndexOfRow(entries: readonly UpdateListEntry[], rowIndex: number): number | undefined {
+  const found = entries.findIndex((entry) => entry.kind === 'row' && entry.rowIndex === rowIndex);
+  return found === -1 ? undefined : found;
+}
+
+// The recap view's body: the last run's context (who it covered, from which sources to which
+// branches) followed by one line per covered service. `sources` are the confirmed per-service
+// merge sources (empty: the manifest shared branches); `branches` the services' current
+// branches. Null when no run has finished in this session.
+export interface LastUpdateRecap {
+  title: string;
+  contextLines: string[];
+  resultLines: string[];
+}
+
+export function formatLastUpdateRecap(
+  topic: string | null,
+  results: readonly GroupUpdateRepoResult[],
+  selection: readonly GroupUpdateSelectionItem[] | null,
+  branchByService: Readonly<Record<string, string | null>>,
+): LastUpdateRecap | null {
+  if (topic === null) {
+    return null;
+  }
+  const isAll = topic === 'all-repos';
+  const title = isAll ? 'Last update — all repos' : `Last update — EDT "${topic}"`;
+  const contextLines = [
+    isAll ? 'Scope: every managed repo' : `Scope: members of EDT "${topic}"`,
+    `Services covered: ${String(results.length)}`,
+  ];
+  const resultLines = results.map((row) => {
+    const glyph = row.outcome === 'updated' ? '✔' : row.outcome === 'skipped' ? '○' : '✖';
+    const source = selection?.find((item) => item.service === row.service)?.sourceBranch ?? 'shared branch';
+    const target = branchByService[row.service] ?? '?';
+    const detail =
+      row.detail !== undefined ? ` (${row.detail.code})${row.detail.message !== '' ? `: ${row.detail.message.replace(/\s+/g, ' ').trim()}` : ''}` : '';
+    return `${glyph} ${row.service}  ${source} → ${target}  ${row.outcome}${detail}`;
+  });
+  return { title, contextLines, resultLines };
+}
+
+// The recap view toggle: `Esc` drops service focus (the right pane shows the last-update
+// recap); any list-navigation key hands focus back to the remembered service without moving it.
+// `handled` tells the dispatcher the key is consumed.
+export function resolveRecapToggle(
+  recapActive: boolean,
+  key: { escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
+): { recapActive: boolean; handled: boolean } {
+  if (key.escape === true) {
+    return { recapActive: true, handled: !recapActive };
+  }
+  const navigates = key.upArrow === true || key.downArrow === true || key.home === true || key.end === true;
+  if (recapActive && navigates) {
+    return { recapActive: false, handled: true };
+  }
+  return { recapActive, handled: false };
+}
