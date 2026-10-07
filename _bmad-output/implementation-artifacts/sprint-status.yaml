@@ -155,7 +155,7 @@ development_status:
   7-2-container-less-managed-services: done
   7-3-shared-zone-layout-contract-ctrl-w-resize-in-every-zone: done
   7-4-interaction-consistency-audit-alignment: done
-  7-4b-interaction-alignment-follow-up: review
+  7-4b-interaction-alignment-follow-up: done
   7-7-shared-focus-navigation: done
   7-8-update-per-service-last-run-detail: done
   7-5-dashboard-workspace-summary-last-update-persistence: backlog
