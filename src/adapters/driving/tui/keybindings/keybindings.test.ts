@@ -13,7 +13,7 @@ const EXPECTED = [
     'Esc',
     'Cancel, always (close modal, exit splitter resize-mode, clear active filter)',
   ],
-  ['Tab', 'Cycle (between form fields / resizable boundaries)'],
+  ['Tab / Shift+Tab', 'Cycle forward / Shift+Tab backward (between panes, form fields / resizable boundaries)'],
   [
     'Ctrl+W',
     "Keyboard resize-mode on the active zone's splitter (Tab cycles boundaries, arrows resize, Enter/Esc exits)",

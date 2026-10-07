@@ -1,6 +1,7 @@
 import { Box, Text } from 'ink';
 import { hasResizableBoundary } from '../../zones/zone-layouts.js';
 import type { ZoneId } from '../../zones/zones.js';
+import { focusNavFooterHint } from '../keys/focus-navigation.js';
 import { colors, spacing } from '../theme/theme.js';
 
 export const DEFAULT_FOOTER_HINTS = [
@@ -25,6 +26,9 @@ export function footerHintsFor(zone?: ZoneId): string[] {
   }
   if (zone === undefined || hasResizableBoundary(zone)) {
     base.push(RESIZE_HINT);
+  }
+  if (zone === 'edts' || zone === 'logs') {
+    base.push(focusNavFooterHint('tab', 'focus'));
   }
   return base;
 }

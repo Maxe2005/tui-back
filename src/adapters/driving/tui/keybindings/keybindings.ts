@@ -1,3 +1,5 @@
+import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
+
 export type Keybinding = {
   keys: string;
   description: string;
@@ -38,8 +40,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
       'Cancel, always (close modal, exit splitter resize-mode, clear active filter)',
   },
   {
-    keys: 'Tab',
-    description: 'Cycle (between form fields / resizable boundaries)',
+    keys: focusNavKeysLabel('tab'),
+    description: 'Cycle forward / Shift+Tab backward (between panes, form fields / resizable boundaries)',
   },
   {
     keys: 'Ctrl+W',

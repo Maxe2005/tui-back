@@ -74,6 +74,12 @@ describe('Footer', () => {
 const DEFAULT_LIST_RATIO = ZONE_LAYOUTS.routes.boundaries[0]!.defaultRatio;
 
 describe('footerHintsFor', () => {
+  it('advertises Tab/Shift+Tab focus for zones that cycle panes', () => {
+    expect(footerHintsFor('edts')).toContain('[Tab/Shift+Tab] focus');
+    expect(footerHintsFor('logs')).toContain('[Tab/Shift+Tab] focus');
+    expect(footerHintsFor('dashboard')).not.toContain('[Tab/Shift+Tab] focus');
+  });
+
   it('advertises ^W resize in every zone that declares a boundary', () => {
     for (const zone of ['dashboard', 'edts', 'update', 'logs', 'routes', 'shared-types'] as const) {
       expect(footerHintsFor(zone)).toContain('^W resize');
