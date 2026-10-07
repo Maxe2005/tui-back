@@ -20,7 +20,8 @@ export const ZONE_LAYOUTS: Record<ZoneId, ZoneLayoutSpec> = {
   dashboard: { boundaries: [LIST_DETAIL_BOUNDARY] },
   // 0: list<->detail, 1: EDTS<->services, 2: EDT SERVICES<->OTHER SERVICES.
   edts: { boundaries: [LIST_DETAIL_BOUNDARY, STACKED_BOUNDARY, STACKED_BOUNDARY] },
-  update: { boundaries: [LIST_DETAIL_BOUNDARY] },
+  // 0: list<->detail, 1: EDT MEMBERS<->OTHER SERVICES.
+  update: { boundaries: [LIST_DETAIL_BOUNDARY, STACKED_BOUNDARY] },
   // 0: service lists<->pane grid. 0.27 is about the 32 columns the list column used to be fixed at, on a 120-column terminal.
   logs: { boundaries: [{ orientation: 'vertical', defaultRatio: 0.27, min: 0.15, max: 0.5 }] },
   routes: { boundaries: [LIST_DETAIL_BOUNDARY] },
