@@ -68,7 +68,6 @@ export {
   matchBranchesBySubstring,
   isBranchAutocompleteExactMatch,
   resolveBranchAutocompleteValidity,
-  resolveBranchAutocompleteDropdown,
   handleBranchAutocompleteKey,
 } from './branch-autocomplete-input.js';
 export type {

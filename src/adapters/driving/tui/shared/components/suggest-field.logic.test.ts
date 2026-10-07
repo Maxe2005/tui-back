@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   createSuggestFieldState,
-  resolveSuggestWindow,
   stepSuggestField,
   validateSuggestValue,
 } from './suggest-field.logic.js';
@@ -66,36 +65,5 @@ describe('validateSuggestValue', () => {
     expect(validateSuggestValue('', SUGGESTIONS, 'a branch')).toBeNull();
     expect(validateSuggestValue('main', SUGGESTIONS, 'a branch')).toBeNull();
     expect(validateSuggestValue('nope', SUGGESTIONS, 'a branch')).toContain('nope');
-  });
-});
-
-describe('resolveSuggestWindow', () => {
-  const many = Array.from({ length: 20 }, (_, index) => `b${index}`);
-
-  it('never exceeds the line budget, indicators included', () => {
-    for (const cursor of [0, 5, 10, 19]) {
-      const window = resolveSuggestWindow(many, cursor, true, 6);
-      const lines = window.items.length + (window.hiddenAbove > 0 ? 1 : 0) + (window.hiddenBelow > 0 ? 1 : 0);
-      expect(lines).toBeLessThanOrEqual(6);
-      expect(window.items[window.highlight]).toBe(`b${cursor}`);
-    }
-  });
-
-  it('shows everything when it fits and nothing for a zero budget', () => {
-    expect(resolveSuggestWindow(['a', 'b'], 0, true, 5)).toMatchObject({ items: ['a', 'b'], hiddenBelow: 0 });
-    expect(resolveSuggestWindow(['a'], 0, true, 0).items).toEqual([]);
-  });
-
-  it('stays within a budget of one or two lines, indicators dropped', () => {
-    for (const budget of [1, 2]) {
-      const window = resolveSuggestWindow(many, 7, true, budget);
-      expect(window.items.length).toBeLessThanOrEqual(budget);
-      expect(window.hiddenAbove + window.hiddenBelow).toBe(0);
-      expect(window.items[window.highlight]).toBe('b7');
-    }
-  });
-
-  it('hides the highlight when it is not meaningful', () => {
-    expect(resolveSuggestWindow(['a', 'b'], 0, false, 5).highlight).toBe(-1);
   });
 });

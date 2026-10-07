@@ -49,7 +49,7 @@ function BoxField({
           state={autocomplete}
           branches={overrideBoxBranches(context)}
           branchesStatus={status}
-          maxRows={maxRows}
+          maxLines={maxRows}
           focused={true}
         />
       </Box>

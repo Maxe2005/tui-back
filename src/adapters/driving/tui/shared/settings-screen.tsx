@@ -952,7 +952,7 @@ export function SettingsScreen({
             <Text color={colors.text}>
               Branch dropdown max rows: <Text color={colors.accent}>{settings.edts.branchDropdownMaxRows}</Text>
             </Text>
-            <DimAnnotation text="Caps the branch autocomplete dropdown before its … N more line." />
+            <DimAnnotation text="Caps the lines of the autocomplete dropdown, “N more” indicators included." />
           </Box>
         ) : null}
       </Box>

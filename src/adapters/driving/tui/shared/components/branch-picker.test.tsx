@@ -471,15 +471,14 @@ describe('BranchPicker rendering', () => {
     expect(output).not.toContain('✖');
   });
 
-  it('caps the pick-existing dropdown at maxRows with an overflow line', async () => {
+  it('caps the pick-existing dropdown at its line budget with a more-below indicator', async () => {
     const state = baseState({ mode: 'pick-existing', pickQuery: '', pickQueryCursor: 0, pickCursor: 0 });
     const output = await renderToString(
-      <BranchPicker state={state} branches={['b-one', 'b-two', 'b-three']} branchesStatus="ready" otherMemberBranches={[]} maxRows={2} />,
+      <BranchPicker state={state} branches={['b-one', 'b-two', 'b-three', 'b-four']} branchesStatus="ready" otherMemberBranches={[]} maxRows={3} />,
     );
     expect(output).toContain('b-one');
-    expect(output).toContain('b-two');
-    expect(output).not.toContain('b-three');
-    expect(output).toContain('… 1 more');
+    expect(output).not.toContain('b-two');
+    expect(output).toContain('↓ 3 more');
   });
 
   it('keeps the `Failed to load branches.` line with a usable field on branchesStatus=error', async () => {

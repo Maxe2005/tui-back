@@ -6,7 +6,7 @@
 import { Box, Text } from 'ink';
 import { formatHints, KEY_UP_DOWN } from '../../shared/components/hints.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
-import { SuggestField } from '../../shared/components/suggest-field.js';
+import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
 import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/suggest-field.logic.js';
 import { colors } from '../../shared/theme/theme.js';
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../edts/dialogs/branch-plan-table.js';
@@ -133,12 +133,13 @@ function GlobalLines({
         if (line === 'edt') {
           return (
             <GlobalRow key={line} focused={focusedLine(line)} label="EDT source">
-              <SuggestField
+              <BranchAutocompleteInput
                 label=""
+                subject="EDT topics"
                 state={view.edtField !== null ? edtState : createSuggestFieldState(topic)}
-                suggestions={edtTopics}
+                branches={edtTopics}
                 placeholder={EDT_PLACEHOLDER}
-                status={edtStatus}
+                branchesStatus={edtStatus}
                 maxLines={dropdownLines}
                 editing={view.edtField !== null}
                 focused={focusedLine(line)}

@@ -257,7 +257,7 @@ describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared 
     );
     expect(output).toContain('Branch dropdown max rows:');
     expect(output).toContain('12');
-    expect(output).toContain('Caps the branch autocomplete dropdown');
+    expect(output).toContain('Caps the lines of the autocomplete dropdown');
   });
 });
 

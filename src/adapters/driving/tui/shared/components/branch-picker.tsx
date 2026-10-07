@@ -537,7 +537,7 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
               state={{ value: state.pickQuery, cursor: state.pickQueryCursor, pickCursor: state.pickCursor }}
               branches={branches}
               branchesStatus={branchesStatus}
-              maxRows={maxRows}
+              maxLines={maxRows}
               focused
             />
             <Text color={colors['text-dim']}>[Enter] fill in  [Enter] again to set branch  [Ctrl+T] rename this branch</Text>

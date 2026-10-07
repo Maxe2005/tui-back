@@ -182,7 +182,7 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     }
   });
 
-  it('a listBranches failure keeps the `Failed to load.` line with a usable field', async () => {
+  it('a listBranches failure keeps the `Failed to load branches.` line with a usable field', async () => {
     const store = storeWithConfig(async (): Promise<Result<string[]>> => ({
       ok: false,
       error: { code: 'git-error', message: 'boom' },
@@ -193,10 +193,10 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, '\r'); // table focus: open the service box on row 0
       await press(instance, stdin, '\r'); // branch line -> begin the branch edit
-      await waitForOutput(instance, stdout, 'Failed to load.');
+      await waitForOutput(instance, stdout, 'Failed to load branches.');
 
       expect(stdout.output).toContain('Source branch');
-      expect(stdout.output).toContain('Failed to load.');
+      expect(stdout.output).toContain('Failed to load branches.');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

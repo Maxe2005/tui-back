@@ -2515,7 +2515,7 @@ describe('EdtsZone real-keypress interactions', () => {
     store.setState({
       settings: {
         ...store.getState().settings,
-        edts: { ...store.getState().settings.edts, branchDropdownMaxRows: 2 },
+        edts: { ...store.getState().settings.edts, branchDropdownMaxRows: 4 },
       },
       edts: [active],
       edtsStatus: 'idle',
@@ -2526,7 +2526,7 @@ describe('EdtsZone real-keypress interactions', () => {
       edtsBranchesStatus: 'idle',
       loadEdts: async () => {},
       loadEdtsBranches: async () => {},
-      listBranches: async () => ({ ok: true, data: ['b-one', 'b-two', 'b-three'] }),
+      listBranches: async () => ({ ok: true, data: ['b-one', 'b-two', 'b-three', 'b-four', 'b-five'] }),
     });
 
     const { instance, stdout, stdin } = mount(store);
@@ -2541,7 +2541,7 @@ describe('EdtsZone real-keypress interactions', () => {
 
       expect(stdout.output).toContain('b-one');
       expect(stdout.output).toContain('b-two');
-      expect(stdout.output).toContain('… 1 more');
+      expect(stdout.output).toContain('↓ 3 more');
       expect(stdout.output).not.toContain('b-three');
     } finally {
       instance.unmount();

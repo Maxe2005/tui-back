@@ -9,7 +9,7 @@ import {
   handleBranchAutocompleteKey,
   isBranchAutocompleteExactMatch,
   matchBranchesBySubstring,
-  resolveBranchAutocompleteDropdown,
+  resolveSuggestWindow,
   resolveBranchAutocompleteValidity,
   type BranchAutocompleteState,
 } from './branch-autocomplete-input.js';
@@ -80,17 +80,23 @@ describe('isBranchAutocompleteExactMatch / resolveBranchAutocompleteValidity', (
   });
 });
 
-describe('resolveBranchAutocompleteDropdown', () => {
-  it('caps the visible slice at maxRows with the overflow count for the … N more line', () => {
-    expect(resolveBranchAutocompleteDropdown(['a', 'b', 'c'], 2)).toEqual({ visible: ['a', 'b'], overflow: 1 });
+describe('resolveSuggestWindow', () => {
+  it('follows the highlight inside the line budget, indicators included', () => {
+    const many = Array.from({ length: 20 }, (_, index) => `b-${index}`);
+    for (const cursor of [0, 7, 19]) {
+      const window = resolveSuggestWindow(many, cursor, true, 6);
+      expect(window.items.length + (window.hiddenAbove > 0 ? 1 : 0) + (window.hiddenBelow > 0 ? 1 : 0)).toBeLessThanOrEqual(6);
+      expect(window.items[window.highlight]).toBe(`b-${cursor}`);
+    }
   });
 
-  it('reports zero overflow when everything fits', () => {
-    expect(resolveBranchAutocompleteDropdown(['a', 'b'], 5)).toEqual({ visible: ['a', 'b'], overflow: 0 });
+  it('shows everything that fits, with no indicator', () => {
+    expect(resolveSuggestWindow(['a', 'b'], 0, true, 5)).toMatchObject({ items: ['a', 'b'], hiddenBelow: 0 });
   });
 
-  it('never goes negative on a non-positive maxRows', () => {
-    expect(resolveBranchAutocompleteDropdown(['a'], 0)).toEqual({ visible: [], overflow: 1 });
+  it('renders nothing on a zero budget and highlights nothing on request', () => {
+    expect(resolveSuggestWindow(['a'], 0, true, 0).items).toEqual([]);
+    expect(resolveSuggestWindow(['a', 'b'], 0, false, 5).highlight).toBe(-1);
   });
 });
 
@@ -179,20 +185,58 @@ describe('handleBranchAutocompleteKey — navigate + insert', () => {
 });
 
 describe('BranchAutocompleteInput render', () => {
-  it('lists at most maxRows substring matches with a … N more overflow line', async () => {
+  it('lists the matches within the line budget with a ↓ N more indicator', async () => {
     const output = await renderToString(
       <BranchAutocompleteInput
         label="Branch"
         state={{ value: '', cursor: 0, pickCursor: 0 }}
-        branches={['b-one', 'b-two', 'b-three']}
+        branches={['b-one', 'b-two', 'b-three', 'b-four', 'b-five']}
         branchesStatus="ready"
-        maxRows={2}
+        maxLines={4}
       />,
     );
     expect(output).toContain('b-one');
     expect(output).toContain('b-two');
     expect(output).not.toContain('b-three');
-    expect(output).toContain('… 1 more');
+    expect(output).toContain('↓ 3 more');
+  });
+
+  it('stays within its line budget', async () => {
+    const many = Array.from({ length: 30 }, (_, index) => `branch-${index}`);
+    const output = await renderToString(
+      <BranchAutocompleteInput label="Branch" state={createBranchAutocompleteState()} branches={many} branchesStatus="ready" maxLines={5} />,
+    );
+    expect(output.split('\n').filter((line) => line.trim() !== '').length).toBeLessThanOrEqual(6);
+  });
+
+  it('shows the placeholder while empty, hides the empty validity mark, and drops it once text is typed', async () => {
+    const empty = await renderToString(
+      <BranchAutocompleteInput label="Source branch" state={createBranchAutocompleteState()} branches={BRANCHES} branchesStatus="ready" maxLines={4} placeholder="<shared-branch>" />,
+    );
+    expect(empty).toContain('<shared-branch>');
+    expect(empty).toContain('development');
+    expect(empty).not.toContain('✖');
+    const typed = await renderToString(
+      <BranchAutocompleteInput label="Source branch" state={createBranchAutocompleteState({ value: 'fix' })} branches={BRANCHES} branchesStatus="ready" maxLines={4} placeholder="<shared-branch>" />,
+    );
+    expect(typed).not.toContain('<shared-branch>');
+    expect(typed).toContain('fix-y');
+    expect(typed).not.toContain('development');
+  });
+
+  it('shows the placeholder, with no list or caret, when the field is not being edited', async () => {
+    const idle = await renderToString(
+      <BranchAutocompleteInput label="Source branch" state={createBranchAutocompleteState()} branches={BRANCHES} branchesStatus="ready" maxLines={4} placeholder="<shared-branch>" editing={false} />,
+    );
+    expect(idle).toContain('<shared-branch>');
+    expect(idle).not.toContain('development');
+  });
+
+  it('names what failed to load and offers a retry only where the host binds one', async () => {
+    const withRetry = await renderToString(
+      <BranchAutocompleteInput label="" subject="EDT topics" state={createBranchAutocompleteState()} branches={[]} branchesStatus="error" maxLines={4} retry />,
+    );
+    expect(withRetry).toContain('Failed to load EDT topics. [R] retry');
   });
 
   it('renders zero dropdown rows for zero matches while the text stays editable', async () => {
@@ -202,7 +246,7 @@ describe('BranchAutocompleteInput render', () => {
         state={{ value: 'zzz', cursor: 3, pickCursor: 0 }}
         branches={BRANCHES}
         branchesStatus="ready"
-        maxRows={5}
+        maxLines={5}
       />,
     );
     expect(output).toContain('zzz');
@@ -217,7 +261,7 @@ describe('BranchAutocompleteInput render', () => {
         state={{ value: 'feat-x', cursor: 6, pickCursor: 0 }}
         branches={BRANCHES}
         branchesStatus="ready"
-        maxRows={5}
+        maxLines={5}
       />,
     );
     expect(exact).toContain('✔');
@@ -228,7 +272,7 @@ describe('BranchAutocompleteInput render', () => {
         state={{ value: 'feat', cursor: 4, pickCursor: 0 }}
         branches={BRANCHES}
         branchesStatus="ready"
-        maxRows={5}
+        maxLines={5}
       />,
     );
     expect(missing).toContain('✖');
@@ -242,7 +286,7 @@ describe('BranchAutocompleteInput render', () => {
         state={{ value: 'feat-x', cursor: 6, pickCursor: 0 }}
         branches={BRANCHES}
         branchesStatus="ready"
-        maxRows={5}
+        maxLines={5}
         focused
       />,
     );
@@ -257,7 +301,7 @@ describe('BranchAutocompleteInput render', () => {
         state={{ value: 'feat-x', cursor: 6, pickCursor: 0 }}
         branches={BRANCHES}
         branchesStatus="loading"
-        maxRows={5}
+        maxLines={5}
       />,
     );
     expect(output).toContain('Loading branches…');
@@ -272,7 +316,7 @@ describe('BranchAutocompleteInput render', () => {
         state={{ value: 'feat', cursor: 4, pickCursor: 0 }}
         branches={BRANCHES}
         branchesStatus="error"
-        maxRows={5}
+        maxLines={5}
       />,
     );
     expect(output).toContain('Failed to load branches.');
