@@ -153,7 +153,7 @@ development_status:
   # Execution order: 7-2-graft (C1) -> 7-8 (parallel OK) -> 7-3 -> 7-7 -> 7-4 -> 7-5/7-6.
   7-1-source-comment-hygiene: done
   7-2-container-less-managed-services: done
-  7-3-shared-zone-layout-contract-ctrl-w-resize-in-every-zone: review
+  7-3-shared-zone-layout-contract-ctrl-w-resize-in-every-zone: done
   7-4-interaction-consistency-audit-alignment: backlog
   7-7-shared-focus-navigation: backlog
   7-8-update-per-service-last-run-detail: done
