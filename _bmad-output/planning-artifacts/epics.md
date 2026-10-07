@@ -176,7 +176,25 @@ A developer can run a group update (pull, migrate, restart) scoped to the active
 **FRs covered:** FR-10, FR-11, FR-12
 **Implementation notes:** Update zone (UX-DR21), reuses Epic 2's git safety gate (AD-8), detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic.
 
-### Epic 4: `shared-types` Propagation & Smart Update
+#### Story 3.13: Non-Blocking Subprocess Execution — Live, Navigable Update
+
+> Added 2026-10-07. Fixes the TUI freezing for the whole duration of a group update: Story 3.10's live tracking cannot render while the event loop is blocked.
+
+As a developer,
+I want the TUI to stay responsive while an update runs,
+So that I can follow each service's progress in real time and keep using the tool in parallel.
+
+**Acceptance Criteria:**
+
+**Given** a group update is running (pull, merge, migration, restart) **When** a git, migration, restart or container subprocess is in flight **Then** the TUI keeps redrawing and accepts keyboard input — no `spawnSync` / `execFileSync` remains on any path used by the update.
+
+**Given** the driven adapters (git, migration, restart, container, docker) **When** they run a subprocess **Then** they do so through one shared asynchronous process helper that returns the same `{status, stdout, stderr, error?}` shape, so every existing error code and message is unchanged and the never-throw `Result` invariant holds.
+
+**Given** an update in progress **When** the developer navigates to another zone **Then** per-service phases (Story 3.10) keep updating live and the run's state is intact when they return; actions that would conflict with the running update (a second update, an EDT switch) are rejected with a clear message via the existing action lock.
+
+**Implementation notes:** `core/ports` signatures are already `Promise<Result<…>>` — no core change beyond callers that relied on synchronous behavior. Migrate adapter by adapter (migration, restart, container, git, docker), one commit each.
+
+## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
 **FRs covered:** FR-13, FR-14, FR-15, FR-30, FR-31
 **Implementation notes:** First company-specific module, validating AD-4/AD-5 (AD-18); shared-types zone (UX-DR24). Prerequisites: Epic 7 done; Epic 3 merged into `devlopment` for Stories 4.4/4.5 (Sprint Change Proposal 2026-10-05).
