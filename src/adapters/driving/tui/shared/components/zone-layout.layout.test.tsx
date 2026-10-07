@@ -6,10 +6,10 @@
 import { describe, it, expect } from 'vitest';
 import { Box, Text } from 'ink';
 
-describe('ListDetailSplit list/detail widths are content-independent', () => {
+describe('ZoneLayout pane widths are content-independent', () => {
   it('never squeezes the other pane\'s short content when one pane holds a long unbroken run of content', async () => {
     const { renderToString } = await import('./render-to-string.js');
-    const { ListDetailSplit } = await import('./list-detail-split.js');
+    const { ZoneLayout } = await import('./zone-layout.js');
 
     const longWord = 'X'.repeat(200);
     const longPane = (
@@ -26,10 +26,10 @@ describe('ListDetailSplit list/detail widths are content-independent', () => {
     const renderWithLongContentIn = (side: 'list' | 'detail') =>
       renderToString(
         <Box width={80} height={20}>
-          <ListDetailSplit
-            ratio={0.4}
-            list={side === 'list' ? longPane : shortPane}
-            detail={side === 'detail' ? longPane : shortPane}
+          <ZoneLayout
+            zoneId="routes"
+            first={side === 'list' ? longPane : shortPane}
+            second={side === 'detail' ? longPane : shortPane}
           />
         </Box>,
       );

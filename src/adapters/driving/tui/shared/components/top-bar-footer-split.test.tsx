@@ -2,12 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { Text } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { TopBar } from './top-bar.js';
-import { Footer, DEFAULT_FOOTER_HINTS } from './footer.js';
-import {
-  ListDetailSplit,
-  resolveSplitFlex,
-  DEFAULT_LIST_RATIO,
-} from './list-detail-split.js';
+import { Footer, DEFAULT_FOOTER_HINTS, footerHintsFor } from './footer.js';
+import { ZoneLayout } from './zone-layout.js';
+import { ZONE_LAYOUTS, clampBoundaryRatio, resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { renderToString } from './render-to-string.js';
 
 const EDTS: EdtRegistryEntry[] = [
@@ -74,37 +71,59 @@ describe('Footer', () => {
   });
 });
 
-describe('resolveSplitFlex', () => {
-  it('defaults the split to ~2:3 list:detail', () => {
-    expect(DEFAULT_LIST_RATIO).toBeCloseTo(2 / 5);
-    const flex = resolveSplitFlex(DEFAULT_LIST_RATIO);
-    expect(flex.list).toBeCloseTo(0.4);
-    expect(flex.detail).toBeCloseTo(0.6);
+const DEFAULT_LIST_RATIO = ZONE_LAYOUTS.routes.boundaries[0]!.defaultRatio;
+
+describe('footerHintsFor', () => {
+  it('advertises ^W resize in every zone that declares a boundary', () => {
+    for (const zone of ['dashboard', 'edts', 'update', 'logs', 'routes', 'shared-types'] as const) {
+      expect(footerHintsFor(zone)).toContain('^W resize');
+    }
   });
 
-  it('keeps both panes usable by clamping extreme ratios', () => {
-    expect(resolveSplitFlex(0).list).toBe(0.2);
-    expect(resolveSplitFlex(1).list).toBe(0.8);
-  });
-
-  it('falls back to the default ratio for non-finite input', () => {
-    expect(resolveSplitFlex(Number.NaN).list).toBeCloseTo(DEFAULT_LIST_RATIO);
-    expect(resolveSplitFlex(Infinity).list).toBeCloseTo(DEFAULT_LIST_RATIO);
-    expect(resolveSplitFlex(-Infinity).list).toBeCloseTo(DEFAULT_LIST_RATIO);
+  it('advertises Logs wrap-all as W', () => {
+    expect(footerHintsFor('logs')).toContain('[W] wrap all');
+    expect(footerHintsFor('edts')).not.toContain('[W] wrap all');
   });
 });
 
-describe('ListDetailSplit', () => {
-  it('renders list and detail panes around a vertical splitter', async () => {
+describe('resolveBoundaryFlex', () => {
+  it('defaults the split to ~2:3 list:detail', () => {
+    expect(DEFAULT_LIST_RATIO).toBeCloseTo(2 / 5);
+    const flex = resolveBoundaryFlex('routes', 0, DEFAULT_LIST_RATIO);
+    expect(flex.first).toBeCloseTo(0.4);
+    expect(flex.second).toBeCloseTo(0.6);
+  });
+
+  it('keeps both panes usable by clamping extreme ratios to the boundary min/max', () => {
+    expect(resolveBoundaryFlex('routes', 0, 0).first).toBe(0.2);
+    expect(resolveBoundaryFlex('routes', 0, 1).first).toBe(0.8);
+    expect(clampBoundaryRatio('logs', 0, 0)).toBe(0.15);
+    expect(clampBoundaryRatio('logs', 0, 1)).toBe(0.5);
+  });
+
+  it('falls back to the default ratio for non-finite input', () => {
+    expect(resolveBoundaryFlex('routes', 0, Number.NaN).first).toBeCloseTo(DEFAULT_LIST_RATIO);
+    expect(resolveBoundaryFlex('routes', 0, Infinity).first).toBeCloseTo(DEFAULT_LIST_RATIO);
+    expect(resolveBoundaryFlex('routes', 0, -Infinity).first).toBeCloseTo(DEFAULT_LIST_RATIO);
+  });
+});
+
+describe('ZoneLayout', () => {
+  it('renders both panes around a vertical splitter', async () => {
     const output = await renderToString(
-      <ListDetailSplit
-        ratio={DEFAULT_LIST_RATIO}
-        list={<Text>list pane</Text>}
-        detail={<Text>detail pane</Text>}
-      />,
+      <ZoneLayout zoneId="routes" first={<Text>list pane</Text>} second={<Text>detail pane</Text>} />,
     );
     expect(output).toContain('list pane');
     expect(output).toContain('detail pane');
     expect(output).toContain('│');
+  });
+
+  it('renders a horizontal boundary as stacked panes around a horizontal splitter', async () => {
+    const output = await renderToString(
+      <ZoneLayout zoneId="edts" boundary={1} first={<Text>top pane</Text>} second={<Text>bottom pane</Text>} />,
+    );
+    expect(output).toContain('top pane');
+    expect(output).toContain('bottom pane');
+    expect(output).toContain('─');
   });
 });
