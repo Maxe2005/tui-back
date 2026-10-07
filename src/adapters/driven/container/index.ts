@@ -1,7 +1,7 @@
 // adapters/driven/container: the driven implementation of core's ContainerPort. Restarts run
 // via node:child_process against the container runtime (`docker restart <container>` by
 // default), no dockerode. The executable is injectable so integration tests can stub it.
-import { spawnSync } from 'node:child_process';
+import { runProcess } from '../process.js';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 
@@ -20,7 +20,7 @@ export async function restartContainer(executable: string, container: string): P
   if (container.trim() === '') {
     return err('container-restart-error', 'Container name must not be empty');
   }
-  const result = spawnSync(executable, ['restart', '--', container], { encoding: 'utf8' });
+  const result = await runProcess(executable, ['restart', '--', container], {});
   if (result.status !== 0) {
     return err('container-restart-error', `${executable} restart ${container} failed: ${spawnFailureDetail(result)}`);
   }
