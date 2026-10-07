@@ -1260,7 +1260,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         }
         return;
       }
-      const jump = resolveSelectionJump({ ...key, upArrow: false, downArrow: false, tab: false });
+      const jump = resolveSelectionJump(key);
       if (jump !== null) {
         setSelected(jumpSelection(jump, visibleRoutes.length));
         return;
