@@ -399,7 +399,7 @@ export function AppShell({
       {commandBarOpen && (
         <CommandBar useStore={useStore} onClose={closeCommandBar} />
       )}
-      <Footer zone={activeZone} />
+      <Footer zone={activeZone} useStore={useStore} />
     </Box>
   );
 }

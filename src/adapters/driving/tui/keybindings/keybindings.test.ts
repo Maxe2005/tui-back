@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { KEYBINDINGS } from './index.js';
+import { FOOTER_CONTEXTS, KEYBINDINGS } from './index.js';
+import { formatHints } from '../shared/components/hints.js';
+
+const CONTEXT_ROWS = Object.values(FOOTER_CONTEXTS).map((context) => [context.label, formatHints(context.hints)] as const);
 
 const EXPECTED = [
   ['↑ / ↓', 'Move highlight up/down within a list'],
@@ -69,16 +72,22 @@ const EXPECTED = [
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {
   it('lists exactly the canonical bindings in documented order', () => {
-    expect(KEYBINDINGS).toHaveLength(EXPECTED.length);
+    expect(KEYBINDINGS).toHaveLength(EXPECTED.length + CONTEXT_ROWS.length);
     expect(KEYBINDINGS.map((entry) => entry.keys)).toEqual(
-      EXPECTED.map(([keys]) => keys),
+      [...EXPECTED, ...CONTEXT_ROWS].map(([keys]) => keys),
     );
   });
 
   it('carries the canonical description per binding', () => {
     expect(KEYBINDINGS.map((entry) => entry.description)).toEqual(
-      EXPECTED.map(([, description]) => description),
+      [...EXPECTED, ...CONTEXT_ROWS].map(([, description]) => description),
     );
+  });
+
+  it('lists every footer context in the help exactly as the footer shows it', () => {
+    for (const [label, hints] of CONTEXT_ROWS) {
+      expect(KEYBINDINGS.find((entry) => entry.keys === label)?.description).toBe(hints);
+    }
   });
 
   it('has no duplicate keys values — the help screen cannot repeat a row', () => {

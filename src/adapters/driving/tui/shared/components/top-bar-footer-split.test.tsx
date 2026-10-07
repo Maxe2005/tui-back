@@ -6,6 +6,9 @@ import { Footer, DEFAULT_FOOTER_HINTS, footerHintsFor } from './footer.js';
 import { ZoneLayout } from './zone-layout.js';
 import { ZONE_LAYOUTS, clampBoundaryRatio, resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { renderToString } from './render-to-string.js';
+import { createAppStore } from '../../store/app-store.js';
+import { PANE_FOCUS_NAV } from '../../zones/edts/edts-zone.logic.js';
+import { LOGS_PANE_FOCUS_NAV } from '../../zones/logs/logs-zone.logic.js';
 
 const EDTS: EdtRegistryEntry[] = [
   {
@@ -137,5 +140,33 @@ describe('ZoneLayout', () => {
     expect(output).toContain('top pane');
     expect(output).toContain('bottom pane');
     expect(output).toContain('─');
+  });
+});
+
+describe('Footer context', () => {
+  it('shows the live context hints, then the zone hints again once it closes', async () => {
+    const store = createAppStore();
+    const App = () => <Footer zone="edts" useStore={store} />;
+    expect(await renderToString(<App />)).toContain('[Tab/Shift+Tab] focus');
+    store.getState().setFooterContext('edts', 'confirm');
+    const during = await renderToString(<App />);
+    expect(during).toContain('[Enter] confirm  [Esc] cancel');
+    expect(during).not.toContain('[Tab/Shift+Tab] focus');
+    store.getState().setFooterContext('edts', null);
+    expect(await renderToString(<App />)).toContain('[Tab/Shift+Tab] focus');
+  });
+
+  it('lets the last owner win and hands back to the previous one', () => {
+    const store = createAppStore();
+    store.getState().setFooterContext('zone', 'menu');
+    store.getState().setFooterContext('help', 'help');
+    expect(store.getState().footerContexts.at(-1)?.id).toBe('help');
+    store.getState().setFooterContext('help', null);
+    expect(store.getState().footerContexts.at(-1)?.id).toBe('menu');
+  });
+
+  it('declares the pane-focus Tab hint for the zones whose focus declaration is Tab', () => {
+    expect(PANE_FOCUS_NAV.mode).toBe('tab');
+    expect(LOGS_PANE_FOCUS_NAV.mode).toBe('tab');
   });
 });

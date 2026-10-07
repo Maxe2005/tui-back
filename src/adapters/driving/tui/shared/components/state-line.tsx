@@ -1,8 +1,10 @@
 // tui/shared/components: the one loading / empty / error line. Loading = spinner + "Loading X…",
 // empty = dim "No X yet." (or a caller-supplied sentence for filtered lists), error = error
-// colour "Failed to load X." plus "[R] retry" only where the host zone binds R to a reload.
+// colour "Failed to load X." plus the retry hint only where the host zone binds R to a reload.
 import { Text } from 'ink';
+import { RETRY_HINT } from '../../keybindings/index.js';
 import { colors } from '../theme/theme.js';
+import { formatHint } from './hints.js';
 import { Spinner } from './spinner.js';
 
 export type StateLineProps =
@@ -17,7 +19,7 @@ export function resolveStateLineText(props: StateLineProps): string {
     case 'empty':
       return props.text ?? `No ${props.subject} yet.`;
     case 'error':
-      return `Failed to load ${props.subject}.${props.retry === true ? ' [R] retry' : ''}`;
+      return `Failed to load ${props.subject}.${props.retry === true ? ` ${formatHint(RETRY_HINT)}` : ''}`;
   }
 }
 

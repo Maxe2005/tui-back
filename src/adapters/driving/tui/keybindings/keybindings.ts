@@ -1,14 +1,21 @@
 import type { ZoneId } from '../zones/zones.js';
+import { formatHints, type Hint } from '../shared/components/hints.js';
+import { FOOTER_CONTEXTS } from './footer-contexts.js';
 import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
 export type { NavigationKey } from '../shared/keys/navigation-key.js';
 
-// `footer` marks a row the footer advertises too (with `zone` when only that zone shows it), so
-// the footer and the ? help are generated from this one list.
+// `footer` marks a row the footer advertises too (with `zones` when only those zones show it,
+// `when: 'resizable'` when only a zone declaring a splitter boundary does), so the footer and the
+// ? help are generated from this one list. Context rows (dialogs, panes, screens) come from
+// FOOTER_CONTEXTS and are appended below.
 export type Keybinding = {
   keys: string;
   description: string;
-  footer?: { key: string; verb: string; zone?: ZoneId };
+  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' };
 };
+
+// The retry key StateLine advertises beside a load error; zones bind R to their reload.
+export const RETRY_HINT: Hint = ['R', 'retry'];
 
 export const KEYBINDINGS: readonly Keybinding[] = [
   {
@@ -38,12 +45,13 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: focusNavKeysLabel('tab'),
     description: 'Cycle focus (between panes, form fields / resizable boundaries); Shift+Tab reverses',
+    footer: { key: 'Tab/Shift+Tab', verb: 'focus', zones: ['edts', 'logs'] },
   },
   {
     keys: 'Ctrl+W',
     description:
       'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)',
-    footer: { key: 'Ctrl+W', verb: 'resize' },
+    footer: { key: 'Ctrl+W', verb: 'resize', when: 'resizable' },
   },
   {
     keys: '/',
@@ -159,7 +167,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'W (Logs)',
     description: 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)',
-    footer: { key: 'W', verb: 'wrap all', zone: 'logs' },
+    footer: { key: 'W', verb: 'wrap all', zones: ['logs'] },
   },
   {
     keys: 'i (Logs)',
@@ -172,7 +180,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'm / a / p (Update)',
     description: 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service',
-    footer: { key: 'm/a/p', verb: 'configure', zone: 'update' },
+    footer: { key: 'm/a/p', verb: 'configure', zones: ['update'] },
   },
   {
     keys: 'Enter (Update config)',
@@ -190,4 +198,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+T (branch picker)',
     description: 'Branch picker: rename the highlighted branch',
   },
+  ...Object.values(FOOTER_CONTEXTS).map((context) => ({
+    keys: context.label,
+    description: formatHints(context.hints),
+  })),
 ];
