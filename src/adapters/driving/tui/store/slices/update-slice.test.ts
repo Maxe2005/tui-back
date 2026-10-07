@@ -2042,10 +2042,10 @@ describe('update slice: merge source from another EDT', () => {
 
     await store.getState().chooseMergeSourceEdt('edt-1');
     expect(store.getState().updateConfig!.strategy.kind).toBe('shared');
-    expect(store.getState().updateConfig!.error).toContain('propre source');
+    expect(store.getState().updateConfig!.error).toContain('own merge source');
 
     await store.getState().chooseMergeSourceEdt('gone');
-    expect(store.getState().updateConfig!.error).toContain("n'existe plus");
+    expect(store.getState().updateConfig!.error).toContain('no longer exists');
   });
 
   it('drops a resolution that lands after the developer went back to shared branches', async () => {

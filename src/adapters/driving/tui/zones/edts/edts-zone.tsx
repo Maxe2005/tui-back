@@ -562,7 +562,7 @@ export function EdtsZone({
             ? {
                 ...prev,
                 submitting: false,
-                error: `EDT « ${created.topic} » créé, mais introuvable après rechargement — basculez-y depuis la liste des EDT.`,
+                error: `EDT “${created.topic}” was created but could not be found after reload — switch to it from the EDT list.`,
                 activation: { ...prev.activation, created, outcome: 'not-activated' },
               }
             : prev,

@@ -100,19 +100,19 @@ describe('canAdvance', () => {
     expect(canAdvance(3, validThroughStep3(), EDTS, CANDIDATES)).toEqual({ ok: true });
     expect(canAdvance(3, validThroughStep3({}, { globalName: { value: ' ', cursor: 1 } }), EDTS, CANDIDATES)).toEqual({
       ok: false,
-      error: 'svc-a : nom de branche vide',
+      error: 'svc-a : empty branch name',
     });
     expect(canAdvance(3, validThroughStep3({}, { globalBase: { value: 'nope', cursor: 4 } }), EDTS, CANDIDATES)).toEqual({
       ok: false,
-      error: 'svc-a : branche introuvable',
+      error: 'svc-a : branch not found',
     });
     expect(canAdvance(3, validThroughStep3({}, { lists: {} }), EDTS, CANDIDATES)).toEqual({
       ok: false,
-      error: 'svc-a : chargement des branches en cours',
+      error: 'svc-a : branches are loading',
     });
     expect(canAdvance(3, validThroughStep3({}, { globalName: { value: 'prod', cursor: 4 } }), EDTS, CANDIDATES)).toEqual({
       ok: false,
-      error: 'svc-a : « prod » est protégée par le manifeste du service',
+      error: 'svc-a : “prod” is protected by the service manifest',
     });
   });
 });
@@ -129,7 +129,7 @@ describe('reachableSteps', () => {
 describe('stepSummary / buildBreadcrumb', () => {
   it('summarizes each completed step', () => {
     const current = validThroughStep3({ selectedMembers: ['/repos/a', '/repos/b', '/repos/c'] });
-    expect(stepSummary(1, current)).toBe('1. Nom: auth-flow');
+    expect(stepSummary(1, current)).toBe('1. Name: auth-flow');
     expect(stepSummary(2, current)).toBe('2. Services (3)');
     expect(stepSummary(3, current)).toBe('3. Branches: auth-flow');
     const withException = { ...current, branches: { ...current.branches, overrides: { '/repos/b': { kind: 'existing' as const, branch: 'x' } } } };
@@ -139,7 +139,7 @@ describe('stepSummary / buildBreadcrumb', () => {
   it('marks the current step, summarizes earlier ones and dims unreachable ones', () => {
     const breadcrumb = buildBreadcrumb(state({ step: 2, topic: 'auth-flow' }), EDTS, CANDIDATES);
     expect(breadcrumb).toEqual([
-      { step: 1, text: '1. Nom: auth-flow', tone: 'done' },
+      { step: 1, text: '1. Name: auth-flow', tone: 'done' },
       { step: 2, text: '▶ 2. Services ◀', tone: 'current' },
       { step: 3, text: '3. Branches', tone: 'unreachable' },
       { step: 4, text: '4. Activation', tone: 'unreachable' },
@@ -226,52 +226,52 @@ describe('buildRowView / buildMemberPlans', () => {
   // svc-a's manifest fixture — its protected set is protectedBranches ∪ {main}.
   const PROTECTION = { sharedBranch: 'main', protectedBranches: ['development', 'preprod', 'prod'] };
 
-  it('Default: [Créer (Global)] main -> auth-flow, plan {create, main, auth-flow}', () => {
+  it('Default: [Create (Global)] main -> auth-flow, plan {create, main, auth-flow}', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, global, ready(['main']), PROTECTION);
-    expect(row).toMatchObject({ mode: 'global', modeLabel: '[Créer (Global)]', base: 'main', target: 'auth-flow', error: null });
+    expect(row).toMatchObject({ mode: 'global', modeLabel: '[Create (Global)]', base: 'main', target: 'auth-flow', error: null });
     expect(buildMemberPlans([row])).toEqual({ '/repos/a': { kind: 'create', base: 'main', name: 'auth-flow' } });
   });
 
   it('Not found: the base column carries the error and no plan is built', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: 'nope', name: 'auth-flow' }, ready(['main']), PROTECTION);
-    expect(row).toMatchObject({ baseStatus: 'error', base: 'branche introuvable', error: 'branche introuvable', plan: null });
+    expect(row).toMatchObject({ baseStatus: 'error', base: 'branch not found', error: 'branch not found', plan: null });
     expect(buildMemberPlans([row])).toBeNull();
   });
 
   it('List load fails: the row shows the real load error', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, global, { status: 'error', local: [], remote: [], error: 'not a git repository' }, PROTECTION);
-    expect(row).toMatchObject({ baseStatus: 'error', error: 'échec du chargement des branches : not a git repository' });
+    expect(row).toMatchObject({ baseStatus: 'error', error: 'failed to load branches: not a git repository' });
   });
 
   it('a global or Perso target that already exists locally is a row error', () => {
     const global = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'feat/q' }, ready(['main', 'feat/q']), PROTECTION);
-    expect(global).toMatchObject({ targetError: 'branche déjà existante', plan: null });
+    expect(global).toMatchObject({ targetError: 'branch already exists', plan: null });
     const perso = buildRowView(
       { path: '/repos/a', service: 'svc-a', override: { kind: 'create', base: 'main', name: 'feat/q' } },
       { base: '', name: 'x' },
       ready(['main', 'feat/q']),
       PROTECTION,
     );
-    expect(perso).toMatchObject({ error: 'branche déjà existante', plan: null });
+    expect(perso).toMatchObject({ error: 'branch already exists', plan: null });
   });
 
   it('existing overrides are re-checked on the row: local protected even with a rename, shadowed remote, taken or no-op rename', () => {
     const view = (override: RowOverride, lists: BranchListState) => buildRowView({ path: '/repos/a', service: 'svc-a', override }, global, lists, PROTECTION);
-    expect(view({ kind: 'existing', branch: 'prod', renameTo: 'p2' }, ready(['prod'])).error).toBe('« prod » est protégée par le manifeste du service');
+    expect(view({ kind: 'existing', branch: 'prod', renameTo: 'p2' }, ready(['prod'])).error).toBe('“prod” is protected by the service manifest');
     expect(view({ kind: 'existing', branch: 'origin/prod', renameTo: 'p2' }, ready([], ['origin/prod'])).error).toBeNull();
-    expect(view({ kind: 'existing', branch: 'origin/x' }, ready(['x'], ['origin/x'])).error).toBe('branche locale du même nom déjà existante');
-    expect(view({ kind: 'existing', branch: 'feat/z', renameTo: 'main2' }, ready(['feat/z', 'main2'])).error).toBe('branche déjà existante');
-    expect(view({ kind: 'existing', branch: 'origin/w', renameTo: 'w' }, ready([], ['origin/w'])).error).toBe('renommage sans effet');
+    expect(view({ kind: 'existing', branch: 'origin/x' }, ready(['x'], ['origin/x'])).error).toBe('a local branch with the same name already exists');
+    expect(view({ kind: 'existing', branch: 'feat/z', renameTo: 'main2' }, ready(['feat/z', 'main2'])).error).toBe('branch already exists');
+    expect(view({ kind: 'existing', branch: 'origin/w', renameTo: 'w' }, ready([], ['origin/w'])).error).toBe('rename has no effect');
   });
 
   it('Protected: a global name equal to a shared branch is rejected on the target column', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'development' }, ready(['main']), PROTECTION);
-    expect(row).toMatchObject({ targetError: '« development » est protégée par le manifeste du service', plan: null });
+    expect(row).toMatchObject({ targetError: '“development” is protected by the service manifest', plan: null });
   });
 
   it('Wizard row: a target the service\'s manifest lists is blocked; one it does not list is allowed', () => {
     const listed = buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'preprod' }, ready(['main']), PROTECTION);
-    expect(listed).toMatchObject({ targetError: '« preprod » est protégée par le manifeste du service', plan: null });
+    expect(listed).toMatchObject({ targetError: '“preprod” is protected by the service manifest', plan: null });
     const unlisted = buildRowView({ path: '/repos/b', service: 'svc-b' }, { base: '', name: 'preprod' }, ready(['development']), { sharedBranch: 'development' });
     expect(unlisted).toMatchObject({ targetError: null, plan: { kind: 'create', base: 'development', name: 'preprod' } });
   });
@@ -279,26 +279,26 @@ describe('buildRowView / buildMemberPlans', () => {
   it('Perso: ignores Panel A entirely', () => {
     const override = { kind: 'create' as const, base: 'origin/dev', name: 'q' };
     const row = buildRowView({ path: '/repos/a', service: 'svc-a', override }, { base: 'nope', name: 'other' }, ready([]), PROTECTION);
-    expect(row).toMatchObject({ mode: 'perso', modeLabel: '[Créer (Perso)]', base: 'origin/dev', target: 'q', error: null });
+    expect(row).toMatchObject({ mode: 'perso', modeLabel: '[Create (Custom)]', base: 'origin/dev', target: 'q', error: null });
     expect(row.plan).toBe(override);
   });
 
-  it('Existing: [Existante] with its local name, the plan passed through as-is', () => {
+  it('Existing: [Existing] with its local name, the plan passed through as-is', () => {
     const override = { kind: 'existing' as const, branch: 'origin/feat/z' };
     const row = buildRowView({ path: '/repos/a', service: 'svc-a', override }, global, ready([], ['origin/feat/z']), PROTECTION);
-    expect(row).toMatchObject({ mode: 'existing', modeLabel: '[Existante]', base: 'origin/feat/z', target: 'feat/z' });
+    expect(row).toMatchObject({ mode: 'existing', modeLabel: '[Existing]', base: 'origin/feat/z', target: 'feat/z' });
     expect(buildMemberPlans([row])).toEqual({ '/repos/a': override });
   });
 
-  it('Rename: [Renommer], target "-> <new name>"', () => {
+  it('Rename: [Rename], target "-> <new name>"', () => {
     const override = { kind: 'existing' as const, branch: 'origin/w', renameTo: 'w2' };
     const row = buildRowView({ path: '/repos/a', service: 'svc-a', override }, global, ready([], ['origin/w']), PROTECTION);
-    expect(row).toMatchObject({ mode: 'rename', modeLabel: '[Renommer]', target: '-> w2', error: null });
+    expect(row).toMatchObject({ mode: 'rename', modeLabel: '[Rename]', target: '-> w2', error: null });
   });
 
   it('Existing protected without a rename is rejected', () => {
     const row = buildRowView({ path: '/repos/a', service: 'svc-a', override: { kind: 'existing', branch: 'prod' } }, global, ready(['prod']), PROTECTION);
-    expect(row).toMatchObject({ targetError: '« prod » est protégée par le manifeste du service', plan: null });
+    expect(row).toMatchObject({ targetError: '“prod” is protected by the service manifest', plan: null });
   });
 
   it('buildStep3Rows follows selection order and each service\'s own sharedBranch', () => {
@@ -357,7 +357,7 @@ describe('edt-create-from seeding', () => {
     expect(initialCreateDialog().seedFromEdt).toBeNull();
   });
 
-  it('Inherited row: each selected root member is seeded [Créer (Perso)] on its root branch, named after the slug', () => {
+  it('Inherited row: each selected root member is seeded [Create (Custom)] on its root branch, named after the slug', () => {
     const entered = enterBranchStep(branches(), 'New Topic', ['/repos/b', '/repos/a', '/repos/c'], ROOT);
     expect(entered.overrides).toEqual({
       '/repos/b': { kind: 'create', base: 'feat/a', name: 'new-topic' },
@@ -416,7 +416,7 @@ describe('edt-create-from seeding', () => {
     expect(entered.seededPaths).toEqual([]);
   });
 
-  it('Inherited rows render [Créer (Perso)] on the root base; added ones [Créer (Global)]', () => {
+  it('Inherited rows render [Create (Custom)] on the root base; added ones [Create (Global)]', () => {
     const base = initialCreateDialog(ROOT);
     const state: CreateDialogState = {
       ...base,
@@ -429,8 +429,8 @@ describe('edt-create-from seeding', () => {
     };
     const rows = buildStep3Rows(state, CANDIDATES);
     expect(rows.map((row) => [row.modeLabel, row.base, row.target])).toEqual([
-      ['[Créer (Perso)]', 'feat/a', 'new'],
-      ['[Créer (Global)]', 'development', 'new'],
+      ['[Create (Custom)]', 'feat/a', 'new'],
+      ['[Create (Global)]', 'development', 'new'],
     ]);
     expect(buildMemberPlans(rows)).toEqual({
       '/repos/b': { kind: 'create', base: 'feat/a', name: 'new' },
@@ -507,7 +507,7 @@ describe('Step 4 helpers', () => {
   });
 
   it('activateLaterHint names the :edt-switch command with the topic', () => {
-    expect(activateLaterHint(' feat ')).toBe('Activez-le plus tard via :edt-switch feat');
+    expect(activateLaterHint(' feat ')).toBe('Activate it later with :edt-switch feat');
   });
 
   it('activationErrorResults reads the per-repo rows from an error details, else null', () => {
@@ -526,8 +526,8 @@ describe('Step 4 helpers', () => {
       ]),
     ).toEqual([
       { service: 'a', message: 'boom' },
-      { service: 'b', message: 'fichiers écrasés (1) : f.ts — puis basculé sur sa branche cible' },
-      { service: 'c', message: 'basculé sur sa branche cible' },
+      { service: 'b', message: 'files overwritten (1): f.ts — then switched to its target branch' },
+      { service: 'c', message: 'switched to its target branch' },
     ]);
   });
 });

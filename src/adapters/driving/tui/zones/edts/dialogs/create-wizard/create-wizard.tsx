@@ -43,7 +43,7 @@ import {
   type BreadcrumbTone,
 } from './wizard.logic.js';
 
-export const CREATE_WIZARD_TITLE = "EDT Wizard: Création d'un espace de travail";
+export const CREATE_WIZARD_TITLE = 'CREATE EDT';
 
 export type CreateWizardDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -93,7 +93,7 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
     const memberPlans = buildMemberPlans(buildStep3Rows(current, deps.candidates));
     if (memberPlans === null) {
       const check = canAdvance(3, current, deps.edtsRows, deps.candidates);
-      const error = check.ok ? 'Étape 3 invalide' : check.error;
+      const error = check.ok ? 'Step 3 is invalid' : check.error;
       patchCreate(() => ({ error }));
       return;
     }
@@ -439,7 +439,7 @@ export function CreateWizardView({
   maxVisibleRows: number;
 }) {
   const breadcrumb = buildBreadcrumb(dialog, edtsRows, candidates);
-  const cancelHint = edtsRows.length > 0 ? '[Esc] Annuler' : '[Esc] Quitter';
+  const cancelHint = edtsRows.length > 0 ? '[Esc] cancel' : '[Esc] quit';
   const acknowledge = isActivationAcknowledge(dialog);
   // Step navigation only exists before the create; afterwards Step 4's own footers apply.
   const created = dialog.activation.created !== null;
@@ -453,7 +453,7 @@ export function CreateWizardView({
             </Text>
           ))}
         </Box>
-        {dialog.seedFromEdt !== null ? <Text color={colors['text-dim']}>Depuis l'EDT : {dialog.seedFromEdt.topic}</Text> : null}
+        {dialog.seedFromEdt !== null ? <Text color={colors['text-dim']}>From EDT: {dialog.seedFromEdt.topic}</Text> : null}
         <Text color={colors['text-dim']}>{STEP_INTROS[dialog.step]}</Text>
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
@@ -461,14 +461,14 @@ export function CreateWizardView({
         {dialog.step === 4 ? <ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={maxVisibleRows} /> : null}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
         {dialog.error ? <DimAnnotation text={dialog.error} /> : null}
-        {dialog.submitting ? <DimAnnotation text={created ? 'Activation…' : 'Création…'} /> : null}
+        {dialog.submitting ? <DimAnnotation text={created ? 'Activating…' : 'Creating…'} /> : null}
         {acknowledge ? (
           <Text color={colors['text-dim']}>
-            {dialog.activation.outcome === null ? 'EDT créé et activé, avec des échecs par service ci-dessus • ' : ''}[Entrée/Esc] Fermer
+            {dialog.activation.outcome === null ? 'EDT created and activated, with per-service failures above  ' : ''}[Enter/Esc] close
           </Text>
         ) : created ? null : (
           <Text color={colors['text-dim']}>
-            [Ctrl+→/Ctrl+N] Étape suivante • [Ctrl+←/Ctrl+P] Étape précédente • {cancelHint}
+            [Ctrl+→/Ctrl+N] next step  [Ctrl+←/Ctrl+P] previous step  {cancelHint}
           </Text>
         )}
       </Box>

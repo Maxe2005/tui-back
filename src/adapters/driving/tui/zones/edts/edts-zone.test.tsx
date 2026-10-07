@@ -1039,12 +1039,12 @@ describe('EdtsZone', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain("EDT Wizard: Création d'un espace de travail");
-    expect(output).toContain('[▶ 1. Nom ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
-    expect(output).toContain('Choisissez un nom unique');
-    expect(output).toContain('Nom:');
+    expect(output).toContain("CREATE EDT");
+    expect(output).toContain('[▶ 1. Name ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
+    expect(output).toContain('Pick a unique name');
+    expect(output).toContain('Name:');
     // With zero EDTs, Esc has nothing to cancel back to — the hint says it quits.
-    expect(output).toContain('[Esc] Quitter');
+    expect(output).toContain('[Esc] quit');
   });
 
   it('Step 2 shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
@@ -1088,15 +1088,15 @@ describe('EdtsZone', () => {
       },
     };
     const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={10} />);
-    expect(output).toContain('Nom : auth-flow');
-    expect(output).toContain('Services : api-gateway, billing, crm, docs');
-    expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
-    expect(output).toContain('billing : [Renommer] feat/bill -> feat/b2');
-    // An [Existante] branch attached under its own name is printed once; a remote one still
+    expect(output).toContain('Name: auth-flow');
+    expect(output).toContain('Services: api-gateway, billing, crm, docs');
+    expect(output).toContain('api-gateway : [Create (Global)] development → auth-flow');
+    expect(output).toContain('billing : [Rename] feat/bill -> feat/b2');
+    // An [Existing] branch attached under its own name is printed once; a remote one still
     // shows the local name it lands on.
-    expect(output).toMatch(/crm : \[Existante\] feat\/crm\s*\n/);
-    expect(output).toContain('docs : [Existante] origin/feat/docs → feat/docs');
-    expect(output).toContain("[Entrée] Créer l'EDT");
+    expect(output).toMatch(/crm : \[Existing\] feat\/crm\s*\n/);
+    expect(output).toContain('docs : [Existing] origin/feat/docs → feat/docs');
+    expect(output).toContain("[Enter] create the EDT");
 
     const acknowledged = await renderToString(
       <ActivationStepView
@@ -1105,8 +1105,8 @@ describe('EdtsZone', () => {
         maxVisibleRows={10}
       />,
     );
-    expect(acknowledged).not.toContain("[Entrée] Créer l'EDT");
-    expect(acknowledged).toContain('EDT créé mais non activé');
+    expect(acknowledged).not.toContain("[Enter] create the EDT");
+    expect(acknowledged).toContain('EDT created but not activated');
   });
 
   it('Step 2 lists every registered managed repo as a checkbox row', async () => {

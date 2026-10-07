@@ -153,11 +153,11 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
 function resultLabel(row: SwitchEdtRepoResult): string | null {
   switch (row.outcome) {
     case 'adopted':
-      return `✔ ${row.service} — adopté sur ${row.detail?.adoptedBranch ?? '?'}`;
+      return `✔ ${row.service} — adopted on ${row.detail?.adoptedBranch ?? '?'}`;
     case 'discarded':
-      return `✔ ${row.service} — écrasé (${row.detail?.discardedPaths?.length ?? 0} fichier(s))`;
+      return `✔ ${row.service} — overwritten (${row.detail?.discardedPaths?.length ?? 0} file(s))`;
     case 'switched':
-      return `✔ ${row.service} — basculé`;
+      return `✔ ${row.service} — switched`;
     case 'failed':
       return null;
   }
@@ -167,9 +167,9 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
   return (
     <>
       {results.some((row) => row.outcome === 'failed') ? (
-        <Text color={colors.warning}>Bascule vers « {dialog.target.topic} » effectuée avec des échecs.</Text>
+        <Text color={colors.warning}>Switch to “{dialog.target.topic}” finished with failures.</Text>
       ) : (
-        <Text color={colors.text}>Bascule vers « {dialog.target.topic} » terminée.</Text>
+        <Text color={colors.text}>Switch to “{dialog.target.topic}” finished.</Text>
       )}
       {results.map((row, index) => {
         const label = resultLabel(row);
@@ -181,7 +181,7 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
         ) : null;
       })}
       {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
-      <Text color={colors['text-dim']}>[Entrée] / [Esc] Fermer</Text>
+      <Text color={colors['text-dim']}>[Enter/Esc] close</Text>
     </>
   );
 }
@@ -212,7 +212,7 @@ export function SwitchDialogView({
           dialog.resolution !== null ? (
             <SwitchResolutionView state={dialog.resolution} dirty={switchDirtyRepos} targetTopic={dialog.target.topic} maxVisibleRows={maxVisibleRows} />
           ) : (
-            <DimAnnotation text="Préparation de la résolution…" />
+            <DimAnnotation text="Preparing the resolution…" />
           )
         ) : dialog.blocked ? (
           <>

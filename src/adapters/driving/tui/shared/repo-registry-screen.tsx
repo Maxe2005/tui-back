@@ -210,7 +210,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   useInput((input, key) => {
     if (phase === 'root-input') {
       // Ctrl+L: "Clean stale entries" — never a plain "l" keypress, which must stay available
-      // as ordinary root-path text (like branch-picker.tsx's Ctrl+R).
+      // as ordinary root-path text (like branch-picker.tsx's Ctrl+T).
       if (key.ctrl && input.toLowerCase() === 'l') {
         void scanRegistryStaleEntries();
         return;

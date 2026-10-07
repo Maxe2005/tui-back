@@ -79,7 +79,7 @@ describe('UpdateConfigPanels', () => {
   it('marks personal rows', async () => {
     const draft = draftWith(2);
     const output = await render(setRow(draft, 0, { ...draft.rows[0]!, migrations: 'off' }), 30);
-    expect(output).toContain('perso');
+    expect(output).toContain('custom');
   });
 
   it('never exceeds the terminal height, even with many rows or an open EDT list', async () => {

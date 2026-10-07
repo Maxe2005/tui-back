@@ -77,7 +77,7 @@ export function ServicesStepView({
           ))
         : null}
       {missing.length > 0 ? (
-        <Text color={colors['text-dim']}>Services de l'EDT source introuvables (ignorés) : {missing.join(', ')}</Text>
+        <Text color={colors['text-dim']}>Source EDT services not found (ignored): {missing.join(', ')}</Text>
       ) : null}
     </Box>
   );

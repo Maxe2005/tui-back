@@ -63,9 +63,9 @@ describe('stepSuggestField', () => {
 
 describe('validateSuggestValue', () => {
   it('accepts empty and listed values, refuses the rest', () => {
-    expect(validateSuggestValue('', SUGGESTIONS, 'une branche')).toBeNull();
-    expect(validateSuggestValue('main', SUGGESTIONS, 'une branche')).toBeNull();
-    expect(validateSuggestValue('nope', SUGGESTIONS, 'une branche')).toContain('nope');
+    expect(validateSuggestValue('', SUGGESTIONS, 'a branch')).toBeNull();
+    expect(validateSuggestValue('main', SUGGESTIONS, 'a branch')).toBeNull();
+    expect(validateSuggestValue('nope', SUGGESTIONS, 'a branch')).toContain('nope');
   });
 });
 

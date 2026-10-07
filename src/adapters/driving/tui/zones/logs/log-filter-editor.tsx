@@ -99,7 +99,7 @@ export function LogFilterEditor({
         text={
           gridCursor !== null
             ? '[↑/↓/←/→] browse history  [Enter] recall  [Esc] close'
-            : '[Tab] text/regex  [Ctrl+←/→] level  [↑/↓] history  [Enter/Esc] done'
+            : '[Tab] text/regex  [Ctrl+←/→] level  [↑/↓] history  [Enter] apply  [Esc] cancel'
         }
       />
     </ModalDialog>

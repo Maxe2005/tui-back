@@ -66,8 +66,8 @@ describe('effective values', () => {
   it('is perso as soon as the row departs from the global parameters', () => {
     const api = edtDraft().rows[0]!;
     expect(rowMode(api)).toBe('global');
-    expect(rowMode({ ...api, migrations: 'off' })).toBe('perso');
-    expect(rowMode({ ...api, origin: 'manual' })).toBe('perso');
+    expect(rowMode({ ...api, migrations: 'off' })).toBe('custom');
+    expect(rowMode({ ...api, origin: 'manual' })).toBe('custom');
   });
 });
 

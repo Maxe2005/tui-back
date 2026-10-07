@@ -12,6 +12,7 @@ import { suggestBranchNameFromTopic, TWO_PANEL_NAV } from '../../edts-zone.logic
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
 import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
+import { formatHints } from '../../../../shared/components/hints.js';
 
 export type ResolutionAction = 'adopt' | 'discard';
 
@@ -87,26 +88,26 @@ export type SwitchResolutionState = {
   decision: SwitchResolutionDecision | null;
 };
 
-export const SWITCH_RESOLUTION_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch';
+export const SWITCH_RESOLUTION_FOOTER = formatHints([['Tab', 'switch pane'], ['Enter', 'configure row'], ['Ctrl+N', 'confirm'], ['Esc', 'cancel switch']]);
 
 export const RESOLUTION_MODE_LABELS = {
-  adoptGlobal: '[Adopter (Global)]',
-  adoptPerso: '[Adopter (Perso)]',
-  discard: '[Écraser]',
+  adoptGlobal: '[Adopt (Global)]',
+  adoptPerso: '[Adopt (Custom)]',
+  discard: '[Discard]',
 } as const;
 
 export const RESOLUTION_ERRORS = {
   // `currentBranch === 'HEAD'` also covers a branch core could not read.
-  detachedHead: 'HEAD détachée ou branche illisible — seul Écraser est possible',
-  unreadableManifest: 'manifeste illisible — impossible de valider la branche ; choisissez Écraser ou annulez',
-  noOutgoing: 'Aucun EDT sortant — seul [Écraser] est possible',
-  blocked: 'Corrigez les lignes invalides avant de confirmer',
+  detachedHead: 'Detached HEAD or unreadable branch — only Discard is possible',
+  unreadableManifest: 'unreadable manifest — cannot validate the branch; choose Discard or cancel',
+  noOutgoing: 'No outgoing EDT — only [Discard] is possible',
+  blocked: 'Fix the invalid rows before confirming',
 } as const;
 
 // Ctrl+E refused: this discard row's file list could not be read by the pre-flight, so what
 // would be destroyed cannot be shown (nor pinned through `confirmedPaths`).
 export function unlistedDiscardError(service: string): string {
-  return `liste des fichiers indisponible pour ${service} — annulez et relancez la bascule`;
+  return `file list unavailable for ${service} — cancel and retry the switch`;
 }
 
 // The rows needing a decision: dirty state-2/3 repos (state-1 rows are auto-stashed).
@@ -219,7 +220,7 @@ export function scopeLabel(repo: SwitchDirtyRepo): string {
 }
 
 export function claimedBranchError(topic: string): string {
-  return `utilisée par l'EDT « ${topic} » — la reprendre casserait cet EDT`;
+  return `used by the EDT “${topic}” — reusing it would break that EDT`;
 }
 
 // Advisory (the git gate stays authoritative). Order: detached HEAD, unreadable manifest (no
@@ -385,7 +386,7 @@ export function reduceResolutionBoxKey(
   if (box.line === 'branch') {
     return { type: 'update', box: key.return ? { ...box, editing: true, error: null } : box };
   }
-  // [ Appliquer ]
+  // [ Apply ]
   if (!key.return) {
     return { type: 'update', box };
   }
@@ -402,10 +403,10 @@ export function reduceResolutionBoxKey(
 //     with the outgoing topic's slug) applied to every row on a SHARED branch. With no outgoing
 //     EDT only Écraser is offered.
 //   - Panel B "SERVICES CONCERNÉS": one row per dirty state-2/3 service; `Enter` opens the
-//     "Configurer <service>" box, `[ Appliquer ]` makes the row Perso (or Écraser), `Ctrl+R`
+//     "Configurer <service>" box, `[ Apply ]` makes the row Perso (or Écraser), `Ctrl+R`
 //     returns it to the global strategy.
 //   - `Ctrl+N` confirms: blocked while any row is invalid; with any Écraser row it first opens
-//     the discard confirmation (files per service, default Retour, `Ctrl+E` confirms).
+//     the discard confirmation (files per service, default back, `Ctrl+E` confirms).
 //   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation); on
 //     the main view it cancels the whole switch.
 
@@ -427,7 +428,7 @@ export function reduceSwitchResolutionKey(
   const global = globalOf(state);
   const rows = buildRows(dirty, global);
 
-  // The discard confirmation: default is Retour; only Ctrl+E confirms.
+  // The discard confirmation: default is back; only Ctrl+E confirms.
   if (state.confirm !== null) {
     if (isCtrl(input, key, 'e')) {
       const unlisted = rows.find((row) => row.plan.kind === 'discard' && row.repo.dirtyPaths === undefined);

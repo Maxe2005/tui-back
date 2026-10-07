@@ -50,7 +50,7 @@ function typeInto(state: OverrideBoxState, text: string): OverrideBoxState {
 }
 
 describe('openOverrideBox', () => {
-  it('a global row opens in "Créer nouvelle" pre-filled with its base and the global name', () => {
+  it('a global row opens in "Create new" pre-filled with its base and the global name', () => {
     const opened = openOverrideBox('/repos/a', { base: 'origin/rel', name: 'auth-flow' });
     expect(opened).toMatchObject({ mode: 'create', line: 'mode', editing: false, rename: false, error: null });
     expect(opened.base.value).toBe('origin/rel');
@@ -119,7 +119,7 @@ describe('reduceOverrideBoxKey', () => {
     expect(press(box({ line: 'name', editing: true }), 'r', { ctrl: true })).toEqual({ type: 'revert' });
   });
 
-  it('Perso: Enter on [ Appliquer ] applies a create plan', () => {
+  it('Perso: Enter on [ Apply ] applies a create plan', () => {
     const ready = box({ line: 'apply', base: { value: 'origin/dev', cursor: 10, pickCursor: 0 }, name: { value: 'q', cursor: 1 } });
     expect(press(ready, '', { return: true })).toEqual({ type: 'apply', plan: { kind: 'create', base: 'origin/dev', name: 'q' } });
   });
@@ -147,7 +147,7 @@ describe('validateOverrideBox', () => {
   });
 
   it('names the branch and the service\'s manifest, in French', () => {
-    expect(protectedNameError('preprod', 'svc-a')).toBe('« preprod » est protégée par le manifeste de svc-a');
+    expect(protectedNameError('preprod', 'svc-a')).toBe('“preprod” is protected by the manifest of svc-a');
   });
 
   it('a branch the service\'s manifest does not list is not protected', () => {

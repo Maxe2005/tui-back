@@ -351,11 +351,11 @@ function handlePickExistingKey(
     };
   }
 
-  // Ctrl+R: the row's secondary "rename" action — never a plain "r" keypress, which must stay
+  // Ctrl+T: the row's secondary "rename" action (F2 is not exposed by Ink's useInput) — never a plain "r" keypress, which must stay
   // available as ordinary filter text. Handled before the shared reducer (which keeps every
   // Ctrl/Meta combo inert), over the shared substring match list.
   const sharedMatches = matchBranchesBySubstring(state.pickQuery, branches);
-  if (key.ctrl && input.toLowerCase() === 'r') {
+  if (key.ctrl && input.toLowerCase() === 't') {
     const highlighted = sharedMatches[clampAutocompletePickCursor(state.pickCursor, sharedMatches.length)];
     if (highlighted === undefined) {
       return { type: 'update', state };
@@ -540,7 +540,7 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
               maxRows={maxRows}
               focused
             />
-            <Text color={colors['text-dim']}>[Enter] fill in  [Enter] again to set branch  [Ctrl+R] rename this branch</Text>
+            <Text color={colors['text-dim']}>[Enter] fill in  [Enter] again to set branch  [Ctrl+T] rename this branch</Text>
           </Box>
         )
       ) : null}

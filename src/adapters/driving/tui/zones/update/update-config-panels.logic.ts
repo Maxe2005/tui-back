@@ -39,9 +39,9 @@ export function effectiveRestart(draft: UpdateConfigDraft, row: UpdateConfigRow)
   return row.recipeDeclared ? 'clean' : 'no-recipe';
 }
 
-// `perso` as soon as the row departs from the global parameters in any way.
-export function rowMode(row: UpdateConfigRow): 'global' | 'perso' {
-  return row.origin === 'manual' || row.migrations !== 'follow' || row.cleanRestart !== 'follow' ? 'perso' : 'global';
+// `custom` as soon as the row departs from the global parameters in any way.
+export function rowMode(row: UpdateConfigRow): 'global' | 'custom' {
+  return row.origin === 'manual' || row.migrations !== 'follow' || row.cleanRestart !== 'follow' ? 'custom' : 'global';
 }
 
 export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart';

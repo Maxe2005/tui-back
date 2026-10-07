@@ -49,7 +49,7 @@ describe('BranchStepView — Panel B cells', () => {
         maxVisibleRows={5}
       />,
     );
-    expect(output).toContain('échec du chargement des branches : fatal: not a git repository');
+    expect(output).toContain('failed to load branches: fatal: not a git repository');
   });
 });
 
@@ -109,12 +109,12 @@ describe('reduceBranchStepKey', () => {
   });
 
   it('fixing the base or the name clears a stale "cannot leave Step 3" error', () => {
-    const blocked = { ...dialog({ editing: true, globalBase: { value: 'nope', cursor: 4 } }), error: 'svc-a : branche introuvable' };
+    const blocked = { ...dialog({ editing: true, globalBase: { value: 'nope', cursor: 4 } }), error: 'svc-a : branch not found' };
     expect(reduceBranchStepKey(blocked, CANDS, '', { backspace: true }).state.error).toBeNull();
-    const blockedName = { ...editingName(), error: 'svc-a : nom de branche vide' };
+    const blockedName = { ...editingName(), error: 'svc-a : empty branch name' };
     expect(reduceBranchStepKey(blockedName, CANDS, 'q', {}).state.error).toBeNull();
     // A pure focus/caret move is not a fix: the message stays.
-    expect(reduceBranchStepKey(blockedName, CANDS, '', { leftArrow: true }).state.error).toBe('svc-a : nom de branche vide');
+    expect(reduceBranchStepKey(blockedName, CANDS, '', { leftArrow: true }).state.error).toBe('svc-a : empty branch name');
   });
 
   it('Space never starts editing the base line; other printable keys do, with the key typed', () => {

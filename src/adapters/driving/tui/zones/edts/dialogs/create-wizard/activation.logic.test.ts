@@ -55,7 +55,7 @@ describe('reduceActivationKey — the pause panel', () => {
 });
 
 describe('reduceActivationKey — the overwrite confirmation', () => {
-  it('Ctrl+E raises overwrite; Enter and Esc mean Retour', () => {
+  it('Ctrl+E raises overwrite; Enter and Esc mean back', () => {
     const confirming = paused({ confirm: { scroll: 0 } });
     expect(reduceActivationKey(confirming, 'e', { ctrl: true }).decision).toEqual({ kind: 'overwrite' });
     expect(reduceActivationKey(confirming, '', { return: true }).confirm).toBeNull();
@@ -78,10 +78,10 @@ describe('reduceActivationKey — the overwrite confirmation', () => {
 describe('overwrite helpers', () => {
   it('lists one head per service then its files', () => {
     expect(overwriteConfirmLines(BLOCKED).map((line) => line.text)).toEqual([
-      'svc-a (2 fichier(s))',
+      'svc-a (2 file(s))',
       '    a.ts',
       '    b.ts',
-      'svc-b (1 fichier(s))',
+      'svc-b (1 file(s))',
       '    c.ts',
     ]);
   });

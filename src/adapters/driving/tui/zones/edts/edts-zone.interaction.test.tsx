@@ -257,21 +257,21 @@ describe('EdtsZone real-keypress interactions', () => {
     try {
       await openResolution(instance, stdin);
 
-      expect(stdout.output).toContain("Vous quittez l'EDT « Mon Topic »");
-      expect(stdout.output).toContain('STRATÉGIE GLOBALE');
-      expect(stdout.output).toContain('SERVICES CONCERNÉS');
-      expect(stdout.output).toContain('Action par défaut : (•) Adopter dans Mon Topic  ( ) Écraser');
-      expect(stdout.output).toContain('Nom global de la branche');
+      expect(stdout.output).toContain("You are leaving the EDT “Mon Topic”");
+      expect(stdout.output).toContain('GLOBAL STRATEGY');
+      expect(stdout.output).toContain('AFFECTED SERVICES');
+      expect(stdout.output).toContain('Default action: (•) Adopt into Mon Topic  ( ) Discard');
+      expect(stdout.output).toContain('Global branch name');
       expect(stdout.output).toContain('mon-topic');
       // The footer wraps at the fake TTY's 80 columns; its exact text is pinned by
       // switch-resolution.logic.test.ts (SWITCH_RESOLUTION_FOOTER).
-      for (const part of ['[Tab] Changer de zone', '[Entrée] Configurer la ligne', '[Ctrl+N] Confirmer', '[Esc] Annuler le switch']) {
+      for (const part of ['[Tab] switch pane', '[Enter] configure row', '[Ctrl+N] confirm', '[Esc] cancel']) {
         expect(stdout.output).toContain(part);
       }
       expect(stdout.output).toContain('hors EDT');
       expect(stdout.output).toContain('membre de third');
-      expect(stdout.output).toContain('[Adopter (Global)]');
-      expect(stdout.output).toContain('svc-orders — sera mis de côté pour Mon Topic (restauré au retour)');
+      expect(stdout.output).toContain('[Adopt (Global)]');
+      expect(stdout.output).toContain('svc-orders — will be stashed for Mon Topic (restored on return)');
 
       await press(instance, stdin, KEYS.ctrlN);
       await settle(instance);
@@ -283,7 +283,7 @@ describe('EdtsZone real-keypress interactions', () => {
         resolutions: { '/repo/payments': { kind: 'adopt', branch: 'mon-topic' }, '/repo/billing': { kind: 'adopt', branch: 'feat/x' } },
       });
       // Results stay on screen; the log goes to the NEW active EDT with the adopted branches.
-      expect(stdout.output).toContain('svc-payments — adopté sur mon-topic');
+      expect(stdout.output).toContain('svc-payments — adopted on mon-topic');
       expect(probe.log).toEqual([{ ulid: 'target-ulid', outcome: 'success', detail: expect.stringContaining('svc-payments → mon-topic') }]);
 
       expect(store.getState().zoneInputCaptured).toBe(true);
@@ -296,23 +296,23 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('an Écraser strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
+  it('an Discard strategy asks a second confirmation listing the files; Enter goes back, Ctrl+E proceeds with discards', async () => {
     const { store, probe } = resolutionStore();
     const { instance, stdout, stdin } = mount(store);
     try {
       await openResolution(instance, stdin);
-      await press(instance, stdin, KEYS.space); // Panel A: Adopter -> Écraser
+      await press(instance, stdin, KEYS.space); // Panel A: Adopt -> Discard
       await press(instance, stdin, KEYS.ctrlN);
 
-      expect(stdout.output).toContain("CONFIRMER L'ÉCRASEMENT");
-      expect(stdout.output).toContain('svc-payments (2 fichier(s))');
+      expect(stdout.output).toContain("CONFIRM OVERWRITE");
+      expect(stdout.output).toContain('svc-payments (2 file(s))');
       expect(stdout.output).toContain('tmp/new.txt');
       expect(stdout.output).toContain('bill.ts');
-      expect(stdout.output).toContain('irréversible');
-      expect(stdout.output).toContain('ignorés');
-      expect(stdout.output).toContain('conservés');
+      expect(stdout.output).toContain('cannot be undone');
+      expect(stdout.output).toContain('ignored by git');
+      expect(stdout.output).toContain('kept');
 
-      await press(instance, stdin, KEYS.enter); // default: Retour
+      await press(instance, stdin, KEYS.enter); // default: back
       await settle(instance);
       expect(probe.resolvedWith).toBeNull();
 
@@ -353,8 +353,8 @@ describe('EdtsZone real-keypress interactions', () => {
       await settle(instance);
       await settle(instance);
       const retryFrame = stdout.output.slice(stdout.output.lastIndexOf('cancelled'));
-      expect(retryFrame).toContain('STRATÉGIE GLOBALE');
-      expect(retryFrame).toContain('SERVICES CONCERNÉS');
+      expect(retryFrame).toContain('GLOBAL STRATEGY');
+      expect(retryFrame).toContain('AFFECTED SERVICES');
       await pressEscape(instance, stdin);
       await settle(instance);
       expect(probe.resolutions).toEqual([{ kind: 'cancel' }, { kind: 'cancel' }]);
@@ -371,29 +371,29 @@ describe('EdtsZone real-keypress interactions', () => {
     try {
       await openResolution(instance, stdin);
 
-      expect(stdout.output).toContain('La branche « mon-topic » existe déjà dans ce service');
+      expect(stdout.output).toContain('The branch “mon-topic” already exists in this service');
 
       await press(instance, stdin, KEYS.ctrlN);
       await settle(instance);
 
       expect(probe.resolvedWith).toBeNull();
-      expect(stdout.output).toContain('Corrigez les lignes invalides avant de confirmer');
+      expect(stdout.output).toContain('Fix the invalid rows before confirming');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
     }
   });
 
-  it('with no outgoing EDT only Écraser is offered, with an explanation', async () => {
+  it('with no outgoing EDT only Discard is offered, with an explanation', async () => {
     const { store } = resolutionStore({ activeTopic: null });
     const { instance, stdout, stdin } = mount(store);
     try {
       await openResolution(instance, stdin);
 
-      expect(stdout.output).toContain('Action par défaut : (•) Écraser');
-      expect(stdout.output).toContain('Aucun EDT sortant');
-      expect(stdout.output).toContain('[Écraser]');
-      expect(stdout.output).not.toContain('[Adopter (Global)]');
+      expect(stdout.output).toContain('Default action: (•) Discard');
+      expect(stdout.output).toContain('No outgoing EDT');
+      expect(stdout.output).toContain('[Discard]');
+      expect(stdout.output).not.toContain('[Adopt (Global)]');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1064,7 +1064,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(store.getState().quitRequested).toBe(false);
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
       expect(lastFrame).toContain('▶ 4. Activation ◀');
-      expect(lastFrame).toContain('Création…');
+      expect(lastFrame).toContain('Creating…');
 
       release?.();
       await instance.waitUntilRenderFlush();
@@ -1096,16 +1096,16 @@ describe('EdtsZone real-keypress interactions', () => {
       // Mid-string insert: typing 'c' at cursor 2 in "abd" must produce "abcd" — a no-op Left
       // would append at the end instead, producing "abdc".
       await type(instance, stdin, 'c');
-      expect(stdout.output).toContain('Nom: abcd');
-      expect(stdout.output).not.toContain('Nom: abdc');
+      expect(stdout.output).toContain('Name: abcd');
+      expect(stdout.output).not.toContain('Name: abdc');
 
       await press(instance, stdin, KEYS.home); // cursor -> 0
       await press(instance, stdin, KEYS.backspace); // cursor:0 -> no-op
-      expect(stdout.output).toContain('Nom: abcd');
+      expect(stdout.output).toContain('Name: abcd');
 
       await press(instance, stdin, KEYS.end); // cursor -> 4 (value.length)
       await press(instance, stdin, KEYS.backspace); // removes 'd' before cursor
-      expect(stdout.output).toContain('Nom: abc');
+      expect(stdout.output).toContain('Name: abc');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1214,7 +1214,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.ctrlN); // Ctrl+N is gated by the same check
       await press(instance, stdin, KEYS.ctrlRight); // and so is Ctrl+→
 
-      expect(stdout.output).toContain('Sélectionnez au moins un service');
+      expect(stdout.output).toContain('Select at least one service');
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE));
       expect(lastFrame).toContain('▶ 2. Services ◀');
       expect(stdout.output).not.toContain('▶ 3. Branches ◀');
@@ -1282,7 +1282,7 @@ describe('EdtsZone real-keypress interactions', () => {
 
       // The EDT already exists — nothing may re-submit or navigate away; the failure rows stay
       // until acknowledged, and Enter closes the wizard.
-      expect(stdout.output).toContain('[Entrée/Esc] Fermer');
+      expect(stdout.output).toContain('[Enter/Esc] close');
       await press(instance, stdin, KEYS.ctrlLeft);
       expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).toContain('shared/protected');
       const beforeClose = stdout.output.length;
@@ -1303,15 +1303,15 @@ describe('EdtsZone real-keypress interactions', () => {
     try {
       await reachStep3(instance, stdin, 'Auth Flow', 2);
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('▶ STRATÉGIE GLOBALE');
-      expect(frame).toContain('› Branche source par défaut: <shared-branch>');
-      expect(frame).toContain('Nom global de la branche: auth-flow');
-      expect(frame).toContain('RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+      expect(frame).toContain('▶ GLOBAL STRATEGY');
+      expect(frame).toContain('› Default source branch: <shared-branch>');
+      expect(frame).toContain('Global branch name: auth-flow');
+      expect(frame).toContain('SUMMARY AND PER-SERVICE EXCEPTIONS');
       expect(frame).toContain('Service │ Mode');
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ main +│ auth-flow/);
-      expect(frame).toMatch(/svc-b +│ \[Créer \(Global\)\] │ development +│ auth-flow/);
+      expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ auth-flow/);
+      expect(frame).toMatch(/svc-b +│ \[Create \(Global\)\] │ development +│ auth-flow/);
       // The Step 3 footer (wrapped at the 80-column fake terminal).
-      expect(frame).toContain('[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Étape');
+      expect(frame).toContain('[Tab] switch pane  [Enter] configure row  [Ctrl+N] next step');
       // Each service's lists are loaded exactly once for this entry.
       expect([...listCalls].sort()).toEqual(['/repos/a', '/repos/b']);
 
@@ -1322,7 +1322,7 @@ describe('EdtsZone real-keypress interactions', () => {
       const recap = lastWizardFrame(stdout);
       expect(recap).toContain('▶ 4. Activation ◀');
       expect(recap).toContain('3. Branches: auth-flow');
-      expect(recap).toContain('svc-a : [Créer (Global)] main → auth-flow');
+      expect(recap).toContain('svc-a : [Create (Global)] main → auth-flow');
       await press(instance, stdin, KEYS.enter); // submit
 
       expect(createCalls).toHaveLength(1);
@@ -1337,7 +1337,7 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('a global base resolves live per service (local preferred, else origin/<x>); "introuvable" blocks Ctrl+N', async () => {
+  it('a global base resolves live per service (local preferred, else origin/<x>); "not found" blocks Ctrl+N', async () => {
     const { store, createCalls } = step3Store({
       lists: { '/repos/a': { local: ['main', 'rel'], remote: ['origin/rel'] }, '/repos/b': { local: ['development'], remote: ['origin/rel'] } },
     });
@@ -1346,21 +1346,21 @@ describe('EdtsZone real-keypress interactions', () => {
       await reachStep3(instance, stdin, 'demo', 2);
       await type(instance, stdin, 'nope'); // a printable key enters edit mode with that character typed
       let frame = lastWizardFrame(stdout);
-      expect(frame).toContain('Branche source par défaut: nope');
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ ✖ branche introuvable/);
+      expect(frame).toContain('Default source branch: nope');
+      expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ ✖ branch not found/);
       await press(instance, stdin, KEYS.ctrlN); // blocked
       frame = lastWizardFrame(stdout);
       expect(frame).toContain('▶ 3. Branches ◀');
-      expect(frame).toContain('svc-a : branche introuvable');
+      expect(frame).toContain('svc-a : branch not found');
 
       for (let i = 0; i < 4; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
-      expect(lastWizardFrame(stdout)).toContain('Branche source par défaut: <shared-branch>'); // placeholder restored
+      expect(lastWizardFrame(stdout)).toContain('Default source branch: <shared-branch>'); // placeholder restored
       await type(instance, stdin, 'rel');
       frame = lastWizardFrame(stdout);
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ rel +│ demo/);
-      expect(frame).toMatch(/svc-b +│ \[Créer \(Global\)\] │ origin\/rel +│ demo/);
+      expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ rel +│ demo/);
+      expect(frame).toMatch(/svc-b +│ \[Create \(Global\)\] │ origin\/rel +│ demo/);
 
       await press(instance, stdin, KEYS.enter); // commit the field
       await press(instance, stdin, KEYS.ctrlN);
@@ -1386,13 +1386,13 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
       await press(instance, stdin, KEYS.enter); // Step 2 -> Step 3 (svc-a still checked)
       await settle(instance);
-      expect(lastWizardFrame(stdout)).toContain('Nom global de la branche: demo-x-y'); // untouched: tracks the slug
+      expect(lastWizardFrame(stdout)).toContain('Global branch name: demo-x-y'); // untouched: tracks the slug
 
       await press(instance, stdin, KEYS.down); // Panel A: base -> name line
       await press(instance, stdin, KEYS.enter); // edit the name
       await type(instance, stdin, '-q');
       await press(instance, stdin, KEYS.enter); // commit
-      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Créer \(Global\)\] │ main +│ demo-x-y-q/);
+      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ demo-x-y-q/);
 
       await press(instance, stdin, KEYS.ctrlLeft);
       await press(instance, stdin, KEYS.ctrlLeft);
@@ -1400,7 +1400,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter);
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
-      expect(lastWizardFrame(stdout)).toContain('Nom global de la branche: demo-x-y-q'); // touched: kept
+      expect(lastWizardFrame(stdout)).toContain('Global branch name: demo-x-y-q'); // touched: kept
 
       await press(instance, stdin, KEYS.ctrlN);
       await press(instance, stdin, KEYS.enter);
@@ -1412,19 +1412,19 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('"Configurer" box — a Perso row ignores Panel A; Ctrl+R reverts it to the global rule', async () => {
+  it('"Configure" box — a Perso row ignores Panel A; Ctrl+R reverts it to the global rule', async () => {
     const { store, createCalls } = step3Store({ lists: { '/repos/a': { local: ['main'], remote: ['origin/dev'] }, '/repos/b': { local: ['development'], remote: [] } } });
     const { instance, stdout, stdin } = mount(store);
     try {
       await reachStep3(instance, stdin, 'demo', 2);
       await press(instance, stdin, KEYS.tab); // Panel A -> Panel B
-      expect(lastWizardFrame(stdout)).toContain('▶ RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+      expect(lastWizardFrame(stdout)).toContain('▶ SUMMARY AND PER-SERVICE EXCEPTIONS');
       await press(instance, stdin, KEYS.enter); // open the box on svc-a
       let frame = lastWizardFrame(stdout);
-      expect(frame).toContain('Configurer svc-a');
-      expect(frame).toContain('Mode : (•) Créer nouvelle ( ) Choisir existante');
+      expect(frame).toContain('Configure svc-a');
+      expect(frame).toContain('Mode: (•) Create new ( ) Choose existing');
       expect(frame).toContain('Branche de base (source): main');
-      expect(frame).toContain('Nom de la branche: demo');
+      expect(frame).toContain('Branch name: demo');
 
       await press(instance, stdin, KEYS.down); // base line
       await press(instance, stdin, KEYS.enter); // edit
@@ -1438,18 +1438,18 @@ describe('EdtsZone real-keypress interactions', () => {
         await press(instance, stdin, KEYS.backspace);
       }
       await type(instance, stdin, 'q');
-      await press(instance, stdin, KEYS.enter); // commit -> [ Appliquer ]
+      await press(instance, stdin, KEYS.enter); // commit -> [ Apply ]
       await press(instance, stdin, KEYS.enter); // apply
       frame = lastWizardFrame(stdout);
-      expect(frame).not.toContain('Configurer svc-a');
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Perso\)\] +│ origin\/dev +│ q/);
+      expect(frame).not.toContain('Configure svc-a');
+      expect(frame).toMatch(/svc-a +│ \[Create \(Custom\)\] +│ origin\/dev +│ q/);
 
       // Perso ignores Panel A: an unresolvable global base only blocks the global row.
       await press(instance, stdin, KEYS.tab);
       await type(instance, stdin, 'zzz');
       frame = lastWizardFrame(stdout);
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Perso\)\] +│ origin\/dev +│ q/);
-      expect(frame).toMatch(/svc-b +│ \[Créer \(Global\)\] +│ ✖ branche introuvable/);
+      expect(frame).toMatch(/svc-a +│ \[Create \(Custom\)\] +│ origin\/dev +│ q/);
+      expect(frame).toMatch(/svc-b +│ \[Create \(Global\)\] +│ ✖ branch not found/);
       for (let i = 0; i < 3; i += 1) {
         await press(instance, stdin, KEYS.backspace);
       }
@@ -1467,28 +1467,28 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('Ctrl+R in the box puts the row back to [Créer (Global)] and closes the box', async () => {
+  it('Ctrl+R in the box puts the row back to [Create (Global)] and closes the box', async () => {
     const { store } = step3Store({ lists: { '/repos/a': { local: ['main', 'feat/z'], remote: [] } } });
     const { instance, stdout, stdin } = mount(store);
     try {
       await reachStep3(instance, stdin, 'demo', 1);
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, KEYS.enter); // open the box
-      await press(instance, stdin, KEYS.space); // Mode -> Choisir existante
+      await press(instance, stdin, KEYS.space); // Mode -> Choose existing
       await press(instance, stdin, KEYS.down); // "Branche existante"
       await press(instance, stdin, KEYS.enter);
       await type(instance, stdin, 'feat/z');
       await press(instance, stdin, KEYS.enter); // commit -> rename checkbox
-      await press(instance, stdin, KEYS.down); // [ Appliquer ]
+      await press(instance, stdin, KEYS.down); // [ Apply ]
       await press(instance, stdin, KEYS.enter); // apply
-      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Existante\] +│ feat\/z +│ feat\/z/);
+      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Existing\] +│ feat\/z +│ feat\/z/);
 
-      await press(instance, stdin, KEYS.enter); // reopen: loaded back as "Choisir existante"
-      expect(lastWizardFrame(stdout)).toContain('Mode : ( ) Créer nouvelle (•) Choisir existante');
+      await press(instance, stdin, KEYS.enter); // reopen: loaded back as "Choose existing"
+      expect(lastWizardFrame(stdout)).toContain('Mode: ( ) Create new (•) Choose existing');
       await press(instance, stdin, KEYS.ctrlR);
       const frame = lastWizardFrame(stdout);
-      expect(frame).not.toContain('Configurer svc-a');
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ main +│ demo/);
+      expect(frame).not.toContain('Configure svc-a');
+      expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ demo/);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1510,8 +1510,8 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter); // apply -> refused (protected, no rename)
       let frame = lastWizardFrame(stdout);
-      expect(frame).toContain('Configurer svc-a');
-      expect(frame).toContain('« prod » est une branche locale protégée par le manifeste de svc-a');
+      expect(frame).toContain('Configure svc-a');
+      expect(frame).toContain('“prod” is a local branch protected by the manifest of svc-a');
 
       await press(instance, stdin, KEYS.up); // rename checkbox
       await press(instance, stdin, KEYS.up); // "Branche existante"
@@ -1525,10 +1525,10 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter);
       await type(instance, stdin, 'w2');
-      await press(instance, stdin, KEYS.enter); // commit -> [ Appliquer ]
+      await press(instance, stdin, KEYS.enter); // commit -> [ Apply ]
       await press(instance, stdin, KEYS.enter); // apply
       frame = lastWizardFrame(stdout);
-      expect(frame).toMatch(/svc-a +│ \[Renommer\] +│ origin\/w +│ -> w2/);
+      expect(frame).toMatch(/svc-a +│ \[Rename\] +│ origin\/w +│ -> w2/);
 
       await press(instance, stdin, KEYS.ctrlN);
       await press(instance, stdin, KEYS.enter);
@@ -1549,11 +1549,11 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter); // a field in edit
       await pressEscape(instance, stdin); // leaves the field
-      expect(lastWizardFrame(stdout)).toContain('Configurer svc-a');
+      expect(lastWizardFrame(stdout)).toContain('Configure svc-a');
       await pressEscape(instance, stdin); // closes the box
       let frame = lastWizardFrame(stdout);
-      expect(frame).not.toContain('Configurer svc-a');
-      expect(frame).toContain('▶ RÉSUMÉ ET EXCEPTIONS PAR SERVICE');
+      expect(frame).not.toContain('Configure svc-a');
+      expect(frame).toContain('▶ SUMMARY AND PER-SERVICE EXCEPTIONS');
 
       await press(instance, stdin, KEYS.tab); // Panel A
       await press(instance, stdin, KEYS.enter); // edit mode
@@ -1594,15 +1594,15 @@ describe('EdtsZone real-keypress interactions', () => {
       }
       let frame = lastWizardFrame(stdout);
       expect(frame).toContain('▶ 3. Branches ◀');
-      expect(frame).toContain('Configurer svc-a');
-      expect(frame).toContain('Nom de la branche: demo-x');
+      expect(frame).toContain('Configure svc-a');
+      expect(frame).toContain('Branch name: demo-x');
 
       await pressEscape(instance, stdin); // leave the field — the box is still open
       await press(instance, stdin, KEYS.ctrlN); // inert with the box open
       await press(instance, stdin, KEYS.ctrlP);
       frame = lastWizardFrame(stdout);
-      expect(frame).toContain('Configurer svc-a');
-      expect(frame).toContain('Nom de la branche: demo-x');
+      expect(frame).toContain('Configure svc-a');
+      expect(frame).toContain('Branch name: demo-x');
 
       await pressEscape(instance, stdin); // close the box
       await press(instance, stdin, KEYS.tab); // Panel A
@@ -1646,7 +1646,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await type(instance, stdin, 'nope');
       await press(instance, stdin, KEYS.enter); // commit the field
       await press(instance, stdin, KEYS.ctrlN); // blocked
-      const count = (frame: string) => frame.split('svc-a : branche introuvable').length - 1;
+      const count = (frame: string) => frame.split('svc-a : branch not found').length - 1;
       expect(count(lastWizardFrame(stdout))).toBe(2); // the detail line + the wizard's message
       await press(instance, stdin, KEYS.enter); // edit again
       await press(instance, stdin, KEYS.backspace); // 'nop': still not found
@@ -1659,7 +1659,7 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('a list landing clears a stale "chargement des branches en cours" message', async () => {
+  it('a list landing clears a stale "branches are loading" message', async () => {
     let release: (() => void) | undefined;
     const { store } = step3Store({
       listCreateBranches: () =>
@@ -1671,13 +1671,13 @@ describe('EdtsZone real-keypress interactions', () => {
     try {
       await reachStep3(instance, stdin, 'demo', 1);
       await press(instance, stdin, KEYS.ctrlN); // blocked while loading
-      const count = (frame: string) => frame.split('chargement des branches en cours').length - 1;
+      const count = (frame: string) => frame.split('branches are loading').length - 1;
       expect(count(lastWizardFrame(stdout))).toBe(2); // the row's detail line + the wizard's message
       release?.();
       await settle(instance);
       const frame = lastWizardFrame(stdout);
       expect(count(frame)).toBe(0);
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ main +│ demo/);
+      expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ demo/);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1693,7 +1693,7 @@ describe('EdtsZone real-keypress interactions', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await reachStep3(instance, stdin, 'demo', 1);
-      expect(lastWizardFrame(stdout)).toContain('✖ svc-a : échec du chargement des branches : spawn git ENOENT');
+      expect(lastWizardFrame(stdout)).toContain('✖ svc-a : failed to load branches: spawn git ENOENT');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1712,9 +1712,9 @@ describe('EdtsZone real-keypress interactions', () => {
     try {
       await reachStep3(instance, stdin, 'demo', 1);
       let frame = lastWizardFrame(stdout);
-      expect(frame).toMatch(/svc-a +│ \[Créer \(Global\)\] │ ✖ échec du chargement/);
+      expect(frame).toMatch(/svc-a +│ \[Create \(Global\)\] │ ✖ failed to/);
       // The real cause, spelled out on the detail line under the table.
-      expect(frame).toContain('✖ svc-a : échec du chargement des branches : boom');
+      expect(frame).toContain('✖ svc-a : failed to load branches: boom');
       await press(instance, stdin, KEYS.ctrlN);
       frame = lastWizardFrame(stdout);
       expect(frame).toContain('▶ 3. Branches ◀');
@@ -1724,7 +1724,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.ctrlN); // Step 3 again: retried
       await settle(instance);
       expect(attempts).toBe(2);
-      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Créer \(Global\)\] │ main +│ demo/);
+      expect(lastWizardFrame(stdout)).toMatch(/svc-a +│ \[Create \(Global\)\] │ main +│ demo/);
       await press(instance, stdin, KEYS.ctrlN);
       await press(instance, stdin, KEYS.enter);
       expect(createCalls).toHaveLength(1);
@@ -1734,7 +1734,7 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
-  it('a name taken by a loaded EDT (trimmed) shows "déjà pris" live and blocks Step 1; a case variant stays available', async () => {
+  it('a name taken by a loaded EDT (trimmed) shows "already taken" live and blocks Step 1; a case variant stays available', async () => {
     const store = createAppStore();
     let createCalls = 0;
     store.setState({
@@ -1755,10 +1755,10 @@ describe('EdtsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, ' demo ');
-      expect(stdout.output).toContain('✖ déjà pris');
+      expect(stdout.output).toContain('✖ already taken');
       await press(instance, stdin, KEYS.enter); // blocked
       await press(instance, stdin, KEYS.ctrlRight); // blocked too
-      expect(stdout.output).toContain('Ce nom est déjà pris par un autre EDT');
+      expect(stdout.output).toContain('This name is already taken by another EDT');
       expect(stdout.output).not.toContain('▶ 2. Services ◀');
 
       // Rewrite it as "Demo": case-sensitive, so available — checked on every keystroke.
@@ -1767,7 +1767,7 @@ describe('EdtsZone real-keypress interactions', () => {
       }
       const beforeAvailable = stdout.output.length;
       await type(instance, stdin, 'Demo');
-      expect(stdout.output.slice(beforeAvailable)).toContain('✔ disponible');
+      expect(stdout.output.slice(beforeAvailable)).toContain('✔ available');
       await press(instance, stdin, KEYS.enter);
       expect(stdout.output).toContain('▶ 2. Services ◀');
       expect(createCalls).toBe(0);
@@ -1809,7 +1809,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.enter); // submit attempt
 
       expect(createCalls).toBe(0);
-      expect(stdout.output).toContain('Ce nom est déjà pris par un autre EDT');
+      expect(stdout.output).toContain('This name is already taken by another EDT');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1832,7 +1832,7 @@ describe('EdtsZone real-keypress interactions', () => {
       await instance.waitUntilRenderFlush();
       await type(instance, stdin, '   ');
       await press(instance, stdin, KEYS.enter);
-      expect(stdout.output).toContain('Le nom ne doit pas être vide');
+      expect(stdout.output).toContain('The name must not be empty');
       expect(stdout.output).not.toContain('▶ 2. Services ◀');
     } finally {
       instance.unmount();
@@ -3179,7 +3179,7 @@ describe('EdtsZone real-keypress interactions', () => {
       expect(stdout.output).not.toContain('[Enter] try a different branch');
       // The heading says failures happened, and the entry goes to the NEW active EDT's log as
       // `failed`, carrying the failure.
-      expect(stdout.output).toContain('effectuée avec des échecs');
+      expect(stdout.output).toContain('finished with failures');
       await settle(instance);
       expect(logged).toEqual([{ ulid: 'target-ulid', outcome: 'failed', detail: expect.stringContaining('svc-a: Branch "other" is already registered') }]);
     } finally {
@@ -3810,10 +3810,10 @@ describe('EdtsZone edt-create-from', () => {
 
       await press(instance, stdin, KEYS.enter); // the active root, first in the pool
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain("Depuis l'EDT : feat-a");
+      expect(frame).toContain("From EDT: feat-a");
       // The topic is never derived from the root: Step 1 starts empty, so Enter is blocked.
       await press(instance, stdin, KEYS.enter);
-      expect(lastWizardFrame(stdout)).toContain('Le nom ne doit pas être vide');
+      expect(lastWizardFrame(stdout)).toContain('The name must not be empty');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -3857,7 +3857,7 @@ describe('EdtsZone edt-create-from', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      expect(lastWizardFrame(stdout)).toContain("Depuis l'EDT : feat-a");
+      expect(lastWizardFrame(stdout)).toContain("From EDT: feat-a");
 
       await type(instance, stdin, 'next');
       await press(instance, stdin, KEYS.enter); // Step 1 -> Step 2
@@ -3871,12 +3871,12 @@ describe('EdtsZone edt-create-from', () => {
       await settle(instance);
 
       const step3 = lastWizardFrame(stdout);
-      expect(step3).toContain('[Créer (Perso)]');
+      expect(step3).toContain('[Create (Custom)]');
       expect(step3).toContain('feat/a-api');
-      expect(step3).toContain('[Créer (Global)]');
+      expect(step3).toContain('[Create (Global)]');
 
       await press(instance, stdin, KEYS.ctrlN); // Step 3 -> Step 4
-      await press(instance, stdin, KEYS.space); // "Créer sans basculer"
+      await press(instance, stdin, KEYS.space); // "Create without switching"
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
 
@@ -3962,7 +3962,7 @@ describe('EdtsZone edt-create-from', () => {
       await type(instance, stdin, '-2');
       await press(instance, stdin, KEYS.enter); // leave edit mode
       await press(instance, stdin, KEYS.ctrlN); // Step 3 -> Step 4
-      await press(instance, stdin, KEYS.space); // "Créer sans basculer"
+      await press(instance, stdin, KEYS.space); // "Create without switching"
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
       expect(createCalls[0]?.memberPlans).toEqual({ '/repos/a': { kind: 'create', base: 'feat/a-api', name: 'next-2' } });
@@ -4045,9 +4045,9 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     try {
       await reachStep4(instance, stdin);
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('Définir cet EDT comme espace actif immédiatement');
-      expect(frame).toContain('Oui (verrouillé)');
-      expect(frame).toContain("pas d'EDT sortant");
+      expect(frame).toContain('Make this EDT the active workspace immediately');
+      expect(frame).toContain('Yes (locked)');
+      expect(frame).toContain("no outgoing EDT");
 
       await press(instance, stdin, KEYS.space); // the radio is locked: inert
       await press(instance, stdin, KEYS.enter);
@@ -4058,7 +4058,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       expect(switchCalls).toHaveLength(0);
       expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', actionType: 'create', outcome: 'success' })]);
       expect(logged[0]?.detail).toContain('activated');
-      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).not.toContain('Activation…');
+      expect(stdout.output.slice(stdout.output.lastIndexOf(WIZARD_TITLE))).not.toContain('Activating…');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -4081,17 +4081,17 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       await settle(instance);
 
       let frame = lastWizardFrame(stdout);
-      expect(frame).toContain('ACTIVATION EN PAUSE');
-      expect(frame).toContain('svc-a (2 fichier(s))');
+      expect(frame).toContain('ACTIVATION PAUSED');
+      expect(frame).toContain('svc-a (2 file(s))');
       expect(frame).toContain('a.ts');
       expect(frame).toContain('lib/b.ts');
-      expect(frame).toContain('[R] Réessayer');
+      expect(frame).toContain('[R] retry');
       expect(logged).toHaveLength(0);
 
       await press(instance, stdin, 'r'); // still blocked -> panel refreshed
       await settle(instance);
       frame = lastWizardFrame(stdout);
-      expect(frame).toContain('ACTIVATION EN PAUSE');
+      expect(frame).toContain('ACTIVATION PAUSED');
 
       await press(instance, stdin, 'R'); // fixed by hand -> proceeds
       await settle(instance);
@@ -4105,7 +4105,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 
-  it('first EDT, overwrite: E opens the confirmation listing every file; Enter is Retour; Ctrl+E activates with exactly those paths', async () => {
+  it('first EDT, overwrite: E opens the confirmation listing every file; Enter is back; Ctrl+E activates with exactly those paths', async () => {
     const { store, activateCalls, logged } = step4Store({
       existing: false,
       activations: [
@@ -4130,13 +4130,13 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
 
       await press(instance, stdin, 'e');
       let frame = lastWizardFrame(stdout);
-      expect(frame).toContain("CONFIRMER L'ÉCRASEMENT");
+      expect(frame).toContain("CONFIRM OVERWRITE");
       expect(frame).toContain('lib/b.ts');
-      expect(frame).toContain('[Ctrl+E] Écraser définitivement');
+      expect(frame).toContain('[Ctrl+E] overwrite for good');
 
-      await press(instance, stdin, KEYS.enter); // Retour
+      await press(instance, stdin, KEYS.enter); // back
       frame = lastWizardFrame(stdout);
-      expect(frame).toContain('ACTIVATION EN PAUSE');
+      expect(frame).toContain('ACTIVATION PAUSED');
       expect(activateCalls).toHaveLength(1);
 
       await press(instance, stdin, 'e');
@@ -4165,13 +4165,13 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       await settle(instance);
 
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('EDT créé mais non actif');
+      expect(frame).toContain('EDT created but not active');
       expect(activateCalls).toHaveLength(1);
       expect(store.getState().quitRequested).toBe(false);
       expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', outcome: 'success' })]);
       expect(logged[0]?.detail).toContain('not activated');
 
-      expect(frame).toContain('Activez-le plus tard via :edt-switch feat');
+      expect(frame).toContain('Activate it later with :edt-switch feat');
 
       const beforeClose = stdout.output.length;
       await press(instance, stdin, KEYS.enter);
@@ -4194,12 +4194,12 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     try {
       await reachStep4(instance, stdin);
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('(•) Basculer immédiatement sur ce nouvel EDT');
-      expect(frame).toContain("( ) Créer sans basculer (rester sur l'EDT courant)");
-      expect(frame).toContain('automatiquement (stash)');
-      expect(frame).toContain('adopter');
+      expect(frame).toContain('(•) Switch to this new EDT immediately');
+      expect(frame).toContain("( ) Create without switching (stay on the current EDT)");
+      expect(frame).toContain('automatically (stash)');
+      expect(frame).toContain('adopt it into the outgoing EDT');
       expect(frame).toContain('svc-b → development');
-      expect(frame).toContain('branches configurées');
+      expect(frame).toContain('configured branches');
 
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
@@ -4257,7 +4257,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       await settle(instance);
       await settle(instance);
 
-      expect(stdout.output).toContain('SERVICES CONCERNÉS');
+      expect(stdout.output).toContain('AFFECTED SERVICES');
       expect(stdout.output.slice(stdout.output.lastIndexOf('SWITCH EDT'))).toContain('svc-b');
 
       await pressEscape(instance, stdin); // cancel the whole switch
@@ -4270,15 +4270,15 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 
-  it('later EDT, stay: Space selects "Créer sans basculer"; Enter creates only, active unchanged, logged to the new EDT', async () => {
+  it('later EDT, stay: Space selects "Create without switching"; Enter creates only, active unchanged, logged to the new EDT', async () => {
     const { store, createCalls, activateCalls, switchCalls, logged } = step4Store({ existing: true });
     const { instance, stdout, stdin } = await mountWizard(store, true);
     try {
       await reachStep4(instance, stdin);
       await press(instance, stdin, KEYS.space);
-      expect(lastWizardFrame(stdout)).toContain("(•) Créer sans basculer (rester sur l'EDT courant)");
+      expect(lastWizardFrame(stdout)).toContain("(•) Create without switching (stay on the current EDT)");
       await press(instance, stdin, KEYS.up); // ↑ back to switch
-      expect(lastWizardFrame(stdout)).toContain('(•) Basculer immédiatement sur ce nouvel EDT');
+      expect(lastWizardFrame(stdout)).toContain('(•) Switch to this new EDT immediately');
       await press(instance, stdin, KEYS.down); // ↓ stay
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
@@ -4294,7 +4294,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 
-  it('partial create: failed rows + "non activé", never switched, logged failed to the new EDT', async () => {
+  it('partial create: failed rows + "not activated", never switched, logged failed to the new EDT', async () => {
     const { store, switchCalls, activateCalls, logged } = step4Store({
       existing: true,
       createResult: {
@@ -4309,7 +4309,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       await settle(instance);
 
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('EDT créé mais non activé');
+      expect(frame).toContain('EDT created but not activated');
       expect(frame).toContain('boom');
       expect(switchCalls).toHaveLength(0);
       expect(activateCalls).toHaveLength(0);
@@ -4351,7 +4351,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     });
   }
 
-  it('activation error: "non activé" with the message and the per-repo rows, logged failed once to the new EDT; Enter closes', async () => {
+  it('activation error: "not activated" with the message and the per-repo rows, logged failed once to the new EDT; Enter closes', async () => {
     const { store, logged } = step4Store({
       existing: false,
       activations: [
@@ -4372,11 +4372,11 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       await settle(instance);
 
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('EDT créé mais non activé');
+      expect(frame).toContain('EDT created but not activated');
       expect(frame).toContain('disk full');
       expect(frame).toContain('checkout boom');
-      expect(frame).toContain('basculé sur sa branche cible');
-      expect(frame).toContain('Activez-le plus tard via :edt-switch feat');
+      expect(frame).toContain('switched to its target branch');
+      expect(frame).toContain('Activate it later with :edt-switch feat');
       expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', actionType: 'create', outcome: 'failed' })]);
 
       await expectClosedAfter(instance, stdout, () => press(instance, stdin, KEYS.enter));
@@ -4387,14 +4387,14 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 
-  it('activation error: Esc closes the "non activé" state too', async () => {
+  it('activation error: Esc closes the "not activated" state too', async () => {
     const { store } = step4Store({ existing: false, activations: [{ ok: false, error: { code: 'state-write-error', message: 'disk full' } }] });
     const { instance, stdout, stdin } = await mountWizard(store, false);
     try {
       await reachStep4(instance, stdin);
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
-      expect(lastWizardFrame(stdout)).toContain('EDT créé mais non activé');
+      expect(lastWizardFrame(stdout)).toContain('EDT created but not activated');
 
       await expectClosedAfter(instance, stdout, () => pressEscape(instance, stdin));
       expect(store.getState().quitRequested).toBe(false);
@@ -4404,7 +4404,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 
-  it('activation with a failed row: stays open on the row and the "créé et activé, avec des échecs" footer; Enter closes; logged failed', async () => {
+  it('activation with a failed row: stays open on the row and the "created and activated, with per-service failures" footer; Enter closes; logged failed', async () => {
     const { store, logged } = step4Store({
       existing: false,
       activations: [
@@ -4428,7 +4428,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
 
       const frame = lastWizardFrame(stdout);
       expect(frame).toContain('checkout boom');
-      expect(frame).toContain('EDT créé et activé, avec des échecs');
+      expect(frame).toContain('EDT created and activated, with per-service failures');
       expect(logged).toEqual([expect.objectContaining({ ulid: 'new-ulid', outcome: 'failed' })]);
 
       await expectClosedAfter(instance, stdout, () => press(instance, stdin, KEYS.enter));
@@ -4438,7 +4438,7 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
     }
   });
 
-  it('switch now, new EDT not found after reload: introuvable + non activé, no switch, logged failed to the new EDT; Enter closes', async () => {
+  it('switch now, new EDT not found after reload: not found + not activated, no switch, logged failed to the new EDT; Enter closes', async () => {
     const { store, switchCalls, logged } = step4Store({ existing: true });
     store.setState({ loadEdts: async () => {} }); // the reload never brings the new entry
     const { instance, stdout, stdin } = await mountWizard(store, true);
@@ -4448,8 +4448,8 @@ describe('EdtsZone create wizard Step 4 — activation & switch choice', () => {
       await settle(instance);
 
       const frame = lastWizardFrame(stdout);
-      expect(frame).toContain('introuvable');
-      expect(frame).toContain('EDT créé mais non activé');
+      expect(frame).toContain('could not be found');
+      expect(frame).toContain('EDT created but not activated');
       expect(switchCalls).toHaveLength(0);
       expect(logged.map((entry) => [entry.ulid, entry.outcome])).toEqual([
         ['new-ulid', 'success'],

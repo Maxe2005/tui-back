@@ -233,9 +233,9 @@ export type CreateFormFocus = FormFocus;
 
 // ---- Create wizard Step 3 ----------------------------------------------------------------
 // The "global strategy + per-service exceptions" state. A row override is exactly core's
-// MemberBranchPlan: `create` renders as [Créer (Perso)], `existing` as [Existante] — or
+// MemberBranchPlan: `create` renders as [Create (Custom)], `existing` as [Existante] — or
 // [Renommer] once `renameTo` is set. A path with no override follows Panel A's global rule
-// ([Créer (Global)]).
+// ([Create (Global)]).
 export type RowOverride = MemberBranchPlan;
 
 // One service's branch lists, loaded once per Step 3 entry (a failed load is retried on the
@@ -262,7 +262,7 @@ export type BranchStepState = {
   overrides: Readonly<Record<string, RowOverride>>;
   lists: Readonly<Record<string, BranchListState>>;
   box: OverrideBoxState | null;
-  // The root-EDT members already given their seeded [Créer (Perso)] override — each path is
+  // The root-EDT members already given their seeded [Create (Custom)] override — each path is
   // seeded at most once, so a row the developer reset to global stays global.
   seededPaths: readonly string[];
 };

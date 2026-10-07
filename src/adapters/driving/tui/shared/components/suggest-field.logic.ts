@@ -69,7 +69,7 @@ export function validateSuggestValue(value: string, suggestions: readonly string
   if (trimmed === '' || suggestions.includes(trimmed)) {
     return null;
   }
-  return `${noun} introuvable : "${trimmed}"`;
+  return `${noun} not found: "${trimmed}"`;
 }
 
 export interface SuggestWindow {

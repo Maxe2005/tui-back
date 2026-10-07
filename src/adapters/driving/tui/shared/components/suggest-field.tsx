@@ -67,7 +67,7 @@ export function SuggestField({
         {validity !== null ? <Text color={validity.glyphColor}> {validity.glyph}</Text> : null}
       </Text>
       {editing && status === 'loading' ? <Text color={colors['text-dim']}>Chargement…</Text> : null}
-      {editing && status === 'error' ? <Text color={colors.error}>Échec du chargement.</Text> : null}
+      {editing && status === 'error' ? <Text color={colors.error}>Failed to load.</Text> : null}
       {window !== null && window.hiddenAbove > 0 ? <Text color={colors['text-dim']}>  ↑ {window.hiddenAbove} de plus</Text> : null}
       {window?.items.map((item, index) => (
         <Text key={`${index}:${item}`} wrap="truncate-end" color={index === window.highlight ? colors.accent : colors.text}>
