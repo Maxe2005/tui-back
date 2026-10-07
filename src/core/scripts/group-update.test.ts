@@ -68,6 +68,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
@@ -246,8 +248,8 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
         ulid: 'edt-active',
         topic: 'demo',
         results: [
-          { service: 'svc-a', outcome: 'updated' },
-          { service: 'svc-b', outcome: 'updated' },
+          { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+          { service: 'svc-b', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'edt',
       },
@@ -313,7 +315,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
       data: {
         ulid: 'edt-shared',
         topic: 'shared',
-        results: [{ service: 'svc-a', outcome: 'updated' }],
+        results: [{ service: 'svc-a', outcome: 'updated', run: expect.anything() }],
         scope: 'edt',
       },
     });
@@ -913,8 +915,8 @@ describe('groupUpdate — interrupted-status clearing', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
     if (!result.ok) {
       const details = result.error.details as { results: unknown[] };
-      expect(details.results).toContainEqual({ service: 'svc-a', outcome: 'updated' });
-      expect(details.results).toContainEqual({ service: 'svc-b', outcome: 'updated' });
+      expect(details.results).toContainEqual({ service: 'svc-a', outcome: 'updated', run: expect.anything() });
+      expect(details.results).toContainEqual({ service: 'svc-b', outcome: 'updated', run: expect.anything() });
     }
   });
 });
@@ -1031,8 +1033,8 @@ describe('groupUpdate — all-repos scope', () => {
         ulid: 'all',
         topic: 'all-repos',
         results: [
-          { service: 'a', outcome: 'updated' },
-          { service: 'b', outcome: 'updated' },
+          { service: 'a', outcome: 'updated', run: expect.anything() },
+          { service: 'b', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'all',
       },
@@ -1805,7 +1807,7 @@ describe('groupUpdate — pre-run configuration', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { ulid: 'edt-active', topic: 'demo', results: [{ service: 'svc-a', outcome: 'updated' }], scope: 'edt' },
+      data: { ulid: 'edt-active', topic: 'demo', results: [{ service: 'svc-a', outcome: 'updated', run: expect.anything() }], scope: 'edt' },
     });
     // The deselected service never reached git, migration, or container at all.
     for (const fn of [git.currentBranch, git.fetch, git.pull, git.mergeBranch, git.assertAllowedBranch]) {
@@ -2628,5 +2630,125 @@ describe('groupUpdate — live per-service phase tracking', () => {
         results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
       },
     });
+  });
+});
+
+describe('groupUpdate — per-service run detail', () => {
+  const headSequence = (before: string, after: string) => {
+    const fn = vi.fn();
+    fn.mockResolvedValueOnce(ok(before)).mockResolvedValue(ok(after));
+    return fn as unknown as GitPort['headRevision'];
+  };
+  const rowOf = (result: Awaited<ReturnType<typeof groupUpdate>>, service: string) =>
+    result.ok ? result.data.results.find((row) => row.service === service) : undefined;
+
+  it('reports up-to-date with no diffstat when HEAD is unchanged', async () => {
+    const git = fakeGit();
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')?.run?.merge).toEqual({ kind: 'up-to-date' });
+    expect(calls(git.diffStat)).toHaveLength(0);
+  });
+
+  it('reports the advanced diffstat between the before and after HEAD', async () => {
+    const git = fakeGit({
+      headRevision: headSequence('aaa', 'bbb'),
+      diffStat: vi.fn(async () => ok({ files: 3, insertions: 10, deletions: 4 })),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')?.run?.merge).toEqual({ kind: 'advanced', files: 3, insertions: 10, deletions: 4 });
+    expect(calls(git.diffStat)[0]).toEqual(['/repo/a', 'aaa', 'bbb']);
+  });
+
+  it('keeps advanced without counts when the diff read fails, never failing the row', async () => {
+    const git = fakeGit({
+      headRevision: headSequence('aaa', 'bbb'),
+      diffStat: vi.fn(async () => err('git-diff-error', 'boom')),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')).toMatchObject({ outcome: 'updated', run: { merge: { kind: 'advanced' } } });
+    expect(rowOf(result, 'svc-a')?.run?.merge).toEqual({ kind: 'advanced' });
+  });
+
+  it('omits merge detail when HEAD is unreadable, without failing the row', async () => {
+    const git = fakeGit({ headRevision: vi.fn(async () => err('git-rev-parse-error', 'no head')) });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')).toMatchObject({ outcome: 'updated' });
+    expect(rowOf(result, 'svc-a')?.run?.merge).toBeUndefined();
+  });
+
+  it('reports a ran migration with its command and the last three non-empty output lines', async () => {
+    const migration = fakeMigration({
+      run: vi.fn(async () => ok({ output: 'one\n\ntwo\nthree\nfour\n' })),
+    });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    expect(rowOf(result, 'svc-a')?.run?.migrations).toEqual({
+      kind: 'ran',
+      command: 'npm run migration:run',
+      outputExcerpt: 'two\nthree\nfour',
+    });
+  });
+
+  it('caps the output excerpt at 200 characters', async () => {
+    const migration = fakeMigration({ run: vi.fn(async () => ok({ output: 'x'.repeat(500) })) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    const migrations = rowOf(result, 'svc-a')?.run?.migrations;
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.length).toBe(200);
+  });
+
+  it('keeps the tail of a long excerpt and strips ANSI escapes', async () => {
+    const output = `${'x'.repeat(300)}\u001b[31mDONE\u001b[0m`;
+    const migration = fakeMigration({ run: vi.fn(async () => ok({ output })) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    const migrations = rowOf(result, 'svc-a')?.run?.migrations;
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.endsWith('xxDONE')).toBe(true);
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.includes('\u001b')).toBe(false);
+  });
+
+  it('reports migrations none when disabled or undeclared', async () => {
+    const disabled = await groupUpdate(makeParams({ runMigrations: false }));
+    const manifest = fakeManifest({
+      load: vi.fn(async () => ok({ ...manifestFor('svc-x'), migrationCommand: '  ' })),
+    });
+    const blank = await groupUpdate(makeParams({ manifest }));
+
+    expect(rowOf(disabled, 'svc-a')?.run?.migrations).toEqual({ kind: 'none' });
+    expect(rowOf(blank, 'svc-a')?.run?.migrations).toEqual({ kind: 'none' });
+  });
+
+  it('keeps the run detail on a container-less skipped row', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async () => ok({ service: 'svc-x', migrationCommand: 'm', sharedBranch: 'development', modules: {} })),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest }));
+
+    expect(rowOf(result, 'svc-a')).toMatchObject({
+      outcome: 'skipped',
+      detail: { code: 'no-container' },
+      run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'ran', command: 'm' } },
+    });
+  });
+
+  it('carries no run detail on a failed migration row', async () => {
+    const migration = fakeMigration({ run: vi.fn(async () => err('migration-failed', 'nope')) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    expect(rowOf(result, 'svc-a')?.outcome).toBe('failed');
+    expect(rowOf(result, 'svc-a')?.run).toBeUndefined();
   });
 });

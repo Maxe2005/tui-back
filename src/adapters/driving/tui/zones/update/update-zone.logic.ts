@@ -108,12 +108,37 @@ export function formatServiceOutcomeDetail(lastOutcome: GroupUpdateRepoResult | 
   if (lastOutcome === undefined) {
     return 'idle';
   }
+  const runLines = formatRunDetailLines(lastOutcome.run);
   if (lastOutcome.outcome === 'updated') {
-    return 'updated';
+    return ['updated', ...runLines].join('\n');
   }
   const code = lastOutcome.detail?.code ?? lastOutcome.outcome;
   const message = lastOutcome.detail?.message !== undefined ? `: ${lastOutcome.detail.message}` : '';
-  return `${lastOutcome.outcome} (${code})${message}`;
+  return [`${lastOutcome.outcome} (${code})${message}`, ...runLines].join('\n');
+}
+
+// The merge and migrate lines of the last run; either is absent when core could not read it.
+// The migration excerpt is collapsed to one line for the pane.
+function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
+  const lines: string[] = [];
+  const merge = run?.merge;
+  if (merge?.kind === 'up-to-date') {
+    lines.push('merge: already up to date');
+  } else if (merge?.kind === 'advanced') {
+    lines.push(
+      merge.files === undefined || merge.insertions === undefined || merge.deletions === undefined
+        ? 'merge: updated (diff unavailable)'
+        : `merge: +${merge.insertions}/\u2212${merge.deletions} lines, ${merge.files} ${merge.files === 1 ? 'file' : 'files'}`,
+    );
+  }
+  const migrations = run?.migrations;
+  if (migrations?.kind === 'none') {
+    lines.push('migrations: none');
+  } else if (migrations?.kind === 'ran') {
+    const excerpt = migrations.outputExcerpt.replace(/\s*\r?\n\s*/g, ' \u21b5 ').trim();
+    lines.push(`migrations: ran (${migrations.command})${excerpt !== '' ? ` \u2014 ${excerpt}` : ''}`);
+  }
+  return lines;
 }
 
 // One entry of the live per-service issue log. `kind` is the blocker kind

@@ -653,6 +653,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 }
               }
               return {
+                // A run finishing while another zone is active badges the Update tab; the
+                // badge clears when the Update zone is next visited.
+                ...(state.activeZone !== 'update'
+                  ? { zoneEvents: { ...state.zoneEvents, update: state.zoneEvents.update + 1 } }
+                  : {}),
                 updateStatus: 'done',
                 updateResults: result.data.results,
                 updateNote: result.data.note ?? null,
