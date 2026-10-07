@@ -860,6 +860,55 @@ describe('formatServiceOutcomeDetail', () => {
   });
 });
 
+describe('formatServiceOutcomeDetail — run detail', () => {
+  it('renders already up to date and no migrations', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'none' } },
+      }),
+    ).toBe('updated\nmerge: already up to date\nmigrations: none');
+  });
+
+  it('renders the diffstat for an advancing merge and the collapsed migration excerpt', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: {
+          merge: { kind: 'advanced', files: 3, insertions: 10, deletions: 4 },
+          migrations: { kind: 'ran', command: 'npm run m', outputExcerpt: 'a\nb' },
+        },
+      }),
+    ).toBe('updated\nmerge: +10/\u22124 lines, 3 files\nmigrations: ran (npm run m) \u2014 a \u21b5 b');
+  });
+
+  it('singularizes one file and omits the dash for an empty excerpt', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'updated',
+        run: {
+          merge: { kind: 'advanced', files: 1, insertions: 1, deletions: 0 },
+          migrations: { kind: 'ran', command: 'm', outputExcerpt: '' },
+        },
+      }),
+    ).toBe('updated\nmerge: +1/\u22120 lines, 1 file\nmigrations: ran (m)');
+  });
+
+  it('flags an unavailable diff and keeps run detail on a container-less skipped row', () => {
+    expect(
+      formatServiceOutcomeDetail({
+        service: 'svc-a',
+        outcome: 'skipped',
+        detail: { code: 'no-container', message: 'no container' },
+        run: { merge: { kind: 'advanced' } },
+      }),
+    ).toBe('skipped (no-container): no container\nmerge: updated (diff unavailable)');
+  });
+});
+
 describe('formatLiveServiceDetail', () => {
   it('renders the current step with no issues', () => {
     expect(formatLiveServiceDetail('pulling', [])).toBe('step: pulling');
@@ -1138,6 +1187,8 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),

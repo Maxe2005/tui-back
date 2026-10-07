@@ -37,6 +37,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     discardPaths: (repoPath, paths) => discardPaths(repoPath, paths),
     discardAll: (repoPath) => discardAll(repoPath),
     diffNameOnly: (repoPath, from, to) => diffNameOnly(repoPath, from, to),
+    headRevision: (repoPath) => headRevision(repoPath),
+    diffStat: (repoPath, from, to) => diffStat(repoPath, from, to),
     discardPathsToHead: (repoPath, paths) => discardPathsToHead(repoPath, paths),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
@@ -551,6 +553,44 @@ export async function diffNameOnly(repoPath: string, from: string, to: string): 
     return err('git-diff-error', `git diff --name-only ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(String(result.stdout).split('\0').filter((path) => path !== ''));
+}
+
+export async function headRevision(repoPath: string): Promise<Result<string>> {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoPath, encoding: 'utf8' });
+  if (result.status !== 0) {
+    return err('git-rev-parse-error', `git rev-parse HEAD failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).trim());
+}
+
+// `--numstat -z` rows are `ins\tdel\tpath\0`; binary files report `-` for both counts and
+// count as a file with 0 lines. `--no-renames` keeps one row per path, no extra NUL fields.
+export async function diffStat(
+  repoPath: string,
+  from: string,
+  to: string,
+): Promise<Result<{ files: number; insertions: number; deletions: number }>> {
+  const result = spawnSync('git', ['diff', '--numstat', '--no-renames', '-z', from, to, '--'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+    maxBuffer: LARGE_OUTPUT_BUFFER,
+  });
+  if (result.status !== 0) {
+    return err('git-diff-error', `git diff --numstat ${from} ${to} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  let files = 0;
+  let insertions = 0;
+  let deletions = 0;
+  for (const row of String(result.stdout).split('\0')) {
+    if (row === '') {
+      continue;
+    }
+    const [ins, del] = row.split('\t');
+    files += 1;
+    insertions += Number(ins) || 0;
+    deletions += Number(del) || 0;
+  }
+  return ok({ files, insertions, deletions });
 }
 
 // 64 MiB: the stdout budget of the path-listing calls above/below (spawnSync's default is 1 MiB).

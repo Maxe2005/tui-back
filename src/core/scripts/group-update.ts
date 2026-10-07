@@ -73,10 +73,58 @@ async function validateSelectionBranches(
   return ok(undefined);
 }
 
+// What the pull/merge and migrate phases did for one service — best-effort, only on the rows
+// that completed them.
+export interface GroupUpdateRunDetail {
+  merge: { kind: 'up-to-date' } | { kind: 'advanced'; files?: number; insertions?: number; deletions?: number };
+  migrations: { kind: 'none' } | { kind: 'ran'; command: string; outputExcerpt: string };
+}
+
 export interface GroupUpdateRepoResult {
   service: string;
   outcome: 'updated' | 'skipped' | 'failed';
   detail?: { code: string; message: string };
+  run?: Partial<GroupUpdateRunDetail>;
+}
+
+const OUTPUT_EXCERPT_LINES = 3;
+const OUTPUT_EXCERPT_MAX_CHARS = 200;
+
+// Last non-empty lines of the trimmed output (ANSI escapes stripped), capped from the tail so
+// the final line — usually the informative one — survives a chatty migration.
+function outputExcerpt(output: string): string {
+  const lines = output
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '');
+  return lines.slice(-OUTPUT_EXCERPT_LINES).join('\n').slice(-OUTPUT_EXCERPT_MAX_CHARS);
+}
+
+// Compares HEAD before/after the pull/merge. A failing read on either side yields no detail;
+// a failing diff keeps `advanced` without counts. Never affects the row's outcome.
+async function readMergeDetail(
+  git: GitPort,
+  repoPath: string,
+  before: string | undefined,
+): Promise<GroupUpdateRunDetail['merge'] | undefined> {
+  if (before === undefined) {
+    return undefined;
+  }
+  const after = await git.headRevision(repoPath);
+  if (!after.ok) {
+    return undefined;
+  }
+  if (after.data === before) {
+    return { kind: 'up-to-date' };
+  }
+  const stat = await git.diffStat(repoPath, before, after.data);
+  if (!stat.ok) {
+    return { kind: 'advanced' };
+  }
+  return { kind: 'advanced', files: stat.data.files, insertions: stat.data.insertions, deletions: stat.data.deletions };
 }
 
 export interface GroupUpdateData {
@@ -746,6 +794,8 @@ async function updateWithLoadedManifest(
     }
   }
 
+  const headBefore = await git.headRevision(repoPath);
+
   if (current.data === mergeSource) {
     // The live current-step signal for the pull path.
     emitPhase(onPhase, service, 'pulling');
@@ -809,6 +859,13 @@ async function updateWithLoadedManifest(
     }
   }
 
+  const mergeDetail = await readMergeDetail(git, repoPath, headBefore.ok ? headBefore.data : undefined);
+  const runDetail: Partial<GroupUpdateRunDetail> = {};
+  if (mergeDetail !== undefined) {
+    runDetail.merge = mergeDetail;
+  }
+  runDetail.migrations = { kind: 'none' };
+
   // The migrate phase runs between the pull/merge and the restart: the manifest-declared
   // `migrationCommand` (skipped without error when absent or blank) runs with the repo as its
   // working directory, and only when the run-wide migrate toggle is on. A failing migration
@@ -825,6 +882,7 @@ async function updateWithLoadedManifest(
         message: `Repo ${repoPath} migration "${migrationCommand}" failed: ${migrated.error.message}`,
       });
     }
+    runDetail.migrations = { kind: 'ran', command: migrationCommand, outputExcerpt: outputExcerpt(migrated.data.output) };
   }
 
   // The restart phase, shared with the standalone single-service use-case via runRestartStep
@@ -837,6 +895,7 @@ async function updateWithLoadedManifest(
           service,
           outcome: 'skipped',
           detail: { code: 'no-container', message: `Repo ${repoPath} declares no container — restart skipped` },
+          run: runDetail,
         },
         cancelRun: false,
       };
@@ -844,7 +903,7 @@ async function updateWithLoadedManifest(
     return failedOutcome(service, restarted.error);
   }
 
-  return { row: { service, outcome: 'updated' }, cancelRun: false };
+  return { row: { service, outcome: 'updated', run: runDetail }, cancelRun: false };
 }
 
 // Aborts a conflicting merge (or pull) back to the pre-run HEAD and reports it as

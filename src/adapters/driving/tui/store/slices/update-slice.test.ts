@@ -65,6 +65,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
@@ -164,8 +166,8 @@ describe('update slice', () => {
     expect(store.getState().updateTopic).toBe('demo');
     expect(store.getState().updateUlid).toBe('edt-1');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().runInProgress).toBe(false);
   });
@@ -180,8 +182,8 @@ describe('update slice', () => {
     await store.getState().runGroupUpdate();
 
     expect(store.getState().lastServiceOutcomes).toEqual({
-      'svc-a': { service: 'svc-a', outcome: 'updated' },
-      'svc-b': { service: 'svc-b', outcome: 'updated' },
+      'svc-a': { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      'svc-b': { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     });
   });
 
@@ -211,20 +213,34 @@ describe('update slice', () => {
     // 'all' never reads edtRegistry, so this run is unaffected by the EDT override above.
     await store.getState().runGroupUpdate('all');
     expect(store.getState().lastServiceOutcomes).toEqual({
-      'svc-a': { service: 'svc-a', outcome: 'updated' },
-      'svc-b': { service: 'svc-b', outcome: 'updated' },
+      'svc-a': { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      'svc-b': { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     });
 
     // Second run: the default EDT-scoped run, targeting only svc-a (the sole member above).
     await store.getState().runGroupUpdate();
-    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated', run: expect.anything() }]);
 
     // svc-b sat outside this second run's scope entirely — its earlier outcome must survive
     // the merge, never be dropped by a wholesale replace.
     expect(store.getState().lastServiceOutcomes).toEqual({
-      'svc-a': { service: 'svc-a', outcome: 'updated' },
-      'svc-b': { service: 'svc-b', outcome: 'updated' },
+      'svc-a': { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      'svc-b': { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     });
+  });
+
+  it('a run ending off the Update zone badges its tab, cleared on visiting it', async () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().setActiveZone('dashboard');
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().zoneEvents.update).toBe(1);
+    store.getState().setActiveZone('update');
+    expect(store.getState().zoneEvents.update).toBe(0);
+
+    await store.getState().runGroupUpdate();
+    expect(store.getState().zoneEvents.update).toBe(0);
   });
 
   it('runGroupUpdate threads the scope: runGroupUpdate(all) lands done on the all-repos outcome', async () => {
@@ -237,8 +253,8 @@ describe('update slice', () => {
     expect(store.getState().updateUlid).toBe('all');
     expect(store.getState().updateScope).toBe('all');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().runInProgress).toBe(false);
   });
@@ -495,7 +511,7 @@ describe('update slice', () => {
     expect(store.getState().updateBlocker).toBeNull();
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().runInProgress).toBe(false);
   });
@@ -971,7 +987,7 @@ describe('update slice: pre-run configuration screen', () => {
     // The screen closed and the run landed with only the selected service reported.
     expect(store.getState().updateConfig).toBeNull();
     expect(store.getState().updateStatus).toBe('done');
-    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated', run: expect.anything() }]);
     expect(deps.container!.restart).toHaveBeenCalledTimes(1);
     expect(deps.container!.restart).toHaveBeenCalledWith('ctr-a');
   });
@@ -988,8 +1004,8 @@ describe('update slice: pre-run configuration screen', () => {
 
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(deps.migration!.run).not.toHaveBeenCalled();
     expect(deps.container!.restart).toHaveBeenCalledTimes(2);
@@ -1594,8 +1610,8 @@ describe('live per-service run tracking', () => {
 
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     // Core resumed past the blocker (the next phase fired), so the entry flipped.
     expect(store.getState().liveServiceIssues).toEqual({
@@ -1632,7 +1648,7 @@ describe('live per-service run tracking', () => {
 
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree', message: expect.any(String) } },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     // No further phase ever fired for the cancelled repo — the entry stays unresolved.
     expect(store.getState().liveServiceIssues).toEqual({
@@ -1653,7 +1669,7 @@ describe('live per-service run tracking', () => {
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'failed', detail: { code: 'migration-failed', message: expect.any(String) } },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().liveServicePhase).toEqual({});
     expect(store.getState().liveServiceIssues['svc-a']).toHaveLength(1);
