@@ -359,17 +359,18 @@ describe('filterVisibleLines', () => {
 });
 
 describe('isClearAllLogsKey / isWrapAllLogsKey', () => {
-  it('is true for Ctrl+C / Ctrl+W, case-insensitively', () => {
+  it('is true for Ctrl+C (case-insensitively) and for Shift+W', () => {
     expect(isClearAllLogsKey('c', { ctrl: true })).toBe(true);
     expect(isClearAllLogsKey('C', { ctrl: true })).toBe(true);
-    expect(isWrapAllLogsKey('w', { ctrl: true })).toBe(true);
-    expect(isWrapAllLogsKey('W', { ctrl: true })).toBe(true);
+    expect(isWrapAllLogsKey('W', {})).toBe(true);
   });
 
-  it('is false without ctrl, or for a different letter', () => {
+  it('is false for the wrong modifier or a different letter; Ctrl+W is never wrap-all', () => {
     expect(isClearAllLogsKey('c', {})).toBe(false);
     expect(isClearAllLogsKey('w', { ctrl: true })).toBe(false);
     expect(isWrapAllLogsKey('w', {})).toBe(false);
+    expect(isWrapAllLogsKey('w', { ctrl: true })).toBe(false);
+    expect(isWrapAllLogsKey('W', { ctrl: true })).toBe(false);
     expect(isWrapAllLogsKey('c', { ctrl: true })).toBe(false);
   });
 });

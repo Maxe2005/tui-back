@@ -44,7 +44,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'Ctrl+W',
     description:
-      'Keyboard resize-mode on the active splitter (arrows resize, Enter/Esc exits)',
+      'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, arrows resize, Enter/Esc exits)',
   },
   {
     keys: '/',
@@ -155,5 +155,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'Esc (switch resolution)',
     description: 'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
+  },
+  // Scoped to the Logs zone's pane grid.
+  {
+    keys: 'W (Logs)',
+    description: 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)',
   },
 ];
