@@ -9,7 +9,7 @@ import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '..
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { ManifestCarryPort } from '../ports/manifest-carry.js';
-import type { ManifestPort } from '../ports/manifest.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
@@ -251,12 +251,15 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   for (const repo of classified) {
     const resolution = preflight.data.get(repo.repoPath);
     const { targetMember } = repo;
-    const serviceName = targetMember?.service ?? (await manifestServiceName(manifest, repo.repoPath));
+    // A non-member's destination comes from its manifest as it sits on disk now, so it is read
+    // before the carry clears a dirty one.
+    const loaded = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
+    const serviceName = targetMember?.service ?? (loaded?.ok ? loaded.data.service : repo.repoPath);
     results.push(
       await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
         targetMember !== undefined
           ? switchMemberRepo(context, repo, targetMember, resolution)
-          : switchNonMemberRepo(context, repo, resolution),
+          : switchNonMemberRepo(context, repo, resolution, loaded!),
       ),
     );
   }
@@ -317,11 +320,6 @@ export function failed(service: string, error: ResultError): SwitchEdtRepoResult
 
 function stashMessage(ulid: string): string {
   return `tui-back:${ulid}`;
-}
-
-async function manifestServiceName(manifest: ManifestPort, repoPath: string): Promise<string> {
-  const loaded = await manifest.load(repoPath);
-  return loaded.ok ? loaded.data.service : repoPath;
 }
 
 function scopeOf(state: SwitchRepoState): SwitchDirtyScope {
@@ -828,11 +826,11 @@ async function switchNonMemberRepo(
   context: RepoSwitchContext,
   repo: ClassifiedSwitchRepo,
   resolution: DirtyResolution | undefined,
+  loaded: Result<Manifest>,
 ): Promise<SwitchEdtRepoResult> {
-  const { git, manifest } = context;
+  const { git } = context;
   const { repoPath } = repo;
 
-  const loaded = await manifest.load(repoPath);
   const service = loaded.ok ? loaded.data.service : repoPath;
   if (!loaded.ok) {
     return failed(service, loaded.error);
