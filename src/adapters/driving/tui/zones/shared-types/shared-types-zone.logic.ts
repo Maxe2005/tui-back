@@ -18,6 +18,9 @@ export type FormState = {
   version: TextInputState;
   // 0 = version field, 1..n = consumers, n+1..n+3 = options.
   row: number;
+  // The version field only captures keys once Enter entered it; merely landing on row 0 just
+  // highlights it, so the left/right tab navigation keeps working.
+  editing: boolean;
   // Consumers the developer unchecked — the default is every consumer checked.
   unchecked: ReadonlySet<string>;
   options: PropagateOptions;
@@ -27,6 +30,7 @@ export function initialFormState(): FormState {
   return {
     version: { value: VERSION_PREFIX, cursor: VERSION_PREFIX.length },
     row: 0,
+    editing: false,
     unchecked: new Set(),
     options: { install: true, cleanRestart: false, commit: true },
   };
@@ -64,20 +68,24 @@ export function canRun(state: FormState, repoPaths: readonly string[]): boolean 
 
 export type FormStep = { state: FormState; run: boolean };
 
-// One keystroke on the form. On the version field every printable key edits the text; elsewhere
-// Up/Down move, Space toggles the row, Enter runs. Enter on the version field moves down.
+// One keystroke on the form. Enter on the highlighted version field starts editing: every
+// printable key edits the text until Enter/Esc/Up/Down leaves it. Elsewhere Up/Down move, Space
+// toggles the row, Enter runs.
 export function reduceForm(state: FormState, input: string, key: FormKey, repoPaths: readonly string[]): FormStep {
   const count = rowCount(repoPaths.length);
   const target = rowTarget(state.row, repoPaths.length);
   if (key.upArrow === true) {
-    return { state: { ...state, row: Math.max(0, state.row - 1) }, run: false };
+    return { state: { ...state, editing: false, row: Math.max(0, state.row - 1) }, run: false };
   }
   if (key.downArrow === true) {
-    return { state: { ...state, row: Math.min(count - 1, state.row + 1) }, run: false };
+    return { state: { ...state, editing: false, row: Math.min(count - 1, state.row + 1) }, run: false };
   }
   if (target.kind === 'version') {
-    if (key.return === true) {
-      return { state: { ...state, row: Math.min(count - 1, 1) }, run: false };
+    if (!state.editing) {
+      return { state: key.return === true ? { ...state, editing: true } : state, run: false };
+    }
+    if (key.return === true || key.escape === true) {
+      return { state: { ...state, editing: false }, run: false };
     }
     return { state: { ...state, version: nextTextInputValue(state.version, input, key) }, run: false };
   }

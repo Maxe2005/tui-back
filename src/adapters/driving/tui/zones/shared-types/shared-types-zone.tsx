@@ -80,10 +80,11 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
 
   // A new consumer list (or another EDT) starts the checklist afresh; the typed version stays.
   useEffect(() => {
-    setForm((previous) => ({ ...previous, unchecked: new Set(), row: 0 }));
+    setForm((previous) => ({ ...previous, unchecked: new Set(), row: 0, editing: false }));
     setResultRow(0);
   }, [repoPathsKey, activeEdt]);
-  const onVersionField = run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0;
+  const onVersionField = run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0 && form.editing;
+  const onVersionRow = run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0;
 
   // The version field types freely (letters included), and a quit confirmation owns the keys.
   useEffect(() => {
@@ -102,7 +103,9 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
           : run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0
             ? onVersionField
               ? 'shared-types-version'
-              : 'shared-types-form'
+              : onVersionRow
+                ? 'shared-types-version-row'
+                : 'shared-types-form'
             : null,
     useStore,
   );
@@ -211,7 +214,16 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     }
     return (
       <Box flexDirection="column">
-        <TextInputLine label="Version" value={form.version.value} cursor={form.version.cursor} focused={form.row === 0} />
+        <Box>
+          <Text color={form.row === 0 ? colors.accent : colors.text}>{form.row === 0 ? '> ' : '  '}</Text>
+          <TextInputLine
+            label="Version"
+            value={form.version.value}
+            cursor={form.version.cursor}
+            focused={form.row === 0 && form.editing}
+            highlighted={form.row === 0}
+          />
+        </Box>
         <Text color={colors['text-dim']}>Services</Text>
         {consumers.map((consumer, index) => (
           <Box key={consumer.repoPath}>
