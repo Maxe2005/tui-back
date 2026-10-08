@@ -665,3 +665,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
   summary: Restore discoverability of the BranchPicker "other members' branches" sub-list outside the footer, and derive the Tab focus hint from each zone's focus-nav declaration.
   evidence: The in-pane `[↓] other members' branches` hint was removed and `footerHintsFor` now uses a static `Tab/Shift+Tab` entry guarded only by a mode assertion.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Harden `writeVersionLine` against nested decoy section keys, braces inside string values, duplicate keys and a dependency declared in both dependencies and devDependencies.
+  evidence: The targeted text edit locates the block with a regex plus the first `}`; valid but unusual package.json shapes (overrides nesting, duplicate keys) can make it edit the wrong block or fail.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Make `writeVersionLine` atomic (temp file plus rename) and reject a blank version.
+  evidence: `writeFile` writes in place, so a crash mid-write can truncate package.json.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Distinguish auth-related E404 (private scope, E401/E403) from "version not published" in `verifyPublished`, and guard against package names starting with `-`.
+  evidence: A misconfigured registry login would be reported as an unpublished version; manifest-controlled names reach the npm argv.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Constrain `packageJsonPath` to stay inside the repo (no absolute path, no `..`) when stories 4.2+ join it with a repo path.
+  evidence: The manifest schema currently accepts any non-blank string.
