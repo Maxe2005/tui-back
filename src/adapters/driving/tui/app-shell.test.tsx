@@ -97,9 +97,9 @@ describe('AppShell', () => {
       store.getState().setActiveZone(zone.id);
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
-      // EDTs, Update, Logs and Routes render real content (covered by their own zone tests);
+      // EDTs, Update, Logs, Routes and shared-types render real content (covered by their own zone tests);
       // every other zone is still the placeholder these two literal strings come from.
-      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes') {
+      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes' && zone.id !== 'shared-types') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
@@ -547,6 +547,24 @@ it('shouldQuit returns true for q', () => {
         saveRequestDraft: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         loadSavedRequest: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         deleteSavedRequest: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        sharedTypesConsumers: [],
+        sharedTypesIssues: [],
+        sharedTypesConsumersStatus: 'idle',
+        sharedTypesConsumersError: null,
+        sharedTypesRun: { status: 'idle', version: '', options: { install: false, cleanRestart: false, commit: false }, blocked: null, results: [], live: null },
+        sharedTypesSources: [],
+        sharedTypesSourceIssues: [],
+        sharedTypesSourcesStatus: 'idle',
+        sharedTypesSourcesError: null,
+        sharedTypesPublish: { status: 'idle', version: null, output: null, error: null, notice: null },
+        loadSharedTypesConsumers: async () => {},
+        runSharedTypesPropagation: async () => {},
+        retrySharedTypesService: async () => {},
+        resetSharedTypesRun: () => {},
+        loadSharedTypesSource: async () => {},
+        runSharedTypesPublish: async () => {},
+        retrySharedTypesPublish: async () => {},
+        resetSharedTypesPublish: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

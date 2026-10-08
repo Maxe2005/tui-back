@@ -6,6 +6,7 @@ import { BranchAutocompleteInput } from '../../shared/components/branch-autocomp
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 
@@ -16,7 +17,7 @@ const OPTION_LABEL: Record<ToggleOverride, (global: boolean) => string> = {
 };
 
 function Marker({ focused }: { focused: boolean }) {
-  return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
+  return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;
 }
 
 function ToggleLine({
@@ -37,7 +38,7 @@ function ToggleLine({
   return (
     <Box>
       <Marker focused={focused} />
-      <Text color={focused ? colors.accent : colors.text}>{label.padEnd(16)}</Text>
+      <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">{label.padEnd(16)}</Text>
       {declared ? (
         <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">
           {toggleOptions(declared)
@@ -107,9 +108,7 @@ export function UpdateServiceBox({
         </Text>
       </Box>
       {box.error !== null ? (
-        <Text color={colors.error} wrap="truncate-end">
-          ✖ {box.error}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${box.error}`}</ClampedParagraph>
       ) : null}
     </Box>
   );

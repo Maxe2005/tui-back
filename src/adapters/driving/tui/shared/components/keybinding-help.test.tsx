@@ -50,7 +50,7 @@ describe('keybinding-help scroll window (UX-DR15)', () => {
     expect(down.visible[0].keys).toBe('Home / End');
     expect(down.scrollOffset).toBe(1);
 
-    const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
+    const atBottom = resolveHelpWindow(KEYBINDINGS, KEYBINDINGS.length + 100, 10);
     expect(atBottom.visible.at(-1)?.keys).toBe(KEYBINDINGS.at(-1)?.keys);
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 

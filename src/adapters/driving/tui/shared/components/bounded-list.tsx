@@ -5,6 +5,7 @@
 // visible. Scroll state is never owned here — callers recompute it from useWindowSize().
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
+import { useRowBudget } from '../bounds/bounds-context.js';
 import { colors } from '../theme/theme.js';
 
 export function clampBoundedOffset(offset: number, maxOffset: number): number {
@@ -109,7 +110,10 @@ export type BoundedListProps<T> = {
   items: readonly T[];
   // Total row budget for this list, indicator lines included — callers derive it live from
   // useWindowSize() so it follows every resize.
-  maxVisibleRows: number;
+  maxVisibleRows?: number;
+  // Instead of a budget: the rows the caller uses around the list; the list takes the rest of
+  // its bounds region.
+  chromeRows?: number;
   // Renders one row; the returned element carries its own `key` (every existing call site
   // already keys its rows this way — e.g. `<Box key={service.path} ...>`).
   renderItem: (item: T, index: number) => ReactNode;
@@ -123,12 +127,14 @@ export type BoundedListProps<T> = {
 export function BoundedList<T>({
   items,
   maxVisibleRows,
+  chromeRows = 0,
   renderItem,
   cursorIndex,
   moreAboveLabel = 'more above',
   moreBelowLabel = 'more below',
 }: BoundedListProps<T>) {
-  const { visible, scrollOffset, hasMoreAbove, hasMoreBelow } = resolveBoundedVisibility(items, maxVisibleRows, cursorIndex);
+  const regionBudget = useRowBudget(chromeRows);
+  const { visible, scrollOffset, hasMoreAbove, hasMoreBelow } = resolveBoundedVisibility(items, maxVisibleRows ?? regionBudget, cursorIndex);
   return (
     <Box flexDirection="column">
       {hasMoreAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
@@ -136,4 +142,112 @@ export function BoundedList<T>({
       {hasMoreBelow ? <Text color={colors['text-dim']}>▼ {moreBelowLabel}</Text> : null}
     </Box>
   );
+}
+
+// Stream-fed collections (issue logs, retry lists) keep only the newest `max` entries; the
+// caller shows `hidden` as "N older hidden".
+export function capOlder<T>(items: readonly T[], max: number): { items: readonly T[]; hidden: number } {
+  const safeMax = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : 0;
+  if (items.length <= safeMax) return { items, hidden: 0 };
+  return { items: items.slice(items.length - safeMax), hidden: items.length - safeMax };
+}
+
+export type Block = { key: string; rows: number; node: ReactNode };
+
+// The heterogeneous variant: each block declares its own height, the window never exceeds
+// `budget` rows (indicators included) and keeps the cursor block visible. A cursor block taller
+// than the content budget is still shown, clipped to `contentRows`.
+export function resolveBlockWindow(
+  heights: readonly number[],
+  budget: number,
+  cursorIndex: number | undefined,
+): { start: number; end: number; hasAbove: boolean; hasBelow: boolean; contentRows: number } {
+  const total = heights.reduce((sum, h) => sum + Math.max(0, h), 0);
+  const safeBudget = Number.isFinite(budget) ? Math.max(0, Math.floor(budget)) : 0;
+  if (total <= safeBudget) return { start: 0, end: heights.length, hasAbove: false, hasBelow: false, contentRows: safeBudget };
+  if (safeBudget === 0) return { start: 0, end: 0, hasAbove: false, hasBelow: false, contentRows: 0 };
+  const cursor = cursorIndex === undefined ? 0 : Math.min(Math.max(0, cursorIndex), heights.length - 1);
+  const height = (index: number) => Math.max(0, heights[index] ?? 0);
+  const windowFor = (content: number) => {
+    let start = cursor;
+    let end = cursor + 1;
+    let used = Math.min(height(cursor), content);
+    if (height(cursor) <= content) {
+      let grew = true;
+      while (grew) {
+        grew = false;
+        if (end < heights.length && used + height(end) <= content) {
+          used += height(end);
+          end += 1;
+          grew = true;
+        }
+        if (cursorIndex !== undefined && start > 0 && used + height(start - 1) <= content) {
+          used += height(start - 1);
+          start -= 1;
+          grew = true;
+        }
+      }
+    }
+    return { start, end };
+  };
+  let hasAbove = false;
+  let hasBelow = false;
+  let result = { start: 0, end: 0 };
+  let contentRows = safeBudget;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    contentRows = Math.max(0, safeBudget - (hasAbove ? 1 : 0) - (hasBelow ? 1 : 0));
+    result = windowFor(contentRows);
+    const nextAbove = result.start > 0;
+    const nextBelow = result.end < heights.length;
+    if (nextAbove === hasAbove && nextBelow === hasBelow) break;
+    hasAbove = hasAbove || nextAbove;
+    hasBelow = hasBelow || nextBelow;
+  }
+  // A budget too small for both indicators and any content gives up the "above" one.
+  if (safeBudget <= 2 && hasAbove && hasBelow) {
+    hasAbove = false;
+    contentRows = Math.max(0, safeBudget - 1);
+    result = windowFor(contentRows);
+  }
+  return { ...result, hasAbove, hasBelow, contentRows };
+}
+
+export function BoundedBlocks({
+  blocks,
+  maxVisibleRows,
+  chromeRows = 0,
+  cursorIndex,
+  moreAboveLabel = 'more above',
+  moreBelowLabel = 'more below',
+}: {
+  blocks: readonly Block[];
+  maxVisibleRows?: number;
+  chromeRows?: number;
+  cursorIndex?: number;
+  moreAboveLabel?: string;
+  moreBelowLabel?: string;
+}) {
+  const regionBudget = useRowBudget(chromeRows);
+  const { start, end, hasAbove, hasBelow, contentRows } = resolveBlockWindow(
+    blocks.map((block) => block.rows),
+    maxVisibleRows ?? regionBudget,
+    cursorIndex,
+  );
+  return (
+    <Box flexDirection="column">
+      {hasAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
+      <Box flexDirection="column" maxHeight={contentRows} overflow="hidden">
+        {blocks.slice(start, end).map((block) => (
+          <Box key={block.key} flexDirection="column" flexShrink={0}>
+            {block.node}
+          </Box>
+        ))}
+      </Box>
+      {hasBelow ? <Text color={colors['text-dim']}>▼ {moreBelowLabel}</Text> : null}
+    </Box>
+  );
+}
+
+export function OlderHiddenLine({ hidden }: { hidden: number }) {
+  return hidden > 0 ? <Text color={colors['text-dim']}>{`… ${hidden} older hidden`}</Text> : null;
 }

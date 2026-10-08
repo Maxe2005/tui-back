@@ -10,6 +10,7 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ZonePlaceholder } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { LaunchBanner } from './launch-banner.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const EMPTY_REGISTRY_MESSAGE = 'No repos registered yet.';
 export const EMPTY_REGISTRY_HINT = 'Press [:] to scan a root path and register repos.';
@@ -38,11 +39,11 @@ export function DashboardZone({
       <LaunchBanner />
       {registryEmptyStatus === 'error' ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
-          <Text color={colors.error}>{REGISTRY_CHECK_ERROR_MESSAGE}</Text>
+          <ClampedParagraph color={colors.error} maxLines={4}>{`${REGISTRY_CHECK_ERROR_MESSAGE}`}</ClampedParagraph>
         </Box>
       ) : registryEmpty === true ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
-          <Text color={colors.text}>{EMPTY_REGISTRY_MESSAGE}</Text>
+          <ClampedParagraph color={colors.text} maxLines={4}>{`${EMPTY_REGISTRY_MESSAGE}`}</ClampedParagraph>
           <DimAnnotation text={EMPTY_REGISTRY_HINT} />
         </Box>
       ) : (

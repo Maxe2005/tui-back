@@ -95,6 +95,14 @@ export type GridLayout = {
   cellHeight: number;
 };
 
+// A pane needs its border, a title row and a line of content, and a few columns of text.
+const MIN_PANE_CELL_ROWS = 4;
+const MIN_PANE_CELL_COLUMNS = 12;
+
+export function maxVisiblePanes(width: number, height: number): number {
+  return Math.max(1, Math.floor(height / MIN_PANE_CELL_ROWS)) * Math.max(1, Math.floor(width / MIN_PANE_CELL_COLUMNS));
+}
+
 export function computeGridLayout(paneCount: number, width: number, height: number): GridLayout {
   if (paneCount <= 0) {
     return { rows: 0, cols: 0, cellWidth: 0, cellHeight: 0 };
@@ -163,6 +171,7 @@ export type LogsLayoutInput = {
 
 export type LogsLayout = {
   layout: GridLayout;
+  visiblePaneCount: number;
   paneVisibleLines: number;
   paneContentWidth: number;
   fullscreenVisibleLines: number;
@@ -182,7 +191,9 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   const listColumnWidth = Math.floor((input.windowColumns - SPLITTER_COLUMNS) * input.listRatio);
   const gridAvailableWidth = Math.max(input.windowColumns - SPLITTER_COLUMNS - listColumnWidth - spacing['pane-padding-x'], 20);
   const gridAvailableHeight = Math.max(input.windowRows - CHROME_ROWS, 5);
-  const layout = computeGridLayout(input.activePaneCount, gridAvailableWidth, gridAvailableHeight);
+  // More panes than the grid can show at a readable minimum cell are not laid out at all.
+  const visiblePaneCount = Math.min(input.activePaneCount, maxVisiblePanes(gridAvailableWidth, gridAvailableHeight));
+  const layout = computeGridLayout(visiblePaneCount, gridAvailableWidth, gridAvailableHeight);
   const paneVisibleLines = Math.max(layout.cellHeight - PANE_CHROME_ROWS, 1);
   const paneContentWidth = Math.max(layout.cellWidth - GRID_PANE_CHROME_COLS, 1);
   const fullscreenVisibleLines = Math.max(input.windowRows - CHROME_ROWS, 3);
@@ -218,6 +229,7 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
 
   return {
     layout,
+    visiblePaneCount,
     paneVisibleLines,
     paneContentWidth,
     fullscreenVisibleLines,

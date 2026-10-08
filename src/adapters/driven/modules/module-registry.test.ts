@@ -5,25 +5,32 @@ import { describe, expect, it } from 'vitest';
 import {
   isKnownModuleId,
   knownModuleIds,
+  moduleConfigSchemas,
   moduleRegistry,
   resolveModule,
   validateModules,
 } from './module-registry.js';
 
 describe('moduleRegistry (AD-5)', () => {
-  it('production registry carries the route-explorer module', () => {
-    expect(Object.keys(moduleRegistry)).toEqual(['route-explorer']);
+  it('production registry carries route-explorer and both shared-types modules', () => {
+    expect(Object.keys(moduleRegistry)).toEqual(['route-explorer', 'shared-types-source', 'shared-types-consumer']);
     expect(moduleRegistry['route-explorer']?.kind).toBe('route-explorer');
+    expect(moduleRegistry['shared-types-source']?.kind).toBe('shared-types');
+    expect(moduleRegistry['shared-types-consumer']?.kind).toBe('shared-types');
+  });
+
+  it('exposes a parameter schema for each shared-types module only', () => {
+    expect(Object.keys(moduleConfigSchemas)).toEqual(['shared-types-source', 'shared-types-consumer']);
   });
 
   it('knownModuleIds is derived from moduleRegistry', () => {
     expect(knownModuleIds).toBeInstanceOf(Set);
-    expect([...knownModuleIds]).toEqual(['route-explorer']);
+    expect([...knownModuleIds]).toEqual(['route-explorer', 'shared-types-source', 'shared-types-consumer']);
   });
 
-  it('isKnownModuleId recognizes route-explorer and rejects anything else', () => {
+  it('isKnownModuleId recognizes registered ids and rejects anything else', () => {
     expect(isKnownModuleId('route-explorer')).toBe(true);
-    expect(isKnownModuleId('shared-types-consumer')).toBe(false);
+    expect(isKnownModuleId('shared-types-consumer')).toBe(true);
     expect(isKnownModuleId('bogus-module')).toBe(false);
   });
 });
@@ -60,7 +67,7 @@ describe('resolveModule (D1)', () => {
   it('resolves the production route-explorer module with a working scanner', async () => {
     const module = resolveModule(moduleRegistry, 'route-explorer');
     expect(module).toBeDefined();
-    const scanned = await module?.scanner.scan('/repos/gateway', {});
+    const scanned = await (module?.kind === 'route-explorer' ? module.scanner : undefined)?.scan('/repos/gateway', {});
     expect(scanned).toMatchObject({ ok: false, error: { code: 'route-scan-failed' } });
   });
 

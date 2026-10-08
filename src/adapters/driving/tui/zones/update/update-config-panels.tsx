@@ -23,6 +23,7 @@ import {
 } from './update-config-panels.logic.js';
 import { UpdateServiceBox } from './update-service-box.js';
 import type { ServiceBoxContext, ServiceBoxState } from './update-service-box.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const PANELS_TITLE_EDT = 'CONFIGURE UPDATE';
 export const PANELS_TITLE_ALL = 'CONFIGURE ALL-REPOS UPDATE';
@@ -82,12 +83,15 @@ function GlobalRow({
 }) {
   return (
     <Box>
-      <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>
-      <Text color={focused ? colors.accent : colors.text}>{label.padEnd(LABEL_WIDTH)}</Text>
+      <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>
+      <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">{label.padEnd(LABEL_WIDTH)}</Text>
       {children}
     </Box>
   );
 }
+
+// The global panel is a fixed handful of settings.
+const MAX_GLOBAL_LINES = 8;
 
 function GlobalLines({
   draft,
@@ -110,7 +114,7 @@ function GlobalLines({
   const topic = draft.strategy.kind === 'edt' ? draft.strategy.topic : '';
   return (
     <Box flexDirection="column">
-      {lines.map((line) => {
+      {lines.slice(0, MAX_GLOBAL_LINES).map((line) => {
         if (line === 'source') {
           return (
             <GlobalRow key={line} focused={focusedLine(line)} label="Merge source">
@@ -140,7 +144,7 @@ function GlobalLines({
         if (line === 'start') {
           return (
             <GlobalRow key={line} focused={focusedLine(line)} label="">
-              <Text color={focusedLine(line) ? colors.accent : colors.text} bold={focusedLine(line)}>
+              <Text color={focusedLine(line) ? colors.accent : colors.text} bold={focusedLine(line)} wrap="truncate-end">
                 {START_RUN_LABEL}
               </Text>
             </GlobalRow>
@@ -149,7 +153,7 @@ function GlobalLines({
         const on = line === 'migrations' ? draft.runMigrations : draft.cleanRestart;
         return (
           <GlobalRow key={line} focused={focusedLine(line)} label={line === 'migrations' ? 'Migrations' : 'Clean restart'}>
-            <Text color={focusedLine(line) ? colors.accent : colors.text}>
+            <Text color={focusedLine(line) ? colors.accent : colors.text} wrap="truncate-end">
               {on ? '[x] yes' : '[ ] no'}
             </Text>
           </GlobalRow>
@@ -224,9 +228,7 @@ export function UpdateConfigPanels({
         maxVisibleRows={budget.tableRows}
         labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
-      <Text color={colors.error} wrap="truncate-end">
-        {draft.error !== null ? `✖ ${draft.error}` : ' '}
-      </Text>
+      <ClampedParagraph color={colors.error} maxLines={4}>{`${draft.error !== null ? `✖ ${draft.error}` : ' '}`}</ClampedParagraph>
     </ModalDialog>
   );
 }

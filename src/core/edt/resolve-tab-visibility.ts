@@ -1,7 +1,7 @@
 // core/edt/resolve-tab-visibility: computes each manifest-gated zone tab's status
 // (`omitted`/`disabled`/`enabled`) from every registered repo's manifest module ids against
 // active-EDT membership. `Routes` gates on `route-explorer`; `shared-types` on
-// `shared-types-source` OR `shared-types-consumer`. Module ids are matched as declared, never
+// `shared-types-source` alone (consumers depend on the source, they never drive the tab). Module ids are matched as declared, never
 // validated against the compiled-in module registry.
 import { resolve } from 'node:path';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
@@ -76,7 +76,7 @@ export async function resolveTabVisibility(
 
   return ok({
     routes: resolveGatedTab(listed.data.repos, [ROUTES_MODULE_ID], activeMemberPaths),
-    sharedTypes: resolveGatedTab(listed.data.repos, [...SHARED_TYPES_MODULE_IDS], activeMemberPaths),
+    sharedTypes: resolveGatedTab(listed.data.repos, [SHARED_TYPES_MODULE_IDS[0]], activeMemberPaths),
   });
 }
 

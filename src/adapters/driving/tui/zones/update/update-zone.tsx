@@ -6,7 +6,8 @@
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
@@ -52,6 +53,7 @@ import { formatHint, formatHints } from '../../shared/components/hints.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from './update-config-panels.logic.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -283,6 +285,11 @@ export function launchEditor(repoPath: string, configured = ''): LaunchEditorRes
 
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.
+// Rows the detail pane keeps around the running list / the recap's result lines.
+const RUNNING_LIST_CHROME_ROWS = 8;
+const RECAP_CHROME_ROWS = 14;
+const RECAP_CONTEXT_MAX_LINES = 4;
+
 export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { useStore?: AppStore; initialRecap?: boolean }) {
   const updateStatus = useStore((state) => state.updateStatus);
   const updateResults = useStore((state) => state.updateResults);
@@ -365,6 +372,8 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // Whether service focus is dropped (`Esc`): the right pane then shows the last-update recap
   // and the idle footer prompt; an arrow key hands focus back. Zone-local UI state.
   const [recapActive, setRecapActive] = useState(initialRecap);
+  // The recap's result list scrolls with PgUp/PgDn: this is the entry the window follows.
+  const [recapCursor, setRecapCursor] = useState(0);
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -596,6 +605,12 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       }
       // `Esc` drops service focus onto the last-update recap; an arrow key restores it (the
       // remembered service, unmoved).
+      if (recapActive && (key.pageDown || key.pageUp)) {
+        const page = Math.max(1, windowSizeForConfig.rows - RECAP_CHROME_ROWS - 1);
+        const last = Math.max(0, updateResults.length - 1);
+        setRecapCursor((current) => (key.pageDown ? Math.min(last, current + page) : Math.max(0, current - page)));
+        return;
+      }
       const recapToggle = resolveRecapToggle(recapActive, key);
       if (recapToggle.handled) {
         setRecapActive(recapToggle.recapActive);
@@ -743,7 +758,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               useStore={useStore}
               first={
                 <>
-                  <Text color={!recapActive && cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_MEMBERS_HEADER}</Text>
+                  <Text color={!recapActive && cursorInMembers ? colors.accent : colors['text-dim']} wrap="truncate-end">{UPDATE_MEMBERS_HEADER}</Text>
                   {panes.members.length === 0 ? <Text color={colors['text-dim']}>No services in this EDT.</Text> : null}
                   <BoundedList
                     items={panes.members}
@@ -755,7 +770,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               }
               second={
                 <>
-                  <Text color={!recapActive && !cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_OTHERS_HEADER}</Text>
+                  <Text color={!recapActive && !cursorInMembers ? colors.accent : colors['text-dim']} wrap="truncate-end">{UPDATE_OTHERS_HEADER}</Text>
                   {panes.others.length === 0 ? <Text color={colors['text-dim']}>No other services.</Text> : null}
                   <BoundedList
                     items={panes.others}
@@ -793,21 +808,18 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             {!recapActive && updateStatus === 'running' ? (
               <Box>
                 <Spinner />
-                <Text color={colors.text}> {runningLabel}</Text>
+                <Text color={colors.text} wrap="truncate-end"> {runningLabel}</Text>
               </Box>
             ) : null}
             {updateNotice !== null ? (
-              <Text color={colors.warning}>
+              <Text color={colors.warning} wrap="truncate-end">
                 ⚠ {updateNotice.message} ({updateNotice.code})
               </Text>
             ) : null}
             {updateStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error}>
-                  {updateError ?? 'Group update failed.'}
-                  {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
-                </Text>
-                {recapActive ? <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text> : null}
+                <ClampedParagraph color={colors.error} maxLines={4}>{`${updateError ?? 'Group update failed.'}${updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}`}</ClampedParagraph>
+                {recapActive ? <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text> : null}
               </Box>
             ) : null}
             {recapActive ? (
@@ -816,24 +828,32 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               <Box flexDirection="column">
                 <Box>
                   <Spinner />
-                  <Text color={colors.text}> {runningLabel}</Text>
+                  <Text color={colors.text} wrap="truncate-end"> {runningLabel}</Text>
                 </Box>
                 {runningSelectedRows.length > 0 ? (
-                  runningSelectedRows.map((row) => (
-                    <Box key={row.path}>
-                      <Spinner />
-                      <Text color={colors.text}> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
-                    </Box>
-                  ))
+                  <BoundedList
+                    items={runningSelectedRows}
+                    chromeRows={RUNNING_LIST_CHROME_ROWS}
+                    renderItem={(row) => (
+                      <Box key={row.path}>
+                        <Spinner />
+                        <Text color={colors.text} wrap="truncate-end"> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
+                      </Box>
+                    )}
+                  />
                 ) : isAllRun || runningMembers.length === 0 ? (
                   <StateLine kind="loading" subject="member services" />
                 ) : (
-                  runningMembers.map((member) => (
-                    <Box key={member.repoPath}>
-                      <Spinner />
-                      <Text color={colors.text}> {member.service} ({member.branch})</Text>
-                    </Box>
-                  ))
+                  <BoundedList
+                    items={runningMembers}
+                    chromeRows={RUNNING_LIST_CHROME_ROWS}
+                    renderItem={(member) => (
+                      <Box key={member.repoPath}>
+                        <Spinner />
+                        <Text color={colors.text} wrap="truncate-end"> {member.service} ({member.branch})</Text>
+                      </Box>
+                    )}
+                  />
                 )}
               </Box>
             ) : null}
@@ -843,27 +863,32 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               // would overstate a no-op as a result.
               updateNote !== null && updateResults.length === 0 ? (
                 <Box flexDirection="column">
-                  <Text color={colors.text}>{updateNote}</Text>
-                  <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text>
+                  <Text color={colors.text} wrap="truncate-end">{updateNote}</Text>
+                  <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text>
                 </Box>
               ) : (
                 <Box flexDirection="column">
                   {recap !== null ? (
                     <Box flexDirection="column">
-                      <Text bold color={colors.text}>
+                      <Text bold color={colors.text} wrap="truncate-end">
                         {recap.title}
                       </Text>
-                      {recap.contextLines.map((line) => (
-                        <Text key={line} color={colors['text-dim']}>
+                      {recap.contextLines.slice(0, RECAP_CONTEXT_MAX_LINES).map((line) => (
+                        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
                           {line}
                         </Text>
                       ))}
-                      {recap.resultLines.map((line, index) => (
-                        // Duplicate service names occur within one EDT — key by line + index.
-                        <Text key={`${line}-${index}`} color={colors.text}>
-                          {line}
-                        </Text>
-                      ))}
+                      <BoundedList
+                        items={recap.resultLines}
+                        chromeRows={RECAP_CHROME_ROWS}
+                        cursorIndex={Math.min(recapCursor, Math.max(0, recap.resultLines.length - 1))}
+                        renderItem={(line, index) => (
+                          // Duplicate service names occur within one EDT — key by line + index.
+                          <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
+                            {line}
+                          </Text>
+                        )}
+                      />
                     </Box>
                   ) : null}
                   <DetailPane
@@ -877,9 +902,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             ) : null}
             {updateStatus === 'idle' ? (
               <Box flexDirection="column">
-                <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
-                <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
-                <Text color={colors['text-dim']}>{UPDATE_NO_RECAP}</Text>
+                <Text color={colors.text} wrap="truncate-end">{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
+                <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_ALL_REPOS_PROMPT}</Text>
+                <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_NO_RECAP}</Text>
               </Box>
             ) : null}
               </Box>
@@ -888,7 +913,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
       />
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
-        <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}`}</ClampedParagraph>
       </ModalDialog>
       {updateConfig !== null ? (
         <UpdateConfigPanels
@@ -911,9 +936,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
-            {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
-            {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
+            <ClampedParagraph color={colors.text} maxLines={4}>{`${formatBlockerBody(updateBlocker)}`}</ClampedParagraph>
+            {formatBlockerRetry(updateBlocker) !== null ? <ClampedParagraph color={colors.warning} maxLines={4}>{`${formatBlockerRetry(updateBlocker)}`}</ClampedParagraph> : null}
+            {editorError !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${editorError}`}</ClampedParagraph> : null}
             <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
           </Box>
         ) : null}

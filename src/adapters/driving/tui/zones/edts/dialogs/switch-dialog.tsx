@@ -19,6 +19,8 @@ import {
 } from '../edts-zone.logic.js';
 import { SwitchResolutionView } from './switch-resolution/switch-resolution-view.js';
 import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from './switch-resolution/switch-resolution.logic.js';
+import { BoundedList } from '../../../shared/components/bounded-list.js';
+import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
 
 export type SwitchDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -167,19 +169,20 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
   return (
     <>
       {results.some((row) => row.outcome === 'failed') ? (
-        <Text color={colors.warning}>Switch to “{dialog.target.topic}” finished with failures.</Text>
+        <ClampedParagraph color={colors.warning} maxLines={4}>{`Switch to “${dialog.target.topic}” finished with failures.`}</ClampedParagraph>
       ) : (
-        <Text color={colors.text}>Switch to “{dialog.target.topic}” finished.</Text>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`Switch to “${dialog.target.topic}” finished.`}</ClampedParagraph>
       )}
-      {results.map((row, index) => {
-        const label = resultLabel(row);
-        return label !== null ? (
+      <BoundedList
+        items={results.filter((row) => resultLabel(row) !== null)}
+        chromeRows={14}
+        renderItem={(row, index) => (
           <Text key={`${row.service}:${index}`} color={row.outcome === 'switched' ? colors['text-dim'] : colors.success} wrap="truncate-end">
             {'  '}
-            {label}
+            {resultLabel(row)}
           </Text>
-        ) : null;
-      })}
+        )}
+      />
       {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
     </>
   );
@@ -219,7 +222,7 @@ export function SwitchDialogView({
           </>
         ) : (
           <>
-            <Text color={colors.text}>Switch to "{dialog.target.topic}"?</Text>
+            <ClampedParagraph color={colors.text} maxLines={4}>{`Switch to "${dialog.target.topic}"?`}</ClampedParagraph>
           </>
         )}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}

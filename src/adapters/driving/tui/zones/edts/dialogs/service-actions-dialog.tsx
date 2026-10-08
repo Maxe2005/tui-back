@@ -204,7 +204,7 @@ export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceA
   return (
     <ModalDialog title="SERVICE ACTIONS" open={true}>
       <Box flexDirection="column">
-        <Text color={colors.text}>{dialog.serviceName}</Text>
+        <Text color={colors.text} wrap="truncate-end">{dialog.serviceName}</Text>
         {dialog.branchPicker !== null ? (
           <>
             <BranchPicker

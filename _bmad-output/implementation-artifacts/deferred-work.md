@@ -665,3 +665,34 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
   summary: Restore discoverability of the BranchPicker "other members' branches" sub-list outside the footer, and derive the Tab focus hint from each zone's focus-nav declaration.
   evidence: The in-pane `[↓] other members' branches` hint was removed and `footerHintsFor` now uses a static `Tab/Shift+Tab` entry guarded only by a mode assertion.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-9-bounded-rendering-audit-global-fix-regression-guard.md`
+  summary: Rewrite the bounded-rendering static guard on the TypeScript AST (regex misses `>` in attributes, nested/self-closing Text, `visible*`-named receivers satisfied by renaming) and extend it beyond `.tsx`.
+  evidence: Blind Hunter and Edge Case Hunter both showed regex false negatives; allow-list "empty on purpose" is only syntactically enforced.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-9-bounded-rendering-audit-global-fix-regression-guard.md`
+  summary: Handle display width (CJK, emoji, zero-width) in bounds math, truncation and matrix assertions instead of UTF-16/code-point counts.
+  evidence: normalizeMessage, tab-bar width estimate and matrix `Array.from(line).length` all count characters, not columns.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-9-bounded-rendering-audit-global-fix-regression-guard.md`
+  summary: Constant-size collections capped with silent `.slice` (wizard breadcrumb, table columns, step views, global lines, pane tabs) hide later additions without a "+N more" marker; chromeRows budgets are hand estimates; dialogs opened from local state (Update config panels, Routes dialogs, quit-confirm/blocker) are not force-opened in the matrix.
+  evidence: Edge Case Hunter and Verification Gap reports on the 7.9 diff.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Harden `writeVersionLine` against nested decoy section keys, braces inside string values, duplicate keys and a dependency declared in both dependencies and devDependencies.
+  evidence: The targeted text edit locates the block with a regex plus the first `}`; valid but unusual package.json shapes (overrides nesting, duplicate keys) can make it edit the wrong block or fail.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Make `writeVersionLine` atomic (temp file plus rename) and reject a blank version.
+  evidence: `writeFile` writes in place, so a crash mid-write can truncate package.json.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Distinguish auth-related E404 (private scope, E401/E403) from "version not published" in `verifyPublished`, and guard against package names starting with `-`.
+  evidence: A misconfigured registry login would be reported as an unpublished version; manifest-controlled names reach the npm argv.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Constrain `packageJsonPath` to stay inside the repo (no absolute path, no `..`) when stories 4.2+ join it with a repo path.
+  evidence: The manifest schema currently accepts any non-blank string.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
+  summary: Unstage the files staged by `stagePaths` when the following `commit` fails, so a retry or a later commit does not sweep them in.
+  evidence: Propagation stages `package.json`/`package-lock.json` then commits; a commit failure (hook, identity) leaves them staged.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
+  summary: Re-check the branch gate immediately before the git write to close the window where HEAD changes after the first check.
+  evidence: The gate runs in the gate step and again in stagePaths/commit, but a branch switch between the check and the git command is not prevented (rare TOCTOU).

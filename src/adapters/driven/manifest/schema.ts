@@ -5,11 +5,14 @@
 // `.satisfies()`), so a field drift fails typecheck in either direction.
 import { z } from 'zod';
 import type { Manifest } from '../../../core/ports/manifest.js';
-import { knownModuleIds } from '../modules/module-registry.js';
+import { knownModuleIds, moduleConfigSchemas } from '../modules/module-registry.js';
 
 export const moduleConfigSchema = z.record(z.string(), z.unknown());
 
-export function createManifestSchema(known: ReadonlySet<string>): z.ZodType<Manifest> {
+export function createManifestSchema(
+  known: ReadonlySet<string>,
+  configSchemas: Readonly<Record<string, z.ZodTypeAny>> = moduleConfigSchemas,
+): z.ZodType<Manifest> {
   return z
     .object({
       service: z.string().trim().min(1),
@@ -39,8 +42,33 @@ export function createManifestSchema(known: ReadonlySet<string>): z.ZodType<Mani
             path: ['modules', id],
             message: `Unknown module id "${id}"`,
           });
+          continue;
+        }
+        // A module that declares a parameter schema gets its config validated (strict,
+        // blanks rejected); the defaulted result is applied by the transform below.
+        const configSchema = Object.prototype.hasOwnProperty.call(configSchemas, id) ? configSchemas[id] : undefined;
+        if (configSchema) {
+          const parsed = configSchema.safeParse(config);
+          if (!parsed.success) {
+            for (const issue of parsed.error.issues) {
+              const param = issue.path.length > 0 ? ` parameter "${issue.path.map(String).join('.')}"` : '';
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['modules', id, ...issue.path],
+                message: `Invalid config for module "${id}"${param}: ${issue.message}`,
+              });
+            }
+          }
         }
       }
+    })
+    .transform((value) => {
+      const modules: Record<string, Record<string, unknown>> = {};
+      for (const [id, config] of Object.entries(value.modules)) {
+        const configSchema = Object.prototype.hasOwnProperty.call(configSchemas, id) ? configSchemas[id] : undefined;
+        modules[id] = configSchema ? (configSchema.parse(config) as Record<string, unknown>) : config;
+      }
+      return { ...value, modules };
     });
 }
 

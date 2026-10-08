@@ -146,4 +146,13 @@ export interface GitPort {
   // `localName` already exists locally; `remote-branch-missing` when `refs/remotes/<remoteRef>`
   // is absent (never fetches to find it).
   createTrackingBranch(repoPath: string, localName: string, remoteRef: string): Promise<Result<void>>;
+  // Stages exactly `paths` (`git add -- <paths>`) — never `-A`/`.`, so every other dirty file
+  // stays untouched. Gated: the repo's current branch must pass assertAllowedBranch before any
+  // git call (a protected/shared branch is refused with `shared-branch-rejected`). An empty list is a
+  // no-op success. Fails `git-add-error`.
+  stagePaths(repoPath: string, paths: string[]): Promise<Result<void>>;
+  // Path-scoped commit (`git commit -m <message> --only -- <paths>`): records only `paths`, so
+  // anything else staged or dirty is left out of the commit. Same current-branch gate as
+  // stagePaths. Never pushes. Fails `git-commit-error` (e.g. nothing to commit).
+  commit(repoPath: string, message: string, paths: string[]): Promise<Result<void>>;
 }
