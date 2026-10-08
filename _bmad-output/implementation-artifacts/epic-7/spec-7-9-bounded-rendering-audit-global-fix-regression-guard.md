@@ -3,7 +3,7 @@ title: 'Story 7.9: Bounded-rendering audit, global fix & regression guard (UX-DR
 type: 'feature'
 created: '2026-10-08'
 baseline_commit: '783a0081c31b65f600718396669be4876dc57e95'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 context:
   - '{project-root}/AGENTS.md'
@@ -84,3 +84,46 @@ context:
 
 **Manual checks (if no CLI):**
 - Run the TUI in a shrunk terminal and drag `Ctrl+W` extremes: no vanished lines, "too small" screen appears and recovers live.
+
+## Suggested Review Order
+
+**Bounds foundation**
+
+- Named minimum size and pane-split math: the contract's numeric core.
+  [`bounds.ts:10`](../../../src/adapters/driving/tui/shared/bounds/bounds.ts#L10)
+
+- Pane minimums enforced in absolute rows/columns, ratios sanitized.
+  [`bounds.ts:35`](../../../src/adapters/driving/tui/shared/bounds/bounds.ts#L35)
+
+- Messages normalized before display: single line, no control codes, capped.
+  [`message.ts:14`](../../../src/adapters/driving/tui/shared/bounds/message.ts#L14)
+
+**Shell**
+
+- Too-small screen and live return; zone stays mounted behind it.
+  [`app-shell.tsx:265`](../../../src/adapters/driving/tui/app-shell.tsx#L265)
+
+- Input gate silences every handler while the screen shows.
+  [`use-input.tsx:8`](../../../src/adapters/driving/tui/shared/hooks/use-input.tsx#L8)
+
+**Bounded primitives**
+
+- Text truncates by default; paragraphs clamp with "… +N lines".
+  [`truncated-text.tsx:12`](../../../src/adapters/driving/tui/shared/components/truncated-text.tsx#L12)
+
+- One scroll region for heterogeneous blocks, with older-hidden cap.
+  [`bounded-list.tsx:160`](../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L160)
+
+- Dialogs always bounded to the window; body scrolls.
+  [`modal-dialog.tsx:43`](../../../src/adapters/driving/tui/shared/components/modal-dialog.tsx#L43)
+
+**Regression guard**
+
+- Static guard with an empty allow-list for raw text and un-windowed maps.
+  [`bounded-rendering.guard.test.ts`](../../../src/adapters/driving/tui/shared/bounds/bounded-rendering.guard.test.ts)
+
+- Size matrix across zones and overlays with adversarial data.
+  [`bounds-matrix.test.tsx`](../../../src/adapters/driving/tui/shared/bounds/bounds-matrix.test.tsx)
+
+- Dialog registry coverage.
+  [`bounds-dialogs.test.tsx`](../../../src/adapters/driving/tui/shared/bounds/bounds-dialogs.test.tsx)
