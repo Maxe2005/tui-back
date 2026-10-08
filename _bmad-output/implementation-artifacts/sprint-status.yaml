@@ -120,6 +120,9 @@ development_status:
   3-15-update-zone-per-service-detail-pane-last-run-live-step-tracking: review
   3-16-global-update-in-progress-status-action-locks: done
   3-17-update-zone-global-default-view-resizable-member-other-panes: done
+  # 3-18/3-19 added by sprint-change-proposal-2026-10-08-2.md. Order: merge 3-15, then 3-19, then 3-18; 4-4 builds on 3-18.
+  3-18-parallel-update-run-incident-queue: backlog
+  3-19-full-screen-service-report: backlog
   epic-3-retrospective: optional
 
   epic-4: in-progress
