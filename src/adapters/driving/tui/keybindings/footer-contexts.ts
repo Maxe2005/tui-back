@@ -266,7 +266,8 @@ export const FOOTER_CONTEXTS = {
     label: 'Repo registry stale entries',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'remove selection'], CLOSE],
   },
-  'shared-types-version': { label: 'Shared types version field', hints: [['Enter', 'next'], [KEY_UP_DOWN, 'move']] },
+  'shared-types-version': { label: 'Shared types version field', hints: [['Enter', 'done'], ['Esc', 'done'], [KEY_UP_DOWN, 'move']] },
+  'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE] },
   'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate']] },
   'shared-types-results': { label: 'Shared types results', hints: [MOVE, ['R', 'retry failed'], ['Esc', 'new run']] },
   'reset-select': {

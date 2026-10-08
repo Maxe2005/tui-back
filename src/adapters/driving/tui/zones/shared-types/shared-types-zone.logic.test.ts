@@ -12,8 +12,29 @@ describe('reduceForm', () => {
     expect(state.unchecked.size).toBe(0);
   });
 
-  it('types into the version field, letters like q included', () => {
+  it('a pre-focused version field ignores keystrokes until Enter starts editing', () => {
     let state = initialFormState();
+    expect(state.editing).toBe(false);
+    for (const char of '3q') {
+      state = reduceForm(state, char, none, PATHS).state;
+    }
+    expect(state.version.value).toBe('0.1.');
+    state = reduceForm(state, '', { return: true }, PATHS).state;
+    expect(state.editing).toBe(true);
+    expect(state.row).toBe(0);
+  });
+
+  it('Enter, Esc and arrows leave the editing mode', () => {
+    const editing = { ...initialFormState(), editing: true };
+    expect(reduceForm(editing, '', { return: true }, PATHS).state.editing).toBe(false);
+    expect(reduceForm(editing, '', { escape: true }, PATHS).state.editing).toBe(false);
+    const down = reduceForm(editing, '', { downArrow: true }, PATHS).state;
+    expect(down.editing).toBe(false);
+    expect(down.row).toBe(1);
+  });
+
+  it('types into the version field, letters like q included', () => {
+    let state = { ...initialFormState(), editing: true };
     for (const char of '3674q') {
       state = reduceForm(state, char, none, PATHS).state;
     }
@@ -46,10 +67,10 @@ describe('reduceForm', () => {
     expect(reduceForm(base, '', { return: true }, PATHS).run).toBe(false);
   });
 
-  it('Enter on the version field moves down instead of running', () => {
+  it('Enter on the version field edits it instead of running', () => {
     const step = reduceForm(initialFormState(), '', { return: true }, PATHS);
     expect(step.run).toBe(false);
-    expect(step.state.row).toBe(1);
+    expect(step.state.editing).toBe(true);
   });
 });
 

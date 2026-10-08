@@ -52,9 +52,11 @@ describe('SharedTypesZone interaction', () => {
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter); // start editing the version
       for (const char of '3674') {
         await press(instance, stdin, char);
       }
+      await press(instance, stdin, KEYS.enter); // stop editing
       await press(instance, stdin, KEYS.down); // api
       await press(instance, stdin, KEYS.down); // web
       await press(instance, stdin, KEYS.space); // uncheck web
@@ -70,13 +72,16 @@ describe('SharedTypesZone interaction', () => {
     }
   });
 
-  it('captures input while typing the version so the global q cannot quit', async () => {
+  it('leaves keys to the global navigation until Enter starts editing the version', async () => {
     const { store } = seed();
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'q');
+      expect(store.getState().zoneInputCaptured).toBe(false);
+      await press(instance, stdin, KEYS.enter);
       expect(store.getState().zoneInputCaptured).toBe(true);
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().zoneInputCaptured).toBe(false);
     } finally {
       instance.unmount();
     }
@@ -193,9 +198,9 @@ describe('SharedTypesZone interaction', () => {
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      for (const char of '5') {
-        await press(instance, stdin, char);
-      }
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, '5');
+      await press(instance, stdin, KEYS.enter);
       for (let i = 0; i < 4; i += 1) {
         await press(instance, stdin, KEYS.down); // api, web, npm i, clean restart
       }
