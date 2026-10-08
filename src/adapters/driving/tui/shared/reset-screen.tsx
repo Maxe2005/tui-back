@@ -26,6 +26,7 @@ import {
   type ResetLine,
   type ResetScreenState,
 } from './reset-screen.logic.js';
+import { BoundedList } from './components/bounded-list.js';
 
 const TONE_COLORS: Record<ResetLine['tone'], string> = {
   text: colors.text,
@@ -43,14 +44,21 @@ export type ResetScreenProps = {
   initialState?: ResetScreenState;
 };
 
+// Rows the reset frame and its prompts keep around a line list.
+const RESET_LIST_CHROME_ROWS = 12;
+
 function Lines({ lines }: { lines: ResetLine[] }) {
   return (
     <Box flexDirection="column">
-      {lines.map((line, index) => (
-        <Text key={index} color={TONE_COLORS[line.tone]} wrap="truncate-end">
-          {line.text}
-        </Text>
-      ))}
+      <BoundedList
+        items={lines}
+        chromeRows={RESET_LIST_CHROME_ROWS}
+        renderItem={(line, index) => (
+          <Text key={index} color={TONE_COLORS[line.tone]} wrap="truncate-end">
+            {line.text}
+          </Text>
+        )}
+      />
     </Box>
   );
 }

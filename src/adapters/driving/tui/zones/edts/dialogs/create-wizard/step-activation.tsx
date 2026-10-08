@@ -24,18 +24,26 @@ export function recapBranches(row: RowView): string {
   return `${row.base} → ${row.target}`;
 }
 
+// Rows the wizard frame, breadcrumb and prompts keep around the recap / the returns list.
+const RECAP_CHROME_ROWS = 16;
+const RETURNS_CHROME_ROWS = 22;
+
 function Recap({ dialog, candidates }: { dialog: CreateDialogState; candidates: readonly BranchCandidate[] }) {
   const rows = buildStep3Rows(dialog, candidates);
   return (
     <>
       <Text color={colors.text} wrap="truncate-end">Name: {dialog.topic.trim()}</Text>
       <Text color={colors.text} wrap="truncate-end">Services: {rows.map((row) => row.service).join(', ')}</Text>
-      {rows.map((row) => (
-        <Text key={row.path} color={colors['text-dim']} wrap="truncate-end">
-          {'  '}
-          {row.service} : {row.modeLabel} {recapBranches(row)}
-        </Text>
-      ))}
+      <BoundedList
+        items={rows}
+        chromeRows={RECAP_CHROME_ROWS}
+        renderItem={(row) => (
+          <Text key={row.path} color={colors['text-dim']} wrap="truncate-end">
+            {'  '}
+            {row.service} : {row.modeLabel} {recapBranches(row)}
+          </Text>
+        )}
+      />
     </>
   );
 }
@@ -116,12 +124,16 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
         {returns.length > 0 ? (
           <>
             <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.nonMembersInfo}`}</ClampedParagraph>
-            {returns.map((entry) => (
-              <Text key={entry.service} color={info} dimColor={!switching} wrap="truncate-end">
-                {'    '}
-                {entry.service} → {entry.sharedBranch}
-              </Text>
-            ))}
+            <BoundedList
+              items={returns}
+              chromeRows={RETURNS_CHROME_ROWS}
+              renderItem={(entry) => (
+                <Text key={entry.service} color={info} dimColor={!switching} wrap="truncate-end">
+                  {'    '}
+                  {entry.service} → {entry.sharedBranch}
+                </Text>
+              )}
+            />
           </>
         ) : null}
       </Box>

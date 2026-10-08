@@ -37,6 +37,9 @@ export function truncateCell(text: string): string {
   return truncateBranchLabel(text, BRANCH_MAX_WIDTH);
 }
 
+// Base, target and status: the table never has more columns than its headers.
+const MAX_TABLE_COLUMNS = 6;
+
 export function BranchPlanTable<Row>({ headers, rows, rowKey, cells, cursor, focused, maxVisibleRows, labels }: BranchPlanTableProps<Row>) {
   const rendered = rows.map((row) => cells(row).map((entry) => ({ ...entry, text: truncateCell(entry.text) })));
   const last = headers.length - 1;
@@ -64,7 +67,7 @@ export function BranchPlanTable<Row>({ headers, rows, rowKey, cells, cursor, foc
           return (
             <Text key={rowKey(row)} wrap="truncate-end">
               <Text color={colors.accent}>{selected ? '› ' : '  '}</Text>
-              {rowCells.map((entry, column) => (
+              {rowCells.slice(0, MAX_TABLE_COLUMNS).map((entry, column) => (
                 <Text key={column} wrap="truncate-end">
                   {column > 0 ? <Text color={rowColor}> │ </Text> : null}
                   <Text color={entry.color ?? rowColor} wrap="truncate-end">{pad(entry.text, column)}</Text>

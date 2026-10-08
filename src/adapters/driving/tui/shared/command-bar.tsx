@@ -410,6 +410,9 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   const allColumns = groupCommandsByColumn(matches, gridMaxRows);
   const layout = layoutCommandGrid(matches, gridMaxRows, availableWidth, (command) => command.name, scrollOffset);
 
+  // layoutCommandGrid already windows the grid to the terminal's width and the configured rows.
+  const visibleColumns = layout.columns;
+
   const openGridAtOrigin = () => {
     setGridShown(true);
     setGridCursor({ column: 0, row: 0 });
@@ -566,12 +569,12 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
         {gridVisible ? (
           <Box flexDirection="row">
             {layout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-            {layout.columns.map((column, columnIndex) => {
+            {visibleColumns.map((visibleColumn, columnIndex) => {
               const absoluteColumn = layout.scrollOffset + columnIndex;
-              const width = columnDisplayWidth(column, (command) => command.name);
+              const width = columnDisplayWidth(visibleColumn, (command) => command.name);
               return (
                 <Box key={absoluteColumn} flexDirection="column" marginRight={GRID_COLUMN_GAP}>
-                  {column.map((command, rowIndex) => {
+                  {visibleColumn.map((command, rowIndex) => {
                     const isCursor =
                       focus === 'grid' && gridCursor.column === absoluteColumn && gridCursor.row === rowIndex;
                     return (

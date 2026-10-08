@@ -30,6 +30,7 @@ import {
   MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
+import { BoundedList } from './components/bounded-list.js';
 
 export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
 
@@ -341,6 +342,9 @@ export type SettingsScreenProps = {
   // Production always starts browsing the row list (false).
   initialGeneralEditing?: boolean;
 };
+
+// Rows the settings frame, tab strip, heading and hint keep around a drill-down list.
+const SETTINGS_LIST_CHROME_ROWS = 14;
 
 export function SettingsScreen({
   useStore = useAppStore,
@@ -824,15 +828,20 @@ export function SettingsScreen({
           // manifest service, never limited to the active EDT's own members.
           <Box flexDirection="column">
             {logsServices.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
-            {logsServices.map((service, index) => {
-              const highlighted = index === logsClearServiceCursor;
-              return (
-                <Box key={service.path} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{service.service}</Text>
-                </Box>
-              );
-            })}
+            <BoundedList
+              items={logsServices}
+              chromeRows={SETTINGS_LIST_CHROME_ROWS}
+              cursorIndex={logsClearServiceCursor}
+              renderItem={(service, index) => {
+                const highlighted = index === logsClearServiceCursor;
+                return (
+                  <Box key={service.path} flexDirection="row">
+                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{service.service}</Text>
+                  </Box>
+                );
+              }}
+            />
             <DimAnnotation text="Clears that service's filter history (text + regex)." />
           </Box>
         ) : null}

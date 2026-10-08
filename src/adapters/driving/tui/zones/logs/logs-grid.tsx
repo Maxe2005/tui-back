@@ -39,15 +39,16 @@ export function LogsGrid({
   paneFilters: Record<string, LogFilterSpec>;
 }) {
   const cols = Math.max(layout.cols, 1);
-  const rowsOfPanes: ServiceBranchDivergence[][] = [];
+  // `panes` is the grid layout's own capped pane set (cols x rows), chunked row by row.
+  const visiblePaneRows: ServiceBranchDivergence[][] = [];
   for (let i = 0; i < panes.length; i += cols) {
-    rowsOfPanes.push(panes.slice(i, i + cols));
+    visiblePaneRows.push(panes.slice(i, i + cols));
   }
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0}>
-      {rowsOfPanes.map((rowPanes, rowIndex) => (
+      {visiblePaneRows.map((visiblePanes, rowIndex) => (
         <Box key={rowIndex} flexDirection="row" flexGrow={1} flexBasis={0} minHeight={0}>
-          {rowPanes.map((service, colIndex) => {
+          {visiblePanes.map((service, colIndex) => {
             const index = rowIndex * cols + colIndex;
             return (
               <LogsPaneView

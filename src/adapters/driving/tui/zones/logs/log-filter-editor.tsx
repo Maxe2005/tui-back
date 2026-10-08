@@ -54,6 +54,8 @@ export function LogFilterEditor({
   // row/cursor math reads), never the vertically sliced `gridLayout.columns` — otherwise the
   // widest entry scrolling out of view would shrink the column and misalign the padding.
   const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
+  // layoutCommandGrid windows the history grid to the available width and height.
+  const visibleColumns = gridLayout?.columns ?? [];
   return (
     <ModalDialog title={title} open>
       <TextInputLine
@@ -72,12 +74,12 @@ export function LogFilterEditor({
             {gridLayout.truncated.top ? <Text color={colors['text-dim']}>▲ more above</Text> : null}
             <Box flexDirection="row">
               {gridLayout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-              {gridLayout.columns.map((column, columnIndex) => {
+              {visibleColumns.map((visibleColumn, columnIndex) => {
                 const absoluteColumn = gridLayout.scrollOffset + columnIndex;
-                const width = columnDisplayWidth(fullHistoryColumns[absoluteColumn] ?? column, historyEntryLabel);
+                const width = columnDisplayWidth(fullHistoryColumns[absoluteColumn] ?? visibleColumn, historyEntryLabel);
                 return (
                   <Box key={absoluteColumn} flexDirection="column" marginRight={HISTORY_GRID_COLUMN_GAP}>
-                    {column.map((entry, rowIndex) => {
+                    {visibleColumn.map((entry, rowIndex) => {
                       const absoluteRow = gridLayout.rowScrollOffset + rowIndex;
                       const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === absoluteRow;
                       return (
