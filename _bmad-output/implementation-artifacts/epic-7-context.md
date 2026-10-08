@@ -12,6 +12,7 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - Story 7.2: Container-less Managed Services (FR-29) + C1 graft (2026-10-05): info-only "services without container" Logs group (all registry, greyed/unselectable/Tab-excluded), focus-scoped Ctrl+A, health badge on every row, explicit restarting
 - Story 7.3: Shared Zone Layout Contract & `Ctrl+W` Resize in Every Zone (UX-DR35)
 - Story 7.7: Shared Focus-Navigation Component (FR-33) — before 7.4; Shift+Tab reverses Tab everywhere via one per-zone configurable primitive
+- Story 7.9: Bounded-Rendering Audit, Global Fix & Regression Guard (AD-19, UX-DR37) — after 7.7, before 7.4/7.5/7.6
 - Story 7.4: Interaction Consistency Audit & Alignment (UX-DR36)
 - Story 7.5: Dashboard — Workspace Summary & Last-Update Persistence (UX-DR19)
 - Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
@@ -23,6 +24,7 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - A manifest may omit `container` (an empty string is still rejected). Container-less services are never polled or restarted through the container port; restart phases report `skipped` with detail `no container`, never `failed`.
 - Pane ratios persist per zone through the state port; a persisted ratio array of the wrong length falls back to that zone's defaults.
 - Footer hints and the `?` help screen are generated from the same keybinding declarations.
+- Bounded rendering: whatever the terminal size, pane ratios or message volume, no rendered region exceeds its space on either axis; overflow is resolved by ellipsis truncation, a windowed scroll region with more-above/below indicators, or an explicit "terminal too small" screen — never silent clipping.
 - Group-update outcomes (finished-at, scope, counts) persist through the state port for the Dashboard.
 
 ## Technical Decisions
@@ -30,6 +32,7 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - Hexagonal boundaries hold: `core` never imports adapters; use-cases return `Result<T>`; TUI cross-zone state lives in the single Zustand store.
 - Explanations that `AGENTS.md` relies on stay in the code, shortened: the dependency-cruiser import-ordering constraint, NodeNext `.js` imports, the unanchored depcruise boundary path, Ink's ctrl+letter parsing.
 - One shared zone-layout primitive renders panes and splitters for every zone; no zone hand-rolls a split.
+- Bounds flow top-down (shell → zone body → ZoneLayout pane → component); text is truncated by default via a shared primitive, wrapping only through a clamped paragraph; messages are normalized (single line, no ANSI, capped); growing data uses one scroll region (generalized bounded-list) and capped in-memory collections; ModalDialog is always bounded to the window; pane minimums are absolute rows/cols; guarded by a size-matrix render test and a static guard test.
 - Shared components (TextInputLine, FilterablePickList, BranchAutocompleteInput) replace ad-hoc list/input/confirm implementations after the consistency audit.
 
 ## Cross-Story Dependencies
@@ -39,5 +42,5 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - 7.8 is session-only and core-led; it never touches 7.5's persisted datum.
 - 7.7 lands before 7.4 so alignment consumes the nav primitive; 7.4's inventory is unchanged.
 - 7.5 builds on 7.3's layout contract and reuses the Update zone's health-poll logic; 7.6 builds on 7.5 and on 7.4's canonical keys.
-- 7.5 builds on 7.3's layout contract and reuses the Update zone's health-poll logic; 7.6 builds on 7.5 and on 7.4's canonical keys.
+- 7.9 builds on 7.3's ZoneLayout, bounded-list and 7.7's focus primitive; 7.4 consumes its primitives and 7.5/7.6 build the Dashboard bounded from day one.
 - 7.2's container-less state is shown by 7.5's Dashboard summary.
