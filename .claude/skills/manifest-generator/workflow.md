@@ -43,14 +43,14 @@ Extract each field by reading files under `{target_repo}` directly (do not guess
 3. **`migrationCommand`**: Read `{target_repo}/package.json` `scripts`. Look for `migrate`, `db:migrate`, `migration`, in that order, and use the first one found. If none exist, treat `migrationCommand` as undetected (`null` for now, same caveat as `container`).
 4. **`sharedBranch`**: Always `"development"`. Never prompt for this value.
 4b. **`protectedBranches`**: Always `[development, preprod, prod]`. Never prompt for this value. Nothing is protected implicitly — a service's protected set is exactly `protectedBranches ∪ {sharedBranch}` — so the default must be written explicitly; the developer adjusts it afterwards to the service's branching model.
-5. **`modules`**: Look for a `modules` config file or directory in `{target_repo}` (e.g. a `modules.json`, `modules.yaml`, or `modules/` directory naming module ids). Collect any ids found as candidates; do not include any of them in the manifest yet — Step 4 filters them against the project's real compiled-in registry.
+5. **`modules`**: Look for a `modules` config file or directory in `{target_repo}` (e.g. a `modules.json`, `modules.yaml`, or `modules/` directory naming module ids). Also detect the `shared-types` modules from `package.json`: add `shared-types-source` as a candidate when its `name` is `@ianord/shared-types`, and `shared-types-consumer` when `dependencies` or `devDependencies` declare `@ianord/shared-types` (config `{}` — both modules have strict, defaulted parameters: source `publishCommand`/`packageName`, consumer `dependency`/`packageJsonPath`; only set a key when the repo differs from the default, never an unknown key). Collect any ids found as candidates; do not include any of them in the manifest yet — Step 4 filters them against the project's real compiled-in registry.
 
 ### Step 4: Filter module ids against the compiled-in registry
 
 - Read `{project-root}/src/adapters/driven/modules/module-registry.ts` and take `knownModuleIds` (the keys of `moduleRegistry`) as the authoritative set — this is the same set the self-check in Step 5 will validate against, so using anything else here would only produce a manifest Step 5 immediately flags.
 - Of the candidate module ids collected in Step 3.5, keep only the ones present in that set. Build the `modules` record from those, using whatever config keys/values were found alongside each id (as opaque `Record<string, unknown>`); drop ids not in the set.
 - Record every dropped id (with the id and where it was found) to report later — these are not an error, just unknown-to-this-build-of-the-tool ids that stay out of the generated manifest.
-- If the registry is empty (no known ids at all — true as of Epics 4/6 not yet landing real modules), `modules` is simply `{}`.
+- If no candidate survives the filter, `modules` is simply `{}`.
 
 ### Step 5: Write the manifest
 
