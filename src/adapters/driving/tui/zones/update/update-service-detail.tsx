@@ -4,6 +4,8 @@
 // then the settled result of each step, spaced and glyph-prefixed. Pure view over
 // buildServiceStepViews; the zone decides which mode applies.
 import { Box, Text } from 'ink';
+import { useBounds } from '../../shared/bounds/bounds-context.js';
+import { capOlder, OlderHiddenLine } from '../../shared/components/bounded-list.js';
 import { Spinner } from '../../shared/components/index.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { GroupUpdateRepoResult } from '../../../../../core/scripts/group-update.js';
@@ -24,6 +26,29 @@ const STEP_COLORS: Record<UpdateStepState, string> = {
   failed: colors.error,
   skipped: colors['text-dim'],
 };
+
+// merge, migration, restart.
+const MAX_STEP_VIEWS = 3;
+const MAX_STEP_DETAIL_LINES = 4;
+// Rows of the pane the issue log leaves to the rest of the detail.
+const ISSUE_LOG_CHROME_ROWS = 16;
+
+// The issue log is stream-fed: only the newest issues show, with the count of older ones.
+function IssueLog({ issues }: { issues: readonly ServiceIssue[] }) {
+  const { rows } = useBounds();
+  const { items: visibleIssues, hidden } = capOlder(issues, Math.max(3, rows - ISSUE_LOG_CHROME_ROWS));
+  return (
+    <>
+      <OlderHiddenLine hidden={hidden} />
+      {visibleIssues.map((issue, index) => (
+        <Text key={`${issue.kind}-${index}`} color={issue.resolved ? colors['text-dim'] : colors.warning} wrap="truncate-end">
+          {'   '}
+          {issue.resolved ? '✔' : '⚠'} {issue.kind} — {issue.detail.replace(/\s+/g, ' ')} ({issue.resolved ? 'resolved' : 'needs your input'})
+        </Text>
+      ))}
+    </>
+  );
+}
 
 export interface UpdateServiceDetailProps {
   service: string;
@@ -57,24 +82,19 @@ export function UpdateServiceDetail({ service, mode, context, steps, result, iss
       ) : (
         <Box flexDirection="column">
           {context !== null ? <Text color={colors.text} wrap="truncate-end">{context}</Text> : null}
-          {views.map((view) => (
+          {views.slice(0, MAX_STEP_VIEWS).map((view) => (
             <Box key={view.key} flexDirection="column" marginTop={1}>
               <Text color={STEP_COLORS[view.state]} bold={view.state === 'running'} wrap="truncate-end">
                 {view.headline}
               </Text>
-              {view.detail.map((line) => (
+              {view.detail.slice(0, MAX_STEP_DETAIL_LINES).map((line) => (
                 <Text key={line} color={colors['text-dim']} wrap="truncate-end">
                   {'   '}
                   {line}
                 </Text>
               ))}
               {view.key === 'merge'
-                ? issues.map((issue, index) => (
-                    <Text key={`${issue.kind}-${index}`} color={issue.resolved ? colors['text-dim'] : colors.warning} wrap="truncate-end">
-                      {'   '}
-                      {issue.resolved ? '✔' : '⚠'} {issue.kind} — {issue.detail.replace(/\s+/g, ' ')} ({issue.resolved ? 'resolved' : 'needs your input'})
-                    </Text>
-                  ))
+                ? <IssueLog issues={issues} />
                 : null}
             </Box>
           ))}

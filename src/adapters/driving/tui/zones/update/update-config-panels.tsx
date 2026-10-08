@@ -89,6 +89,9 @@ function GlobalRow({
   );
 }
 
+// The global panel is a fixed handful of settings.
+const MAX_GLOBAL_LINES = 8;
+
 function GlobalLines({
   draft,
   view,
@@ -110,7 +113,7 @@ function GlobalLines({
   const topic = draft.strategy.kind === 'edt' ? draft.strategy.topic : '';
   return (
     <Box flexDirection="column">
-      {lines.map((line) => {
+      {lines.slice(0, MAX_GLOBAL_LINES).map((line) => {
         if (line === 'source') {
           return (
             <GlobalRow key={line} focused={focusedLine(line)} label="Merge source">

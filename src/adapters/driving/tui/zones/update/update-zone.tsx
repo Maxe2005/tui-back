@@ -283,6 +283,11 @@ export function launchEditor(repoPath: string, configured = ''): LaunchEditorRes
 
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.
+// Rows the detail pane keeps around the running list / the recap's result lines.
+const RUNNING_LIST_CHROME_ROWS = 8;
+const RECAP_CHROME_ROWS = 14;
+const RECAP_CONTEXT_MAX_LINES = 4;
+
 export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { useStore?: AppStore; initialRecap?: boolean }) {
   const updateStatus = useStore((state) => state.updateStatus);
   const updateResults = useStore((state) => state.updateResults);
@@ -819,21 +824,29 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                   <Text color={colors.text} wrap="truncate-end"> {runningLabel}</Text>
                 </Box>
                 {runningSelectedRows.length > 0 ? (
-                  runningSelectedRows.map((row) => (
-                    <Box key={row.path}>
-                      <Spinner />
-                      <Text color={colors.text} wrap="truncate-end"> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
-                    </Box>
-                  ))
+                  <BoundedList
+                    items={runningSelectedRows}
+                    chromeRows={RUNNING_LIST_CHROME_ROWS}
+                    renderItem={(row) => (
+                      <Box key={row.path}>
+                        <Spinner />
+                        <Text color={colors.text} wrap="truncate-end"> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
+                      </Box>
+                    )}
+                  />
                 ) : isAllRun || runningMembers.length === 0 ? (
                   <StateLine kind="loading" subject="member services" />
                 ) : (
-                  runningMembers.map((member) => (
-                    <Box key={member.repoPath}>
-                      <Spinner />
-                      <Text color={colors.text} wrap="truncate-end"> {member.service} ({member.branch})</Text>
-                    </Box>
-                  ))
+                  <BoundedList
+                    items={runningMembers}
+                    chromeRows={RUNNING_LIST_CHROME_ROWS}
+                    renderItem={(member) => (
+                      <Box key={member.repoPath}>
+                        <Spinner />
+                        <Text color={colors.text} wrap="truncate-end"> {member.service} ({member.branch})</Text>
+                      </Box>
+                    )}
+                  />
                 )}
               </Box>
             ) : null}
@@ -853,17 +866,21 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                       <Text bold color={colors.text} wrap="truncate-end">
                         {recap.title}
                       </Text>
-                      {recap.contextLines.map((line) => (
+                      {recap.contextLines.slice(0, RECAP_CONTEXT_MAX_LINES).map((line) => (
                         <Text key={line} color={colors['text-dim']} wrap="truncate-end">
                           {line}
                         </Text>
                       ))}
-                      {recap.resultLines.map((line, index) => (
-                        // Duplicate service names occur within one EDT — key by line + index.
-                        <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
-                          {line}
-                        </Text>
-                      ))}
+                      <BoundedList
+                        items={recap.resultLines}
+                        chromeRows={RECAP_CHROME_ROWS}
+                        renderItem={(line, index) => (
+                          // Duplicate service names occur within one EDT — key by line + index.
+                          <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
+                            {line}
+                          </Text>
+                        )}
+                      />
                     </Box>
                   ) : null}
                   <DetailPane
