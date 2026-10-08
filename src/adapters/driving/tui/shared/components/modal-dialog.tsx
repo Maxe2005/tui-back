@@ -1,6 +1,7 @@
-import { Box, Text } from 'ink';
-import type { ReactNode } from 'react';
+import { Box, Text, useInput } from 'ink';
+import { useState, type ReactNode } from 'react';
 import { useBounds } from '../bounds/bounds-context.js';
+import { useElementSize } from '../hooks/use-element-size.js';
 import { colors, spacing } from '../theme/theme.js';
 
 export type ModalDialogProps = {
@@ -19,6 +20,20 @@ const DIALOG_FRAME_ROWS = 6;
 export function ModalDialog(props: ModalDialogProps) {
   const { title, open = true, children, maxHeight, footer } = props;
   const bounds = useBounds();
+  const [bodyRef, bodySize] = useElementSize();
+  const [innerRef, innerSize] = useElementSize();
+  const [offset, setOffset] = useState(0);
+  // Rows of body hidden below the visible window; the body scrolls with PgUp/PgDn.
+  const hidden = bodySize !== null && innerSize !== null ? Math.max(0, innerSize.height - bodySize.height) : 0;
+  const scroll = Math.min(offset, hidden);
+  const page = Math.max(1, (bodySize?.height ?? 1) - 1);
+  useInput(
+    (_input, key) => {
+      if (key.pageDown) setOffset(Math.min(hidden, scroll + page));
+      if (key.pageUp) setOffset(Math.max(0, scroll - page));
+    },
+    { isActive: open && hidden > 0 },
+  );
   if (!open) return null;
   const frameCap = Math.max(DIALOG_FRAME_ROWS + 1, bounds.rows);
   const cap = maxHeight === undefined ? frameCap : Math.min(maxHeight, frameCap);
@@ -44,10 +59,17 @@ export function ModalDialog(props: ModalDialogProps) {
         </Text>
       </Box>
       {children ? (
-        <Box flexDirection="column" flexShrink={1} minHeight={0} overflow="hidden">
-          <Box flexDirection="column" flexShrink={0}>
+        <Box ref={bodyRef} flexDirection="column" flexShrink={1} minHeight={0} overflow="hidden">
+          <Box ref={innerRef} flexDirection="column" flexShrink={0} marginTop={-scroll}>
             {children}
           </Box>
+        </Box>
+      ) : null}
+      {hidden > 0 ? (
+        <Box flexShrink={0}>
+          <Text color={colors['text-dim']} wrap="truncate-end">
+            {`${scroll > 0 ? '▲' : ' '}${scroll < hidden ? '▼' : ' '} PgUp/PgDn scroll`}
+          </Text>
         </Box>
       ) : null}
       {footer ? <Box flexShrink={0}>{footer}</Box> : null}

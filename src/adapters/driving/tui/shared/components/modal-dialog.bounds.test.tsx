@@ -1,9 +1,10 @@
 import { createElement } from 'react';
-import { Text } from 'ink';
+import { Text, render } from 'ink';
 import { describe, expect, it } from 'vitest';
 import { ModalDialog } from './modal-dialog.js';
 import { BoundsProvider } from '../bounds/bounds-context.js';
 import { renderToString } from './render-to-string.js';
+import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../test-support/fake-tty.js';
 
 describe('ModalDialog bounds', () => {
   it('never exceeds its bounds, keeps the title, pins the footer', async () => {
@@ -21,5 +22,46 @@ describe('ModalDialog bounds', () => {
     expect(out).toContain('FOOT');
     expect(out).toContain('row-0');
     expect(out).not.toContain('row-49');
+  });
+});
+
+describe('ModalDialog scrolling', () => {
+  it('scrolls its clipped body with PgDn / PgUp, keeping title and footer', async () => {
+    const stdout = new FakeTtyStdout();
+    stdout.columns = 60;
+    stdout.rows = 14;
+    const stdin = fakeInteractiveTtyStdin();
+    const body = Array.from({ length: 50 }, (_, i) => createElement(Text, { key: i }, `row-${i}`));
+    const instance = render(
+      createElement(
+        BoundsProvider,
+        { columns: 60, rows: 14, children: null },
+        createElement(ModalDialog, { title: 'BIG', footer: createElement(Text, null, 'FOOT') }, ...body),
+      ),
+      { stdout: stdout as unknown as NodeJS.WriteStream, stdin, interactive: true, exitOnCtrlC: false, patchConsole: false },
+    );
+    const last = () => stdout.output.slice(stdout.output.lastIndexOf('BIG'));
+    try {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(last()).toContain('row-0');
+      expect(last()).toContain('PgUp/PgDn scroll');
+
+      (stdin as unknown as { write: (c: string) => void }).write(KEYS.pageDown);
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      const after = last();
+      expect(after).not.toContain('row-0\n');
+      expect(after).toContain('row-5');
+      expect(after).toContain('FOOT');
+
+      (stdin as unknown as { write: (c: string) => void }).write(KEYS.pageUp);
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(last()).toContain('row-0');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
   });
 });

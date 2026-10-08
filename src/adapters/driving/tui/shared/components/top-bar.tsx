@@ -14,13 +14,17 @@ export function TopBar({
   const topic = edts?.find((edt) => edt.ulid === activeEdt)?.topic ?? null;
   return (
     <Box backgroundColor={colors.background} paddingLeft={spacing['1']} flexShrink={0}>
-      <Text color={colors.text} wrap="truncate-end">tui-back</Text>
+      <Box flexShrink={0}>
+        <Text color={colors.text}>tui-back</Text>
+      </Box>
       <Text color={colors['text-dim']} wrap="truncate-end">
         {' '}
         {topic ? normalizeMessage(topic, 60) : 'no active EDT'}
       </Text>
       <Box flexGrow={1} flexShrink={0} />
-      <Text color={colors['text-dim']} wrap="truncate-end">{formatHints([[':', 'cmd']])}</Text>
+      <Box flexShrink={0}>
+        <Text color={colors['text-dim']}>{formatHints([[':', 'cmd']])}</Text>
+      </Box>
     </Box>
   );
 }

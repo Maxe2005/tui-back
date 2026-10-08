@@ -15,7 +15,7 @@ function createFakeTtyStdin(): NodeJS.ReadStream {
   return stdin as unknown as NodeJS.ReadStream;
 }
 
-export async function renderToString(node: ReactNode): Promise<string> {
+export async function renderToString(node: ReactNode, size: { columns: number; rows: number } = { columns: 120, rows: 40 }): Promise<string> {
   let output = '';
   const stdout = new Writable({
     write(chunk, _encoding, callback) {
@@ -28,7 +28,7 @@ export async function renderToString(node: ReactNode): Promise<string> {
   // doesn't report both — making wrap-sensitive assertions non-deterministic across
   // environments (interactive shell vs. CI, narrow vs. wide). Fixing both pins every test's
   // layout width regardless of where it runs.
-  Object.assign(stdout, { columns: 120, rows: 40 });
+  Object.assign(stdout, size);
   const instance = render(node, {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stdin: createFakeTtyStdin(),
