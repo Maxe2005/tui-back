@@ -2,7 +2,7 @@
 title: 'Story 7.10: Switch — carry a dirty .tui-back.yaml across the EDT switch'
 type: 'feature'
 created: '2026-10-08'
-status: 'in-review'
+status: 'done'
 baseline_commit: '574f40dcc811b1949c799e6b89970371d5087b49'
 review_loop_iteration: 0
 context:
