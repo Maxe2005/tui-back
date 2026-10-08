@@ -13,6 +13,7 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - Story 7.3: Shared Zone Layout Contract & `Ctrl+W` Resize in Every Zone (UX-DR35)
 - Story 7.7: Shared Focus-Navigation Component (FR-33) — before 7.4; Shift+Tab reverses Tab everywhere via one per-zone configurable primitive
 - Story 7.9: Bounded-Rendering Audit, Global Fix & Regression Guard (AD-19, UX-DR37) — after 7.7, before 7.4/7.5/7.6
+- Story 7.10: Switch — Carry a Dirty `.tui-back.yaml` Across the EDT Switch (added 2026-10-08; independent of 7.4–7.6)
 - Story 7.4: Interaction Consistency Audit & Alignment (UX-DR36)
 - Story 7.5: Dashboard — Workspace Summary & Last-Update Persistence (UX-DR19)
 - Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
