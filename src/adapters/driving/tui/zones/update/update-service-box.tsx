@@ -6,6 +6,7 @@ import { BranchAutocompleteInput } from '../../shared/components/branch-autocomp
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 
@@ -107,9 +108,7 @@ export function UpdateServiceBox({
         </Text>
       </Box>
       {box.error !== null ? (
-        <Text color={colors.error} wrap="truncate-end">
-          ✖ {box.error}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${box.error}`}</ClampedParagraph>
       ) : null}
     </Box>
   );

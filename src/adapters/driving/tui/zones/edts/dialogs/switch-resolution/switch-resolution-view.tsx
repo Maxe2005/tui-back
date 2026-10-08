@@ -22,6 +22,7 @@ import {
   type SwitchResolutionBox,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 const COLUMN_HEADERS = ['Service', 'Scope', 'Current branch', 'Action', 'Target branch'] as const;
 
@@ -66,7 +67,7 @@ function ResolutionBoxView({ box, row, lists }: { box: SwitchResolutionBox; row:
           <TextInputLine label="Branch" value={box.branch.value} cursor={box.branch.cursor} focused={focused('branch') && box.editing} />
         </Box>
       ) : null}
-      {error !== null ? <Text color={colors.error} wrap="truncate-end">✖ {error}</Text> : null}
+      {error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${error}`}</ClampedParagraph> : null}
       <Box>
         <Marker focused={focused('apply')} />
         <Text color={focused('apply') ? colors.accent : colors.text} bold={focused('apply')}>
@@ -131,7 +132,7 @@ function DiscardConfirmView({
           </Text>
         )}
       />
-      {error !== null ? <Text color={colors.error} wrap="truncate-end">✖ {error}</Text> : null}
+      {error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${error}`}</ClampedParagraph> : null}
     </Box>
   );
 }
@@ -220,11 +221,9 @@ export function SwitchResolutionView({
         )}
       />
       {blocked !== undefined ? (
-        <Text color={colors.error} wrap="truncate-end">
-          ✖ {blocked.row.repo.service} : {blocked.error}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${blocked.row.repo.service} : ${blocked.error}`}</ClampedParagraph>
       ) : null}
-      {state.error !== null ? <Text color={colors.error} wrap="truncate-end">✖ {state.error}</Text> : null}
+      {state.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${state.error}`}</ClampedParagraph> : null}
       {listsPending ? (
         <Text color={colors['text-dim']}>Local branches are loading or unavailable — the “already exists” check is skipped for these services.</Text>
       ) : null}

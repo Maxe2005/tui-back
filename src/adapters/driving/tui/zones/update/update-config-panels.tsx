@@ -23,6 +23,7 @@ import {
 } from './update-config-panels.logic.js';
 import { UpdateServiceBox } from './update-service-box.js';
 import type { ServiceBoxContext, ServiceBoxState } from './update-service-box.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const PANELS_TITLE_EDT = 'CONFIGURE UPDATE';
 export const PANELS_TITLE_ALL = 'CONFIGURE ALL-REPOS UPDATE';
@@ -227,9 +228,7 @@ export function UpdateConfigPanels({
         maxVisibleRows={budget.tableRows}
         labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
-      <Text color={colors.error} wrap="truncate-end">
-        {draft.error !== null ? `✖ ${draft.error}` : ' '}
-      </Text>
+      <ClampedParagraph color={colors.error} maxLines={4}>{`${draft.error !== null ? `✖ ${draft.error}` : ' '}`}</ClampedParagraph>
     </ModalDialog>
   );
 }

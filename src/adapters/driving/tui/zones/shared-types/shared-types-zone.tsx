@@ -6,6 +6,7 @@ import { SHARED_TYPES_MODULE_IDS } from '../../../../../core/edt/resolve-tab-vis
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ZonePlaceholder } from '../../shared/components/index.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 // The singular-carrier phrasing names the source id specifically; the plural phrasing (module
 // identity ambiguous across several carriers) names both ids generically instead.
@@ -26,7 +27,7 @@ export function SharedTypesZone({ useStore = useAppStore }: { useStore?: AppStor
   if (status === 'disabled') {
     return (
       <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
-        <Text color={colors.text} wrap="truncate-end">{formatSharedTypesDisabledMessage(carryingServices)}</Text>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`${formatSharedTypesDisabledMessage(carryingServices)}`}</ClampedParagraph>
       </Box>
     );
   }

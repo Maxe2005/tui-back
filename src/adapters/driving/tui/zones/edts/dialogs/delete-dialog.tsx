@@ -21,6 +21,7 @@ import {
 import { StateLine } from '../../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import { BoundedList } from '../../../shared/components/bounded-list.js';
+import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
 
 export type DeleteDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -123,7 +124,7 @@ export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
       <Box flexDirection="column">
         {dialog.rejected ? (
           <>
-            <Text color={colors.error} wrap="truncate-end">{dialog.error}</Text>
+            <ClampedParagraph color={colors.error} maxLines={4}>{`${dialog.error}`}</ClampedParagraph>
           </>
         ) : dialog.memberRows === null ? (
           <StateLine kind="loading" subject="member status" />

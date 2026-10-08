@@ -42,6 +42,7 @@ import {
   summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 export const CREATE_WIZARD_TITLE = 'CREATE EDT';
 
@@ -455,7 +456,7 @@ export function CreateWizardView({
           ))}
         </Box>
         {dialog.seedFromEdt !== null ? <Text color={colors['text-dim']} wrap="truncate-end">From EDT: {dialog.seedFromEdt.topic}</Text> : null}
-        <Text color={colors['text-dim']} wrap="truncate-end">{STEP_INTROS[dialog.step]}</Text>
+        <ClampedParagraph color={colors['text-dim']} maxLines={4}>{`${STEP_INTROS[dialog.step]}`}</ClampedParagraph>
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
         {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} maxRows={maxRows} maxVisibleRows={maxVisibleRows} /> : null}

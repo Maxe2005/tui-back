@@ -17,6 +17,7 @@ import {
   type RequestRowSection,
   type RequestSection,
 } from './routes-request.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 // Rows shown per Params/Query/Headers section before the list windows (the Body keeps
 // the remaining height).
@@ -78,9 +79,7 @@ export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, 
   return (
     <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
       {fireBlock !== null ? (
-        <Text color={colors.error} wrap="truncate-end">
-          {fireBlock}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`${fireBlock}`}</ClampedParagraph>
       ) : null}
       {ROW_SECTIONS.map((rowSection) => {
         const rows = draft === null ? [] : draft[rowSection];
@@ -110,7 +109,7 @@ export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, 
             {rowAddPrompt !== null && rowAddPrompt.section === rowSection ? (
               <Box flexDirection="column" paddingLeft={2}>
                 <TextInputLine label="New name" value={rowAddPrompt.input.value} cursor={rowAddPrompt.input.cursor} focused />
-                {rowAddPrompt.error !== null ? <Text color={colors.error} wrap="truncate-end">{rowAddPrompt.error}</Text> : null}
+                {rowAddPrompt.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`${rowAddPrompt.error}`}</ClampedParagraph> : null}
               </Box>
             ) : null}
           </Box>

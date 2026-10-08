@@ -16,6 +16,7 @@ import {
   type OverrideBoxLine,
   type OverrideBoxState,
 } from './override-box.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 function LineMarker({ focused }: { focused: boolean }) {
   return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;
@@ -127,7 +128,7 @@ export function OverrideBoxView({
           [ Apply ]
         </Text>
       </Box>
-      {box.error !== null ? <Text color={colors.error} wrap="truncate-end">✖ {box.error}</Text> : null}
+      {box.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${box.error}`}</ClampedParagraph> : null}
     </Box>
   );
 }

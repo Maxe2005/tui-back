@@ -53,6 +53,7 @@ import { formatHint, formatHints } from '../../shared/components/hints.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from './update-config-panels.logic.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -817,10 +818,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             ) : null}
             {updateStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error} wrap="truncate-end">
-                  {updateError ?? 'Group update failed.'}
-                  {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
-                </Text>
+                <ClampedParagraph color={colors.error} maxLines={4}>{`${updateError ?? 'Group update failed.'}${updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}`}</ClampedParagraph>
                 {recapActive ? <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text> : null}
               </Box>
             ) : null}
@@ -915,7 +913,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
       />
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
-        <Text color={colors.text} wrap="truncate-end">{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}`}</ClampedParagraph>
       </ModalDialog>
       {updateConfig !== null ? (
         <UpdateConfigPanels
@@ -938,9 +936,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">{formatBlockerBody(updateBlocker)}</Text>
-            {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning} wrap="truncate-end">{formatBlockerRetry(updateBlocker)}</Text> : null}
-            {editorError !== null ? <Text color={colors.error} wrap="truncate-end">✖ {editorError}</Text> : null}
+            <ClampedParagraph color={colors.text} maxLines={4}>{`${formatBlockerBody(updateBlocker)}`}</ClampedParagraph>
+            {formatBlockerRetry(updateBlocker) !== null ? <ClampedParagraph color={colors.warning} maxLines={4}>{`${formatBlockerRetry(updateBlocker)}`}</ClampedParagraph> : null}
+            {editorError !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${editorError}`}</ClampedParagraph> : null}
             <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
           </Box>
         ) : null}

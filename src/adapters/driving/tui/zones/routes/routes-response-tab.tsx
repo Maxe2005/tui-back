@@ -10,6 +10,7 @@ import { StateLine } from '../../shared/components/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RouteResponse } from '../../store/slices/routes-slice.js';
 import { formatFireError, formatFireStatus } from './routes-zone.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export function RoutesResponseTab({
   response,
@@ -32,7 +33,7 @@ export function RoutesResponseTab({
     );
   }
   if (response.status === 'error') {
-    return <Text color={colors.error} wrap="truncate-end">{formatFireError(response.error.code, response.error.message)}</Text>;
+    return <ClampedParagraph color={colors.error} maxLines={4}>{`${formatFireError(response.error.code, response.error.message)}`}</ClampedParagraph>;
   }
   return (
     <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
