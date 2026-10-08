@@ -550,7 +550,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   return (
     <ModalDialog title="COMMAND" open>
       <Box flexDirection="column">
-        <Text color={colors.text}>
+        <Text color={colors.text} wrap="truncate-end">
           :<Text color={colors.accent}>{query}</Text>
           <Text color={colors['text-dim']}>█</Text>
         </Text>
@@ -575,7 +575,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
                     const isCursor =
                       focus === 'grid' && gridCursor.column === absoluteColumn && gridCursor.row === rowIndex;
                     return (
-                      <Text key={command.name} color={isCursor ? colors.accent : colors['text-dim']}>
+                      <Text key={command.name} color={isCursor ? colors.accent : colors['text-dim']} wrap="truncate-end">
                         {isCursor ? '› ' : '  '}
                         {command.name.padEnd(width)}
                       </Text>

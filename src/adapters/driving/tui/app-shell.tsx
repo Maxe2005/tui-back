@@ -4,7 +4,7 @@ import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-vis
 import { CommandBar } from './shared/command-bar.js';
 import { BoundsProvider } from './shared/bounds/bounds-context.js';
 import { SHELL_CHROME_ROWS, formatTooSmallMessage, isTerminalTooSmall } from './shared/bounds/bounds.js';
-import { TruncatedText } from './shared/components/truncated-text.js';
+import { ClampedParagraph, TruncatedText } from './shared/components/truncated-text.js';
 import { Footer } from './shared/components/footer.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
 import { TopBar } from './shared/components/top-bar.js';
@@ -368,7 +368,9 @@ export function AppShell({
   if (isTerminalTooSmall(columns, rows)) {
     return (
       <Box flexDirection="column" height={rows} overflow="hidden">
-        <Text color={colors.warning}>{formatTooSmallMessage(columns, rows)}</Text>
+        <ClampedParagraph color={colors.warning} maxLines={rows} width={columns}>
+          {formatTooSmallMessage(columns, rows)}
+        </ClampedParagraph>
       </Box>
     );
   }

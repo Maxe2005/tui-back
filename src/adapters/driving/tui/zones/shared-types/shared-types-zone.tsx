@@ -26,7 +26,7 @@ export function SharedTypesZone({ useStore = useAppStore }: { useStore?: AppStor
   if (status === 'disabled') {
     return (
       <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
-        <Text color={colors.text}>{formatSharedTypesDisabledMessage(carryingServices)}</Text>
+        <Text color={colors.text} wrap="truncate-end">{formatSharedTypesDisabledMessage(carryingServices)}</Text>
       </Box>
     );
   }

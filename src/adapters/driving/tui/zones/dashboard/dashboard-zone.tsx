@@ -38,11 +38,11 @@ export function DashboardZone({
       <LaunchBanner />
       {registryEmptyStatus === 'error' ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
-          <Text color={colors.error}>{REGISTRY_CHECK_ERROR_MESSAGE}</Text>
+          <Text color={colors.error} wrap="truncate-end">{REGISTRY_CHECK_ERROR_MESSAGE}</Text>
         </Box>
       ) : registryEmpty === true ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
-          <Text color={colors.text}>{EMPTY_REGISTRY_MESSAGE}</Text>
+          <Text color={colors.text} wrap="truncate-end">{EMPTY_REGISTRY_MESSAGE}</Text>
           <DimAnnotation text={EMPTY_REGISTRY_HINT} />
         </Box>
       ) : (

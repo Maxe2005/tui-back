@@ -290,7 +290,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
 
         {phase === 'root-input' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-end">
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
@@ -324,7 +324,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 // matching list-row.tsx's selection marker, without modifying the shared
                 // component.
                 <Box key={path} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
                   <CheckboxListItem
                     label={path}
                     selected={highlighted}
@@ -345,7 +345,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
             <Text color={colors['text-dim']}>RESULTS</Text>
             {(registryRegisterResults ?? []).map((result) => (
               <Box key={result.path} flexDirection="column">
-                <Text color={colors.text}>
+                <Text color={colors.text} wrap="truncate-end">
                   {result.path} — <Text color={outcomeColor(result.outcome)}>{result.outcome}</Text>
                 </Text>
                 {result.detail ? <DimAnnotation text={result.detail} /> : null}
@@ -385,7 +385,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                     candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
                   return (
                     <Box key={candidate.path} flexDirection="row">
-                      <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
                       <CheckboxListItem
                         label={`${candidate.path} — ${candidate.reason}${memberNote}`}
                         selected={highlighted}
@@ -418,7 +418,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
             <Text color={colors['text-dim']}>RESULTS</Text>
             {(registryCleanResults ?? []).map((result) => (
               <Box key={result.path} flexDirection="column">
-                <Text color={colors.text}>
+                <Text color={colors.text} wrap="truncate-end">
                   {result.path} — <Text color={staleOutcomeColor(result.outcome)}>{result.outcome}</Text>
                 </Text>
                 {result.detail ? <DimAnnotation text={result.detail.message} /> : null}

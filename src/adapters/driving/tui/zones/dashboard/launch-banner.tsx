@@ -14,7 +14,7 @@ export function LaunchBanner() {
       backgroundColor={colors.surface}
     >
       {BANNER_LINES.map((line) => (
-        <Text key={line} color={colors['text-dim']}>
+        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
           {line}
         </Text>
       ))}
