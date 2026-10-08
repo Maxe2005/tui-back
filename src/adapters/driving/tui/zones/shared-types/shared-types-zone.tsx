@@ -76,6 +76,13 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   }, [loadConsumers, activeEdt]);
 
   const repoPaths = consumers.map((consumer) => consumer.repoPath);
+  const repoPathsKey = repoPaths.join('\n');
+
+  // A new consumer list (or another EDT) starts the checklist afresh; the typed version stays.
+  useEffect(() => {
+    setForm((previous) => ({ ...previous, unchecked: new Set(), row: 0 }));
+    setResultRow(0);
+  }, [repoPathsKey, activeEdt]);
   const onVersionField = run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0;
 
   // The version field types freely (letters included), and a quit confirmation owns the keys.
@@ -128,7 +135,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       if (key.upArrow === true) {
         setResultRow((row) => Math.max(0, row - 1));
       } else if (key.downArrow === true) {
-        setResultRow((row) => Math.min(run.results.length - 1, row + 1));
+        setResultRow((row) => Math.max(0, Math.min(run.results.length - 1, row + 1)));
       } else if ((input === 'r' || input === 'R') && run.results[resultRow]?.outcome === 'failed') {
         void retryService(run.results[resultRow]!.repoPath);
       } else if (key.escape === true || input === 'n') {
@@ -183,7 +190,16 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       return <StateLine kind="loading" subject="consuming services" />;
     }
     if (consumersStatus === 'error') {
-      return <StateLine kind="error" subject="consuming services" retry />;
+      return (
+        <Box flexDirection="column">
+          <StateLine kind="error" subject="consuming services" retry />
+          {consumersError !== null ? (
+            <Text color={colors.error}>
+              [{consumersError.code}] {consumersError.message}
+            </Text>
+          ) : null}
+        </Box>
+      );
     }
     if (consumers.length === 0) {
       return (
@@ -271,6 +287,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
             </Box>
           );
         })}
+        {run.status === 'done' && run.notice ? <Text color={colors.warning}>{run.notice}</Text> : null}
         {run.status === 'done' ? (
           <Text color={colors['text-dim']}>
             {run.results.some((result) => result.outcome === 'failed')

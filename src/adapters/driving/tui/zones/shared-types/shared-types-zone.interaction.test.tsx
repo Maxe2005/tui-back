@@ -42,7 +42,7 @@ function mount(store: ReturnType<typeof createAppStore>) {
 async function press(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, sequence: string): Promise<void> {
   (stdin as unknown as { write: (chunk: string) => void }).write(sequence);
   await instance.waitUntilRenderFlush();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, sequence === KEYS.escape ? 80 : 10));
 }
 
 
@@ -137,5 +137,91 @@ describe('SharedTypesZone interaction', () => {
       instance.unmount();
     }
   });
-});
 
+  it('Enter and Esc on a blocked run return to the form through resetSharedTypesRun', async () => {
+    for (const key of [KEYS.enter, KEYS.escape]) {
+      const resetSharedTypesRun = vi.fn();
+      const { store } = seed({
+        resetSharedTypesRun,
+        sharedTypesRun: {
+          status: 'blocked',
+          version: '0.1.1',
+          options: { install: true, cleanRestart: false, commit: true },
+          blocked: { code: 'version-not-published', message: 'nope' },
+          results: [],
+          live: null,
+        },
+      });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, key);
+        expect(resetSharedTypesRun).toHaveBeenCalledTimes(1);
+      } finally {
+        instance.unmount();
+      }
+    }
+  });
+
+  it('Esc and n on a done run start a new run through resetSharedTypesRun', async () => {
+    for (const key of [KEYS.escape, 'n']) {
+      const resetSharedTypesRun = vi.fn();
+      const { store } = seed({
+        resetSharedTypesRun,
+        sharedTypesRun: {
+          status: 'done',
+          version: '0.1.1',
+          options: { install: true, cleanRestart: false, commit: true },
+          blocked: null,
+          results: [{ service: 'api', repoPath: '/r/api', outcome: 'done', steps: [] }],
+          live: null,
+        },
+      });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, key);
+        expect(resetSharedTypesRun).toHaveBeenCalledTimes(1);
+      } finally {
+        instance.unmount();
+      }
+    }
+  });
+
+  it('Space toggles an option, visible in the next run call', async () => {
+    const { store, runSharedTypesPropagation } = seed();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      for (const char of '5') {
+        await press(instance, stdin, char);
+      }
+      for (let i = 0; i < 4; i += 1) {
+        await press(instance, stdin, KEYS.down); // api, web, npm i, clean restart
+      }
+      await press(instance, stdin, KEYS.space); // clean restart on
+      await press(instance, stdin, KEYS.enter);
+
+      expect(runSharedTypesPropagation).toHaveBeenCalledWith({
+        version: '0.1.5',
+        repoPaths: ['/r/api', '/r/web'],
+        options: { install: true, cleanRestart: true, commit: true },
+      });
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('does not run while the version is only the 0.1. prefix', async () => {
+    const { store, runSharedTypesPropagation } = seed();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      expect(runSharedTypesPropagation).not.toHaveBeenCalled();
+    } finally {
+      instance.unmount();
+    }
+  });
+});

@@ -2,6 +2,7 @@
 // consumer checklist, option toggles), the results cursor and the quit-confirm rule. The zone's
 // `useInput` stays a thin dispatcher over these.
 import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/shared-types/propagate-version.js';
+import { isValidVersion } from '../../../../../core/shared-types/propagate-version.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/text-edit.js';
 
 export const VERSION_PREFIX = '0.1.';
@@ -58,7 +59,7 @@ export function selectedRepoPaths(state: FormState, repoPaths: readonly string[]
 }
 
 export function canRun(state: FormState, repoPaths: readonly string[]): boolean {
-  return state.version.value.trim() !== '' && selectedRepoPaths(state, repoPaths).length > 0;
+  return isValidVersion(state.version.value) && selectedRepoPaths(state, repoPaths).length > 0;
 }
 
 export type FormStep = { state: FormState; run: boolean };

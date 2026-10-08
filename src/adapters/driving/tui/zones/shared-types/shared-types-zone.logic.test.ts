@@ -32,10 +32,18 @@ describe('reduceForm', () => {
   });
 
   it('runs on Enter outside the version field only when a version and a service are chosen', () => {
-    const base = { ...initialFormState(), row: 1 };
+    const base = { ...initialFormState(), version: { value: '0.1.5', cursor: 5 }, row: 1 };
     expect(reduceForm(base, '', { return: true }, PATHS).run).toBe(true);
     expect(reduceForm({ ...base, unchecked: new Set(PATHS) }, '', { return: true }, PATHS).run).toBe(false);
     expect(canRun({ ...base, version: { value: ' ', cursor: 1 } }, PATHS)).toBe(false);
+  });
+
+  it('cannot run with only the 0.1. prefix or an invalid version', () => {
+    const base = { ...initialFormState(), row: 1 };
+    expect(canRun(base, PATHS)).toBe(false);
+    expect(canRun({ ...base, version: { value: '0.1.abc', cursor: 7 } }, PATHS)).toBe(false);
+    expect(canRun({ ...base, version: { value: '0.1.3674', cursor: 8 } }, PATHS)).toBe(true);
+    expect(reduceForm(base, '', { return: true }, PATHS).run).toBe(false);
   });
 
   it('Enter on the version field moves down instead of running', () => {
