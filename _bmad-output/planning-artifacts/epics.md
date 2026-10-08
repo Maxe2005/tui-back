@@ -46,6 +46,7 @@ FR-30 (added 2026-10-05, Sprint Change Proposal): Smart group update — `shared
 FR-31 (added 2026-10-05, Sprint Change Proposal): Auto-resolve merge conflicts limited to the `shared-types` dependency line.
 FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed services — `container` optional in the manifest; restart/health/logs degrade to an explicit "no container" state.
 FR-32 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/migration detail in Update, session-only.
+FR-34 (added 2026-10-08, Sprint Change Proposal): Full-screen, scrollable per-service update report; FR-10/FR-11 amended for parallel runs and the incident queue.
 FR-33 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
 
 ### NonFunctional Requirements
@@ -158,6 +159,7 @@ FR-22: Epic 6 - See response and relevant logs together
 FR-23: Epic 6 - Manage the saved-request library across EDTs
 FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
 FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
+FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
 ## Epic List
@@ -174,7 +176,7 @@ A developer can create, modify, and safely switch between EDTs (no uncommitted w
 
 ### Epic 3: Group Update & Migrations
 A developer can run a group update (pull, migrate, restart) scoped to the active EDT, to all managed repos, or to a single service — configured beforehand (service selection, per-service branch, migrate/clean-restart toggles) and followed live per-service — with assisted resolution of conflicts and migration failures.
-**FRs covered:** FR-10, FR-11, FR-12
+**FRs covered:** FR-10, FR-11, FR-12, FR-34
 **Implementation notes:** Update zone (UX-DR21), reuses Epic 2's git safety gate (AD-8), detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic.
 
 #### Story 3.13: Non-Blocking Subprocess Execution — Live, Navigable Update
@@ -260,6 +262,72 @@ So that I get the overview first and can size each group to what I'm looking at.
 **Given** the service list **When** it renders **Then** `EDT MEMBERS` and `OTHER SERVICES` are two distinct panes separated by a splitter (as in the EDTs zone), each with its own bounded list, and the boundary is declared in the zone layout contract so `Ctrl+W` resizes it and `Tab` cycles it with the list/detail boundary.
 
 **Given** no service is focused **When** the developer presses `p` or `Enter` **Then** nothing opens — they act on a focused service only.
+
+### Story 3.18: Parallel Update Run & Incident Queue
+
+> Added 2026-10-08 (Sprint Change Proposal). Amends FR-10, FR-11. Builds on Stories 3.4, 3.10, 3.13.
+
+As a developer,
+I want the services of a run to update in parallel and every problem to wait in a queue I can work through in the order I choose,
+So that a clean run finishes as fast as possible and a run with errors never stops healthy services while I fix the others.
+
+**Acceptance Criteria:**
+
+**Given** a confirmed run (any scope) **When** it starts **Then** the targeted services are processed by a bounded pool: at most `N` services are in flight at once (`N` = setting `update.concurrency`, default 3, minimum 1; `1` behaves exactly like today's sequential run). Each service runs its own pipeline (merge → migration → restart) independently of the others.
+
+**Given** two targeted services that resolve to the same repoPath **When** the run executes **Then** they are never processed concurrently.
+
+**Given** a service hits something needing the developer (dirty worktree, merge conflict, pre-existing mid-merge/mid-rebase — Story 3.4) **When** it is raised **Then** that service **pauses** and an **incident** is appended to the run's incident queue; the pool slot it held is released to the next waiting service; every other service keeps going.
+
+**Given** a service's migration or restart fails **When** it occurs **Then** nothing changes from today: the service ends `failed` with its `migration-failed` / restart detail, no incident is raised, and the other services are neither blocked nor rolled back.
+
+**Given** a run in progress **When** the developer launches any other update, including a single-service update of a service that already failed **Then** it is rejected as today (Story 3.16); relaunching is possible only once the whole run has ended.
+
+**Given** the incident queue **When** the first incident arrives and the developer is in the Update zone **Then** the incident popup opens on it. Later incidents are appended **without stealing focus or input** from whatever the developer is doing (popup open or closed): the Update tab and the zone header show a count of pending incidents, and a transient toast names the new one.
+
+**Given** the incident popup **When** it is open **Then** it lists every pending incident (service, kind, age) next to the guided menu of the selected one. `↑/↓` select an incident, `Enter` opens its guided menu, the developer may resolve them in any order. `Esc` closes the popup **without resolving anything**: incidents stay queued, their services stay paused, a key reopens the popup (also reachable from the command bar).
+
+**Given** the developer resolves an incident (stash / edited / cancel-repo / cancel-run) **When** the tool re-verifies it (Story 3.4's re-check, never assumed) **Then** the service resumes on its own in the background: a service that regains its slot continues its pipeline without further input. If re-verification fails, the incident stays in the queue marked "still blocked" with the reason, as Story 3.4 does today.
+
+**Given** a pending incident **When** the developer looks at that service in the list or its detail pane **Then** the service shows an "awaiting you" state (glyph + colour, never colour alone), consistent with the closed status set of Story 3.6.
+
+**Given** the developer chooses "cancel the whole run" **When** selected **Then** no service that has not started is started; services in flight finish their **current step** (no subprocess is killed mid-step) and stop before the next one; pending incidents are closed as cancelled; the summary lists them as skipped/cancelled. The summary still accounts for every targeted service, in configuration order.
+
+**Given** the developer presses `q` during a run **When** incidents are pending or services are in flight **Then** the existing quit confirmation names how many are pending and in flight (Story 3.1 rule extended).
+
+**Given** the run ends **When** the summary shows **Then** the incident queue is empty (every incident resolved, skipped or cancelled), and the recap (Story 3.14) lists the services in configuration order.
+
+**Implementation notes:**
+- Core: replace the two sequential loops with one `runPool(targets, concurrency, worker)` helper (pure, unit-tested with fake ports). Keep the `Promise<UpdateBlockerChoice>` seam and its blocker kinds/choices unchanged. Lock keys: keep `GROUP_UPDATE_LOCK_KEY`; add a per-repoPath serialisation (key by resolved path). Provide an `ordering` hook (stages) so Story 4.4 can run `shared-types` alone first.
+- A worker throwing is converted into that service's `failed` row (never-throw invariant, AD-3); the pool never rejects.
+- Store: `updateBlocker` / `pendingBlockerResolve` become `incidents: UpdateIncident[]` plus a `Map<incidentId, resolver>`; `resolveUpdateIncident(id, choice)`. Existing `liveServiceIssues` keep working per service.
+- Settings: `update.concurrency` in the global settings screen (Story 2.19), General tab or an Update tab.
+- Build in this order, one commit each: pool at `concurrency=1` (suite green) → per-repoPath serialisation → incident store → queue popup → concurrency setting → enable default 3.
+- Bounded rendering (AD-19): the queue list goes through `BoundedList`; register the popup in `dialog-registry.tsx`.
+
+### Story 3.19: Full-Screen Service Report (Success / Error Logs)
+
+> Added 2026-10-08 (Sprint Change Proposal). Adds FR-34. Mirrors the Logs zone's fullscreen pane (Epic 5).
+
+As a developer,
+I want to open a service's last-update report (or its live issue log) full screen,
+So that I can read an entire merge or migration error that the detail pane has to truncate.
+
+**Acceptance Criteria:**
+
+**Given** a focused service in the Update zone with a last update or a live issue log **When** the developer presses `f` (Enter on the detail pane is not used: it opens the service menu) **Then** a full-screen report opens for that service: context line (from → to), then every step (merge, migration, restart) with its **complete** detail and error output, the issue log with each issue's full text, nothing capped at 4 lines or flattened to one line.
+
+**Given** the full-screen report **When** content exceeds the screen **Then** it scrolls (`↑/↓`, `PgUp/PgDn`, `Home/End`), shows a position indicator, and long lines wrap (not truncate); `w` toggles wrap/truncate like the Logs fullscreen; `Esc` closes and returns to the zone unchanged.
+
+**Given** the report is opened during a live run **When** new steps/issues arrive **Then** it updates live; if the service finishes, it switches to its final report in place.
+
+**Given** the report content **When** a step failed **Then** failed steps are visually first-class (error colour + glyph, never colour alone) and a key (`n`/`p`) jumps between failed steps.
+
+**Given** the recap view (no service focused) **When** a service row of the recap has a failure **Then** the same report opens for it (`Enter` on the row).
+
+**Given** the pane footer **When** a report is available **Then** the footer hint advertises `[f] full report`.
+
+**Implementation notes:** a `FullscreenReport` component under `zones/update/`, purely presentational like `logs/fullscreen-pane.tsx`; data comes from the existing `buildServiceStepViews` and `liveServiceIssues` with the caps lifted (the caps stay on the inline pane). Bounded-rendering exemption justified: scrolling window over the full text, tested in `bounded-rendering.guard`.
 
 ## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
@@ -2184,6 +2252,10 @@ So that I can catch up my session's services in one action instead of doing it b
 **When** the developer presses `q`
 **Then** quitting requires explicit confirmation first
 
+**Given** several member services (amended 2026-10-08)
+**When** the run executes
+**Then** they are processed in parallel up to the configured concurrency (Story 3.18); a service waiting on the developer never delays the others
+
 ### Story 3.2: Run Migrations as Part of the Group Update
 
 As a developer,
@@ -2262,7 +2334,7 @@ So that a conflict never stalls the whole run or forces me to a separate termina
 **When** the group update reaches it
 **Then** this is detected and surfaced as its own distinct state, before the guided menu applies
 
-**Compatibility note (added 2026-09-22 correct-course):** the guided menu keeps blocking input exactly as today; it now renders in front of that service's live detail pane (Story 3.10) instead of a blank backdrop — no change to the detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic itself.
+**Compatibility note (added 2026-09-22 correct-course):** the guided menu keeps blocking input exactly as today; it now renders in front of that service's live detail pane (Story 3.10) instead of a blank backdrop — no change to the detect → auto-fix-known-safe-or-guided-menu → re-verify mechanic itself. (Amended 2026-10-08: the menu is no longer a single blocking modal; each blocked repo becomes one incident in the run's incident queue, Story 3.18, and only that repo waits.)
 
 ### Story 3.5: Per-Service Migration Failure Handling & Re-Trigger — Superseded
 

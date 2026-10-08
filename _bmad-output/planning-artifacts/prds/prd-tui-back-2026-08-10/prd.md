@@ -262,6 +262,7 @@ A developer can run a group update — pull/merge the update, run migrations, re
 - The end-of-run summary accounts for every targeted service by outcome (updated / skipped / failed) — no service is silently absent from the summary.
 - A group update triggered on an EDT with zero member services is a no-op, with an explicit message rather than silent success.
 - A second group-update run is rejected while one is already in progress, in any scope.
+- The targeted services are updated in parallel, bounded by a configurable concurrency (default 3; 1 = sequential). The end-of-run summary lists services in configuration order. (Amended 2026-10-08, Sprint Change Proposal.)
 
 #### FR-11: Assisted resolution of merge conflicts / dirty state
 
@@ -269,7 +270,7 @@ When a group update hits a repo that isn't cleanly updatable, the tool auto-reso
 
 **Consequences (testable):**
 - If only `package.json`/lockfile are dirty, the tool resolves it the same way `update_repo.sh` does today, without prompting.
-- For any other dirty/conflicted state, the tool presents a menu (stash / open in editor / cancel this repo / cancel the whole run) and does not proceed on that repo until the developer acts — canceling this repo alone lets the run continue with the rest; canceling the whole run stops it entirely.
+- For any other dirty/conflicted state, the tool raises an incident in a queue that fills as the run progresses; the developer chooses which incident to resolve first (stash / open in editor / cancel this repo / cancel the whole run). Only the blocked repo waits; the others keep updating, and a resolved repo resumes by itself after the tool re-verifies its state (amended 2026-10-08) — canceling this repo alone lets the run continue with the rest; canceling the whole run stops un-started services and lets in-flight services finish their current step.
 - After the developer acts, the tool re-checks the repo's state before resuming — it does not assume success.
 - A repo already mid-merge/mid-rebase from a previous interrupted or crashed run is detected as its own case, distinct from a lockfile-only dirty state, and surfaced to the developer explicitly before the guided menu applies.
 
@@ -284,6 +285,7 @@ When a migration fails during a group update, the tool surfaces which service, w
 - Re-running a fixed migration re-verifies success before that service is marked caught up.
 - Repeated failures on the same migration are surfaced the same way each time; no retry limit or escalation path is enforced in v1.
 - The re-trigger action is available directly from the affected service's own row/detail view in the Update zone, using the same single-service configuration interface as a full single-service update (FR-25) — no separate flow to remember.
+- A failed migration or restart is not an incident: the service ends failed as before, and the other services are neither blocked nor rolled back. It can be relaunched through the single-service update once the whole run has ended. (Clarified 2026-10-08.)
 
 #### FR-25: Configure a group update before it runs
 
@@ -336,6 +338,15 @@ After a group update, the Update zone's detail pane reports per service what rea
 - CLI parity (FR-1): the same details ride the JSON line additively.
 
 ---
+
+#### FR-34: Full-screen service update report (added 2026-10-08, Sprint Change Proposal)
+
+A developer can open a service's update report full screen — the complete detail and error output of each step and every logged issue — scrollable, wrapping, and live while the run is in progress.
+
+**Consequences (testable):**
+- Nothing is capped or flattened: a multi-line migration or merge error is fully readable.
+- Failed steps are visually distinct (glyph + color) and can be jumped to.
+- The inline detail pane keeps its bounded rendering; the full report is the only unbounded-text surface.
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
