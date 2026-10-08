@@ -55,6 +55,8 @@ export interface PropagateParams {
   shared: SharedTypesPort;
   version: string;
   consumers: DependencyConsumer[];
+  // Registry URL per dependency name, from the shared-types-source modules' `registry`.
+  registries?: Readonly<Record<string, string>>;
   options: PropagateOptions;
   // Retry: per repoPath, the step to resume at (from a previous failed result).
   resume?: Readonly<Record<string, ResumeFrom>>;
@@ -88,16 +90,26 @@ export function isValidVersion(version: string): boolean {
   return VERSION_PATTERN.test(version.trim());
 }
 
+// A 404 from the registry that was actually queried; when none was configured, say so — npm
+// then used its own default (npmjs.org), where a private scoped package is never found.
+export function notPublishedMessage(packageName: string, version: string, registry: string | undefined): string {
+  if (registry !== undefined && registry.trim() !== '') {
+    return `${packageName}@${version} was not found on ${registry.trim()}.`;
+  }
+  return `${packageName}@${version} was not found on npm's default registry — no "registry" is configured, so a private package cannot be resolved. Set "registry" on the shared-types-source module in .tui-back.yaml.`;
+}
+
 export async function verifyVersionPublished(
   shared: SharedTypesPort,
   consumers: readonly DependencyConsumer[],
   version: string,
+  registries: Readonly<Record<string, string>> = {},
 ): Promise<Result<void>> {
   if (!isValidVersion(version)) {
     return err('invalid-version', `"${version.trim()}" is not a valid version — expected major.minor.patch, e.g. 0.1.3674. Nothing was written.`);
   }
   for (const dependency of new Set(consumers.map((consumer) => consumer.dependency))) {
-    const verified = await shared.verifyPublished(dependency, version);
+    const verified = await shared.verifyPublished(dependency, version, registries[dependency]);
     if (!verified.ok) {
       if (verified.error.code === 'registry-unreachable') {
         return err('registry-unreachable', `Registry unreachable: cannot verify ${dependency}@${version} (${verified.error.message}). Nothing was written.`);
@@ -105,7 +117,7 @@ export async function verifyVersionPublished(
       return verified;
     }
     if (!verified.data) {
-      return err('version-not-published', `${dependency}@${version} is not published on the registry. Nothing was written.`);
+      return err('version-not-published', `${notPublishedMessage(dependency, version, registries[dependency])} Nothing was written.`);
     }
   }
   return ok(undefined);
@@ -117,7 +129,7 @@ export async function propagateVersion(params: PropagateParams): Promise<Propaga
   if (consumers.length === 0) {
     return { status: 'blocked', error: { code: 'no-service-selected', message: 'No service selected — nothing to propagate.' } };
   }
-  const verified = await verifyVersionPublished(shared, consumers, version);
+  const verified = await verifyVersionPublished(shared, consumers, version, params.registries);
   if (!verified.ok) {
     return { status: 'blocked', error: { code: verified.error.code, message: verified.error.message } };
   }

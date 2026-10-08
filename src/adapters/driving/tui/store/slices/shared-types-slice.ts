@@ -129,6 +129,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
           shared: deps.sharedTypes.port,
           version,
           consumers,
+          registries: await sourceRegistries(),
           options,
           resume,
           onProgress: (event) => set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, live: { repoPath: event.repoPath, step: event.step } } })),
@@ -153,6 +154,34 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
         }
       } finally {
         get().setRunInProgress(false);
+      }
+    }
+
+    // Best effort: dependency name → registry of the EDT's source modules. A failure here
+    // leaves the map empty (npm's own configuration then applies) and never blocks a run.
+    async function sourceRegistries(): Promise<Record<string, string>> {
+      if (deps?.sharedTypes?.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
+        return {};
+      }
+      try {
+        const listed = await listSources({
+          edtRegistry: deps.edtRegistry,
+          manifest: deps.manifest,
+          state: deps.state,
+          moduleId: deps.sharedTypes.sourceModuleId,
+          parseConfig: deps.sharedTypes.parseSourceConfig,
+        });
+        const registries: Record<string, string> = {};
+        if (listed.ok) {
+          for (const source of listed.data.sources) {
+            if (source.registry !== undefined && registries[source.packageName] === undefined) {
+              registries[source.packageName] = source.registry;
+            }
+          }
+        }
+        return registries;
+      } catch {
+        return {};
       }
     }
 
@@ -212,6 +241,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
           sourceRepoPath: source.repoPath,
           publishCommand: source.publishCommand,
           packageName: source.packageName,
+          registry: source.registry,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -425,7 +455,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
           }
           let verified: Awaited<ReturnType<typeof deps.sharedTypes.port.verifyPublished>>;
           try {
-            verified = await deps.sharedTypes.port.verifyPublished(source.packageName, version);
+            verified = await deps.sharedTypes.port.verifyPublished(source.packageName, version, source.registry);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             set((state) => ({

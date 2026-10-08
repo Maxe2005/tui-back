@@ -101,6 +101,26 @@ describe('verifyPublished', () => {
     expect(seen).toEqual(['view', `${DEP}@1.0.0`, 'version', '--json']);
   });
 
+  it('routes a scoped package through its scope registry', async () => {
+    let seen: readonly string[] = [];
+    const runner: RegistryRunner = async (_c, args) => {
+      seen = args;
+      return { status: 0, stdout: '"1.0.0"', stderr: '' };
+    };
+    await createSharedTypesAdapter({ runner }).verifyPublished(DEP, '1.0.0', 'https://npm.ianord.fr');
+    expect(seen).toEqual(['view', `${DEP}@1.0.0`, 'version', '--json', '--@ianord:registry=https://npm.ianord.fr']);
+  });
+
+  it('uses the global --registry flag for an unscoped package', async () => {
+    let seen: readonly string[] = [];
+    const runner: RegistryRunner = async (_c, args) => {
+      seen = args;
+      return { status: 0, stdout: '"1.0.0"', stderr: '' };
+    };
+    await createSharedTypesAdapter({ runner }).verifyPublished('plain-pkg', '1.0.0', 'https://npm.example');
+    expect(seen).toContain('--registry=https://npm.example');
+  });
+
   it('requires an exact match when npm prints several versions', async () => {
     const out = '["0.1.3","0.1.4"]';
     const adapter = createSharedTypesAdapter({ runner: runnerOf({ status: 0, stdout: out, stderr: '' }) });

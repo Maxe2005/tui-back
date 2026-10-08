@@ -259,6 +259,7 @@ entrée `{}` est valide et prend les valeurs par défaut.
 |--------------------------|--------------------|---------------------------|------------------------------------------------------------------|
 | `shared-types-source`    | `publishCommand`  | `npm run v`             | Commande de publication du paquet (utilisée par les stories de publication) |
 | `shared-types-source`    | `packageName`     | `@ianord/shared-types`  | Nom du paquet, utilisé pour vérifier une version sur le registre npm |
+| `shared-types-source`    | `registry`        | `https://npm.ianord.fr` | URL du registre npm qui sert le scope du paquet (passée à `npm view` via `--@scope:registry=…`, `--registry=…` si le paquet n'a pas de scope). Sans elle, npm interroge npmjs.org et ne trouve jamais un paquet privé |
 | `shared-types-consumer`  | `dependency`      | `@ianord/shared-types`  | Dépendance dont la ligne de version est lue/réécrite dans `package.json` |
 | `shared-types-consumer`  | `packageJsonPath` | `package.json`          | Chemin du `package.json` du service, relatif à son dépôt        |
 

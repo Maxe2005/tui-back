@@ -46,6 +46,7 @@ export interface ListConsumersParams {
 export interface SourceConfig {
   publishCommand: string;
   packageName: string;
+  registry?: string;
 }
 
 export interface SourceEntry extends SourceConfig {
@@ -117,6 +118,7 @@ export async function listSources(params: ListSourcesParams): Promise<Result<Lis
       branch: entry.branch,
       publishCommand: (entry.config as SourceConfig).publishCommand,
       packageName: (entry.config as SourceConfig).packageName,
+      registry: (entry.config as SourceConfig).registry,
     })),
     issues: listed.data.issues,
   });

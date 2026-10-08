@@ -35,7 +35,7 @@ describe('runPublish', () => {
     expect(f.restart.run).toHaveBeenCalledTimes(1);
     expect(f.restart.run).toHaveBeenCalledWith('/r/source', 'npm run v');
     expect(f.shared.readOwnVersion).toHaveBeenCalledWith('/r/source/package.json');
-    expect(f.shared.verifyPublished).toHaveBeenCalledWith('@ianord/shared-types', '0.1.3674');
+    expect(f.shared.verifyPublished).toHaveBeenCalledWith('@ianord/shared-types', '0.1.3674', undefined);
   });
 
   it('rejects an empty publish command without running anything', async () => {
@@ -63,6 +63,12 @@ describe('runPublish', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'publish-failed' } });
     expect((result as { ok: false; error: { message: string } }).error.message).toContain('npm ERR boom');
     expect(f.shared.readOwnVersion).not.toHaveBeenCalled();
+  });
+
+  it('verifies on the configured registry', async () => {
+    const f = fakes();
+    await runPublish({ ...f, ...BASE, registry: 'https://npm.example' });
+    expect(f.shared.verifyPublished).toHaveBeenCalledWith('@ianord/shared-types', '0.1.3674', 'https://npm.example');
   });
 
   it('does not mark published when the version is absent from the registry', async () => {
