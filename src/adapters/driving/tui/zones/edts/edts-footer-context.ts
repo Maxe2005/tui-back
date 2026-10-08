@@ -100,7 +100,7 @@ export function edtsFooterContext(
       }
       return dialog.rejected || dialog.memberRows === null ? 'dismiss' : 'checklist';
     case 'issues':
-      return 'dismiss';
+      return 'issues-list';
     case 'quick-pick':
       return 'menu';
   }

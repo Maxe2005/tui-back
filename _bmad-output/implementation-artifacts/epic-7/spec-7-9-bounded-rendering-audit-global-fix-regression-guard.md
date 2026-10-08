@@ -71,6 +71,8 @@ context:
 
 - `zones/logs/logs-zone.interaction.test.tsx`, "keeps a column's display width stable as its own vertical scroll changes" and "the grid gains a 'more below' indicator once the terminal shrinks…": the shrink step now resizes to 12 rows instead of 10, because 10 rows is below the new 40x12 minimum and now shows the too-small screen instead of the zone.
 - Rendering that deliberately changed without touching an existing test: dynamic `Text` outside `shared/` now truncates to its line (wrapping text such as the activation explanations, health labels and annotations clamps to 3 lines instead); `DetailPane`/`DimAnnotation`/`FailedResultList` clamp their text and window their rows; the footer wraps to at most 3 rows; the tab bar collapses inactive tabs to `[mnemonic]` when the full labels do not fit; `ModalDialog` is capped to the zone region, no longer shrinks under it, and scrolls its body with PgUp/PgDn.
+- `zones/logs/logs-zone.test.tsx` ("a restarting row names the request…") and `zones/logs/logs-zone.interaction.test.tsx` ('"R" is a no-op while that pane is already restarting'): the row's restart label now truncates to one line, so they assert `restart requested` instead of `re-verifying`.
+- `keybindings/keybindings.test.ts`: the canonical list gains the `PgUp / PgDn` row; `zones/edts/edts-footer-context.test.ts`: the issues dialog's footer context is `issues-list` (arrows browse issues), no longer `dismiss`.
 - `shared/components/render-to-string.ts` gained an optional size argument (defaults unchanged).
 
 ## Verification

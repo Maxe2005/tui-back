@@ -67,7 +67,7 @@ describe('wizardFooterContext', () => {
 describe('edtsFooterContext', () => {
   it('maps every dialog kind to its keys', () => {
     expect(edtsFooterContext({ kind: 'none' }, CLOSED)).toBeNull();
-    expect(edtsFooterContext(initialIssuesDialog(), CLOSED)).toBe('dismiss');
+    expect(edtsFooterContext(initialIssuesDialog(), CLOSED)).toBe('issues-list');
     const quickPick = { kind: 'quick-pick', mode: 'switch', notFound: null, query: '', queryCursor: 0, cursor: 0 } as unknown as EdtDialogState;
     expect(edtsFooterContext(quickPick, CLOSED)).toBe('menu');
   });
