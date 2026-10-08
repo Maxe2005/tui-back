@@ -48,6 +48,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     listRemoteBranches: (repoPath) => listRemoteBranches(repoPath),
     createTrackingBranch: (repoPath, localName, remoteRef) =>
       createTrackingBranch(manifest, repoPath, localName, remoteRef),
+    stagePaths: (repoPath, paths) => stagePaths(manifest, repoPath, paths),
+    commit: (repoPath, message, paths) => commitPaths(manifest, repoPath, message, paths),
   };
 }
 
@@ -890,4 +892,53 @@ async function showFullRef(repoPath: string, fullRef: string): Promise<ShowRefOu
     return { kind: 'missing', detail: '' };
   }
   return { kind: 'error', detail: spawnFailureDetail(result) };
+}
+
+// The branch-scope gate for a write that has no branch argument: judges the repo's current
+// branch (a detached HEAD fails as `git-current-branch-error`, never writes).
+async function assertCurrentBranchAllowed(manifest: ManifestPort, repoPath: string): Promise<Result<void>> {
+  const branch = await currentBranch(repoPath);
+  if (!branch.ok) {
+    return branch;
+  }
+  return assertAllowedBranch(manifest, repoPath, branch.data);
+}
+
+// `git add -- <paths>`: stages exactly the listed paths, nothing else. Gated on the current
+// branch before any git call.
+export async function stagePaths(manifest: ManifestPort, repoPath: string, paths: string[]): Promise<Result<void>> {
+  const allowed = await assertCurrentBranchAllowed(manifest, repoPath);
+  if (!allowed.ok) {
+    return allowed;
+  }
+  if (paths.length === 0) {
+    return ok(undefined);
+  }
+  const result = await runProcess('git', ['add', '--', ...paths], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-add-error', `git add failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// `git commit -m <message> --only -- <paths>`: `--only` records exactly the listed paths even
+// when other files are staged. Gated on the current branch. Never pushes.
+export async function commitPaths(
+  manifest: ManifestPort,
+  repoPath: string,
+  message: string,
+  paths: string[],
+): Promise<Result<void>> {
+  const allowed = await assertCurrentBranchAllowed(manifest, repoPath);
+  if (!allowed.ok) {
+    return allowed;
+  }
+  if (paths.length === 0) {
+    return err('git-commit-error', `Nothing to commit in ${repoPath}: no paths given`);
+  }
+  const result = await runProcess('git', ['commit', '-m', message, '--only', '--', ...paths], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-commit-error', `git commit failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
 }

@@ -18,7 +18,12 @@ modules:
   # route-explorer:
   #   scanner: nestjs-openapi
   #   auth: jose-dev-jwt
-  # shared-types-consumer: {}
+  # shared-types-source:        # the repo that publishes the shared-types package
+  #   publishCommand: npm run v           # default
+  #   packageName: "@ianord/shared-types" # default
+  # shared-types-consumer:      # a service depending on it; `{}` uses the defaults
+  #   dependency: "@ianord/shared-types"  # default
+  #   packageJsonPath: package.json       # default
 ```
 
 After generation, the skill validates the manifest using the project's own `loadManifest` adapter.

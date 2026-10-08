@@ -33,7 +33,9 @@ import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/
 import { createDockerPort } from "../adapters/driven/docker/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
-import { ROUTES_MODULE_ID } from "../core/edt/resolve-tab-visibility.js";
+import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
+import { err, ok } from "../core/result.js";
+import type { DependencyConsumerConfig } from "../core/shared-types/list-consumers.js";
 
 if (!process.stdin.isTTY) {
   process.stderr.write("tui-back-tui requires an interactive terminal\n");
@@ -113,7 +115,7 @@ const docker = createDockerPort();
 // The Routes zone's scanner, resolved out of the statically compiled module registry by
 // manifest module id (AD-5), the same as the CLI so both scan through one implementation.
 const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
-if (!routeExplorer) {
+if (routeExplorer?.kind !== 'route-explorer') {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
 // The Routes zone's fire path needs the module's auth port alongside its scanner — the same
@@ -125,6 +127,24 @@ if (!routeExplorer.auth) {
 // request-* subcommands run against, so a TUI save is visible to the CLI and back.
 const globalDbFile = resolveGlobalDbFile(xdg);
 const savedRequests = createSavedRequestPort(globalDbFile);
+// The shared-types zone: the consuming module's SharedTypesPort and manifest-parameter schema,
+// resolved out of the registry by module id (AD-5) — core only ever sees the port and a parser.
+const [, SHARED_TYPES_CONSUMER_ID] = SHARED_TYPES_MODULE_IDS;
+const sharedTypesConsumer = resolveModule(moduleRegistry, SHARED_TYPES_CONSUMER_ID);
+// A missing or wrong-kind module leaves the zone degraded (explicit error) instead of aborting.
+const sharedTypes =
+  sharedTypesConsumer?.kind === "shared-types"
+    ? {
+        port: sharedTypesConsumer.shared,
+        consumerModuleId: SHARED_TYPES_CONSUMER_ID,
+        parseConsumerConfig: (raw: Record<string, unknown>) => {
+          const parsed = sharedTypesConsumer.configSchema.safeParse(raw);
+          return parsed.success
+            ? ok(parsed.data as DependencyConsumerConfig)
+            : err("invalid-module-config", `${SHARED_TYPES_CONSUMER_ID}: ${parsed.error.message}`);
+        },
+      }
+    : undefined;
 const store = createAppStore({
   registry,
   manifest,
@@ -143,6 +163,7 @@ const store = createAppStore({
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
   savedRequests,
+  sharedTypes,
 });
 const onQuit = async () => {
   if (tuiLock) {

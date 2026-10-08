@@ -78,6 +78,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
   };
@@ -714,6 +716,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
         pull: vi.fn(async () => ok(undefined)),
@@ -815,6 +819,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
       };
@@ -862,6 +868,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
       };
@@ -916,6 +924,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
       };
@@ -958,6 +968,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
       };
@@ -1000,6 +1012,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
       };
@@ -1042,6 +1056,8 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
       };

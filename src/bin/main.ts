@@ -58,7 +58,7 @@ const interactiveIsTTY = isTTY && process.stdin.isTTY === true;
 // cannot fail in practice (registry and key are compiled together); the throw is a loud
 // programmer-error signal, raised before any stdout output so the envelope is unaffected.
 const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
-if (routeExplorer === undefined) {
+if (routeExplorer?.kind !== 'route-explorer') {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
 // The fire-request use-case needs the module's auth port alongside its scanner — same

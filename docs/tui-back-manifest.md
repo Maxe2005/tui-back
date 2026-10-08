@@ -20,6 +20,8 @@ Le chargement/parsing est fait par
 ```yaml
 # Obligatoire
 service: <chaîne non vide>
+
+# Optionnel — absent = service sans conteneur (pas de redémarrage simple, de santé ni de logs)
 container: <chaîne non vide>
 
 # Optionnel
@@ -51,10 +53,13 @@ modules:
 - **Rôle** : identifiant du service, utilisé pour l'affichage et le
   repérage du dépôt géré.
 
-### `container` (obligatoire)
+### `container` (optionnel)
 
 - **Type** : `string`
 - **Validation** : `trim().min(1)` — mêmes règles que `service`.
+- **Comportement si absent** : le service n'a pas de runtime Docker (pas de
+  redémarrage simple, de santé ni de flux de logs). Il reste un membre valide
+  d'un EDT. Omettre la clé : `null` ou une chaîne vide sont rejetés.
 - **Rôle** : nom du conteneur Docker associé au service (généralement le
   premier service déclaré dans `docker-compose.yml`).
 
@@ -167,11 +172,13 @@ modules:
 
 Défini dans
 [`src/adapters/driven/modules/module-registry.ts`](../src/adapters/driven/modules/module-registry.ts).
-À ce jour, le seul id de module compilé en dur est :
+Les ids de modules compilés en dur sont :
 
-| Id de module     | Description                                            |
-|-------------------|----------------------------------------------------------|
-| `route-explorer`  | Explorateur de routes basé sur une spécification OpenAPI |
+| Id de module            | Description                                                                 |
+|--------------------------|------------------------------------------------------------------------------|
+| `route-explorer`         | Explorateur de routes basé sur une spécification OpenAPI                     |
+| `shared-types-source`    | Dépôt qui publie le paquet `shared-types`                                    |
+| `shared-types-consumer`  | Service qui dépend du paquet `shared-types` (cible de la propagation de version) |
 
 Toute autre clé sous `modules` échoue la validation avec l'erreur
 `unknown-module`.
@@ -238,6 +245,29 @@ Comportement du tir :
 - `403` → erreur distincte `auth-forbidden` (mismatch de permission), sans
   nouvel essai.
 
+##### Configuration des modules `shared-types-source` et `shared-types-consumer`
+
+Définies dans
+[`src/adapters/driven/modules/shared-types/config.ts`](../src/adapters/driven/modules/shared-types/config.ts).
+Contrairement à `route-explorer`, ces deux modules ont un schéma **strict** :
+toutes les clés sont optionnelles (valeur par défaut ci-dessous), une clé
+inconnue ou une valeur vide/blanche fait échouer le chargement avec
+`manifest-validation-failed` (le message nomme le module et le paramètre). Une
+entrée `{}` est valide et prend les valeurs par défaut.
+
+| Module                  | Clé               | Défaut                  | Rôle                                                            |
+|--------------------------|--------------------|---------------------------|------------------------------------------------------------------|
+| `shared-types-source`    | `publishCommand`  | `npm run v`             | Commande de publication du paquet (utilisée par les stories de publication) |
+| `shared-types-source`    | `packageName`     | `@ianord/shared-types`  | Nom du paquet, utilisé pour vérifier une version sur le registre npm |
+| `shared-types-consumer`  | `dependency`      | `@ianord/shared-types`  | Dépendance dont la ligne de version est lue/réécrite dans `package.json` |
+| `shared-types-consumer`  | `packageJsonPath` | `package.json`          | Chemin du `package.json` du service, relatif à son dépôt        |
+
+Déclarer l'un ou l'autre module active l'onglet `shared-types` du TUI (affiché,
+masqué ou grisé selon l'appartenance à l'EDT actif). Les opérations
+elles-mêmes (lire la version déclarée, réécrire uniquement la ligne de
+dépendance, vérifier la publication sur le registre) passent par le port
+`SharedTypesPort` ([`src/core/ports/shared-types.ts`](../src/core/ports/shared-types.ts)).
+
 > Note : toute autre clé sous une entrée de module est acceptée par le
 > schéma (les valeurs de `modules.<id>` sont un `Record<string, unknown>`
 > libre) mais n'a d'effet que si le code du module correspondant la lit.
@@ -267,6 +297,24 @@ modules:
 `/auth/me` et `300` s'appliqueraient. `baseUrl` est en revanche obligatoire
 dès qu'on veut tirer des requêtes.)
 
+## Exemple — service consommateur de `shared-types`
+
+```yaml
+service: orders-api
+container: orders-api
+sharedBranch: development
+modules:
+  shared-types-consumer: {}   # défauts : @ianord/shared-types, package.json
+```
+
+Le dépôt source, lui, déclare `shared-types-source: {}` (ou surcharge
+`publishCommand` / `packageName`) — il peut ne pas avoir de `container`.
+
+L'onglet `shared-types` est piloté par `shared-types-source` uniquement, comme l'onglet Routes
+l'est par `route-explorer` : il est masqué tant qu'aucun dépôt enregistré ne déclare
+`shared-types-source`, grisé si le service source n'est pas membre de l'EDT actif, et actif
+sinon. `shared-types-consumer` ne dépend que de lui et n'influence jamais l'onglet.
+
 ## Exemple minimal
 
 ```yaml
@@ -290,7 +338,7 @@ Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
 | `manifest-not-found`          | Le fichier `.tui-back.yaml` n'existe pas à la racine du dépôt (le dépôt est alors considéré comme non géré, ce n'est pas un crash). |
 | `manifest-read-error`         | Erreur de lecture du fichier (droits, etc.).                        |
 | `manifest-invalid-yaml`       | Le contenu n'est pas un YAML valide.                                 |
-| `manifest-validation-failed`  | Le document ne respecte pas le schéma (champ manquant, type invalide, clé inconnue au niveau racine, valeur de module non-objet, etc.). Le message précise le chemin du premier problème rencontré. |
+| `manifest-validation-failed`  | Le document ne respecte pas le schéma (champ manquant, type invalide, clé inconnue au niveau racine, valeur de module non-objet, paramètre inconnu ou vide d'un module `shared-types-*`, etc.). Le message précise le chemin du premier problème rencontré. |
 | `unknown-module`               | Une clé sous `modules` ne correspond à aucun id de module connu (registre `knownModuleIds`). |
 
 ## Sources
@@ -302,6 +350,7 @@ Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
   `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,
   `src/adapters/driven/restart/index.ts`
 - Registre des modules : `src/adapters/driven/modules/module-registry.ts`
+- Modules `shared-types` : `src/adapters/driven/modules/shared-types/config.ts`, `src/adapters/driven/modules/shared-types/npm-package.ts`, `src/core/ports/shared-types.ts`
 - Scanner `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
 - Auth session cookie : `src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`
 - Tir de requête : `src/core/routes/fire-request.ts`

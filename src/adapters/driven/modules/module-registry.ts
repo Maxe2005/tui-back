@@ -6,14 +6,30 @@ import { createNestjsOpenApiScanner } from './route-explorer/nestjs-openapi.js';
 import { createCookieSessionAuth } from './route-explorer/cookie-session-auth.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
+import type { SharedTypesPort } from '../../../core/ports/shared-types.js';
+import type { ZodTypeAny } from 'zod';
+import { createSharedTypesAdapter } from './shared-types/npm-package.js';
+import { sharedTypesConsumerConfigSchema, sharedTypesSourceConfigSchema } from './shared-types/config.js';
 
 export type ModuleId = string;
 
-export interface ModuleImplementation {
-  kind: string;
+export interface RouteExplorerModule {
+  kind: 'route-explorer';
   scanner: RouteScannerPort;
   auth?: DevAuthPort;
+  configSchema?: ZodTypeAny;
 }
+
+export interface SharedTypesModule {
+  kind: 'shared-types';
+  shared: SharedTypesPort;
+  // Validates and defaults the module's manifest parameters (strict: unknown ones rejected).
+  configSchema: ZodTypeAny;
+}
+
+export type ModuleImplementation = RouteExplorerModule | SharedTypesModule;
+
+const sharedTypesAdapter = createSharedTypesAdapter();
 
 export const moduleRegistry: Readonly<Record<ModuleId, ModuleImplementation>> = {
   'route-explorer': {
@@ -21,7 +37,23 @@ export const moduleRegistry: Readonly<Record<ModuleId, ModuleImplementation>> = 
     scanner: createNestjsOpenApiScanner(),
     auth: createCookieSessionAuth(),
   },
+  'shared-types-source': {
+    kind: 'shared-types',
+    shared: sharedTypesAdapter,
+    configSchema: sharedTypesSourceConfigSchema,
+  },
+  'shared-types-consumer': {
+    kind: 'shared-types',
+    shared: sharedTypesAdapter,
+    configSchema: sharedTypesConsumerConfigSchema,
+  },
 };
+
+// Per-module manifest parameter schemas, derived from the registry so the manifest schema
+// stays generic and never names a module.
+export const moduleConfigSchemas: Readonly<Record<ModuleId, ZodTypeAny>> = Object.fromEntries(
+  Object.entries(moduleRegistry).flatMap(([id, impl]) => (impl.configSchema ? [[id, impl.configSchema]] : [])),
+);
 
 export const knownModuleIds: ReadonlySet<ModuleId> = new Set(Object.keys(moduleRegistry));
 

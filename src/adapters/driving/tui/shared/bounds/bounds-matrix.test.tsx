@@ -194,3 +194,44 @@ describe('size matrix: Update zone mid-run', () => {
     });
   }
 });
+
+describe('size matrix: Shared types zone', () => {
+  const states = ['form', 'running', 'done', 'blocked'] as const;
+  for (const state of states) {
+    for (const size of MATRIX_SIZES) {
+      it(`${state} with 200 consumers at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
+        const store = adversarialStore();
+        const consumers = Array.from({ length: 200 }, (_, i) => ({
+          service: `consumer-with-a-long-name-${i}-${'c'.repeat(60)}`,
+          repoPath: `/repos/consumer-${i}`,
+          dependency: `@scope/${'d'.repeat(60)}`,
+          branch: `feature/${'b'.repeat(80)}`,
+        }));
+        store.setState({
+          tabVisibility: { routes: { status: 'omitted', carryingServices: [] }, sharedTypes: { status: 'enabled', carryingServices: [] } },
+          sharedTypesConsumers: consumers,
+          sharedTypesConsumersStatus: 'ready',
+          sharedTypesIssues: consumers.slice(0, 30).map((c) => ({ repoPath: c.repoPath, service: c.service, message: MULTILINE })),
+          sharedTypesRun: {
+            status: state === 'form' ? 'idle' : state,
+            version: '0.1.0',
+            options: {},
+            blocked: state === 'blocked' ? { code: 'boom', message: MULTILINE } : null,
+            results:
+              state === 'done' ? consumers.map((c) => ({ repoPath: c.repoPath, service: c.service, outcome: 'failed', detail: MULTILINE })) : [],
+            live: null,
+            notice: state === 'done' ? MULTILINE : null,
+          },
+        } as never);
+        store.getState().setActiveZone('shared-types');
+        const frame = frameLines(await renderToString(createElement(AppShell, { useStore: store, onQuit: () => {} }), size));
+        expect(frame.length).toBeLessThanOrEqual(size.rows);
+        for (const line of frame) {
+          expect(Array.from(line).length, line).toBeLessThanOrEqual(size.columns);
+        }
+        expect(frame[0]).toContain('tui-back');
+        expect(frame.at(-1)?.trim()).not.toBe('');
+      });
+    }
+  }
+});

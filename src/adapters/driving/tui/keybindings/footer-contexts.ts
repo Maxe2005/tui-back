@@ -267,6 +267,10 @@ export const FOOTER_CONTEXTS = {
     label: 'Repo registry stale entries',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'remove selection'], CLOSE],
   },
+  'shared-types-version': { label: 'Shared types version field', hints: [['Enter', 'done'], ['Esc', 'done'], [KEY_UP_DOWN, 'move']] },
+  'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE] },
+  'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate']] },
+  'shared-types-results': { label: 'Shared types results', hints: [MOVE, ['R', 'retry failed'], ['Esc', 'new run']] },
   'reset-select': {
     label: 'Reset categories',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'review'], CANCEL],
@@ -308,7 +312,7 @@ export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
 
 // Who may register a footer context. Overlays sit above the zone they cover, so they win over a
 // zone that registers or re-registers while one is open.
-export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'edts' | 'update' | 'logs' | 'routes';
+export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
 
 export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset'];
 

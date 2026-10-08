@@ -58,7 +58,7 @@ describe('loadManifest', () => {
         sharedBranch: 'development',
         modules: {
           'route-explorer': { scanner: 'nestjs-openapi', auth: 'jose-dev-jwt' },
-          'shared-types-consumer': {},
+          'shared-types-consumer': { dependency: '@ianord/shared-types', packageJsonPath: 'package.json' },
         },
       },
     });
@@ -530,6 +530,51 @@ describe('loadManifest', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
     if (!result.ok) {
       expect(result.error.message).toContain('unknown-x');
+    }
+  });
+});
+
+describe('loadManifest shared-types module parameters', () => {
+  const head = ['service: svc', 'migrationCommand: migrate', 'modules:'];
+
+  it('fills source defaults for an empty config, with no container', async () => {
+    const repo = await tempRepo([...head, '  shared-types-source: {}'].join('\n'));
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        modules: { 'shared-types-source': { publishCommand: 'npm run v', packageName: '@ianord/shared-types' } },
+      },
+    });
+  });
+
+  it('loads custom consumer parameters as given', async () => {
+    const repo = await tempRepo(
+      [...head, '  shared-types-consumer:', '    dependency: "@x/y"', '    packageJsonPath: api/package.json'].join('\n'),
+    );
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { modules: { 'shared-types-consumer': { dependency: '@x/y', packageJsonPath: 'api/package.json' } } },
+    });
+  });
+
+  it('rejects an unknown parameter naming the module and the parameter', async () => {
+    const repo = await tempRepo([...head, '  shared-types-consumer:', '    bogus: 1'].join('\n'));
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('shared-types-consumer');
+      expect(result.error.message).toContain('bogus');
+    }
+  });
+
+  it('rejects a blank parameter', async () => {
+    const repo = await tempRepo([...head, '  shared-types-source:', '    publishCommand: ""'].join('\n'));
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('publishCommand');
     }
   });
 });

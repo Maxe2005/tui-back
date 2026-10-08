@@ -44,6 +44,8 @@ import {
   pullBranch,
   renameBranch,
   restoreStash,
+  stagePaths,
+  commitPaths,
   stashSave,
 } from './index.js';
 
@@ -1953,5 +1955,63 @@ describe('finalizeMerge', () => {
     const result = await finalizeMerge(repo);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-commit-error' } });
+  });
+});
+
+// stagePaths / commitPaths: the path-scoped write pair behind version propagation. Both are
+// gated on the current branch and touch only the listed paths.
+describe('stagePaths and commitPaths', () => {
+  async function dirtyRepo(): Promise<string> {
+    const repo = await makeCleanGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
+    await writeFile(join(repo, 'package.json'), '{}');
+    await writeFile(join(repo, 'package-lock.json'), '{}');
+    await writeFile(join(repo, 'other.txt'), 'unrelated');
+    return repo;
+  }
+
+  it('stages exactly the listed paths and commits only them, leaving other dirty files alone', async () => {
+    const repo = await dirtyRepo();
+
+    expect(await stagePaths(manifest, repo, ['package.json', 'package-lock.json'])).toEqual({ ok: true, data: undefined });
+    expect(runGit(repo, ['diff', '--cached', '--name-only']).stdout.trim().split('\n').sort()).toEqual([
+      'package-lock.json',
+      'package.json',
+    ]);
+    const committed = await commitPaths(manifest, repo, 'chore(deps): bump x [tui-back]', ['package.json', 'package-lock.json']);
+
+    expect(committed).toEqual({ ok: true, data: undefined });
+    expect(runGit(repo, ['log', '-1', '--format=%s']).stdout.trim()).toBe('chore(deps): bump x [tui-back]');
+    expect(runGit(repo, ['show', '--name-only', '--format=', 'HEAD']).stdout.trim().split('\n').sort()).toEqual([
+      'package-lock.json',
+      'package.json',
+    ]);
+    expect(runGit(repo, ['status', '--porcelain']).stdout).toContain('?? other.txt');
+  });
+
+  it('leaves an already-staged unrelated file out of the commit', async () => {
+    const repo = await dirtyRepo();
+    expect(runGit(repo, ['add', 'other.txt']).status).toBe(0);
+    await stagePaths(manifest, repo, ['package.json']);
+
+    expect((await commitPaths(manifest, repo, 'msg', ['package.json'])).ok).toBe(true);
+
+    expect(runGit(repo, ['show', '--name-only', '--format=', 'HEAD']).stdout.trim()).toBe('package.json');
+  });
+
+  it('refuses on a protected or shared branch before touching git', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'package.json'), '{}');
+
+    expect(await stagePaths(manifest, repo, ['package.json'])).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(await commitPaths(manifest, repo, 'msg', ['package.json'])).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(runGit(repo, ['diff', '--cached', '--name-only']).stdout).toBe('');
+  });
+
+  it('reports git-commit-error when there is nothing to commit', async () => {
+    const repo = await makeCleanGitRepo();
+    expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
+
+    expect(await commitPaths(manifest, repo, 'msg', ['.tui-back.yaml'])).toMatchObject({ ok: false, error: { code: 'git-commit-error' } });
   });
 });

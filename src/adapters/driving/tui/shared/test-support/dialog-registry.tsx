@@ -67,7 +67,7 @@ export function failedRows(count = 300) {
 // `file` is the source file whose ModalDialog this entry covers, relative to the tui directory.
 export type DialogEntry =
   | { id: string; file: string; render: (rows: number) => ReactElement }
-  | { id: string; file: string; embedded: 'update' | 'routes' };
+  | { id: string; file: string; embedded: 'update' | 'routes' | 'shared-types' };
 
 const edt = adversarialEdt();
 const services = adversarialServices();
@@ -254,6 +254,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone.tsx', embedded: 'update' },
   { id: 'routes/zone', file: 'zones/routes/routes-zone.tsx', embedded: 'routes' },
+  { id: 'shared-types/zone', file: 'zones/shared-types/shared-types-zone.tsx', embedded: 'shared-types' },
 ];
 
 function helpStore() {

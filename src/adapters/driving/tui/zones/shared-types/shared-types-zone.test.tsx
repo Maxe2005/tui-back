@@ -1,10 +1,10 @@
-// tui/zones/shared-types: render tests for the `disabled` explanatory message, plus the
-// `enabled`/`omitted` fallthrough to the ZonePlaceholder stub (`disabled` is only reachable
-// here through a directly-seeded store fixture).
+// tui/zones/shared-types: render tests for the `disabled` explanatory message, the empty state,
+// the form and a blocked run (`disabled` is only reachable here through a directly-seeded store
+// fixture).
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { SharedTypesZone, formatSharedTypesDisabledMessage } from './shared-types-zone.js';
+import { SHARED_TYPES_NO_MEMBERS, SharedTypesZone, formatSharedTypesDisabledMessage } from './shared-types-zone.js';
 
 describe('formatSharedTypesDisabledMessage', () => {
   it('names the single carrying repo (singular phrasing)', () => {
@@ -34,21 +34,54 @@ describe('SharedTypesZone', () => {
     expect(output).not.toContain('SHARED TYPES');
   });
 
-  it('falls through to the normal ZonePlaceholder content when enabled', async () => {
+  it('shows the explicit empty state when the active EDT has no consuming service', async () => {
     const store = createAppStore();
     store.setState({
       tabVisibility: {
         routes: { status: 'omitted', carryingServices: [] },
         sharedTypes: { status: 'enabled', carryingServices: ['shared-types'] },
       },
+      sharedTypesConsumersStatus: 'ready',
+      sharedTypesConsumers: [],
+      loadSharedTypesConsumers: async () => {},
     });
     const output = await renderToString(<SharedTypesZone useStore={store} />);
-    expect(output).toContain('list pane');
+    expect(output).toContain(SHARED_TYPES_NO_MEMBERS);
   });
 
-  it('falls through to the normal ZonePlaceholder content by default (pre-load / omitted state)', async () => {
+  it('shows the version field pre-filled 0.1. followed by the consumer checklist and options', async () => {
     const store = createAppStore();
+    store.setState({
+      sharedTypesConsumersStatus: 'ready',
+      sharedTypesConsumers: [
+        { service: 'api', repoPath: '/r/api', branch: 'feat/x', dependency: '@ianord/shared-types', packageJsonPath: 'package.json' },
+      ],
+      loadSharedTypesConsumers: async () => {},
+    });
     const output = await renderToString(<SharedTypesZone useStore={store} />);
-    expect(output).toContain('list pane');
+    expect(output).toContain('Version');
+    expect(output).toContain('0.1.');
+    expect(output).toContain('[x] api');
+    expect(output).toContain('Run npm i');
+    expect(output).toContain('Clean restart');
+    expect(output).toContain('Commit');
+  });
+
+  it('shows a blocked run with its explicit message', async () => {
+    const store = createAppStore();
+    store.setState({
+      sharedTypesConsumersStatus: 'ready',
+      sharedTypesRun: {
+        status: 'blocked',
+        version: '0.1.9',
+        options: { install: true, cleanRestart: false, commit: true },
+        blocked: { code: 'version-not-published', message: 'x@0.1.9 is not published on the registry. Nothing was written.' },
+        results: [],
+        live: null,
+      },
+      loadSharedTypesConsumers: async () => {},
+    });
+    const output = await renderToString(<SharedTypesZone useStore={store} />);
+    expect(output).toContain('not published');
   });
 });
