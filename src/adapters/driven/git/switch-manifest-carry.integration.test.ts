@@ -58,10 +58,12 @@ async function runSwitch(
   repo: string,
   members: EdtRegistryEntry['members'] = [],
   dirtyResolutions: Parameters<typeof switchActiveEdt>[0]['dirtyResolutions'] = {},
+  targetMembers: EdtRegistryEntry['members'] = [],
 ) {
   const outgoing = { ...OUTGOING, members };
+  const target = { ...TARGET, members: targetMembers };
   const edtRegistry = {
-    list: async () => ok([outgoing, TARGET]),
+    list: async () => ok([outgoing, target]),
     setStatus: async () => ok(undefined),
   } as unknown as EdtRegistryPort;
   const registry = { list: async () => ok([repo]) } as unknown as RegistryPort;
@@ -170,6 +172,22 @@ describe('switchActiveEdt — dirty .tui-back.yaml with real git', () => {
 
     const result = await runSwitch(repo, [], undefined);
 
-    expect(result.ok).toBe(true);
+    expect(result.ok && result.data.results[0]?.outcome).toBe('switched');
+    expect(git(repo, 'branch', '--show-current').trim()).toBe('development');
+    expect(git(repo, 'stash', 'list')).toBe('');
+    expect(await read(repo)).toBe(manifestText('local-edit'));
+  });
+
+  it('carries a deleted manifest across a successful switch into a target member branch', async () => {
+    const repo = await makeRepo(manifestText('dev'), manifestText('feat'));
+    git(repo, 'checkout', '-q', '-b', 'feat/target');
+    git(repo, 'checkout', '-q', 'feat/x');
+    await rm(join(repo, '.tui-back.yaml'));
+
+    const result = await runSwitch(repo, [], {}, [{ service: 'feat', repoPath: repo, branch: 'feat/target' }]);
+
+    expect(result.ok && result.data.results).toEqual([{ service: 'feat', outcome: 'switched' }]);
+    expect(git(repo, 'branch', '--show-current').trim()).toBe('feat/target');
+    expect(existsSync(join(repo, '.tui-back.yaml'))).toBe(false);
   });
 });

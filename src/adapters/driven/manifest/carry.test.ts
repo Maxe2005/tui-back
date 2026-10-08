@@ -63,4 +63,33 @@ describe('createManifestCarryPort', () => {
     expect(restored.error.message).toContain('tui-back-manifest-carry');
     expect(await readFile(join(repo, '.git', 'tui-back-manifest-carry'), 'utf8')).toBe('keep me');
   });
+
+  it('refuses to overwrite a safety copy left by an earlier failed restore', async () => {
+    const repo = await repoDir();
+    await writeFile(join(repo, '.tui-back.yaml'), 'new');
+    await writeFile(join(repo, '.git', 'tui-back-manifest-carry'), 'unrecovered');
+
+    const captured = await createManifestCarryPort().capture(repo);
+
+    expect(captured).toMatchObject({ ok: false, error: { code: 'manifest-carry-stale-copy' } });
+    expect(await readFile(join(repo, '.git', 'tui-back-manifest-carry'), 'utf8')).toBe('unrecovered');
+  });
+
+  it('keeps its safety copy in the real git dir of a worktree', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'carry-wt-'));
+    dirs.push(repo);
+    const realGitDir = await mkdtemp(join(tmpdir(), 'carry-gitdir-'));
+    dirs.push(realGitDir);
+    await writeFile(join(repo, '.git'), `gitdir: ${realGitDir}\n`);
+    await writeFile(join(repo, '.tui-back.yaml'), 'wt');
+    const port = createManifestCarryPort();
+
+    const captured = await port.capture(repo);
+
+    expect(existsSync(join(realGitDir, 'tui-back-manifest-carry'))).toBe(true);
+    if (!captured.ok) throw new Error('capture failed');
+    await port.restore(repo, captured.data);
+    expect(existsSync(join(realGitDir, 'tui-back-manifest-carry'))).toBe(false);
+    expect(existsSync(join(repo, '.tui-back.yaml.carry-tmp'))).toBe(false);
+  });
 });

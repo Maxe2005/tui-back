@@ -253,13 +253,13 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
     const { targetMember } = repo;
     // A non-member's destination comes from its manifest as it sits on disk now, so it is read
     // before the carry clears a dirty one.
-    const loaded = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
-    const serviceName = targetMember?.service ?? (loaded?.ok ? loaded.data.service : repo.repoPath);
+    const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
+    const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
     results.push(
       await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
         targetMember !== undefined
           ? switchMemberRepo(context, repo, targetMember, resolution)
-          : switchNonMemberRepo(context, repo, resolution, loaded!),
+          : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
       ),
     );
   }

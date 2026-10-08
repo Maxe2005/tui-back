@@ -100,4 +100,26 @@ describe('withCarriedManifest', () => {
     expect(run).not.toHaveBeenCalled();
     expect(carry.restore).toHaveBeenCalledTimes(1);
   });
+
+  it('fails the row, touching nothing, when the dirtiness cannot be read', async () => {
+    const { git, carry } = setup({ git: { listDirtyPaths: vi.fn(async () => err('git-status-error', 'no repo')) } });
+    const run = vi.fn(async () => row());
+
+    const result = await withCarriedManifest({ git, carry }, '/r', 'svc', run);
+
+    expect(result).toMatchObject({ outcome: 'failed', detail: { code: 'git-status-error' } });
+    expect(run).not.toHaveBeenCalled();
+    expect(carry.capture).not.toHaveBeenCalled();
+  });
+
+  it('restores the manifest then rethrows when the run throws', async () => {
+    const { git, carry } = setup();
+
+    await expect(
+      withCarriedManifest({ git, carry }, '/r', 'svc', async () => {
+        throw new Error('kaboom');
+      }),
+    ).rejects.toThrow('kaboom');
+    expect(carry.restore).toHaveBeenCalledWith('/r', SNAPSHOT);
+  });
 });

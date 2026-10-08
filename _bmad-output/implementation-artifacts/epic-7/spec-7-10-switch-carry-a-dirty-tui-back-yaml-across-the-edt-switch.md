@@ -81,3 +81,7 @@ Clearing the manifest before the normal flow means stash, `discardAll`, adopt an
 - `npm test` -- expected: all pass, incl. every matrix row.
 - `npm run typecheck` -- expected: clean.
 - `npm run depcheck` -- expected: clean.
+
+## Review Outcome
+
+Three review layers ran. Patched: listDirtyPaths failure now fails the row; restore also runs when the run throws; safety copy resolved through the worktree `gitdir:` pointer; a stale safety copy is never overwritten (`manifest-carry-stale-copy`); atomic restore; one shared `MANIFEST_FILE`; stronger tests (throw, status failure, worktree, deleted manifest on a member). Deferred: see `deferred-work.md`. Rejected: non-findings about collapsed untracked dirs (the manifest is a root file), activation at-risk paths (the pre-flight excludes the manifest) and docs (already committed).

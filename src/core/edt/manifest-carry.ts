@@ -21,7 +21,11 @@ export async function withCarriedManifest(
 ): Promise<SwitchEdtRepoResult> {
   const { git, carry } = deps;
   const dirty = await git.listDirtyPaths(repoPath);
-  if (!dirty.ok || !dirty.data.includes(MANIFEST_FILE)) {
+  if (!dirty.ok) {
+    // Not knowing whether the manifest is dirty means a checkout could overwrite it: stop here.
+    return failedRow(service, dirty.error.code, `${dirty.error.message} — left untouched`);
+  }
+  if (!dirty.data.includes(MANIFEST_FILE)) {
     return run();
   }
 
@@ -37,7 +41,13 @@ export async function withCarriedManifest(
     return failedRow(service, cleared.error.code, `${cleared.error.message}${note}`);
   }
 
-  const row = await run();
+  let row: SwitchEdtRepoResult;
+  try {
+    row = await run();
+  } catch (error) {
+    await carry.restore(repoPath, captured.data);
+    throw error;
+  }
 
   const restored = await carry.restore(repoPath, captured.data);
   if (restored.ok) {
