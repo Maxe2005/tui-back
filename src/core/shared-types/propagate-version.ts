@@ -81,13 +81,20 @@ function normalizeRel(path: string): string {
   return posix.normalize(path.replace(/\\/g, '/')).replace(/^\.\//, '');
 }
 
+// A declared version: major.minor.patch with an optional prerelease suffix.
+export const VERSION_PATTERN = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
+
+export function isValidVersion(version: string): boolean {
+  return VERSION_PATTERN.test(version.trim());
+}
+
 export async function verifyVersionPublished(
   shared: SharedTypesPort,
   consumers: readonly DependencyConsumer[],
   version: string,
 ): Promise<Result<void>> {
-  if (version.trim() === '') {
-    return err('invalid-version', 'Enter a version to propagate.');
+  if (!isValidVersion(version)) {
+    return err('invalid-version', `"${version.trim()}" is not a valid version — expected major.minor.patch, e.g. 0.1.3674. Nothing was written.`);
   }
   for (const dependency of new Set(consumers.map((consumer) => consumer.dependency))) {
     const verified = await shared.verifyPublished(dependency, version);
@@ -105,7 +112,11 @@ export async function verifyVersionPublished(
 }
 
 export async function propagateVersion(params: PropagateParams): Promise<PropagateReport> {
-  const { shared, version, consumers } = params;
+  const { shared, consumers } = params;
+  const version = params.version.trim();
+  if (consumers.length === 0) {
+    return { status: 'blocked', error: { code: 'no-service-selected', message: 'No service selected — nothing to propagate.' } };
+  }
   const verified = await verifyVersionPublished(shared, consumers, version);
   if (!verified.ok) {
     return { status: 'blocked', error: { code: verified.error.code, message: verified.error.message } };
@@ -113,7 +124,7 @@ export async function propagateVersion(params: PropagateParams): Promise<Propaga
   const results: PropagateServiceResult[] = [];
   for (const consumer of consumers) {
     try {
-      results.push(await propagateToService(params, consumer));
+      results.push(await propagateToService({ ...params, version }, consumer));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       results.push({

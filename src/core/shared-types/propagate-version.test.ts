@@ -205,6 +205,85 @@ describe('propagateVersion', () => {
     expect(f.git.stagePaths).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid version before any registry call or write', async () => {
+    for (const version of ['', '0.1.', 'abc', '1.2', '0.1.x']) {
+      const f = fakes();
+
+      const report = await propagateVersion({ ...params(f, [consumer('a')]), version });
+
+      expect(report).toMatchObject({ status: 'blocked', error: { code: 'invalid-version' } });
+      expect(f.shared.verifyPublished).not.toHaveBeenCalled();
+      expect(f.shared.writeVersionLine).not.toHaveBeenCalled();
+    }
+  });
+
+  it('accepts a prerelease version and trims it', async () => {
+    const f = fakes();
+
+    const report = await propagateVersion({ ...params(f, [consumer('a')]), version: ' 0.1.3-beta.2 ' });
+
+    expect(report.status).toBe('completed');
+    expect(f.shared.verifyPublished).toHaveBeenCalledWith(DEP, '0.1.3-beta.2');
+  });
+
+  it('blocks with no-service-selected when there is no consumer', async () => {
+    const f = fakes();
+
+    expect(await propagateVersion(params(f, []))).toMatchObject({ status: 'blocked', error: { code: 'no-service-selected' } });
+    expect(f.shared.verifyPublished).not.toHaveBeenCalled();
+  });
+
+  it('skips a service whose package-lock.json is dirty when commit is on, without writing', async () => {
+    const f = fakes({ git: { listDirtyPaths: vi.fn(async () => ok(['package-lock.json'])) } });
+
+    const report = await propagateVersion(params(f, [consumer('a')]));
+
+    expect(report).toMatchObject({ results: [{ outcome: 'skipped' }] });
+    expect(f.shared.writeVersionLine).not.toHaveBeenCalled();
+  });
+
+  it('proceeds despite a dirty package-lock.json when commit is off', async () => {
+    const f = fakes({ git: { listDirtyPaths: vi.fn(async () => ok(['package-lock.json'])) } });
+
+    const report = await propagateVersion(params(f, [consumer('a')], { install: false, cleanRestart: false, commit: false }));
+
+    expect(report).toMatchObject({ results: [{ outcome: 'done' }] });
+    expect(f.shared.writeVersionLine).toHaveBeenCalled();
+  });
+
+  it('resuming at commit with every option on runs neither npm i nor restart but still commits', async () => {
+    const f = fakes();
+    (f.git.listDirtyPaths as ReturnType<typeof vi.fn>).mockResolvedValue(ok(['package.json', 'package-lock.json']));
+
+    const report = await propagateVersion(params(f, [consumer('a')], ALL, { resume: { '/repo/a': 'commit' } }));
+
+    expect(report).toMatchObject({ results: [{ outcome: 'done' }] });
+    expect(f.restart.run).not.toHaveBeenCalled();
+    expect(f.shared.writeVersionLine).not.toHaveBeenCalled();
+    expect(f.git.stagePaths).toHaveBeenCalled();
+    expect(f.git.commit).toHaveBeenCalled();
+  });
+
+  it('resuming at restart does not run npm i again', async () => {
+    const f = fakes();
+
+    await propagateVersion(params(f, [consumer('a')], ALL, { resume: { '/repo/a': 'restart' } }));
+
+    expect(f.restart.run).not.toHaveBeenCalledWith('/repo/a', 'npm i');
+    expect(f.restart.run).toHaveBeenCalledWith('/repo/a', 'make restart');
+  });
+
+  it('records the restart step as skipped for a service with no container and no recipe', async () => {
+    const f = fakes();
+    (f.manifest.load as ReturnType<typeof vi.fn>).mockResolvedValue(ok({ service: 'a', sharedBranch: 'development', modules: {} }));
+
+    const report = await propagateVersion(params(f, [consumer('a')], { install: false, cleanRestart: true, commit: false }));
+
+    expect(report).toMatchObject({
+      results: [{ outcome: 'done', steps: expect.arrayContaining([expect.objectContaining({ step: 'restart', status: 'skipped' })]) }],
+    });
+  });
+
   it('never pushes: the git port exposes no push', () => {
     expect(Object.keys(fakes().git)).not.toContain('push');
   });
