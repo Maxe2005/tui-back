@@ -341,6 +341,12 @@ Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
 | `manifest-validation-failed`  | Le document ne respecte pas le schéma (champ manquant, type invalide, clé inconnue au niveau racine, valeur de module non-objet, paramètre inconnu ou vide d'un module `shared-types-*`, etc.). Le message précise le chemin du premier problème rencontré. |
 | `unknown-module`               | Une clé sous `modules` ne correspond à aucun id de module connu (registre `knownModuleIds`). |
 
+## Comportement lors d'un switch d'EDT
+
+Un `.tui-back.yaml` modifié (non commité) n'est jamais mis en stash, adopté ni abandonné lors d'un
+`edt switch` : il est retrouvé tel quel après le switch, quelle que soit la version (ou l'absence)
+du fichier sur la branche cible. Il apparaît alors modifié par rapport à cette branche.
+
 ## Sources
 
 - Schéma Zod : `src/adapters/driven/manifest/schema.ts`
