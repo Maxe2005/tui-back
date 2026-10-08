@@ -155,49 +155,61 @@ export function capOlder<T>(items: readonly T[], max: number): { items: readonly
 export type Block = { key: string; rows: number; node: ReactNode };
 
 // The heterogeneous variant: each block declares its own height, the window never exceeds
-// `budget` rows (indicators included) and keeps the cursor block visible.
+// `budget` rows (indicators included) and keeps the cursor block visible. A cursor block taller
+// than the content budget is still shown, clipped to `contentRows`.
 export function resolveBlockWindow(
   heights: readonly number[],
   budget: number,
   cursorIndex: number | undefined,
-): { start: number; end: number; hasAbove: boolean; hasBelow: boolean } {
+): { start: number; end: number; hasAbove: boolean; hasBelow: boolean; contentRows: number } {
   const total = heights.reduce((sum, h) => sum + Math.max(0, h), 0);
   const safeBudget = Number.isFinite(budget) ? Math.max(0, Math.floor(budget)) : 0;
-  if (total <= safeBudget) return { start: 0, end: heights.length, hasAbove: false, hasBelow: false };
+  if (total <= safeBudget) return { start: 0, end: heights.length, hasAbove: false, hasBelow: false, contentRows: safeBudget };
+  if (safeBudget === 0) return { start: 0, end: 0, hasAbove: false, hasBelow: false, contentRows: 0 };
   const cursor = cursorIndex === undefined ? 0 : Math.min(Math.max(0, cursorIndex), heights.length - 1);
-  let reserved = 1;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const content = Math.max(0, safeBudget - reserved);
+  const height = (index: number) => Math.max(0, heights[index] ?? 0);
+  const windowFor = (content: number) => {
     let start = cursor;
-    let end = cursor;
-    let used = 0;
-    if ((heights[cursor] ?? 0) <= content) {
-      used = heights[cursor] ?? 0;
-      end = cursor + 1;
+    let end = cursor + 1;
+    let used = Math.min(height(cursor), content);
+    if (height(cursor) <= content) {
       let grew = true;
       while (grew) {
         grew = false;
-        if (end < heights.length && used + (heights[end] ?? 0) <= content) {
-          used += heights[end] ?? 0;
+        if (end < heights.length && used + height(end) <= content) {
+          used += height(end);
           end += 1;
           grew = true;
         }
-        if (cursorIndex !== undefined && start > 0 && used + (heights[start - 1] ?? 0) <= content) {
-          used += heights[start - 1] ?? 0;
+        if (cursorIndex !== undefined && start > 0 && used + height(start - 1) <= content) {
+          used += height(start - 1);
           start -= 1;
           grew = true;
         }
       }
     }
-    const hasAbove = start > 0;
-    const hasBelow = end < heights.length;
-    const need = (hasAbove ? 1 : 0) + (hasBelow ? 1 : 0);
-    if (need <= reserved || attempt === 2) {
-      return { start, end, hasAbove: hasAbove && safeBudget - used > 0, hasBelow: hasBelow && safeBudget - used - (hasAbove ? 1 : 0) > 0 };
-    }
-    reserved = need;
+    return { start, end };
+  };
+  let hasAbove = false;
+  let hasBelow = false;
+  let result = { start: 0, end: 0 };
+  let contentRows = safeBudget;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    contentRows = Math.max(0, safeBudget - (hasAbove ? 1 : 0) - (hasBelow ? 1 : 0));
+    result = windowFor(contentRows);
+    const nextAbove = result.start > 0;
+    const nextBelow = result.end < heights.length;
+    if (nextAbove === hasAbove && nextBelow === hasBelow) break;
+    hasAbove = hasAbove || nextAbove;
+    hasBelow = hasBelow || nextBelow;
   }
-  return { start: 0, end: 0, hasAbove: false, hasBelow: false };
+  // A budget too small for both indicators and any content gives up the "above" one.
+  if (safeBudget <= 2 && hasAbove && hasBelow) {
+    hasAbove = false;
+    contentRows = Math.max(0, safeBudget - 1);
+    result = windowFor(contentRows);
+  }
+  return { ...result, hasAbove, hasBelow, contentRows };
 }
 
 export function BoundedBlocks({
@@ -216,7 +228,7 @@ export function BoundedBlocks({
   moreBelowLabel?: string;
 }) {
   const regionBudget = useRowBudget(chromeRows);
-  const { start, end, hasAbove, hasBelow } = resolveBlockWindow(
+  const { start, end, hasAbove, hasBelow, contentRows } = resolveBlockWindow(
     blocks.map((block) => block.rows),
     maxVisibleRows ?? regionBudget,
     cursorIndex,
@@ -224,11 +236,13 @@ export function BoundedBlocks({
   return (
     <Box flexDirection="column">
       {hasAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
-      {blocks.slice(start, end).map((block) => (
-        <Box key={block.key} flexDirection="column" flexShrink={0}>
-          {block.node}
-        </Box>
-      ))}
+      <Box flexDirection="column" maxHeight={contentRows} overflow="hidden">
+        {blocks.slice(start, end).map((block) => (
+          <Box key={block.key} flexDirection="column" flexShrink={0}>
+            {block.node}
+          </Box>
+        ))}
+      </Box>
       {hasBelow ? <Text color={colors['text-dim']}>▼ {moreBelowLabel}</Text> : null}
     </Box>
   );

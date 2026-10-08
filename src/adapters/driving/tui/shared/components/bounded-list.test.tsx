@@ -176,8 +176,12 @@ describe('block window and older-hidden cap', () => {
     for (let budget = 0; budget <= 20; budget += 1) {
       for (let cursor = 0; cursor < heights.length; cursor += 1) {
         const w = resolveBlockWindow(heights, budget, cursor);
-        const used = heights.slice(w.start, w.end).reduce((a, b) => a + b, 0) + (w.hasAbove ? 1 : 0) + (w.hasBelow ? 1 : 0);
+        const shown = Math.min(heights.slice(w.start, w.end).reduce((a, b) => a + b, 0), w.contentRows);
+        const used = shown + (w.hasAbove ? 1 : 0) + (w.hasBelow ? 1 : 0);
         expect(used).toBeLessThanOrEqual(Math.max(budget, 0));
+        if (budget > 0) expect(w.end).toBeGreaterThan(w.start);
+        if (w.start > 0 && budget > 2) expect(w.hasAbove).toBe(true);
+        if (w.end < heights.length && budget > 1) expect(w.hasBelow).toBe(true);
       }
     }
   });
@@ -186,5 +190,14 @@ describe('block window and older-hidden cap', () => {
     const w = resolveBlockWindow([2, 2, 2, 2, 2, 2], 7, 4);
     expect(w.start).toBeLessThanOrEqual(4);
     expect(w.end).toBeGreaterThan(4);
+  });
+
+  it('still shows a cursor block taller than the budget, clipped, with indicators', () => {
+    const w = resolveBlockWindow([2, 20, 2], 6, 1);
+    expect(w.start).toBe(1);
+    expect(w.end).toBe(2);
+    expect(w.hasAbove).toBe(true);
+    expect(w.hasBelow).toBe(true);
+    expect(w.contentRows).toBe(4);
   });
 });
