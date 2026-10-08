@@ -4,7 +4,8 @@
 // reset-screen.logic.ts; this component feeds it raw Ink keys. Danger styling: error-colored
 // border and title, never the accent.
 import { useRef, useState, type ReactNode } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { TextInputLine } from './components/text-input-line.js';
@@ -26,6 +27,7 @@ import {
   type ResetLine,
   type ResetScreenState,
 } from './reset-screen.logic.js';
+import { BoundedList } from './components/bounded-list.js';
 
 const TONE_COLORS: Record<ResetLine['tone'], string> = {
   text: colors.text,
@@ -43,14 +45,21 @@ export type ResetScreenProps = {
   initialState?: ResetScreenState;
 };
 
+// Rows the reset frame and its prompts keep around a line list.
+const RESET_LIST_CHROME_ROWS = 12;
+
 function Lines({ lines }: { lines: ResetLine[] }) {
   return (
     <Box flexDirection="column">
-      {lines.map((line, index) => (
-        <Text key={index} color={TONE_COLORS[line.tone]}>
-          {line.text}
-        </Text>
-      ))}
+      <BoundedList
+        items={lines}
+        chromeRows={RESET_LIST_CHROME_ROWS}
+        renderItem={(line, index) => (
+          <Text key={index} color={TONE_COLORS[line.tone]} wrap="truncate-end">
+            {line.text}
+          </Text>
+        )}
+      />
     </Box>
   );
 }
@@ -109,7 +118,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
           const highlighted = index === screen.cursor;
           return (
             <Box key={category} flexDirection="row">
-              <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+              <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
               <CheckboxListItem
                 label={RESET_CATEGORY_LABELS[category]}
                 state={screen.checked[category] ? 'checked' : 'unchecked'}
@@ -139,7 +148,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
   } else {
     body = (
       <Box flexDirection="column">
-        <Text color={colors.text}>
+        <Text color={colors.text} wrap="truncate-end">
           Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter. This permanently deletes the data and cannot be undone.
         </Text>
         <TextInputLine label="Confirm" value={screen.confirm.value} cursor={screen.confirm.cursor} focused />

@@ -4,6 +4,7 @@
 // created, the pause panel, the overwrite confirmation, or the "created but not active" message.
 // Key handling lives in activation.logic.ts.
 import { Box, Text } from 'ink';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
@@ -23,18 +24,26 @@ export function recapBranches(row: RowView): string {
   return `${row.base} → ${row.target}`;
 }
 
+// Rows the wizard frame, breadcrumb and prompts keep around the recap / the returns list.
+const RECAP_CHROME_ROWS = 16;
+const RETURNS_CHROME_ROWS = 22;
+
 function Recap({ dialog, candidates }: { dialog: CreateDialogState; candidates: readonly BranchCandidate[] }) {
   const rows = buildStep3Rows(dialog, candidates);
   return (
     <>
-      <Text color={colors.text}>Name: {dialog.topic.trim()}</Text>
-      <Text color={colors.text}>Services: {rows.map((row) => row.service).join(', ')}</Text>
-      {rows.map((row) => (
-        <Text key={row.path} color={colors['text-dim']}>
-          {'  '}
-          {row.service} : {row.modeLabel} {recapBranches(row)}
-        </Text>
-      ))}
+      <Text color={colors.text} wrap="truncate-end">Name: {dialog.topic.trim()}</Text>
+      <Text color={colors.text} wrap="truncate-end">Services: {rows.map((row) => row.service).join(', ')}</Text>
+      <BoundedList
+        items={rows}
+        chromeRows={RECAP_CHROME_ROWS}
+        renderItem={(row) => (
+          <Text key={row.path} color={colors['text-dim']} wrap="truncate-end">
+            {'  '}
+            {row.service} : {row.modeLabel} {recapBranches(row)}
+          </Text>
+        )}
+      />
     </>
   );
 }
@@ -95,8 +104,8 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
   if (activation.firstEdt) {
     return (
       <>
-        <Text color={colors.accent}>(•) {ACTIVATION_LABELS.firstEdt} — Yes (locked)</Text>
-        <Text color={colors['text-dim']}>{'    '}{ACTIVATION_LABELS.firstEdtExplanation}</Text>
+        <Text color={colors.accent} wrap="truncate-end">(•) {ACTIVATION_LABELS.firstEdt} — Yes (locked)</Text>
+        <ClampedParagraph color={colors['text-dim']} maxLines={3}>{'    ' + ACTIVATION_LABELS.firstEdtExplanation}</ClampedParagraph>
       </>
     );
   }
@@ -105,26 +114,30 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
   const info = colors['text-dim'];
   return (
     <>
-      <Text color={switching ? colors.accent : colors.text}>
+      <Text color={switching ? colors.accent : colors.text} wrap="truncate-end">
         {switching ? '(•)' : '( )'} {ACTIVATION_LABELS.switchNow}
       </Text>
       <Box flexDirection="column" paddingLeft={4}>
-        <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.stashInfo}</Text>
-        <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.otherDirtyInfo}</Text>
-        <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.membersInfo}</Text>
+        <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.stashInfo}`}</ClampedParagraph>
+        <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.otherDirtyInfo}`}</ClampedParagraph>
+        <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.membersInfo}`}</ClampedParagraph>
         {returns.length > 0 ? (
           <>
-            <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.nonMembersInfo}</Text>
-            {returns.map((entry) => (
-              <Text key={entry.service} color={info} dimColor={!switching} wrap="truncate-end">
-                {'    '}
-                {entry.service} → {entry.sharedBranch}
-              </Text>
-            ))}
+            <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.nonMembersInfo}`}</ClampedParagraph>
+            <BoundedList
+              items={returns}
+              chromeRows={RETURNS_CHROME_ROWS}
+              renderItem={(entry) => (
+                <Text key={entry.service} color={info} dimColor={!switching} wrap="truncate-end">
+                  {'    '}
+                  {entry.service} → {entry.sharedBranch}
+                </Text>
+              )}
+            />
           </>
         ) : null}
       </Box>
-      <Text color={switching ? colors.text : colors.accent}>
+      <Text color={switching ? colors.text : colors.accent} wrap="truncate-end">
         {switching ? '( )' : '(•)'} {ACTIVATION_LABELS.stay}
       </Text>
     </>
@@ -146,8 +159,8 @@ export function ActivationStepView({
   if (activation.outcome !== null) {
     body = (
       <>
-        <Text color={colors.warning}>{activation.outcome === 'stopped' ? ACTIVATION_LABELS.stopped : ACTIVATION_LABELS.notActivated}</Text>
-        <Text color={colors['text-dim']}>{activateLaterHint(activation.created?.topic ?? dialog.topic)}</Text>
+        <Text color={colors.warning} wrap="truncate-end">{activation.outcome === 'stopped' ? ACTIVATION_LABELS.stopped : ACTIVATION_LABELS.notActivated}</Text>
+        <Text color={colors['text-dim']} wrap="truncate-end">{activateLaterHint(activation.created?.topic ?? dialog.topic)}</Text>
       </>
     );
   } else if (activation.confirm !== null) {

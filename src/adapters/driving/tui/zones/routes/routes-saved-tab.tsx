@@ -10,6 +10,7 @@ import {
 } from '../../shared/components/filterable-pick-list.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export function RoutesSavedTab({
   items,
@@ -25,9 +26,7 @@ export function RoutesSavedTab({
   return (
     <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
       {error !== null ? (
-        <Text color={colors.error} wrap="truncate-end">
-          {error}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`${error}`}</ClampedParagraph>
       ) : null}
       {!isLoaded && error === null ? (
         <DimAnnotation text="Saved requests not loaded." />

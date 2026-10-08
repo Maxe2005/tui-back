@@ -22,12 +22,13 @@ import {
   type SwitchResolutionBox,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 const COLUMN_HEADERS = ['Service', 'Scope', 'Current branch', 'Action', 'Target branch'] as const;
 
 
 function Marker({ focused }: { focused: boolean }) {
-  return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
+  return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;
 }
 
 function rowCells(row: ResolutionRow, lists: Readonly<Record<string, LocalBranchList>>): BranchPlanCell[] {
@@ -49,12 +50,12 @@ function ResolutionBoxView({ box, row, lists }: { box: SwitchResolutionBox; row:
   const error = live ?? box.error;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
-      <Text color={colors.accent} bold>
+      <Text color={colors.accent} bold wrap="truncate-end">
         Configure {repo.service}
       </Text>
       <Box>
         <Marker focused={focused('action')} />
-        <Text color={focused('action') ? colors.accent : colors.text}>
+        <Text color={focused('action') ? colors.accent : colors.text} wrap="truncate-end">
           {hasOutgoing
             ? `Action: ${box.action === 'adopt' ? '(•)' : '( )'} Adopt ${box.action === 'discard' ? '(•)' : '( )'} Discard`
             : 'Action: (•) Discard'}
@@ -66,7 +67,7 @@ function ResolutionBoxView({ box, row, lists }: { box: SwitchResolutionBox; row:
           <TextInputLine label="Branch" value={box.branch.value} cursor={box.branch.cursor} focused={focused('branch') && box.editing} />
         </Box>
       ) : null}
-      {error !== null ? <Text color={colors.error}>✖ {error}</Text> : null}
+      {error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${error}`}</ClampedParagraph> : null}
       <Box>
         <Marker focused={focused('apply')} />
         <Text color={focused('apply') ? colors.accent : colors.text} bold={focused('apply')}>
@@ -131,7 +132,7 @@ function DiscardConfirmView({
           </Text>
         )}
       />
-      {error !== null ? <Text color={colors.error}>✖ {error}</Text> : null}
+      {error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${error}`}</ClampedParagraph> : null}
     </Box>
   );
 }
@@ -170,7 +171,7 @@ export function SwitchResolutionView({
   const listsPending = Object.values(state.lists).some((list) => list.status !== 'ready');
   return (
     <Box flexDirection="column">
-      <Text color={colors.text}>
+      <Text color={colors.text} wrap="truncate-end">
         {outgoing !== null
           ? `You are leaving the EDT “${outgoing}” for “${targetTopic}”. These services have uncommitted changes outside “${outgoing}”: adopt them into “${outgoing}” or discard them. Member services of “${outgoing}” are stashed automatically.`
           : `Switch to “${targetTopic}”: these services have uncommitted changes. Member services of the EDT being left are stashed automatically.`}
@@ -178,7 +179,7 @@ export function SwitchResolutionView({
       <PanelTitle text="GLOBAL STRATEGY" focused={globalFocused} />
       <Box>
         <Marker focused={lineFocused('action')} />
-        <Text color={lineFocused('action') ? colors.accent : colors.text}>
+        <Text color={lineFocused('action') ? colors.accent : colors.text} wrap="truncate-end">
           {outgoing !== null
             ? `Default action: ${state.globalAction === 'adopt' ? '(•)' : '( )'} Adopt into ${outgoing}  ${state.globalAction === 'discard' ? '(•)' : '( )'} Discard`
             : 'Default action: (•) Discard'}
@@ -209,18 +210,20 @@ export function SwitchResolutionView({
         maxVisibleRows={maxVisibleRows}
         labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
-      {stashed.map((repo) => (
-        <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">
-          {'  '}
-          {repo.service} — will be stashed for {outgoing ?? 'the EDT being left'} (restored on return)
-        </Text>
-      ))}
+      <BoundedList
+        items={stashed}
+        chromeRows={maxVisibleRows + 10}
+        renderItem={(repo) => (
+          <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">
+            {'  '}
+            {repo.service} — will be stashed for {outgoing ?? 'the EDT being left'} (restored on return)
+          </Text>
+        )}
+      />
       {blocked !== undefined ? (
-        <Text color={colors.error}>
-          ✖ {blocked.row.repo.service} : {blocked.error}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${blocked.row.repo.service} : ${blocked.error}`}</ClampedParagraph>
       ) : null}
-      {state.error !== null ? <Text color={colors.error}>✖ {state.error}</Text> : null}
+      {state.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${state.error}`}</ClampedParagraph> : null}
       {listsPending ? (
         <Text color={colors['text-dim']}>Local branches are loading or unavailable — the “already exists” check is skipped for these services.</Text>
       ) : null}

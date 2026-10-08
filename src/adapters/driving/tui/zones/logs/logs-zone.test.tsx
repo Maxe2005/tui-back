@@ -514,11 +514,11 @@ describe('LogsZone', () => {
 
     const output = await renderToString(<LogsZone useStore={store} />);
 
-    // The exact wording is locked in the logic unit tests; the narrow list column word-wraps
-    // (and the grid interleaves columns), so here assert the distinctive new token reaches the
-    // screen while the bare state reads nowhere.
+    // The exact wording is locked in the logic unit tests; the narrow list column truncates it,
+    // so here assert its distinctive leading words reach the screen while the bare state reads
+    // nowhere.
     const flat = output.replace(/\s+/g, ' ');
-    expect(flat).toContain('re-verifying');
+    expect(flat).toContain('restart requested');
     expect(flat).not.toContain('restarting');
     expect(output).toContain('⣾');
   });

@@ -17,10 +17,14 @@ import {
   type RequestRowSection,
   type RequestSection,
 } from './routes-request.logic.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 // Rows shown per Params/Query/Headers section before the list windows (the Body keeps
 // the remaining height).
 const MAX_SECTION_ROWS = 4;
+
+const MAX_PANE_TABS = 3;
+const ROW_SECTIONS: readonly RequestRowSection[] = ['params', 'query', 'headers'];
 
 const PANE_TAB_LABELS: Record<RoutesPaneTab, string> = { saved: 'Saved', request: 'Request', response: 'Response' };
 
@@ -29,14 +33,14 @@ const PANE_TAB_LABELS: Record<RoutesPaneTab, string> = { saved: 'Saved', request
 export function RoutesPaneTabStrip({ tabs, active, focused }: { tabs: readonly RoutesPaneTab[]; active: RoutesPaneTab; focused: boolean }) {
   return (
     <Box flexDirection="row" flexShrink={0}>
-      {tabs.map((tab, index) => (
+      {tabs.slice(0, MAX_PANE_TABS).map((tab, index) => (
         <Box key={tab} flexShrink={0}>
           {index > 0 ? <Text color={colors['text-dim']}> │ </Text> : null}
           <Text
             color={tab === active ? (focused ? colors.accent : colors.text) : colors['text-dim']}
             bold={tab === active}
             underline={tab === active && focused}
-          >
+           wrap="truncate-end">
             {tab === active ? `▸ ${PANE_TAB_LABELS[tab]}` : PANE_TAB_LABELS[tab]}
           </Text>
         </Box>
@@ -72,15 +76,12 @@ export type RoutesRequestTabProps = {
 };
 
 export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, rowAddPrompt, hasBody, fireBlock, bodyAreaRef, body }: RoutesRequestTabProps) {
-  const rowSections: RequestRowSection[] = ['params', 'query', 'headers'];
   return (
     <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
       {fireBlock !== null ? (
-        <Text color={colors.error} wrap="truncate-end">
-          {fireBlock}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`${fireBlock}`}</ClampedParagraph>
       ) : null}
-      {rowSections.map((rowSection) => {
+      {ROW_SECTIONS.map((rowSection) => {
         const rows = draft === null ? [] : draft[rowSection];
         const active = section === rowSection;
         const cursor = rows.length === 0 ? 0 : Math.min(rowCursor, rows.length - 1);
@@ -108,7 +109,7 @@ export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, 
             {rowAddPrompt !== null && rowAddPrompt.section === rowSection ? (
               <Box flexDirection="column" paddingLeft={2}>
                 <TextInputLine label="New name" value={rowAddPrompt.input.value} cursor={rowAddPrompt.input.cursor} focused />
-                {rowAddPrompt.error !== null ? <Text color={colors.error}>{rowAddPrompt.error}</Text> : null}
+                {rowAddPrompt.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`${rowAddPrompt.error}`}</ClampedParagraph> : null}
               </Box>
             ) : null}
           </Box>

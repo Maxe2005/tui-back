@@ -3,7 +3,8 @@
 // fullscreen view and a two-tier text/regex/level filter. A single `useInput` dispatches every
 // keystroke to pure functions in logs-zone.logic.ts; overlays (filter editor, fullscreen) first.
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
@@ -85,6 +86,9 @@ import {
 import { StateLine } from '../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
+
+// The info-only list of services without a container never takes more than this.
+const WITHOUT_CONTAINER_MAX_ROWS = 5;
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout; subscribing here re-renders the
@@ -249,6 +253,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // — computed by one pure function (logs-zone.logic.ts), unit-testable without Ink.
   const {
     layout,
+    visiblePaneCount,
     paneVisibleLines,
     paneContentWidth,
     fullscreenVisibleLines,
@@ -809,11 +814,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   const displayHealth = displayHealthFor(service.path);
                   return (
                     <Box key={service.path} flexDirection="row">
-                      <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                       <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState(displayHealth)} />
-                        <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+                        <Box flexShrink={0}><StatusBadge state={healthBadgeState(displayHealth)} /></Box>
+                        <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHealthLabel(displayHealth)}`}</Text>
                       </Box>
                     </Box>
                   );
@@ -832,11 +837,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   const displayHealth = displayHealthFor(service.path);
                   return (
                     <Box key={service.path} flexDirection="row">
-                      <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                       <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState(displayHealth)} />
-                        <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+                        <Box flexShrink={0}><StatusBadge state={healthBadgeState(displayHealth)} /></Box>
+                        <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHealthLabel(displayHealth)}`}</Text>
                       </Box>
                     </Box>
                   );
@@ -849,15 +854,19 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {withoutContainerServices.length > 0 ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
                   <Text color={colors['text-dim']}>SERVICES WITHOUT CONTAINER</Text>
-                  {withoutContainerServices.map((service) => (
-                    <Box key={service.path} flexDirection="row">
-                      <Text color={colors['text-dim']}> {service.service}</Text>
-                      <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState('no-container')} />
-                        <Text color={colors['text-dim']}> {formatHealthLabel('no-container')}</Text>
+                  <BoundedList
+                    items={withoutContainerServices}
+                    maxVisibleRows={WITHOUT_CONTAINER_MAX_ROWS}
+                    renderItem={(service) => (
+                      <Box key={service.path} flexDirection="row">
+                        <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
+                        <Box marginLeft={1}>
+                          <Box flexShrink={0}><StatusBadge state={healthBadgeState('no-container')} /></Box>
+                          <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel('no-container')}</Text>
+                        </Box>
                       </Box>
-                    </Box>
-                  ))}
+                    )}
+                  />
                 </Box>
               ) : null}
 
@@ -884,7 +893,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 <DimAnnotation text="No service selected — select one or more services on the left to stream their logs." />
               ) : (
                 <LogsGrid
-                  panes={activePanes}
+                  panes={activePanes.slice(0, visiblePaneCount)}
+                  hiddenPaneCount={activePanes.length - visiblePaneCount}
                   logsPanes={logsPanes}
                   layout={layout}
                   visibleLines={paneVisibleLines}

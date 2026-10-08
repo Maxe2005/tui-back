@@ -16,9 +16,10 @@ import {
   type OverrideBoxLine,
   type OverrideBoxState,
 } from './override-box.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 function LineMarker({ focused }: { focused: boolean }) {
-  return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
+  return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;
 }
 
 function BoxField({
@@ -77,12 +78,12 @@ export function OverrideBoxView({
   const newNameProtected = box.mode === 'existing' && box.rename && box.newName.value.trim() !== '' && isProtectedTarget(box.newName.value, context);
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
-      <Text color={colors.accent} bold>
+      <Text color={colors.accent} bold wrap="truncate-end">
         Configure {context.service}
       </Text>
       <Box>
         <LineMarker focused={focused('mode')} />
-        <Text color={focused('mode') ? colors.accent : colors.text}>
+        <Text color={focused('mode') ? colors.accent : colors.text} wrap="truncate-end">
           Mode: {box.mode === 'create' ? '(•)' : '( )'} Create new {box.mode === 'existing' ? '(•)' : '( )'} Choose existing
         </Text>
       </Box>
@@ -98,7 +99,7 @@ export function OverrideBoxView({
             maxRows={maxRows}
           />
           <BoxField label="Branch name" focused={focused('name')} editing={box.editing} value={box.name} context={context} maxRows={maxRows} />
-          {nameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.name.value.trim(), context.service)}</Text> : null}
+          {nameProtected ? <Text color={colors.error} wrap="truncate-end">✖ {protectedNameError(box.name.value.trim(), context.service)}</Text> : null}
         </>
       ) : (
         <>
@@ -113,12 +114,12 @@ export function OverrideBoxView({
           />
           <Box>
             <LineMarker focused={focused('rename')} />
-            <Text color={focused('rename') ? colors.accent : colors.text}>{box.rename ? '[x]' : '[ ]'} Rename the local branch</Text>
+            <Text color={focused('rename') ? colors.accent : colors.text} wrap="truncate-end">{box.rename ? '[x]' : '[ ]'} Rename the local branch</Text>
           </Box>
           {box.rename ? (
             <BoxField label="New name" focused={focused('newName')} editing={box.editing} value={box.newName} context={context} maxRows={maxRows} />
           ) : null}
-          {newNameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.newName.value.trim(), context.service)}</Text> : null}
+          {newNameProtected ? <Text color={colors.error} wrap="truncate-end">✖ {protectedNameError(box.newName.value.trim(), context.service)}</Text> : null}
         </>
       )}
       <Box>
@@ -127,7 +128,7 @@ export function OverrideBoxView({
           [ Apply ]
         </Text>
       </Box>
-      {box.error !== null ? <Text color={colors.error}>✖ {box.error}</Text> : null}
+      {box.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${box.error}`}</ClampedParagraph> : null}
     </Box>
   );
 }

@@ -86,13 +86,13 @@ export function LogsPaneView({
         {/* Inline health badge next to the service's logs (glyph+color paired) + the restart
             control's disabled state while restarting. */}
         <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(displayHealth)} />
-          <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+          <Box flexShrink={0}><StatusBadge state={healthBadgeState(displayHealth)} /></Box>
+          <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHealthLabel(displayHealth)}`}</Text>
         </Box>
         {noContainer ? null : displayHealth === 'restarting' ? (
-          <Text color={colors['text-dim']}> {formatHint(['R', 'restart requested — re-verifying…'])}</Text>
+          <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHint(['R', 'restart requested — re-verifying…'])}`}</Text>
         ) : (
-          <Text color={colors['text-dim']}> {formatHint(['R', 'restart'])}</Text>
+          <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHint(['R', 'restart'])}`}</Text>
         )}
       </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
