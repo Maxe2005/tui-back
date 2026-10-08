@@ -242,6 +242,7 @@ describe('subcommand registry guards', () => {
     return buildSubcommands({
       registry,
       manifest,
+      manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
       lock: fakeLock(),
       registryResourceKey: '/cfg/registry.yaml',
       edtsBaseDir: '/data/edts',

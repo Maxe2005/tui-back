@@ -127,6 +127,7 @@ function makeParams(overrides: Partial<ActivateEdtParams> = {}): ActivateEdtPara
     edtRegistry: fakeEdtRegistry([NEW_EDT]),
     registry: fakeRegistry(REPOS),
     manifest: fakeManifest(),
+    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
     git: fakeGit(),
     lock: fakeLock(),
     state: fakeState(),
@@ -213,7 +214,10 @@ describe('activateEdt — clean first activation', () => {
 
     expect(result.ok && result.data.status).toBe('activated');
     expect(calls(git.checkout)).toEqual([['/repo/a', 'feat/a']]);
-    expect(calls(git.listDirtyPaths).map((call) => call[0])).toEqual(['/repo/a']);
+    // Only /repo/a is read by the pre-flight (b is already on its target); the bare read is the
+    // manifest-carry check run just before its checkout.
+    const preflightReads = calls(git.listDirtyPaths).filter((call) => call[1] !== undefined);
+    expect(preflightReads.map((call) => call[0])).toEqual(['/repo/a']);
   });
 
   it('does not block on dirt that is not in the branch diff', async () => {

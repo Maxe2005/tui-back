@@ -18,6 +18,7 @@ import type { ContainerPort } from '../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { ManifestCarryPort } from '../../../core/ports/manifest-carry.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RestartPort } from '../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
@@ -54,6 +55,7 @@ const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
 export function buildSubcommands(deps: {
   registry: RegistryPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   lock: LockPort;
   registryResourceKey: string;
   edtsBaseDir: string;
@@ -735,6 +737,7 @@ async function runEdtSwitch(
     edtRegistryResourceKey: string;
     registry: RegistryPort;
     manifest: ManifestPort;
+    manifestCarry: ManifestCarryPort;
     git: GitPort;
     lock: LockPort;
     state: StatePort;
@@ -776,6 +779,7 @@ async function runEdtSwitch(
     edtRegistryResourceKey: deps.edtRegistryResourceKey,
     registry: deps.registry,
     manifest: deps.manifest,
+    manifestCarry: deps.manifestCarry,
     git: deps.git,
     lock: deps.lock,
     state: deps.state,

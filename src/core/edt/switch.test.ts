@@ -8,6 +8,7 @@ import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '..
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
+import type { ManifestCarryPort } from '../ports/manifest-carry.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { classifySwitchRepos, switchActiveEdt, type SwitchActiveEdtParams } from './switch.js';
@@ -30,6 +31,14 @@ function manifestFor(repoPath: string): Manifest {
 function fakeManifest(overrides: Partial<ManifestPort> = {}): ManifestPort {
   return {
     load: vi.fn(async (path: string) => ok(manifestFor(path))),
+    ...overrides,
+  };
+}
+
+function fakeManifestCarry(overrides: Partial<ManifestCarryPort> = {}): ManifestCarryPort {
+  return {
+    capture: vi.fn(async () => ok({ kind: 'absent' } as const)),
+    restore: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -133,6 +142,7 @@ function makeParams(overrides: Partial<SwitchActiveEdtParams> = {}): SwitchActiv
     edtRegistry: overrides.edtRegistry ?? fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) }),
     registry: overrides.registry ?? fakeRegistry(REPOS),
     manifest: overrides.manifest ?? fakeManifest(),
+    manifestCarry: overrides.manifestCarry ?? fakeManifestCarry(),
     git: overrides.git ?? fakeGit(),
     lock: overrides.lock ?? fakeLock(),
     state: overrides.state ?? fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) }),
@@ -874,7 +884,9 @@ describe('switchActiveEdt — seam row facts for the TUI dialog', () => {
     const stateOne = rows.find((row) => row.repoPath === '/repo/c');
     expect(stateOne).toMatchObject({ sharedBranch: 'development', resolution: 'auto-stash' });
     expect(stateOne).not.toHaveProperty('dirtyPaths');
-    expect(calls(git.listDirtyPaths)).toEqual([['/repo/b', { expandUntracked: true }]]);
+    expect(calls(git.listDirtyPaths).filter((call) => call[1] !== undefined)).toEqual([
+      ['/repo/b', { expandUntracked: true, excludePaths: ['.tui-back.yaml'] }],
+    ]);
     expectZeroWrites(git);
   });
 
@@ -1130,9 +1142,9 @@ describe('switchActiveEdt — discard resolution', () => {
         detail: { code: 'discarded', message: 'Discarded 2 uncommitted path(s)', discardedPaths: ['a.txt', 'newdir/b.txt'] },
       });
     }
-    // Once read-only by the pre-flight (`dirtyPaths`), once to capture before the discard.
-    expect(calls(git.listDirtyPaths)).toEqual([
-      ['/repo/b', { expandUntracked: true }],
+    // Once read-only by the pre-flight (`dirtyPaths`, manifest excluded), once to capture before the discard.
+    expect(calls(git.listDirtyPaths).filter((call) => call[1] !== undefined)).toEqual([
+      ['/repo/b', { expandUntracked: true, excludePaths: ['.tui-back.yaml'] }],
       ['/repo/b', { expandUntracked: true }],
     ]);
     expect(calls(git.discardAll)).toEqual([['/repo/b']]);
