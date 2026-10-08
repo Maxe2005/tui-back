@@ -64,4 +64,45 @@ describe('ModalDialog scrolling', () => {
       await instance.waitUntilExit();
     }
   });
+
+  it('resets the scroll position when it reopens', async () => {
+    const stdout = new FakeTtyStdout();
+    stdout.columns = 60;
+    stdout.rows = 14;
+    const stdin = fakeInteractiveTtyStdin();
+    const body = (prefix: string) => Array.from({ length: 50 }, (_, i) => createElement(Text, { key: i }, `${prefix}-${i}`));
+    const tree = (open: boolean) =>
+      createElement(
+        BoundsProvider,
+        { columns: 60, rows: 14, children: null },
+        createElement(ModalDialog, { title: 'ONE', open }, ...body('a')),
+      );
+    const instance = render(tree(true), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    const write = async (chunk: string) => {
+      (stdin as unknown as { write: (c: string) => void }).write(chunk);
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+    };
+    try {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      await write(KEYS.pageDown);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('ONE'))).not.toContain('a-0\n');
+      instance.rerender(tree(false));
+      await instance.waitUntilRenderFlush();
+      instance.rerender(tree(true));
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(stdout.output.lastIndexOf('ONE'))).toContain('a-0');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });

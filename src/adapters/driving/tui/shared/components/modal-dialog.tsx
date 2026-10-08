@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { useInput } from '../hooks/use-input.js';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useBounds } from '../bounds/bounds-context.js';
 import { useElementSize } from '../hooks/use-element-size.js';
 import { colors, spacing } from '../theme/theme.js';
@@ -15,8 +15,30 @@ export type ModalDialogProps = {
   footer?: ReactNode;
 };
 
-// Chrome of the frame: border (2) + padding (2) + title + rule.
-const DIALOG_FRAME_ROWS = 6;
+// The open dialogs in opening order; only the last one (the topmost) takes PgUp/PgDn.
+let openDialogs: string[] = [];
+const listeners = new Set<() => void>();
+
+function setOpenDialogs(next: string[]): void {
+  openDialogs = next;
+  for (const listener of listeners) listener();
+}
+
+function useIsTopmost(id: string, open: boolean): boolean {
+  useEffect(() => {
+    if (!open) return undefined;
+    setOpenDialogs([...openDialogs, id]);
+    return () => setOpenDialogs(openDialogs.filter((entry) => entry !== id));
+  }, [id, open]);
+  const top = useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => openDialogs.at(-1),
+  );
+  return open && top === id;
+}
 
 export function ModalDialog(props: ModalDialogProps) {
   const { title, open = true, children, maxHeight, footer } = props;
@@ -24,19 +46,27 @@ export function ModalDialog(props: ModalDialogProps) {
   const [bodyRef, bodySize] = useElementSize();
   const [innerRef, innerSize] = useElementSize();
   const [offset, setOffset] = useState(0);
+  const topmost = useIsTopmost(useId(), open);
   // Rows of body hidden below the visible window; the body scrolls with PgUp/PgDn.
   const hidden = bodySize !== null && innerSize !== null ? Math.max(0, innerSize.height - bodySize.height) : 0;
   const scroll = Math.min(offset, hidden);
   const page = Math.max(1, (bodySize?.height ?? 1) - 1);
+  // A fresh scroll position whenever the dialog reopens or its content shrinks below the offset.
+  useEffect(() => {
+    if (!open) setOffset(0);
+  }, [open]);
+  useEffect(() => {
+    if (offset > hidden) setOffset(hidden);
+  }, [offset, hidden]);
   useInput(
     (_input, key) => {
       if (key.pageDown) setOffset(Math.min(hidden, scroll + page));
       if (key.pageUp) setOffset(Math.max(0, scroll - page));
     },
-    { isActive: open && hidden > 0 },
+    { isActive: topmost && hidden > 0 },
   );
   if (!open) return null;
-  const frameCap = Math.max(DIALOG_FRAME_ROWS + 1, bounds.rows);
+  const frameCap = Math.max(1, bounds.rows);
   const cap = maxHeight === undefined ? frameCap : Math.min(maxHeight, frameCap);
   return (
     <Box
