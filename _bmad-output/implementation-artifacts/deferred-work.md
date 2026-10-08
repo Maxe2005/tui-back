@@ -696,3 +696,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
   summary: Re-check the branch gate immediately before the git write to close the window where HEAD changes after the first check.
   evidence: The gate runs in the gate step and again in stagePaths/commit, but a branch switch between the check and the git command is not prevented (rare TOCTOU).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
+  summary: A member switch's branch gate (`assertAllowedBranch`) now reads the HEAD version of a dirty `.tui-back.yaml` (protected branches) because the carry clears it first.
+  evidence: The git adapter resolves the protected set from the on-disk manifest at gate time; the carry runs before it. Edge case: only differs when the local edit changes `protectedBranches`/`sharedBranch`.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
+  summary: A symlinked `.tui-back.yaml` is read through but restored as a regular file; file mode is not preserved by the carry.
+  evidence: `capture` stores bytes only and `restore` renames a temp file over the target.

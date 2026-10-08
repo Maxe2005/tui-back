@@ -8,10 +8,12 @@ import { withActionLock } from '../locking.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
+import type { ManifestCarryPort } from '../ports/manifest-carry.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { addMemberUnderLock } from './modify.js';
 import { isProtectedBranch } from './shared-branches.js';
 
@@ -53,6 +55,9 @@ export interface SwitchDirtyRepo {
   owningEdtTopics: string[];
   dirtyPaths?: string[];
   resolution?: 'auto-stash';
+  // True when the repo also has a dirty `.tui-back.yaml`: it is carried over untouched, outside
+  // any resolution, and never listed in `dirtyPaths`.
+  manifestCarried?: boolean;
 }
 
 export type SwitchDirtyReposChoice =
@@ -83,6 +88,7 @@ export interface SwitchActiveEdtParams {
   edtRegistry: EdtRegistryPort;
   registry: RegistryPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   git: GitPort;
   lock: LockPort;
   state: StatePort;
@@ -162,7 +168,7 @@ export function classifySwitchRepos(
 // The outgoing lock peek is non-blocking and non-mutating: `--force` past a held lock never
 // aborts anything; it only marks the outgoing EDT `interrupted`.
 export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Result<SwitchActiveEdtData>> {
-  const { edtRegistry, registry, manifest, git, lock, state, edtRegistryResourceKey, force = false } = params;
+  const { edtRegistry, registry, manifest, manifestCarry, git, lock, state, edtRegistryResourceKey, force = false } = params;
 
   const topic = params.topic.trim();
   if (topic === '') {
@@ -234,6 +240,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   const context: RepoSwitchContext = {
     git,
     manifest,
+    manifestCarry,
     edtRegistry,
     lock,
     edtRegistryResourceKey,
@@ -243,10 +250,17 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   const results: SwitchEdtRepoResult[] = [];
   for (const repo of classified) {
     const resolution = preflight.data.get(repo.repoPath);
+    const { targetMember } = repo;
+    // A non-member's destination comes from its manifest as it sits on disk now, so it is read
+    // before the carry clears a dirty one.
+    const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
+    const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
     results.push(
-      repo.targetMember !== undefined
-        ? await switchMemberRepo(context, repo, repo.targetMember, resolution)
-        : await switchNonMemberRepo(context, repo, resolution),
+      await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
+        targetMember !== undefined
+          ? switchMemberRepo(context, repo, targetMember, resolution)
+          : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
+      ),
     );
   }
 
@@ -326,7 +340,7 @@ async function resolveDirtyRepos(input: {
 
   const dirtyRows: SwitchDirtyRepo[] = [];
   for (const repo of classified) {
-    const dirty = await git.hasUncommittedChanges(repo.repoPath);
+    const dirty = await git.hasUncommittedChanges(repo.repoPath, { excludePaths: [MANIFEST_FILE] });
     if (!dirty.ok || !dirty.data) {
       continue;
     }
@@ -415,10 +429,14 @@ async function describeDirtyRepo(
     protectedBranches: loaded.ok ? (loaded.data.protectedBranches ?? []) : [],
     owningEdtTopics: repo.owningTopics,
   };
+  const everyDirtyPath = await git.listDirtyPaths(repo.repoPath);
+  if (everyDirtyPath.ok && everyDirtyPath.data.includes(MANIFEST_FILE)) {
+    row.manifestCarried = true;
+  }
   if (repo.state === 1) {
     row.resolution = 'auto-stash';
   } else {
-    const paths = await git.listDirtyPaths(repo.repoPath, { expandUntracked: true });
+    const paths = await git.listDirtyPaths(repo.repoPath, { expandUntracked: true, excludePaths: [MANIFEST_FILE] });
     if (paths.ok) {
       row.dirtyPaths = paths.data;
     }
@@ -462,6 +480,7 @@ export async function resolveTargetBranch(git: GitPort, repoPath: string, spec: 
 interface RepoSwitchContext {
   git: GitPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   edtRegistry: EdtRegistryPort;
   lock: LockPort;
   edtRegistryResourceKey: string;
@@ -807,11 +826,11 @@ async function switchNonMemberRepo(
   context: RepoSwitchContext,
   repo: ClassifiedSwitchRepo,
   resolution: DirtyResolution | undefined,
+  loaded: Result<Manifest>,
 ): Promise<SwitchEdtRepoResult> {
-  const { git, manifest } = context;
+  const { git } = context;
   const { repoPath } = repo;
 
-  const loaded = await manifest.load(repoPath);
   const service = loaded.ok ? loaded.data.service : repoPath;
   if (!loaded.ok) {
     return failed(service, loaded.error);

@@ -10,6 +10,7 @@
 - **Story numbering must be visible in the subject line** whenever a commit belongs to a story, for quick identification — e.g. `feat(domain): add Cell value object with wall-bit decoding (story 1.1)`.
 - **Merge the story branch into its epic branch** with `git merge --no-ff` (keeps a visible merge commit marking the story's contribution) once the story's implementation is complete and reviewed.
 - **Merge the epic branch into `devlopment` only once the whole epic is finished and closed** — and only via a pull request, never a direct local merge.
+  - Exception: the `/worktree-merge` skill (`.claude/skills/worktree-merge`) is explicitly authorized to merge epic branches into `devlopment` locally (`git merge --no-ff`) when the user invokes it. Outside that skill, the pull-request rule applies.
 
 ## Troubleshooting: dependencies in worktrees
 

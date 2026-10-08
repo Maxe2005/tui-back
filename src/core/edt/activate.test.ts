@@ -127,6 +127,7 @@ function makeParams(overrides: Partial<ActivateEdtParams> = {}): ActivateEdtPara
     edtRegistry: fakeEdtRegistry([NEW_EDT]),
     registry: fakeRegistry(REPOS),
     manifest: fakeManifest(),
+    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
     git: fakeGit(),
     lock: fakeLock(),
     state: fakeState(),
@@ -213,7 +214,10 @@ describe('activateEdt — clean first activation', () => {
 
     expect(result.ok && result.data.status).toBe('activated');
     expect(calls(git.checkout)).toEqual([['/repo/a', 'feat/a']]);
-    expect(calls(git.listDirtyPaths).map((call) => call[0])).toEqual(['/repo/a']);
+    // Only /repo/a is read by the pre-flight (b is already on its target); the bare read is the
+    // manifest-carry check run just before its checkout.
+    const preflightReads = calls(git.listDirtyPaths).filter((call) => call[1] !== undefined);
+    expect(preflightReads.map((call) => call[0])).toEqual(['/repo/a']);
   });
 
   it('does not block on dirt that is not in the branch diff', async () => {
@@ -371,5 +375,25 @@ describe('activateEdt — per-repo isolation', () => {
     });
     expect(calls(state.writeActiveEdt)).toHaveLength(0);
     expect(calls(edtRegistry.setStatus)).toHaveLength(0);
+  });
+});
+
+describe('activateEdt — dirty .tui-back.yaml', () => {
+  it('never counts the manifest as at risk and carries it across the checkout', async () => {
+    const dirty = vi.fn(async (_repoPath: string, opts?: { excludePaths?: string[] }) =>
+      ok(opts?.excludePaths?.includes('.tui-back.yaml') === true ? [] : ['.tui-back.yaml']),
+    );
+    const git = atRiskGit({ listDirtyPaths: dirty, diffNameOnly: vi.fn(async () => ok(['.tui-back.yaml'])) });
+    const manifestCarry = {
+      capture: vi.fn(async () => ok({ kind: 'absent' } as const)),
+      restore: vi.fn(async () => ok(undefined)),
+    };
+
+    const result = await activateEdt(makeParams({ git, manifestCarry }));
+
+    expect(result.ok && result.data.status).toBe('activated');
+    expect(calls(manifestCarry.capture)).toEqual([['/repo/a'], ['/repo/b']]);
+    expect(calls(git.discardPathsToHead)).toEqual([['/repo/a', ['.tui-back.yaml']], ['/repo/b', ['.tui-back.yaml']]]);
+    expect(calls(manifestCarry.restore)).toHaveLength(2);
   });
 });

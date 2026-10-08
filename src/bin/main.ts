@@ -5,6 +5,7 @@
 import { join } from 'node:path';
 import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
+import { createManifestCarryPort } from '../adapters/driven/manifest/carry.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
@@ -23,6 +24,7 @@ const xdg = resolveXdgPaths();
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
+const manifestCarry = createManifestCarryPort();
 const edtsBaseDir = join(xdg.dataDir, 'edts');
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
@@ -69,6 +71,7 @@ if (routeExplorer.auth === undefined) {
 const subcommands = buildSubcommands({
   registry,
   manifest,
+  manifestCarry,
   lock,
   registryResourceKey: registryFile,
   edtsBaseDir,
