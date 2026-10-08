@@ -25,6 +25,8 @@ export type SharedTypesRun = {
   results: PropagateServiceResult[];
   // The service and step currently executing while status is `running`.
   live: { repoPath: string; step: PropagateStep } | null;
+  // A retry that could not run (blocked, unwired): the previous results stay and this says why.
+  notice?: string | null;
 };
 
 export type SharedTypesSlice = {
@@ -48,6 +50,7 @@ const IDLE_RUN: SharedTypesRun = {
   blocked: null,
   results: [],
   live: null,
+  notice: null,
 };
 
 export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], SharedTypesSlice> {
@@ -58,8 +61,16 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
       options: PropagateOptions,
       resume: Record<string, ResumeFrom>,
       merge: (fresh: PropagateServiceResult[]) => PropagateServiceResult[],
+      isRetry = false,
     ): Promise<void> {
+      // A retry that cannot run keeps the previous results and shows why, instead of wiping them.
+      const keepResults = (message: string) =>
+        set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, status: 'done', blocked: null, live: null, notice: message } }));
       if (deps?.sharedTypes === undefined || deps.container === undefined || deps.restart === undefined) {
+        if (isRetry) {
+          keepResults('Version propagation is not available in this session.');
+          return;
+        }
         set({
           sharedTypesRun: {
             ...IDLE_RUN,
@@ -74,7 +85,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
       if (get().runInProgress) {
         return;
       }
-      set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, status: 'running', version, options, blocked: null, live: null } }));
+      set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, status: 'running', version, options, blocked: null, live: null, notice: null } }));
       get().setRunInProgress(true);
       try {
         const report = await propagateVersion({
@@ -89,7 +100,9 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
           resume,
           onProgress: (event) => set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, live: { repoPath: event.repoPath, step: event.step } } })),
         });
-        if (report.status === 'blocked') {
+        if (report.status === 'blocked' && isRetry) {
+          keepResults(report.error.message);
+        } else if (report.status === 'blocked') {
           set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, status: 'blocked', blocked: report.error, live: null } }));
         } else {
           set((state) => ({
@@ -98,9 +111,13 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        set((state) => ({
-          sharedTypesRun: { ...state.sharedTypesRun, status: 'blocked', blocked: { code: 'internal-error', message }, live: null },
-        }));
+        if (isRetry) {
+          keepResults(message);
+        } else {
+          set((state) => ({
+            sharedTypesRun: { ...state.sharedTypesRun, status: 'blocked', blocked: { code: 'internal-error', message }, live: null },
+          }));
+        }
       } finally {
         get().setRunInProgress(false);
       }
@@ -152,6 +169,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
         const resume: Record<string, ResumeFrom> = isResumable(previous.failedStep) ? { [repoPath]: previous.failedStep } : {};
         await execute([consumer], sharedTypesRun.version, sharedTypesRun.options, resume, (fresh) =>
           get().sharedTypesRun.results.map((result) => fresh.find((candidate) => candidate.repoPath === result.repoPath) ?? result),
+          true,
         );
       },
       resetSharedTypesRun: () => {

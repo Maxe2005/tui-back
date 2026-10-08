@@ -7,11 +7,11 @@ import { createAppStore, type AppStoreDeps } from '../app-store.js';
 const MODULE = 'consumer-module';
 
 function makeDeps(overrides: { published?: boolean; installFails?: boolean } = {}) {
-  let written = false;
+  const written = new Set<string>();
   const git = {
     currentBranch: vi.fn(async () => ok('feat/x')),
     assertAllowedBranch: vi.fn(async () => ok(undefined)),
-    listDirtyPaths: vi.fn(async () => ok(written ? ['package.json'] : [])),
+    listDirtyPaths: vi.fn(async (repoPath: string) => ok(written.has(repoPath) ? ['package.json'] : [])),
     stagePaths: vi.fn(async () => ok(undefined)),
     commit: vi.fn(async () => ok(undefined)),
   };
@@ -20,8 +20,8 @@ function makeDeps(overrides: { published?: boolean; installFails?: boolean } = {
   };
   const port = {
     readVersion: vi.fn(),
-    writeVersionLine: vi.fn(async () => {
-      written = true;
+    writeVersionLine: vi.fn(async (path: string) => {
+      written.add(path.replace('/package.json', ''));
       return ok(undefined);
     }),
     verifyPublished: vi.fn(async () => ok(overrides.published ?? true)),
@@ -82,5 +82,49 @@ describe('shared-types slice', () => {
     await store.getState().retrySharedTypesService('/r/api');
     expect(port.writeVersionLine).toHaveBeenCalledTimes(1);
     expect(store.getState().sharedTypesRun.results[0]).toMatchObject({ outcome: 'failed', failedStep: 'install' });
+  });
+
+  it('keeps the other services\' results and turns the retried one done when the retry succeeds', async () => {
+    const { deps } = makeDeps();
+    const members = [
+      { service: 'api', repoPath: '/r/api', branch: 'feat/x' },
+      { service: 'web', repoPath: '/r/web', branch: 'feat/x' },
+    ];
+    (deps.edtRegistry.list as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok([{ ulid: 'E1', topic: 't', createdAt: '', status: 'active', members }]),
+    );
+    let failWeb = true;
+    (deps.restart!.run as ReturnType<typeof vi.fn>).mockImplementation(async (repoPath: string) =>
+      repoPath === '/r/web' && failWeb ? err('restart-failed', 'npm ERR') : ok({ output: '' }),
+    );
+    const store = createAppStore(deps);
+    await store.getState().loadSharedTypesConsumers();
+    await store.getState().runSharedTypesPropagation({ version: '0.1.9', repoPaths: ['/r/api', '/r/web'], options: OPTIONS });
+    expect(store.getState().sharedTypesRun.results.map((r) => r.outcome)).toEqual(['done', 'failed']);
+
+    failWeb = false;
+    await store.getState().retrySharedTypesService('/r/web');
+
+    const run = store.getState().sharedTypesRun;
+    expect(run.status).toBe('done');
+    expect(run.results.map((r) => [r.repoPath, r.outcome])).toEqual([
+      ['/r/api', 'done'],
+      ['/r/web', 'done'],
+    ]);
+  });
+
+  it('keeps the previous results and restores done with a notice when a retry is blocked', async () => {
+    const { deps, port } = makeDeps({ installFails: true });
+    const store = createAppStore(deps);
+    await store.getState().loadSharedTypesConsumers();
+    await store.getState().runSharedTypesPropagation({ version: '0.1.9', repoPaths: ['/r/api'], options: OPTIONS });
+    port.verifyPublished.mockResolvedValue(err('registry-unreachable', 'down'));
+
+    await store.getState().retrySharedTypesService('/r/api');
+
+    const run = store.getState().sharedTypesRun;
+    expect(run.status).toBe('done');
+    expect(run.results[0]).toMatchObject({ outcome: 'failed' });
+    expect(run.notice).toContain('Registry unreachable');
   });
 });
