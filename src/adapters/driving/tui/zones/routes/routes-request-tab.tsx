@@ -22,6 +22,9 @@ import {
 // the remaining height).
 const MAX_SECTION_ROWS = 4;
 
+const MAX_PANE_TABS = 3;
+const ROW_SECTIONS: readonly RequestRowSection[] = ['params', 'query', 'headers'];
+
 const PANE_TAB_LABELS: Record<RoutesPaneTab, string> = { saved: 'Saved', request: 'Request', response: 'Response' };
 
 // The active tab is marked and bold; the strip turns accent while the pane holds focus
@@ -29,7 +32,7 @@ const PANE_TAB_LABELS: Record<RoutesPaneTab, string> = { saved: 'Saved', request
 export function RoutesPaneTabStrip({ tabs, active, focused }: { tabs: readonly RoutesPaneTab[]; active: RoutesPaneTab; focused: boolean }) {
   return (
     <Box flexDirection="row" flexShrink={0}>
-      {tabs.map((tab, index) => (
+      {tabs.slice(0, MAX_PANE_TABS).map((tab, index) => (
         <Box key={tab} flexShrink={0}>
           {index > 0 ? <Text color={colors['text-dim']}> │ </Text> : null}
           <Text
@@ -72,7 +75,6 @@ export type RoutesRequestTabProps = {
 };
 
 export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, rowAddPrompt, hasBody, fireBlock, bodyAreaRef, body }: RoutesRequestTabProps) {
-  const rowSections: RequestRowSection[] = ['params', 'query', 'headers'];
   return (
     <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
       {fireBlock !== null ? (
@@ -80,7 +82,7 @@ export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, 
           {fireBlock}
         </Text>
       ) : null}
-      {rowSections.map((rowSection) => {
+      {ROW_SECTIONS.map((rowSection) => {
         const rows = draft === null ? [] : draft[rowSection];
         const active = section === rowSection;
         const cursor = rows.length === 0 ? 0 : Math.min(rowCursor, rows.length - 1);

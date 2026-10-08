@@ -87,6 +87,9 @@ import { StateLine } from '../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 
+// The info-only list of services without a container never takes more than this.
+const WITHOUT_CONTAINER_MAX_ROWS = 5;
+
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout; subscribing here re-renders the
   // grid panes too, so their useElementSize re-measures instead of keeping a stale row budget.
@@ -850,15 +853,19 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
               {withoutContainerServices.length > 0 ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
                   <Text color={colors['text-dim']}>SERVICES WITHOUT CONTAINER</Text>
-                  {withoutContainerServices.map((service) => (
-                    <Box key={service.path} flexDirection="row">
-                      <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
-                      <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState('no-container')} />
-                        <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel('no-container')}</Text>
+                  <BoundedList
+                    items={withoutContainerServices}
+                    maxVisibleRows={WITHOUT_CONTAINER_MAX_ROWS}
+                    renderItem={(service) => (
+                      <Box key={service.path} flexDirection="row">
+                        <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
+                        <Box marginLeft={1}>
+                          <StatusBadge state={healthBadgeState('no-container')} />
+                          <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel('no-container')}</Text>
+                        </Box>
                       </Box>
-                    </Box>
-                  ))}
+                    )}
+                  />
                 </Box>
               ) : null}
 

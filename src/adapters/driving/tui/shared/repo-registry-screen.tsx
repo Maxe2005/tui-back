@@ -23,6 +23,7 @@ import {
   type RemoveStaleRegistryOutcome,
 } from '../store/app-store.js';
 import type { ScanResult } from '../../../../core/ports/registry.js';
+import { BoundedBlocks, BoundedList } from './components/bounded-list.js';
 
 // Static manifest-creation guidance, always shown alongside the scan/register controls — never
 // gated to first launch only. Field names mirror the manifest zod schema
@@ -165,6 +166,11 @@ function outcomeColor(outcome: RegistryOutcome): string {
 function staleOutcomeColor(outcome: RemoveStaleRegistryOutcome): string {
   return outcome === 'removed' ? colors.success : colors.error;
 }
+
+// Rows the screen keeps around its list: frame, guidance lines, heading, hint.
+const REGISTRY_CHROME_ROWS = 14;
+// A result's path line plus up to three annotation lines.
+const DETAIL_BLOCK_ROWS = 4;
 
 export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppStore }) {
   const registryScanStatus = useStore((state) => state.registryScanStatus);
@@ -316,7 +322,11 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         {phase === 'candidates' ? (
           <Box flexDirection="column">
             <Text color={colors['text-dim']}>CANDIDATES</Text>
-            {candidates.map((path, index) => {
+            <BoundedList
+              items={candidates}
+              chromeRows={REGISTRY_CHROME_ROWS}
+              cursorIndex={clampedCursor}
+              renderItem={(path, index) => {
               const highlighted = index === clampedCursor;
               return (
                 // checkbox-list-item.tsx's own `selected` prop has no visible effect, so the
@@ -332,7 +342,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                   />
                 </Box>
               );
-            })}
+              }}
+            />
           </Box>
         ) : null}
 
@@ -343,14 +354,21 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         {phase === 'results' ? (
           <Box flexDirection="column">
             <Text color={colors['text-dim']}>RESULTS</Text>
-            {(registryRegisterResults ?? []).map((result) => (
-              <Box key={result.path} flexDirection="column">
-                <Text color={colors.text} wrap="truncate-end">
-                  {result.path} — <Text color={outcomeColor(result.outcome)}>{result.outcome}</Text>
-                </Text>
-                {result.detail ? <DimAnnotation text={result.detail} /> : null}
-              </Box>
-            ))}
+            <BoundedBlocks
+              chromeRows={REGISTRY_CHROME_ROWS}
+              blocks={(registryRegisterResults ?? []).map((result) => ({
+                key: result.path,
+                rows: result.detail ? DETAIL_BLOCK_ROWS : 1,
+                node: (
+                  <Box flexDirection="column">
+                    <Text color={colors.text} wrap="truncate-end">
+                      {result.path} — <Text color={outcomeColor(result.outcome)}>{result.outcome}</Text>
+                    </Text>
+                    {result.detail ? <DimAnnotation text={result.detail} /> : null}
+                  </Box>
+                ),
+              }))}
+            />
           </Box>
         ) : null}
 
@@ -379,7 +397,11 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
             ) : (
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>STALE ENTRIES</Text>
-                {staleCandidates.map((candidate, index) => {
+                <BoundedList
+                  items={staleCandidates}
+                  chromeRows={REGISTRY_CHROME_ROWS + 2}
+                  cursorIndex={clampedCleanCursor}
+                  renderItem={(candidate, index) => {
                   const highlighted = index === clampedCleanCursor;
                   const memberNote =
                     candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
@@ -393,7 +415,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       />
                     </Box>
                   );
-                })}
+                  }}
+                />
                 {registryCleanErrors.length > 0 ? (
                   // A path that couldn't even be checked (registry.exists() errored) is never
                   // silently dropped — reported here, distinct from the removable candidate list
@@ -416,14 +439,21 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
         {phase === 'clean-results' ? (
           <Box flexDirection="column">
             <Text color={colors['text-dim']}>RESULTS</Text>
-            {(registryCleanResults ?? []).map((result) => (
-              <Box key={result.path} flexDirection="column">
-                <Text color={colors.text} wrap="truncate-end">
-                  {result.path} — <Text color={staleOutcomeColor(result.outcome)}>{result.outcome}</Text>
-                </Text>
-                {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
-              </Box>
-            ))}
+            <BoundedBlocks
+              chromeRows={REGISTRY_CHROME_ROWS}
+              blocks={(registryCleanResults ?? []).map((result) => ({
+                key: result.path,
+                rows: result.detail ? DETAIL_BLOCK_ROWS : 1,
+                node: (
+                  <Box flexDirection="column">
+                    <Text color={colors.text} wrap="truncate-end">
+                      {result.path} — <Text color={staleOutcomeColor(result.outcome)}>{result.outcome}</Text>
+                    </Text>
+                    {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
+                  </Box>
+                ),
+              }))}
+            />
           </Box>
         ) : null}
       </Box>

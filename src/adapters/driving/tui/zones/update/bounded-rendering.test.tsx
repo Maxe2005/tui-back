@@ -9,7 +9,7 @@ import { UpdateServiceDetail } from './update-service-detail.js';
 
 describe('Update zone bounded rendering', () => {
   it('caps a 300-issue log to the newest entries with an older-hidden count', async () => {
-    const issues = Array.from({ length: 300 }, (_, i) => ({ kind: 'conflict', detail: `issue number ${i}\n${'long '.repeat(200)}`, resolved: i % 2 === 0 }));
+    const issues = Array.from({ length: 300 }, (_, i) => ({ kind: 'conflict', detail: `issue number ${i}\n${'long '.repeat(200)}`, resolved: i % 2 === 0 })) as never;
     const output = await renderToString(
       createElement(
         BoundsProvider,
