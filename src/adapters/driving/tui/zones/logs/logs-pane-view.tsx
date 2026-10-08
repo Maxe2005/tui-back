@@ -5,6 +5,7 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { formatHint } from '../../shared/components/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { LogsPaneData } from '../../store/app-store.js';
@@ -87,12 +88,12 @@ export function LogsPaneView({
             control's disabled state while restarting. */}
         <Box marginLeft={1}>
           <StatusBadge state={healthBadgeState(displayHealth)} />
-          <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+          <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHealthLabel(displayHealth)}`}</ClampedParagraph>
         </Box>
         {noContainer ? null : displayHealth === 'restarting' ? (
-          <Text color={colors['text-dim']}> {formatHint(['R', 'restart requested — re-verifying…'])}</Text>
+          <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHint(['R', 'restart requested — re-verifying…'])}`}</ClampedParagraph>
         ) : (
-          <Text color={colors['text-dim']}> {formatHint(['R', 'restart'])}</Text>
+          <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHint(['R', 'restart'])}`}</ClampedParagraph>
         )}
       </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}

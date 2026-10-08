@@ -62,7 +62,7 @@ export function LogFilterEditor({
         cursor={editor.cursor}
         focused={gridCursor === null}
       />
-      <Text color={colors.text}>Level: {editor.level ?? 'ALL'}</Text>
+      <Text color={colors.text} wrap="truncate-end">Level: {editor.level ?? 'ALL'}</Text>
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
       {gridCursor !== null && gridLayout !== null ? (
         history.length === 0 ? (
@@ -81,7 +81,7 @@ export function LogFilterEditor({
                       const absoluteRow = gridLayout.rowScrollOffset + rowIndex;
                       const isCursor = gridCursor.column === absoluteColumn && gridCursor.row === absoluteRow;
                       return (
-                        <Text key={`${absoluteColumn}-${absoluteRow}`} color={isCursor ? colors.accent : colors['text-dim']}>
+                        <Text key={`${absoluteColumn}-${absoluteRow}`} color={isCursor ? colors.accent : colors['text-dim']} wrap="truncate-end">
                           {isCursor ? '› ' : '  '}
                           {entry.padEnd(width)}
                         </Text>

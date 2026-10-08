@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -809,11 +810,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   const displayHealth = displayHealthFor(service.path);
                   return (
                     <Box key={service.path} flexDirection="row">
-                      <Text color={colors.accent}>{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                       <Box marginLeft={1}>
                         <StatusBadge state={healthBadgeState(displayHealth)} />
-                        <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+                        <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHealthLabel(displayHealth)}`}</ClampedParagraph>
                       </Box>
                     </Box>
                   );
@@ -832,11 +833,11 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   const displayHealth = displayHealthFor(service.path);
                   return (
                     <Box key={service.path} flexDirection="row">
-                      <Text color={colors.accent}>{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                       <Box marginLeft={1}>
                         <StatusBadge state={healthBadgeState(displayHealth)} />
-                        <Text color={colors['text-dim']}> {formatHealthLabel(displayHealth)}</Text>
+                        <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHealthLabel(displayHealth)}`}</ClampedParagraph>
                       </Box>
                     </Box>
                   );
@@ -851,10 +852,10 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   <Text color={colors['text-dim']}>SERVICES WITHOUT CONTAINER</Text>
                   {withoutContainerServices.map((service) => (
                     <Box key={service.path} flexDirection="row">
-                      <Text color={colors['text-dim']}> {service.service}</Text>
+                      <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
                       <Box marginLeft={1}>
                         <StatusBadge state={healthBadgeState('no-container')} />
-                        <Text color={colors['text-dim']}> {formatHealthLabel('no-container')}</Text>
+                        <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel('no-container')}</Text>
                       </Box>
                     </Box>
                   ))}
