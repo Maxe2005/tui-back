@@ -362,6 +362,8 @@ describe('modifyEdt persistence (real update())', () => {
       renameBranch: async () => ok(undefined),
       listRemoteBranches: async () => ok([]),
       createTrackingBranch: async () => ok(undefined),
+      stagePaths: async () => ok(undefined),
+      commit: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
       ...overrides,
