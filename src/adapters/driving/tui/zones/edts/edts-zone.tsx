@@ -4,7 +4,8 @@
 // a pure function in edts-zone.logic.ts; DetailPane takes only Text-safe content (UX-DR17), so a
 // git-error detail renders as a DimAnnotation sibling.
 import { useEffect, useRef, useState } from 'react';
-import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { Box, Text, useWindowSize, type Key } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
@@ -841,7 +842,11 @@ export function EdtsZone({
               {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
                 <StateLine kind="empty" subject="EDTs" />
               ) : null}
-              {edtsRows.map((entry, index) => (
+              <BoundedList
+                items={edtsRows}
+                chromeRows={4}
+                cursorIndex={clampedEdtsSelected}
+                renderItem={(entry, index) => (
                 <ListRow
                   key={entry.ulid}
                   label={entry.topic}
@@ -856,7 +861,8 @@ export function EdtsZone({
                   // different row.
                   active={entry.ulid === activeEdtUlid}
                 />
-              ))}
+                )}
+              />
               {!dialogOpen ? <DimAnnotation text={formatHints([['Enter', 'switch/modify'], ['Tab', 'focus']])} /> : null}
               </>
               }
@@ -875,7 +881,7 @@ export function EdtsZone({
                   read-only issues dialog. */}
               {issuesSummary ? (
                 <Box paddingLeft={2}>
-                  <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold>
+                  <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold wrap="truncate-end">
                     {issuesSeverity === 'error' ? '✖' : '▲'} {issuesSummary}
                     {!dialogOpen ? `  ${formatHint(['i', 'details'])}` : ''}
                   </Text>

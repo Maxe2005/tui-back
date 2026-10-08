@@ -33,6 +33,7 @@ import {
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
+import { BoundedList } from '../../../shared/components/bounded-list.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -381,22 +382,29 @@ export function ModifyDialogView({
             {candidateState === 'loading' ? <StateLine kind="loading" subject="services" /> : null}
             {candidateState === 'empty' ? <StateLine kind="empty" subject="registered services" text="No registered services available." /> : null}
             {candidateState === 'ready'
-              ? candidates.map((candidate, index) => {
-                  const branch =
-                    dialog.branchRenames[candidate.path] ??
-                    dialog.branchEdits[candidate.path] ??
-                    dialog.target.members.find((member) => member.repoPath === candidate.path)?.branch;
-                  return (
-                    <Box key={candidate.path}>
-                      <Text color={colors.accent}>{dialog.formFocus === 'members' && index === dialog.memberCursor ? '›' : ' '}</Text>
-                      <CheckboxListItem
-                        label={candidate.service}
-                        state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'}
-                        meta={branch}
-                      />
-                    </Box>
-                  );
-                })
+              ? (
+                <BoundedList
+                  items={candidates}
+                  chromeRows={16}
+                  cursorIndex={dialog.memberCursor}
+                  renderItem={(candidate, index) => {
+                    const branch =
+                      dialog.branchRenames[candidate.path] ??
+                      dialog.branchEdits[candidate.path] ??
+                      dialog.target.members.find((member) => member.repoPath === candidate.path)?.branch;
+                    return (
+                      <Box key={candidate.path}>
+                        <Text color={colors.accent} wrap="truncate-end">{dialog.formFocus === 'members' && index === dialog.memberCursor ? '›' : ' '}</Text>
+                        <CheckboxListItem
+                          label={candidate.service}
+                          state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'}
+                          meta={branch}
+                        />
+                      </Box>
+                    );
+                  }}
+                />
+                )
               : null}
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Saving…" /> : null}

@@ -107,7 +107,7 @@ export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialog
   return (
     <ModalDialog title="ADD TO EDT" open={true}>
       <Box flexDirection="column">
-        <Text color={colors.text}>
+        <Text color={colors.text} wrap="truncate-end">
           Add {dialog.serviceName} to "{dialog.edt.topic}"
         </Text>
         {dialog.branchPicker !== null ? (

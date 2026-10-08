@@ -58,7 +58,7 @@ export function UpdateServiceMenuDialog({
   return (
     <ModalDialog title={UPDATE_SERVICE_MENU_TITLE} open>
       <Box flexDirection="column">
-        <Text color={colors.text}>{service}</Text>
+        <Text color={colors.text} wrap="truncate-end">{service}</Text>
         <MenuList items={items} cursor={cursor} />
       </Box>
     </ModalDialog>

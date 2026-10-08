@@ -42,6 +42,7 @@ import {
   summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 export const CREATE_WIZARD_TITLE = 'CREATE EDT';
 
@@ -415,6 +416,9 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
   return { handleCreateInput, loadPendingBranchLists, handleCancelRequest, dispatchActivationDecision };
 }
 
+// Name, Services, Branches, Activation.
+const MAX_BREADCRUMB_STEPS = 4;
+
 const BREADCRUMB_COLORS: Readonly<Record<BreadcrumbTone, string>> = {
   current: colors.accent,
   done: colors.text,
@@ -445,14 +449,14 @@ export function CreateWizardView({
     <ModalDialog title={CREATE_WIZARD_TITLE} open={true}>
       <Box flexDirection="column">
         <Box flexWrap="wrap">
-          {breadcrumb.map((item, index) => (
-            <Text key={item.step} color={BREADCRUMB_COLORS[item.tone]} bold={item.tone === 'current'} dimColor={item.tone === 'unreachable'}>
+          {breadcrumb.slice(0, MAX_BREADCRUMB_STEPS).map((item, index) => (
+            <Text key={item.step} color={BREADCRUMB_COLORS[item.tone]} bold={item.tone === 'current'} dimColor={item.tone === 'unreachable'} wrap="truncate-end">
               {index > 0 ? ' ── ' : ''}[{item.text}]
             </Text>
           ))}
         </Box>
-        {dialog.seedFromEdt !== null ? <Text color={colors['text-dim']}>From EDT: {dialog.seedFromEdt.topic}</Text> : null}
-        <Text color={colors['text-dim']}>{STEP_INTROS[dialog.step]}</Text>
+        {dialog.seedFromEdt !== null ? <Text color={colors['text-dim']} wrap="truncate-end">From EDT: {dialog.seedFromEdt.topic}</Text> : null}
+        <ClampedParagraph color={colors['text-dim']} maxLines={4}>{`${STEP_INTROS[dialog.step]}`}</ClampedParagraph>
         {dialog.step === 1 ? <NameStepView dialog={dialog} availability={checkNameAvailability(dialog.topic, edtsRows)} /> : null}
         {dialog.step === 2 ? <ServicesStepView dialog={dialog} candidates={candidates} candidateState={candidateState} /> : null}
         {dialog.step === 3 ? <BranchStepView dialog={dialog} candidates={candidates} maxRows={maxRows} maxVisibleRows={maxVisibleRows} /> : null}

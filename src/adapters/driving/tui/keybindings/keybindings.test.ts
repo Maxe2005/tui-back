@@ -69,6 +69,7 @@ const EXPECTED = [
   ['R (load error)', 'EDTs, Update and Logs: retry a failed list load'],
   ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane'],
   ['Ctrl+T (branch picker)', 'Branch picker: rename the highlighted branch'],
+  ['PgUp / PgDn', 'Scroll a dialog taller than the window; page the Update last-run recap'],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {

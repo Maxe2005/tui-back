@@ -40,6 +40,7 @@ export const FOOTER_CONTEXTS = {
   'force-confirm': { label: 'Forced action', hints: [['Enter', 'force switch anyway'], CANCEL] },
   close: { label: 'Result dialog', hints: [['Enter/Esc', 'close']] },
   dismiss: { label: 'Read-only dialog', hints: [CLOSE] },
+  'issues-list': { label: 'Service listing issues', hints: [[KEY_UP_DOWN, 'browse issues'], CLOSE] },
   // An action is running and the dialog ignores every key until it lands.
   busy: { label: 'Action in progress', hints: [] },
   menu: { label: 'Menu or pick list', hints: [MOVE, ['Enter', 'select'], CANCEL] },

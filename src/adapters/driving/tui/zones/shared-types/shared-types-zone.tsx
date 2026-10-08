@@ -4,10 +4,13 @@
 // (live step with spinner), then per-service results with independent retry. `q` mid-run asks
 // for confirmation. The use-cases live in core; this file renders and dispatches keys.
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { SHARED_TYPES_MODULE_IDS } from '../../../../../core/edt/resolve-tab-visibility.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem, ModalDialog, Spinner, StateLine, TextInputLine } from '../../shared/components/index.js';
+import { BoundedList } from '../../shared/components/bounded-list.js';
+import { ClampedParagraph, TruncatedText } from '../../shared/components/truncated-text.js';
+import { useInput } from '../../shared/hooks/use-input.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
@@ -30,6 +33,13 @@ export const SHARED_TYPES_QUIT_TITLE = 'QUIT MID-RUN';
 export const SHARED_TYPES_QUIT_BODY = 'A version propagation is in progress. Quit anyway? Services already processed stay as they are.';
 export const SHARED_TYPES_NO_MEMBERS = 'No service of the active EDT consumes the shared dependency — nothing to propagate.';
 
+// Rows the form/run views use around their windowed consumer list: title, version row, two
+// section headers, the option rows, the issue lines, the run notice and hint.
+const FORM_CHROME_ROWS = 4 + OPTION_ROWS.length + 4;
+const RUN_CHROME_ROWS = 6;
+const MAX_ISSUE_ROWS = 3;
+const MAX_CLAMPED_LINES = 4;
+
 export function formatSharedTypesDisabledMessage(carryingServices: string[]): string {
   const list = carryingServices.join(', ');
   if (carryingServices.length === 1) {
@@ -45,7 +55,7 @@ export function SharedTypesZone({ useStore = useAppStore }: { useStore?: AppStor
   if (status === 'disabled') {
     return (
       <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
-        <Text color={colors.text}>{formatSharedTypesDisabledMessage(carryingServices)}</Text>
+        <ClampedParagraph color={colors.text} maxLines={MAX_CLAMPED_LINES}>{formatSharedTypesDisabledMessage(carryingServices)}</ClampedParagraph>
       </Box>
     );
   }
@@ -171,8 +181,8 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       <Text color={colors['text-dim']}>SHARED TYPES</Text>
       {renderBody()}
       <ModalDialog title={SHARED_TYPES_QUIT_TITLE} open={quitConfirm}>
-        <Text color={colors.text}>{SHARED_TYPES_QUIT_BODY}</Text>
-        <Text color={colors['text-dim']}>Enter quit, Esc keep running</Text>
+        <ClampedParagraph color={colors.text} maxLines={MAX_CLAMPED_LINES}>{SHARED_TYPES_QUIT_BODY}</ClampedParagraph>
+        <Text color={colors['text-dim']} wrap="truncate-end">Enter quit, Esc keep running</Text>
       </ModalDialog>
     </Box>
   );
@@ -181,8 +191,8 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     if (run.status === 'blocked' && run.blocked !== null) {
       return (
         <Box flexDirection="column">
-          <Text color={colors.error}>Blocked [{run.blocked.code}]: {run.blocked.message}</Text>
-          <Text color={colors['text-dim']}>Enter/Esc back to the form</Text>
+          <ClampedParagraph color={colors.error} maxLines={MAX_CLAMPED_LINES}>{`Blocked [${run.blocked.code}]: ${run.blocked.message}`}</ClampedParagraph>
+          <Text color={colors['text-dim']} wrap="truncate-end">Enter/Esc back to the form</Text>
         </Box>
       );
     }
@@ -197,9 +207,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
         <Box flexDirection="column">
           <StateLine kind="error" subject="consuming services" retry />
           {consumersError !== null ? (
-            <Text color={colors.error}>
-              [{consumersError.code}] {consumersError.message}
-            </Text>
+            <ClampedParagraph color={colors.error} maxLines={MAX_CLAMPED_LINES}>{`[${consumersError.code}] ${consumersError.message}`}</ClampedParagraph>
           ) : null}
         </Box>
       );
@@ -215,7 +223,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     return (
       <Box flexDirection="column">
         <Box>
-          <Text color={form.row === 0 ? colors.accent : colors.text}>{form.row === 0 ? '> ' : '  '}</Text>
+          <Text color={form.row === 0 ? colors.accent : colors.text} wrap="truncate-end">{form.row === 0 ? '> ' : '  '}</Text>
           <TextInputLine
             label="Version"
             value={form.version.value}
@@ -225,22 +233,27 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
           />
         </Box>
         <Text color={colors['text-dim']}>Services</Text>
-        {consumers.map((consumer, index) => (
-          <Box key={consumer.repoPath}>
-            <Text color={form.row === index + 1 ? colors.accent : colors.text}>{form.row === index + 1 ? '> ' : '  '}</Text>
-            <CheckboxListItem
-              label={consumer.service}
-              meta={`${consumer.dependency} on ${consumer.branch}`}
-              state={form.unchecked.has(consumer.repoPath) ? 'unchecked' : 'checked'}
-            />
-          </Box>
-        ))}
+        <BoundedList
+          items={consumers}
+          chromeRows={FORM_CHROME_ROWS}
+          cursorIndex={form.row >= 1 && form.row <= consumers.length ? form.row - 1 : undefined}
+          renderItem={(consumer, index) => (
+            <Box key={consumer.repoPath}>
+              <Text color={form.row === index + 1 ? colors.accent : colors.text} wrap="truncate-end">{form.row === index + 1 ? '> ' : '  '}</Text>
+              <CheckboxListItem
+                label={consumer.service}
+                meta={`${consumer.dependency} on ${consumer.branch}`}
+                state={form.unchecked.has(consumer.repoPath) ? 'unchecked' : 'checked'}
+              />
+            </Box>
+          )}
+        />
         <Text color={colors['text-dim']}>Options</Text>
         {OPTION_ROWS.map((option, index) => {
           const row = consumers.length + 1 + index;
           return (
             <Box key={option.key}>
-              <Text color={form.row === row ? colors.accent : colors.text}>{form.row === row ? '> ' : '  '}</Text>
+              <Text color={form.row === row ? colors.accent : colors.text} wrap="truncate-end">{form.row === row ? '> ' : '  '}</Text>
               <CheckboxListItem label={option.label} state={form.options[option.key] ? 'checked' : 'unchecked'} />
             </Box>
           );
@@ -256,11 +269,16 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     }
     return (
       <Box flexDirection="column">
-        {issues.map((issue) => (
-          <Text key={issue.repoPath} color={colors.warning}>
-            {issue.service}: {issue.message}
-          </Text>
-        ))}
+        <BoundedList
+          items={issues}
+          maxVisibleRows={MAX_ISSUE_ROWS + 1}
+          moreBelowLabel="more issues"
+          renderItem={(issue) => (
+            <TruncatedText key={issue.repoPath} color={colors.warning}>
+              {`${issue.service}: ${issue.message}`}
+            </TruncatedText>
+          )}
+        />
       </Box>
     );
   }
@@ -274,34 +292,39 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     });
     return (
       <Box flexDirection="column">
-        <Text color={colors.text}>Propagating {run.version}</Text>
-        {chosen.map((consumer) => {
-          const result = run.results.find((candidate) => candidate.repoPath === consumer.repoPath);
-          const index = run.results.findIndex((candidate) => candidate.repoPath === consumer.repoPath);
-          const live = run.live?.repoPath === consumer.repoPath ? run.live : null;
-          const focused = run.status === 'done' && index === resultRow;
-          const color = result === undefined ? colors['text-dim'] : result.outcome === 'done' ? colors.success : result.outcome === 'skipped' ? colors.warning : colors.error;
-          return (
-            <Box key={consumer.repoPath}>
-              <Text color={focused ? colors.accent : colors.text}>{focused ? '> ' : '  '}</Text>
-              {live !== null && run.status === 'running' ? <Spinner /> : null}
-              <Text color={color}>
-                {' '}
-                {consumer.service}:{' '}
-                {result !== undefined
-                  ? summarizeResult(result)
-                  : live !== null
-                    ? STEP_LABELS[live.step]
-                    : run.status === 'running'
-                      ? 'waiting'
-                      : ''}
-              </Text>
-            </Box>
-          );
-        })}
-        {run.status === 'done' && run.notice ? <Text color={colors.warning}>{run.notice}</Text> : null}
+        <TruncatedText color={colors.text}>{`Propagating ${run.version}`}</TruncatedText>
+        <BoundedList
+          items={chosen}
+          chromeRows={RUN_CHROME_ROWS}
+          cursorIndex={run.status === 'done' ? Math.max(0, chosen.findIndex((consumer) => run.results[resultRow]?.repoPath === consumer.repoPath)) : undefined}
+          renderItem={(consumer) => {
+            const result = run.results.find((candidate) => candidate.repoPath === consumer.repoPath);
+            const index = run.results.findIndex((candidate) => candidate.repoPath === consumer.repoPath);
+            const live = run.live?.repoPath === consumer.repoPath ? run.live : null;
+            const focused = run.status === 'done' && index === resultRow;
+            const color = result === undefined ? colors['text-dim'] : result.outcome === 'done' ? colors.success : result.outcome === 'skipped' ? colors.warning : colors.error;
+            return (
+              <Box key={consumer.repoPath}>
+                <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">{focused ? '> ' : '  '}</Text>
+                {live !== null && run.status === 'running' ? <Spinner /> : null}
+                <TruncatedText color={color}>
+                  {` ${consumer.service}: ${
+                    result !== undefined
+                      ? summarizeResult(result)
+                      : live !== null
+                        ? STEP_LABELS[live.step]
+                        : run.status === 'running'
+                          ? 'waiting'
+                          : ''
+                  }`}
+                </TruncatedText>
+              </Box>
+            );
+          }}
+        />
+        {run.status === 'done' && run.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{run.notice}</ClampedParagraph> : null}
         {run.status === 'done' ? (
-          <Text color={colors['text-dim']}>
+          <Text color={colors['text-dim']} wrap="truncate-end">
             {run.results.some((result) => result.outcome === 'failed')
               ? 'Up/Down select, R retry the failed service, Esc new run'
               : 'Esc new run'}

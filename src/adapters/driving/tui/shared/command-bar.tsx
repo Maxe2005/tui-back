@@ -4,7 +4,9 @@
 // handles everything; AppShell only mounts/unmounts it via `commandBarOpen`. Every key decision
 // is a pure, unit-tested function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
-import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { Box, Text, type Key } from 'ink';
+import { useInput } from './hooks/use-input.js';
+import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
@@ -386,7 +388,10 @@ export type CommandBarProps = {
 
 export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps) {
   // Read live from the store (the settings screen's Command Palette tab).
-  const gridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  const configuredGridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  // Frame (6) + input line + one message line + one spare row.
+  const bounds = useBounds();
+  const gridMaxRows = Math.max(1, Math.min(configuredGridMaxRows, bounds.rows - 9));
   useFooterContext('command-bar', 'command', useStore);
   const [query, setQuery] = useState('');
   const [unknownCommand, setUnknownCommand] = useState(false);
@@ -396,16 +401,25 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   // grid re-filters live and hides once only one match remains).
   const [gridShown, setGridShown] = useState(false);
   const [focus, setFocus] = useState<'input' | 'grid'>('input');
-  const [gridCursor, setGridCursor] = useState<GridCursor>({ column: 0, row: 0 });
+  const [rawGridCursor, setGridCursor] = useState<GridCursor>({ column: 0, row: 0 });
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const matches = matchCommands(query, COMMANDS);
   const gridVisible = gridShown && matches.length > 1;
 
-  const { columns: terminalColumns } = useWindowSize();
+  const terminalColumns = bounds.columns;
   const availableWidth = Math.max(terminalColumns - MODAL_CHROME_WIDTH, MIN_GRID_WIDTH);
   const allColumns = groupCommandsByColumn(matches, gridMaxRows);
+  // A resize can change the column heights (gridMaxRows follows the bounds): keep the cursor on a real cell.
+  const cursorColumn = Math.max(0, Math.min(rawGridCursor.column, allColumns.length - 1));
+  const gridCursor: GridCursor = {
+    column: cursorColumn,
+    row: Math.max(0, Math.min(rawGridCursor.row, (allColumns[cursorColumn]?.length ?? 1) - 1)),
+  };
   const layout = layoutCommandGrid(matches, gridMaxRows, availableWidth, (command) => command.name, scrollOffset);
+
+  // layoutCommandGrid already windows the grid to the terminal's width and the configured rows.
+  const visibleColumns = layout.columns;
 
   const openGridAtOrigin = () => {
     setGridShown(true);
@@ -547,7 +561,7 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   return (
     <ModalDialog title="COMMAND" open>
       <Box flexDirection="column">
-        <Text color={colors.text}>
+        <Text color={colors.text} wrap="truncate-start">
           :<Text color={colors.accent}>{query}</Text>
           <Text color={colors['text-dim']}>█</Text>
         </Text>
@@ -563,16 +577,16 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
         {gridVisible ? (
           <Box flexDirection="row">
             {layout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-            {layout.columns.map((column, columnIndex) => {
+            {visibleColumns.map((visibleColumn, columnIndex) => {
               const absoluteColumn = layout.scrollOffset + columnIndex;
-              const width = columnDisplayWidth(column, (command) => command.name);
+              const width = columnDisplayWidth(visibleColumn, (command) => command.name);
               return (
                 <Box key={absoluteColumn} flexDirection="column" marginRight={GRID_COLUMN_GAP}>
-                  {column.map((command, rowIndex) => {
+                  {visibleColumn.map((command, rowIndex) => {
                     const isCursor =
                       focus === 'grid' && gridCursor.column === absoluteColumn && gridCursor.row === rowIndex;
                     return (
-                      <Text key={command.name} color={isCursor ? colors.accent : colors['text-dim']}>
+                      <Text key={command.name} color={isCursor ? colors.accent : colors['text-dim']} wrap="truncate-end">
                         {isCursor ? '› ' : '  '}
                         {command.name.padEnd(width)}
                       </Text>

@@ -21,6 +21,7 @@ import {
   type QuickPickDialogState,
   type QuickPickMode,
 } from '../edts-zone.logic.js';
+import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
 
 // The candidate pool for a given mode: switch mode filters out the active EDT; modify, delete and
 // create-from modes offer every EDT, active included (any EDT can be the root of a new one).
@@ -110,7 +111,7 @@ export function QuickPickDialogView({ dialog, pool }: { dialog: QuickPickDialogS
   return (
     <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} open={true}>
       <Box flexDirection="column">
-        {dialog.notFound !== null ? <Text color={colors.error}>{dialog.notFound}</Text> : null}
+        {dialog.notFound !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`${dialog.notFound}`}</ClampedParagraph> : null}
         <FilterablePickList
           label="Filter"
           state={dialog}

@@ -4,7 +4,8 @@
 // `Ctrl+R` fires the draft. While the pane holds focus it captures the keyboard from AppShell;
 // `Esc` unwinds sub-editors, then Response → Request and Saved → list, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -72,6 +73,7 @@ import { nextTextInputValue, type TextInputState } from '../../shared/components
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import {
   filterRoutes,
   formatRouteDetail,
@@ -1687,7 +1689,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (status === 'disabled') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
-        <Text color={colors.text}>{formatRoutesDisabledMessage(carryingServices)}</Text>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`${formatRoutesDisabledMessage(carryingServices)}`}</ClampedParagraph>
       </Box>
     );
   }
@@ -1708,7 +1710,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.error}>{routesError ? routesError.message : 'Route scan failed.'}</Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`${routesError ? routesError.message : 'Route scan failed.'}`}</ClampedParagraph>
       </Box>
     );
   }
@@ -1865,7 +1867,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {focused && paneTab === 'request' && savePrompt !== null ? (
               <Box flexDirection="column">
                 <TextInputLine label="Name" value={savePrompt.input.value} cursor={savePrompt.input.cursor} focused />
-                {savePrompt.error !== null ? <Text color={colors.error}>{savePrompt.error}</Text> : null}
+                {savePrompt.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`${savePrompt.error}`}</ClampedParagraph> : null}
               </Box>
             ) : null}
             {focused && paneTab === 'request' && saveNotice !== null && savePrompt === null ? (
@@ -1890,15 +1892,15 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {overwriteConfirm !== null ? (
         <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`}>
           <Box flexDirection="column">
-            <Text color={colors.text}>A saved request named "{overwriteConfirm.name}" already exists. Overwriting replaces it.</Text>
-            <Text color={colors.text}>{formatHints([['Enter', 'overwrite'], ['Esc', 'cancel']])}</Text>
+            <ClampedParagraph color={colors.text} maxLines={4}>{`A saved request named "${overwriteConfirm.name}" already exists. Overwriting replaces it.`}</ClampedParagraph>
+            <ClampedParagraph color={colors.text} maxLines={4}>{`${formatHints([['Enter', 'overwrite'], ['Esc', 'cancel']])}`}</ClampedParagraph>
           </Box>
         </ModalDialog>
       ) : null}
       {pickerOpen ? (
         <ModalDialog title="Saved requests">
           <Box flexDirection="column">
-            {pickerError !== null ? <Text color={colors.error}>{pickerError}</Text> : null}
+            {pickerError !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`${pickerError}`}</ClampedParagraph> : null}
             {savedRequests === null ? (
               <DimAnnotation text="Loading saved requests…" />
             ) : (
@@ -1917,16 +1919,16 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {pickerDeleteConfirm !== null ? (
         <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`}>
           <Box flexDirection="column">
-            <Text color={colors.text}>The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
-            <Text color={colors.text}>{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
+            <ClampedParagraph color={colors.text} maxLines={4}>{`The stale saved request "${pickerDeleteConfirm.name}" will be removed. This cannot be undone.`}</ClampedParagraph>
+            <Text color={colors.text} wrap="truncate-end">{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}
       {savedTabDeleteConfirm !== null ? (
         <ModalDialog title={`Delete "${savedTabDeleteConfirm.name}"?`}>
           <Box flexDirection="column">
-            <Text color={colors.text}>The saved request "{savedTabDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
-            <Text color={colors.text}>{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
+            <ClampedParagraph color={colors.text} maxLines={4}>{`The saved request "${savedTabDeleteConfirm.name}" will be removed. This cannot be undone.`}</ClampedParagraph>
+            <Text color={colors.text} wrap="truncate-end">{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}

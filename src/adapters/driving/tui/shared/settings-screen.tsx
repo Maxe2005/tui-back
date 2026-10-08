@@ -4,7 +4,8 @@
 // state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
 // lives here (`onClose`): only this component knows whether Esc steps back or closes.
 import { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
@@ -30,6 +31,7 @@ import {
   MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
+import { BoundedList } from './components/bounded-list.js';
 
 export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
 
@@ -341,6 +343,9 @@ export type SettingsScreenProps = {
   // Production always starts browsing the row list (false).
   initialGeneralEditing?: boolean;
 };
+
+// Rows the settings frame, tab strip, heading and hint keep around a drill-down list.
+const SETTINGS_LIST_CHROME_ROWS = 14;
 
 export function SettingsScreen({
   useStore = useAppStore,
@@ -685,7 +690,7 @@ export function SettingsScreen({
             const state = resolveSettingsTabState(t, tab);
             return (
               <Box key={t} paddingX={spacing['1']} backgroundColor={state.backgroundColor}>
-                <Text bold={state.bold} color={state.labelColor}>
+                <Text bold={state.bold} color={state.labelColor} wrap="truncate-end">
                   {SETTINGS_TAB_LABELS[t]}
                 </Text>
               </Box>
@@ -698,7 +703,7 @@ export function SettingsScreen({
         {tab === 'general' ? (
           <Box flexDirection="column">
             <Box flexDirection="row">
-              <Text color={colors.accent}>{GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? '›' : ' '}</Text>
+              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? '›' : ' '}</Text>
               <CheckboxListItem
                 label="Enable 'q' to quit"
                 selected={GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut'}
@@ -706,16 +711,16 @@ export function SettingsScreen({
               />
             </Box>
             <Box flexDirection="row">
-              <Text color={colors.accent}>{GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? '›' : ' '}</Text>
+              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? '›' : ' '}</Text>
               {generalEditing !== null ? (
                 <TextInputLine label="Editor command" value={generalEditing.value} cursor={generalEditing.cursor} focused />
               ) : (
-                <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? colors.accent : colors.text}>
+                <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? colors.accent : colors.text} wrap="truncate-end">
                   Editor command:{' '}
                   {settings.general.editorCommand !== '' ? (
                     <Text color={colors.accent}>{settings.general.editorCommand}</Text>
                   ) : (
-                    <Text color={colors['text-dim']}>{EDITOR_COMMAND_PLACEHOLDER_TEXT}</Text>
+                    <Text color={colors['text-dim']} wrap="truncate-end">{EDITOR_COMMAND_PLACEHOLDER_TEXT}</Text>
                   )}
                 </Text>
               )}
@@ -732,7 +737,7 @@ export function SettingsScreen({
 
         {tab === 'command-palette' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-end">
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Rows of the command grid before it scrolls." />
@@ -747,8 +752,8 @@ export function SettingsScreen({
               const highlighted = index === logsGroupCursor;
               return (
                 <Box key={group.id} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text}>{group.label}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
                 </Box>
               );
             })}
@@ -757,7 +762,7 @@ export function SettingsScreen({
 
         {tab === 'logs' && logsGroup === 'buffer-size' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-end">
               Log buffer size (lines per pane): <Text color={colors.accent}>{settings.logs.bufferSize}</Text>
             </Text>
             <DimAnnotation
@@ -777,7 +782,7 @@ export function SettingsScreen({
 
         {tab === 'logs' && logsGroup === 'filter-history-size' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-end">
               Filter history size (entries per list): <Text color={colors.accent}>{settings.logs.filterHistorySize}</Text>
             </Text>
             <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
@@ -786,7 +791,7 @@ export function SettingsScreen({
 
         {tab === 'logs' && logsGroup === 'filter-history-grid' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-end">
               Filter history grid max rows: <Text color={colors.accent}>{settings.logs.filterHistoryGridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Steps of 1 row; a digit sets the value." />
@@ -811,8 +816,8 @@ export function SettingsScreen({
               const highlighted = index === logsClearRowCursor;
               return (
                 <Box key={row} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text}>{LOGS_CLEAR_ROW_LABELS[row]}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{LOGS_CLEAR_ROW_LABELS[row]}</Text>
                 </Box>
               );
             })}
@@ -824,15 +829,20 @@ export function SettingsScreen({
           // manifest service, never limited to the active EDT's own members.
           <Box flexDirection="column">
             {logsServices.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
-            {logsServices.map((service, index) => {
-              const highlighted = index === logsClearServiceCursor;
-              return (
-                <Box key={service.path} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text}>{service.service}</Text>
-                </Box>
-              );
-            })}
+            <BoundedList
+              items={logsServices}
+              chromeRows={SETTINGS_LIST_CHROME_ROWS}
+              cursorIndex={logsClearServiceCursor}
+              renderItem={(service, index) => {
+                const highlighted = index === logsClearServiceCursor;
+                return (
+                  <Box key={service.path} flexDirection="row">
+                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{service.service}</Text>
+                  </Box>
+                );
+              }}
+            />
             <DimAnnotation text="Clears that service's filter history (text + regex)." />
           </Box>
         ) : null}
@@ -845,8 +855,8 @@ export function SettingsScreen({
               const highlighted = index === groupCursor;
               return (
                 <Box key={group.id} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text}>{group.label}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
                 </Box>
               );
             })}
@@ -861,7 +871,7 @@ export function SettingsScreen({
                 // checkbox-list-item's own `selected` prop has no visible effect on its own — the
                 // highlighted row needs its own `›` cursor glyph, rendered as a sibling column.
                 <Box key={token.id} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
                   <CheckboxListItem
                     label={token.label}
                     selected={highlighted}
@@ -880,7 +890,7 @@ export function SettingsScreen({
               const highlighted = index === actionTypeCursor;
               return (
                 <Box key={token.id} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
                   <CheckboxListItem
                     label={token.label}
                     selected={highlighted}
@@ -895,7 +905,7 @@ export function SettingsScreen({
 
         {tab === 'edts' && edtsGroup === 'branch-dropdown-rows' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-end">
               Branch dropdown max rows: <Text color={colors.accent}>{settings.edts.branchDropdownMaxRows}</Text>
             </Text>
             <DimAnnotation text="Caps the lines of the autocomplete dropdown, “N more” indicators included." />

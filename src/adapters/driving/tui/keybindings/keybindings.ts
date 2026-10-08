@@ -202,6 +202,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+T (branch picker)',
     description: 'Branch picker: rename the highlighted branch',
   },
+  {
+    keys: 'PgUp / PgDn',
+    description: 'Scroll a dialog taller than the window; page the Update last-run recap',
+  },
   ...Object.values(FOOTER_CONTEXTS).map((context) => ({
     keys: context.label,
     description: context.hints.length > 0 ? formatHints(context.hints) : 'No keys while it runs',
