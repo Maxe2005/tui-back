@@ -32,7 +32,7 @@ export function RoutesResponseTab({
     );
   }
   if (response.status === 'error') {
-    return <Text color={colors.error}>{formatFireError(response.error.code, response.error.message)}</Text>;
+    return <Text color={colors.error} wrap="truncate-end">{formatFireError(response.error.code, response.error.message)}</Text>;
   }
   return (
     <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">

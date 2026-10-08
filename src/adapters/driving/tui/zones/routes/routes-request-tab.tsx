@@ -36,7 +36,7 @@ export function RoutesPaneTabStrip({ tabs, active, focused }: { tabs: readonly R
             color={tab === active ? (focused ? colors.accent : colors.text) : colors['text-dim']}
             bold={tab === active}
             underline={tab === active && focused}
-          >
+           wrap="truncate-end">
             {tab === active ? `▸ ${PANE_TAB_LABELS[tab]}` : PANE_TAB_LABELS[tab]}
           </Text>
         </Box>
@@ -108,7 +108,7 @@ export function RoutesRequestTab({ draft, section, focused, rowCursor, rowEdit, 
             {rowAddPrompt !== null && rowAddPrompt.section === rowSection ? (
               <Box flexDirection="column" paddingLeft={2}>
                 <TextInputLine label="New name" value={rowAddPrompt.input.value} cursor={rowAddPrompt.input.cursor} focused />
-                {rowAddPrompt.error !== null ? <Text color={colors.error}>{rowAddPrompt.error}</Text> : null}
+                {rowAddPrompt.error !== null ? <Text color={colors.error} wrap="truncate-end">{rowAddPrompt.error}</Text> : null}
               </Box>
             ) : null}
           </Box>

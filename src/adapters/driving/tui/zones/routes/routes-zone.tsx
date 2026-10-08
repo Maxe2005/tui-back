@@ -1687,7 +1687,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
   if (status === 'disabled') {
     return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
-        <Text color={colors.text}>{formatRoutesDisabledMessage(carryingServices)}</Text>
+        <Text color={colors.text} wrap="truncate-end">{formatRoutesDisabledMessage(carryingServices)}</Text>
       </Box>
     );
   }
@@ -1708,7 +1708,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
         <FooterContext owner="routes" id={routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, filterEditing, paneFocused })} useStore={useStore} />
         <Text color={colors['text-dim']}>ROUTES</Text>
-        <Text color={colors.error}>{routesError ? routesError.message : 'Route scan failed.'}</Text>
+        <Text color={colors.error} wrap="truncate-end">{routesError ? routesError.message : 'Route scan failed.'}</Text>
       </Box>
     );
   }
@@ -1865,7 +1865,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             {focused && paneTab === 'request' && savePrompt !== null ? (
               <Box flexDirection="column">
                 <TextInputLine label="Name" value={savePrompt.input.value} cursor={savePrompt.input.cursor} focused />
-                {savePrompt.error !== null ? <Text color={colors.error}>{savePrompt.error}</Text> : null}
+                {savePrompt.error !== null ? <Text color={colors.error} wrap="truncate-end">{savePrompt.error}</Text> : null}
               </Box>
             ) : null}
             {focused && paneTab === 'request' && saveNotice !== null && savePrompt === null ? (
@@ -1890,15 +1890,15 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {overwriteConfirm !== null ? (
         <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`}>
           <Box flexDirection="column">
-            <Text color={colors.text}>A saved request named "{overwriteConfirm.name}" already exists. Overwriting replaces it.</Text>
-            <Text color={colors.text}>{formatHints([['Enter', 'overwrite'], ['Esc', 'cancel']])}</Text>
+            <Text color={colors.text} wrap="truncate-end">A saved request named "{overwriteConfirm.name}" already exists. Overwriting replaces it.</Text>
+            <Text color={colors.text} wrap="truncate-end">{formatHints([['Enter', 'overwrite'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}
       {pickerOpen ? (
         <ModalDialog title="Saved requests">
           <Box flexDirection="column">
-            {pickerError !== null ? <Text color={colors.error}>{pickerError}</Text> : null}
+            {pickerError !== null ? <Text color={colors.error} wrap="truncate-end">{pickerError}</Text> : null}
             {savedRequests === null ? (
               <DimAnnotation text="Loading saved requests…" />
             ) : (
@@ -1917,16 +1917,16 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
       {pickerDeleteConfirm !== null ? (
         <ModalDialog title={`Delete "${pickerDeleteConfirm.name}"?`}>
           <Box flexDirection="column">
-            <Text color={colors.text}>The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
-            <Text color={colors.text}>{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
+            <Text color={colors.text} wrap="truncate-end">The stale saved request "{pickerDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
+            <Text color={colors.text} wrap="truncate-end">{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}
       {savedTabDeleteConfirm !== null ? (
         <ModalDialog title={`Delete "${savedTabDeleteConfirm.name}"?`}>
           <Box flexDirection="column">
-            <Text color={colors.text}>The saved request "{savedTabDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
-            <Text color={colors.text}>{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
+            <Text color={colors.text} wrap="truncate-end">The saved request "{savedTabDeleteConfirm.name}" will be removed. This cannot be undone.</Text>
+            <Text color={colors.text} wrap="truncate-end">{formatHints([['Enter', 'delete'], ['Esc', 'cancel']])}</Text>
           </Box>
         </ModalDialog>
       ) : null}
