@@ -736,6 +736,18 @@ describe('hasUncommittedChanges', () => {
     expect(await hasUncommittedChanges(repo)).toEqual({ ok: true, data: true });
   });
 
+  it('ignores excludePaths literally, but still sees other dirty paths', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, '.tui-back.yaml'), 'service: changed\n');
+
+    expect(await hasUncommittedChanges(repo, { excludePaths: ['.tui-back.yaml'] })).toEqual({ ok: true, data: false });
+    expect(await listDirtyPaths(repo, { excludePaths: ['.tui-back.yaml'] })).toEqual({ ok: true, data: [] });
+
+    await writeFile(join(repo, 'other.txt'), 'x');
+    expect(await hasUncommittedChanges(repo, { excludePaths: ['.tui-back.yaml'] })).toEqual({ ok: true, data: true });
+    expect(await listDirtyPaths(repo, { excludePaths: ['.tui-back.yaml'] })).toEqual({ ok: true, data: ['other.txt'] });
+  });
+
   it('reports a controlled error on a non-git directory', async () => {
     const dir = await makeDirWithManifestOnly();
 

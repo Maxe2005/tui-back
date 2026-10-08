@@ -23,7 +23,7 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     currentBranch: (repoPath) => currentBranch(repoPath),
     aheadBehind: (repoPath) => aheadBehind(repoPath),
     checkout: (repoPath, branchName) => checkoutBranch(repoPath, branchName),
-    hasUncommittedChanges: (repoPath) => hasUncommittedChanges(repoPath),
+    hasUncommittedChanges: (repoPath, opts) => hasUncommittedChanges(repoPath, opts),
     stashSave: (repoPath, message) => stashSave(repoPath, message),
     restoreStash: (repoPath, message) => restoreStash(repoPath, message),
     hasStash: (repoPath, tag) => hasStash(repoPath, tag),
@@ -326,10 +326,20 @@ export async function checkoutBranch(repoPath: string, branchName: string): Prom
   return ok(undefined);
 }
 
+// Trailing pathspec args that hide `paths` from a `git status` (`:(exclude,literal)` — no glob).
+function excludePathspecs(paths: readonly string[] | undefined): string[] {
+  return paths === undefined || paths.length === 0 ? [] : ['--', '.', ...paths.map((path) => `:(exclude,literal)${path}`)];
+}
+
 // `git status --porcelain` is non-empty iff the working tree has tracked or untracked
 // changes; this is the trigger for stashSave before any checkout touches the repo.
-export async function hasUncommittedChanges(repoPath: string): Promise<Result<boolean>> {
-  const result = await runProcess('git', ['status', '--porcelain'], { cwd: repoPath });
+export async function hasUncommittedChanges(
+  repoPath: string,
+  opts?: { excludePaths?: string[] },
+): Promise<Result<boolean>> {
+  const result = await runProcess('git', ['status', '--porcelain', ...excludePathspecs(opts?.excludePaths)], {
+    cwd: repoPath,
+  });
   if (result.status !== 0) {
     return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
@@ -487,9 +497,14 @@ export async function isMergeInProgress(repoPath: string): Promise<Result<boolea
 // discard resolution's captured `discardedPaths`); the default is git's collapsed `dir/`.
 export async function listDirtyPaths(
   repoPath: string,
-  opts?: { expandUntracked?: boolean },
+  opts?: { expandUntracked?: boolean; excludePaths?: string[] },
 ): Promise<Result<string[]>> {
-  const args = opts?.expandUntracked === true ? ['status', '--porcelain', '--untracked-files=all'] : ['status', '--porcelain'];
+  const args = [
+    'status',
+    '--porcelain',
+    ...(opts?.expandUntracked === true ? ['--untracked-files=all'] : []),
+    ...excludePathspecs(opts?.excludePaths),
+  ];
   const result = await runProcess('git', args, { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-status-error', `git status failed in ${repoPath}: ${spawnFailureDetail(result)}`);

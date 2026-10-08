@@ -47,7 +47,8 @@ export interface GitPort {
   checkout(repoPath: string, branchName: string): Promise<Result<void>>;
   // True when the working tree has tracked or untracked changes (`git status --porcelain`
   // is non-empty) — the trigger for stashSave before any checkout touches the repo.
-  hasUncommittedChanges(repoPath: string): Promise<Result<boolean>>;
+  // `excludePaths` (literal repo-root paths) are ignored when deciding whether the tree is dirty.
+  hasUncommittedChanges(repoPath: string, opts?: { excludePaths?: string[] }): Promise<Result<boolean>>;
   // `git stash push -u -m message` — tracked + untracked. Message-tagged (not
   // position-tagged) so restoreStash can find it later regardless of other stashes.
   stashSave(repoPath: string, message: string): Promise<Result<void>>;
@@ -89,7 +90,7 @@ export interface GitPort {
   // `expandUntracked` lists every file inside an untracked directory
   // (`--untracked-files=all`) instead of the directory itself — switch.ts uses it to capture
   // exactly what a `discard` resolution removes.
-  listDirtyPaths(repoPath: string, opts?: { expandUntracked?: boolean }): Promise<Result<string[]>>;
+  listDirtyPaths(repoPath: string, opts?: { expandUntracked?: boolean; excludePaths?: string[] }): Promise<Result<string[]>>;
   // Path-scoped discard (`git checkout -- <paths>` equivalent) for the lockfile-only
   // auto-fix. Never touches paths outside the given list.
   discardPaths(repoPath: string, paths: string[]): Promise<Result<void>>;
