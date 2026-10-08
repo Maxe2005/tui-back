@@ -93,4 +93,59 @@ describe('EDTs zone bounded rendering', () => {
       await instance.waitUntilExit();
     }
   });
+
+  it('issues dialog arrows reveal later issues and show the above indicator', async () => {
+    const stdout = new FakeTtyStdout();
+    stdout.columns = 60;
+    stdout.rows = 15;
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(
+      createElement(
+        BoundsProvider,
+        region,
+        createElement(IssuesDialogView, {
+          unreachable: Array.from({ length: 40 }, (_, i) => `/repos/unreachable-${i}`),
+          errors: [],
+        }),
+      ),
+      { stdout: stdout as unknown as NodeJS.WriteStream, stdin, interactive: true, exitOnCtrlC: false, patchConsole: false },
+    );
+    const last = () => stdout.output.slice(stdout.output.lastIndexOf('SERVICE LISTING ISSUES'));
+    try {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(last()).toContain('unreachable-0');
+      expect(last()).not.toContain('unreachable-30');
+      for (let i = 0; i < 30; i += 1) {
+        (stdin as unknown as { write: (c: string) => void }).write(KEYS.down);
+        await instance.waitUntilRenderFlush();
+      }
+      expect(last()).toContain('unreachable-30');
+      expect(last()).toContain('▲ more issues');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('issues dialog ignores arrows when there are no issues', async () => {
+    const stdout = new FakeTtyStdout();
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(createElement(IssuesDialogView, { unreachable: [], errors: [] }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      await instance.waitUntilRenderFlush();
+      (stdin as unknown as { write: (c: string) => void }).write(KEYS.down);
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('No issues.');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });

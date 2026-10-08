@@ -54,6 +54,7 @@ export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps)
   ];
   const clamped = Math.min(cursor, Math.max(0, blocks.length - 1));
   useInput((_input, key) => {
+    if (blocks.length === 0) return;
     if (key.downArrow) setCursor(Math.min(blocks.length - 1, clamped + 1));
     if (key.upArrow) setCursor(Math.max(0, clamped - 1));
   });

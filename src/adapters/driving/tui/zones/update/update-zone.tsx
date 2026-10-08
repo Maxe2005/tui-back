@@ -371,6 +371,8 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // Whether service focus is dropped (`Esc`): the right pane then shows the last-update recap
   // and the idle footer prompt; an arrow key hands focus back. Zone-local UI state.
   const [recapActive, setRecapActive] = useState(initialRecap);
+  // The recap's result list scrolls with PgUp/PgDn: this is the entry the window follows.
+  const [recapCursor, setRecapCursor] = useState(0);
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -602,6 +604,12 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       }
       // `Esc` drops service focus onto the last-update recap; an arrow key restores it (the
       // remembered service, unmoved).
+      if (recapActive && (key.pageDown || key.pageUp)) {
+        const page = Math.max(1, windowSizeForConfig.rows - RECAP_CHROME_ROWS - 1);
+        const last = Math.max(0, updateResults.length - 1);
+        setRecapCursor((current) => (key.pageDown ? Math.min(last, current + page) : Math.max(0, current - page)));
+        return;
+      }
       const recapToggle = resolveRecapToggle(recapActive, key);
       if (recapToggle.handled) {
         setRecapActive(recapToggle.recapActive);
@@ -875,6 +883,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                       <BoundedList
                         items={recap.resultLines}
                         chromeRows={RECAP_CHROME_ROWS}
+                        cursorIndex={Math.min(recapCursor, Math.max(0, recap.resultLines.length - 1))}
                         renderItem={(line, index) => (
                           // Duplicate service names occur within one EDT — key by line + index.
                           <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
