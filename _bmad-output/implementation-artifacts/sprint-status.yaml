@@ -164,6 +164,8 @@ development_status:
   7-7-shared-focus-navigation: done
   7-8-update-per-service-last-run-detail: done
   7-9-bounded-rendering-audit-global-fix-regression-guard: review
+  # 7-10 is independent of 7-4..7-6 (sprint-change-proposal-2026-10-08.md); can run right after 7-9.
+  7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch: backlog
   7-5-dashboard-workspace-summary-last-update-persistence: backlog
   7-6-dashboard-alerts-quick-actions-registry-health-operation-indicator: backlog
   epic-7-retrospective: optional

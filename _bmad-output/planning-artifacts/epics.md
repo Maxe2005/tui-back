@@ -2015,6 +2015,8 @@ As a developer, I want a switch to know exactly whose uncommitted work each repo
 
 **Given** the new `GitPort.discardAll(repoPath)` **When** implemented **Then** it runs `git reset --hard` then `git clean -fd` (never `-x`, never `-ff`), returns `git-discard-error` on failure, and its port doc comment records that it is the one consent-gated destructive primitive whose only permitted caller is `switch.ts` under an explicit `discard` resolution.
 
+**Given** `.tui-back.yaml` is dirty in a repo **When** it is switched **Then** it is exempt from stash, adopt and discard and is carried over unchanged — see Story 7.10.
+
 **Given** a discard/adopt failure on one repo **When** reported **Then** it is a `failed` row for that repo; the others proceed (per-repo isolation unchanged). Idempotency, lock-peek/`--force`, AD-8 member re-verification and the final `state.json`/`edts.yaml` writes are unchanged.
 
 **Given** the TUI slice **When** this story lands **Then** its seam implementation compiles against the new signature and, for a dirty state-2/3 repo, returns `cancel` with an explanatory message (interim, safe; replaced by 2.41).
@@ -3216,3 +3218,30 @@ As a developer, I want every region of the TUI — zones, panes, dialogs, rows, 
 
 **Implementation notes:** commits split audit → foundation (bounds context, text primitives, message normalizer, scroll region, bounded `ModalDialog`, min-size screen) → one patch commit per zone/dialog family → guard tests last (so the guard lands green). Build on `zone-layout.tsx`, `bounded-list.tsx`, `use-element-size.ts`, `keybinding-help.tsx` windowing; do not introduce a third scrolling mechanism. If the patch list proves larger than one story, split the remainder into follow-ups (7.9b…) from the validated inventory, but the foundation and the guard ship in 7.9 itself. AD-19, UX-DR37; relates to Story 5.5 (precedent), Story 7.3 (layout contract), Story 7.4 (alignment consumes these primitives).
 
+### Story 7.10: Switch — Carry a Dirty `.tui-back.yaml` Across the EDT Switch
+
+> Added 2026-10-08 (Sprint Change Proposal `sprint-change-proposal-2026-10-08.md`). Relates to Stories 2.39 (switch core), 2.40 (CLI) and 2.41 (resolution dialog).
+
+As a developer, I want my local `.tui-back.yaml` changes to stay exactly as they are when I switch EDT, so that the tool never runs on a manifest that the target branch overwrote, emptied or removed.
+
+**Acceptance Criteria:**
+
+**Given** a switch where a repo's `.tui-back.yaml` is dirty (modified, untracked or deleted) **When** the switch completes **Then** the file in the working tree is byte-for-byte what it was before (or still absent if it was deleted), whatever the target branch holds for that path.
+
+**Given** a dirty state-1 repo **When** it is stashed **Then** the stash contains every dirty path except `.tui-back.yaml` (`GitPort.stashSave` takes an optional `excludePaths`), and a later switch back into the EDT never overwrites the manifest.
+
+**Given** a state-2/3 repo whose only dirty path is `.tui-back.yaml` **When** the pre-flight runs **Then** it is not a row needing a resolution, the `onDirtyReposBeforeSwitch` seam is not invoked for it, and `switch-dirty-services-unresolved` is never raised for it.
+
+**Given** an `adopt` or `discard` resolution on a repo that also has a dirty manifest **When** executed **Then** the manifest is captured first and restored last; `discardAll` never destroys it; `detail.discardedPaths` and `dirtyPaths` omit it.
+
+**Given** the manifest is tracked and differs between the source and target branches, or exists only on one of them **When** the switch runs **Then** the checkout does not abort because of it.
+
+**Given** any failure between capture and restore **When** it occurs **Then** the manifest is rewritten (rollback) when the checkout failed; when the restore itself fails, the row is `failed`, names the safety-copy path, and the copy is kept.
+
+**Given** the resolution dialog (2.41) **When** a repo has a dirty manifest **Then** it is shown as "conserved" and is not part of the discard confirmation list.
+
+**Given** `activateEdt` **When** a manifest is dirty **Then** its "would be overwritten" pre-flight does not require consent for it (verified in this story; patched if needed).
+
+**Given** the docs **When** updated **Then** `docs/tui-back-manifest.md` states the carry-over rule.
+
+**Implementation notes:** file I/O goes through a small port (`ManifestCarryPort`: `capture`, `restore`, `release`) with an `adapters/driven/` implementation; `core/` imports no `node:fs`. Tests: fake ports for ordering and rollback (AD-13), plus real-git integration tests (tracked-modified, untracked, deleted, tracked-and-different-on-target, absent-on-target, alongside other dirty files, adopt, discard). Commits split: port + adapter → `stashSave` exclusion → switch pre-flight → carry in stash/adopt/discard paths → dialog/docs.
