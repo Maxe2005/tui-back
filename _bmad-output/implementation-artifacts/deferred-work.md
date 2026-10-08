@@ -678,3 +678,11 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
   summary: Constrain `packageJsonPath` to stay inside the repo (no absolute path, no `..`) when stories 4.2+ join it with a repo path.
   evidence: The manifest schema currently accepts any non-blank string.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
+  summary: Unstage the files staged by `stagePaths` when the following `commit` fails, so a retry or a later commit does not sweep them in.
+  evidence: Propagation stages `package.json`/`package-lock.json` then commits; a commit failure (hook, identity) leaves them staged.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
+  summary: Re-check the branch gate immediately before the git write to close the window where HEAD changes after the first check.
+  evidence: The gate runs in the gate step and again in stagePaths/commit, but a branch switch between the check and the git command is not prevented (rare TOCTOU).

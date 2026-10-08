@@ -125,7 +125,7 @@ development_status:
   epic-4: in-progress
   # Rewritten 2026-10-05 (sprint-change-proposal-2026-10-05.md). Starts after Epic 7; 4-4/4-5 also need Epic 3 merged into devlopment.
   4-1-shared-types-modules-manifest-parameters: done
-  4-2-propagate-a-version-to-chosen-services: backlog
+  4-2-propagate-a-version-to-chosen-services: done
   4-3-publish-a-new-shared-types-version: backlog
   4-4-smart-group-update-shared-types-first: backlog
   4-5-auto-resolve-shared-types-only-merge-conflicts: backlog
