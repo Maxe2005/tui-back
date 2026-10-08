@@ -1,7 +1,8 @@
 // tui/zones/logs: the active-panes grid. Lays panes out row-major over `layout.cols` and renders
 // one LogsPaneView per pane; purely presentational, all keystroke handling stays in LogsZone's
 // useInput.
-import { Box } from 'ink';
+import { Box, Text } from 'ink';
+import { colors } from '../../shared/theme/theme.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import { LogsPaneView } from './logs-pane-view.js';
@@ -15,6 +16,7 @@ import {
 
 export function LogsGrid({
   panes,
+  hiddenPaneCount = 0,
   logsPanes,
   layout,
   visibleLines,
@@ -27,6 +29,8 @@ export function LogsGrid({
   paneFilters,
 }: {
   panes: ServiceBranchDivergence[];
+  // Active panes that do not fit the grid at a readable size.
+  hiddenPaneCount?: number;
   logsPanes: Record<string, LogsPaneData>;
   layout: GridLayout;
   visibleLines: number;
@@ -39,13 +43,13 @@ export function LogsGrid({
   paneFilters: Record<string, LogFilterSpec>;
 }) {
   const cols = Math.max(layout.cols, 1);
-  // `panes` is the grid layout's own capped pane set (cols x rows), chunked row by row.
+  // `panes` is already capped to what fits; the rest is announced below.
   const visiblePaneRows: ServiceBranchDivergence[][] = [];
   for (let i = 0; i < panes.length; i += cols) {
     visiblePaneRows.push(panes.slice(i, i + cols));
   }
   return (
-    <Box flexDirection="column" flexGrow={1} minHeight={0}>
+    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
       {visiblePaneRows.map((visiblePanes, rowIndex) => (
         <Box key={rowIndex} flexDirection="row" flexGrow={1} flexBasis={0} minHeight={0}>
           {visiblePanes.map((service, colIndex) => {
@@ -68,6 +72,7 @@ export function LogsGrid({
           })}
         </Box>
       ))}
+      {hiddenPaneCount > 0 ? <Text color={colors['text-dim']} wrap="truncate-end">{`+${hiddenPaneCount} more panes (enlarge the terminal)`}</Text> : null}
     </Box>
   );
 }

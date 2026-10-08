@@ -133,3 +133,39 @@ describe('zone registries', () => {
     expect(Object.keys(ZONE_LAYOUTS).sort()).toEqual(ZONES.map((zone) => zone.id).sort());
   });
 });
+
+describe('size matrix: Logs with many selected services', () => {
+  for (const size of MATRIX_SIZES) {
+    it(`logs with 60 streaming panes at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
+      const store = adversarialStore();
+      const services = (store.getState().edtsBranches ?? []).slice(0, 60);
+      store.setState({
+        logsEdtSelected: services.filter((s) => s.isMember).map((s) => s.path),
+        logsOtherSelected: services.filter((s) => !s.isMember).map((s) => s.path),
+        logsPanes: Object.fromEntries(
+          services.map((s) => [
+            s.path,
+            {
+              repoPath: s.path,
+              service: s.service,
+              lines: Array.from({ length: 80 }, (_, i) => ({ stream: 'stdout', text: `line ${i} ${'w'.repeat(300)}`, timestamp: '2026-01-01T00:00:00Z' })),
+              streamError: { code: 'stream-failed', message: MULTILINE },
+              noMoreHistory: false,
+              scrollOffset: 0,
+              health: 'up',
+              restarting: true,
+            },
+          ]),
+        ),
+      } as never);
+      store.getState().setActiveZone('logs');
+      const frame = frameLines(await renderToString(createElement(AppShell, { useStore: store, onQuit: () => {} }), size));
+      expect(frame.length).toBeLessThanOrEqual(size.rows);
+      for (const line of frame) {
+        expect(Array.from(line).length, line).toBeLessThanOrEqual(size.columns);
+      }
+      expect(frame[0]).toContain('tui-back');
+      expect(frame.at(-1)?.trim()).not.toBe('');
+    });
+  }
+});

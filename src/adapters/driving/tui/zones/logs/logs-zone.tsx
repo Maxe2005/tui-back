@@ -7,7 +7,6 @@ import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -254,6 +253,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // — computed by one pure function (logs-zone.logic.ts), unit-testable without Ink.
   const {
     layout,
+    visiblePaneCount,
     paneVisibleLines,
     paneContentWidth,
     fullscreenVisibleLines,
@@ -817,8 +817,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       <Text color={colors.accent} wrap="truncate-end">{paneFocus === 'edt-list' && index === clampedEdtCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsEdtSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                       <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState(displayHealth)} />
-                        <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHealthLabel(displayHealth)}`}</ClampedParagraph>
+                        <Box flexShrink={0}><StatusBadge state={healthBadgeState(displayHealth)} /></Box>
+                        <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHealthLabel(displayHealth)}`}</Text>
                       </Box>
                     </Box>
                   );
@@ -840,8 +840,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       <Text color={colors.accent} wrap="truncate-end">{paneFocus === 'other-list' && index === clampedOtherCursor ? '›' : ' '}</Text>
                       <CheckboxListItem label={service.service} state={logsOtherSelected.includes(service.path) ? 'checked' : 'unchecked'} />
                       <Box marginLeft={1}>
-                        <StatusBadge state={healthBadgeState(displayHealth)} />
-                        <ClampedParagraph color={colors['text-dim']} maxLines={3}>{` ${formatHealthLabel(displayHealth)}`}</ClampedParagraph>
+                        <Box flexShrink={0}><StatusBadge state={healthBadgeState(displayHealth)} /></Box>
+                        <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHealthLabel(displayHealth)}`}</Text>
                       </Box>
                     </Box>
                   );
@@ -861,7 +861,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                       <Box key={service.path} flexDirection="row">
                         <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
                         <Box marginLeft={1}>
-                          <StatusBadge state={healthBadgeState('no-container')} />
+                          <Box flexShrink={0}><StatusBadge state={healthBadgeState('no-container')} /></Box>
                           <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel('no-container')}</Text>
                         </Box>
                       </Box>
@@ -893,7 +893,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                 <DimAnnotation text="No service selected — select one or more services on the left to stream their logs." />
               ) : (
                 <LogsGrid
-                  panes={activePanes}
+                  panes={activePanes.slice(0, visiblePaneCount)}
+                  hiddenPaneCount={activePanes.length - visiblePaneCount}
                   logsPanes={logsPanes}
                   layout={layout}
                   visibleLines={paneVisibleLines}

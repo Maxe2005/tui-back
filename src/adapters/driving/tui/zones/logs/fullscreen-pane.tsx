@@ -75,7 +75,7 @@ export function FullscreenPane({
             manifest without `container` shows the dim no-container state with no restart
             control at all. */}
         <Box marginLeft={1}>
-          <StatusBadge state={healthBadgeState(displayHealth)} />
+          <Box flexShrink={0}><StatusBadge state={healthBadgeState(displayHealth)} /></Box>
           <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel(displayHealth)}</Text>
         </Box>
         {noContainer ? null : displayHealth === 'restarting' ? (

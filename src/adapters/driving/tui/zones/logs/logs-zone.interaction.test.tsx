@@ -1097,10 +1097,10 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
         // The control renders its disabled state while a restart is in flight. The exact
-        // wording is locked in the logic unit tests; the grid interleaves columns when
-        // wrapping, so here assert the distinctive new token while the bare state is gone.
+        // wording is locked in the logic unit tests; the narrow row truncates it, so here assert
+        // its distinctive leading words while the bare state is gone.
         const flat = stdout.output.replace(/\s+/g, ' ');
-        expect(flat).toContain('re-verifying');
+        expect(flat).toContain('restart requested');
         expect(flat).not.toContain('restarting');
         await press(instance, stdin, KEYS.tab); // edt-list -> other-list
         await press(instance, stdin, KEYS.tab); // other-list -> panes
@@ -1304,7 +1304,7 @@ describe('LogsZone real-keypress interactions', () => {
         expect(lastFrame).not.toContain('more below');
         expect(lastFrame).not.toContain('more above');
 
-        // Shrinks well below what the 8-row (default) first column needs.
+        // Shrinks to the 12-row minimum, still below what the 8-row (default) first column needs.
         stdout.rows = 12;
         stdout.emit('resize');
         await instance.waitUntilRenderFlush();
@@ -1382,7 +1382,7 @@ describe('LogsZone real-keypress interactions', () => {
         await press(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0 — the wide entry is visible here
 
-        stdout.rows = 12; // forces vertical pagination on the 5-row-tall column 0
+        stdout.rows = 12; // the 12-row minimum still forces vertical pagination on the 5-row-tall column 0
         stdout.emit('resize');
         await instance.waitUntilRenderFlush();
         await instance.waitUntilRenderFlush();
