@@ -6,6 +6,9 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors, spacing } from '../theme/theme.js';
 import { formatHint } from './hints.js';
 
+// The hint list wraps on a narrow terminal; past this many rows the rest is clipped.
+const FOOTER_MAX_ROWS = 3;
+
 const footerEntries = KEYBINDINGS.flatMap((binding) => (binding.footer === undefined ? [] : [binding.footer]));
 
 // The zone-independent hints. A resize hint is zone-conditional (see footerHintsFor) but listed
@@ -38,6 +41,9 @@ export function Footer({ hints, zone, useStore = useAppStore }: { hints?: string
     <Box
       backgroundColor={colors.background}
       paddingLeft={spacing['1']}
+      flexShrink={0}
+      maxHeight={FOOTER_MAX_ROWS}
+      overflow="hidden"
     >
       <Text color={colors['text-dim']}>{items.join('  ')}</Text>
     </Box>

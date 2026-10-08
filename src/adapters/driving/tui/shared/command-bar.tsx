@@ -5,6 +5,7 @@
 // is a pure, unit-tested function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
@@ -386,7 +387,9 @@ export type CommandBarProps = {
 
 export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps) {
   // Read live from the store (the settings screen's Command Palette tab).
-  const gridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  const configuredGridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  // Frame (6) + input line + one message line + one spare row.
+  const gridMaxRows = Math.max(1, Math.min(configuredGridMaxRows, useBounds().rows - 9));
   useFooterContext('command-bar', 'command', useStore);
   const [query, setQuery] = useState('');
   const [unknownCommand, setUnknownCommand] = useState(false);

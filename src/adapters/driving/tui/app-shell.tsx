@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
 import { CommandBar } from './shared/command-bar.js';
+import { BoundsProvider } from './shared/bounds/bounds-context.js';
+import { SHELL_CHROME_ROWS, formatTooSmallMessage, isTerminalTooSmall } from './shared/bounds/bounds.js';
+import { TruncatedText } from './shared/components/truncated-text.js';
 import { Footer } from './shared/components/footer.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
 import { TopBar } from './shared/components/top-bar.js';
@@ -198,7 +201,7 @@ export function AppShell({
   // either is ever opened.
   const loadFilterHistory = useStore((state) => state.loadFilterHistory);
   const ZoneScreen = getZoneScreen(activeZone);
-  const { rows } = useWindowSize();
+  const { rows, columns } = useWindowSize();
   const quitRequested = useStore((state) => state.quitRequested);
 
   // A single effect keyed on `registryScreenOpen` both fires the mount-time load (it starts
@@ -360,18 +363,41 @@ export function AppShell({
     // group is drilled in (Esc steps back) or not (Esc closes).
   });
 
+  // Every hook above stays mounted while the too-small screen shows, so growing the window
+  // returns to the exact state the user left.
+  if (isTerminalTooSmall(columns, rows)) {
+    return (
+      <Box flexDirection="column" height={rows} overflow="hidden">
+        <Text color={colors.warning}>{formatTooSmallMessage(columns, rows)}</Text>
+      </Box>
+    );
+  }
+
+  // The command bar sits outside the zone region so it and the footer always stay visible; it
+  // gets at most half of the region, and the region (everything else) shrinks and clips.
+  const regionRows = Math.max(1, rows - SHELL_CHROME_ROWS);
+  const commandBarRows = Math.max(3, regionRows - 4);
+  const zoneRows = commandBarOpen ? Math.max(1, regionRows - commandBarRows) : regionRows;
   return (
     <Box flexDirection="column" height={rows} overflow="hidden">
       <TopBar activeEdt={activeEdt} edts={edts} />
       <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} />
-      <ZoneScreen useStore={useStore} />
-      <KeybindingHelp useStore={useStore} />
-      {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
-      {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
-      {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
-      {resetNotice !== null && <Text color={colors.warning}>{resetNotice}</Text>}
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
+        <BoundsProvider columns={columns} rows={zoneRows}>
+          <ZoneScreen useStore={useStore} />
+          <KeybindingHelp useStore={useStore} />
+          {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
+          {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
+          {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
+          {resetNotice !== null && <TruncatedText color={colors.warning}>{resetNotice}</TruncatedText>}
+        </BoundsProvider>
+      </Box>
       {commandBarOpen && (
-        <CommandBar useStore={useStore} onClose={closeCommandBar} />
+        <Box flexShrink={0} flexDirection="column" maxHeight={commandBarRows} overflow="hidden">
+          <BoundsProvider columns={columns} rows={commandBarRows}>
+            <CommandBar useStore={useStore} onClose={closeCommandBar} />
+          </BoundsProvider>
+        </Box>
       )}
       <Footer zone={activeZone} useStore={useStore} />
     </Box>

@@ -1305,7 +1305,7 @@ describe('LogsZone real-keypress interactions', () => {
         expect(lastFrame).not.toContain('more above');
 
         // Shrinks well below what the 8-row (default) first column needs.
-        stdout.rows = 10;
+        stdout.rows = 12;
         stdout.emit('resize');
         await instance.waitUntilRenderFlush();
         await instance.waitUntilRenderFlush();
@@ -1382,7 +1382,7 @@ describe('LogsZone real-keypress interactions', () => {
         await press(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0 — the wide entry is visible here
 
-        stdout.rows = 10; // forces vertical pagination on the 5-row-tall column 0
+        stdout.rows = 12; // forces vertical pagination on the 5-row-tall column 0
         stdout.emit('resize');
         await instance.waitUntilRenderFlush();
         await instance.waitUntilRenderFlush();

@@ -5,6 +5,7 @@ import {
   type ResolveTabVisibilityData,
 } from '../../../../../core/edt/resolve-tab-visibility.js';
 import { ZONES, zoneGatedStatus, type Zone, type ZoneId } from '../../zones/zones.js';
+import { useBounds } from '../bounds/bounds-context.js';
 import { colors, spacing, typography } from '../theme/theme.js';
 
 // Re-exported for callers that don't care about manifest-gating — every zone renders
@@ -64,27 +65,39 @@ export function ZoneTabBar({
   // A group update is in flight: the Update tab shows its status badge from any zone.
   updateRunning?: boolean;
 }) {
+  const { columns } = useBounds();
+  const tabs = ZONES.map((zone) => ({ zone, status: zoneGatedStatus(zone.id, tabVisibility) })).filter(
+    ({ status }) => status !== 'omitted',
+  );
+  // Full labels when they fit; otherwise only the active tab keeps its label, the rest shrink
+  // to their `[mnemonic]`.
+  const fullWidth = tabs.reduce((sum, { zone, status }) => {
+    const badge = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update').badge;
+    return sum + 2 + `[${zone.mnemonic}] ${zone.label}`.length + (badge ? badge.text.length + 1 : 0);
+  }, 0);
+  const compact = fullWidth > columns;
   return (
-    <Box backgroundColor={colors.background}>
-      {ZONES.map((zone) => ({ zone, status: zoneGatedStatus(zone.id, tabVisibility) }))
-        .filter(({ status }) => status !== 'omitted')
-        .map(({ zone, status }) => {
+    <Box backgroundColor={colors.background} flexShrink={0} height={1} overflow="hidden">
+      {tabs.map(({ zone, status }) => {
           const state = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update');
+          const collapsed = compact && !state.active;
           return (
             <Box
               key={zone.id}
-              paddingX={spacing['1']}
+              paddingX={collapsed ? 0 : spacing['1']}
+              marginRight={collapsed ? 1 : 0}
+              flexShrink={0}
               backgroundColor={state.backgroundColor}
             >
-              <Text bold={state.bold} strikethrough={state.strikethrough} color={state.labelColor}>
-                [{zone.mnemonic}] {zone.label}
+              <Text bold={state.bold} strikethrough={state.strikethrough} color={state.labelColor} wrap="truncate-end">
+                {collapsed ? `[${zone.mnemonic}]` : `[${zone.mnemonic}] ${zone.label}`}
               </Text>
-              {state.badge ? (
+              {state.badge && !collapsed ? (
                 <Text color={state.badge.color}> {state.badge.text}</Text>
               ) : null}
             </Box>
           );
-        })}
+      })}
     </Box>
   );
 }
