@@ -5,7 +5,9 @@ import { describe, it, expect } from 'vitest';
 import { Text } from 'ink';
 import {
   BoundedList,
+  capOlder,
   clampBoundedOffset,
+  resolveBlockWindow,
   resolveBoundedVisibility,
   resolveBoundedWindow,
 } from './bounded-list.js';
@@ -160,5 +162,29 @@ describe('<BoundedList> rendering', () => {
     );
     expect(output).toContain('item-9');
     expect(output).toContain('more above');
+  });
+});
+
+describe('block window and older-hidden cap', () => {
+  it('capOlder keeps the newest entries and counts the rest', () => {
+    expect(capOlder([1, 2, 3, 4, 5], 2)).toEqual({ items: [4, 5], hidden: 3 });
+    expect(capOlder([1], 5)).toEqual({ items: [1], hidden: 0 });
+  });
+
+  it('resolveBlockWindow never exceeds the budget, indicators included', () => {
+    const heights = [3, 1, 2, 5, 1, 1, 4];
+    for (let budget = 0; budget <= 20; budget += 1) {
+      for (let cursor = 0; cursor < heights.length; cursor += 1) {
+        const w = resolveBlockWindow(heights, budget, cursor);
+        const used = heights.slice(w.start, w.end).reduce((a, b) => a + b, 0) + (w.hasAbove ? 1 : 0) + (w.hasBelow ? 1 : 0);
+        expect(used).toBeLessThanOrEqual(Math.max(budget, 0));
+      }
+    }
+  });
+
+  it('keeps the cursor block visible when it fits', () => {
+    const w = resolveBlockWindow([2, 2, 2, 2, 2, 2], 7, 4);
+    expect(w.start).toBeLessThanOrEqual(4);
+    expect(w.end).toBeGreaterThan(4);
   });
 });

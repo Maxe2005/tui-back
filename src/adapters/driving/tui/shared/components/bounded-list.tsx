@@ -137,3 +137,94 @@ export function BoundedList<T>({
     </Box>
   );
 }
+
+// Stream-fed collections (issue logs, retry lists) keep only the newest `max` entries; the
+// caller shows `hidden` as "N older hidden".
+export function capOlder<T>(items: readonly T[], max: number): { items: readonly T[]; hidden: number } {
+  const safeMax = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : 0;
+  if (items.length <= safeMax) return { items, hidden: 0 };
+  return { items: items.slice(items.length - safeMax), hidden: items.length - safeMax };
+}
+
+export type Block = { key: string; rows: number; node: ReactNode };
+
+// The heterogeneous variant: each block declares its own height, the window never exceeds
+// `budget` rows (indicators included) and keeps the cursor block visible.
+export function resolveBlockWindow(
+  heights: readonly number[],
+  budget: number,
+  cursorIndex: number | undefined,
+): { start: number; end: number; hasAbove: boolean; hasBelow: boolean } {
+  const total = heights.reduce((sum, h) => sum + Math.max(0, h), 0);
+  const safeBudget = Number.isFinite(budget) ? Math.max(0, Math.floor(budget)) : 0;
+  if (total <= safeBudget) return { start: 0, end: heights.length, hasAbove: false, hasBelow: false };
+  const cursor = cursorIndex === undefined ? 0 : Math.min(Math.max(0, cursorIndex), heights.length - 1);
+  let reserved = 1;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const content = Math.max(0, safeBudget - reserved);
+    let start = cursor;
+    let end = cursor;
+    let used = 0;
+    if ((heights[cursor] ?? 0) <= content) {
+      used = heights[cursor] ?? 0;
+      end = cursor + 1;
+      let grew = true;
+      while (grew) {
+        grew = false;
+        if (end < heights.length && used + (heights[end] ?? 0) <= content) {
+          used += heights[end] ?? 0;
+          end += 1;
+          grew = true;
+        }
+        if (cursorIndex !== undefined && start > 0 && used + (heights[start - 1] ?? 0) <= content) {
+          used += heights[start - 1] ?? 0;
+          start -= 1;
+          grew = true;
+        }
+      }
+    }
+    const hasAbove = start > 0;
+    const hasBelow = end < heights.length;
+    const need = (hasAbove ? 1 : 0) + (hasBelow ? 1 : 0);
+    if (need <= reserved || attempt === 2) {
+      return { start, end, hasAbove: hasAbove && safeBudget - used > 0, hasBelow: hasBelow && safeBudget - used - (hasAbove ? 1 : 0) > 0 };
+    }
+    reserved = need;
+  }
+  return { start: 0, end: 0, hasAbove: false, hasBelow: false };
+}
+
+export function BoundedBlocks({
+  blocks,
+  maxVisibleRows,
+  cursorIndex,
+  moreAboveLabel = 'more above',
+  moreBelowLabel = 'more below',
+}: {
+  blocks: readonly Block[];
+  maxVisibleRows: number;
+  cursorIndex?: number;
+  moreAboveLabel?: string;
+  moreBelowLabel?: string;
+}) {
+  const { start, end, hasAbove, hasBelow } = resolveBlockWindow(
+    blocks.map((block) => block.rows),
+    maxVisibleRows,
+    cursorIndex,
+  );
+  return (
+    <Box flexDirection="column">
+      {hasAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
+      {blocks.slice(start, end).map((block) => (
+        <Box key={block.key} flexDirection="column" flexShrink={0}>
+          {block.node}
+        </Box>
+      ))}
+      {hasBelow ? <Text color={colors['text-dim']}>▼ {moreBelowLabel}</Text> : null}
+    </Box>
+  );
+}
+
+export function OlderHiddenLine({ hidden }: { hidden: number }) {
+  return hidden > 0 ? <Text color={colors['text-dim']}>{`… ${hidden} older hidden`}</Text> : null;
+}
