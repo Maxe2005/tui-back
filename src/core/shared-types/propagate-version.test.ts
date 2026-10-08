@@ -93,6 +93,23 @@ describe('propagateVersion', () => {
     expect(commitMessage(DEP, '0.1.3674')).toBe('chore(deps): bump @ianord/shared-types to 0.1.3674 [tui-back]');
   });
 
+  it('verifies on the configured registry and names it when the version is not found', async () => {
+    const f = fakes({ shared: { verifyPublished: vi.fn(async () => ok(false)) } });
+
+    const report = await propagateVersion({ ...params(f, [consumer('a')]), registries: { [DEP]: 'https://npm.example' } });
+
+    expect(f.shared.verifyPublished).toHaveBeenCalledWith(DEP, expect.any(String), 'https://npm.example');
+    expect(report).toMatchObject({ status: 'blocked', error: { code: 'version-not-published', message: expect.stringContaining('https://npm.example') } });
+  });
+
+  it('points at the missing registry setting when none is configured', async () => {
+    const f = fakes({ shared: { verifyPublished: vi.fn(async () => ok(false)) } });
+
+    const report = await propagateVersion(params(f, [consumer('a')]));
+
+    expect(report).toMatchObject({ status: 'blocked', error: { message: expect.stringContaining('"registry"') } });
+  });
+
   it('blocks with an explicit message and writes nothing when the version is unpublished', async () => {
     const f = fakes({ shared: { verifyPublished: vi.fn(async () => ok(false)) } });
 
@@ -224,7 +241,7 @@ describe('propagateVersion', () => {
     const report = await propagateVersion({ ...params(f, [consumer('a')]), version: ' 0.1.3-beta.2 ' });
 
     expect(report.status).toBe('completed');
-    expect(f.shared.verifyPublished).toHaveBeenCalledWith(DEP, '0.1.3-beta.2');
+    expect(f.shared.verifyPublished).toHaveBeenCalledWith(DEP, '0.1.3-beta.2', undefined);
   });
 
   it('blocks with no-service-selected when there is no consumer', async () => {

@@ -6,6 +6,7 @@ import type { GitPort } from '../ports/git.js';
 import type { RestartPort } from '../ports/restart.js';
 import type { SharedTypesPort } from '../ports/shared-types.js';
 import { err, ok, type Result } from '../result.js';
+import { notPublishedMessage } from './propagate-version.js';
 
 export interface PublishParams {
   git: GitPort;
@@ -14,6 +15,7 @@ export interface PublishParams {
   sourceRepoPath: string;
   publishCommand: string;
   packageName: string;
+  registry?: string;
 }
 
 export interface PublishSuccess {
@@ -22,7 +24,7 @@ export interface PublishSuccess {
 }
 
 export async function runPublish(params: PublishParams): Promise<Result<PublishSuccess>> {
-  const { git, restart, shared, sourceRepoPath, publishCommand, packageName } = params;
+  const { git, restart, shared, sourceRepoPath, publishCommand, packageName, registry } = params;
   if (publishCommand.trim() === '') {
     return err('invalid-publish-command', 'The publish command must not be empty.');
   }
@@ -46,12 +48,12 @@ export async function runPublish(params: PublishParams): Promise<Result<PublishS
   if (version === '') {
     return err('package-json-unreadable', `Cannot read ${join(sourceRepoPath, 'package.json')}: missing or blank "version" field`);
   }
-  const verified = await shared.verifyPublished(packageName, version);
+  const verified = await shared.verifyPublished(packageName, version, registry);
   if (!verified.ok) {
     return verified;
   }
   if (!verified.data) {
-    return err('version-not-published', `${packageName}@${version} is not published on the registry.`);
+    return err('version-not-published', notPublishedMessage(packageName, version, registry));
   }
   return ok({ version, output: ran.data.output });
 }
