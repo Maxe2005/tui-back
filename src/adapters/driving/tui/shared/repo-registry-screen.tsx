@@ -297,7 +297,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
 
         {phase === 'root-input' ? (
           <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
+            <Text color={colors.text} wrap="truncate-start">
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
