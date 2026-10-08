@@ -43,7 +43,7 @@ The skill walks the repo and extracts values for each manifest field:
 | `migrationCommand` | `package.json` `scripts.[migrate]` or `migrate`, or `db:migrate` | `null` |
 | `sharedBranch` | Default: `"development"` (never prompt, always default) | `"development"` |
 | `protectedBranches` | Default: `[development, preprod, prod]` (never prompt; the developer edits it to match the service's branching model) | `[development, preprod, prod]` |
-| `modules` | Compiled-in `knownModuleIds` set (empty by default); if the repo has a `modules` config file or directory, those keys are attempted against the registry — unknown ids are logged but do not block generation | `{}` (empty) |
+| `modules` | Compiled-in `knownModuleIds` set; `package.json` `name` / `dependencies` / `devDependencies` decide the `shared-types-*` modules (see below); other keys found in the repo are attempted against the registry — unknown ids are logged but do not block generation | `{}` (empty) |
 
 ### Detailed Extraction
 
@@ -57,7 +57,10 @@ The skill walks the repo and extracts values for each manifest field:
 
 4b. **`protectedBranches`**: Always emit `protectedBranches: [development, preprod, prod]`. A service's protected set (FR-7) is exactly `protectedBranches ∪ {sharedBranch}` — nothing is protected implicitly — so the generator writes the usual release branches explicitly. The developer trims or extends the list to match the service's branching model. The field is optional in the schema; every entry must be a non-empty string.
 
-5. **`modules`**: The manifest's `modules` record keys must be members of the compiled-in `knownModuleIds` set (currently empty — Epics 4/6 will populate it). The skill attempts to map any module ids it finds in the repo against this set. Unknown ids are recorded in a `.memlog.md` note but do not prevent manifest generation; the generated manifest will only include known module ids.
+5. **`modules`**: The manifest's `modules` record keys must be members of the compiled-in `knownModuleIds` set (`route-explorer`, `shared-types-source`, `shared-types-consumer`). Unknown ids are recorded in a `.memlog.md` note but do not prevent manifest generation; the generated manifest will only include known module ids.
+   - `shared-types-source`: emit when `package.json` `name` is the shared-types package (default `@ianord/shared-types`). Parameters (all optional, defaults shown, unknown ones rejected): `publishCommand: "npm run v"`, `packageName: "@ianord/shared-types"`. Emit `{}` unless the repo's publish script or package name differs.
+   - `shared-types-consumer`: emit when `dependencies` or `devDependencies` in `package.json` declare the shared-types package. Parameters (all optional, defaults shown, unknown ones rejected): `dependency: "@ianord/shared-types"`, `packageJsonPath: "package.json"`. Emit `{}` unless the dependency name or the `package.json` location differs (e.g. `api/package.json`).
+   - A repo is never both source and consumer in practice; if detection is ambiguous, emit neither and log it in `.memlog.md`.
 
 ## Output
 
@@ -124,11 +127,12 @@ modules:
   route-explorer:
     scanner: nestjs-openapi
     auth: jose-dev-jwt
+  shared-types-consumer: {}
 ```
 
 ## Notes
 
 - The skill never modifies source code — it only creates/overwrites `.tui-back.yaml`
-- Module config values are passed through as `Record<string, unknown>` — the schema only validates that module *ids* are known, not the shape of their config
-- If the repo has no `knownModuleIds` registered, the generated manifest will have an empty `modules: {}` — this is valid per the schema
+- Module config values are passed through as `Record<string, unknown>` — the schema validates that module *ids* are known; `shared-types-source` and `shared-types-consumer` additionally have a strict, defaulted parameter schema (unknown or blank parameters fail with `manifest-validation-failed`), while `route-explorer` config stays free-form
+- If no module applies to the repo, the generated manifest will have an empty `modules: {}` — this is valid per the schema
 - The skill is intentionally conservative: it only includes module ids that are in the compiled-in registry; unknown ids are logged but do not block manifest generation
