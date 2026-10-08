@@ -10,7 +10,7 @@ import { BRANCH_MAX_WIDTH, truncateBranchLabel } from '../edts-zone.logic.js';
 
 export function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
   return (
-    <Text color={focused ? colors.accent : colors.text} bold={focused}>
+    <Text color={focused ? colors.accent : colors.text} bold={focused} wrap="truncate-end">
       {focused ? '▶ ' : '  '}
       {text}
     </Text>
@@ -65,9 +65,9 @@ export function BranchPlanTable<Row>({ headers, rows, rowKey, cells, cursor, foc
             <Text key={rowKey(row)} wrap="truncate-end">
               <Text color={colors.accent}>{selected ? '› ' : '  '}</Text>
               {rowCells.map((entry, column) => (
-                <Text key={column}>
+                <Text key={column} wrap="truncate-end">
                   {column > 0 ? <Text color={rowColor}> │ </Text> : null}
-                  <Text color={entry.color ?? rowColor}>{pad(entry.text, column)}</Text>
+                  <Text color={entry.color ?? rowColor} wrap="truncate-end">{pad(entry.text, column)}</Text>
                 </Text>
               ))}
             </Text>

@@ -875,7 +875,7 @@ export function EdtsZone({
                   read-only issues dialog. */}
               {issuesSummary ? (
                 <Box paddingLeft={2}>
-                  <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold>
+                  <Text color={issuesSeverity === 'error' ? colors.error : colors.warning} bold wrap="truncate-end">
                     {issuesSeverity === 'error' ? '✖' : '▲'} {issuesSummary}
                     {!dialogOpen ? `  ${formatHint(['i', 'details'])}` : ''}
                   </Text>

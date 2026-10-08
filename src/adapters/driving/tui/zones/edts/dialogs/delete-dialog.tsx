@@ -122,19 +122,19 @@ export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
       <Box flexDirection="column">
         {dialog.rejected ? (
           <>
-            <Text color={colors.error}>{dialog.error}</Text>
+            <Text color={colors.error} wrap="truncate-end">{dialog.error}</Text>
           </>
         ) : dialog.memberRows === null ? (
           <StateLine kind="loading" subject="member status" />
         ) : (
           <>
-            <Text color={colors.text}>Delete EDT "{dialog.target.topic}"?</Text>
+            <Text color={colors.text} wrap="truncate-end">Delete EDT "{dialog.target.topic}"?</Text>
             {dialog.memberRows.length === 0 ? (
               <Text color={colors['text-dim']}>No members — only the EDT record will be removed.</Text>
             ) : (
               dialog.memberRows.map((row, index) => (
                 <Box key={row.repoPath}>
-                  <Text color={colors.accent}>{index === dialog.memberCursor ? '›' : ' '}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
                   <CheckboxListItem
                     label={row.service}
                     state={row.disposition === 'delete' ? 'checked' : 'unchecked'}

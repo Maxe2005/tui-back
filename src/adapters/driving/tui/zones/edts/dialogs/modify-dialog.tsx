@@ -388,7 +388,7 @@ export function ModifyDialogView({
                     dialog.target.members.find((member) => member.repoPath === candidate.path)?.branch;
                   return (
                     <Box key={candidate.path}>
-                      <Text color={colors.accent}>{dialog.formFocus === 'members' && index === dialog.memberCursor ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{dialog.formFocus === 'members' && index === dialog.memberCursor ? '›' : ' '}</Text>
                       <CheckboxListItem
                         label={candidate.service}
                         state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'}

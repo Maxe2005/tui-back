@@ -225,9 +225,9 @@ export function BranchStepView({
     <Box flexDirection="column">
       <PanelTitle text="GLOBAL STRATEGY" focused={globalFocused} />
       <Box>
-        <Text color={colors.accent}>{lineFocused('base') ? '› ' : '  '}</Text>
+        <Text color={colors.accent} wrap="truncate-end">{lineFocused('base') ? '› ' : '  '}</Text>
         {branches.globalBase.value === '' ? (
-          <Text color={lineFocused('base') ? colors.accent : colors.text}>
+          <Text color={lineFocused('base') ? colors.accent : colors.text} wrap="truncate-end">
             Default source branch: <Text color={colors['text-dim']}>{SHARED_BRANCH_PLACEHOLDER}</Text>
           </Text>
         ) : (
@@ -240,7 +240,7 @@ export function BranchStepView({
         )}
       </Box>
       <Box>
-        <Text color={colors.accent}>{lineFocused('name') ? '› ' : '  '}</Text>
+        <Text color={colors.accent} wrap="truncate-end">{lineFocused('name') ? '› ' : '  '}</Text>
         <TextInputLine
           label="Global branch name"
           value={branches.globalName.value}
@@ -260,7 +260,7 @@ export function BranchStepView({
         labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
       {blocked !== undefined ? (
-        <Text color={colors.error}>
+        <Text color={colors.error} wrap="truncate-end">
           ✖ {blocked.service} : {blocked.error}
         </Text>
       ) : null}

@@ -23,10 +23,10 @@ export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps)
           const { reason, suggestion } = explainUnreachable();
           return (
             <Box key={path} flexDirection="column" marginBottom={1}>
-              <Text color={colors.warning}>
+              <Text color={colors.warning} wrap="truncate-end">
                 {path} — {reason}
               </Text>
-              <Text color={colors['text-dim']}>  → {suggestion}</Text>
+              <Text color={colors['text-dim']} wrap="truncate-end">  → {suggestion}</Text>
             </Box>
           );
         })}
@@ -34,11 +34,11 @@ export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps)
           const { reason, suggestion } = explainIssueErrorCode(entry.code);
           return (
             <Box key={`${entry.path}-${index}`} flexDirection="column" marginBottom={1}>
-              <Text color={colors.error}>
+              <Text color={colors.error} wrap="truncate-end">
                 {entry.path} — {reason}
               </Text>
-              <Text color={colors['text-dim']}>  {entry.message}</Text>
-              <Text color={colors['text-dim']}>  → {suggestion}</Text>
+              <Text color={colors['text-dim']} wrap="truncate-end">  {entry.message}</Text>
+              <Text color={colors['text-dim']} wrap="truncate-end">  → {suggestion}</Text>
             </Box>
           );
         })}

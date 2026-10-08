@@ -68,13 +68,13 @@ export function ServicesStepView({
       {candidateState === 'ready'
         ? candidates.map((candidate, index) => (
             <Box key={candidate.path}>
-              <Text color={colors.accent}>{index === dialog.memberCursor ? '›' : ' '}</Text>
+              <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
               <CheckboxListItem label={candidate.service} state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'} />
             </Box>
           ))
         : null}
       {missing.length > 0 ? (
-        <Text color={colors['text-dim']}>Source EDT services not found (ignored): {missing.join(', ')}</Text>
+        <Text color={colors['text-dim']} wrap="truncate-end">Source EDT services not found (ignored): {missing.join(', ')}</Text>
       ) : null}
     </Box>
   );

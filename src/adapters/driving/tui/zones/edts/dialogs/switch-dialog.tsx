@@ -167,9 +167,9 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
   return (
     <>
       {results.some((row) => row.outcome === 'failed') ? (
-        <Text color={colors.warning}>Switch to “{dialog.target.topic}” finished with failures.</Text>
+        <Text color={colors.warning} wrap="truncate-end">Switch to “{dialog.target.topic}” finished with failures.</Text>
       ) : (
-        <Text color={colors.text}>Switch to “{dialog.target.topic}” finished.</Text>
+        <Text color={colors.text} wrap="truncate-end">Switch to “{dialog.target.topic}” finished.</Text>
       )}
       {results.map((row, index) => {
         const label = resultLabel(row);
@@ -219,7 +219,7 @@ export function SwitchDialogView({
           </>
         ) : (
           <>
-            <Text color={colors.text}>Switch to "{dialog.target.topic}"?</Text>
+            <Text color={colors.text} wrap="truncate-end">Switch to "{dialog.target.topic}"?</Text>
           </>
         )}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}

@@ -110,7 +110,7 @@ export function QuickPickDialogView({ dialog, pool }: { dialog: QuickPickDialogS
   return (
     <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} open={true}>
       <Box flexDirection="column">
-        {dialog.notFound !== null ? <Text color={colors.error}>{dialog.notFound}</Text> : null}
+        {dialog.notFound !== null ? <Text color={colors.error} wrap="truncate-end">{dialog.notFound}</Text> : null}
         <FilterablePickList
           label="Filter"
           state={dialog}
