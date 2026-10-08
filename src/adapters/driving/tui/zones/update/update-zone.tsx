@@ -6,7 +6,8 @@
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';

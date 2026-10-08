@@ -2,7 +2,8 @@
 // the issues summary line, closed by Esc/Enter. It carries no payload and submits nothing, so it
 // has no createXDialogHandlers factory (edts-zone.tsx's useInput closes it inline) — just a
 // view fed straight from the zone's store selectors.
-import { Box, useInput } from 'ink';
+import { Box } from 'ink';
+import { useInput } from '../../../shared/hooks/use-input.js';
 import { useState, type ReactNode } from 'react';
 import type { BranchDivergenceEntryError } from '../../../../../../core/edt/list.js';
 import { BoundedBlocks } from '../../../shared/components/bounded-list.js';

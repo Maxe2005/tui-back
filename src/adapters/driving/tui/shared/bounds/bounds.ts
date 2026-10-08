@@ -2,9 +2,11 @@
 // and pane sizes, and the pane split that honors them. Everything that renders dynamic content
 // gets its box from here (top-down), clipping is only the safety net.
 
-// Chrome is top bar 1 + tab bar 1 + footer 1 + the command/cursor row 1, which leaves 8 content
-// rows at the minimum; 40 columns keeps a "▲ more above" line, the "[:] cmd" hint and a 12-char
-// service name with its status glyph on one line (the tab bar collapses to mnemonics below 80).
+// Chrome is top bar 1 + tab bar 1 + footer 1 = 3 rows, which leaves 9 content rows at the minimum
+// of 12 (the footer grows to FOOTER_MAX_ROWS when its hints wrap, and the command bar shares the
+// zone region while open). 40 columns keeps a "▲ more above" line, the "[:] cmd" hint and a
+// 12-char service name with its status glyph on one line (the tab bar collapses to mnemonics
+// below 80).
 export const MIN_TERMINAL_COLUMNS = 40;
 export const MIN_TERMINAL_ROWS = 12;
 
@@ -12,8 +14,10 @@ export const MIN_TERMINAL_ROWS = 12;
 export const MIN_PANE_ROWS = 3;
 export const MIN_PANE_COLUMNS = 12;
 
-// Rows the shell itself uses outside the zone region: top bar, tab bar, footer.
+// Rows the shell itself uses outside the zone region: top bar, tab bar, and a one-row footer
+// (the real footer height is measured from its wrapped hints, see footerRowsFor).
 export const SHELL_CHROME_ROWS = 3;
+export const SHELL_FIXED_ROWS = 2;
 
 export type Bounds = { columns: number; rows: number };
 

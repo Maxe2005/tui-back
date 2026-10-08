@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Text, useInput } from 'ink';
+import { Text } from 'ink';
+import { useInput } from '../hooks/use-input.js';
 import { KEYBINDINGS, type Keybinding } from '../../keybindings/index.js';
 import type { NavigationKey } from '../keys/navigation-key.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';

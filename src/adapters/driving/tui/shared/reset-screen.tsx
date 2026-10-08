@@ -4,7 +4,8 @@
 // reset-screen.logic.ts; this component feeds it raw Ink keys. Danger styling: error-colored
 // border and title, never the accent.
 import { useRef, useState, type ReactNode } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { TextInputLine } from './components/text-input-line.js';

@@ -1,4 +1,5 @@
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInput } from '../hooks/use-input.js';
 import { useState, type ReactNode } from 'react';
 import { useBounds } from '../bounds/bounds-context.js';
 import { useElementSize } from '../hooks/use-element-size.js';

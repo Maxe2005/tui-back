@@ -4,7 +4,8 @@
 // `Ctrl+R` fires the draft. While the pane holds focus it captures the keyboard from AppShell;
 // `Esc` unwinds sub-editors, then Response → Request and Saved → list, then back to the list.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';

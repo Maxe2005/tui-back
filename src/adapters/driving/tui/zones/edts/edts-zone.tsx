@@ -4,7 +4,8 @@
 // a pure function in edts-zone.logic.ts; DetailPane takes only Text-safe content (UX-DR17), so a
 // git-error detail renders as a DimAnnotation sibling.
 import { useEffect, useRef, useState } from 'react';
-import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { Box, Text, useWindowSize, type Key } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';

@@ -4,7 +4,8 @@
 // handles everything; AppShell only mounts/unmounts it via `commandBarOpen`. Every key decision
 // is a pure, unit-tested function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
-import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { Box, Text, useWindowSize, type Key } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';

@@ -3,7 +3,8 @@
 // fullscreen view and a two-tier text/regex/level filter. A single `useInput` dispatches every
 // keystroke to pure functions in logs-zone.logic.ts; overlays (filter editor, fullscreen) first.
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Text, useInput, useWindowSize } from 'ink';
+import { Box, Text, useWindowSize } from 'ink';
+import { useInput } from '../../shared/hooks/use-input.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';

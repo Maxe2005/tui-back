@@ -4,7 +4,8 @@
 // unreachable/manifest-not-found entries and remove the confirmed ones. Every key decision is a
 // pure function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
-import { Box, Text, useInput, type Key } from 'ink';
+import { Box, Text, type Key } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';

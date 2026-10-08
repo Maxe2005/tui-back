@@ -4,7 +4,8 @@
 // state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
 // lives here (`onClose`): only this component knows whether Esc steps back or closes.
 import { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';

@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { ClampedParagraph, TruncatedText, clampParagraph } from './truncated-text.js';
 import { renderToString } from './render-to-string.js';
+import { FOOTER_MAX_ROWS, footerRowsFor } from './footer.js';
 
 describe('clampParagraph', () => {
   it('keeps short text as is', () => {
@@ -27,5 +28,13 @@ describe('bounded text components', () => {
     expect(out).toContain('one');
     expect(out).toContain('… +3 lines');
     expect(out).not.toContain('four');
+  });
+});
+
+describe('footerRowsFor', () => {
+  it('counts the wrapped hint lines, capped', () => {
+    expect(footerRowsFor(['[a] one', '[b] two'], 120)).toBe(1);
+    expect(footerRowsFor(['[a] one', '[b] two', '[c] three'], 12)).toBeGreaterThan(1);
+    expect(footerRowsFor(Array.from({ length: 50 }, (_, i) => `[${i}] hint`), 20)).toBe(FOOTER_MAX_ROWS);
   });
 });
