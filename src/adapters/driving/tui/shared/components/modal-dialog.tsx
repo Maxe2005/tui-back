@@ -29,7 +29,7 @@ export function ModalDialog(props: ModalDialogProps) {
       borderStyle="double"
       padding={spacing['1']}
       flexDirection="column"
-      flexShrink={1}
+      flexShrink={0}
       maxHeight={cap}
       overflow="hidden"
     >

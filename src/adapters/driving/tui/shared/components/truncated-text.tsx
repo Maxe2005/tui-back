@@ -1,10 +1,10 @@
 // tui/shared/components: bounded text by default — TruncatedText is one normalized line cut to
 // its width with an ellipsis; ClampedParagraph keeps at most `maxLines` wrapped lines and ends
 // with "… +N lines". Dynamic content outside shared/ goes through these, never raw ink Text.
-import { Text } from 'ink';
+import { Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
 import type { ComponentProps } from 'react';
-import { normalizeMessage } from '../bounds/message.js';
+import { normalizeMessage, stripControl } from '../bounds/message.js';
 import { useBounds } from '../bounds/bounds-context.js';
 
 type TextStyleProps = Omit<ComponentProps<typeof Text>, 'children' | 'wrap'>;
@@ -26,6 +26,9 @@ export function clampParagraph(text: string, width: number, maxLines: number): s
   return [...lines.slice(0, safeMax - 1), `… +${hidden} lines`];
 }
 
+// Text that fits within `maxLines` at the bounds' width renders through Ink's own wrap, so
+// ordinary output is untouched. Longer text is pre-wrapped, cut and ended with "… +N lines".
+// The max-height clip below also holds for panes narrower than the bounds estimate.
 export function ClampedParagraph({
   children,
   maxLines,
@@ -33,22 +36,29 @@ export function ClampedParagraph({
   ...style
 }: TextStyleProps & { children: string; maxLines: number; width?: number }) {
   const bounds = useBounds();
-  const lines = clampParagraph(normalizeParagraph(children), width ?? bounds.columns, maxLines);
+  const text = normalizeParagraph(children);
+  const safeMax = Math.max(1, Math.floor(maxLines));
+  const lineWidth = width ?? bounds.columns;
+  const wrapped = clampParagraph(text, lineWidth, Number.MAX_SAFE_INTEGER);
+  if (wrapped.length <= safeMax) {
+    return (
+      <Box flexDirection="column" flexShrink={0} maxHeight={safeMax} overflow="hidden">
+        <Text {...style}>{text}</Text>
+      </Box>
+    );
+  }
   return (
-    <>
-      {lines.map((line, index) => (
+    <Box flexDirection="column" flexShrink={0}>
+      {clampParagraph(text, lineWidth, safeMax).map((line, index) => (
         <Text key={index} {...style} wrap="truncate-end">
           {line}
         </Text>
       ))}
-    </>
+    </Box>
   );
 }
 
-// Keeps line breaks (a paragraph) but strips ANSI/control characters.
+// Keeps line breaks and spacing (a paragraph) but strips ANSI/control characters.
 function normalizeParagraph(text: string): string {
-  return text
-    .split('\n')
-    .map((line) => normalizeMessage(line, 2000))
-    .join('\n');
+  return stripControl(text);
 }
