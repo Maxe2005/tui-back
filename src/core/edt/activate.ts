@@ -9,15 +9,18 @@ import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
+import type { ManifestCarryPort } from '../ports/manifest-carry.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
+import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { failed, resolveTargetBranch, type SwitchEdtRepoResult, type TargetBranchSpec } from './switch.js';
 
 export interface ActivateEdtParams {
   edtRegistry: EdtRegistryPort;
   registry: RegistryPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   git: GitPort;
   lock: LockPort;
   state: StatePort;
@@ -50,7 +53,7 @@ interface ReadyRepo {
 type Preflighted = { kind: 'ready'; repo: ReadyRepo } | { kind: 'failed'; row: SwitchEdtRepoResult };
 
 export async function activateEdt(params: ActivateEdtParams): Promise<Result<ActivateEdtData>> {
-  const { edtRegistry, registry, manifest, git, lock, state, edtRegistryResourceKey } = params;
+  const { edtRegistry, registry, manifest, manifestCarry, git, lock, state, edtRegistryResourceKey } = params;
 
   const topic = params.topic.trim();
   if (topic === '') {
@@ -112,7 +115,17 @@ export async function activateEdt(params: ActivateEdtParams): Promise<Result<Act
   // Activation: every at-risk path is confirmed by now.
   const results: SwitchEdtRepoResult[] = [];
   for (const entry of preflighted) {
-    results.push(entry.kind === 'failed' ? entry.row : await activateRepo(git, entry.repo));
+    if (entry.kind === 'failed') {
+      results.push(entry.row);
+      continue;
+    }
+    const { repo } = entry;
+    // A dirty `.tui-back.yaml` is carried over untouched: never at risk, never discarded.
+    results.push(
+      repo.alreadyThere
+        ? await activateRepo(git, repo)
+        : await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, repo.service, () => activateRepo(git, repo)),
+    );
   }
 
     // A member no longer in the managed-repo registry is surfaced as `failed`, never silently
@@ -190,7 +203,7 @@ async function preflightRepo(
     return { kind: 'ready', repo: { service, repoPath, branch: spec.branch, alreadyThere: true, atRisk: [] } };
   }
 
-  const dirty = await git.listDirtyPaths(repoPath, { expandUntracked: true });
+  const dirty = await git.listDirtyPaths(repoPath, { expandUntracked: true, excludePaths: [MANIFEST_FILE] });
   if (!dirty.ok) {
     return { kind: 'failed', row: failed(service, dirty.error) };
   }

@@ -95,6 +95,9 @@ export function discardConfirmLines(rows: readonly ResolutionRow[]): ConfirmLine
     for (const path of paths ?? []) {
       lines.push({ key: `${row.repo.repoPath}:${path}`, text: `    ${path}`, color: colors.text });
     }
+    if (row.repo.manifestCarried === true) {
+      lines.push({ key: `${row.repo.repoPath}:manifest`, text: '    .tui-back.yaml — conserved, not discarded', color: colors['text-dim'] });
+    }
   }
   return lines;
 }

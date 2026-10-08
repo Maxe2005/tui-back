@@ -87,6 +87,7 @@ function fakeDeps(disk: Disk, overrides: { lock?: LockPort } = {}): AppStoreDeps
   return {
     registry,
     manifest,
+    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
     git: {} as GitPort,
     edtRegistry,
     state,

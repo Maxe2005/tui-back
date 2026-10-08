@@ -7,6 +7,7 @@ import {
   acquireTuiLock,
   readLockFile,
 } from "../adapters/driving/tui/single-instance.js";
+import { createManifestCarryPort } from "../adapters/driven/manifest/carry.js";
 import { loadManifest } from "../adapters/driven/manifest/index.js";
 import { createContainerPort } from "../adapters/driven/container/index.js";
 import { createMigrationPort } from "../adapters/driven/migration/index.js";
@@ -91,6 +92,7 @@ try {
 const registryFile = resolveRegistryFile(xdg);
 const registry = createRegistryPort(registryFile);
 const manifest = { load: loadManifest };
+const manifestCarry = createManifestCarryPort();
 const edtsBaseDir = join(xdg.dataDir, "edts");
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
 const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
@@ -148,6 +150,7 @@ const sharedTypes =
 const store = createAppStore({
   registry,
   manifest,
+  manifestCarry,
   git,
   container,
   migration,
