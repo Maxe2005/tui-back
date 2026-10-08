@@ -21,6 +21,7 @@ modules:
   # shared-types-source:        # the repo that publishes the shared-types package
   #   publishCommand: npm run v           # default
   #   packageName: "@ianord/shared-types" # default
+  #   registry: "https://npm.ianord.fr"    # default; registry serving the package scope
   # shared-types-consumer:      # a service depending on it; `{}` uses the defaults
   #   dependency: "@ianord/shared-types"  # default
   #   packageJsonPath: package.json       # default
