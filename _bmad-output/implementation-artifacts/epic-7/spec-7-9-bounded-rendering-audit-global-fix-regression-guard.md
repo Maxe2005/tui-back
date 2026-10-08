@@ -3,7 +3,7 @@ title: 'Story 7.9: Bounded-rendering audit, global fix & regression guard (UX-DR
 type: 'feature'
 created: '2026-10-08'
 baseline_commit: '783a0081c31b65f600718396669be4876dc57e95'
-status: 'in-progress'
+status: 'in-review'
 review_loop_iteration: 0
 context:
   - '{project-root}/AGENTS.md'

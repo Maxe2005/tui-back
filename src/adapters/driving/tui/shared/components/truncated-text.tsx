@@ -9,7 +9,7 @@ import { useBounds } from '../bounds/bounds-context.js';
 
 type TextStyleProps = Omit<ComponentProps<typeof Text>, 'children' | 'wrap'>;
 
-export function TruncatedText({ children, maxChars, ...style }: TextStyleProps & { children: unknown; maxChars?: number }) {
+export function TruncatedText({ children, maxChars, ...style }: TextStyleProps & { children: string | number | readonly (string | number)[]; maxChars?: number }) {
   return (
     <Text {...style} wrap="truncate-end">
       {normalizeMessage(children, maxChars)}

@@ -34,8 +34,10 @@ export function resolvePaneSplit(
   minPane: number,
   splitter = 1,
 ): { first: number; second: number; adjustedRatio: number | null } {
-  const usable = Math.max(0, Math.floor(total) - splitter);
-  const first = Math.round(usable * ratio);
+  const safeTotal = Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+  const safeRatio = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0.5;
+  const usable = Math.max(0, safeTotal - splitter);
+  const first = Math.round(usable * safeRatio);
   const second = usable - first;
   if (usable < minPane * 2) {
     const half = Math.floor(usable / 2);
