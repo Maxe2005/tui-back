@@ -25,6 +25,7 @@ import {
   initialServiceActionsDialog,
   initialSwitchDialog,
 } from '../../zones/edts/edts-zone.logic.js';
+import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
 import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-dialog.js';
 import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
@@ -163,6 +164,59 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
         maxRows: rows,
         maxVisibleRows: rows,
       }),
+  },
+  ...[2, 3, 4].map((step): DialogEntry => ({
+    id: `edts/create-wizard-step-${step}`,
+    file: 'zones/edts/dialogs/create-wizard/create-wizard.tsx',
+    render: (rows) =>
+      createElement(CreateWizardView, {
+        dialog: { ...initialCreateDialog(), step: step as 2 | 3 | 4, topic: 'wide-topic', selectedMembers: services.map((s) => s.path), memberCursor: 150 },
+        candidates: services,
+        candidateState: 'ready',
+        edtsRows: [edt],
+        maxRows: rows,
+        maxVisibleRows: rows,
+      }),
+  })),
+  {
+    id: 'edts/switch-results',
+    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    render: (rows) =>
+      createElement(SwitchDialogView, {
+        dialog: {
+          ...initialSwitchDialog(edt),
+          results: services.map((s, i) => ({
+            service: s.service,
+            outcome: (['switched', 'adopted', 'discarded', 'failed'] as const)[i % 4],
+            detail: { code: 'x', message: MULTILINE_ERROR, adoptedBranch: s.branch ?? 'main' },
+          })),
+          failedRows: failedRows(),
+        },
+        switchDirtyRepos: null,
+        maxVisibleRows: rows,
+      }),
+  },
+  {
+    id: 'edts/switch-resolution',
+    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    render: (rows) => {
+      const dirty = services.map((s) => ({
+        service: s.service,
+        repoPath: s.path,
+        scope: 'outgoing-member' as const,
+        currentBranch: s.branch ?? 'main',
+        currentBranchShared: false,
+        sharedBranch: 'development',
+        protectedBranches: [],
+        owningEdtTopics: ['x'.repeat(100)],
+        dirtyPaths: Array.from({ length: 50 }, (_, i) => `src/${'d'.repeat(80)}/${i}.ts`),
+      }));
+      return createElement(SwitchDialogView, {
+        dialog: { ...initialSwitchDialog(edt), resolution: initialSwitchResolution('outgoing-topic', dirty) },
+        switchDirtyRepos: dirty,
+        maxVisibleRows: rows,
+      });
+    },
   },
   {
     id: 'update/service-pick',

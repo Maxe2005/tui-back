@@ -169,3 +169,28 @@ describe('size matrix: Logs with many selected services', () => {
     });
   }
 });
+
+describe('size matrix: Update zone mid-run', () => {
+  for (const size of MATRIX_SIZES) {
+    it(`update running with 200 members at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
+      const store = adversarialStore();
+      const services = store.getState().edtsBranches ?? [];
+      const edts = store.getState().edts ?? [];
+      store.setState({
+        updateStatus: 'running',
+        updateTopic: 'ulid-0',
+        edts: edts.map((entry, index) =>
+          index === 0 ? { ...entry, members: services.map((s) => ({ service: s.service, repoPath: s.path, branch: s.branch ?? 'main' })) } : entry,
+        ),
+      } as never);
+      store.getState().setActiveZone('update');
+      const frame = frameLines(await renderToString(createElement(AppShell, { useStore: store, onQuit: () => {} }), size));
+      expect(frame.length).toBeLessThanOrEqual(size.rows);
+      for (const line of frame) {
+        expect(Array.from(line).length, line).toBeLessThanOrEqual(size.columns);
+      }
+      expect(frame[0]).toContain('tui-back');
+      expect(frame.at(-1)?.trim()).not.toBe('');
+    });
+  }
+});
