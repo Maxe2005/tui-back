@@ -113,7 +113,7 @@ const docker = createDockerPort();
 // The Routes zone's scanner, resolved out of the statically compiled module registry by
 // manifest module id (AD-5), the same as the CLI so both scan through one implementation.
 const routeExplorer = resolveModule(moduleRegistry, ROUTES_MODULE_ID);
-if (!routeExplorer) {
+if (routeExplorer?.kind !== 'route-explorer') {
   throw new Error(`${ROUTES_MODULE_ID} module is not registered`);
 }
 // The Routes zone's fire path needs the module's auth port alongside its scanner — the same

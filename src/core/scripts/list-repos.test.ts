@@ -166,6 +166,32 @@ describe('listRepos', () => {
     });
   });
 
+  it('accepts a container-less shared-types-source repo as a member', async () => {
+    const path = '/m/shared-types';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'shared-types',
+          sharedBranch: 'development',
+          modules: { 'shared-types-source': { publishCommand: 'npm run v', packageName: '@ianord/shared-types' } },
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        repos: [
+          { path, service: 'shared-types', container: null, sharedBranch: 'development', moduleIds: ['shared-types-source'] },
+        ],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
   it('exposes a blank container as null, like a missing one', async () => {
     const path = '/m/blank';
     const registry = fakeRegistry({ list: async () => ok([path]) });
