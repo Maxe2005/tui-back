@@ -15,5 +15,7 @@ export interface SharedTypesPort {
   // Targeted text edit of the dependency's version line; every other byte is preserved.
   writeVersionLine(packageJsonPath: string, dependency: string, version: string): Promise<Result<void>>;
   // true when the registry has the version, false when it reports none; never throws.
-  verifyPublished(packageName: string, version: string): Promise<Result<boolean>>;
+  // `registry` is the URL serving the package's scope (the source module's `registry`
+  // parameter); omitted, npm falls back to its own configuration.
+  verifyPublished(packageName: string, version: string, registry?: string): Promise<Result<boolean>>;
 }
