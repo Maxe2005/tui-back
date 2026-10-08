@@ -33,7 +33,9 @@ import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/
 import { createDockerPort } from "../adapters/driven/docker/index.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
-import { ROUTES_MODULE_ID } from "../core/edt/resolve-tab-visibility.js";
+import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
+import { err, ok } from "../core/result.js";
+import type { DependencyConsumerConfig } from "../core/shared-types/list-consumers.js";
 
 if (!process.stdin.isTTY) {
   process.stderr.write("tui-back-tui requires an interactive terminal\n");
@@ -125,6 +127,23 @@ if (!routeExplorer.auth) {
 // request-* subcommands run against, so a TUI save is visible to the CLI and back.
 const globalDbFile = resolveGlobalDbFile(xdg);
 const savedRequests = createSavedRequestPort(globalDbFile);
+// The shared-types zone: the consuming module's SharedTypesPort and manifest-parameter schema,
+// resolved out of the registry by module id (AD-5) — core only ever sees the port and a parser.
+const [, SHARED_TYPES_CONSUMER_ID] = SHARED_TYPES_MODULE_IDS;
+const sharedTypesConsumer = resolveModule(moduleRegistry, SHARED_TYPES_CONSUMER_ID);
+if (sharedTypesConsumer?.kind !== 'shared-types') {
+  throw new Error(`${SHARED_TYPES_CONSUMER_ID} module is not registered`);
+}
+const sharedTypes = {
+  port: sharedTypesConsumer.shared,
+  consumerModuleId: SHARED_TYPES_CONSUMER_ID,
+  parseConsumerConfig: (raw: Record<string, unknown>) => {
+    const parsed = sharedTypesConsumer.configSchema.safeParse(raw);
+    return parsed.success
+      ? ok(parsed.data as DependencyConsumerConfig)
+      : err("invalid-module-config", `${SHARED_TYPES_CONSUMER_ID}: ${parsed.error.message}`);
+  },
+};
 const store = createAppStore({
   registry,
   manifest,
@@ -143,6 +162,7 @@ const store = createAppStore({
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
   savedRequests,
+  sharedTypes,
 });
 const onQuit = async () => {
   if (tuiLock) {
