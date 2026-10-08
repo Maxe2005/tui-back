@@ -131,19 +131,20 @@ const savedRequests = createSavedRequestPort(globalDbFile);
 // resolved out of the registry by module id (AD-5) — core only ever sees the port and a parser.
 const [, SHARED_TYPES_CONSUMER_ID] = SHARED_TYPES_MODULE_IDS;
 const sharedTypesConsumer = resolveModule(moduleRegistry, SHARED_TYPES_CONSUMER_ID);
-if (sharedTypesConsumer?.kind !== 'shared-types') {
-  throw new Error(`${SHARED_TYPES_CONSUMER_ID} module is not registered`);
-}
-const sharedTypes = {
-  port: sharedTypesConsumer.shared,
-  consumerModuleId: SHARED_TYPES_CONSUMER_ID,
-  parseConsumerConfig: (raw: Record<string, unknown>) => {
-    const parsed = sharedTypesConsumer.configSchema.safeParse(raw);
-    return parsed.success
-      ? ok(parsed.data as DependencyConsumerConfig)
-      : err("invalid-module-config", `${SHARED_TYPES_CONSUMER_ID}: ${parsed.error.message}`);
-  },
-};
+// A missing or wrong-kind module leaves the zone degraded (explicit error) instead of aborting.
+const sharedTypes =
+  sharedTypesConsumer?.kind === "shared-types"
+    ? {
+        port: sharedTypesConsumer.shared,
+        consumerModuleId: SHARED_TYPES_CONSUMER_ID,
+        parseConsumerConfig: (raw: Record<string, unknown>) => {
+          const parsed = sharedTypesConsumer.configSchema.safeParse(raw);
+          return parsed.success
+            ? ok(parsed.data as DependencyConsumerConfig)
+            : err("invalid-module-config", `${SHARED_TYPES_CONSUMER_ID}: ${parsed.error.message}`);
+        },
+      }
+    : undefined;
 const store = createAppStore({
   registry,
   manifest,
