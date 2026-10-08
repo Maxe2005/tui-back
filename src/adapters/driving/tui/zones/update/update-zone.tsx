@@ -743,7 +743,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               useStore={useStore}
               first={
                 <>
-                  <Text color={!recapActive && cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_MEMBERS_HEADER}</Text>
+                  <Text color={!recapActive && cursorInMembers ? colors.accent : colors['text-dim']} wrap="truncate-end">{UPDATE_MEMBERS_HEADER}</Text>
                   {panes.members.length === 0 ? <Text color={colors['text-dim']}>No services in this EDT.</Text> : null}
                   <BoundedList
                     items={panes.members}
@@ -755,7 +755,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               }
               second={
                 <>
-                  <Text color={!recapActive && !cursorInMembers ? colors.accent : colors['text-dim']}>{UPDATE_OTHERS_HEADER}</Text>
+                  <Text color={!recapActive && !cursorInMembers ? colors.accent : colors['text-dim']} wrap="truncate-end">{UPDATE_OTHERS_HEADER}</Text>
                   {panes.others.length === 0 ? <Text color={colors['text-dim']}>No other services.</Text> : null}
                   <BoundedList
                     items={panes.others}
@@ -793,21 +793,21 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             {!recapActive && updateStatus === 'running' ? (
               <Box>
                 <Spinner />
-                <Text color={colors.text}> {runningLabel}</Text>
+                <Text color={colors.text} wrap="truncate-end"> {runningLabel}</Text>
               </Box>
             ) : null}
             {updateNotice !== null ? (
-              <Text color={colors.warning}>
+              <Text color={colors.warning} wrap="truncate-end">
                 ⚠ {updateNotice.message} ({updateNotice.code})
               </Text>
             ) : null}
             {updateStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error}>
+                <Text color={colors.error} wrap="truncate-end">
                   {updateError ?? 'Group update failed.'}
                   {updateErrorCode !== null ? ` (code: ${updateErrorCode})` : ''}
                 </Text>
-                {recapActive ? <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text> : null}
+                {recapActive ? <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text> : null}
               </Box>
             ) : null}
             {recapActive ? (
@@ -816,13 +816,13 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               <Box flexDirection="column">
                 <Box>
                   <Spinner />
-                  <Text color={colors.text}> {runningLabel}</Text>
+                  <Text color={colors.text} wrap="truncate-end"> {runningLabel}</Text>
                 </Box>
                 {runningSelectedRows.length > 0 ? (
                   runningSelectedRows.map((row) => (
                     <Box key={row.path}>
                       <Spinner />
-                      <Text color={colors.text}> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
+                      <Text color={colors.text} wrap="truncate-end"> {row.service}{row.branch !== null ? ` (${row.branch})` : ''}</Text>
                     </Box>
                   ))
                 ) : isAllRun || runningMembers.length === 0 ? (
@@ -831,7 +831,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                   runningMembers.map((member) => (
                     <Box key={member.repoPath}>
                       <Spinner />
-                      <Text color={colors.text}> {member.service} ({member.branch})</Text>
+                      <Text color={colors.text} wrap="truncate-end"> {member.service} ({member.branch})</Text>
                     </Box>
                   ))
                 )}
@@ -843,24 +843,24 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
               // would overstate a no-op as a result.
               updateNote !== null && updateResults.length === 0 ? (
                 <Box flexDirection="column">
-                  <Text color={colors.text}>{updateNote}</Text>
-                  <Text color={colors['text-dim']}>{UPDATE_IDLE_PROMPT}</Text>
+                  <Text color={colors.text} wrap="truncate-end">{updateNote}</Text>
+                  <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text>
                 </Box>
               ) : (
                 <Box flexDirection="column">
                   {recap !== null ? (
                     <Box flexDirection="column">
-                      <Text bold color={colors.text}>
+                      <Text bold color={colors.text} wrap="truncate-end">
                         {recap.title}
                       </Text>
                       {recap.contextLines.map((line) => (
-                        <Text key={line} color={colors['text-dim']}>
+                        <Text key={line} color={colors['text-dim']} wrap="truncate-end">
                           {line}
                         </Text>
                       ))}
                       {recap.resultLines.map((line, index) => (
                         // Duplicate service names occur within one EDT — key by line + index.
-                        <Text key={`${line}-${index}`} color={colors.text}>
+                        <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
                           {line}
                         </Text>
                       ))}
@@ -877,9 +877,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             ) : null}
             {updateStatus === 'idle' ? (
               <Box flexDirection="column">
-                <Text color={colors.text}>{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
-                <Text color={colors['text-dim']}>{UPDATE_ALL_REPOS_PROMPT}</Text>
-                <Text color={colors['text-dim']}>{UPDATE_NO_RECAP}</Text>
+                <Text color={colors.text} wrap="truncate-end">{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
+                <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_ALL_REPOS_PROMPT}</Text>
+                <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_NO_RECAP}</Text>
               </Box>
             ) : null}
               </Box>
@@ -888,7 +888,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
       />
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
-        <Text color={colors.text}>{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
+        <Text color={colors.text} wrap="truncate-end">{isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}</Text>
       </ModalDialog>
       {updateConfig !== null ? (
         <UpdateConfigPanels
@@ -911,9 +911,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null}>
         {updateBlocker !== null ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>{formatBlockerBody(updateBlocker)}</Text>
-            {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning}>{formatBlockerRetry(updateBlocker)}</Text> : null}
-            {editorError !== null ? <Text color={colors.error}>✖ {editorError}</Text> : null}
+            <Text color={colors.text} wrap="truncate-end">{formatBlockerBody(updateBlocker)}</Text>
+            {formatBlockerRetry(updateBlocker) !== null ? <Text color={colors.warning} wrap="truncate-end">{formatBlockerRetry(updateBlocker)}</Text> : null}
+            {editorError !== null ? <Text color={colors.error} wrap="truncate-end">✖ {editorError}</Text> : null}
             <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
           </Box>
         ) : null}

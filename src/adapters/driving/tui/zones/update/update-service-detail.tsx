@@ -40,7 +40,7 @@ export function UpdateServiceDetail({ service, mode, context, steps, result, iss
   return (
     <Box flexDirection="column">
       <Box>
-        <Text bold color={colors.text}>
+        <Text bold color={colors.text} wrap="truncate-end">
           {service}
         </Text>
         {mode === 'live' ? (
@@ -53,24 +53,24 @@ export function UpdateServiceDetail({ service, mode, context, steps, result, iss
         ) : null}
       </Box>
       {mode === 'never' ? (
-        <Text color={colors['text-dim']}>{UPDATE_DETAIL_NEVER_RAN}</Text>
+        <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_DETAIL_NEVER_RAN}</Text>
       ) : (
         <Box flexDirection="column">
-          {context !== null ? <Text color={colors.text}>{context}</Text> : null}
+          {context !== null ? <Text color={colors.text} wrap="truncate-end">{context}</Text> : null}
           {views.map((view) => (
             <Box key={view.key} flexDirection="column" marginTop={1}>
-              <Text color={STEP_COLORS[view.state]} bold={view.state === 'running'}>
+              <Text color={STEP_COLORS[view.state]} bold={view.state === 'running'} wrap="truncate-end">
                 {view.headline}
               </Text>
               {view.detail.map((line) => (
-                <Text key={line} color={colors['text-dim']}>
+                <Text key={line} color={colors['text-dim']} wrap="truncate-end">
                   {'   '}
                   {line}
                 </Text>
               ))}
               {view.key === 'merge'
                 ? issues.map((issue, index) => (
-                    <Text key={`${issue.kind}-${index}`} color={issue.resolved ? colors['text-dim'] : colors.warning}>
+                    <Text key={`${issue.kind}-${index}`} color={issue.resolved ? colors['text-dim'] : colors.warning} wrap="truncate-end">
                       {'   '}
                       {issue.resolved ? '✔' : '⚠'} {issue.kind} — {issue.detail.replace(/\s+/g, ' ')} ({issue.resolved ? 'resolved' : 'needs your input'})
                     </Text>

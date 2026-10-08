@@ -82,8 +82,8 @@ function GlobalRow({
 }) {
   return (
     <Box>
-      <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>
-      <Text color={focused ? colors.accent : colors.text}>{label.padEnd(LABEL_WIDTH)}</Text>
+      <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>
+      <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">{label.padEnd(LABEL_WIDTH)}</Text>
       {children}
     </Box>
   );
@@ -140,7 +140,7 @@ function GlobalLines({
         if (line === 'start') {
           return (
             <GlobalRow key={line} focused={focusedLine(line)} label="">
-              <Text color={focusedLine(line) ? colors.accent : colors.text} bold={focusedLine(line)}>
+              <Text color={focusedLine(line) ? colors.accent : colors.text} bold={focusedLine(line)} wrap="truncate-end">
                 {START_RUN_LABEL}
               </Text>
             </GlobalRow>
@@ -149,7 +149,7 @@ function GlobalLines({
         const on = line === 'migrations' ? draft.runMigrations : draft.cleanRestart;
         return (
           <GlobalRow key={line} focused={focusedLine(line)} label={line === 'migrations' ? 'Migrations' : 'Clean restart'}>
-            <Text color={focusedLine(line) ? colors.accent : colors.text}>
+            <Text color={focusedLine(line) ? colors.accent : colors.text} wrap="truncate-end">
               {on ? '[x] yes' : '[ ] no'}
             </Text>
           </GlobalRow>

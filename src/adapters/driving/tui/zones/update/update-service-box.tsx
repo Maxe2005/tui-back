@@ -16,7 +16,7 @@ const OPTION_LABEL: Record<ToggleOverride, (global: boolean) => string> = {
 };
 
 function Marker({ focused }: { focused: boolean }) {
-  return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
+  return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;
 }
 
 function ToggleLine({
@@ -37,7 +37,7 @@ function ToggleLine({
   return (
     <Box>
       <Marker focused={focused} />
-      <Text color={focused ? colors.accent : colors.text}>{label.padEnd(16)}</Text>
+      <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">{label.padEnd(16)}</Text>
       {declared ? (
         <Text color={focused ? colors.accent : colors.text} wrap="truncate-end">
           {toggleOptions(declared)
