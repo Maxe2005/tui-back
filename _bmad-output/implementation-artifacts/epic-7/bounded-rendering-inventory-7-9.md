@@ -83,3 +83,8 @@ Legend. Height sources: `root` = shell `height={rows}` + `overflow="hidden"` cli
 6. Shared screens: registry, settings, reset, command bar, `resetNotice`, help, footer/top bar/tab bar.
 
 Estimated size: foundation + guard + six patch commits fits one story; if the validated inventory shows more partial surfaces than listed here, split the tail into 7.9b.
+
+## Outcome
+
+- Minimum size 40 x 12 kept. The tab bar needs about 77 columns for full labels; below that it collapses inactive tabs to `[mnemonic]` (about 38 columns with the active label), so it fits 40 columns; on the Update tab the `⇄ updating` badge can clip at exactly 40 columns.
+- Every `partial`/`unbounded` row above is fixed by one of: the shell region (pinned top bar, tab bar, footer), `ZoneLayout` minimums, `ModalDialog` bounds + PgUp/PgDn, truncating/clamped text, `BoundedList`/`BoundedBlocks`/`capOlder`. The dialog registry (`shared/test-support/dialog-registry.tsx`) lists the dialogs; `update-zone.tsx`, `update-config-panels.tsx` and `routes-zone.tsx` open theirs from local state, so the matrix reaches them through the owning zone rather than forcing them open.

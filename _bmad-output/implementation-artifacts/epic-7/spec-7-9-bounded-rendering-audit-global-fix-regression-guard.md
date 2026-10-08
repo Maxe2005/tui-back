@@ -52,14 +52,14 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `epic-7/bounded-rendering-inventory-7-9.md` -- audit table of every surface (zones, panes, dialogs, DetailPane, Update boxes/log, errors, Dashboard, shared-types, command bar, `?` help, footer, top bar) -- commit first, then HALT for validation.
-- [ ] `shared/` bounds context/hook + `app-shell.tsx` + `zone-layout.tsx` -- zone bounds from `useWindowSize()` minus rendered chrome; pane bounds from ratios; absolute minimums; too-small screen with named constant -- foundation.
-- [ ] `shared/` truncating text, clamped paragraph (`maxLines`, "… +N lines"), message normalizer (+ unit tests) -- bounded text by default.
-- [ ] `bounded-list.tsx` generalized to heterogeneous blocks; stream/retry collections capped with "N older hidden" -- single scroll mechanism.
-- [ ] `modal-dialog.tsx` -- always window-bounded, scrolling body, live resize; dialog registry -- no dialog can exceed the terminal.
-- [ ] One patch commit per family (EDTs, Logs, Routes, Update, Dashboard, shared-types, shared screens), each preceded by its failing repro test.
-- [ ] Guard tests last: size-matrix render (zones + dialogs × 120×40, 80×24, 60×15, minimum × adversarial fixtures), static guard (empty allow-list), registry-coverage test.
-- [ ] Docs: EXPERIENCE.md primitive entry, AGENTS.md two-line rule.
+- [x] `epic-7/bounded-rendering-inventory-7-9.md` -- audit table of every surface (zones, panes, dialogs, DetailPane, Update boxes/log, errors, Dashboard, shared-types, command bar, `?` help, footer, top bar) -- commit first, then HALT for validation.
+- [x] `shared/` bounds context/hook + `app-shell.tsx` + `zone-layout.tsx` -- zone bounds from `useWindowSize()` minus rendered chrome; pane bounds from ratios; absolute minimums; too-small screen with named constant -- foundation.
+- [x] `shared/` truncating text, clamped paragraph (`maxLines`, "… +N lines"), message normalizer (+ unit tests) -- bounded text by default.
+- [x] `bounded-list.tsx` generalized to heterogeneous blocks; stream/retry collections capped with "N older hidden" -- single scroll mechanism.
+- [x] `modal-dialog.tsx` -- always window-bounded, scrolling body, live resize; dialog registry -- no dialog can exceed the terminal.
+- [x] One patch commit per family (EDTs, Logs, Routes, Update, Dashboard, shared-types, shared screens), each preceded by its failing repro test.
+- [x] Guard tests last: size-matrix render (zones + dialogs × 120×40, 80×24, 60×15, minimum × adversarial fixtures), static guard (empty allow-list), registry-coverage test.
+- [x] Docs: EXPERIENCE.md primitive entry, AGENTS.md two-line rule.
 
 **Acceptance Criteria:**
 - Given any matrix cell, when rendered, then no frame exceeds terminal rows or any line exceeds columns, and top bar, footer and cursor row stay visible.
@@ -68,6 +68,10 @@ context:
 - Given a terminal where nothing overflowed before, when any zone is used, then output is unchanged.
 
 ## Spec Change Log
+
+- `zones/logs/logs-zone.interaction.test.tsx`, "keeps a column's display width stable as its own vertical scroll changes" and "the grid gains a 'more below' indicator once the terminal shrinks…": the shrink step now resizes to 12 rows instead of 10, because 10 rows is below the new 40x12 minimum and now shows the too-small screen instead of the zone.
+- Rendering that deliberately changed without touching an existing test: dynamic `Text` outside `shared/` now truncates to its line (wrapping text such as the activation explanations, health labels and annotations clamps to 3 lines instead); `DetailPane`/`DimAnnotation`/`FailedResultList` clamp their text and window their rows; the footer wraps to at most 3 rows; the tab bar collapses inactive tabs to `[mnemonic]` when the full labels do not fit; `ModalDialog` is capped to the zone region, no longer shrinks under it, and scrolls its body with PgUp/PgDn.
+- `shared/components/render-to-string.ts` gained an optional size argument (defaults unchanged).
 
 ## Verification
 

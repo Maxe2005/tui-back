@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { AppShell } from '../../app-shell.js';
 import { createAppStore, type AppStore } from '../../store/app-store.js';
 import { ZONES } from '../../zones/zones.js';
+import { getZoneScreen } from '../../zones/index.js';
+import { ZONE_LAYOUTS } from '../../zones/zone-layouts.js';
 import { renderToString } from '../components/render-to-string.js';
 import { MATRIX_SIZES, frameLines } from '../test-support/matrix.js';
 
@@ -82,4 +84,52 @@ describe('size matrix: zones', () => {
       });
     }
   }
+});
+
+const OVERLAYS: Record<string, Record<string, unknown>> = {
+  help: { helpOpen: true },
+  'command bar': { commandBarOpen: true },
+  settings: { settingsScreenOpen: true },
+  reset: { resetScreenOpen: true, resetStatus: 'idle', resetError: MULTILINE },
+  registry: {
+    registryScreenOpen: true,
+    registryScanResult: {
+      candidates: Array.from({ length: 300 }, (_, i) => `/very/long/path/${'p'.repeat(100)}/repo-${i}`),
+      skipped: [],
+    },
+    registryScanError: MULTILINE,
+  },
+};
+
+const OVERLAY_TITLES: Record<string, string> = { 'command bar': 'COMMAND', settings: 'SETTINGS', registry: 'REPO REGISTRY' };
+
+describe('size matrix: overlays', () => {
+  for (const [name, state] of Object.entries(OVERLAYS)) {
+    for (const size of MATRIX_SIZES) {
+      it(`${name} over the EDTs zone at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
+        const store = adversarialStore();
+        store.getState().setActiveZone('edts');
+        store.setState(state as never);
+        const frame = frameLines(await renderToString(createElement(AppShell, { useStore: store, onQuit: () => {} }), size));
+        expect(frame.length).toBeLessThanOrEqual(size.rows);
+        for (const line of frame) {
+          expect(Array.from(line).length, line).toBeLessThanOrEqual(size.columns);
+        }
+        expect(frame[0]).toContain('tui-back');
+        expect(frame.at(-1)?.trim()).not.toBe('');
+        const title = OVERLAY_TITLES[name];
+        if (title !== undefined && size.rows >= 24) expect(frame.join('\n')).toContain(title);
+      });
+    }
+  }
+});
+
+describe('zone registries', () => {
+  it('has a screen and a layout for every zone', () => {
+    for (const zone of ZONES) {
+      expect(getZoneScreen(zone.id), zone.id).toBeDefined();
+      expect(ZONE_LAYOUTS[zone.id], zone.id).toBeDefined();
+    }
+    expect(Object.keys(ZONE_LAYOUTS).sort()).toEqual(ZONES.map((zone) => zone.id).sort());
+  });
 });
