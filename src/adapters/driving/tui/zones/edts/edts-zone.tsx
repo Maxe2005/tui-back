@@ -841,7 +841,11 @@ export function EdtsZone({
               {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
                 <StateLine kind="empty" subject="EDTs" />
               ) : null}
-              {edtsRows.map((entry, index) => (
+              <BoundedList
+                items={edtsRows}
+                chromeRows={4}
+                cursorIndex={clampedEdtsSelected}
+                renderItem={(entry, index) => (
                 <ListRow
                   key={entry.ulid}
                   label={entry.topic}
@@ -856,7 +860,8 @@ export function EdtsZone({
                   // different row.
                   active={entry.ulid === activeEdtUlid}
                 />
-              ))}
+                )}
+              />
               {!dialogOpen ? <DimAnnotation text={formatHints([['Enter', 'switch/modify'], ['Tab', 'focus']])} /> : null}
               </>
               }

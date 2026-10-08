@@ -415,6 +415,9 @@ export function createCreateWizardHandlers(deps: CreateWizardDeps) {
   return { handleCreateInput, loadPendingBranchLists, handleCancelRequest, dispatchActivationDecision };
 }
 
+// Name, Services, Branches, Activation.
+const MAX_BREADCRUMB_STEPS = 4;
+
 const BREADCRUMB_COLORS: Readonly<Record<BreadcrumbTone, string>> = {
   current: colors.accent,
   done: colors.text,
@@ -445,7 +448,7 @@ export function CreateWizardView({
     <ModalDialog title={CREATE_WIZARD_TITLE} open={true}>
       <Box flexDirection="column">
         <Box flexWrap="wrap">
-          {breadcrumb.map((item, index) => (
+          {breadcrumb.slice(0, MAX_BREADCRUMB_STEPS).map((item, index) => (
             <Text key={item.step} color={BREADCRUMB_COLORS[item.tone]} bold={item.tone === 'current'} dimColor={item.tone === 'unreachable'} wrap="truncate-end">
               {index > 0 ? ' ── ' : ''}[{item.text}]
             </Text>

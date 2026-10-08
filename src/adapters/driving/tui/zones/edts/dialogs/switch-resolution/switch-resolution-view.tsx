@@ -209,12 +209,16 @@ export function SwitchResolutionView({
         maxVisibleRows={maxVisibleRows}
         labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
-      {stashed.map((repo) => (
-        <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">
-          {'  '}
-          {repo.service} — will be stashed for {outgoing ?? 'the EDT being left'} (restored on return)
-        </Text>
-      ))}
+      <BoundedList
+        items={stashed}
+        chromeRows={maxVisibleRows + 10}
+        renderItem={(repo) => (
+          <Text key={repo.repoPath} color={colors['text-dim']} wrap="truncate-end">
+            {'  '}
+            {repo.service} — will be stashed for {outgoing ?? 'the EDT being left'} (restored on return)
+          </Text>
+        )}
+      />
       {blocked !== undefined ? (
         <Text color={colors.error} wrap="truncate-end">
           ✖ {blocked.row.repo.service} : {blocked.error}

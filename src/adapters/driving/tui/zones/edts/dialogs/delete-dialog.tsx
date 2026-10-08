@@ -20,6 +20,7 @@ import {
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
+import { BoundedList } from '../../../shared/components/bounded-list.js';
 
 export type DeleteDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
@@ -132,16 +133,21 @@ export function DeleteDialogView({ dialog }: { dialog: DeleteDialogState }) {
             {dialog.memberRows.length === 0 ? (
               <Text color={colors['text-dim']}>No members — only the EDT record will be removed.</Text>
             ) : (
-              dialog.memberRows.map((row, index) => (
-                <Box key={row.repoPath}>
-                  <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
-                  <CheckboxListItem
-                    label={row.service}
-                    state={row.disposition === 'delete' ? 'checked' : 'unchecked'}
-                    meta={formatDeleteMemberMeta(row)}
-                  />
-                </Box>
-              ))
+              <BoundedList
+                items={dialog.memberRows}
+                chromeRows={14}
+                cursorIndex={dialog.memberCursor}
+                renderItem={(row, index) => (
+                  <Box key={row.repoPath}>
+                    <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
+                    <CheckboxListItem
+                      label={row.service}
+                      state={row.disposition === 'delete' ? 'checked' : 'unchecked'}
+                      meta={formatDeleteMemberMeta(row)}
+                    />
+                  </Box>
+                )}
+              />
             )}
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Deleting…" /> : null}

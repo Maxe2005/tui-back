@@ -5,6 +5,7 @@
 // visible. Scroll state is never owned here — callers recompute it from useWindowSize().
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
+import { useRowBudget } from '../bounds/bounds-context.js';
 import { colors } from '../theme/theme.js';
 
 export function clampBoundedOffset(offset: number, maxOffset: number): number {
@@ -109,7 +110,10 @@ export type BoundedListProps<T> = {
   items: readonly T[];
   // Total row budget for this list, indicator lines included — callers derive it live from
   // useWindowSize() so it follows every resize.
-  maxVisibleRows: number;
+  maxVisibleRows?: number;
+  // Instead of a budget: the rows the caller uses around the list; the list takes the rest of
+  // its bounds region.
+  chromeRows?: number;
   // Renders one row; the returned element carries its own `key` (every existing call site
   // already keys its rows this way — e.g. `<Box key={service.path} ...>`).
   renderItem: (item: T, index: number) => ReactNode;
@@ -123,12 +127,14 @@ export type BoundedListProps<T> = {
 export function BoundedList<T>({
   items,
   maxVisibleRows,
+  chromeRows = 0,
   renderItem,
   cursorIndex,
   moreAboveLabel = 'more above',
   moreBelowLabel = 'more below',
 }: BoundedListProps<T>) {
-  const { visible, scrollOffset, hasMoreAbove, hasMoreBelow } = resolveBoundedVisibility(items, maxVisibleRows, cursorIndex);
+  const regionBudget = useRowBudget(chromeRows);
+  const { visible, scrollOffset, hasMoreAbove, hasMoreBelow } = resolveBoundedVisibility(items, maxVisibleRows ?? regionBudget, cursorIndex);
   return (
     <Box flexDirection="column">
       {hasMoreAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
@@ -197,19 +203,22 @@ export function resolveBlockWindow(
 export function BoundedBlocks({
   blocks,
   maxVisibleRows,
+  chromeRows = 0,
   cursorIndex,
   moreAboveLabel = 'more above',
   moreBelowLabel = 'more below',
 }: {
   blocks: readonly Block[];
-  maxVisibleRows: number;
+  maxVisibleRows?: number;
+  chromeRows?: number;
   cursorIndex?: number;
   moreAboveLabel?: string;
   moreBelowLabel?: string;
 }) {
+  const regionBudget = useRowBudget(chromeRows);
   const { start, end, hasAbove, hasBelow } = resolveBlockWindow(
     blocks.map((block) => block.rows),
-    maxVisibleRows,
+    maxVisibleRows ?? regionBudget,
     cursorIndex,
   );
   return (

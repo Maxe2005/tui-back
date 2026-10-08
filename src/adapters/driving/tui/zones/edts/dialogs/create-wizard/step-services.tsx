@@ -14,6 +14,7 @@ import {
 import { missingSeedMembers } from './wizard.logic.js';
 import { StateLine } from '../../../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';
+import { BoundedList } from '../../../../shared/components/bounded-list.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,
@@ -66,12 +67,19 @@ export function ServicesStepView({
       {candidateState === 'error' ? <StateLine kind="error" subject="services" /> : null}
       {candidateState === 'empty' ? <StateLine kind="empty" subject="registered services" text="No registered services available." /> : null}
       {candidateState === 'ready'
-        ? candidates.map((candidate, index) => (
-            <Box key={candidate.path}>
-              <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
-              <CheckboxListItem label={candidate.service} state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'} />
-            </Box>
-          ))
+        ? (
+          <BoundedList
+            items={candidates}
+            chromeRows={14}
+            cursorIndex={dialog.memberCursor}
+            renderItem={(candidate, index) => (
+              <Box key={candidate.path}>
+                <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
+                <CheckboxListItem label={candidate.service} state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'} />
+              </Box>
+            )}
+          />
+          )
         : null}
       {missing.length > 0 ? (
         <Text color={colors['text-dim']} wrap="truncate-end">Source EDT services not found (ignored): {missing.join(', ')}</Text>
