@@ -92,8 +92,8 @@ export function ZoneTabBar({
               <Text bold={state.bold} strikethrough={state.strikethrough} color={state.labelColor} wrap="truncate-end">
                 {collapsed ? `[${zone.mnemonic}]` : `[${zone.mnemonic}] ${zone.label}`}
               </Text>
-              {state.badge && !collapsed ? (
-                <Text color={state.badge.color}> {state.badge.text}</Text>
+              {state.badge ? (
+                <Text color={state.badge.color}>{collapsed ? Array.from(state.badge.text)[0] : ` ${state.badge.text}`}</Text>
               ) : null}
             </Box>
           );
