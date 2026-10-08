@@ -310,6 +310,11 @@ modules:
 Le dépôt source, lui, déclare `shared-types-source: {}` (ou surcharge
 `publishCommand` / `packageName`) — il peut ne pas avoir de `container`.
 
+L'onglet `shared-types` est piloté par `shared-types-source` uniquement, comme l'onglet Routes
+l'est par `route-explorer` : il est masqué tant qu'aucun dépôt enregistré ne déclare
+`shared-types-source`, grisé si le service source n'est pas membre de l'EDT actif, et actif
+sinon. `shared-types-consumer` ne dépend que de lui et n'influence jamais l'onglet.
+
 ## Exemple minimal
 
 ```yaml

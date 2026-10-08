@@ -59,7 +59,7 @@ The skill walks the repo and extracts values for each manifest field:
 
 5. **`modules`**: The manifest's `modules` record keys must be members of the compiled-in `knownModuleIds` set (`route-explorer`, `shared-types-source`, `shared-types-consumer`). Unknown ids are recorded in a `.memlog.md` note but do not prevent manifest generation; the generated manifest will only include known module ids.
    - `shared-types-source`: emit when `package.json` `name` is the shared-types package (default `@ianord/shared-types`). Parameters (all optional, defaults shown, unknown ones rejected): `publishCommand: "npm run v"`, `packageName: "@ianord/shared-types"`. Emit `{}` unless the repo's publish script or package name differs.
-   - `shared-types-consumer`: emit when `dependencies` or `devDependencies` in `package.json` declare the shared-types package. Parameters (all optional, defaults shown, unknown ones rejected): `dependency: "@ianord/shared-types"`, `packageJsonPath: "package.json"`. Emit `{}` unless the dependency name or the `package.json` location differs (e.g. `api/package.json`).
+   - `shared-types-consumer`: emit when `dependencies` or `devDependencies` in `package.json` declare the shared-types package. Parameters (all optional, defaults shown, unknown ones rejected): `dependency: "@ianord/shared-types"`, `packageJsonPath: "package.json"`. Emit `{}` unless the dependency name or the `package.json` location differs (e.g. `api/package.json`). Note: the Shared types tab is driven by `shared-types-source` alone; a consumer without any registered source never shows the tab.
    - A repo is never both source and consumer in practice; if detection is ambiguous, emit neither and log it in `.memlog.md`.
 
 ## Output
