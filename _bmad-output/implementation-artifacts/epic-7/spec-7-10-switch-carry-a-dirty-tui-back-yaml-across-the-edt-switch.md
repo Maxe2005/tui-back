@@ -2,7 +2,7 @@
 title: 'Story 7.10: Switch — carry a dirty .tui-back.yaml across the EDT switch'
 type: 'feature'
 created: '2026-10-08'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '574f40dcc811b1949c799e6b89970371d5087b49'
 review_loop_iteration: 0
 context:
@@ -56,14 +56,14 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `ports/manifest-carry.ts`, `adapters/driven/manifest/carry.ts` (+ tests) -- capture/restore with safety copy -- file I/O behind a port.
-- [ ] `ports/git.ts` + git adapter (+ real-git tests) -- `excludePaths` on the two read methods -- pre-flight ignores the manifest.
-- [ ] `core/edt/manifest-carry.ts` (+ tests with fake ports: ordering, rollback, restore failure) -- carry helper.
-- [ ] `core/edt/switch.ts` (+ tests per matrix row) -- wire helper, pre-flight exclusion, `manifestCarried` flag.
-- [ ] `core/edt/activate.ts` (+ tests) -- same rule on first activation.
-- [ ] CLI wiring and test fakes -- typecheck stays green.
-- [ ] Switch-resolution dialog (+ tests) -- "conserved" line.
-- [ ] Real-git integration test: tracked-modified, untracked, deleted, tracked-and-different-on-target, absent-on-target, with other dirty files, adopt, discard.
+- [x] `ports/manifest-carry.ts`, `adapters/driven/manifest/carry.ts` (+ tests) -- capture/restore with safety copy -- file I/O behind a port.
+- [x] `ports/git.ts` + git adapter (+ real-git tests) -- `excludePaths` on the two read methods -- pre-flight ignores the manifest.
+- [x] `core/edt/manifest-carry.ts` (+ tests with fake ports: ordering, rollback, restore failure) -- carry helper.
+- [x] `core/edt/switch.ts` (+ tests per matrix row) -- wire helper, pre-flight exclusion, `manifestCarried` flag.
+- [x] `core/edt/activate.ts` (+ tests) -- same rule on first activation.
+- [x] CLI wiring and test fakes -- typecheck stays green.
+- [x] Switch-resolution dialog (+ tests) -- "conserved" line.
+- [x] Real-git integration test: tracked-modified, untracked, deleted, tracked-and-different-on-target, absent-on-target, with other dirty files, adopt, discard.
 
 **Acceptance Criteria:**
 - Given a dirty manifest, when any switch completes, then the working-tree file is byte-identical (or still absent), whatever the target branch holds.

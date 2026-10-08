@@ -1483,6 +1483,20 @@ describe('switchActiveEdt — dirty .tui-back.yaml is carried over', () => {
     expect(callOrder(git.discardAll)).toBeLessThan(callOrder(manifestCarry.restore));
   });
 
+  it('adopts the other dirty work into the outgoing EDT while the manifest stays out of the stash', async () => {
+    const git = gitWithDirty({ '/repo/b': ['.tui-back.yaml', 'x.txt'] });
+    const manifestCarry = fakeManifestCarry();
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
+    const onDirtyReposBeforeSwitch = vi.fn(async () => ({ kind: 'proceed' as const, resolutions: { '/repo/b': { kind: 'adopt' as const, branch: 'feat/b-out' } } }));
+
+    const result = await switchActiveEdt(makeParams({ git, manifestCarry, edtRegistry, onDirtyReposBeforeSwitch }));
+
+    expect(result.ok && result.data.results).toContainEqual(expect.objectContaining({ service: 'svc-b', outcome: 'adopted' }));
+    expect(callOrder(manifestCarry.capture)).toBeLessThan(callOrder(git.stashSave, (args) => args[0] === '/repo/b'));
+    expect(callOrder(git.checkout, (args) => args[0] === '/repo/b')).toBeLessThan(callOrder(manifestCarry.restore));
+    expect(calls(manifestCarry.restore)).toHaveLength(1);
+  });
+
   it('rewrites the manifest and reports the checkout failure when the checkout fails', async () => {
     const git = gitWithDirty(
       { '/repo/b': ['.tui-back.yaml'] },
