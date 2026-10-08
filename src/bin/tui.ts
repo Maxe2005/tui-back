@@ -35,7 +35,7 @@ import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
 import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
 import { err, ok } from "../core/result.js";
-import type { DependencyConsumerConfig } from "../core/shared-types/list-consumers.js";
+import type { DependencyConsumerConfig, SourceConfig } from "../core/shared-types/list-consumers.js";
 
 if (!process.stdin.isTTY) {
   process.stderr.write("tui-back-tui requires an interactive terminal\n");
@@ -129,22 +129,43 @@ const globalDbFile = resolveGlobalDbFile(xdg);
 const savedRequests = createSavedRequestPort(globalDbFile);
 // The shared-types zone: the consuming module's SharedTypesPort and manifest-parameter schema,
 // resolved out of the registry by module id (AD-5) — core only ever sees the port and a parser.
-const [, SHARED_TYPES_CONSUMER_ID] = SHARED_TYPES_MODULE_IDS;
+const [SHARED_TYPES_SOURCE_ID, SHARED_TYPES_CONSUMER_ID] = SHARED_TYPES_MODULE_IDS;
 const sharedTypesConsumer = resolveModule(moduleRegistry, SHARED_TYPES_CONSUMER_ID);
+const sharedTypesSource = resolveModule(moduleRegistry, SHARED_TYPES_SOURCE_ID);
 // A missing or wrong-kind module leaves the zone degraded (explicit error) instead of aborting.
+// Source wiring is independent of consumer presence so a working source without a
+// consumer still leaves publish available.
+const sharedTypesPort = (
+  sharedTypesConsumer?.kind === "shared-types" ? sharedTypesConsumer.shared : undefined
+) ?? (sharedTypesSource?.kind === "shared-types" ? sharedTypesSource.shared : undefined);
 const sharedTypes =
-  sharedTypesConsumer?.kind === "shared-types"
-    ? {
-        port: sharedTypesConsumer.shared,
-        consumerModuleId: SHARED_TYPES_CONSUMER_ID,
-        parseConsumerConfig: (raw: Record<string, unknown>) => {
-          const parsed = sharedTypesConsumer.configSchema.safeParse(raw);
-          return parsed.success
-            ? ok(parsed.data as DependencyConsumerConfig)
-            : err("invalid-module-config", `${SHARED_TYPES_CONSUMER_ID}: ${parsed.error.message}`);
-        },
-      }
-    : undefined;
+  sharedTypesPort === undefined
+    ? undefined
+    : {
+        port: sharedTypesPort,
+        ...(sharedTypesConsumer?.kind === "shared-types"
+          ? {
+              consumerModuleId: SHARED_TYPES_CONSUMER_ID,
+              parseConsumerConfig: (raw: Record<string, unknown>) => {
+                const parsed = sharedTypesConsumer.configSchema.safeParse(raw);
+                return parsed.success
+                  ? ok(parsed.data as DependencyConsumerConfig)
+                  : err("invalid-module-config", `${SHARED_TYPES_CONSUMER_ID}: ${parsed.error.message}`);
+              },
+            }
+          : {}),
+        ...(sharedTypesSource?.kind === "shared-types"
+          ? {
+              sourceModuleId: SHARED_TYPES_SOURCE_ID,
+              parseSourceConfig: (raw: Record<string, unknown>) => {
+                const parsed = sharedTypesSource.configSchema.safeParse(raw);
+                return parsed.success
+                  ? ok(parsed.data as SourceConfig)
+                  : err("invalid-module-config", `${SHARED_TYPES_SOURCE_ID}: ${parsed.error.message}`);
+              },
+            }
+          : {}),
+      };
 const store = createAppStore({
   registry,
   manifest,

@@ -552,10 +552,19 @@ it('shouldQuit returns true for q', () => {
         sharedTypesConsumersStatus: 'idle',
         sharedTypesConsumersError: null,
         sharedTypesRun: { status: 'idle', version: '', options: { install: false, cleanRestart: false, commit: false }, blocked: null, results: [], live: null },
+        sharedTypesSources: [],
+        sharedTypesSourceIssues: [],
+        sharedTypesSourcesStatus: 'idle',
+        sharedTypesSourcesError: null,
+        sharedTypesPublish: { status: 'idle', version: null, output: null, error: null, notice: null },
         loadSharedTypesConsumers: async () => {},
         runSharedTypesPropagation: async () => {},
         retrySharedTypesService: async () => {},
         resetSharedTypesRun: () => {},
+        loadSharedTypesSource: async () => {},
+        runSharedTypesPublish: async () => {},
+        retrySharedTypesPublish: async () => {},
+        resetSharedTypesPublish: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

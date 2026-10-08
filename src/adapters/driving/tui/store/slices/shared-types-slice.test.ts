@@ -20,6 +20,7 @@ function makeDeps(overrides: { published?: boolean; installFails?: boolean } = {
   };
   const port = {
     readVersion: vi.fn(),
+    readOwnVersion: vi.fn(async () => ok('0.1.0')),
     writeVersionLine: vi.fn(async (path: string) => {
       written.add(path.replace('/package.json', ''));
       return ok(undefined);

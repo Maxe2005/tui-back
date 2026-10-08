@@ -49,6 +49,7 @@ function fakes(overrides: { git?: Partial<GitPort>; shared?: Partial<SharedTypes
   } as unknown as GitPort;
   const shared: SharedTypesPort = {
     readVersion: vi.fn(async () => ok('0.1.0')),
+    readOwnVersion: vi.fn(async () => ok('0.1.0')),
     writeVersionLine: vi.fn(async (path: string) => {
       written.add(path.replace('/package.json', ''));
       order.push(`write:${path}`);

@@ -106,6 +106,18 @@ export function createSharedTypesAdapter(options: SharedTypesOptions = {}): Shar
       return ok((loaded.data.json[section] as Record<string, string>)[dependency] as string);
     },
 
+    async readOwnVersion(packageJsonPath) {
+      const loaded = await loadPackage(fs, packageJsonPath);
+      if (!loaded.ok) {
+        return loaded;
+      }
+      const version = (loaded.data.json as Record<string, unknown>)['version'];
+      if (typeof version !== 'string' || version.trim() === '') {
+        return unreadable(packageJsonPath, new Error('missing or blank "version" field'));
+      }
+      return ok(version.trim());
+    },
+
     async writeVersionLine(packageJsonPath, dependency, version) {
       const loaded = await loadPackage(fs, packageJsonPath);
       if (!loaded.ok) {

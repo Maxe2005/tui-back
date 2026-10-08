@@ -10,6 +10,8 @@ import type { Result } from '../result.js';
 export interface SharedTypesPort {
   // The declared version string, verbatim (it may be a range such as `^0.1.3`).
   readVersion(packageJsonPath: string, dependency: string): Promise<Result<string>>;
+  // The source repo's own `version` field, trimmed (never a range).
+  readOwnVersion(packageJsonPath: string): Promise<Result<string>>;
   // Targeted text edit of the dependency's version line; every other byte is preserved.
   writeVersionLine(packageJsonPath: string, dependency: string, version: string): Promise<Result<void>>;
   // true when the registry has the version, false when it reports none; never throws.
