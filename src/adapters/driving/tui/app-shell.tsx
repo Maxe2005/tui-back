@@ -162,6 +162,7 @@ export function AppShell({
   const loadEdts = useStore((state) => state.loadEdts);
   const zoneEvents = useStore((state) => state.zoneEvents);
   const updateRunning = useStore((state) => state.updateStatus === 'running');
+  const updateIncidents = useStore((state) => state.incidents.length);
   const setActiveZone = useStore((state) => state.setActiveZone);
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
@@ -389,7 +390,7 @@ export function AppShell({
       ) : null}
       <Box flexDirection="column" height={rows} overflow="hidden" display={tooSmall ? 'none' : 'flex'}>
         <TopBar activeEdt={activeEdt} edts={edts} />
-        <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} />
+        <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} updateIncidents={updateIncidents} />
         <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
           <BoundsProvider columns={columns} rows={zoneRows}>
             <ZoneScreen useStore={useStore} />

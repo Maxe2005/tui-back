@@ -23,8 +23,10 @@ import { computeLineRowCount, sliceVisibleWindow } from '../logs/logs-zone.logic
 // raw health — a container can report `up` immediately after a failed migration).
 // 'no-container' is the TUI-side state for a service whose manifest declares no Docker
 // runtime — dim, never the down treatment.
-export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'error' | 'no-container';
+export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'awaiting' | 'error' | 'no-container';
 
+// A service paused on a pending incident ('awaiting') outranks everything: it is
+// the one state that needs the developer, not the run.
 // Precedence: a run currently targeting this service wins ('updating', or 'migrating' during the
 // live migrate phase — outranking even a stale 'error' from a previous run); otherwise a
 // standalone clean restart in flight wins ('restarting'); otherwise a failed last outcome
@@ -37,7 +39,11 @@ export function deriveUpdateServiceStatus(
   isTargetedByRunningRun: boolean,
   isRestarting = false,
   livePhase?: UpdatePhase,
+  isAwaiting = false,
 ): UpdateServiceStatus {
+  if (isAwaiting) {
+    return 'awaiting';
+  }
   if (isTargetedByRunningRun) {
     // The list glyph stays `updating` for every live step except the migrate phase, which
     // produces `migrating`.
@@ -477,7 +483,9 @@ export function formatServiceUpdateContext(source: string | undefined, target: s
   return `${source ?? 'shared branch'} → ${target ?? '?'}${edt}`;
 }
 export type UpdateFooterInput = {
+  // The incident popup is open on a guided menu / on its incident list.
   blocker: boolean;
+  incidentList?: boolean;
   // The pre-run config screen's own context when it is open (see updateConfigFooterContext).
   config: FooterContextId | null;
   servicePick: boolean;
@@ -493,6 +501,9 @@ export type UpdateFooterInput = {
 export function updateFooterContext(input: UpdateFooterInput): FooterContextId | null {
   if (input.blocker) {
     return 'menu';
+  }
+  if (input.incidentList === true) {
+    return 'update-incidents';
   }
   if (input.config !== null) {
     return input.config;

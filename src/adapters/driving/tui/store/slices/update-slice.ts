@@ -96,7 +96,7 @@ export type UpdateSlice = {
   // four-choice modal menu over it, and this dispatch carries the developer's choice back
   // to the waiting run. Every git write still goes through the core use-case (AD-1) — the
   // driving side owns only menu rendering and the editor process.
-  // Story 3.18: every service waiting on the developer is one incident in the run's queue
+  // every service waiting on the developer is one incident in the run's queue
   // (oldest first); the queue replaces the single blocking blocker. Resolving one resumes only
   // that service. `incidentPopupOpen` is the popup's visibility (Esc closes it without
   // resolving anything), `incidentToast` names a late incident without stealing focus.
@@ -296,7 +296,7 @@ export interface ServiceRunSnapshot {
 }
 
 // One service waiting on the developer. `stillBlocked` marks an incident re-raised after a
-// choice whose re-verification (Story 3.4) did not settle it, with the reason core reported.
+// choice whose re-verification did not settle it, with the reason core reported.
 export interface UpdateIncident {
   id: string;
   blocker: UpdateBlocker;

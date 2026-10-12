@@ -192,6 +192,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     footer: { key: 'f', verb: 'full report', zones: ['update'] },
   },
   {
+    keys: 'i (Update)',
+    description: 'Update: reopen the incident queue of the running update (also `:update-incidents`)',
+    footer: { key: 'i', verb: 'incidents', zones: ['update'] },
+  },
+  {
     keys: 'Enter (Update config)',
     description: 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box',
   },

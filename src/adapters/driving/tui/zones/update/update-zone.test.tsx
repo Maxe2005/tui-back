@@ -3,6 +3,7 @@
 // offer, running spinner, done summary, top-level error). The useInput callback itself is
 // never invoked here — the shared harness's fake stdin never emits data (the edts-zone
 // convention) — so keystroke behavior is verified through the pure functions directly.
+import { UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
@@ -723,12 +724,13 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
+      incidentPopupOpen: true,
       incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
-    expect(output).toContain(UPDATE_BLOCKER_TITLE);
+    expect(output).toContain(UPDATE_INCIDENTS_TITLE);
     expect(output).toContain('svc-a');
     expect(output).toContain('/repo/a');
     for (const item of UPDATE_BLOCKER_MENU_ITEMS) {
@@ -740,6 +742,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
+      incidentPopupOpen: true,
       incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' }, raisedAt: 0 }],
     });
 
@@ -753,6 +756,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
+      incidentPopupOpen: true,
       incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }, raisedAt: 0 }],
     });
 
@@ -767,11 +771,16 @@ describe('UpdateZone rendering', () => {
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
-    expect(output).not.toContain(UPDATE_BLOCKER_TITLE);
+    expect(output).not.toContain(UPDATE_INCIDENTS_TITLE);
   });
 });
 
 describe('deriveUpdateServiceStatus', () => {
+  it('a service paused on an incident is awaiting, outranking updating', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging', true)).toBe('awaiting');
+    expect(deriveUpdateServiceStatus('down', 'failed', false, false, undefined, true)).toBe('awaiting');
+  });
+
   it('a run currently targeting the service always wins, regardless of health or a stale failed outcome', () => {
     expect(deriveUpdateServiceStatus('down', 'failed', true)).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true)).toBe('updating');

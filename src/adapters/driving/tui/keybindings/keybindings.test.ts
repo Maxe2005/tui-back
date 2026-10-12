@@ -66,6 +66,7 @@ const EXPECTED = [
   ['R (Logs)', "Logs: restart the focused pane's service"],
   ['m / a / p (Update)', 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service'],
   ['f (Update)', 'Update: open the full-screen report of the highlighted service (Enter on a failed recap row too)'],
+  ['i (Update)', 'Update: reopen the incident queue of the running update (also `:update-incidents`)'],
   ['Enter (Update config)', 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box'],
   ['R (load error)', 'EDTs, Update and Logs: retry a failed list load'],
   ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane'],

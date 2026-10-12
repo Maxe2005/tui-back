@@ -23,7 +23,7 @@ export interface RunPoolOptions<T, R> {
   // Items sharing a key are never in flight together (e.g. the resolved repoPath).
   keyOf?: (item: T) => string;
   // Items run stage by stage in ascending order; a stage starts once the previous one has
-  // fully finished (Story 4.4 runs `shared-types` alone first). Default: one stage.
+  // fully finished (a later story runs `shared-types` alone first). Default: one stage.
   stageOf?: (item: T) => number;
   // The row for an item that never started because the run was cancelled.
   onCancelled: (item: T) => R | undefined | Promise<R | undefined>;
