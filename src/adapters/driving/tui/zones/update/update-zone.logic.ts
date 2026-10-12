@@ -312,7 +312,7 @@ export function formatLastUpdateRecap(
 // `handled` tells the dispatcher the key is consumed.
 export function resolveRecapToggle(
   recapActive: boolean,
-  key: { escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
+  key: { ctrl?: boolean; meta?: boolean; escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
 ): { recapActive: boolean; handled: boolean } {
   if (key.escape === true) {
     return { recapActive: true, handled: !recapActive };
@@ -373,6 +373,25 @@ export function finalizeServiceSteps(current: ServiceStepStates | undefined, res
     }
   }
   return next;
+}
+
+// Step states for a settled result that has no live-step snapshot (e.g. only the recap row
+// survives): an updated service finished everything, a skipped one ran nothing, and a failed one
+// failed the first step core's run detail gives no evidence of completing.
+export function inferSettledSteps(result: GroupUpdateRepoResult): ServiceStepStates {
+  if (result.outcome === 'updated') {
+    return { merge: 'done', migration: 'done', restart: 'done' };
+  }
+  if (result.outcome === 'skipped') {
+    return { merge: 'skipped', migration: 'skipped', restart: 'skipped' };
+  }
+  if (result.run?.merge === undefined) {
+    return { merge: 'failed', migration: 'skipped', restart: 'skipped' };
+  }
+  if (result.run.migrations?.kind === 'none') {
+    return { merge: 'done', migration: 'done', restart: 'failed' };
+  }
+  return { merge: 'done', migration: 'failed', restart: 'skipped' };
 }
 
 export const UPDATE_STEP_LABELS: Record<UpdateStepKey, string> = {
@@ -524,8 +543,20 @@ function reportText(text: string): string {
   return text === '' ? ' ' : text;
 }
 
-function splitReportText(text: string): string[] {
-  return text.replace(/\r/g, '').replace(/\t/g, '  ').split('\n').map(reportText);
+// ANSI escape sequences (colourised tool output) and the remaining C0 control characters would
+// corrupt the frame; tabs become spaces, and a bare CR or CRLF is a line break.
+const ANSI_SEQUENCE = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/g;
+// eslint-disable-next-line no-control-regex
+const C0_CONTROLS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+
+export function splitReportText(text: string): string[] {
+  return text
+    .replace(ANSI_SEQUENCE, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(C0_CONTROLS, '')
+    .split('\n')
+    .map(reportText);
 }
 
 export function buildServiceReport(input: ServiceReportInput): ServiceReport {
@@ -543,7 +574,9 @@ export function buildServiceReport(input: ServiceReportInput): ServiceReport {
   if (input.context !== null) {
     push('context', input.context);
   }
-  for (const view of buildServiceStepViews(input.steps ?? PENDING_STEPS, input.result, { full: true })) {
+  // Without a run there are no steps to list — only the issue log.
+  const views = input.mode === 'never' ? [] : buildServiceStepViews(input.steps ?? PENDING_STEPS, input.result, { full: true });
+  for (const view of views) {
     push('dim', ' ');
     const failed = view.state === 'failed';
     if (failed) {
@@ -611,8 +644,9 @@ export type ReportKeyAction = 'close' | 'up' | 'down' | 'page-up' | 'page-down' 
 
 export function resolveReportKey(
   input: string,
-  key: { escape?: boolean; upArrow?: boolean; downArrow?: boolean; pageUp?: boolean; pageDown?: boolean; home?: boolean; end?: boolean },
+  key: { ctrl?: boolean; meta?: boolean; escape?: boolean; upArrow?: boolean; downArrow?: boolean; pageUp?: boolean; pageDown?: boolean; home?: boolean; end?: boolean },
 ): ReportKeyAction | null {
+  if (key.ctrl === true || key.meta === true) return null;
   if (key.escape === true) return 'close';
   if (key.upArrow === true) return 'up';
   if (key.downArrow === true) return 'down';
@@ -621,8 +655,8 @@ export function resolveReportKey(
   if (key.home === true) return 'top';
   if (key.end === true) return 'bottom';
   if (input === 'w' || input === 'W') return 'toggle-wrap';
-  if (input === 'n') return 'next-failed';
-  if (input === 'p') return 'prev-failed';
+  if (input === 'n' || input === 'N') return 'next-failed';
+  if (input === 'p' || input === 'P') return 'prev-failed';
   return null;
 }
 

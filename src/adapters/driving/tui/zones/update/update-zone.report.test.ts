@@ -10,6 +10,7 @@ import {
   reportMaxOffset,
   reportWindow,
   resolveReportKey,
+  splitReportText,
   type ServiceReportInput,
 } from './update-zone.logic.js';
 
@@ -76,6 +77,14 @@ describe('buildServiceReport', () => {
     expect(report.lines.at(-1)?.text).toBe('No update has run for this service yet.');
   });
 
+  it('shows only the issue log, no pending steps, when there is no run but there are issues', () => {
+    const report = buildServiceReport({ ...base, mode: 'never', steps: undefined, result: undefined, context: null, issues: [{ kind: 'merge-conflict', detail: 'boom', resolved: false }] });
+    const texts = report.lines.map((line) => line.text);
+    expect(texts.some((text) => text.includes('waiting'))).toBe(false);
+    expect(texts).toContain('Issues (1)');
+    expect(report.failedLines).toEqual([]);
+  });
+
   it('shows live steps as in progress', () => {
     const report = buildServiceReport({ ...base, mode: 'live', steps: { merge: 'running', migration: 'pending', restart: 'pending' }, result: undefined, context: null });
     expect(report.lines[0]?.text).toContain('UPDATE IN PROGRESS');
@@ -137,5 +146,18 @@ describe('resolveReportKey', () => {
     expect(resolveReportKey('n', {})).toBe('next-failed');
     expect(resolveReportKey('p', {})).toBe('prev-failed');
     expect(resolveReportKey('x', {})).toBeNull();
+    expect(resolveReportKey('N', {})).toBe('next-failed');
+    expect(resolveReportKey('P', {})).toBe('prev-failed');
+    expect(resolveReportKey('n', { ctrl: true })).toBeNull();
+    expect(resolveReportKey('w', { meta: true })).toBeNull();
+    expect(resolveReportKey('', { escape: true, ctrl: true })).toBeNull();
+  });
+});
+
+describe('splitReportText', () => {
+  it('strips ANSI and control characters, expands tabs and splits on bare CR', () => {
+    expect(splitReportText('\u001b[31mred\u001b[0m\tx\u0007')).toEqual(['red  x']);
+    expect(splitReportText('a\rb\r\nc\nd')).toEqual(['a', 'b', 'c', 'd']);
+    expect(splitReportText('')).toEqual([' ']);
   });
 });
