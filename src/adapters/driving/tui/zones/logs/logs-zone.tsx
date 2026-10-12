@@ -43,7 +43,6 @@ import {
   cycleLogsPaneFocus,
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
-  DEFAULT_VISIBILITY_FLAGS,
   logsFooterContext,
   logsLegendHints,
   filterHistoryKeyString,
@@ -81,7 +80,6 @@ import {
   type FilterHistoryKey,
   type LogFilterSpec,
   type LogsPaneFocus,
-  type VisibilityFlags,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
@@ -179,16 +177,21 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [edtCursor, setEdtCursor] = useState(0);
   const [otherCursor, setOtherCursor] = useState(0);
   const [subFocus, setSubFocus] = useState(0);
-  const [visibility, setVisibility] = useState<VisibilityFlags>(DEFAULT_VISIBILITY_FLAGS);
-  // Wrap/truncate is per pane (keyed by repoPath), so 'w' targets just the sub-focused/fullscreen
-  // pane, with Shift+W as the explicit "apply to every open pane" (see isWrapAllLogsKey).
-  const [paneWrap, setPaneWrap] = useState<Record<string, boolean>>({});
-  // The global filter every pane is engaged with by default, the per-pane engagement flags ('i'
-  // opts a single pane out), and each pane's own filter ('f'). Ephemeral UI state — never
-  // persisted.
-  const [globalFilter, setGlobalFilter] = useState<LogFilterSpec>(DEFAULT_LOG_FILTER);
-  const [paneFilterEngaged, setPaneFilterEngaged] = useState<Record<string, boolean>>({});
-  const [paneFilters, setPaneFilters] = useState<Record<string, LogFilterSpec>>({});
+  // Display settings live in the store (session-only) so they survive a tab switch: the t/o/p
+  // visibility flags and the global filter are global, wrap / 'i' engagement / own filter are
+  // per pane (keyed by repoPath) and dropped by the store when the service is deselected.
+  // Wrap/truncate is per pane, so 'w' targets just the sub-focused/fullscreen pane, with
+  // Shift+W as the explicit "apply to every open pane" (see isWrapAllLogsKey).
+  const visibility = useStore((state) => state.logsVisibility);
+  const setVisibility = useStore((state) => state.setLogsVisibility);
+  const paneWrap = useStore((state) => state.logsPaneWrap);
+  const setPaneWrap = useStore((state) => state.setLogsPaneWrap);
+  const globalFilter = useStore((state) => state.logsGlobalFilter);
+  const setGlobalFilter = useStore((state) => state.setLogsGlobalFilter);
+  const paneFilterEngaged = useStore((state) => state.logsPaneFilterEngaged);
+  const setPaneFilterEngaged = useStore((state) => state.setLogsPaneFilterEngaged);
+  const paneFilters = useStore((state) => state.logsPaneFilters);
+  const setPaneFilters = useStore((state) => state.setLogsPaneFilters);
   const [filterEditor, setFilterEditor] = useState<FilterEditorState | null>(null);
   // The history grid browser's cursor/scroll — non-null exactly while the grid is open (`↓` on an
   // untouched draft). Separate from FilterEditorState since it only exists while the editor does.

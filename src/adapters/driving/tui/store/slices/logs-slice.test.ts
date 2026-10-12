@@ -396,3 +396,52 @@ describe('logs slice: listed-row health polling', () => {
     store.getState().stopLogsListedHealthPolling();
   });
 });
+
+describe('logs display settings (session-only)', () => {
+  const spec = { mode: 'text' as const, query: 'boom', level: null };
+
+  function seed() {
+    const store = createAppStore();
+    const s = store.getState();
+    s.toggleLogsEdtSelection('/repo/api');
+    s.toggleLogsEdtSelection('/repo/web');
+    s.setLogsVisibility((current) => ({ ...current, showTimestamps: false }));
+    s.setLogsGlobalFilter(spec);
+    s.setLogsPaneWrap(() => ({ '/repo/api': true, '/repo/web': true }));
+    s.setLogsPaneFilterEngaged(() => ({ '/repo/api': false }));
+    s.setLogsPaneFilters(() => ({ '/repo/api': spec, '/repo/web': spec }));
+    return store;
+  }
+
+  it('deselecting a service drops its own settings but keeps the global ones and other services', () => {
+    const store = seed();
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    const state = store.getState();
+    expect(state.logsPaneWrap).toEqual({ '/repo/web': true });
+    expect(state.logsPaneFilterEngaged).toEqual({});
+    expect(state.logsPaneFilters).toEqual({ '/repo/web': spec });
+    expect(state.logsVisibility.showTimestamps).toBe(false);
+    expect(state.logsGlobalFilter).toEqual(spec);
+  });
+
+  it('deselect-all and select-all drop the settings of every service that leaves the selection', () => {
+    const store = seed();
+    store.getState().selectAllLogsEdtServices(['/repo/web']);
+    expect(Object.keys(store.getState().logsPaneFilters)).toEqual(['/repo/web']);
+    store.getState().deselectAllLogsEdtServices();
+    expect(store.getState().logsPaneFilters).toEqual({});
+    expect(store.getState().logsPaneWrap).toEqual({});
+    expect(store.getState().logsVisibility.showTimestamps).toBe(false);
+  });
+
+  it('closing an ad hoc fullscreen preview of an unselected service drops its settings', () => {
+    const store = seed();
+    store.getState().setLogsPaneWrap((current) => ({ ...current, '/repo/lib': true }));
+    store.getState().openLogsFullscreen('/repo/lib', 'lib');
+    store.getState().closeLogsFullscreen();
+    expect(store.getState().logsPaneWrap['/repo/lib']).toBeUndefined();
+    store.getState().openLogsFullscreen('/repo/web', 'web');
+    store.getState().closeLogsFullscreen();
+    expect(store.getState().logsPaneWrap['/repo/web']).toBe(true);
+  });
+});

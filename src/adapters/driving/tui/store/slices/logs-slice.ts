@@ -9,10 +9,14 @@ import { clearLogs, getServiceHealth, loadOlderLogs, restartService, subscribeLo
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 import {
+  DEFAULT_LOG_FILTER,
+  DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
   pushFilterHistoryEntry,
   resolvePostLoadScrollOffset,
   type FilterHistoryKey,
+  type LogFilterSpec,
+  type VisibilityFlags,
 } from '../../zones/logs/logs-zone.logic.js';
 
 export type LogsPaneErrorState = { code: string; message: string } | null;
@@ -35,6 +39,20 @@ export type LogsPaneData = {
   // loadOlderLogsPane's own successful prepend so the viewport doesn't visually jump.
   scrollOffset: number;
 };
+
+// Drops every per-service display setting (wrap, own filter, global-filter engagement) for the
+// given repoPaths — what deselecting a service resets, so re-selecting it starts from the
+// defaults. The global settings (visibility flags, global filter) are never touched here.
+function withoutPaneSettings(state: AppState, repoPaths: readonly string[]): Partial<AppState> {
+  const drop = new Set(repoPaths);
+  const omit = <T>(record: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([path]) => !drop.has(path)));
+  return {
+    logsPaneWrap: omit(state.logsPaneWrap),
+    logsPaneFilterEngaged: omit(state.logsPaneFilterEngaged),
+    logsPaneFilters: omit(state.logsPaneFilters),
+  };
+}
 
 function emptyPane(repoPath: string, service: string): LogsPaneData {
   return { repoPath, service, lines: [], streamError: null, noMoreHistory: false, scrollOffset: 0, health: 'down', restarting: false };
@@ -64,6 +82,21 @@ export type LogsSlice = {
   // fullscreen target). A key with no entry yet (subscribe still in flight) is treated as an
   // empty/loading pane by the zone.
   logsPanes: Record<string, LogsPaneData>;
+  // Display settings of the Logs tab, kept in the store (in memory only, never written to
+  // disk) so they survive switching tabs and coming back, but not closing the tool.
+  // Global ones: the t/o/p visibility flags and the global filter. Per-service ones, keyed by
+  // repoPath: wrap, global-filter engagement, own filter — all dropped when the service is
+  // deselected, so re-selecting it starts fresh while the global ones stay applied.
+  logsVisibility: VisibilityFlags;
+  logsGlobalFilter: LogFilterSpec;
+  logsPaneWrap: Record<string, boolean>;
+  logsPaneFilterEngaged: Record<string, boolean>;
+  logsPaneFilters: Record<string, LogFilterSpec>;
+  setLogsVisibility: (update: (current: VisibilityFlags) => VisibilityFlags) => void;
+  setLogsGlobalFilter: (filter: LogFilterSpec) => void;
+  setLogsPaneWrap: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
+  setLogsPaneFilterEngaged: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
+  setLogsPaneFilters: (update: (current: Record<string, LogFilterSpec>) => Record<string, LogFilterSpec>) => void;
   toggleLogsEdtSelection: (repoPath: string) => void;
   toggleLogsOtherSelection: (repoPath: string) => void;
   selectAllLogsEdtServices: (repoPaths: readonly string[]) => void;
@@ -389,23 +422,50 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       logsFullscreenTarget: null,
       logsFullscreenServiceName: null,
       logsPanes: {},
+      logsVisibility: DEFAULT_VISIBILITY_FLAGS,
+      logsGlobalFilter: DEFAULT_LOG_FILTER,
+      logsPaneWrap: {},
+      logsPaneFilterEngaged: {},
+      logsPaneFilters: {},
+
+      setLogsVisibility: (update) => set((state) => ({ logsVisibility: update(state.logsVisibility) })),
+      setLogsGlobalFilter: (filter) => set({ logsGlobalFilter: filter }),
+      setLogsPaneWrap: (update) => set((state) => ({ logsPaneWrap: update(state.logsPaneWrap) })),
+      setLogsPaneFilterEngaged: (update) => set((state) => ({ logsPaneFilterEngaged: update(state.logsPaneFilterEngaged) })),
+      setLogsPaneFilters: (update) => set((state) => ({ logsPaneFilters: update(state.logsPaneFilters) })),
 
       toggleLogsEdtSelection: (repoPath) =>
-        set((state) => ({
-          logsEdtSelected: state.logsEdtSelected.includes(repoPath)
-            ? state.logsEdtSelected.filter((candidate) => candidate !== repoPath)
-            : [...state.logsEdtSelected, repoPath],
-        })),
+        set((state) =>
+          state.logsEdtSelected.includes(repoPath)
+            ? {
+                logsEdtSelected: state.logsEdtSelected.filter((candidate) => candidate !== repoPath),
+                ...withoutPaneSettings(state, [repoPath]),
+              }
+            : { logsEdtSelected: [...state.logsEdtSelected, repoPath] },
+        ),
       toggleLogsOtherSelection: (repoPath) =>
+        set((state) =>
+          state.logsOtherSelected.includes(repoPath)
+            ? {
+                logsOtherSelected: state.logsOtherSelected.filter((candidate) => candidate !== repoPath),
+                ...withoutPaneSettings(state, [repoPath]),
+              }
+            : { logsOtherSelected: [...state.logsOtherSelected, repoPath] },
+        ),
+      selectAllLogsEdtServices: (repoPaths) =>
         set((state) => ({
-          logsOtherSelected: state.logsOtherSelected.includes(repoPath)
-            ? state.logsOtherSelected.filter((candidate) => candidate !== repoPath)
-            : [...state.logsOtherSelected, repoPath],
+          logsEdtSelected: [...repoPaths],
+          ...withoutPaneSettings(state, state.logsEdtSelected.filter((path) => !repoPaths.includes(path))),
         })),
-      selectAllLogsEdtServices: (repoPaths) => set({ logsEdtSelected: [...repoPaths] }),
-      deselectAllLogsEdtServices: () => set({ logsEdtSelected: [] }),
-      selectAllLogsOtherServices: (repoPaths) => set({ logsOtherSelected: [...repoPaths] }),
-      deselectAllLogsOtherServices: () => set({ logsOtherSelected: [] }),
+      deselectAllLogsEdtServices: () =>
+        set((state) => ({ logsEdtSelected: [], ...withoutPaneSettings(state, state.logsEdtSelected) })),
+      selectAllLogsOtherServices: (repoPaths) =>
+        set((state) => ({
+          logsOtherSelected: [...repoPaths],
+          ...withoutPaneSettings(state, state.logsOtherSelected.filter((path) => !repoPaths.includes(path))),
+        })),
+      deselectAllLogsOtherServices: () =>
+        set((state) => ({ logsOtherSelected: [], ...withoutPaneSettings(state, state.logsOtherSelected) })),
       resolveLogsContainerPresence: (repoPaths) => {
         for (const repoPath of repoPaths) {
           void resolveContainerPresence(repoPath);
@@ -458,7 +518,18 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         listedPollingRepoPaths = [];
       },
       openLogsFullscreen: (repoPath, serviceName) => set({ logsFullscreenTarget: repoPath, logsFullscreenServiceName: serviceName }),
-      closeLogsFullscreen: () => set({ logsFullscreenTarget: null, logsFullscreenServiceName: null }),
+      // An ad hoc preview of an unselected service leaves no per-service settings behind, like a
+      // deselected one.
+      closeLogsFullscreen: () =>
+        set((state) => {
+          const target = state.logsFullscreenTarget;
+          const selected = target !== null && (state.logsEdtSelected.includes(target) || state.logsOtherSelected.includes(target));
+          return {
+            logsFullscreenTarget: null,
+            logsFullscreenServiceName: null,
+            ...(target !== null && !selected ? withoutPaneSettings(state, [target]) : {}),
+          };
+        }),
 
       subscribeLogsPane: async (repoPath, service) => {
         if (!deps || !logsManager) {
