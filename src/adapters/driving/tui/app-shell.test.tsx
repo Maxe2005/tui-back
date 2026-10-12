@@ -466,6 +466,7 @@ it('shouldQuit returns true for q', () => {
         stopUpdateHealthPolling: () => {},
         // Live per-service run tracking + issue log
         liveServicePhase: {},
+    liveSharedTypesPhase: {},
         liveServiceIssues: {},
         liveServiceSteps: {},
         liveServiceDone: {},

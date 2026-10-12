@@ -8,7 +8,8 @@ import { resolve as resolvePath } from 'node:path';
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
-import type { GroupUpdateRepoResult, UpdateBlocker, UpdateBlockerChoice } from '../../../../../core/scripts/group-update.js';
+import type { GroupUpdateRepoResult, UpdateBlockerChoice } from '../../../../../core/scripts/group-update.js';
+import type { IncidentBlocker } from '../../store/slices/update-slice.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import {
@@ -242,18 +243,30 @@ export const UPDATE_BLOCKER_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Objec
   { value: 'cancel-run', label: 'Cancel the whole run' },
 ]);
 
+// The `shared-types` phase failure reuses the same four seam values under phase-specific labels:
+// `edited` is retry, `cancel-repo` skips the phase (the remaining services update), `cancel-run`
+// aborts the run (the remaining services are cancelled). Escape stays the least destructive.
+export const SHARED_TYPES_PHASE_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Object.freeze([
+  { value: 'edited', label: 'Retry the shared-types phase' },
+  { value: 'cancel-repo', label: 'Skip shared-types handling (update the rest)' },
+  { value: 'cancel-run', label: 'Abort the run (cancel the remaining services)' },
+]);
+
 // The choices offered for a blocker kind. A merge conflict drops `stash`: git refuses to
 // stash unmerged paths, and once the conflict is resolved and staged a stash silently
 // shelves the resolution and clears the merge (the retry then re-conflicts) — the editor
 // retry and the two cancels are the only meaningful exits there.
-export function blockerMenuItems(kind: UpdateBlocker['kind']): readonly UpdateBlockerMenuItem[] {
+export function blockerMenuItems(kind: IncidentBlocker['kind']): readonly UpdateBlockerMenuItem[] {
+  if (kind === 'shared-types-phase-failed') {
+    return SHARED_TYPES_PHASE_MENU_ITEMS;
+  }
   return kind === 'merge-conflict' ? UPDATE_BLOCKER_MENU_ITEMS.filter((item) => item.value !== 'stash') : UPDATE_BLOCKER_MENU_ITEMS;
 }
 
 // The modal body names the blocked service, its repo path, and the blocker kind —
 // mid-merge/mid-rebase rows stress that the pre-existing state is reported, never
 // auto-touched.
-export function formatBlockerBody(blocker: UpdateBlocker): string {
+export function formatBlockerBody(blocker: IncidentBlocker): string {
   switch (blocker.kind) {
     case 'dirty-worktree':
       return `"${blocker.service}" has uncommitted changes (${blocker.repoPath}).`;
@@ -263,13 +276,18 @@ export function formatBlockerBody(blocker: UpdateBlocker): string {
       return `"${blocker.service}" is already mid-merge from an earlier run (${blocker.repoPath}) — left as-is.`;
     case 'mid-rebase':
       return `"${blocker.service}" is already mid-rebase from an earlier run (${blocker.repoPath}) — rebases are never touched.`;
+    case 'shared-types-phase-failed':
+      return `shared-types phase failed after "${blocker.service}": ${blocker.message} No other service starts until you choose.`;
   }
 }
 
 // A re-presented merge conflict (a failed stash/edit attempt) carries core's retry counter
 // and the reason the last attempt did not settle it — rendered under the body so the
 // endless resolve-and-retry loop stays legible. Null on a first prompt.
-export function formatBlockerRetry(blocker: UpdateBlocker): string | null {
+export function formatBlockerRetry(blocker: IncidentBlocker): string | null {
+  if (blocker.kind === 'shared-types-phase-failed') {
+    return null;
+  }
   if (blocker.retry === undefined || blocker.retry <= 0) {
     return null;
   }
@@ -376,6 +394,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const liveServiceSteps = useStore((state) => state.liveServiceSteps);
   const updateNotice = useStore((state) => state.updateNotice);
   const liveServiceDone = useStore((state) => state.liveServiceDone);
+  const liveSharedTypesPhase = useStore((state) => state.liveSharedTypesPhase);
   const lastServiceRuns = useStore((state) => state.lastServiceRuns);
   const startUpdateHealthPolling = useStore((state) => state.startUpdateHealthPolling);
   const stopUpdateHealthPolling = useStore((state) => state.stopUpdateHealthPolling);
@@ -480,7 +499,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // `isRowTargeted`: covered and still being processed.
   const isRowInRun = (row: { service: string; path: string }): boolean =>
     updateStatus === 'running' && isServiceTargetedByRun(row, runTarget);
-  const isRowTargeted = (row: { service: string; path: string }): boolean => isRowInRun(row) && liveServiceDone[row.service] !== true;
+  const isRowTargeted = (row: { service: string; path: string }): boolean => isRowInRun(row) && (liveServiceDone[row.service] !== true || liveSharedTypesPhase[row.service] !== undefined);
   // During a run the list keeps only the services the run covers.
   const serviceRows = updateStatus === 'running' ? allServiceRows.filter(isRowInRun) : allServiceRows;
   const panes = splitUpdateServiceRows(serviceRows);
@@ -673,7 +692,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {
-          if (step.choice === 'edited') {
+          if (step.choice === 'edited' && updateBlocker.kind !== 'shared-types-phase-failed') {
             // Driving-side editor: spawn the configured command and wait for exit, then
             // report the choice — core re-verifies before resuming (a no-op edit
             // re-presents). An editor that could not be started reports nothing to core:
@@ -864,7 +883,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // Services paused on an incident are not in flight: they wait on the developer.
   const quitCounts = formatQuitRunCounts(
     incidents.length,
-    Object.keys(liveServicePhase).filter((service) => !awaitingServices.has(service)).length,
+    [...new Set([...Object.keys(liveServicePhase), ...Object.keys(liveSharedTypesPhase)])].filter((service) => !awaitingServices.has(service)).length,
   );
   // The zone header counts the pending incidents next to the run label.
   const runningLabel = incidents.length > 0 ? `${baseRunningLabel} · ◐ ${incidents.length} awaiting you (i)` : baseRunningLabel;
@@ -918,7 +937,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     selectedServiceRow === undefined
       ? 'No service selected.'
       : showLiveDetail
-        ? formatLiveServiceDetail(selectedLivePhase, selectedLiveIssues)
+        ? formatLiveServiceDetail(selectedLivePhase, selectedLiveIssues, selectedServiceRow !== undefined ? liveSharedTypesPhase[selectedServiceRow.service] : undefined)
         : formatServiceOutcomeDetail(selectedLastOutcome);
 
   return (

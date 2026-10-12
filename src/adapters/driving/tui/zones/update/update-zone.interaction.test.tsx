@@ -917,3 +917,44 @@ describe('UpdateZone — incident queue popup', () => {
   });
 });
 
+describe('UpdateZone — shared-types phase failure incident', () => {
+  function storeWithPhaseIncident() {
+    const store = createAppStore();
+    const resolved: Array<[string, string]> = [];
+    store.setState({
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      updateStatus: 'running',
+      incidentPopupOpen: true,
+      incidents: [
+        { id: 'p1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'shared-types-phase-failed', message: 'publish failed' }, raisedAt: Date.now() },
+      ],
+      resolveUpdateIncident: (id: string, choice: string) => {
+        resolved.push([id, choice]);
+      },
+    } as never);
+    return { store, resolved };
+  }
+
+  it.each([
+    ['retry', [] as string[], 'edited'],
+    ['skip', [KEYS.down], 'cancel-repo'],
+    ['abort', [KEYS.down, KEYS.down], 'cancel-run'],
+  ])('%s answers the paused phase with the matching seam choice', async (_name, downs, expected) => {
+    const { store, resolved } = storeWithPhaseIncident();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      for (const key of downs) {
+        await press(instance, stdin, key);
+      }
+      await press(instance, stdin, KEYS.enter);
+      expect(resolved).toEqual([['p1', expected]]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+

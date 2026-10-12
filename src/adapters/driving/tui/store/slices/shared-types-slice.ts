@@ -82,6 +82,73 @@ const IDLE_PUBLISH: SharedTypesPublish = {
 
 const RUN_IN_PROGRESS_MESSAGE = 'Another run is already in progress — wait for it to finish before starting another.';
 
+// Best effort: dependency name → registry of the EDT's source modules. A failure here
+// leaves the map empty (npm's own configuration then applies) and never blocks a run.
+export async function resolveSourceRegistries(deps: AppStoreDeps | undefined): Promise<Record<string, string>> {
+  if (deps?.sharedTypes?.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
+    return {};
+  }
+  try {
+    const listed = await listSources({
+      edtRegistry: deps.edtRegistry,
+      manifest: deps.manifest,
+      state: deps.state,
+      moduleId: deps.sharedTypes.sourceModuleId,
+      parseConfig: deps.sharedTypes.parseSourceConfig,
+    });
+    const registries: Record<string, string> = {};
+    if (listed.ok) {
+      for (const source of listed.data.sources) {
+        if (source.registry !== undefined && registries[source.packageName] === undefined) {
+          registries[source.packageName] = source.registry;
+        }
+      }
+    }
+    return registries;
+  } catch {
+    return {};
+  }
+}
+
+
+export async function resolveSingleSourceOf(deps: AppStoreDeps | undefined): Promise<
+  | { ok: true; source: SourceEntry }
+  | { ok: false; kind: 'empty' | 'ambiguous' | 'error'; code?: string; message?: string }
+> {
+  if (deps?.sharedTypes === undefined || deps.sharedTypes.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
+    return { ok: false, kind: 'error', code: 'not-wired', message: 'Version publishing is not available in this session.' };
+  }
+  let listed: Awaited<ReturnType<typeof listSources>>;
+  try {
+    listed = await listSources({
+      edtRegistry: deps.edtRegistry,
+      manifest: deps.manifest,
+      state: deps.state,
+      moduleId: deps.sharedTypes.sourceModuleId,
+      parseConfig: deps.sharedTypes.parseSourceConfig,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, kind: 'error', code: 'internal-error', message };
+  }
+  if (!listed.ok) {
+    return { ok: false, kind: 'error', code: listed.error.code, message: listed.error.message };
+  }
+  if (listed.data.sources.length > 1) {
+    const names = listed.data.sources.map((entry) => entry.service).join(', ');
+    return { ok: false, kind: 'ambiguous', code: 'ambiguous-source', message: `Several source repos in the active EDT (${names}) — publish is blocked.` };
+  }
+  if (listed.data.sources.length === 0) {
+    const first = listed.data.issues[0];
+    if (first !== undefined) {
+      return { ok: false, kind: 'error', code: first.code, message: first.message };
+    }
+    return { ok: false, kind: 'empty' };
+  }
+  return { ok: true, source: listed.data.sources[0] as SourceEntry };
+}
+
+
 export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], SharedTypesSlice> {
   return (set, get) => {
     async function execute(
@@ -157,70 +224,8 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
       }
     }
 
-    // Best effort: dependency name → registry of the EDT's source modules. A failure here
-    // leaves the map empty (npm's own configuration then applies) and never blocks a run.
-    async function sourceRegistries(): Promise<Record<string, string>> {
-      if (deps?.sharedTypes?.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
-        return {};
-      }
-      try {
-        const listed = await listSources({
-          edtRegistry: deps.edtRegistry,
-          manifest: deps.manifest,
-          state: deps.state,
-          moduleId: deps.sharedTypes.sourceModuleId,
-          parseConfig: deps.sharedTypes.parseSourceConfig,
-        });
-        const registries: Record<string, string> = {};
-        if (listed.ok) {
-          for (const source of listed.data.sources) {
-            if (source.registry !== undefined && registries[source.packageName] === undefined) {
-              registries[source.packageName] = source.registry;
-            }
-          }
-        }
-        return registries;
-      } catch {
-        return {};
-      }
-    }
-
-    async function resolveSingleSource(): Promise<
-      | { ok: true; source: SourceEntry }
-      | { ok: false; kind: 'empty' | 'ambiguous' | 'error'; code?: string; message?: string }
-    > {
-      if (deps?.sharedTypes === undefined || deps.sharedTypes.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
-        return { ok: false, kind: 'error', code: 'not-wired', message: 'Version publishing is not available in this session.' };
-      }
-      let listed: Awaited<ReturnType<typeof listSources>>;
-      try {
-        listed = await listSources({
-          edtRegistry: deps.edtRegistry,
-          manifest: deps.manifest,
-          state: deps.state,
-          moduleId: deps.sharedTypes.sourceModuleId,
-          parseConfig: deps.sharedTypes.parseSourceConfig,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, kind: 'error', code: 'internal-error', message };
-      }
-      if (!listed.ok) {
-        return { ok: false, kind: 'error', code: listed.error.code, message: listed.error.message };
-      }
-      if (listed.data.sources.length > 1) {
-        const names = listed.data.sources.map((entry) => entry.service).join(', ');
-        return { ok: false, kind: 'ambiguous', code: 'ambiguous-source', message: `Several source repos in the active EDT (${names}) — publish is blocked.` };
-      }
-      if (listed.data.sources.length === 0) {
-        const first = listed.data.issues[0];
-        if (first !== undefined) {
-          return { ok: false, kind: 'error', code: first.code, message: first.message };
-        }
-        return { ok: false, kind: 'empty' };
-      }
-      return { ok: true, source: listed.data.sources[0] as SourceEntry };
-    }
+    const sourceRegistries = () => resolveSourceRegistries(deps);
+    const resolveSingleSource = () => resolveSingleSourceOf(deps);
 
     // Runs the publish command once for the resolved source. The caller holds the
     // `runInProgress` guard and has already set the running state; this only lands
