@@ -94,24 +94,24 @@ Slot release: wrap `onUpdateBlocker` per worker — `release(); try { await seam
 **Pool and core pipeline**
 
 - Entry point: bounded pool with keys, stages, slot release and cancel.
-  [`run-pool.ts:55`](../../../src/core/scripts/run-pool.ts#L55)
+  [`run-pool.ts:62`](../../../src/core/scripts/run-pool.ts#L62)
 
 - Both sequential loops replaced; cancel and seam wrapping wired per worker.
-  [`group-update.ts:358`](../../../src/core/scripts/group-update.ts#L358)
+  [`group-update.ts:361`](../../../src/core/scripts/group-update.ts#L361)
 
 - Seam wrapper releases the slot only when the pool is wider than one.
-  [`group-update.ts:455`](../../../src/core/scripts/group-update.ts#L455)
+  [`group-update.ts:729`](../../../src/core/scripts/group-update.ts#L729)
 
 - Step-boundary cancel checks inside the per-service pipeline.
-  [`group-update.ts:800`](../../../src/core/scripts/group-update.ts#L800)
+  [`group-update.ts:845`](../../../src/core/scripts/group-update.ts#L845)
 
 **Incident queue state**
 
 - Incident store: resolvers by id, still-blocked, cancel-run fan-out.
-  [`update-slice.ts:640`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L640)
+  [`update-slice.ts:625`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L625)
 
 - Seam implementation raising incidents and toasts.
-  [`update-slice.ts:725`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L725)
+  [`update-slice.ts:732`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L732)
 
 **Popup and zone wiring**
 
@@ -119,7 +119,7 @@ Slot release: wrap `onUpdateBlocker` per worker — `release(); try { await seam
   [`update-incidents-dialog.tsx:1`](../../../src/adapters/driving/tui/zones/update/update-incidents-dialog.tsx#L1)
 
 - List/menu key handling, Esc semantics, `i` reopen.
-  [`update-zone.tsx:640`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L640)
+  [`update-zone.tsx:654`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L654)
 
 - Awaiting status precedence.
   [`update-zone.logic.ts:34`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L34)
@@ -127,7 +127,7 @@ Slot release: wrap `onUpdateBlocker` per worker — `release(); try { await seam
 **Setting**
 
 - `update.concurrency` model, schema and General-tab row.
-  [`settings.ts:36`](../../../src/core/ports/settings.ts#L36)
+  [`settings.ts:37`](../../../src/core/ports/settings.ts#L37)
 
 **Tests**
 
