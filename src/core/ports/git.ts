@@ -67,6 +67,14 @@ export interface GitPort {
   // repo's manifest sharedBranch. Never used for a member's own branch: a missing member
   // branch is reported failed, never auto-fetched.
   fetch(repoPath: string, branchName: string): Promise<Result<void>>;
+  // Plain `git fetch origin <branch>`: refreshes `origin/<branch>` only and never touches the
+  // local branch, so it cannot be rejected as non-fast-forward. The "simple fetch" an
+  // unpushed-commits blocker offers when `fetch` could not update the local branch.
+  fetchRemote(repoPath: string, branchName: string): Promise<Result<void>>;
+  // `<hash> <subject>` lines of the local commits of branchName that origin/<branchName> does
+  // not have (`git log origin/<branch>..<branch>`), oldest first. Reads the remote-tracking
+  // ref as it stands — callers refresh it with `fetchRemote` first.
+  listUnpushedCommits(repoPath: string, branchName: string): Promise<Result<string[]>>;
   // Plain `git pull` on the current branch — used only when a member already sits on its
   // manifest sharedBranch (the merge path below would be a self-merge). Pulls of the shared
   // branch carry no write-gate.

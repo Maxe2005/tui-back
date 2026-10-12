@@ -230,7 +230,7 @@ export function resolveQuitConfirm(input: string, key: { return?: boolean; escap
 // continues) so a stray keystroke never cancels the run.
 export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
 
-export type UpdateBlockerMenuValue = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+export type UpdateBlockerMenuValue = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run' | 'fetch';
 
 export type UpdateBlockerMenuItem = MenuItem<UpdateBlockerMenuValue>;
 
@@ -256,9 +256,18 @@ export const SHARED_TYPES_PHASE_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = O
 // stash unmerged paths, and once the conflict is resolved and staged a stash silently
 // shelves the resolution and clears the merge (the retry then re-conflicts) — the editor
 // retry and the two cancels are the only meaningful exits there.
-export function blockerMenuItems(kind: IncidentBlocker['kind']): readonly UpdateBlockerMenuItem[] {
+export function blockerMenuItems(kind: IncidentBlocker['kind'], branch?: string): readonly UpdateBlockerMenuItem[] {
   if (kind === 'shared-types-phase-failed') {
     return SHARED_TYPES_PHASE_MENU_ITEMS;
+  }
+  if (kind === 'unpushed-commits') {
+    // No stash (nothing is dirty); the plain fetch comes first as the proposed way out.
+    return [
+      { value: 'fetch', label: `Simple fetch (git fetch origin ${branch ?? '<branch>'}) and continue` },
+      { value: 'edited', label: 'Open in editor, then retry' },
+      { value: 'cancel-repo', label: 'Cancel this service (continue with the rest)' },
+      { value: 'cancel-run', label: 'Cancel the whole run' },
+    ];
   }
   return kind === 'merge-conflict' ? UPDATE_BLOCKER_MENU_ITEMS.filter((item) => item.value !== 'stash') : UPDATE_BLOCKER_MENU_ITEMS;
 }
@@ -274,6 +283,10 @@ export function formatBlockerBody(blocker: IncidentBlocker): string {
       return `"${blocker.service}" hit a merge conflict (${blocker.repoPath}).`;
     case 'mid-merge':
       return `"${blocker.service}" is already mid-merge from an earlier run (${blocker.repoPath}) — left as-is.`;
+    case 'unpushed-commits': {
+      const commits = blocker.commits ?? [];
+      return `There are unpushed commits on branch ${blocker.branch ?? '?'} of service "${blocker.service}", which prevents a clean fetch. How to proceed? Unpushed: ${commits.join(' | ')}`;
+    }
     case 'mid-rebase':
       return `"${blocker.service}" is already mid-rebase from an earlier run (${blocker.repoPath}) — rebases are never touched.`;
     case 'shared-types-phase-failed':
@@ -688,7 +701,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
           setIncidentMode('list');
           return;
         }
-        const step = resolveMenuKey(key, blockerCursor, blockerMenuItems(updateBlocker.kind), UPDATE_BLOCKER_MENU_ESCAPE);
+        const step = resolveMenuKey(key, blockerCursor, blockerMenuItems(updateBlocker.kind, 'branch' in updateBlocker ? updateBlocker.branch : undefined), UPDATE_BLOCKER_MENU_ESCAPE);
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
         } else if (step.type === 'choose') {

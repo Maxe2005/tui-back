@@ -107,6 +107,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     pull: vi.fn(async () => ok(undefined)),
     isMergeInProgress: vi.fn(async () => ok(false)),
     mergeBranch: vi.fn(async () => ok(undefined)),
@@ -355,6 +357,8 @@ describe('deleteEdt', () => {
       isBranchMerged: vi.fn(async () => ok(true)),
       currentBranch: vi.fn(async () => ok('development')),
       hasStash: vi.fn(async (repoPath: string, tag: string) => ok(repoPath === '/repo/a' && tag === 'tui-back:target-ulid')),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     });
     const params = await makeParams({ edtRegistry, git, dispositions: { '/repo/a': 'delete' } });
 
@@ -372,6 +376,8 @@ describe('deleteEdt', () => {
       currentBranch: vi.fn(async () => ok('some-other-edts-branch')),
       hasUncommittedChanges: vi.fn(async () => ok(true)), // some *other* EDT's own dirt
       hasStash: vi.fn(async () => ok(false)),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     });
     const params = await makeParams({ edtRegistry, git, dispositions: { '/repo/a': 'delete' } });
 
@@ -534,6 +540,8 @@ describe('resolveMemberDeleteStatuses', () => {
     const git = fakeGit({
       isBranchMerged: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
       hasStash: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     });
 
     const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, TARGET.members);
@@ -577,6 +585,8 @@ describe('resolveMemberDeleteStatuses', () => {
         currentBranch: vi.fn(async () => ok('development')), // nothing checked out matches feat/a
         hasUncommittedChanges: vi.fn(async () => ok(false)),
         hasStash: vi.fn(async (repoPath: string, tag: string) => ok(repoPath === '/repo/a' && tag === 'tui-back:target-ulid')),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);
@@ -589,6 +599,8 @@ describe('resolveMemberDeleteStatuses', () => {
       const git = fakeGit({
         currentBranch: vi.fn(async () => ok('development')),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);
@@ -602,6 +614,8 @@ describe('resolveMemberDeleteStatuses', () => {
         currentBranch: vi.fn(async () => ok('feat/a')),
         hasUncommittedChanges: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);

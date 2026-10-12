@@ -680,7 +680,12 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               ? state.liveServiceIssues
               : appendLiveIssue(state.liveServiceIssues, blocker.service, {
                   kind: blocker.kind,
-                  detail: blocker.kind === SHARED_TYPES_PHASE_FAILED ? (blocker as SharedTypesPhaseBlocker).message : blocker.repoPath,
+                  detail:
+                    blocker.kind === SHARED_TYPES_PHASE_FAILED
+                      ? (blocker as SharedTypesPhaseBlocker).message
+                      : blocker.kind === 'unpushed-commits'
+                        ? `${blocker.branch ?? ''}: ${(blocker.commits ?? []).join(' | ')}`
+                        : blocker.repoPath,
                   resolved: false,
                 }),
           };

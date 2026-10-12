@@ -102,6 +102,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
       commit: vi.fn(async () => ok(undefined)),
       isBranchMerged: vi.fn(async () => ok(true)),
       hasStash: vi.fn(async () => ok(false)),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     },
     edtRegistry: {
       add: vi.fn(async () => ok(undefined)),
