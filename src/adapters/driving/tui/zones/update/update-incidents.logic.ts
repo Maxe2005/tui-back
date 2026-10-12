@@ -9,6 +9,7 @@ const KIND_LABELS: Record<UpdateIncident['blocker']['kind'], string> = {
   'merge-conflict': 'merge conflict',
   'mid-merge': 'mid-merge',
   'mid-rebase': 'mid-rebase',
+  'unpushed-commits': 'unpushed commits',
 };
 
 export function formatIncidentKind(kind: UpdateIncident['blocker']['kind']): string {

@@ -30,6 +30,8 @@ import {
   discardPaths,
   discardPathsToHead,
   fetchBranch,
+  fetchRemoteBranch,
+  listUnpushedCommits,
   finalizeMerge,
   hasStash,
   hasUncommittedChanges,
@@ -1172,17 +1174,6 @@ describe('fetchBranch', () => {
     expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
   });
 
-  it('succeeds when the local branch is ahead of origin (unpushed local commit)', async () => {
-    const { clone } = await makeGitRepoOriginAndClone();
-    runGit(clone, ['commit', '--allow-empty', '-m', 'local only']);
-    const localTip = runGit(clone, ['rev-parse', 'development']).stdout.trim();
-
-    const result = await fetchBranch(clone, 'development');
-
-    expect(result).toEqual({ ok: true, data: undefined });
-    expect(runGit(clone, ['rev-parse', 'development']).stdout.trim()).toBe(localTip);
-  });
-
   it('reports a controlled error when the branch does not exist on origin', async () => {
     const { clone } = await makeGitRepoOriginAndClone();
 
@@ -1197,6 +1188,41 @@ describe('fetchBranch', () => {
     const result = await fetchBranch(repo, 'development');
 
     expect(result).toMatchObject({ ok: false, error: { code: 'git-fetch-error' } });
+  });
+});
+
+describe('fetchBranch with unpushed local commits', () => {
+  it('is rejected on a diverged branch, while fetchRemoteBranch succeeds and listUnpushedCommits names the local-only commits', async () => {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    const commitOn = (dir: string, branch: string, message: string): void => {
+      const tip = runGit(dir, ['commit-tree', `${branch}^{tree}`, '-p', branch, '-m', message]).stdout.trim();
+      expect(runGit(dir, ['update-ref', `refs/heads/${branch}`, tip]).status).toBe(0);
+    };
+    expect(runGit(clone, ['branch', 'feat/remote-only', 'origin/feat/remote-only']).status).toBe(0);
+    commitOn(origin, 'feat/remote-only', 'remote only');
+    commitOn(clone, 'feat/remote-only', 'local only');
+
+    expect(await fetchBranch(clone, 'feat/remote-only')).toMatchObject({ ok: false, error: { code: 'git-fetch-error' } });
+    expect(await fetchRemoteBranch(clone, 'feat/remote-only')).toEqual({ ok: true, data: undefined });
+
+    const listed = await listUnpushedCommits(clone, 'feat/remote-only');
+    expect(listed.ok && listed.data).toHaveLength(1);
+    expect(listed.ok && listed.data[0]).toMatch(/^[0-9a-f]+ local only$/);
+  });
+
+  it('lists nothing when the local branch has no commits origin lacks', async () => {
+    const { clone } = await makeGitRepoOriginAndClone();
+
+    expect(await listUnpushedCommits(clone, 'development')).toEqual({ ok: true, data: [] });
+  });
+
+  it('reports a controlled error when the remote-tracking ref is unknown', async () => {
+    const repo = await makeGitRepo();
+
+    expect(await listUnpushedCommits(repo, 'development')).toMatchObject({
+      ok: false,
+      error: { code: 'git-unpushed-commits-error' },
+    });
   });
 });
 

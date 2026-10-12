@@ -239,6 +239,8 @@ describe('subcommand registry guards', () => {
       commit: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
+      fetchRemote: async () => ok(undefined),
+      listUnpushedCommits: async () => ok([] as string[]),
     };
 
     return buildSubcommands({

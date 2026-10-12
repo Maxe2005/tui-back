@@ -194,7 +194,7 @@ export interface GroupUpdateParams {
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
 // from a pre-existing mid-merge/mid-rebase (surfaced before any menu); the driving side
 // answers with one of four bounded choices.
-export type UpdateBlockerKind = 'dirty-worktree' | 'merge-conflict' | 'mid-merge' | 'mid-rebase';
+export type UpdateBlockerKind = 'dirty-worktree' | 'merge-conflict' | 'mid-merge' | 'mid-rebase' | 'unpushed-commits';
 
 export interface UpdateBlocker {
   service: string;
@@ -205,9 +205,15 @@ export interface UpdateBlocker {
   // the driving side shows both so an endless retry loop stays legible.
   retry?: number;
   retryReason?: string;
+  // `unpushed-commits` only: the local branch that could not be fetched into and the
+  // `<hash> <subject>` lines of its commits origin does not have.
+  branch?: string;
+  commits?: string[];
 }
 
-export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+// `fetch` answers an `unpushed-commits` blocker only: core runs a plain `git fetch origin
+// <branch>` (local branch untouched) and carries on with the local branch as it stands.
+export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run' | 'fetch';
 
 export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerChoice>;
 
@@ -957,7 +963,10 @@ async function updateWithLoadedManifest(
     emitPhase(onPhase, service, 'merging');
     const fetched = await git.fetch(repoPath, mergeSource);
     if (!fetched.ok) {
-      return failedOutcome(service, fetched.error);
+      const settlement = await resolveUnpushedCommits(service, git, repoPath, mergeSource, fetched.error, onUpdateBlocker);
+      if (!settlement.resumed) {
+        return { row: settlement.row, cancelRun: settlement.cancelRun };
+      }
     }
     // Re-verify before any git write (AD-8) — never assume the member branch is still safe.
     // All-repos scope passes no edtId: the shared-branch gate still applies, the cross-EDT
@@ -1071,7 +1080,7 @@ async function askSeam(
 ): Promise<{ choice: UpdateBlockerChoice } | { error: ResultError }> {
   try {
     const choice = await onUpdateBlocker(blocker);
-    if (choice !== 'stash' && choice !== 'edited' && choice !== 'cancel-repo' && choice !== 'cancel-run') {
+    if (choice !== 'stash' && choice !== 'edited' && choice !== 'cancel-repo' && choice !== 'cancel-run' && choice !== 'fetch') {
       return {
         error: {
           code: 'internal-error',
@@ -1260,6 +1269,86 @@ async function resolveDirtyBlocker(
       return { resumed: true };
     }
     // Still dirty/conflicted → re-present the menu.
+  }
+}
+
+// A rejected `fetch origin <b>:<b>` is almost always a local branch carrying commits origin
+// lacks (git refuses to move a branch backwards). Core refreshes `origin/<b>` with a plain
+// fetch and lists those commits: none → the failure is something else (network, auth) and
+// stays the original `git-fetch-error`; some → the repo is stopped with an explicit message
+// naming them. Without a seam that is a `failed` row; with one the developer chooses: `fetch`
+// (carry on with the local branch as is), `edited` (fix it in the editor — e.g. push — then the
+// strict fetch is retried), or one of the two cancels.
+function unpushedMessage(service: string, branch: string, commits: readonly string[]): string {
+  return `There are unpushed commits on branch ${branch} of service ${service}, which prevents a clean fetch: ${commits.join(' | ')}`;
+}
+
+async function resolveUnpushedCommits(
+  service: string,
+  git: GitPort,
+  repoPath: string,
+  branch: string,
+  fetchError: ResultError,
+  onUpdateBlocker: OnUpdateBlocker | undefined,
+): Promise<BlockerSettlement> {
+  const refreshed = await git.fetchRemote(repoPath, branch);
+  if (!refreshed.ok) {
+    return { resumed: false, row: failed(service, fetchError), cancelRun: false };
+  }
+  const listed = await git.listUnpushedCommits(repoPath, branch);
+  if (!listed.ok || listed.data.length === 0) {
+    return { resumed: false, row: failed(service, fetchError), cancelRun: false };
+  }
+  let commits = listed.data;
+  if (onUpdateBlocker === undefined) {
+    return {
+      resumed: false,
+      row: failed(service, { code: 'unpushed-commits', message: unpushedMessage(service, branch, commits) }),
+      cancelRun: false,
+    };
+  }
+  let retry = 0;
+  let retryReason = '';
+  for (;;) {
+    const blocker: UpdateBlocker = {
+      service,
+      repoPath,
+      kind: 'unpushed-commits',
+      branch,
+      commits,
+      ...(retry > 0 ? { retry, retryReason } : {}),
+    };
+    const asked = await askSeam(onUpdateBlocker, blocker);
+    if ('error' in asked) {
+      return { resumed: false, row: failed(service, asked.error), cancelRun: false };
+    }
+    if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
+      return {
+        resumed: false,
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: 'unpushed-commits', message: `Repo ${repoPath} update cancelled by developer — left untouched` },
+        },
+        cancelRun: asked.choice === 'cancel-run',
+      };
+    }
+    if (asked.choice === 'fetch') {
+      // The plain fetch already ran above; the local branch (a superset of origin's) is merged as is.
+      return { resumed: true };
+    }
+    // `edited` (or an unavailable `stash`): retry the strict fetch the editor session may have unblocked.
+    const retried = await git.fetch(repoPath, branch);
+    if (retried.ok) {
+      return { resumed: true };
+    }
+    retry += 1;
+    retryReason = 'Local branch still has commits origin lacks';
+    await git.fetchRemote(repoPath, branch);
+    const again = await git.listUnpushedCommits(repoPath, branch);
+    if (again.ok && again.data.length > 0) {
+      commits = again.data;
+    }
   }
 }
 

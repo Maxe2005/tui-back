@@ -82,6 +82,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     ...overrides,
   };
 }
@@ -1362,6 +1364,102 @@ describe('groupUpdate — assisted resolution', () => {
     expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }]);
     expect(calls(git.stashSave)).toContainEqual(['/repo/a', 'tui-back:update']);
     expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+  });
+
+  // A rejected `fetch origin <b>:<b>` caused by local-only commits: the fake fails the strict
+  // fetch of svc-a, then lists the commits the plain-fetch-refreshed origin ref lacks.
+  function unpushedGit(strictFetchFailures: number): GitPort {
+    let strictFetches = 0;
+    return fakeGit({
+      fetch: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a') {
+          strictFetches += 1;
+        }
+        if (repoPath === '/repo/a' && strictFetches <= strictFetchFailures) {
+          return err('git-fetch-error', 'rejected (non-fast-forward)');
+        }
+        return ok(undefined);
+      }),
+      listUnpushedCommits: vi.fn(async (repoPath: string) =>
+        ok(repoPath === '/repo/a' && strictFetches <= strictFetchFailures ? ['45ce145 chore(deps): bump shared-types'] : []),
+      ),
+    });
+  }
+
+  it('unpushed commits without seam: stops the service with an explicit message naming the commits', async () => {
+    const git = unpushedGit(1);
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          {
+            service: 'svc-a',
+            outcome: 'failed',
+            detail: { code: 'unpushed-commits', message: expect.stringContaining('45ce145 chore(deps): bump shared-types') },
+          },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.fetchRemote)).toContainEqual(['/repo/a', expect.any(String)]);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('unpushed commits with seam: raises the blocker with branch and commits, `fetch` resumes the merge', async () => {
+    const { seam, blockers } = scriptedSeam(['fetch']);
+    const git = unpushedGit(1);
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toHaveLength(1);
+    expect(blockers[0]).toMatchObject({
+      service: 'svc-a',
+      kind: 'unpushed-commits',
+      commits: ['45ce145 chore(deps): bump shared-types'],
+    });
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+  });
+
+  it('unpushed commits with seam: edited retries the strict fetch, re-presenting while still blocked', async () => {
+    const { seam, blockers } = scriptedSeam(['edited', 'edited']);
+    const git = unpushedGit(2);
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b' }] } });
+    expect(blockers).toHaveLength(2);
+    expect(blockers[1]).toMatchObject({ kind: 'unpushed-commits', retry: 1 });
+  });
+
+  it('unpushed commits with seam: cancel-repo skips the service, cancel-run stops the run', async () => {
+    const skipRepo = await groupUpdate(makeParams({ git: unpushedGit(1), onUpdateBlocker: scriptedSeam(['cancel-repo']).seam }));
+    expect(skipRepo).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'unpushed-commits' } }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+
+    const git = unpushedGit(1);
+    const stopRun = await groupUpdate(makeParams({ git, onUpdateBlocker: scriptedSeam(['cancel-run']).seam }));
+    expect(stopRun).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'skipped' }, { service: 'svc-b', outcome: 'skipped' }] } });
+  });
+
+  it('a fetch failure with no unpushed commits stays a plain git-fetch-error', async () => {
+    const { seam, blockers } = scriptedSeam([]);
+    const git = fakeGit({
+      fetch: vi.fn(async (repoPath: string) => (repoPath === '/repo/a' ? err('git-fetch-error', 'offline') : ok(undefined))),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'failed', detail: { code: 'git-fetch-error' } }, { service: 'svc-b' }] } });
+    expect(blockers).toHaveLength(0);
   });
 
   it('dirty with seam: edited re-verifies before resuming', async () => {
