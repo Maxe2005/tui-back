@@ -2,6 +2,7 @@
 // handled by UpdateZone's useInput. Shows the unflattened, uncapped report of one service as a
 // windowed, top-anchored scroll view with a position indicator; failed steps carry the error
 // colour and glyph (never colour alone).
+import { useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -26,6 +27,7 @@ export function FullscreenReport({
   wrapLines,
   visibleLines,
   contentWidth,
+  onLayout,
 }: {
   lines: readonly ReportLine[];
   // Top-anchored: the index of the first line visibleRows (clamped to what still fills the pane).
@@ -34,10 +36,15 @@ export function FullscreenReport({
   // The row/column budget before the first measurement lands; the measured size takes over after.
   visibleLines: number;
   contentWidth: number;
+  // The budget actually used, so the owner's key handler scrolls against the same numbers.
+  onLayout?: (rows: number, columns: number) => void;
 }) {
   const [contentRef, measuredSize] = useElementSize();
   const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
   const resolvedWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
+  useEffect(() => {
+    onLayout?.(rowBudget, resolvedWidth);
+  }, [onLayout, rowBudget, resolvedWidth]);
   const window = reportWindow(lines, offset, rowBudget, resolvedWidth, wrapLines);
   const visibleRows = window.visibleLines;
   return (

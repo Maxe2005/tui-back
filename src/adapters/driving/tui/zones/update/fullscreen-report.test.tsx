@@ -9,6 +9,7 @@ import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../shared/test-
 import { frameLines } from '../../shared/test-support/matrix.js';
 import { createAppStore } from '../../store/app-store.js';
 import { FullscreenReport } from './fullscreen-report.js';
+import { activeFooterContext, footerContextHints } from '../../keybindings/index.js';
 import { buildServiceReport } from './update-zone.logic.js';
 import { UpdateZone } from './update-zone.js';
 
@@ -94,6 +95,11 @@ function mount(store: ReturnType<typeof createAppStore>, initialRecap = false) {
   return { instance, last, press, settle };
 }
 
+// The first line number of the last "lines a–b of n" indicator in a chunk of output.
+function position(output: string): string | undefined {
+  return [...output.matchAll(/lines (\d+)–/g)].at(-1)?.[1];
+}
+
 describe('Update zone full report interaction', () => {
   it('opens with f, scrolls, toggles wrap, jumps to the failed step and closes with Esc', async () => {
     const { instance, last, press, settle } = mount(storeWithRun());
@@ -113,8 +119,10 @@ describe('Update zone full report interaction', () => {
       expect(last()).toContain('truncate');
       await press(KEYS.pageDown);
       expect(last()).not.toContain('lines 1–');
+      const before = position(last());
       await press('n');
       expect(last()).toContain('✖ Migration');
+      expect(position(last())).not.toBe(before);
       await press(KEYS.escape, 30);
       expect(last()).not.toContain('FULL REPORT');
       expect(last()).toContain('SERVICES');
@@ -182,6 +190,55 @@ describe('Update zone full report interaction', () => {
       await press(KEYS.enter);
       expect(last()).toContain('FULL REPORT');
       expect(last()).toContain('svc-a');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('opens from a failed recap row even when the per-service maps hold nothing', async () => {
+    const store = storeWithRun();
+    store.setState({ lastServiceRuns: {}, lastServiceOutcomes: {}, updateStatus: 'done', updateTopic: 'demo', updateResults: [FAILED_RESULT] } as never);
+    const { instance, last, press, settle } = mount(store, true);
+    try {
+      await settle();
+      await press(KEYS.enter);
+      expect(last()).toContain('FULL REPORT');
+      expect(last()).toContain('boom first');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('owns the keyboard while open: no config opens, p jumps back, input is captured and the footer shows the report hints', async () => {
+    const store = storeWithRun();
+    const failedTwice = { merge: 'failed', migration: 'failed', restart: 'skipped' };
+    store.setState({
+      lastServiceRuns: { 'svc-a': { steps: failedTwice, result: FAILED_RESULT, source: undefined, target: 'feat/a', topic: 'demo' } },
+    } as never);
+    const { instance, last, press, settle } = mount(store);
+    try {
+      await settle();
+      expect(store.getState().zoneInputCaptured).toBe(false);
+      await press('f');
+      expect(store.getState().zoneInputCaptured).toBe(true);
+      const id = activeFooterContext(store.getState().footerContexts);
+      expect(id).toBe('update-report');
+      expect(footerContextHints('update-report').map(([key]) => key)).toContain('n/p');
+      await press('n');
+      await press('n');
+      const second = position(last());
+      for (const key of ['m', 'a']) {
+        await press(key);
+        expect(store.getState().updateConfig).toBeNull();
+      }
+      await press('p');
+      expect(store.getState().updateConfig).toBeNull();
+      expect(last()).toContain('FULL REPORT');
+      expect(position(last())).not.toBe(second);
+      await press(KEYS.escape, 30);
+      expect(store.getState().zoneInputCaptured).toBe(false);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

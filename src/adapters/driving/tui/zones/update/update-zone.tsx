@@ -5,7 +5,7 @@
 // Every keystroke decision is a pure function; useInput stays a thin dispatcher.
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
@@ -39,7 +39,7 @@ import {
   resolveUpdatePaneRows,
   applyReportScroll,
   buildServiceReport,
-  finalizeServiceSteps,
+  inferSettledSteps,
   jumpToFailedStep,
   reportMaxOffset,
   resolveReportKey,
@@ -390,6 +390,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const [reportOffset, setReportOffset] = useState(0);
   const [reportWrap, setReportWrap] = useState(true);
   const bounds = useBounds();
+  // The report pane's real row/column budget, reported by FullscreenReport after each layout so
+  // the key handler clamps and pages against the exact numbers the view renders with. Until the
+  // first measurement the fallback is the zone bounds minus the report's one header row.
+  const reportLayout = useRef<{ rows: number; columns: number } | null>(null);
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -543,9 +547,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     const row = serviceRows.find((candidate) => candidate.service === service);
     const live = row !== undefined && (isRowTargeted(row) || serviceRestartInFlight[resolvePath(row.path)] !== undefined);
     const run = lastServiceRuns[service];
-    const outcome = lastServiceOutcomes[service];
+    const outcome = lastServiceOutcomes[service] ?? updateResults.find((candidate) => candidate.service === service);
     const issues = liveServiceIssues[service] ?? [];
-    const settled = run ?? (outcome !== undefined ? { steps: finalizeServiceSteps(undefined, outcome), result: outcome, source: undefined, target: row?.branch ?? null, topic: updateTopic } : undefined);
+    const settled = run ?? (outcome !== undefined ? { steps: inferSettledSteps(outcome), result: outcome, source: undefined, target: row?.branch ?? null, topic: updateTopic } : undefined);
     const mode: 'live' | 'last' | 'never' = live ? 'live' : settled !== undefined ? 'last' : 'never';
     return {
       available: live || settled !== undefined || issues.length > 0,
@@ -560,8 +564,17 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     };
   };
   const report = reportService !== null ? buildServiceReport(reportInputFor(reportService).input) : null;
-  const reportBudget = Math.max(1, bounds.rows - 1);
+  const REPORT_HEADER_ROWS = 1;
+  const reportBudget = Math.max(1, bounds.rows - REPORT_HEADER_ROWS);
   const reportWidth = Math.max(1, bounds.columns - 2 * spacing['pane-padding-x']);
+  const reportAvailable = reportService !== null && reportInputFor(reportService).available;
+  // A report whose service lost everything to show (a new run reset it) closes on its own.
+  useEffect(() => {
+    if (reportService !== null && !reportAvailable) {
+      setReportService(null);
+      setReportOffset(0);
+    }
+  }, [reportService, reportAvailable]);
   const openReport = (service: string): boolean => {
     if (!reportInputFor(service).available) {
       return false;
@@ -659,18 +672,22 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       // `p` and `Esc` keep their report meaning). Scrolling is clamped to what still fills the pane.
       if (reportService !== null && report !== null) {
         const action = resolveReportKey(input, key);
-        const maxOffset = reportMaxOffset(report.lines, reportBudget, reportWidth, reportWrap);
+        const budget = reportLayout.current?.rows ?? reportBudget;
+        const width = reportLayout.current?.columns ?? reportWidth;
+        const maxOffset = reportMaxOffset(report.lines, budget, width, reportWrap);
         if (action === 'close') {
           setReportService(null);
         } else if (action === 'toggle-wrap') {
-          setReportWrap((current) => !current);
+          const nextWrap = !reportWrap;
+          setReportWrap(nextWrap);
+          setReportOffset(Math.min(reportOffset, reportMaxOffset(report.lines, budget, width, nextWrap)));
         } else if (action === 'next-failed' || action === 'prev-failed') {
           const target = jumpToFailedStep(report.failedLines, reportOffset, action === 'next-failed' ? 'next' : 'prev');
           if (target !== null) {
-            setReportOffset(target);
+            setReportOffset(Math.min(target, maxOffset));
           }
         } else if (action !== null) {
-          setReportOffset(applyReportScroll(reportOffset, action, maxOffset, reportBudget));
+          setReportOffset(applyReportScroll(reportOffset, action, maxOffset, budget));
         }
         return;
       }
@@ -818,7 +835,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       {/* Only the title line carries left padding — the outer Box stays unpadded so it doesn't
           double up the list/detail panes' own paddingX. */}
       {report !== null ? (
-        <FullscreenReport lines={report.lines} offset={reportOffset} wrapLines={reportWrap} visibleLines={reportBudget} contentWidth={reportWidth} />
+        <FullscreenReport lines={report.lines} offset={reportOffset} wrapLines={reportWrap} visibleLines={reportBudget} contentWidth={reportWidth} onLayout={(rows, columns) => { reportLayout.current = { rows, columns }; }} />
       ) : (
         <>
       <Box paddingX={spacing['pane-padding-x']}>
