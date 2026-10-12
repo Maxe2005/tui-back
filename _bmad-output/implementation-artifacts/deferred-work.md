@@ -732,3 +732,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
   summary: A write to state.json while another field is corrupt treats the file as empty and overwrites it, discarding the valid sibling fields.
   evidence: Pre-existing `writeActiveEdt`/`writeSplitterRatios`/`writeFilterHistory` convention (only state-read-error is propagated); the shared `mergeWriteStateFile` preserves it, now also covering commandHistory.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: Under `if-changed`, a source whose earlier publish failed (nothing new to merge) is never published, and a merge touching only non-package files still publishes.
+  evidence: `shouldRunSharedTypesPhase` keys only on merge kind `advanced`; no check of the repo's own version against the registry.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: A phase retry after publish succeeded but registry verification failed re-runs the publish command, and a partial-propagation retry re-propagates consumers that already succeeded without an idempotence test.
+  evidence: Retry reuses `publishedVersion` only after a verified publish; the 4.3 already-published re-check is not applied inside the smart phase.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: With the source row deselected the config row still shows its mode though confirm drops it, and a missing container/restart/sharedTypes dep silently runs a plain update.
+  evidence: `confirmUpdateConfigDraft` drops the mode silently and `buildSharedTypesHook` returns null without a notice.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: The phase result (published version, per-consumer outcomes) is not shown after the run, and a consumer skipped for a dirty package.json stays on the old version without a visible warning.
+  evidence: Only failed consumers pause the run; results are discarded after the hook returns.
