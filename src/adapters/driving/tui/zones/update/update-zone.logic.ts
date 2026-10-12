@@ -12,6 +12,7 @@ import type {
   UpdateBlockerKind,
   UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
+import type { SharedTypesStage } from '../../../../../core/shared-types/smart-update.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
@@ -155,7 +156,7 @@ function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
 // (migrations). Entries start `resolved: false` and flip to `true` once the run
 // re-verifies the service after the developer acted — a failed re-verify keeps them
 // unresolved. The log is store-side derivation (never core state) and is cleared per run.
-export type ServiceIssueKind = UpdateBlockerKind | 'migration-failed';
+export type ServiceIssueKind = UpdateBlockerKind | 'migration-failed' | 'shared-types-phase-failed';
 
 export interface ServiceIssue {
   kind: ServiceIssueKind;
@@ -166,8 +167,13 @@ export interface ServiceIssue {
 // The detail pane's live body: the current step plus the issue log with resolved/unresolved
 // marking — replacing the last-outcome view while a run targets the selected service. A targeted
 // service with no phase emitted yet (the run just started) reports `starting`.
-export function formatLiveServiceDetail(phase: UpdatePhase | undefined, issues: readonly ServiceIssue[]): string {
-  const lines = [`step: ${phase ?? 'starting'}`];
+export function formatLiveServiceDetail(
+  phase: UpdatePhase | undefined,
+  issues: readonly ServiceIssue[],
+  sharedTypesStage?: SharedTypesStage,
+): string {
+  // The `shared-types` phase runs after the service's own update: it replaces the core step.
+  const lines = [sharedTypesStage !== undefined ? `step: ${sharedTypesStage} shared-types` : `step: ${phase ?? 'starting'}`];
   for (const issue of issues) {
     const mark = issue.resolved ? '✔' : '○';
     const state = issue.resolved ? 'resolved' : 'unresolved';

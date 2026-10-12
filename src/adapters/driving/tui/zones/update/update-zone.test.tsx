@@ -919,6 +919,13 @@ describe('formatServiceOutcomeDetail — run detail', () => {
   });
 });
 
+describe('formatLiveServiceDetail — shared-types phase', () => {
+  it('shows the phase on the source service instead of the core step', () => {
+    expect(formatLiveServiceDetail(undefined, [], 'publishing')).toBe('step: publishing shared-types');
+    expect(formatLiveServiceDetail('pulling', [], 'propagating')).toBe('step: propagating shared-types');
+  });
+});
+
 describe('formatLiveServiceDetail', () => {
   it('renders the current step with no issues', () => {
     expect(formatLiveServiceDetail('pulling', [])).toBe('step: pulling');

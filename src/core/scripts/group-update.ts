@@ -15,7 +15,8 @@ import type { RegistryPort } from '../ports/registry.js';
 import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
-import { runPool, type PoolControl } from './run-pool.js';
+import { runPool, type PoolControl, type StageControl } from './run-pool.js';
+export type { StageControl };
 
 // The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)
 // serializes on it, so a second trigger is rejected, never queued or raced.
@@ -189,6 +190,10 @@ export interface GroupUpdateParams {
   // Optional stage of a target: stages run in ascending order, each fully finished before the
   // next starts (a later story runs `shared-types` alone first). Absent: one stage.
   ordering?: (target: { service: string; repoPath: string }) => number;
+  // Awaited once each stage has finished (also after the last), with that stage's final rows;
+  // it may cancel the run so the remaining stages are reported as cancelled. Generic seam: core
+  // knows nothing about what the driving side does between stages. A throwing hook cancels.
+  afterStage?: (stage: number, rows: GroupUpdateRepoResult[], control: StageControl) => void | Promise<void>;
 }
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
@@ -365,6 +370,9 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
         keyOf: (target) => resolve(target.repoPath),
         ...(params.ordering !== undefined
           ? { stageOf: (target) => params.ordering?.({ service: serviceFallback(target.repoPath), repoPath: target.repoPath }) ?? 0 }
+          : {}),
+        ...(params.afterStage !== undefined
+          ? { afterStage: (stage: number, stageRows: (GroupUpdateRepoResult | undefined)[], control: StageControl) => params.afterStage?.(stage, stageRows.filter((row): row is GroupUpdateRepoResult => row !== undefined), control) }
           : {}),
         onCancelled: async (target) => {
           const loaded = await manifest.load(target.repoPath);
@@ -590,6 +598,9 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
           keyOf: ({ member }) => resolve(member.repoPath),
           ...(params.ordering !== undefined
             ? { stageOf: ({ member }) => params.ordering?.({ service: member.service, repoPath: member.repoPath }) ?? 0 }
+            : {}),
+          ...(params.afterStage !== undefined
+            ? { afterStage: (stage: number, stageRows: (GroupUpdateRepoResult | undefined)[], control: StageControl) => params.afterStage?.(stage, stageRows.filter((row): row is GroupUpdateRepoResult => row !== undefined), control) }
             : {}),
           onCancelled: ({ member }) => {
             const row = runCancelledRow(member.service, member.repoPath, 'before it started');

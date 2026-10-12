@@ -917,3 +917,92 @@ describe('UpdateZone — incident queue popup', () => {
   });
 });
 
+describe('UpdateZone — shared-types phase failure incident', () => {
+  function storeWithPhaseIncident() {
+    const store = createAppStore();
+    const resolved: Array<[string, string]> = [];
+    store.setState({
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      updateStatus: 'running',
+      incidentPopupOpen: true,
+      incidents: [
+        { id: 'p1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'shared-types-phase-failed', message: 'publish failed' }, raisedAt: Date.now() },
+      ],
+      resolveUpdateIncident: (id: string, choice: string) => {
+        resolved.push([id, choice]);
+      },
+    } as never);
+    return { store, resolved };
+  }
+
+  it.each([
+    ['retry', [] as string[], 'edited'],
+    ['skip', [KEYS.down], 'cancel-repo'],
+    ['abort', [KEYS.down, KEYS.down], 'cancel-run'],
+  ])('%s answers the paused phase with the matching seam choice', async (_name, downs, expected) => {
+    const { store, resolved } = storeWithPhaseIncident();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      for (const key of downs) {
+        await press(instance, stdin, key);
+      }
+      await press(instance, stdin, KEYS.enter);
+      expect(resolved).toEqual([['p1', expected]]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('UpdateZone — shared-types phase live tracking', () => {
+  it('keeps the finished source targeted, shows the phase, and counts it in flight on quit', async () => {
+    const ROW_A: ServiceBranchDivergence = {
+      service: 'svc-a',
+      path: '/repo/a',
+      isMember: true,
+      sharedBranch: 'development',
+      protectedBranches: [],
+      branch: 'feat/a',
+      ahead: 0,
+      behind: 0,
+      status: 'current',
+    };
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [ROW_A],
+      edtsBranchesStatus: 'idle',
+      edts: [
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+        },
+      ],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServiceDone: { 'svc-a': true },
+      liveSharedTypesPhase: { 'svc-a': 'publishing' },
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    } as never);
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // Targeted despite its final row: the live view (not the last-update view) is shown.
+      await waitForOutput(instance, stdout, 'step: publishing shared-types');
+      await press(instance, stdin, 'q');
+      await waitForOutput(instance, stdout, '1 service in flight');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+

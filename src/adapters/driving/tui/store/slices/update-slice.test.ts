@@ -848,6 +848,8 @@ describe('update slice: pre-run configuration screen', () => {
       error: null,
       layout: 'edt-panels',
       strategy: { kind: 'shared' },
+      sharedTypes: 'off',
+      sharedTypesSource: null,
     });
     // Opening the screen runs no git/docker action and starts no run.
     expect(store.getState().updateStatus).toBe('idle');
@@ -1318,6 +1320,8 @@ describe('update slice: pre-run configuration screen', () => {
     expect(() => store.getState().setUpdateConfig({
       scope: 'edt',
       rows: [],
+      sharedTypes: 'off',
+      sharedTypesSource: null,
       runMigrations: true,
       cleanRestart: false,
       error: null,
@@ -2253,5 +2257,191 @@ describe('update slice: merge source from another EDT', () => {
     const store = createAppStore(depsWithSibling());
     await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
     expect(store.getState().updateConfig!.layout).toBe('service-panels');
+  });
+});
+
+describe('update slice: smart group update (shared-types first)', () => {
+  // svc-a (/repo/a) is the single source, svc-b (/repo/b) its consumer.
+  function smartDeps(options: { publishFails?: () => boolean } = {}) {
+    const base = fakeDeps();
+    const heads = new Map<string, number>();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) => {
+        const name = repoPath.split('/').pop() ?? '';
+        return ok({
+          service: `svc-${name}`,
+          container: `ctr-${name}`,
+          migrationCommand: 'npm run migration:run',
+          sharedBranch: 'development',
+          modules: (name === 'a' ? { 'src-mod': {} } : { 'cons-mod': {} }) as Record<string, Record<string, unknown>>,
+        });
+      }),
+    };
+    const git = {
+      ...base.git,
+      // Every pull/merge moves HEAD: the merge reads as `advanced`.
+      headRevision: vi.fn(async (repoPath: string) => {
+        const next = (heads.get(repoPath) ?? 0) + 1;
+        heads.set(repoPath, next);
+        return ok(`h${String(next)}`);
+      }),
+      diffStat: vi.fn(async () => ok({ files: 1, insertions: 1, deletions: 0 })),
+      // The commit cleans the consumer's worktree again.
+      commit: vi.fn(async () => {
+        heads.set('written', 0);
+        return ok(undefined);
+      }),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b' && (heads.get('written') ?? 0) > 0 ? ['package.json'] : [])),
+    } as unknown as GitPort;
+    const restart: RestartPort = {
+      run: vi.fn(async (_repoPath: string, command: string) =>
+        command === 'npm run v' && options.publishFails?.() === true ? err('restart-failed', 'npm ERR boom') : ok({ output: '' }),
+      ),
+    };
+    const sharedTypes = {
+      port: {
+        readVersion: vi.fn(async () => ok('0.1.0')),
+        readOwnVersion: vi.fn(async () => ok('0.1.5')),
+        writeVersionLine: vi.fn(async () => {
+          heads.set('written', 1);
+          return ok(undefined);
+        }),
+        verifyPublished: vi.fn(async () => ok(true)),
+      },
+      sourceModuleId: 'src-mod',
+      parseSourceConfig: () => ok({ publishCommand: 'npm run v', packageName: '@x/types' }),
+      consumerModuleId: 'cons-mod',
+      parseConsumerConfig: () => ok({ dependency: '@x/types', packageJsonPath: 'package.json' }),
+    };
+    const deps = fakeDeps({ manifest, git, restart, sharedTypes });
+    return { deps, restart, git, sharedTypes };
+  }
+
+  const RUN = {
+    selection: [
+      { service: 'svc-a', repoPath: '/repo/a' },
+      { service: 'svc-b', repoPath: '/repo/b' },
+    ],
+    sharedTypesSource: '/repo/a',
+  };
+
+  const order = (fn: unknown, predicate: (args: unknown[]) => boolean): number => {
+    const mock = fn as { mock: { calls: unknown[][]; invocationCallOrder: number[] } };
+    const index = mock.mock.calls.findIndex(predicate);
+    return index === -1 ? -1 : (mock.mock.invocationCallOrder[index] ?? -1);
+  };
+
+  it('updates the source alone, publishes, propagates with a commit, then updates the others', async () => {
+    const { deps, restart, git } = smartDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults.map((row) => row.outcome)).toEqual(['updated', 'updated']);
+    const publish = order(restart.run, (args) => args[1] === 'npm run v');
+    const sourceMigration = order(deps.migration!.run, (args) => args[0] === '/repo/a');
+    const consumerMigration = order(deps.migration!.run, (args) => args[0] === '/repo/b');
+    expect(sourceMigration).toBeGreaterThan(0);
+    expect(publish).toBeGreaterThan(sourceMigration);
+    expect(consumerMigration).toBeGreaterThan(publish);
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.stringContaining('0.1.5'), ['package.json']);
+    expect(store.getState().liveSharedTypesPhase).toEqual({});
+  });
+
+  it('does nothing extra when the setting is off', async () => {
+    const { deps, restart } = smartDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'off' });
+
+    expect(restart.run).not.toHaveBeenCalledWith('/repo/a', 'npm run v');
+    expect(deps.git.commit).not.toHaveBeenCalled();
+  });
+
+  it('a single-service update of the source still propagates to its consumers without updating them', async () => {
+    const { deps, git } = smartDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('edt', { selection: [{ service: 'svc-a', repoPath: '/repo/a' }], sharedTypes: 'always', sharedTypesSource: '/repo/a' });
+
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.any(String), ['package.json']);
+  });
+
+  it('pauses on a phase failure and starts no other service until the developer chooses (retry then skip)', async () => {
+    let failing = true;
+    const { deps, restart } = smartDeps({ publishFails: () => failing });
+    const store = createAppStore(deps);
+
+    const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidents[0]?.blocker).toMatchObject({ kind: 'shared-types-phase-failed', service: 'svc-a' });
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+
+    // Retry re-runs the phase; it fails again and pauses again (still blocked).
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
+    await vi.waitFor(() => expect(restart.run).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidents[0]?.stillBlocked).toBeDefined();
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+
+    // Skip continues without the phase: the consumer is updated, nothing was committed.
+    failing = false;
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+    expect(store.getState().updateResults.map((row) => `${row.service}:${row.outcome}`)).toEqual(['svc-a:updated', 'svc-b:updated']);
+    expect(deps.git.commit).not.toHaveBeenCalled();
+  });
+
+  it('abort cancels the remaining services', async () => {
+    const { deps } = smartDeps({ publishFails: () => true });
+    const store = createAppStore(deps);
+
+    const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-run');
+    await run;
+
+    expect(store.getState().updateResults.map((row) => `${row.service}:${row.outcome}`)).toEqual(['svc-a:updated', 'svc-b:skipped']);
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+  });
+
+  it('the config draft carries the shared-types row only for a single source among the rows', async () => {
+    const { deps } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig?.sharedTypesSource).toBe('/repo/a');
+    expect(store.getState().updateConfig?.sharedTypes).toBe('off');
+    store.getState().closeUpdateConfig();
+
+    await store.getState().openUpdateConfig({ service: 'svc-b', repoPath: '/repo/b' });
+    expect(store.getState().updateConfig?.sharedTypesSource).toBeNull();
+
+    const plain = createAppStore(fakeDeps());
+    await plain.getState().openUpdateConfig('edt');
+    expect(plain.getState().updateConfig?.sharedTypesSource).toBeNull();
+  });
+
+  it('the real confirm path forwards the mode and source: publish runs and the consumer is committed', async () => {
+    const { deps, restart, git } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    store.getState().setUpdateConfig({ ...store.getState().updateConfig!, sharedTypes: 'always' });
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(restart.run).toHaveBeenCalledWith('/repo/a', 'npm run v');
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.stringContaining('0.1.5'), ['package.json']);
+  });
+
+  it('confirming passes the mode through and a deselected source runs nothing extra', async () => {
+    const { deps, restart } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig!;
+    store.getState().setUpdateConfig({ ...draft, sharedTypes: 'always', rows: draft.rows.map((row) => (row.repoPath === '/repo/a' ? { ...row, selected: false } : row)) });
+    await store.getState().confirmUpdateConfig();
+    expect(restart.run).not.toHaveBeenCalledWith('/repo/a', 'npm run v');
   });
 });

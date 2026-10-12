@@ -184,6 +184,7 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.onServiceResult !== undefined ? { onServiceResult: overrides.onServiceResult } : {}),
     ...(overrides.concurrency !== undefined ? { concurrency: overrides.concurrency } : {}),
     ...(overrides.ordering !== undefined ? { ordering: overrides.ordering } : {}),
+    ...(overrides.afterStage !== undefined ? { afterStage: overrides.afterStage } : {}),
   };
 }
 
@@ -1026,6 +1027,27 @@ describe('groupUpdate — all-repos scope', () => {
       ...overrides,
     };
   }
+
+  it('forwards ordering and afterStage: the hook sees the stage rows and a cancel there cancels later stages', async () => {
+    const seen: string[] = [];
+    const result = await groupUpdate(
+      allParams({
+        concurrency: 3,
+        ordering: ({ repoPath }) => (repoPath === '/repo/b' ? 0 : 1),
+        afterStage: (stage, rows, control) => {
+          seen.push(`${stage}:${rows.map((row) => row.service).join(',')}`);
+          if (stage === 0) {
+            control.cancel();
+          }
+        },
+      }),
+    );
+    expect(seen).toEqual(['0:b']);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'a', outcome: 'skipped', detail: { code: 'run-cancelled' } }, { service: 'b', outcome: 'updated' }] },
+    });
+  });
 
   it('runs the same per-service flow for every managed repo, each in results', async () => {
     const git = fakeGit();
@@ -2899,5 +2921,26 @@ describe('groupUpdate — parallel pool', () => {
     });
     await groupUpdate(makeParams({ migration, concurrency: 3, ordering: ({ service }) => (service === 'svc-b' ? 0 : 1) }));
     expect(started).toEqual(['start:/repo/b', 'end:/repo/b', 'start:/repo/a', 'end:/repo/a']);
+  });
+
+  it('afterStage sees the stage rows; a cancel there skips the later stage and its hook', async () => {
+    const seen: string[] = [];
+    const result = await groupUpdate(
+      makeParams({
+        concurrency: 3,
+        ordering: ({ service }) => (service === 'svc-b' ? 0 : 1),
+        afterStage: (stage, rows, control) => {
+          seen.push(`${stage}:${rows.map((row) => row.service).join(',')}`);
+          if (stage === 0) {
+            control.cancel();
+          }
+        },
+      }),
+    );
+    expect(seen).toEqual(['0:svc-b']);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'run-cancelled' } }, { service: 'svc-b', outcome: 'updated' }] },
+    });
   });
 });

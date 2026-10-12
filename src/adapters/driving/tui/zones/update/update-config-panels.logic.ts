@@ -8,6 +8,7 @@ import {
   validateSuggestValue,
   type SuggestFieldState,
 } from '../../shared/components/suggest-field.logic.js';
+import type { SharedTypesMode } from '../../../../../core/shared-types/smart-update.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 import type { TextEditKey } from '../../shared/components/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -45,15 +46,28 @@ export function rowMode(row: UpdateConfigRow): 'global' | 'custom' {
   return row.origin === 'manual' || row.migrations !== 'follow' || row.cleanRestart !== 'follow' ? 'custom' : 'global';
 }
 
-export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart' | 'start';
+export type GlobalLine = 'source' | 'edt' | 'migrations' | 'cleanRestart' | 'sharedTypes' | 'start';
 
 export function globalLines(draft: UpdateConfigDraft): GlobalLine[] {
+  // The `shared-types` row exists only when the EDT has exactly one source repo among the rows.
+  const sharedTypes: GlobalLine[] = draft.sharedTypesSource !== null ? ['sharedTypes'] : [];
   if (draft.layout !== 'edt-panels') {
-    return ['migrations', 'cleanRestart', 'start'];
+    return ['migrations', 'cleanRestart', ...sharedTypes, 'start'];
   }
   return draft.strategy.kind === 'shared'
-    ? ['source', 'migrations', 'cleanRestart', 'start']
-    : ['source', 'edt', 'migrations', 'cleanRestart', 'start'];
+    ? ['source', 'migrations', 'cleanRestart', ...sharedTypes, 'start']
+    : ['source', 'edt', 'migrations', 'cleanRestart', ...sharedTypes, 'start'];
+}
+
+const SHARED_TYPES_CYCLE: readonly SharedTypesMode[] = ['off', 'if-changed', 'always'];
+
+// off -> publish if changed -> always publish -> off.
+export function cycleSharedTypes(mode: SharedTypesMode): SharedTypesMode {
+  return SHARED_TYPES_CYCLE[(SHARED_TYPES_CYCLE.indexOf(mode) + 1) % SHARED_TYPES_CYCLE.length] ?? 'off';
+}
+
+export function sharedTypesLabel(mode: SharedTypesMode): string {
+  return mode === 'off' ? 'off' : mode === 'if-changed' ? 'publish if the merge changed something' : 'always publish';
 }
 
 export function clampPanelCursor(draft: UpdateConfigDraft, cursor: number): number {
@@ -70,6 +84,9 @@ export function toggleGlobalLine(draft: UpdateConfigDraft, line: GlobalLine): Up
   }
   if (line === 'cleanRestart') {
     return { ...draft, cleanRestart: !draft.cleanRestart, error: null };
+  }
+  if (line === 'sharedTypes') {
+    return { ...draft, sharedTypes: cycleSharedTypes(draft.sharedTypes), error: null };
   }
   return draft;
 }

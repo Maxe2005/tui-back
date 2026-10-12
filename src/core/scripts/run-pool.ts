@@ -18,6 +18,12 @@ export interface PoolControl {
   cancel(): void;
 }
 
+// What the between-stage hook may do to the pool.
+export interface StageControl {
+  cancelled(): boolean;
+  cancel(): void;
+}
+
 export interface RunPoolOptions<T, R> {
   concurrency: number;
   // Items sharing a key are never in flight together (e.g. the resolved repoPath).
@@ -25,6 +31,10 @@ export interface RunPoolOptions<T, R> {
   // Items run stage by stage in ascending order; a stage starts once the previous one has
   // fully finished (a later story runs `shared-types` alone first). Default: one stage.
   stageOf?: (item: T) => number;
+  // Awaited once each stage has fully finished, before the next one starts (also after the last
+  // one). It receives that stage's rows in input order and may cancel the run, so every later
+  // stage resolves through `onCancelled`. A throwing hook cancels the run too — never a rejection.
+  afterStage?: (stage: number, rows: (R | undefined)[], control: StageControl) => void | Promise<void>;
   // The row for an item that never started because the run was cancelled.
   onCancelled: (item: T) => R | undefined | Promise<R | undefined>;
   // The row for a worker that threw (never-throw invariant).
@@ -132,7 +142,21 @@ export async function runPool<T, R>(
     stages.set(stage, [...(stages.get(stage) ?? []), index]);
   });
   for (const stage of [...stages.keys()].sort((a, b) => a - b)) {
-    await Promise.all((stages.get(stage) ?? []).map((index) => runOne(index)));
+    const indices = stages.get(stage) ?? [];
+    await Promise.all(indices.map((index) => runOne(index)));
+    // A run cancelled during the stage never triggers the between-stage work.
+    if (options.afterStage !== undefined && !cancelled) {
+      try {
+        await options.afterStage(
+          stage,
+          indices.map((index) => results[index]),
+          { cancelled: () => cancelled, cancel: () => { cancelled = true; } },
+        );
+      } catch {
+        // A failing hook must not let later stages run unsupervised.
+        cancelled = true;
+      }
+    }
   }
   return results;
 }
