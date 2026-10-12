@@ -7,8 +7,10 @@ import {
   groupUpdate as groupUpdateUseCase,
   markGroupUpdateInterrupted as markGroupUpdateInterruptedUseCase,
   MIGRATION_FAILED_CODE,
+  type AutoResolveConflict,
   type GroupUpdateRepoResult,
   type GroupUpdateScope,
+  type StageControl,
   type GroupUpdateSelectionItem,
   type OnUpdatePhase,
   type UpdateBlocker,
@@ -26,6 +28,18 @@ import {
   type ServiceIssue,
   type ServiceStepStates,
 } from '../../zones/update/update-zone.logic.js';
+import { autoResolveSharedTypesConflict } from '../../../../../core/shared-types/resolve-conflict.js';
+import { listConsumers, type DependencyConsumer } from '../../../../../core/shared-types/list-consumers.js';
+import {
+  runSharedTypesPhase,
+  SHARED_TYPES_PHASE_FAILED,
+  shouldRunSharedTypesPhase,
+  type SharedTypesMode,
+  type SharedTypesPhaseFailure,
+  type SharedTypesPhaseOutcome,
+  type SharedTypesStage,
+} from '../../../../../core/shared-types/smart-update.js';
+import { resolveSingleSourceOf, resolveSourceRegistries } from './shared-types-slice.js';
 import { loadMergeSourcesFromEdt } from '../../../../../core/scripts/resolve-merge-sources.js';
 import {
   applyMergeStrategy,
@@ -63,6 +77,10 @@ export type UpdateRunOptions = {
   selection?: GroupUpdateSelectionItem[];
   runMigrations?: boolean;
   cleanRestart?: boolean;
+  // Run-wide `shared-types` handling and the source repo it applies to: the source is updated
+  // alone first, then published and propagated before the other services start.
+  sharedTypes?: SharedTypesMode;
+  sharedTypesSource?: string | null;
 };
 
 // The pre-run configuration target — an EDT/all scope, or a single service (`repoPath`
@@ -117,6 +135,9 @@ export type UpdateSlice = {
   // error); the issue map additionally survives completion so a migration failure that
   // ended its service mid-run stays inspectable until the next run clears it.
   liveServicePhase: Record<string, UpdatePhase>;
+  // The `shared-types` phase (publishing / propagating) currently running on a service — the
+  // source repo, whose own row is already final while the phase runs. Cleared with the live maps.
+  liveSharedTypesPhase: Record<string, SharedTypesStage>;
   liveServiceIssues: Record<string, ServiceIssue[]>;
   // The per-service step tracker (merge / migration / restart, each pending → running →
   // done|failed|skipped) advanced by the same `onPhase` emissions; cleared with the live maps.
@@ -295,11 +316,23 @@ export interface ServiceRunSnapshot {
   topic: string | null;
 }
 
+// The `shared-types` phase failed (publish or propagation): the run is paused on the source
+// service until the developer picks retry / skip / abort. Raised through the same incident
+// queue as the core blockers, which stay untouched.
+export interface SharedTypesPhaseBlocker {
+  service: string;
+  repoPath: string;
+  kind: typeof SHARED_TYPES_PHASE_FAILED;
+  message: string;
+}
+
+export type IncidentBlocker = UpdateBlocker | SharedTypesPhaseBlocker;
+
 // One service waiting on the developer. `stillBlocked` marks an incident re-raised after a
 // choice whose re-verification did not settle it, with the reason core reported.
 export interface UpdateIncident {
   id: string;
-  blocker: UpdateBlocker;
+  blocker: IncidentBlocker;
   raisedAt: number;
   stillBlocked?: { reason: string };
 }
@@ -311,7 +344,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   const incidentResolvers = new Map<string, (choice: UpdateBlockerChoice) => void>();
   // The kind of the last incident each service raised in this run — a second incident of the same
   // kind is a failed re-verification ("still blocked"). Never in Zustand state.
-  const raisedKinds = new Map<string, UpdateBlocker['kind']>();
+  const raisedKinds = new Map<string, IncidentBlocker['kind']>();
   let incidentSequence = 0;
   // One shared poll timer for every currently-tracked service (not one per
   // repoPath, unlike logs-slice.ts) — restarted whenever the tracked list changes so a
@@ -397,13 +430,29 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // Opens the screen over a clean banner: a stale `done`/`error` outcome from the previous
     // run must not linger underneath the new configuration. Per-run history
     // (`updateResults`, `lastServiceOutcomes`) is kept — only the banner fields reset.
-    function openConfigDraft(
+    // The `shared-types` row exists only when the active EDT has exactly one source repo and it
+    // is one of the rows: that row's repoPath, else null (row hidden).
+    async function resolveSharedTypesSource(rows: readonly UpdateConfigRowInput[]): Promise<string | null> {
+      try {
+        const resolved = await resolveSingleSourceOf(deps);
+        if (!resolved.ok) {
+          return null;
+        }
+        const wanted = resolve(resolved.source.repoPath);
+        return rows.find((row) => resolve(row.repoPath) === wanted)?.repoPath ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function openConfigDraft(
       scope: GroupUpdateScope,
       rows: UpdateConfigRowInput[],
       options?: { layout?: ConfigLayout },
-    ): void {
+    ): Promise<void> {
+      const sharedTypesSource = await resolveSharedTypesSource(rows);
       set({
-        updateConfig: createUpdateConfigDraft(scope, rows, options),
+        updateConfig: createUpdateConfigDraft(scope, rows, { ...options, sharedTypesSource }),
         updateStatus: 'idle',
         updateError: null,
         updateErrorCode: null,
@@ -453,7 +502,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         failConfigOpen('no-services-selected', `EDT "${active.topic}" has no member services — nothing to update.`);
         return;
       }
-      openConfigDraft('edt', rows, { layout: 'edt-panels' });
+      await openConfigDraft('edt', rows, { layout: 'edt-panels' });
     }
 
     // The managed-repo enumeration shared by openAllReposConfig and
@@ -514,7 +563,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         failConfigOpen('no-services-selected', 'No managed repos found — nothing to update.');
         return;
       }
-      openConfigDraft('all', enumerated.rows, { layout: 'all-panels' });
+      await openConfigDraft('all', enumerated.rows, { layout: 'all-panels' });
     }
 
     // The reusable pre-scoped entry point (the single-service update reuses it): exactly one
@@ -536,7 +585,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           failConfigOpen(scope.error.code, scope.error.message);
           return;
         }
-        openConfigDraft(scope.data, [
+        await openConfigDraft(scope.data, [
           { service: loaded.data.service, repoPath, sourceBranch: loaded.data.sharedBranch },
         ]);
         return;
@@ -552,7 +601,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         const wanted = service.toLowerCase();
         const member = active?.members.find((candidate) => candidate.service.toLowerCase() === wanted);
         if (member !== undefined) {
-          openConfigDraft('edt', [
+          await openConfigDraft('edt', [
             { service: member.service, repoPath: member.repoPath, sourceBranch: await resolveBranchDefault(member.repoPath) },
           ]);
           return;
@@ -569,7 +618,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         }
         const loaded = await deps.manifest.load(candidate);
         if (loaded.ok && loaded.data.service.toLowerCase() === service.toLowerCase()) {
-          openConfigDraft('all', [
+          await openConfigDraft('all', [
             { service: loaded.data.service, repoPath: candidate, sourceBranch: loaded.data.sharedBranch },
           ]);
           return;
@@ -603,6 +652,209 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       return ok(active !== undefined && active.members.some((member) => resolve(member.repoPath) === wanted) ? 'edt' : 'all');
     }
 
+    // Raises one incident in the queue and waits for the developer's choice. Shared by core's
+    // blocker seam and the `shared-types` phase failure: the first incident opens the popup when
+    // the developer is in the Update zone, later ones never steal focus (a toast names them).
+    function raiseIncident(blocker: IncidentBlocker): Promise<UpdateBlockerChoice> {
+      incidentSequence += 1;
+      const id = `incident-${incidentSequence}`;
+      const stillBlocked = raisedKinds.get(blocker.service) === blocker.kind;
+      raisedKinds.set(blocker.service, blocker.kind);
+      const reason = 'retryReason' in blocker ? blocker.retryReason : undefined;
+      const incident: UpdateIncident = {
+        id,
+        blocker,
+        raisedAt: Date.now(),
+        ...(stillBlocked
+          ? { stillBlocked: { reason: blocker.kind === SHARED_TYPES_PHASE_FAILED ? (blocker as SharedTypesPhaseBlocker).message : (reason ?? 'Re-verification failed — the repo is still blocked') } }
+          : {}),
+      };
+      return new Promise<UpdateBlockerChoice>((resolveChoice) => {
+        incidentResolvers.set(id, resolveChoice);
+        set((state) => {
+          const first = state.incidents.length === 0;
+          const popupOpensNow = first && state.activeZone === 'update';
+          return {
+            incidents: [...state.incidents, incident],
+            incidentPopupOpen: popupOpensNow ? true : state.incidentPopupOpen,
+            incidentToast: popupOpensNow ? state.incidentToast : `${blocker.service} needs you (${blocker.kind})`,
+            // A resolved entry re-raised stays unresolved; only a fresh service appends.
+            liveServiceIssues: stillBlocked
+              ? state.liveServiceIssues
+              : appendLiveIssue(state.liveServiceIssues, blocker.service, {
+                  kind: blocker.kind,
+                  detail:
+                    blocker.kind === SHARED_TYPES_PHASE_FAILED
+                      ? (blocker as SharedTypesPhaseBlocker).message
+                      : blocker.kind === 'unpushed-commits'
+                        ? `${blocker.branch ?? ''}: ${(blocker.commits ?? []).join(' | ')}`
+                        : blocker.kind === 'merge-conflict' && blocker.autoResolveNote !== undefined
+                          ? `${blocker.repoPath} — ${blocker.autoResolveNote}`
+                          : blocker.repoPath,
+                  resolved: false,
+                }),
+          };
+        });
+      });
+    }
+
+    // Builds the between-stage hook of a smart group update: once the source repo (alone in
+    // stage 0) is updated, publish and propagate its version; on failure pause on an incident
+    // (retry / skip / abort). Never throws — every failure becomes a phase failure.
+    function buildSharedTypesHook(mode: SharedTypesMode, sourceRepoPath: string | null | undefined, runState: { publishedVersion: string | undefined }) {
+      if (
+        mode === 'off' ||
+        sourceRepoPath === null ||
+        sourceRepoPath === undefined ||
+        !deps ||
+        deps.container === undefined ||
+        deps.restart === undefined ||
+        deps.sharedTypes === undefined
+      ) {
+        return null;
+      }
+      const sharedDeps = deps;
+      const wired = deps.sharedTypes;
+      const container = deps.container;
+      const restart = deps.restart;
+      const sourceKey = resolve(sourceRepoPath);
+      const setStage = (service: string, stage: SharedTypesStage | null) =>
+        set((state) => ({ liveSharedTypesPhase: stage === null ? omitKey(state.liveSharedTypesPhase, service) : { ...state.liveSharedTypesPhase, [service]: stage } }));
+
+      const attempt = async (sourceRow: GroupUpdateRepoResult | undefined, publishedVersion: string | undefined): Promise<Result<unknown>> => {
+        const resolved = await resolveSingleSourceOf(sharedDeps);
+        if (!resolved.ok) {
+          return err(SHARED_TYPES_PHASE_FAILED, resolved.message ?? 'Cannot resolve the source repo.');
+        }
+        const source = resolved.source;
+        if (resolve(source.repoPath) !== sourceKey) {
+          return err(SHARED_TYPES_PHASE_FAILED, `The source repo changed since the configuration was opened (${source.service}).`);
+        }
+        if (!shouldRunSharedTypesPhase(mode, sourceRow)) {
+          return ok(undefined);
+        }
+        if (wired.consumerModuleId === undefined || wired.parseConsumerConfig === undefined) {
+          return err(SHARED_TYPES_PHASE_FAILED, 'Version propagation is not available in this session.');
+        }
+        const consumers = await listConsumers({
+          edtRegistry: sharedDeps.edtRegistry,
+          manifest: sharedDeps.manifest,
+          state: sharedDeps.state,
+          moduleId: wired.consumerModuleId,
+          parseConfig: wired.parseConsumerConfig,
+        });
+        if (!consumers.ok) {
+          return err(SHARED_TYPES_PHASE_FAILED, consumers.error.message);
+        }
+        return runSharedTypesPhase({
+          git: sharedDeps.git,
+          manifest: sharedDeps.manifest,
+          container,
+          restart,
+          shared: wired.port,
+          mode,
+          source,
+          sourceRow,
+          consumers: consumers.data.consumers,
+          registries: await resolveSourceRegistries(sharedDeps),
+          ...(publishedVersion !== undefined ? { publishedVersion } : {}),
+          onStage: (stage) => setStage(source.service, stage),
+        });
+      };
+
+      const afterStage = async (stage: number, rows: GroupUpdateRepoResult[], control: StageControl): Promise<void> => {
+        // Stage 0 holds the source repo alone; later stages are the remaining services.
+        const sourceRow = stage === 0 ? rows[0] : undefined;
+        if (stage !== 0 || sourceRow === undefined || !shouldRunSharedTypesPhase(mode, sourceRow)) {
+          return;
+        }
+        const service = sourceRow.service;
+        let publishedVersion: string | undefined;
+        for (;;) {
+          let outcome: Result<unknown>;
+          try {
+            outcome = await attempt(sourceRow, publishedVersion);
+          } catch (error) {
+            outcome = err(SHARED_TYPES_PHASE_FAILED, error instanceof Error ? error.message : String(error));
+          }
+          setStage(service, null);
+          if (outcome.ok) {
+            const phase = outcome.data as SharedTypesPhaseOutcome | undefined;
+            if (phase?.status === 'done') {
+              // Kept by the conflict auto-resolver for the rest of the run.
+              runState.publishedVersion = phase.version;
+            }
+            set((state) => ({ liveServiceIssues: resolveLiveIssues(state.liveServiceIssues, service) }));
+            return;
+          }
+          const details = outcome.error.details as SharedTypesPhaseFailure | undefined;
+          publishedVersion = details?.publishedVersion ?? publishedVersion;
+          if (publishedVersion !== undefined) {
+            runState.publishedVersion = publishedVersion;
+          }
+          const choice = await raiseIncident({ service, repoPath: sourceRepoPath, kind: SHARED_TYPES_PHASE_FAILED, message: outcome.error.message });
+          if (choice === 'edited') {
+            continue;
+          }
+          set((state) => ({ liveServiceIssues: resolveLiveIssues(state.liveServiceIssues, service) }));
+          if (choice === 'cancel-run') {
+            control.cancel();
+          }
+          return;
+        }
+      };
+
+      return { ordering: (target: { service: string; repoPath: string }) => (resolve(target.repoPath) === sourceKey ? 0 : 1), afterStage };
+    }
+
+    // The conflict auto-resolution seam of a run: settles the consumers' dependency version on a
+    // conflicting merge/pull. Null when the consumer module or the restart port is not wired.
+    function buildAutoResolveConflict(runState: { publishedVersion: string | undefined }): AutoResolveConflict | null {
+      const wired = deps?.sharedTypes;
+      if (
+        !deps ||
+        deps.restart === undefined ||
+        wired === undefined ||
+        wired.consumerModuleId === undefined ||
+        wired.parseConsumerConfig === undefined
+      ) {
+        return null;
+      }
+      const resolverDeps = deps;
+      const restart = deps.restart;
+      const moduleId = wired.consumerModuleId;
+      const parseConfig = wired.parseConsumerConfig;
+      // Cached once read successfully; a failed read is retried on the next conflict.
+      let consumers: DependencyConsumer[] | undefined;
+      return async ({ repoPath }) => {
+        if (consumers === undefined) {
+          const listed = await listConsumers({
+            edtRegistry: resolverDeps.edtRegistry,
+            manifest: resolverDeps.manifest,
+            state: resolverDeps.state,
+            moduleId,
+            parseConfig,
+          });
+          if (!listed.ok) {
+            return { touched: false, issue: `Cannot list the consumers of the active EDT: ${listed.error.message}` };
+          }
+          consumers = listed.data.consumers;
+        }
+        const wanted = resolve(repoPath);
+        const consumer = consumers.find((candidate) => resolve(candidate.repoPath) === wanted);
+        if (consumer === undefined) {
+          return { touched: false };
+        }
+        return autoResolveSharedTypesConflict({
+          git: resolverDeps.git,
+          restart,
+          repoPath,
+          consumer,
+          ...(runState.publishedVersion !== undefined ? { preferredVersion: runState.publishedVersion } : {}),
+        });
+      };
+    }
+
     return {
       updateStatus: 'idle',
       updateResults: [],
@@ -617,6 +869,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       incidentPopupOpen: false,
       incidentToast: null,
       liveServicePhase: {},
+      liveSharedTypesPhase: {},
       liveServiceSteps: {},
       updateNotice: null,
       liveServiceDone: {},
@@ -695,6 +948,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           // A fresh run starts with a fresh live view — stale phases and
           // resolved/unresolved entries from the previous run never leak into this one.
           liveServicePhase: {},
+          liveSharedTypesPhase: {},
           liveServiceSteps: {},
           updateNotice: null,
           liveServiceDone: {},
@@ -703,6 +957,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         incidentResolvers.clear();
         raisedKinds.clear();
         get().setRunInProgress(true);
+        const runState: { publishedVersion: string | undefined } = { publishedVersion: undefined };
+        const sharedTypesHook = buildSharedTypesHook(opts.sharedTypes ?? 'off', opts.sharedTypesSource, runState);
+        const autoResolveConflict = buildAutoResolveConflict(runState);
         // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
         // unexpected failure in production) must still clear `runInProgress` — otherwise the
         // AppShell `q` gate and every `runInProgress` reader wedge in `running` forever.
@@ -725,49 +982,14 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             ...(opts.selection !== undefined ? { selection: opts.selection } : {}),
             ...(opts.runMigrations !== undefined ? { runMigrations: opts.runMigrations } : {}),
             ...(opts.cleanRestart !== undefined ? { cleanRestart: opts.cleanRestart } : {}),
+            // Smart group update: the source repo goes first and alone, then the phase runs.
+            ...(sharedTypesHook !== null ? sharedTypesHook : {}),
+            ...(autoResolveConflict !== null ? { autoResolveConflict } : {}),
             // The TUI backs the assisted-resolution seam — core pauses the run on each
             // dirty/conflicted repo and waits here while the zone's modal menu collects the
             // developer's choice (stash / open in editor / cancel repo / cancel run). Raising the
             // menu also appends the live issue-log entry (unresolved until the run moves on).
-            onUpdateBlocker: async (blocker) => {
-              incidentSequence += 1;
-              const id = `incident-${incidentSequence}`;
-              const stillBlocked = raisedKinds.get(blocker.service) === blocker.kind;
-              raisedKinds.set(blocker.service, blocker.kind);
-              const incident: UpdateIncident = {
-                id,
-                blocker,
-                raisedAt: Date.now(),
-                ...(stillBlocked
-                  ? { stillBlocked: { reason: blocker.retryReason ?? 'Re-verification failed — the repo is still blocked' } }
-                  : {}),
-              };
-              return new Promise<UpdateBlockerChoice>((resolveChoice) => {
-                incidentResolvers.set(id, resolveChoice);
-                set((state) => {
-                  const first = state.incidents.length === 0;
-                  const popupOpensNow = first && state.activeZone === 'update';
-                  return {
-                    incidents: [...state.incidents, incident],
-                    // The first incident opens the popup when the developer is in the Update
-                    // zone; later ones (or any elsewhere) never steal focus — a toast names them.
-                    incidentPopupOpen: popupOpensNow ? true : state.incidentPopupOpen,
-                    incidentToast: popupOpensNow ? state.incidentToast : `${blocker.service} needs you (${blocker.kind})`,
-                    // A resolved entry re-raised stays unresolved; only a fresh service appends.
-                    liveServiceIssues: stillBlocked
-                      ? state.liveServiceIssues
-                      : appendLiveIssue(state.liveServiceIssues, blocker.service, {
-                          kind: blocker.kind,
-                          detail:
-                            blocker.kind === 'unpushed-commits'
-                              ? `${blocker.branch ?? ''}: ${(blocker.commits ?? []).join(' | ')}`
-                              : blocker.repoPath,
-                          resolved: false,
-                        }),
-                  };
-                });
-              });
-            },
+            onUpdateBlocker: (blocker) => raiseIncident(blocker),
             // The TUI backs the live-phase observer — core reports each
             // service's current step at its phase boundaries. The next phase for a service
             // implies its re-verification passed, so its unresolved entries flip to
@@ -821,6 +1043,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 // The live step clears with the run — revisiting a covered service shows the
                 // final per-service outcome, with its settled steps and context snapshot.
                 liveServicePhase: {},
+                liveSharedTypesPhase: {},
                 liveServiceSteps: {},
                 updateNotice: null,
                 liveServiceDone: {},
@@ -838,6 +1061,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
               updateErrorCode: result.error.code,
               // A top-level rejection ran nothing — no live state survives it.
               liveServicePhase: {},
+              liveSharedTypesPhase: {},
               liveServiceSteps: {},
               updateNotice: null,
               liveServiceDone: {},
@@ -851,6 +1075,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateError: detail,
             updateErrorCode: 'internal-error',
             liveServicePhase: {},
+            liveSharedTypesPhase: {},
             liveServiceSteps: {},
             updateNotice: null,
             liveServiceDone: {},
@@ -1074,6 +1299,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           selection: confirmed.config.selection,
           runMigrations: confirmed.config.runMigrations,
           cleanRestart: confirmed.config.cleanRestart,
+          ...(confirmed.config.sharedTypes !== undefined ? { sharedTypes: confirmed.config.sharedTypes, sharedTypesSource: confirmed.config.sharedTypesSource ?? null } : {}),
         });
         // A core pre-lock rejection (`unknown-branch`, `no-services-selected` — both are
         // only ever returned before any lock is taken, so nothing ran) restores the screen
@@ -1254,6 +1480,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateServicePick: null,
           serviceRestartInFlight: {},
           liveServicePhase: {},
+          liveSharedTypesPhase: {},
           liveServiceSteps: {},
           updateNotice: null,
           liveServiceDone: {},

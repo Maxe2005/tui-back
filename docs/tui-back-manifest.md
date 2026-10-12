@@ -269,6 +269,16 @@ elles-mêmes (lire la version déclarée, réécrire uniquement la ligne de
 dépendance, vérifier la publication sur le registre) passent par le port
 `SharedTypesPort` ([`src/core/ports/shared-types.ts`](../src/core/ports/shared-types.ts)).
 
+**Mise à jour de groupe « shared-types d'abord »** : lorsque l'EDT actif contient
+exactement un dépôt `shared-types-source` (parmi les services de la mise à jour),
+l'écran de configuration de la mise à jour (zone Update) affiche une ligne
+globale `shared-types` (barre d'espace pour changer) : `off` (défaut), `publish if the
+merge changed something` ou `always publish`. Le choix vaut pour le run en cours
+uniquement (jamais persisté, aucun changement de manifeste). Dépôt source mis à jour
+seul d'abord, puis publication, propagation (avec commit, sans `npm i` ni clean restart,
+jamais de push) vers tous les consommateurs de l'EDT, puis mise à jour des autres
+services. Un échec met le run en pause (réessayer / ignorer `shared-types` / abandonner).
+
 > Note : toute autre clé sous une entrée de module est acceptée par le
 > schéma (les valeurs de `modules.<id>` sont un `Record<string, unknown>`
 > libre) mais n'a d'effet que si le code du module correspondant la lit.

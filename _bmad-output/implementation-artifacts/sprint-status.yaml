@@ -132,8 +132,8 @@ development_status:
   4-1-shared-types-modules-manifest-parameters: done
   4-2-propagate-a-version-to-chosen-services: done
   4-3-publish-a-new-shared-types-version: review
-  4-4-smart-group-update-shared-types-first: backlog
-  4-5-auto-resolve-shared-types-only-merge-conflicts: backlog
+  4-4-smart-group-update-shared-types-first: review
+  4-5-auto-resolve-shared-types-only-merge-conflicts: review
   # 4-6 rewritten 2026-10-12 (version history library); 4-7 added. Order: 4-3 merged -> 4-7 -> 4-6. Prerequisite relaxed to 7-3/7-4 done.
   4-6-shared-types-version-history-library: backlog
   4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: backlog

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { UpdateIncident } from '../../store/slices/update-slice.js';
 import {
   formatIncidentAge,
+  formatIncidentKind,
   formatIncidentRow,
   formatQuitRunCounts,
   reduceIncidentListKey,
@@ -43,3 +44,15 @@ describe('update incident queue logic', () => {
     expect(formatQuitRunCounts(2, 1)).toBe('2 incidents pending, 1 service in flight.');
   });
 });
+
+describe('shared-types phase incident', () => {
+  it('has its own kind label and row', () => {
+    expect(formatIncidentKind('shared-types-phase-failed')).toBe('shared-types phase failed');
+    const row = formatIncidentRow(
+      incident({ blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'shared-types-phase-failed', message: 'boom' } }),
+      5_000,
+    );
+    expect(row).toBe('svc-a · shared-types phase failed · 5s');
+  });
+});
+

@@ -53,7 +53,7 @@ export function UpdateIncidentsDialog({
               <ClampedParagraph color={colors.warning} maxLines={3}>{`↻ Still blocked — ${current.stillBlocked.reason}`}</ClampedParagraph>
             ) : null}
             {editorError !== null ? <ClampedParagraph color={colors.error} maxLines={3}>{`✖ ${editorError}`}</ClampedParagraph> : null}
-            <MenuList items={blockerMenuItems(current.blocker.kind, current.blocker.branch)} cursor={mode === 'menu' ? menuCursor : -1} />
+            <MenuList items={blockerMenuItems(current.blocker.kind, 'branch' in current.blocker ? current.blocker.branch : undefined)} cursor={mode === 'menu' ? menuCursor : -1} />
             {mode === 'list' ? (
               <Text color={colors['text-dim']} wrap="truncate-end">Enter: choose for this incident · Esc: close (nothing resolved)</Text>
             ) : null}

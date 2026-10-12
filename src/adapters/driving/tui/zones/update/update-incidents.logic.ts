@@ -9,6 +9,7 @@ const KIND_LABELS: Record<UpdateIncident['blocker']['kind'], string> = {
   'merge-conflict': 'merge conflict',
   'mid-merge': 'mid-merge',
   'mid-rebase': 'mid-rebase',
+  'shared-types-phase-failed': 'shared-types phase failed',
   'unpushed-commits': 'unpushed commits',
 };
 

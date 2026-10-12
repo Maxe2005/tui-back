@@ -8,6 +8,7 @@ import { useBounds } from '../../shared/bounds/bounds-context.js';
 import { capOlder, OlderHiddenLine } from '../../shared/components/bounded-list.js';
 import { Spinner } from '../../shared/components/index.js';
 import { colors } from '../../shared/theme/theme.js';
+import type { SharedTypesStage } from '../../../../../core/shared-types/smart-update.js';
 import type { GroupUpdateRepoResult } from '../../../../../core/scripts/group-update.js';
 import {
   buildServiceStepViews,
@@ -58,9 +59,11 @@ export interface UpdateServiceDetailProps {
   steps: ServiceStepStates | undefined;
   result: GroupUpdateRepoResult | undefined;
   issues: readonly ServiceIssue[];
+  // The `shared-types` phase running after this service's own update, when it is the source.
+  sharedTypesStage?: SharedTypesStage;
 }
 
-export function UpdateServiceDetail({ service, mode, context, steps, result, issues }: UpdateServiceDetailProps) {
+export function UpdateServiceDetail({ service, mode, context, steps, result, issues, sharedTypesStage }: UpdateServiceDetailProps) {
   const views = buildServiceStepViews(steps ?? PENDING_STEPS, result);
   return (
     <Box flexDirection="column">
@@ -82,6 +85,7 @@ export function UpdateServiceDetail({ service, mode, context, steps, result, iss
       ) : (
         <Box flexDirection="column">
           {context !== null ? <Text color={colors.text} wrap="truncate-end">{context}</Text> : null}
+          {sharedTypesStage !== undefined ? <Text color={colors.info} bold wrap="truncate-end">{`step: ${sharedTypesStage} shared-types`}</Text> : null}
           {views.slice(0, MAX_STEP_VIEWS).map((view) => (
             <Box key={view.key} flexDirection="column" marginTop={1}>
               <Text color={STEP_COLORS[view.state]} bold={view.state === 'running'} wrap="truncate-end">

@@ -161,4 +161,83 @@ describe('runPool', () => {
     );
     expect(rows).toEqual(['r1', 'cancelled:2', 'cancelled:3']);
   });
+
+  describe('afterStage', () => {
+    it('runs after each stage with that stage rows, before the next stage starts', async () => {
+      const log: string[] = [];
+      await runPool(
+        [1, 2, 3],
+        {
+          ...base,
+          concurrency: 3,
+          stageOf: (item) => (item === 1 ? 0 : 1),
+          afterStage: (stage, rows) => {
+            log.push(`after${stage}:${rows.join(',')}`);
+          },
+        },
+        async (item) => {
+          log.push(`run${item}`);
+          return `r${item}`;
+        },
+      );
+      expect(log).toEqual(['run1', 'after0:r1', 'run2', 'run3', 'after1:r2,r3']);
+    });
+
+    it('cancelling in the hook sends later stages through onCancelled', async () => {
+      const rows = await runPool(
+        [1, 2, 3],
+        {
+          ...base,
+          concurrency: 3,
+          stageOf: (item) => (item === 1 ? 0 : 1),
+          onCancelled: (item) => `cancelled:${item}`,
+          afterStage: async (_stage, _rows, control) => {
+            await tick();
+            control.cancel();
+          },
+        },
+        async (item) => `r${item}`,
+      );
+      expect(rows).toEqual(['r1', 'cancelled:2', 'cancelled:3']);
+    });
+
+    it('is not called when the run was cancelled during the stage', async () => {
+      let calls = 0;
+      const rows = await runPool(
+        [1, 2],
+        {
+          ...base,
+          concurrency: 1,
+          stageOf: (item) => item - 1,
+          onCancelled: (item) => `cancelled:${item}`,
+          afterStage: () => {
+            calls += 1;
+          },
+        },
+        async (item, control) => {
+          control.cancel();
+          return `r${item}`;
+        },
+      );
+      expect(calls).toBe(0);
+      expect(rows).toEqual(['r1', 'cancelled:2']);
+    });
+
+    it('a throwing hook cancels the remaining stages and never rejects', async () => {
+      const rows = await runPool(
+        [1, 2],
+        {
+          ...base,
+          concurrency: 1,
+          stageOf: (item) => item - 1,
+          onCancelled: (item) => `cancelled:${item}`,
+          afterStage: () => {
+            throw new Error('boom');
+          },
+        },
+        async (item) => `r${item}`,
+      );
+      expect(rows).toEqual(['r1', 'cancelled:2']);
+    });
+  });
 });

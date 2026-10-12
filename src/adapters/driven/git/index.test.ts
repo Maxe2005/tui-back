@@ -49,6 +49,10 @@ import {
   stagePaths,
   commitPaths,
   stashSave,
+  listUnmergedPaths,
+  readWorktreeFile,
+  writeResolvedFile,
+  checkoutSide,
 } from './index.js';
 
 const tmpDirs: string[] = [];
@@ -2062,5 +2066,88 @@ describe('stagePaths and commitPaths', () => {
     expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
 
     expect(await commitPaths(manifest, repo, 'msg', ['.tui-back.yaml'])).toMatchObject({ ok: false, error: { code: 'git-commit-error' } });
+  });
+});
+
+// Conflict primitives backing the shared-types conflict auto-resolver.
+describe('conflict primitives', () => {
+  async function conflictedRepo(): Promise<string> {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base\n');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side\n');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side\n');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+    return repo;
+  }
+
+  it('lists the unmerged paths, none on a clean repo', async () => {
+    expect(await listUnmergedPaths(await makeCleanGitRepo())).toEqual({ ok: true, data: [] });
+    const repo = await conflictedRepo();
+
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+  });
+
+  it('reads a worktree file with its conflict markers, and refuses a path outside the repo', async () => {
+    const repo = await conflictedRepo();
+
+    const read = await readWorktreeFile(repo, 'conflict.txt');
+    expect(read.ok && read.data).toContain('<<<<<<<');
+    expect((await readWorktreeFile(repo, 'missing.txt')).ok).toBe(false);
+    expect(await readWorktreeFile(repo, '../escape.txt')).toMatchObject({ ok: false, error: { code: 'git-read-error' } });
+  });
+
+  it('writes a resolved file and stages it only on request', async () => {
+    const repo = await conflictedRepo();
+
+    expect(await writeResolvedFile(manifest, repo, 'conflict.txt', 'merged\n', { stage: false })).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'conflict.txt'), 'utf8')).toBe('merged\n');
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+
+    expect(await writeResolvedFile(manifest, repo, 'conflict.txt', 'merged\n', { stage: true })).toEqual({ ok: true, data: undefined });
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('takes the current branch side of a conflicted path without staging it', async () => {
+    const repo = await conflictedRepo();
+
+    expect(await checkoutSide(manifest, repo, 'conflict.txt', 'ours')).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'conflict.txt'), 'utf8')).toBe('member side\n');
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+  });
+
+  it('gates both writes on the current branch: a protected branch is refused before anything is written', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'f.txt'), 'x');
+
+    expect(await writeResolvedFile(manifest, repo, 'f.txt', 'changed', { stage: true })).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(await readFile(join(repo, 'f.txt'), 'utf8')).toBe('x');
+    expect(await checkoutSide(manifest, repo, 'f.txt', 'ours')).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+  });
+
+  it('refuses to write outside the repo and writes nothing', async () => {
+    const repo = await conflictedRepo();
+    const escaped = join(repo, '..', 'escape.txt');
+
+    expect(await writeResolvedFile(manifest, repo, '../escape.txt', 'x', { stage: false })).toMatchObject({ ok: false, error: { code: 'git-write-error' } });
+    expect(existsSync(escaped)).toBe(false);
+  });
+
+  it('wires the primitives behind the factory', async () => {
+    const repo = await conflictedRepo();
+    const port = createGitPort(manifest);
+
+    expect(await port.listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+    expect((await port.readWorktreeFile(repo, 'conflict.txt')).ok).toBe(true);
+    expect((await port.checkoutSide(repo, 'conflict.txt', 'ours')).ok).toBe(true);
+    expect((await port.writeResolvedFile(repo, 'conflict.txt', 'merged\n', { stage: true })).ok).toBe(true);
   });
 });
