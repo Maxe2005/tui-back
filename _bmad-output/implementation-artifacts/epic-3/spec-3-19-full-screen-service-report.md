@@ -2,7 +2,7 @@
 title: 'Story 3.19: Full-Screen Service Report (Success / Error Logs)'
 type: 'feature'
 created: '2026-10-12'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'a2c1c0b3c1fe0d4d504a632344e4cac62227c48b'
 review_loop_iteration: 0
 context: ['{project-root}/_bmad-output/implementation-artifacts/epic-3-context.md']
@@ -52,11 +52,11 @@ All under `src/adapters/driving/tui/`.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `zones/update/update-zone.logic.ts` -- full-fidelity report-line builder (unflattened steps, issues, failed-step line indices), report key resolver, footer input; unit tests in `update-zone.logic.test.ts` covering the matrix -- pure and testable
-- [ ] `zones/update/fullscreen-report.tsx` -- presentational windowed view, position indicator, wrap/truncate, failed glyph+colour -- UX-DR/AD-19
-- [ ] `zones/update/update-zone.tsx` -- open (`f`, recap Enter on failed row), input capture, live data wiring, Esc close -- integration
-- [ ] `keybindings/keybindings.ts`, `footer-contexts.ts` (+ tests) -- `[f] full report` and report footer context
-- [ ] Tests: `fullscreen-report` Ink smoke + interaction (open/scroll/`w`/`n`/`p`/Esc/live update/recap Enter), bounded-rendering dynamic test
+- [x] `zones/update/update-zone.logic.ts` -- full-fidelity report-line builder (unflattened steps, issues, failed-step line indices), report key resolver, footer input; unit tests in `update-zone.logic.test.ts` covering the matrix -- pure and testable
+- [x] `zones/update/fullscreen-report.tsx` -- presentational windowed view, position indicator, wrap/truncate, failed glyph+colour -- UX-DR/AD-19
+- [x] `zones/update/update-zone.tsx` -- open (`f`, recap Enter on failed row), input capture, live data wiring, Esc close -- integration
+- [x] `keybindings/keybindings.ts`, `footer-contexts.ts` (+ tests) -- `[f] full report` and report footer context
+- [x] Tests: `fullscreen-report` Ink smoke + interaction (open/scroll/`w`/`n`/`p`/Esc/live update/recap Enter), bounded-rendering dynamic test
 
 **Acceptance Criteria:**
 - Given a focused service with a last run or live issues, when `f` is pressed, then a full-screen report shows complete steps and issues with nothing capped or flattened.
@@ -77,3 +77,51 @@ Report lines are built as a flat `string`-like line model (with a kind tag for f
 - `npm test` -- expected: all green, including bounded-rendering guard and keybindings tests
 - `npx tsc --noEmit` -- expected: no errors
 - `npm run lint` -- expected: no errors (if the script exists)
+
+## Suggested Review Order
+
+**Report model (entry point)**
+
+- Pure line model: unflattened steps, issues, failed-line indices; start here.
+  [`update-zone.logic.ts:562`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L562)
+
+- Full-fidelity step views via opt-in `full`; inline pane stays capped.
+  [`update-zone.logic.ts:434`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L434)
+
+- Text sanitising: ANSI/control stripping, CR handling.
+  [`update-zone.logic.ts:552`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L552)
+
+- Steps inferred for recap-only results.
+  [`update-zone.logic.ts:381`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L381)
+
+**Scrolling and keys**
+
+- Windowing and max offset, wrap-aware.
+  [`update-zone.logic.ts:619`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L619)
+
+- Key mapping and failed-step jump.
+  [`update-zone.logic.ts:645`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L645)
+
+**View and zone wiring**
+
+- Presentational windowed view reporting its real layout.
+  [`fullscreen-report.tsx:24`](../../../src/adapters/driving/tui/zones/update/fullscreen-report.tsx#L24)
+
+- Report input derivation and open/close; input capture and key precedence.
+  [`update-zone.tsx:546`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L546)
+
+**Keybindings**
+
+- `[f] full report` footer row.
+  [`keybindings.ts:192`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L192)
+
+- Report footer context.
+  [`footer-contexts.ts:107`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L107)
+
+**Tests**
+
+- Interaction and bounded-rendering tests.
+  [`fullscreen-report.test.tsx`](../../../src/adapters/driving/tui/zones/update/fullscreen-report.test.tsx)
+
+- Pure logic tests.
+  [`update-zone.report.test.ts`](../../../src/adapters/driving/tui/zones/update/update-zone.report.test.ts)
