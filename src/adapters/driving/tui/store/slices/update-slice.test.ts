@@ -2423,6 +2423,18 @@ describe('update slice: smart group update (shared-types first)', () => {
     expect(plain.getState().updateConfig?.sharedTypesSource).toBeNull();
   });
 
+  it('the real confirm path forwards the mode and source: publish runs and the consumer is committed', async () => {
+    const { deps, restart, git } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    store.getState().setUpdateConfig({ ...store.getState().updateConfig!, sharedTypes: 'always' });
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(restart.run).toHaveBeenCalledWith('/repo/a', 'npm run v');
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.stringContaining('0.1.5'), ['package.json']);
+  });
+
   it('confirming passes the mode through and a deselected source runs nothing extra', async () => {
     const { deps, restart } = smartDeps();
     const store = createAppStore(deps);
