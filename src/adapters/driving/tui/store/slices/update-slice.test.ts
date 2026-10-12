@@ -524,7 +524,6 @@ describe('update slice', () => {
   it('runs services in parallel up to update.concurrency read from the settings', async () => {
     let inFlight = 0;
     let peak = 0;
-    const base = fakeDeps();
     const migration = {
       run: vi.fn(async () => {
         inFlight += 1;
@@ -535,7 +534,6 @@ describe('update slice', () => {
       }),
     };
     const store = createAppStore(fakeDeps({ migration } as never));
-    void base;
     store.setState({ settings: { ...store.getState().settings, update: { concurrency: 2 } } });
 
     await store.getState().runGroupUpdate();
@@ -583,6 +581,27 @@ describe('update slice', () => {
 
     store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
     await run;
+  });
+
+  it('cancel-run from one incident answers every other pending incident and the run settles', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async () => ok(['wip.txt'])),
+    };
+    const store = createAppStore(fakeDeps({ git }));
+    store.setState({ activeZone: 'update', settings: { ...store.getState().settings, update: { concurrency: 2 } } });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(2));
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-run');
+    expect(store.getState().incidents).toEqual([]);
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    await run;
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults.map((row) => row.outcome)).toEqual(['skipped', 'skipped']);
+    expect(store.getState().runInProgress).toBe(false);
   });
 
   it('an incident re-raised after a failed re-verification is marked still blocked', async () => {

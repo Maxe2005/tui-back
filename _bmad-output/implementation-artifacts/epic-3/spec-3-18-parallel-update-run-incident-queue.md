@@ -2,7 +2,7 @@
 title: 'Story 3.18: Parallel Update Run & Incident Queue'
 type: 'feature'
 created: '2026-10-12'
-status: 'in-review'
+status: 'done'
 baseline_commit: '942ea941cc48bda32a63ecaafba00ab6c3dd0cec'
 review_loop_iteration: 0
 context: ['{project-root}/_bmad-output/implementation-artifacts/epic-3-context.md']
@@ -88,3 +88,54 @@ Slot release: wrap `onUpdateBlocker` per worker — `release(); try { await seam
 - `npm test` -- expected: all green (incl. bounded-rendering guard, keybindings tests)
 - `npx tsc --noEmit` -- expected: no errors
 - `npm run lint` -- expected: no errors (if the script exists)
+
+## Suggested Review Order
+
+**Pool and core pipeline**
+
+- Entry point: bounded pool with keys, stages, slot release and cancel.
+  [`run-pool.ts:55`](../../../src/core/scripts/run-pool.ts#L55)
+
+- Both sequential loops replaced; cancel and seam wrapping wired per worker.
+  [`group-update.ts:358`](../../../src/core/scripts/group-update.ts#L358)
+
+- Seam wrapper releases the slot only when the pool is wider than one.
+  [`group-update.ts:455`](../../../src/core/scripts/group-update.ts#L455)
+
+- Step-boundary cancel checks inside the per-service pipeline.
+  [`group-update.ts:800`](../../../src/core/scripts/group-update.ts#L800)
+
+**Incident queue state**
+
+- Incident store: resolvers by id, still-blocked, cancel-run fan-out.
+  [`update-slice.ts:640`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L640)
+
+- Seam implementation raising incidents and toasts.
+  [`update-slice.ts:725`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L725)
+
+**Popup and zone wiring**
+
+- Popup list beside the selected incident's guided menu.
+  [`update-incidents-dialog.tsx:1`](../../../src/adapters/driving/tui/zones/update/update-incidents-dialog.tsx#L1)
+
+- List/menu key handling, Esc semantics, `i` reopen.
+  [`update-zone.tsx:640`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L640)
+
+- Awaiting status precedence.
+  [`update-zone.logic.ts:34`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L34)
+
+**Setting**
+
+- `update.concurrency` model, schema and General-tab row.
+  [`settings.ts:36`](../../../src/core/ports/settings.ts#L36)
+
+**Tests**
+
+- Pool unit tests.
+  [`run-pool.test.ts`](../../../src/core/scripts/run-pool.test.ts)
+
+- Parallel pool use-case tests.
+  [`group-update.test.ts`](../../../src/core/scripts/group-update.test.ts)
+
+- Incident queue store tests.
+  [`update-slice.test.ts`](../../../src/adapters/driving/tui/store/slices/update-slice.test.ts)

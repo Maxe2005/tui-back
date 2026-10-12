@@ -372,11 +372,15 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
             return undefined;
           }
           const service = loaded.ok ? loaded.data.service : serviceFallback(target.repoPath);
-          const row = runCancelledRow(service, target.repoPath, 'before it started');
+          const row = loaded.ok ? runCancelledRow(service, target.repoPath, 'before it started') : failed(service, loaded.error);
           emitServiceResult(params.onServiceResult, row);
           return row;
         },
-        onError: (target, error) => failed(serviceFallback(target.repoPath), unexpectedError(error)),
+        onError: (target, error) => {
+          const row = failed(serviceFallback(target.repoPath), unexpectedError(error));
+          emitServiceResult(params.onServiceResult, row);
+          return row;
+        },
       },
       async (target, control) => {
         const { repoPath } = target;
@@ -592,7 +596,11 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
             emitServiceResult(params.onServiceResult, row);
             return row;
           },
-          onError: ({ member }, error) => failed(member.service, unexpectedError(error)),
+          onError: ({ member }, error) => {
+            const row = failed(member.service, unexpectedError(error));
+            emitServiceResult(params.onServiceResult, row);
+            return row;
+          },
         },
         async ({ member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart }, control) => {
           // `cancel-run` stops the pool but still returns `ok` with rows so far.

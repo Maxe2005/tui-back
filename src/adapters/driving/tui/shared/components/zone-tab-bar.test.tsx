@@ -16,6 +16,17 @@ describe('resolveZoneTabState — busy', () => {
     expect(resolveZoneTabState(updateZone, 'update', 0, 'enabled', true).badge).toEqual({ text: '⇄ updating', color: colors.background });
   });
 
+  it('pending incidents turn the busy badge into an awaiting-you count, falling back at zero', () => {
+    expect(resolveZoneTabState(updateZone, 'dashboard', 0, 'enabled', true, 2).badge).toEqual({ text: '◐ 2 awaiting you', color: colors.warning });
+    expect(resolveZoneTabState(updateZone, 'update', 0, 'enabled', true, 2).badge).toEqual({ text: '◐ 2 awaiting you', color: colors.background });
+    expect(resolveZoneTabState(updateZone, 'dashboard', 0, 'enabled', true, 0).badge?.text).toBe('⇄ updating');
+  });
+
+  it('the rendered bar shows the awaiting count', async () => {
+    const output = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} updateRunning updateIncidents={3} />);
+    expect(output).toContain('3 awaiting you');
+  });
+
   it('the badge shows in the rendered bar only when the update runs', async () => {
     const running = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} updateRunning />);
     const idle = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} />);

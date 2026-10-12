@@ -309,9 +309,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   // consumed when the zone menu dispatches a choice. Held in closure, never in Zustand
   // state (a function is non-serializable, and set() replacements must not drop it).
   const incidentResolvers = new Map<string, (choice: UpdateBlockerChoice) => void>();
-  // Services that already raised an incident in this run — a second one for the same service
-  // is a failed re-verification ("still blocked"). Never in Zustand state.
-  const raisedServices = new Set<string>();
+  // The kind of the last incident each service raised in this run — a second incident of the same
+  // kind is a failed re-verification ("still blocked"). Never in Zustand state.
+  const raisedKinds = new Map<string, UpdateBlocker['kind']>();
   let incidentSequence = 0;
   // One shared poll timer for every currently-tracked service (not one per
   // repoPath, unlike logs-slice.ts) — restarted whenever the tracked list changes so a
@@ -633,7 +633,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           // stops unstarted services and finishes in-flight ones at their step boundary.
           const others = [...incidentResolvers.entries()];
           incidentResolvers.clear();
-          set({ incidents: [], incidentPopupOpen: false });
+          set({ incidents: [], incidentPopupOpen: false, incidentToast: null });
           resolveChoice(choice);
           for (const [, otherResolve] of others) {
             otherResolve('cancel-run');
@@ -642,7 +642,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         }
         set((state) => {
           const incidents = state.incidents.filter((incident) => incident.id !== id);
-          return { incidents, incidentPopupOpen: incidents.length === 0 ? false : state.incidentPopupOpen };
+          return {
+            incidents,
+            incidentPopupOpen: incidents.length === 0 ? false : state.incidentPopupOpen,
+            incidentToast: incidents.length === 0 ? null : state.incidentToast,
+          };
         });
         resolveChoice(choice);
       },
@@ -697,7 +701,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           liveServiceIssues: {},
         });
         incidentResolvers.clear();
-        raisedServices.clear();
+        raisedKinds.clear();
         get().setRunInProgress(true);
         // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
         // unexpected failure in production) must still clear `runInProgress` — otherwise the
@@ -728,8 +732,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             onUpdateBlocker: async (blocker) => {
               incidentSequence += 1;
               const id = `incident-${incidentSequence}`;
-              const stillBlocked = raisedServices.has(blocker.service);
-              raisedServices.add(blocker.service);
+              const stillBlocked = raisedKinds.get(blocker.service) === blocker.kind;
+              raisedKinds.set(blocker.service, blocker.kind);
               const incident: UpdateIncident = {
                 id,
                 blocker,
@@ -742,12 +746,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 incidentResolvers.set(id, resolveChoice);
                 set((state) => {
                   const first = state.incidents.length === 0;
+                  const popupOpensNow = first && state.activeZone === 'update';
                   return {
                     incidents: [...state.incidents, incident],
                     // The first incident opens the popup when the developer is in the Update
                     // zone; later ones (or any elsewhere) never steal focus — a toast names them.
-                    incidentPopupOpen: first && state.activeZone === 'update' ? true : state.incidentPopupOpen,
-                    incidentToast: first && state.activeZone === 'update' ? state.incidentToast : `${blocker.service} needs you (${blocker.kind})`,
+                    incidentPopupOpen: popupOpensNow ? true : state.incidentPopupOpen,
+                    incidentToast: popupOpensNow ? state.incidentToast : `${blocker.service} needs you (${blocker.kind})`,
                     // A resolved entry re-raised stays unresolved; only a fresh service appends.
                     liveServiceIssues: stillBlocked
                       ? state.liveServiceIssues
@@ -1225,7 +1230,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           get().setRunInProgress(false);
         }
       },
-      clearUpdate: () =>
+      clearUpdate: () => {
+        incidentResolvers.clear();
+        raisedKinds.clear();
         set({
           updateStatus: 'idle',
           updateResults: [],
@@ -1248,7 +1255,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateNotice: null,
           liveServiceDone: {},
           liveServiceIssues: {},
-        }),
+        });
+      },
 
       updateServiceHealth: {},
       lastServiceOutcomes: {},

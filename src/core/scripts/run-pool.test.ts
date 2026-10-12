@@ -129,4 +129,36 @@ describe('runPool', () => {
     );
     expect(rows).toEqual(['r1', 'cancelled:2', 'cancelled:3']);
   });
+
+  it('survives an onError that throws itself', async () => {
+    const rows = await runPool(
+      [1, 2],
+      {
+        ...base,
+        concurrency: 2,
+        onError: () => {
+          throw new Error('mapper broke');
+        },
+      },
+      async (item) => {
+        if (item === 1) {
+          throw new Error('boom');
+        }
+        return `r${item}`;
+      },
+    );
+    expect(rows).toEqual([undefined, 'r2']);
+  });
+
+  it('a cancel in an early stage sends every later-stage item to onCancelled', async () => {
+    const rows = await runPool(
+      [1, 2, 3],
+      { ...base, concurrency: 3, stageOf: (item) => (item === 1 ? 0 : 1), onCancelled: (item) => `cancelled:${item}` },
+      async (item, control) => {
+        control.cancel();
+        return `r${item}`;
+      },
+    );
+    expect(rows).toEqual(['r1', 'cancelled:2', 'cancelled:3']);
+  });
 });

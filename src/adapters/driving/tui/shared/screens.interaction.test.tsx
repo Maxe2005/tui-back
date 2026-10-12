@@ -67,6 +67,21 @@ describe('SettingsScreen (real keypress)', () => {
     }
   });
 
+  it('on the last General row a digit sets update.concurrency live', async () => {
+    const store = createAppStore();
+    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(KEYS.end);
+      await press('5');
+      expect(store.getState().settings.update.concurrency).toBe(5);
+      await press('-');
+      expect(store.getState().settings.update.concurrency).toBe(4);
+    } finally {
+      await stop();
+    }
+  });
+
   it('Space no longer clears the global filter history; Enter does', async () => {
     const store = createAppStore();
     const clearGlobalFilterHistory = vi.fn();

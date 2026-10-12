@@ -322,6 +322,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const [incidentIndex, setIncidentIndex] = useState(0);
   const [incidentMode, setIncidentMode] = useState<'list' | 'menu'>('list');
   const [incidentNow, setIncidentNow] = useState(() => Date.now());
+  const awaitingServices = new Set(incidents.map((incident) => incident.blocker.service));
   const popupOpen = incidentPopupOpen && incidents.length > 0;
   const selectedIncidentIndex = Math.min(incidentIndex, Math.max(incidents.length - 1, 0));
   const selectedIncident = incidents[selectedIncidentIndex];
@@ -534,6 +535,19 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       setBlockerCursor(0);
     }
     setEditorError(null);
+  }, [incidentMode, selectedIncident?.id]);
+  // A choice is always for the incident the menu opened on: if that one leaves the queue (or the
+  // selection shifts) the keys fall back to the list rather than answering another incident.
+  const menuIncidentId = useRef<string | null>(null);
+  useEffect(() => {
+    if (incidentMode !== 'menu') {
+      menuIncidentId.current = null;
+    } else if (menuIncidentId.current === null) {
+      menuIncidentId.current = selectedIncident?.id ?? null;
+    } else if (menuIncidentId.current !== selectedIncident?.id) {
+      menuIncidentId.current = null;
+      setIncidentMode('list');
+    }
   }, [incidentMode, selectedIncident?.id]);
   useEffect(() => {
     if (!popupOpen) {
@@ -847,6 +861,11 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // single EDT, so it shows the generic loading line instead of EDT member rows.
   const offerRerun = shouldOfferRerun(edts, activeEdt);
   const baseRunningLabel = !isAllRun ? UPDATE_RUNNING_LABEL : updateSelection !== null ? UPDATE_SELECTION_RUNNING_LABEL : UPDATE_ALL_RUNNING_LABEL;
+  // Services paused on an incident are not in flight: they wait on the developer.
+  const quitCounts = formatQuitRunCounts(
+    incidents.length,
+    Object.keys(liveServicePhase).filter((service) => !awaitingServices.has(service)).length,
+  );
   // The zone header counts the pending incidents next to the run label.
   const runningLabel = incidents.length > 0 ? `${baseRunningLabel} · ◐ ${incidents.length} awaiting you (i)` : baseRunningLabel;
 
@@ -857,7 +876,6 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const paneRows = resolveUpdatePaneRows(serviceListMaxVisibleRows, membersRatio);
   // Pane-local cursor: members come first in the flat row array, so others are offset by them.
   const cursorInMembers = clampedServiceCursor < panes.members.length;
-  const awaitingServices = new Set(incidents.map((incident) => incident.blocker.service));
   const renderServiceRow = (row: (typeof serviceRows)[number], index: number) => {
     const health = updateServiceHealth[row.path] ?? 'down';
     const lastOutcome = lastServiceOutcomes[row.service];
@@ -1097,7 +1115,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         </>
       )}
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
-        <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}${formatQuitRunCounts(incidents.length, Object.keys(liveServicePhase).length) !== null ? ` ${formatQuitRunCounts(incidents.length, Object.keys(liveServicePhase).length)}` : ''}`}</ClampedParagraph>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}${quitCounts !== null ? ` ${quitCounts}` : ''}`}</ClampedParagraph>
       </ModalDialog>
       {updateConfig !== null ? (
         <UpdateConfigPanels

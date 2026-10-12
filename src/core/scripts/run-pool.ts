@@ -112,7 +112,12 @@ export async function runPool<T, R>(
           results[index] = await worker(item, control);
         }
       } catch (error) {
-        results[index] = options.onError(item, error);
+        try {
+          results[index] = options.onError(item, error);
+        } catch {
+          // The pool never rejects: a failing error mapper leaves that item without a row.
+          results[index] = undefined;
+        }
       } finally {
         control.release();
       }
