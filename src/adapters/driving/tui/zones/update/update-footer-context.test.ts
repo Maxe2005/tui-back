@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { updateFooterContext, type UpdateFooterInput } from './update-zone.logic.js';
 
-const IDLE: UpdateFooterInput = { blocker: false, config: null, servicePick: false, quitConfirm: false, serviceMenu: false, selectRequest: false };
+const IDLE: UpdateFooterInput = { blocker: false, config: null, servicePick: false, quitConfirm: false, serviceMenu: false, selectRequest: false, report: false };
 
 describe('updateFooterContext', () => {
   const cases: Array<[string, Partial<UpdateFooterInput>, string | null]> = [
@@ -14,6 +14,8 @@ describe('updateFooterContext', () => {
     ['config screen outranks the quick-pick', { config: 'update-box', servicePick: true }, 'update-box'],
     ['blocker outranks the config screen', { blocker: true, config: 'update-config-table' }, 'menu'],
     ['quit confirmation outranks the service menu', { quitConfirm: true, serviceMenu: true }, 'confirm'],
+    ['full-screen report', { report: true }, 'update-report'],
+    ['an open dialog outranks the report', { report: true, serviceMenu: true }, 'menu'],
     ['pending :update-service request', { selectRequest: true }, 'busy'],
     ['an open dialog outranks a pending request', { serviceMenu: true, selectRequest: true }, 'menu'],
   ];
