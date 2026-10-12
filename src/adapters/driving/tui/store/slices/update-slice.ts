@@ -758,7 +758,10 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                       ? state.liveServiceIssues
                       : appendLiveIssue(state.liveServiceIssues, blocker.service, {
                           kind: blocker.kind,
-                          detail: blocker.repoPath,
+                          detail:
+                            blocker.kind === 'unpushed-commits'
+                              ? `${blocker.branch ?? ''}: ${(blocker.commits ?? []).join(' | ')}`
+                              : blocker.repoPath,
                           resolved: false,
                         }),
                   };

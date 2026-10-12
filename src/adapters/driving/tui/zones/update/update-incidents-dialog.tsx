@@ -45,7 +45,7 @@ export function UpdateIncidentsDialog({
         />
         {current !== undefined ? (
           <Box flexDirection="column" marginTop={1}>
-            <ClampedParagraph color={colors.text} maxLines={3}>{formatBlockerBody(current.blocker)}</ClampedParagraph>
+            <ClampedParagraph color={colors.text} maxLines={current.blocker.kind === 'unpushed-commits' ? 8 : 3}>{formatBlockerBody(current.blocker)}</ClampedParagraph>
             {formatBlockerRetry(current.blocker) !== null ? (
               <ClampedParagraph color={colors.warning} maxLines={3}>{`${formatBlockerRetry(current.blocker)}`}</ClampedParagraph>
             ) : null}
@@ -53,7 +53,7 @@ export function UpdateIncidentsDialog({
               <ClampedParagraph color={colors.warning} maxLines={3}>{`↻ Still blocked — ${current.stillBlocked.reason}`}</ClampedParagraph>
             ) : null}
             {editorError !== null ? <ClampedParagraph color={colors.error} maxLines={3}>{`✖ ${editorError}`}</ClampedParagraph> : null}
-            <MenuList items={blockerMenuItems(current.blocker.kind)} cursor={mode === 'menu' ? menuCursor : -1} />
+            <MenuList items={blockerMenuItems(current.blocker.kind, current.blocker.branch)} cursor={mode === 'menu' ? menuCursor : -1} />
             {mode === 'list' ? (
               <Text color={colors['text-dim']} wrap="truncate-end">Enter: choose for this incident · Esc: close (nothing resolved)</Text>
             ) : null}
