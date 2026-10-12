@@ -184,6 +184,7 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.onServiceResult !== undefined ? { onServiceResult: overrides.onServiceResult } : {}),
     ...(overrides.concurrency !== undefined ? { concurrency: overrides.concurrency } : {}),
     ...(overrides.ordering !== undefined ? { ordering: overrides.ordering } : {}),
+    ...(overrides.afterStage !== undefined ? { afterStage: overrides.afterStage } : {}),
   };
 }
 
@@ -2899,5 +2900,26 @@ describe('groupUpdate — parallel pool', () => {
     });
     await groupUpdate(makeParams({ migration, concurrency: 3, ordering: ({ service }) => (service === 'svc-b' ? 0 : 1) }));
     expect(started).toEqual(['start:/repo/b', 'end:/repo/b', 'start:/repo/a', 'end:/repo/a']);
+  });
+
+  it('afterStage sees the stage rows and a cancel there skips the later stage', async () => {
+    const seen: string[] = [];
+    const result = await groupUpdate(
+      makeParams({
+        concurrency: 3,
+        ordering: ({ service }) => (service === 'svc-b' ? 0 : 1),
+        afterStage: (stage, rows, control) => {
+          seen.push(`${stage}:${rows.map((row) => row.service).join(',')}`);
+          if (stage === 0) {
+            control.cancel();
+          }
+        },
+      }),
+    );
+    expect(seen).toEqual(['0:svc-b', '1:svc-a']);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'run-cancelled' } }, { service: 'svc-b', outcome: 'updated' }] },
+    });
   });
 });
