@@ -2,7 +2,7 @@
 title: 'Command History Recall & Shared Input-History Primitive'
 type: 'feature'
 created: '2026-10-12'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'a2c1c0b3c1fe0d4d504a632344e4cac62227c48b'
 review_loop_iteration: 0
 context:
@@ -92,3 +92,71 @@ context:
 - `npm test` -- expected: all suites pass, 5.4 suites unmodified
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no new violations
+
+## Suggested Review Order
+
+**Shared primitive (entry point)**
+
+- The single push/dedup/trim rule both histories now share.
+  [`input-history.logic.ts:9`](../../../src/adapters/driving/tui/shared/input-history/input-history.logic.ts#L9)
+
+- Browse state machine, now guarded against a list that changed mid-browse.
+  [`input-history.logic.ts:34`](../../../src/adapters/driving/tui/shared/input-history/input-history.logic.ts#L34)
+
+- Snap-back rule, reused by the command bar and the filter editor's mode toggle.
+  [`input-history.logic.ts:92`](../../../src/adapters/driving/tui/shared/input-history/input-history.logic.ts#L92)
+
+- Persisted-store mechanics extracted once: hydrate, version guard, save chain, await-load.
+  [`persisted-history-store.ts:28`](../../../src/adapters/driving/tui/shared/input-history/persisted-history-store.ts#L28)
+
+**Logs filter history re-pointed (behavior-preserving)**
+
+- Filter history slice now delegates to the shared controller.
+  [`logs-slice.ts:147`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L147)
+
+- Filter editor snap-back goes through the shared helper.
+  [`logs-zone.tsx:435`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L435)
+
+**Command bar recall**
+
+- ↑ recall through the shared state machine; Enter's record happens just above.
+  [`command-bar.tsx:558`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L558)
+
+- Only a recognized command is recorded, never an unknown one.
+  [`command-bar.tsx:524`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L524)
+
+- Command history slice: same controller, one flat list.
+  [`command-history-slice.ts:23`](../../../src/adapters/driving/tui/store/slices/command-history-slice.ts#L23)
+
+- Hydrated once at mount alongside filter history.
+  [`app-shell.tsx:244`](../../../src/adapters/driving/tui/app-shell.tsx#L244)
+
+**Persistence and settings**
+
+- New port methods for the command history list.
+  [`state.ts:19`](../../../src/core/ports/state.ts#L19)
+
+- Shared read-merge-write so no field clobbers another.
+  [`index.ts:186`](../../../src/adapters/driven/state/index.ts#L186)
+
+- Per-field recovery shared by all optional fields.
+  [`index.ts:166`](../../../src/adapters/driven/state/index.ts#L166)
+
+- New settings validated with the shared size bounds.
+  [`schema.ts:39`](../../../src/adapters/driven/settings/schema.ts#L39)
+
+- Command Palette tab becomes a group list with the history controls.
+  [`settings-screen.tsx:288`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L288)
+
+**Reset**
+
+- `:reset` histories category now clears the command history too.
+  [`reset-tool.ts:154`](../../../src/core/scripts/reset-tool.ts#L154)
+
+**Tests**
+
+- Full recall I/O matrix driven by real keypresses.
+  [`command-bar.history.interaction.test.tsx`](../../../src/adapters/driving/tui/shared/command-bar.history.interaction.test.tsx)
+
+- Primitive unit tests: logic and persisted store.
+  [`input-history.logic.test.ts`](../../../src/adapters/driving/tui/shared/input-history/input-history.logic.test.ts), [`persisted-history-store.test.ts`](../../../src/adapters/driving/tui/shared/input-history/persisted-history-store.test.ts)
