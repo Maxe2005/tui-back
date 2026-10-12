@@ -2001,6 +2001,34 @@ describe('AppShell splitterRatios load activation', () => {
   });
 });
 
+describe('AppShell commandHistory load activation', () => {
+  it('resolves store.commandHistory from a wired mount-time loadCommandHistory()', async () => {
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok(null)),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(['settings', 'registry'])),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+    expect(store.getState().commandHistory).toEqual([]);
+
+    const { instance } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+
+      expect(state.readCommandHistory).toHaveBeenCalled();
+      expect(store.getState().commandHistory).toEqual(['settings', 'registry']);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
 describe('AppShell Ctrl+W resize-mode', () => {
   it.each(['dashboard', 'update', 'logs', 'routes', 'shared-types'] as const)('Ctrl+W engages resize-mode on boundary 0 in the %s zone', async (zone) => {
     const store = createAppStore();

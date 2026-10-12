@@ -33,7 +33,7 @@ describe('createPersistedHistoryStore', () => {
     expect(live).toEqual([]);
   });
 
-  it('never lets a stale read clobber a newer mutation', async () => {
+  it('a mutation issued during the initial load waits for it and builds on the hydrated value', async () => {
     const read = deferred<{ ok: true; data: string[] }>();
     const writes: string[][] = [];
     let live: string[] = [];

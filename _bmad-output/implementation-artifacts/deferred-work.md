@@ -703,3 +703,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
   summary: A symlinked `.tui-back.yaml` is read through but restored as a regular file; file mode is not preserved by the carry.
   evidence: `capture` stores bytes only and `restore` renames a temp file over the target.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: The persisted-history store ignores failed or throwing state writes/reads (no user-visible warning, an unhandled rejection can surface in `mutate`/`resetAndDrain`).
+  evidence: Carried over unchanged from the original filterHistory machinery in logs-slice.ts; `persist` discards the `Result` of `deps.write` and `load` silently keeps the default on a failed read.
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: A write to state.json while another field is corrupt treats the file as empty and overwrites it, discarding the valid sibling fields.
+  evidence: Pre-existing `writeActiveEdt`/`writeSplitterRatios`/`writeFilterHistory` convention (only state-read-error is propagated); the shared `mergeWriteStateFile` preserves it, now also covering commandHistory.

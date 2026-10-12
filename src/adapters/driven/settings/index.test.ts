@@ -119,6 +119,23 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('commandPalette.gridMaxRows');
   });
 
+  it.each([
+    ['historySize: 201', 'commandPalette.historySize'],
+    ['historySize: 0', 'commandPalette.historySize'],
+    ['historyDedup: "x"', 'commandPalette.historyDedup'],
+  ])('falls back to defaults with a field-naming warning for commandPalette %s', async (line, field) => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, `commandPalette:\n  gridMaxRows: 8\n  ${line}\n`);
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain(field);
+  });
+
   it('falls back to defaults with a field-naming warning when logs.bufferSize exceeds the upper bound', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');

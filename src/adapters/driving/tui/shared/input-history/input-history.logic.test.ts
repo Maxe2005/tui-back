@@ -42,6 +42,11 @@ describe('browse state machine', () => {
     expect(second.query).toBe('y');
     expect(resolveHistoryBrowseDown(second.browsing!, h).query).toBe('x');
   });
+  it('ends browsing and restores the draft when the list shrank under an active browse', () => {
+    const stale = { index: 5, savedDraft: 'draft' };
+    expect(resolveHistoryBrowseUp('x', stale, ['a'])).toEqual({ query: 'draft', browsing: null });
+    expect(resolveHistoryBrowseDown(stale, [])).toEqual({ query: 'draft', browsing: null });
+  });
   it('is a no-op on an empty history', () => {
     expect(resolveHistoryBrowseUp('d', null, [])).toEqual({ query: 'd', browsing: null });
   });

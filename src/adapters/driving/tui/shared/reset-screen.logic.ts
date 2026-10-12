@@ -152,7 +152,7 @@ export function buildResetSummaryLines(categories: readonly ResetCategory[], pre
     lines.push({ text: '  state.json — activeEdt set to null', tone: 'text' });
   }
   if (effective.includes('histories')) {
-    lines.push({ text: 'Histories — every Logs filter history', tone: 'error' });
+    lines.push({ text: 'Histories — every Logs filter history and the command history', tone: 'error' });
     lines.push({ text: '  state.json — filterHistory emptied', tone: 'text' });
     lines.push({ text: '  state.json — commandHistory emptied', tone: 'text' });
   }

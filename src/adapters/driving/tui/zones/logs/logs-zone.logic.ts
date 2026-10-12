@@ -791,7 +791,7 @@ export type FilterEditorState = {
   preOpen: LogFilterSpec;
   // Non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh open and
   // whenever browsing has ended (snapped back to the draft, or walked past the most-recent entry).
-  // See resolveHistoryBrowseUp/Down just above.
+  // See resolveHistoryBrowseUp/Down in tui/shared/input-history.
   browsing: HistoryBrowseState | null;
 };
 

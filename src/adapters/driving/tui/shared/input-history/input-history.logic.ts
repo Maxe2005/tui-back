@@ -49,6 +49,11 @@ export function resolveHistoryBrowseUp(
     }
     return { query: history[index]!, browsing: { index, savedDraft: currentQuery } };
   }
+  // The list can change under an active browse (hydration, a clear, a reset): a stale index
+  // ends browsing and restores the draft instead of reading past the list.
+  if (browsing.index >= history.length) {
+    return { query: browsing.savedDraft, browsing: null };
+  }
   let nextIndex = browsing.index + 1;
   while (nextIndex < history.length && history[nextIndex] === browsing.savedDraft) {
     nextIndex += 1;
@@ -67,6 +72,9 @@ export function resolveHistoryBrowseDown(
   browsing: HistoryBrowseState,
   history: readonly string[],
 ): HistoryBrowseResult {
+  if (browsing.index > history.length) {
+    return { query: browsing.savedDraft, browsing: null };
+  }
   let prevIndex = browsing.index - 1;
   while (prevIndex >= 0 && history[prevIndex] === browsing.savedDraft) {
     prevIndex -= 1;
@@ -79,8 +87,8 @@ export function resolveHistoryBrowseDown(
 
 // The snap-back rule: a printable character or Backspace while browsing ends browsing, restores
 // the saved draft and applies the keystroke on top of it (cursor at the draft's end). Not
-// browsing, the live text/cursor are returned unchanged. Also used by Tab-style actions that must
-// start from the pre-browse draft rather than the recalled text.
+// browsing, the live text/cursor are returned unchanged. Also used by the Logs filter editor's
+// mode toggle, which must carry the pre-browse draft over rather than the recalled text.
 export function resolveSnapBackBase(
   query: string,
   cursor: number,

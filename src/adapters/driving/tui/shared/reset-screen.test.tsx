@@ -32,6 +32,7 @@ describe('buildResetSummaryLines', () => {
     expect(text).toContain('/data/edts/*');
     expect(text).toContain('activeEdt set to null');
     expect(text).toContain('filterHistory emptied');
+    expect(text).toContain('commandHistory emptied');
     expect(text).toContain('Registered services — 4 services');
     expect(text).toContain('/cfg/registry.yaml — every entry removed');
   });
