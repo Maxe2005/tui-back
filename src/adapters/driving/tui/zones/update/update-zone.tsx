@@ -1011,7 +1011,8 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                       ? formatServiceUpdateContext(selectedRun.source, selectedRun.target, selectedRun.topic)
                       : null
                   }
-                  steps={isSelectedTargeted ? liveServiceSteps[selectedServiceRow.service] : selectedRun?.steps}
+                  steps={isSelectedTargeted ? (liveServiceSteps[selectedServiceRow.service] ?? (liveSharedTypesPhase[selectedServiceRow.service] !== undefined ? selectedRun?.steps : undefined)) : selectedRun?.steps}
+                  sharedTypesStage={isSelectedTargeted ? liveSharedTypesPhase[selectedServiceRow.service] : undefined}
                   result={isSelectedTargeted ? undefined : selectedRun?.result}
                   issues={selectedLiveIssues}
                 />

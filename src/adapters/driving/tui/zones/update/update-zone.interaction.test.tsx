@@ -958,3 +958,51 @@ describe('UpdateZone — shared-types phase failure incident', () => {
   });
 });
 
+describe('UpdateZone — shared-types phase live tracking', () => {
+  it('keeps the finished source targeted, shows the phase, and counts it in flight on quit', async () => {
+    const ROW_A: ServiceBranchDivergence = {
+      service: 'svc-a',
+      path: '/repo/a',
+      isMember: true,
+      sharedBranch: 'development',
+      protectedBranches: [],
+      branch: 'feat/a',
+      ahead: 0,
+      behind: 0,
+      status: 'current',
+    };
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [ROW_A],
+      edtsBranchesStatus: 'idle',
+      edts: [
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+        },
+      ],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServiceDone: { 'svc-a': true },
+      liveSharedTypesPhase: { 'svc-a': 'publishing' },
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    } as never);
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // Targeted despite its final row: the live view (not the last-update view) is shown.
+      await waitForOutput(instance, stdout, 'step: publishing shared-types');
+      await press(instance, stdin, 'q');
+      await waitForOutput(instance, stdout, '1 service in flight');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
