@@ -33,7 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-10-08
+last_updated: 2026-10-12
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -122,7 +122,7 @@ development_status:
   3-17-update-zone-global-default-view-resizable-member-other-panes: done
   # 3-18/3-19 added by sprint-change-proposal-2026-10-08-2.md. Order: merge 3-15, then 3-19, then 3-18; 4-4 builds on 3-18.
   3-18-parallel-update-run-incident-queue: backlog
-  3-19-full-screen-service-report: backlog
+  3-19-full-screen-service-report: in-progress
   epic-3-retrospective: optional
 
   epic-4: in-progress

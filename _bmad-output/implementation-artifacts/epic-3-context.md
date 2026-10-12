@@ -21,6 +21,14 @@ A developer can run a group update (pull, migrate, restart) scoped to the active
 - Story 3.9: Per-Service Actions — Clean Restart & Single-Service Update
 - Story 3.10: Live Per-Service Run Tracking — Current Step & Issue Log
 - Story 3.11: Update Commands — Main, All-Repos, Single-Service
+- Story 3.12: Update — Merge Source from Another EDT
+- Story 3.13: Non-Blocking Subprocess Execution & Live Update TUI
+- Story 3.14: Update Zone — Member/Other Grouping & Last-Update Recap View
+- Story 3.15: Update Zone — Per-Service Detail Pane (Last Run & Live Step Tracking)
+- Story 3.16: Global "Update in Progress" Status & Action Locks
+- Story 3.17: Update Zone — Global Default View & Resizable Member/Other Panes
+- Story 3.18: Parallel Update Run & Incident Queue
+- Story 3.19: Full-Screen Service Report (Success / Error Logs)
 
 ## Requirements & Constraints
 
@@ -59,3 +67,4 @@ A developer can run a group update (pull, migrate, restart) scoped to the active
 - 3.9's single-service update reuses 3.7 pre-scoped to one service; its clean-restart depends on 3.8's `RestartPort`/fallback.
 - 3.10's live pane is what 3.4's guided menu now renders in front of, and where 3.5's superseded issue-surfacing guarantee now lives.
 - 3.11's commands depend on 3.7, plus respectively 3.1 (main), 3.3 (all-repos), or 3.9 (single-service).
+- 3.19's full-screen report reuses 3.15's step views / live issue log (caps lifted only in the report, kept inline) and mirrors the Logs zone's fullscreen pane; it opens from the 3.14 recap view too. 3.18 (parallel run, incident queue) builds on 3.16/3.17; merge order 3.19 then 3.18.
