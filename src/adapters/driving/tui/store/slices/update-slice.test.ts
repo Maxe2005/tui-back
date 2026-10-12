@@ -521,6 +521,29 @@ describe('update slice', () => {
     expect(store.getState().runInProgress).toBe(false);
   });
 
+  it('runs services in parallel up to update.concurrency read from the settings', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const base = fakeDeps();
+    const migration = {
+      run: vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+        inFlight -= 1;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration } as never));
+    void base;
+    store.setState({ settings: { ...store.getState().settings, update: { concurrency: 2 } } });
+
+    await store.getState().runGroupUpdate();
+
+    expect(peak).toBe(2);
+    expect(store.getState().updateResults.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+  });
+
   function dirtyGit(): GitPort {
     return {
       ...(fakeDeps().git as GitPort),

@@ -10,11 +10,13 @@ import {
   MAX_FILTER_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
+  MAX_UPDATE_CONCURRENCY,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
   MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
+  MIN_UPDATE_CONCURRENCY,
   type Settings,
 } from '../../../core/ports/settings.js';
 
@@ -61,6 +63,20 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.edts),
+    // Optional-with-default: a settings.yaml written before this group existed has no `update:`.
+    update: z
+      .object({
+        concurrency: z
+          .number()
+          .int()
+          .min(MIN_UPDATE_CONCURRENCY)
+          .max(MAX_UPDATE_CONCURRENCY)
+          .optional()
+          .default(DEFAULT_SETTINGS.update.concurrency),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.update),
     // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
     // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
     // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's

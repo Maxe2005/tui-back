@@ -714,6 +714,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             lock: deps.lock,
             registry: deps.registry,
             scope,
+            // The pool size comes from the global settings, read once when the run starts.
+            concurrency: get().settings.update.concurrency,
             // The confirmed pre-run configuration (or the full defaults when the
             // run started without a screen — selection omitted, migrate ON, clean OFF).
             ...(opts.selection !== undefined ? { selection: opts.selection } : {}),
