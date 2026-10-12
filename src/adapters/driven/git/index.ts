@@ -29,6 +29,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     hasStash: (repoPath, tag) => hasStash(repoPath, tag),
     branchExistsLocally: (repoPath, branchName) => branchExistsLocally(repoPath, branchName),
     fetch: (repoPath, branchName) => fetchBranch(repoPath, branchName),
+    fetchRemote: (repoPath, branchName) => fetchRemoteBranch(repoPath, branchName),
+    listUnpushedCommits: (repoPath, branchName) => listUnpushedCommits(repoPath, branchName),
     pull: (repoPath) => pullBranch(repoPath),
     isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
     mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
@@ -438,6 +440,38 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
     return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(undefined);
+}
+
+// Plain `git fetch origin <branch>`: only refreshes the remote-tracking ref (and FETCH_HEAD),
+// never the local branch — so a local branch ahead of origin cannot make it fail.
+export async function fetchRemoteBranch(repoPath: string, branchName: string): Promise<Result<void>> {
+  const result = await runProcess('git', ['fetch', 'origin', branchName], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Local commits of branchName absent from origin/<branchName>, as `<short hash> <subject>`
+// lines, oldest first. An unknown remote-tracking ref is a controlled error, not an empty list.
+export async function listUnpushedCommits(repoPath: string, branchName: string): Promise<Result<string[]>> {
+  const result = await runProcess(
+    'git',
+    ['log', '--reverse', '--format=%h %s', `refs/remotes/origin/${branchName}..refs/heads/${branchName}`],
+    { cwd: repoPath },
+  );
+  if (result.status !== 0) {
+    return err(
+      'git-unpushed-commits-error',
+      `Cannot list unpushed commits of ${branchName} in ${repoPath}: ${spawnFailureDetail(result)}`,
+    );
+  }
+  return ok(
+    String(result.stdout)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== ''),
+  );
 }
 
 // `git pull --ff-only` on the current branch. Only ever called for a member that already sits

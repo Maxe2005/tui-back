@@ -82,6 +82,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
@@ -725,6 +727,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
         pull: vi.fn(async () => ok(undefined)),
         isMergeInProgress: vi.fn(async () => ok(false)),
         mergeBranch: vi.fn(async () => ok(undefined)),
@@ -828,6 +832,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -877,6 +883,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -933,6 +941,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -977,6 +987,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -1021,6 +1033,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -1065,6 +1079,8 @@ describe("app store", () => {
         commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
       };
       const edtRegistry: EdtRegistryPort = {
         add: vi.fn(async () => ok(undefined)),
