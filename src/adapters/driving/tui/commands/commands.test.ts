@@ -299,12 +299,13 @@ describe('COMMANDS', () => {
   });
 
   it('the update commands are visible through prefix autocomplete on "update"', () => {
-    expect(matchCommands('update').map((c) => c.name)).toEqual(['update-edt', 'update-all', 'update-service']);
+    expect(matchCommands('update').map((c) => c.name)).toEqual(['update-edt', 'update-all', 'update-service', 'update-incidents']);
   });
 
   it('the update commands narrow by scope prefix without guessing across scopes', () => {
     expect(matchCommands('update-e').map((c) => c.name)).toEqual(['update-edt']);
     expect(matchCommands('update-s').map((c) => c.name)).toEqual(['update-service']);
+    expect(matchCommands('update-i').map((c) => c.name)).toEqual(['update-incidents']);
   });
 });
 

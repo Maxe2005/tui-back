@@ -30,6 +30,8 @@ import {
   adjustFilterHistoryGridMaxRows,
   adjustFilterHistorySize,
   adjustGridMaxRows,
+  adjustUpdateConcurrency,
+  parseUpdateConcurrencyDigit,
   adjustLogBufferSize,
   clampBranchDropdownMaxRows,
   clampFilterHistoryGridMaxRows,
@@ -45,6 +47,24 @@ import {
   resolveSettingsTabState,
   toggleHiddenHint,
 } from './settings-screen.js';
+
+describe('update concurrency row', () => {
+  it('steps within [1, 8] and sets from a digit', () => {
+    expect(adjustUpdateConcurrency(3, 'up')).toBe(4);
+    expect(adjustUpdateConcurrency(1, 'down')).toBe(1);
+    expect(adjustUpdateConcurrency(8, 'up')).toBe(8);
+    expect(parseUpdateConcurrencyDigit('5')).toBe(5);
+    expect(parseUpdateConcurrencyDigit('0')).toBeNull();
+    expect(parseUpdateConcurrencyDigit('x')).toBeNull();
+  });
+
+  it('only reacts on its own row', () => {
+    expect(resolveGeneralSettingsKey('+', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 4 });
+    expect(resolveGeneralSettingsKey('-', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 2 });
+    expect(resolveGeneralSettingsKey('6', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 6 });
+    expect(resolveGeneralSettingsKey('+', {}, { cursor: 0, editing: null }, 3)).toEqual({ type: 'ignore' });
+  });
+});
 
 describe('nextSettingsTab', () => {
   it('cycles General -> EDTs -> Command Palette -> Logs -> General going forward', () => {
@@ -560,7 +580,8 @@ describe('resolveGeneralSettingsKey (General tab row list + editor command field
 
   it('Up/Down move the row cursor, clamped at both ends', () => {
     expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
-    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow + 1 });
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow + 1, editing: null })).toEqual({ type: 'move', cursor: editorRow + 1 });
     expect(resolveGeneralSettingsKey('', { upArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: quitRow });
   });
 

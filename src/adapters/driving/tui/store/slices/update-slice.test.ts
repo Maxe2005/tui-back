@@ -157,7 +157,7 @@ describe('update slice', () => {
     expect(store.getState().updateNote).toBeNull();
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
   });
 
   it('runGroupUpdate runs the core use-case in-process and lands done with per-service rows', async () => {
@@ -355,7 +355,7 @@ describe('update slice', () => {
     expect(git.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('runGroupUpdate surfaces a throwing use-case as internal-error and always clears runInProgress', async () => {
+  it('runGroupUpdate turns a throwing worker into failed rows and always clears runInProgress', async () => {
     const manifest: ManifestPort = {
       load: vi.fn(async () => {
         throw new Error('boom');
@@ -365,9 +365,11 @@ describe('update slice', () => {
 
     await store.getState().runGroupUpdate();
 
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('internal-error');
-    expect(store.getState().updateError).toContain('boom');
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'failed', detail: { code: 'internal-error', message: expect.stringContaining('boom') } },
+      { service: 'svc-b', outcome: 'failed', detail: { code: 'internal-error', message: expect.stringContaining('boom') } },
+    ]);
     expect(store.getState().runInProgress).toBe(false);
   });
 
@@ -477,7 +479,7 @@ describe('update slice', () => {
 
     await store.getState().runGroupUpdate();
     expect(store.getState().updateStatus).toBe('done');
-    store.setState({ updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' } });
+    store.setState({ incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: 0 }] });
     store.getState().clearUpdate();
 
     expect(store.getState().updateStatus).toBe('idle');
@@ -487,10 +489,10 @@ describe('update slice', () => {
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
     expect(store.getState().updateScope).toBeNull();
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
   });
 
-  it('runGroupUpdate raises the blocker on a dirty repo and resumes on resolveUpdateBlocker', async () => {
+  it('runGroupUpdate raises an incident on a dirty repo and resumes on resolveUpdateIncident', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
@@ -499,7 +501,7 @@ describe('update slice', () => {
 
     const run = store.getState().runGroupUpdate();
     await vi.waitFor(() => {
-      expect(store.getState().updateBlocker).toEqual({
+      expect(store.getState().incidents[0]?.blocker).toEqual({
         service: 'svc-a',
         repoPath: '/repo/a',
         kind: 'dirty-worktree',
@@ -507,11 +509,11 @@ describe('update slice', () => {
     });
     expect(store.getState().updateStatus).toBe('running');
 
-    store.getState().resolveUpdateBlocker('cancel-repo');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
     await run;
 
     expect(store.getState().updateStatus).toBe('done');
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
       { service: 'svc-b', outcome: 'updated', run: expect.anything() },
@@ -519,16 +521,111 @@ describe('update slice', () => {
     expect(store.getState().runInProgress).toBe(false);
   });
 
-  it('resolveUpdateBlocker with no raised blocker is a no-op, never a throw', () => {
+  it('runs services in parallel up to update.concurrency read from the settings', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const migration = {
+      run: vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+        inFlight -= 1;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration } as never));
+    store.setState({ settings: { ...store.getState().settings, update: { concurrency: 2 } } });
+
+    await store.getState().runGroupUpdate();
+
+    expect(peak).toBe(2);
+    expect(store.getState().updateResults.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+  });
+
+  function dirtyGit(): GitPort {
+    return {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    };
+  }
+
+  it('the first incident opens the popup in the Update zone; esc-close keeps the incident queued', async () => {
+    const store = createAppStore(fakeDeps({ git: dirtyGit() }));
+    store.setState({ activeZone: 'update' });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidentPopupOpen).toBe(true);
+    expect(store.getState().incidentToast).toBeNull();
+
+    store.getState().closeIncidentPopup();
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    expect(store.getState().incidents).toHaveLength(1);
+    store.getState().openIncidentPopup();
+    expect(store.getState().incidentPopupOpen).toBe(true);
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+    expect(store.getState().incidents).toEqual([]);
+    expect(store.getState().incidentPopupOpen).toBe(false);
+  });
+
+  it('an incident raised outside the Update zone never opens the popup and raises a toast', async () => {
+    const store = createAppStore(fakeDeps({ git: dirtyGit() }));
+    store.setState({ activeZone: 'dashboard' });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    expect(store.getState().incidentToast).toContain('svc-a');
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+  });
+
+  it('cancel-run from one incident answers every other pending incident and the run settles', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async () => ok(['wip.txt'])),
+    };
+    const store = createAppStore(fakeDeps({ git }));
+    store.setState({ activeZone: 'update', settings: { ...store.getState().settings, update: { concurrency: 2 } } });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(2));
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-run');
+    expect(store.getState().incidents).toEqual([]);
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    await run;
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults.map((row) => row.outcome)).toEqual(['skipped', 'skipped']);
+    expect(store.getState().runInProgress).toBe(false);
+  });
+
+  it('an incident re-raised after a failed re-verification is marked still blocked', async () => {
+    const store = createAppStore(fakeDeps({ git: dirtyGit() }));
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidents[0]?.stillBlocked).toBeUndefined();
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
+    await vi.waitFor(() => expect(store.getState().incidents[0]?.stillBlocked).toBeDefined());
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+  });
+
+  it('resolveUpdateIncident with no raised incident is a no-op, never a throw', () => {
     const store = createAppStore(fakeDeps());
 
-    store.getState().resolveUpdateBlocker('cancel-repo');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
 
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
     expect(store.getState().updateStatus).toBe('idle');
   });
 
-  it('a throwing git write under a raised blocker settles as internal-error with the menu cleared', async () => {
+  it('a throwing git write under a raised incident fails that service with the queue cleared', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
@@ -540,15 +637,18 @@ describe('update slice', () => {
 
     const run = store.getState().runGroupUpdate();
     await vi.waitFor(() => {
-      expect(store.getState().updateBlocker).not.toBeNull();
+      expect(store.getState().incidents).not.toEqual([]);
     });
-    store.getState().resolveUpdateBlocker('stash');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'stash');
     await run;
 
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('internal-error');
-    expect(store.getState().updateError).toContain('stash exploded');
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults[0]).toMatchObject({
+      service: 'svc-a',
+      outcome: 'failed',
+      detail: { code: 'internal-error', message: expect.stringContaining('stash exploded') },
+    });
+    expect(store.getState().incidents).toEqual([]);
     expect(store.getState().runInProgress).toBe(false);
   });
 });
@@ -1576,7 +1676,9 @@ describe('live per-service run tracking', () => {
     // observable while the run is still in flight (default fakes take the merge path).
     await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
     expect(store.getState().updateStatus).toBe('running');
-    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating' });
+    // The default pool runs both services at once: each one is in its migrate step.
+    await waitForCondition(() => store.getState().liveServicePhase['svc-b'] === 'migrating');
+    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating', 'svc-b': 'migrating' });
 
     releaseMigration?.();
     await run;
@@ -1651,16 +1753,16 @@ describe('live per-service run tracking', () => {
     const store = createAppStore({ ...base, git });
 
     const run = store.getState().runGroupUpdate();
-    await waitForCondition(() => store.getState().updateBlocker !== null);
+    await waitForCondition(() => store.getState().incidents.length > 0);
 
     // Raising the menu appends the unresolved entry before any phase is emitted.
-    expect(store.getState().updateBlocker).toMatchObject({ service: 'svc-a', kind: 'dirty-worktree' });
+    expect(store.getState().incidents[0]?.blocker).toMatchObject({ service: 'svc-a', kind: 'dirty-worktree' });
     expect(store.getState().liveServiceIssues).toEqual({
       'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
     });
     expect(store.getState().liveServicePhase).toEqual({});
 
-    store.getState().resolveUpdateBlocker('edited');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
     await run;
 
     expect(store.getState().updateStatus).toBe('done');
@@ -1681,24 +1783,27 @@ describe('live per-service run tracking', () => {
     const git: GitPort = {
       ...(base.git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => {
+        if (repoPath !== '/repo/a') {
+          return ok([]);
+        }
         dirtyReads += 1;
         // Still dirty after the stash, clean only once the repo is cancelled.
-        return ok(dirtyReads <= 2 && repoPath === '/repo/a' ? ['src/app.ts'] : []);
+        return ok(dirtyReads <= 2 ? ['src/app.ts'] : []);
       }),
     };
     const store = createAppStore({ ...base, git });
 
     const run = store.getState().runGroupUpdate();
-    await waitForCondition(() => store.getState().updateBlocker !== null);
-    store.getState().resolveUpdateBlocker('stash');
+    await waitForCondition(() => store.getState().incidents.length > 0);
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'stash');
 
     // Core re-presents the same menu — the second raise must not duplicate the row.
-    await waitForCondition(() => store.getState().updateBlocker !== null && dirtyReads >= 2);
+    await waitForCondition(() => store.getState().incidents.length > 0 && dirtyReads >= 2);
     expect(store.getState().liveServiceIssues).toEqual({
       'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
     });
 
-    store.getState().resolveUpdateBlocker('cancel-repo');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
     await run;
 
     expect(store.getState().updateResults).toEqual([

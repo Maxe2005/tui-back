@@ -844,3 +844,74 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 });
+
+describe('UpdateZone — incident queue popup', () => {
+  function storeWithIncidents() {
+    const store = createAppStore();
+    const resolved: Array<[string, string]> = [];
+    store.setState({
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      updateStatus: 'running',
+      incidentPopupOpen: true,
+      incidents: [
+        { id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: Date.now() },
+        { id: 'i2', blocker: { service: 'svc-b', repoPath: '/repo/b', kind: 'merge-conflict' }, raisedAt: Date.now() },
+      ],
+      resolveUpdateIncident: (id: string, choice: string) => {
+        resolved.push([id, choice]);
+      },
+    } as never);
+    return { store, resolved };
+  }
+
+  it('Esc closes the popup without resolving; `i` reopens it', async () => {
+    const { store, resolved } = storeWithIncidents();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await pressEscape(instance, stdin);
+      expect(store.getState().incidentPopupOpen).toBe(false);
+      expect(store.getState().incidents).toHaveLength(2);
+      expect(resolved).toEqual([]);
+      await press(instance, stdin, 'i');
+      expect(store.getState().incidentPopupOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('arrows select an incident and Enter opens its menu, then a choice resolves that incident only', async () => {
+    const { store, resolved } = storeWithIncidents();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      // Menu of the merge-conflict incident: [edited, cancel-repo, cancel-run] — Down then Enter = cancel-repo.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      expect(resolved).toEqual([['i2', 'cancel-repo']]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc in the guided menu goes back to the list, resolving nothing', async () => {
+    const { store, resolved } = storeWithIncidents();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await pressEscape(instance, stdin);
+      expect(resolved).toEqual([]);
+      expect(store.getState().incidentPopupOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+

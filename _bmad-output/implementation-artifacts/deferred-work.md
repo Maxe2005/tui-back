@@ -713,3 +713,15 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
   summary: A single wrapped line taller than the viewport cannot be scrolled within in the full-screen report; only its first rows are reachable.
   evidence: reportWindow always shows whole lines; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The incident popup can open over a service menu, pick or full-screen report that was already open in the Update zone.
+  evidence: The store opens the popup on the first incident whenever the Update zone is active, without knowing the zone's local dialogs; reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: A run cancelled with unstarted services (now `run-cancelled` rows) still clears an `interrupted` EDT status because no row is `failed`.
+  evidence: groupUpdateEdt only checks for failed rows before setStatus('active'); reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: update-incidents-dialog imports blocker helpers from update-zone while the zone imports the dialog (circular import); the helpers belong in a shared logic module.
+  evidence: Works at runtime (use only inside functions) but is a layering smell; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The CLI `tui-back update` stays sequential (no concurrency passed) while the TUI defaults to 3; cancelled-run issue-log entries stay unresolved; the `:update-incidents` command gives no feedback with an empty queue; no docs mention `update.concurrency`, the `i` key or the awaiting status.
+  evidence: Observed by the three review layers; none breaks the story's acceptance criteria.

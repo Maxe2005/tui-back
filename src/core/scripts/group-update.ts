@@ -15,6 +15,7 @@ import type { RegistryPort } from '../ports/registry.js';
 import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { runPool, type PoolControl } from './run-pool.js';
 
 // The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)
 // serializes on it, so a second trigger is rejected, never queued or raced.
@@ -183,6 +184,11 @@ export interface GroupUpdateParams {
   // Fires once per service as soon as its row is final (before the run ends), so a driving
   // side can show a finished service while others still run. Observer-only, like onPhase.
   onServiceResult?: OnServiceResult;
+  // How many services are processed at once (bounded pool). Default 1 — the sequential run.
+  concurrency?: number;
+  // Optional stage of a target: stages run in ascending order, each fully finished before the
+  // next starts (a later story runs `shared-types` alone first). Absent: one stage.
+  ordering?: (target: { service: string; repoPath: string }) => number;
 }
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
@@ -352,42 +358,67 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
   }
 
   const run = await withActionLock(lock, GROUP_UPDATE_LOCK_KEY, async () => {
-    const results: GroupUpdateRepoResult[] = [];
-    for (const target of targets) {
-      const { repoPath } = target;
-      const loaded = await manifest.load(repoPath);
-      if (!loaded.ok) {
-        // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
-        if (loaded.error.code === 'manifest-not-found') {
-          continue;
+    const rows = await runPool<(typeof targets)[number], GroupUpdateRepoResult>(
+      targets,
+      {
+        concurrency: params.concurrency ?? 1,
+        keyOf: (target) => resolve(target.repoPath),
+        ...(params.ordering !== undefined
+          ? { stageOf: (target) => params.ordering?.({ service: serviceFallback(target.repoPath), repoPath: target.repoPath }) ?? 0 }
+          : {}),
+        onCancelled: async (target) => {
+          const loaded = await manifest.load(target.repoPath);
+          if (!loaded.ok && loaded.error.code === 'manifest-not-found') {
+            return undefined;
+          }
+          const service = loaded.ok ? loaded.data.service : serviceFallback(target.repoPath);
+          const row = loaded.ok ? runCancelledRow(service, target.repoPath, 'before it started') : failed(service, loaded.error);
+          emitServiceResult(params.onServiceResult, row);
+          return row;
+        },
+        onError: (target, error) => {
+          const row = failed(serviceFallback(target.repoPath), unexpectedError(error));
+          emitServiceResult(params.onServiceResult, row);
+          return row;
+        },
+      },
+      async (target, control) => {
+        const { repoPath } = target;
+        const loaded = await manifest.load(repoPath);
+        if (!loaded.ok) {
+          // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
+          if (loaded.error.code === 'manifest-not-found') {
+            return undefined;
+          }
+          return failed(serviceFallback(repoPath), loaded.error);
         }
-        results.push(failed(serviceFallback(repoPath), loaded.error));
-        continue;
-      }
-      // `cancel-run` stops the loop but still returns `ok` with rows so far (a cancelled repo
-      // is `skipped`, never `failed`).
-      const outcome = await updateWithLoadedManifest(
-        loaded.data,
-        git,
-        container,
-        migration,
-        restart,
-        undefined,
-        repoPath,
-        loaded.data.service,
-        undefined,
-        params.onUpdateBlocker,
-        effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
-        target.runMigrations ?? runMigrations,
-        target.cleanRestart ?? cleanRestart,
-        params.onPhase,
-      );
-      results.push(outcome.row);
-      emitServiceResult(params.onServiceResult, outcome.row);
-      if (outcome.cancelRun) {
-        break;
-      }
-    }
+        // `cancel-run` stops the pool but still returns `ok` with rows so far (a cancelled repo
+        // is `skipped`, never `failed`).
+        const outcome = await updateWithLoadedManifest(
+          loaded.data,
+          git,
+          container,
+          migration,
+          restart,
+          undefined,
+          repoPath,
+          loaded.data.service,
+          undefined,
+          pausingSeam(params.onUpdateBlocker, control),
+          effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
+          target.runMigrations ?? runMigrations,
+          target.cleanRestart ?? cleanRestart,
+          params.onPhase,
+          control.cancelled,
+        );
+        if (outcome.cancelRun) {
+          control.cancel();
+        }
+        emitServiceResult(params.onServiceResult, outcome.row);
+        return outcome.row;
+      },
+    );
+    const results = rows.filter((row): row is GroupUpdateRepoResult => row !== undefined);
     // Every registered path was unmanaged — an explicit no-op, never silent success.
     if (results.length === 0) {
       return ok({
@@ -552,29 +583,50 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
         seen.add(key);
         return true;
       });
-      const results: GroupUpdateRepoResult[] = [];
-      for (const { member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart } of enlisted) {
-        // `cancel-run` stops the loop but still returns `ok` with rows so far.
-        const outcome = await updateMember(
-          manifest,
-          git,
-          container,
-          migration,
-          restart,
-          active.ulid,
-          member,
-          params.onUpdateBlocker,
-          sourceBranch,
-          memberMigrations ?? runMigrations,
-          memberCleanRestart ?? cleanRestart,
-          params.onPhase,
-        );
-        results.push(outcome.row);
-        emitServiceResult(params.onServiceResult, outcome.row);
-        if (outcome.cancelRun) {
-          break;
-        }
-      }
+      const rows = await runPool<ConfiguredMember, GroupUpdateRepoResult>(
+        enlisted,
+        {
+          concurrency: params.concurrency ?? 1,
+          keyOf: ({ member }) => resolve(member.repoPath),
+          ...(params.ordering !== undefined
+            ? { stageOf: ({ member }) => params.ordering?.({ service: member.service, repoPath: member.repoPath }) ?? 0 }
+            : {}),
+          onCancelled: ({ member }) => {
+            const row = runCancelledRow(member.service, member.repoPath, 'before it started');
+            emitServiceResult(params.onServiceResult, row);
+            return row;
+          },
+          onError: ({ member }, error) => {
+            const row = failed(member.service, unexpectedError(error));
+            emitServiceResult(params.onServiceResult, row);
+            return row;
+          },
+        },
+        async ({ member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart }, control) => {
+          // `cancel-run` stops the pool but still returns `ok` with rows so far.
+          const outcome = await updateMember(
+            manifest,
+            git,
+            container,
+            migration,
+            restart,
+            active.ulid,
+            member,
+            pausingSeam(params.onUpdateBlocker, control),
+            sourceBranch,
+            memberMigrations ?? runMigrations,
+            memberCleanRestart ?? cleanRestart,
+            params.onPhase,
+            control.cancelled,
+          );
+          if (outcome.cancelRun) {
+            control.cancel();
+          }
+          emitServiceResult(params.onServiceResult, outcome.row);
+          return outcome.row;
+        },
+      );
+      const results = rows.filter((row): row is GroupUpdateRepoResult => row !== undefined);
       // A fully successful run clears a previously set `interrupted` status so the re-run
       // offer doesn't persist forever: results exist and none failed (a `skipped` row
       // doesn't block the clear — the services that could update did). The zero-member
@@ -660,6 +712,43 @@ export async function runRestartStep(input: RestartStepInput): Promise<Result<vo
   return ok(undefined);
 }
 
+// The row of a service the run was cancelled for: `skipped`, never `failed`, so the summary
+// still accounts for it.
+function runCancelledRow(service: string, repoPath: string, when: string): GroupUpdateRepoResult {
+  return {
+    service,
+    outcome: 'skipped',
+    detail: { code: 'run-cancelled', message: `Repo ${repoPath} update cancelled with the run ${when}` },
+  };
+}
+
+// Wraps the blocker seam so a service waiting on the developer gives its pool slot to the next
+// service, and takes one again (behind the waiting ones) once answered. A pool of one keeps
+// its slot: that run stays strictly sequential, a blocker waits for the developer exactly as
+// before.
+function pausingSeam(seam: OnUpdateBlocker | undefined, control: PoolControl): OnUpdateBlocker | undefined {
+  if (seam === undefined) {
+    return undefined;
+  }
+  if (control.concurrency <= 1) {
+    return seam;
+  }
+  return async (blocker) => {
+    control.release();
+    try {
+      return await seam(blocker);
+    } finally {
+      await control.reacquire();
+    }
+  };
+}
+
+// A worker that threw (never-throw invariant, AD-3) becomes that service's failed row.
+function unexpectedError(error: unknown): ResultError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return { code: 'internal-error', message: detail };
+}
+
 function failed(service: string, error: ResultError): GroupUpdateRepoResult {
   return { service, outcome: 'failed', detail: { code: error.code, message: error.message } };
 }
@@ -677,6 +766,7 @@ async function updateMember(
   runMigrations = true,
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
+  shouldStop?: () => boolean,
 ): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
@@ -700,6 +790,7 @@ async function updateMember(
     runMigrations,
     cleanRestart,
     onPhase,
+    shouldStop,
   );
 }
 
@@ -746,8 +837,17 @@ async function updateWithLoadedManifest(
   runMigrations = true,
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
+  shouldStop?: () => boolean,
 ): Promise<RepoOutcome> {
   const { container: containerName, migrationCommand, restartCommands } = loaded;
+  // A cancelled run lets in-flight services finish their current step, then stops them before
+  // the next one — no subprocess is ever killed.
+  const stopped = (when: string): RepoOutcome | undefined =>
+    shouldStop?.() === true ? { row: runCancelledRow(service, repoPath, when), cancelRun: false } : undefined;
+  const stoppedEarly = stopped('before it started');
+  if (stoppedEarly !== undefined) {
+    return stoppedEarly;
+  }
   // The configured merge source — the manifest `sharedBranch` unless the pre-run screen
   // confirmed a per-service override (trimmed once inside `effectiveSourceBranch`, so padding
   // never reaches fetch/merge). Merge stays `git merge`, never rebase.
@@ -818,6 +918,10 @@ async function updateWithLoadedManifest(
     }
   }
 
+  const stoppedBeforeMerge = stopped('before its merge');
+  if (stoppedBeforeMerge !== undefined) {
+    return stoppedBeforeMerge;
+  }
   const headBefore = await git.headRevision(repoPath);
 
   if (current.data === mergeSource) {
@@ -896,6 +1000,10 @@ async function updateWithLoadedManifest(
   // keeps the repo on its merged code but skips the restart — a `failed` row with
   // `migration-failed` detail naming the command and the error output — and never blocks or
   // rolls back the other services.
+  const stoppedBeforeMigration = stopped('after its merge — migration and restart not run');
+  if (stoppedBeforeMigration !== undefined) {
+    return stoppedBeforeMigration;
+  }
   if (runMigrations && migrationCommand !== undefined && migrationCommand.trim() !== '') {
     // The live current-step signal for the migrate phase.
     emitPhase(onPhase, service, 'migrating');
@@ -909,6 +1017,10 @@ async function updateWithLoadedManifest(
     runDetail.migrations = { kind: 'ran', command: migrationCommand, outputExcerpt: outputExcerpt(migrated.data.output) };
   }
 
+  const stoppedBeforeRestart = stopped('before its restart');
+  if (stoppedBeforeRestart !== undefined) {
+    return stoppedBeforeRestart;
+  }
   // The restart phase, shared with the standalone single-service use-case via runRestartStep
   // (which also emits the `restarting` phase).
   const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });

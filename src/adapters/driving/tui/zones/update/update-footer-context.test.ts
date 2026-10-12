@@ -7,6 +7,9 @@ describe('updateFooterContext', () => {
   const cases: Array<[string, Partial<UpdateFooterInput>, string | null]> = [
     ['nothing open', {}, null],
     ['blocker menu', { blocker: true }, 'menu'],
+    ['incident list', { incidentList: true }, 'update-incidents'],
+    ['guided incident menu outranks the list', { blocker: true, incidentList: true }, 'menu'],
+    ['incident list outranks the config screen', { incidentList: true, config: 'update-config-table' }, 'update-incidents'],
     ['quit confirmation', { quitConfirm: true }, 'confirm'],
     ['service actions menu', { serviceMenu: true }, 'menu'],
     ['service quick-pick', { servicePick: true }, 'menu'],

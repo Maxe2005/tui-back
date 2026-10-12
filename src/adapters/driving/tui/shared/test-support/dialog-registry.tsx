@@ -28,6 +28,7 @@ import {
 import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
 import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-dialog.js';
 import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
+import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
 import { CommandBar } from '../command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
@@ -231,6 +232,24 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
     id: 'update/service-menu',
     file: 'zones/update/update-service-menu-dialog.tsx',
     render: () => createElement(UpdateServiceMenuDialog, { service: 's'.repeat(500), cursor: 0 }),
+  },
+  {
+    id: 'update/incidents',
+    file: 'zones/update/update-incidents-dialog.tsx',
+    render: () =>
+      createElement(UpdateIncidentsDialog, {
+        incidents: Array.from({ length: 200 }, (_, i) => ({
+          id: `incident-${i}`,
+          blocker: { service: `${'s'.repeat(300)}-${i}`, repoPath: `/repo/${'p'.repeat(500)}`, kind: 'merge-conflict' as const, retry: 3, retryReason: MULTILINE_ERROR },
+          raisedAt: 0,
+          stillBlocked: { reason: MULTILINE_ERROR },
+        })),
+        selected: 150,
+        mode: 'menu',
+        menuCursor: 0,
+        editorError: MULTILINE_ERROR,
+        now: 90_000,
+      }),
   },
   {
     id: 'logs/filter-editor',

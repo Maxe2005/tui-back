@@ -180,6 +180,8 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.cleanRestart !== undefined ? { cleanRestart: overrides.cleanRestart } : {}),
     ...(overrides.onPhase !== undefined ? { onPhase: overrides.onPhase } : {}),
     ...(overrides.onServiceResult !== undefined ? { onServiceResult: overrides.onServiceResult } : {}),
+    ...(overrides.concurrency !== undefined ? { concurrency: overrides.concurrency } : {}),
+    ...(overrides.ordering !== undefined ? { ordering: overrides.ordering } : {}),
   };
 }
 
@@ -1431,11 +1433,14 @@ describe('groupUpdate — assisted resolution', () => {
     expect(result).toMatchObject({
       ok: true,
       data: {
-        results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } }],
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } },
+          { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } },
+        ],
       },
     });
     if (result.ok) {
-      expect(result.data.results).toHaveLength(1);
+      expect(result.data.results).toHaveLength(2);
     }
     // The run stopped: the second repo was never even read.
     expect(calls(git.currentBranch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
@@ -1532,7 +1537,12 @@ describe('groupUpdate — assisted resolution', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'merge-conflict' } }] },
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'merge-conflict' } },
+          { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } },
+        ],
+      },
     });
     expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
     expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
@@ -2778,5 +2788,114 @@ describe('groupUpdate — per-service run detail', () => {
 
     expect(rowOf(result, 'svc-a')?.outcome).toBe('failed');
     expect(rowOf(result, 'svc-a')?.run).toBeUndefined();
+  });
+});
+
+describe('groupUpdate — parallel pool', () => {
+  const tickMs = () => new Promise<void>((resolveTick) => setTimeout(resolveTick, 2));
+
+  function trackedMigration(): { migration: MigrationPort; peak: () => number } {
+    let inFlight = 0;
+    let peak = 0;
+    const migration = fakeMigration({
+      run: vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await tickMs();
+        inFlight -= 1;
+        return ok({ output: '' });
+      }),
+    });
+    return { migration, peak: () => peak };
+  }
+
+  it('runs the services in parallel up to the concurrency and keeps configuration order', async () => {
+    const { migration, peak } = trackedMigration();
+    const result = await groupUpdate(makeParams({ migration, concurrency: 2 }));
+    expect(peak()).toBe(2);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+  });
+
+  it('concurrency 1 never overlaps services', async () => {
+    const { migration, peak } = trackedMigration();
+    await groupUpdate(makeParams({ migration, concurrency: 1 }));
+    expect(peak()).toBe(1);
+  });
+
+  it('a worker that throws becomes that service failed row, the other still runs', async () => {
+    const git = fakeGit({
+      currentBranch: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a') {
+          throw new Error('git exploded');
+        }
+        return ok('feat/b');
+      }),
+    });
+    const result = await groupUpdate(makeParams({ git, concurrency: 2 }));
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'internal-error' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+  });
+
+  it('a service waiting on the developer does not stop the others (pool > 1)', async () => {
+    let answer: (choice: UpdateBlockerChoice) => void = () => {};
+    const seam: OnUpdateBlocker = (blocker) =>
+      blocker.service === 'svc-a'
+        ? new Promise<UpdateBlockerChoice>((resolveChoice) => {
+            answer = resolveChoice;
+          })
+        : Promise.resolve('cancel-repo');
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+    const done: string[] = [];
+    const run = groupUpdate(
+      makeParams({ git, onUpdateBlocker: seam, concurrency: 2, onServiceResult: (row) => done.push(row.service) }),
+    );
+    await tickMs();
+    await tickMs();
+    // svc-b completed while svc-a waited on the developer.
+    expect(done).toEqual(['svc-b']);
+    answer('cancel-repo');
+    const result = await run;
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+  });
+
+  it('cancel-run lets in-flight services finish their step and skips the rest', async () => {
+    const seam: OnUpdateBlocker = async () => 'cancel-run';
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, concurrency: 1 }));
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped' }, { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } }] },
+    });
+  });
+
+  it('the ordering hook runs a stage alone before the next one', async () => {
+    const started: string[] = [];
+    const migration = fakeMigration({
+      run: vi.fn(async (repoPath: string) => {
+        started.push(`start:${repoPath}`);
+        await tickMs();
+        started.push(`end:${repoPath}`);
+        return ok({ output: '' });
+      }),
+    });
+    await groupUpdate(makeParams({ migration, concurrency: 3, ordering: ({ service }) => (service === 'svc-b' ? 0 : 1) }));
+    expect(started).toEqual(['start:/repo/b', 'end:/repo/b', 'start:/repo/a', 'end:/repo/a']);
   });
 });
