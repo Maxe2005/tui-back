@@ -32,7 +32,7 @@ export interface Settings {
   // The Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) — how many
   // lines each pane keeps from the live tail before dropping the oldest. Captured once per
   // subscription, so a change here never resizes an already-running stream.
-  // The group update's bounded pool: how many services update at once (min 1; 1 is the strictly
+  // The group update's bounded pool: how many services update at once (default 3, min 1; 1 is the strictly
   // sequential run). Read when a run starts.
   update: {
     concurrency: number;
@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // filterHistorySize=20 covers a session's worth of committed filters per (scope, mode) list
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
-  update: { concurrency: 1 },
+  update: { concurrency: 3 },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 

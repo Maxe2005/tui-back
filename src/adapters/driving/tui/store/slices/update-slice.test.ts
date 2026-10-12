@@ -1657,7 +1657,9 @@ describe('live per-service run tracking', () => {
     // observable while the run is still in flight (default fakes take the merge path).
     await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
     expect(store.getState().updateStatus).toBe('running');
-    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating' });
+    // The default pool runs both services at once: each one is in its migrate step.
+    await waitForCondition(() => store.getState().liveServicePhase['svc-b'] === 'migrating');
+    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating', 'svc-b': 'migrating' });
 
     releaseMigration?.();
     await run;
@@ -1762,9 +1764,12 @@ describe('live per-service run tracking', () => {
     const git: GitPort = {
       ...(base.git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => {
+        if (repoPath !== '/repo/a') {
+          return ok([]);
+        }
         dirtyReads += 1;
         // Still dirty after the stash, clean only once the repo is cancelled.
-        return ok(dirtyReads <= 2 && repoPath === '/repo/a' ? ['src/app.ts'] : []);
+        return ok(dirtyReads <= 2 ? ['src/app.ts'] : []);
       }),
     };
     const store = createAppStore({ ...base, git });
