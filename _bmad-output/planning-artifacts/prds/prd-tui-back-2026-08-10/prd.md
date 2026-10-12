@@ -348,6 +348,18 @@ A developer can open a service's update report full screen — the complete deta
 - Failed steps are visually distinct (glyph + color) and can be jumped to.
 - The inline detail pane keeps its bounded rendering; the full report is the only unbounded-text surface.
 
+#### FR-35: Service actions (added 2026-10-12, Sprint Change Proposal)
+
+A single set of per-service actions — open in IDE, simple restart, clean restart, extensible — is available from the Logs zone and the Dashboard, behaving identically in both.
+
+**Consequences (testable):**
+- An unavailable action (no container, no clean-restart recipe) is shown disabled with its reason; a clean restart without a recipe falls back to a simple restart with a visible notice.
+- Logs `R` restarts with the mode chosen in `logs.restartMode` (simple by default).
+
+#### FR-36: Configurable defaults (added 2026-10-12, Sprint Change Proposal)
+
+The defaults of the Update global parameters, the st zone's option toggles and the Logs restart mode are settings. A per-run change never writes back; with untouched settings behaviour is unchanged.
+
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
 **Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.
@@ -366,14 +378,15 @@ A developer can publish a new `shared-types` version through the tool, which run
 - Publish is offered only when the active EDT includes the repo declaring `shared-types-source` as a member.
 - Manifest parameters: `shared-types-source` takes `publishCommand` (default `npm run v`) and `packageName` (default `@ianord/shared-types`).
 
-#### FR-14: See declared-version drift *(amended 2026-10-05 — niche, optional)*
+#### FR-14: Search the `shared-types` version history *(redefined 2026-10-12, Sprint Change Proposal — replaces the declared-version drift view)*
 
-The tool shows, for the active EDT's `shared-types-consumer` member services, the `shared-types` version declared in their `package.json` compared with the version declared by the `shared-types` source repo on the active EDT's branch.
+A developer searches the `shared-types` source repo's branches and commits in real time to see which versions each branch carried and when.
 
 **Consequences (testable):**
-- The comparison reads declared versions from `package.json` files only. No git-ancestry walk is performed and nothing is cached. (The 2026-08-24 ancestry-based resolution is superseded.)
-- A member service that doesn't declare `shared-types-consumer` is omitted; unavailable when the active EDT doesn't include the source repo.
-- An out-of-sync consumer offers a one-key jump into FR-15 with the source version pre-filled.
+- **By branch:** the developer picks a branch; the tool walks its commits newest-first and records every commit that changes the `"version"` line of the source repo's root `package.json`, until `n` versions are found (`sharedTypes.historyDepth`, default 20) or `sharedTypes.maxCommitsScanned` (default 1 000) commits were scanned.
+- **By version:** the developer enters a valid `MAJOR.MINOR.PATCH`; the tool shows the branch(es) containing the commit that set it and that commit's date (the bump date, not a registry publication date). Invalid input runs nothing.
+- Results stream in and the search is cancellable; nothing is cached and nothing is written to any repo.
+- Available only when the active EDT includes the `shared-types-source` repo. A result row can pre-fill FR-15's version field.
 
 #### FR-15: Propagate a version to chosen services *(amended 2026-10-05)*
 
@@ -426,6 +439,7 @@ Service health (up / down / restarting) is visible inline with the log view, so 
 **Consequences (testable):**
 - A failing service's health status is visible in the same view as its logs, without a separate health check step.
 - Restarting a failing service is a developer-triggered action from this view, replacing `check_health.sh`'s current silent auto-restart.
+- Restart honours `logs.restartMode` (simple | clean) and an open-in-IDE shortcut acts on the focused service (FR-35, added 2026-10-12).
 - A restart request on a service that's already restarting is a no-op — the control is disabled during restart, never triggering a second concurrent restart.
 
 ---
@@ -575,7 +589,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 - **SM-1**: Session start is one guided action (switch/create EDT → group update completes) instead of a manual multi-step sequence, every time. Validates FR-4, FR-6, FR-10.
 - **SM-2**: Zero forgotten-service incidents — no service silently left out of date after a group update. Target: 0 per month, observed over real use. Validates FR-10.
 - **SM-3**: Every merge/migration failure encountered during a group update is resolved through the tool's guided flow, without the developer dropping to a separate terminal. Validates FR-11, FR-12.
-- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30 (FR-14 is niche).
+- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30; FR-14 answers *which version, where, when* from git.
 - **SM-5**: The trace → fix → resume loop (fire a saved route request, see the relevant logs, get back to coding) stays fast enough not to break flow. Validates FR-20, FR-21, FR-22, FR-23.
 - **SM-6**: Zero incidents of a non-member service breaking EDT work because it was left on a stray branch — branch state for every managed repo is always visible and correct. Validates FR-8, FR-9.
 

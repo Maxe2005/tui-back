@@ -248,3 +248,10 @@ graph LR
 - **Binds:** FR-10, FR-11, Stories 3.18, 4.4
 - **Prevents:** one slow or blocked service holding the rest of a run; unbounded Docker/CPU fan-out; two workers touching one working tree; a single global blocker slot hiding concurrent problems.
 - **Rule:** `core/scripts/group-update.ts` drives targets through a bounded worker pool (`update.concurrency`, default 3). Workers are isolated (a throw becomes that service's `failed` row), serialised per resolved repoPath, and report through the existing `onUpdatePhase` / `onServiceResult` / `onUpdateBlocker` seams. `onUpdateBlocker` may be invoked concurrently: the driving adapter owns the queue (one pending promise per incident). Core never knows about the queue, popups or ordering of resolution. An optional stage list lets a caller run a first stage alone (Story 4.4's `shared-types`) before the parallel stage. Cancel-run is cooperative: checked between steps, never by killing a subprocess.
+### AD-21 — Service action registry (added 2026-10-12)
+
+- **Binds:** FR-35, Stories 7.12, 5.7, 7.5
+- **Prevents:** Logs and Dashboard each re-implementing restart / open-in-IDE with diverging behaviour; `child_process` leaking into the TUI layer.
+- **Rule:** per-service actions (`openInIde`, `restart(simple|clean)`, future ones) are declared once in `core/` with availability rules (container-less, no clean-restart recipe, held lock) and consumed by any driving adapter. Editor launching sits behind a port. `GitPort` also gains read-only, streaming, cancellable history capabilities (`listVersionBumpCommits`, `listBranchesContaining`) for Story 4.6 (AD-16 extension).
+- **Settings:** new `sharedTypes` group (`historyDepth`, `maxCommitsScanned`, option defaults), `logs.restartMode`, Update global defaults — every zod default equals today's behaviour.
+
