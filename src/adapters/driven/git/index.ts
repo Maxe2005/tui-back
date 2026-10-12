@@ -424,19 +424,6 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
     cwd: repoPath,
   });
   if (result.status !== 0) {
-    // `<b>:<b>` is rejected as non-fast-forward whenever the local branch carries commits the
-    // remote lacks (e.g. an unpushed tui-back dependency-bump commit). That is not a failure:
-    // the local branch already contains everything the remote has, so the merge that follows
-    // loses nothing. Only a genuinely diverged branch stays an error.
-    const remoteTip = await runProcess('git', ['fetch', 'origin', branchName], { cwd: repoPath });
-    if (remoteTip.status === 0) {
-      const contained = await runProcess('git', ['merge-base', '--is-ancestor', 'FETCH_HEAD', branchName], {
-        cwd: repoPath,
-      });
-      if (contained.status === 0) {
-        return ok(undefined);
-      }
-    }
     return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(undefined);

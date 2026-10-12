@@ -1174,17 +1174,6 @@ describe('fetchBranch', () => {
     expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
   });
 
-  it('succeeds when the local branch is ahead of origin (unpushed local commit)', async () => {
-    const { clone } = await makeGitRepoOriginAndClone();
-    runGit(clone, ['commit', '--allow-empty', '-m', 'local only']);
-    const localTip = runGit(clone, ['rev-parse', 'development']).stdout.trim();
-
-    const result = await fetchBranch(clone, 'development');
-
-    expect(result).toEqual({ ok: true, data: undefined });
-    expect(runGit(clone, ['rev-parse', 'development']).stdout.trim()).toBe(localTip);
-  });
-
   it('reports a controlled error when the branch does not exist on origin', async () => {
     const { clone } = await makeGitRepoOriginAndClone();
 
