@@ -1318,6 +1318,8 @@ describe('update slice: pre-run configuration screen', () => {
     expect(() => store.getState().setUpdateConfig({
       scope: 'edt',
       rows: [],
+      sharedTypes: 'off',
+      sharedTypesSource: null,
       runMigrations: true,
       cleanRestart: false,
       error: null,

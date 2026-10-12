@@ -13,6 +13,7 @@ import {
   checkEdtChoice,
   commitEmptyBranch,
   computeConfigBudget,
+  cycleSharedTypes,
   effectiveMigrations,
   effectiveRestart,
   globalLines,
@@ -68,6 +69,40 @@ describe('effective values', () => {
     expect(rowMode(api)).toBe('global');
     expect(rowMode({ ...api, migrations: 'off' })).toBe('custom');
     expect(rowMode({ ...api, origin: 'manual' })).toBe('custom');
+  });
+});
+
+describe('shared-types row', () => {
+  const withSource = (): UpdateConfigDraft => createUpdateConfigDraft('edt', ROWS, { layout: 'edt-panels', sharedTypesSource: '/r/api' });
+
+  it('is hidden without a single source among the rows', () => {
+    expect(globalLines(edtDraft())).not.toContain('sharedTypes');
+    expect(edtDraft().sharedTypes).toBe('off');
+  });
+
+  it('sits right before the start line and cycles off, if-changed, always, off', () => {
+    const draft = withSource();
+    expect(globalLines(draft)).toEqual(['source', 'migrations', 'cleanRestart', 'sharedTypes', 'start']);
+    expect(cycleSharedTypes('off')).toBe('if-changed');
+    const once = toggleGlobalLine(draft, 'sharedTypes');
+    expect(once.sharedTypes).toBe('if-changed');
+    const twice = toggleGlobalLine(once, 'sharedTypes');
+    expect(twice.sharedTypes).toBe('always');
+    expect(toggleGlobalLine(twice, 'sharedTypes').sharedTypes).toBe('off');
+  });
+
+  it('the toggle key (space) on the focused row cycles it', () => {
+    const draft = withSource();
+    const view: PanelsViewState = { ...VIEW, panelCursor: globalLines(draft).indexOf('sharedTypes') };
+    expect(resolvePanelsKey(' ', {}, view, draft, [])).toEqual({ type: 'toggle-global', line: 'sharedTypes' });
+  });
+
+  it('is confirmed only while the source row is selected', () => {
+    const draft = { ...withSource(), sharedTypes: 'always' as const };
+    expect(confirmUpdateConfigDraft(draft)).toMatchObject({ ok: true, config: { sharedTypes: 'always', sharedTypesSource: '/r/api' } });
+    const deselected = toggleRowSelection(draft, 0);
+    expect(confirmUpdateConfigDraft(deselected)).toMatchObject({ ok: true, config: { runMigrations: true } });
+    expect((confirmUpdateConfigDraft(deselected) as { config: object }).config).not.toHaveProperty('sharedTypes');
   });
 });
 
