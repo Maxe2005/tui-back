@@ -234,9 +234,11 @@ describe('reset slice', () => {
     const store = createAppStore(fakeDeps(disk));
     await store.getState().loadEdts();
     await store.getState().loadFilterHistory();
+    await store.getState().loadCommandHistory();
     await store.getState().checkRegistryEmpty();
     expect(store.getState().activeEdt).toBe('ULID1');
     expect(store.getState().registryEmpty).toBe(false);
+    expect(store.getState().commandHistory).toEqual(['update-service api']);
 
     store.getState().openResetScreen();
     await store.getState().runReset(['services', 'histories']);
@@ -255,6 +257,8 @@ describe('reset slice', () => {
     expect(state.activeEdt).toBeNull();
     expect(state.registryEmpty).toBe(true);
     expect(state.filterHistory).toEqual({});
+    expect(disk.commandHistory).toEqual([]);
+    expect(state.commandHistory).toEqual([]);
     expect(disk.repos).toEqual([]);
   });
 

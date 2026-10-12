@@ -171,6 +171,25 @@ describe('resetTool', () => {
     ]);
   });
 
+  it('HISTORY_ONLY: also clears commandHistory, leaving everything else', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    state.data.commandHistory = ['settings', 'registry'];
+
+    const result = await resetTool({
+      categories: ['histories'],
+      edtRegistry,
+      registry,
+      state,
+      lock: fakeLock(),
+      keys: KEYS,
+      edtsBaseDir,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(state.data.commandHistory).toEqual([]);
+    expect(state.data.activeEdt).toBe('ULID1');
+  });
+
   it('HISTORY_ONLY: clears only filterHistory', async () => {
     const { edtRegistry, registry, state } = fullSetup();
 

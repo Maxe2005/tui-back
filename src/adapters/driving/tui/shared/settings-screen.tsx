@@ -279,7 +279,23 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'clear-history', label: 'Clear history' },
 ];
 
-const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId, FooterContextId> = {
+// The Command Palette tab's group list, same two-level shape as the Logs tab: the grid height
+// plus the command-history controls (size, dedup, clear), one group each.
+export type PaletteSettingsGroupId = 'grid-max-rows' | 'history-size' | 'history-dedup' | 'clear-history';
+
+export type PaletteSettingsGroup = { id: PaletteSettingsGroupId; label: string };
+
+export const PALETTE_SETTINGS_GROUPS: readonly PaletteSettingsGroup[] = [
+  { id: 'grid-max-rows', label: 'Command grid max rows' },
+  { id: 'history-size', label: 'Command history size' },
+  { id: 'history-dedup', label: 'Deduplicate command history' },
+  { id: 'clear-history', label: 'Clear command history' },
+];
+
+const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | PaletteSettingsGroupId, FooterContextId> = {
+  'grid-max-rows': 'settings-adjust',
+  'history-size': 'settings-adjust',
+  'history-dedup': 'settings-toggle',
   'hint-visibility': 'settings-toggle',
   'action-types': 'settings-toggle',
   'branch-dropdown-rows': 'settings-adjust',
@@ -295,13 +311,18 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId, Foote
 // confirm/cancel, a group list opens groups, and each group advertises its own control.
 export function settingsFooterContext(
   tab: SettingsTab,
-  state: { generalEditing: boolean; edtsGroup: SettingsGroupId | null; logsGroup: LogsSettingsGroupId | null },
+  state: {
+    generalEditing: boolean;
+    edtsGroup: SettingsGroupId | null;
+    logsGroup: LogsSettingsGroupId | null;
+    paletteGroup?: PaletteSettingsGroupId | null;
+  },
 ): FooterContextId {
   switch (tab) {
     case 'general':
       return state.generalEditing ? 'confirm' : 'settings-general';
     case 'command-palette':
-      return 'settings-palette';
+      return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
     case 'edts':
       return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
     case 'logs':
@@ -339,6 +360,8 @@ export type SettingsScreenProps = {
   // Implies initialLogsGroup = 'clear-history' when that prop is left unset, since the service
   // list is only reachable from within that group.
   initialLogsClearServiceOpen?: boolean;
+  // Same test-only injection idiom for the Command Palette tab's own group list.
+  initialPaletteGroup?: PaletteSettingsGroupId | null;
   // Same test-only injection idiom for the General tab's editor-command edit session.
   // Production always starts browsing the row list (false).
   initialGeneralEditing?: boolean;
@@ -354,6 +377,7 @@ export function SettingsScreen({
   initialEdtsGroup = null,
   initialLogsGroup = null,
   initialLogsClearServiceOpen = false,
+  initialPaletteGroup = null,
   initialGeneralEditing = false,
 }: SettingsScreenProps) {
   const settings = useStore((state) => state.settings);
@@ -363,6 +387,7 @@ export function SettingsScreen({
   // into.
   const clearGlobalFilterHistory = useStore((state) => state.clearGlobalFilterHistory);
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
+  const clearCommandHistory = useStore((state) => state.clearCommandHistory);
   const edtsBranches = useStore((state) => state.edtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -387,6 +412,9 @@ export function SettingsScreen({
   const [logsClearServiceOpen, setLogsClearServiceOpen] = useState(initialLogsClearServiceOpen);
   const [logsClearServiceCursor, setLogsClearServiceCursor] = useState(0);
   const logsServices = edtsBranches ?? [];
+  // The Command Palette tab's group list (same shape as the Logs tab's).
+  const [paletteGroup, setPaletteGroup] = useState<PaletteSettingsGroupId | null>(initialPaletteGroup);
+  const [paletteGroupCursor, setPaletteGroupCursor] = useState(0);
 
   // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
   // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
@@ -394,11 +422,12 @@ export function SettingsScreen({
   // General tab counts too: Left/Right/Tab belong to the text field while it is open, and Esc
   // cancels the edit rather than closing the screen.
   const drilledIn =
-    (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
+    (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null) ||
+    (tab === 'command-palette' && paletteGroup !== null);
 
   useFooterContext(
     'settings',
-    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup }),
+    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup, paletteGroup }),
     useStore,
   );
 
@@ -412,6 +441,10 @@ export function SettingsScreen({
       if (tab === 'edts' && edtsGroup !== null) {
         // Steps back up to the group list — the whole settings screen stays open.
         setEdtsGroup(null);
+        return;
+      }
+      if (tab === 'command-palette' && paletteGroup !== null) {
+        setPaletteGroup(null);
         return;
       }
       if (tab === 'logs' && logsClearServiceOpen) {
@@ -438,6 +471,8 @@ export function SettingsScreen({
       setLogsGroup(null);
       setLogsGroupCursor(0);
       setLogsClearServiceOpen(false);
+      setPaletteGroup(null);
+      setPaletteGroupCursor(0);
       setTab((current) => nextSettingsTab(current, tabStep === 'back' ? -1 : 1));
       return;
     }
@@ -448,6 +483,8 @@ export function SettingsScreen({
       setGroupCursor(0);
       setLogsGroup(null);
       setLogsGroupCursor(0);
+      setPaletteGroup(null);
+      setPaletteGroupCursor(0);
       setTab((current) => nextSettingsTab(current, direction));
       return;
     }
@@ -470,22 +507,62 @@ export function SettingsScreen({
     }
 
     if (tab === 'command-palette') {
-      if (key.upArrow) {
-        void updateSettings({
-          commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'up') },
-        });
+      if (paletteGroup === 'grid-max-rows') {
+        if (key.upArrow || key.rightArrow) {
+          void updateSettings({
+            commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'up') },
+          });
+          return;
+        }
+        if (key.downArrow || key.leftArrow) {
+          void updateSettings({
+            commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'down') },
+          });
+          return;
+        }
+        const digit = parseGridMaxRowsDigit(input);
+        if (digit !== null) {
+          void updateSettings({ commandPalette: { gridMaxRows: digit } });
+        }
         return;
       }
-      if (key.downArrow) {
-        void updateSettings({
-          commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'down') },
-        });
+
+      if (paletteGroup === 'history-size') {
+        if (key.leftArrow || key.downArrow) {
+          void updateSettings({ commandPalette: { historySize: adjustFilterHistorySize(settings.commandPalette.historySize, 'down') } });
+          return;
+        }
+        if (key.rightArrow || key.upArrow) {
+          void updateSettings({ commandPalette: { historySize: adjustFilterHistorySize(settings.commandPalette.historySize, 'up') } });
+        }
         return;
       }
-      const digit = parseGridMaxRowsDigit(input);
-      if (digit !== null) {
-        void updateSettings({ commandPalette: { gridMaxRows: digit } });
+
+      if (paletteGroup === 'history-dedup') {
+        if (input === ' ') {
+          void updateSettings({ commandPalette: { historyDedup: !settings.commandPalette.historyDedup } });
+        }
         return;
+      }
+
+      if (paletteGroup === 'clear-history') {
+        if (key.return) {
+          clearCommandHistory();
+        }
+        return;
+      }
+
+      // paletteGroup === null: the group-list level — Up/Down navigates, Enter drills in.
+      const moved = nextCursorForKey(key, paletteGroupCursor, PALETTE_SETTINGS_GROUPS.length);
+      if (moved !== null) {
+        setPaletteGroupCursor(moved);
+        return;
+      }
+      if (key.return) {
+        const group = PALETTE_SETTINGS_GROUPS[paletteGroupCursor];
+        if (group) {
+          setPaletteGroup(group.id);
+        }
       }
       return;
     }
@@ -735,12 +812,52 @@ export function SettingsScreen({
           </Box>
         ) : null}
 
-        {tab === 'command-palette' ? (
+        {tab === 'command-palette' && paletteGroup === null ? (
+          <Box flexDirection="column">
+            {PALETTE_SETTINGS_GROUPS.map((group, index) => {
+              const highlighted = index === paletteGroupCursor;
+              return (
+                <Box key={group.id} flexDirection="row">
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
+                </Box>
+              );
+            })}
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'grid-max-rows' ? (
           <Box flexDirection="column">
             <Text color={colors.text} wrap="truncate-end">
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Rows of the command grid before it scrolls." />
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'history-size' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Command history size: <Text color={colors.accent}>{settings.commandPalette.historySize}</Text>
+            </Text>
+            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'history-dedup' ? (
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Deduplicate command history"
+              state={settings.commandPalette.historyDedup ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="On: a repeated command moves to the front. Off: only a repeat of the latest is merged." />
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'clear-history' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">Clear the command history</Text>
+            <DimAnnotation text="Empties the `:` bar's recall list; the filter histories are untouched." />
           </Box>
         ) : null}
 

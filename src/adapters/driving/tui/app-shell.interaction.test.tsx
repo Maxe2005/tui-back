@@ -1486,7 +1486,9 @@ describe('AppShell settings screen (:settings)', () => {
       expect(stdout.output).toContain('Recent action types');
 
       await press(instance, stdin, KEYS.tab);
-      expect(stdout.output).toContain('Command grid max rows:');
+      // The Command Palette tab opens on its group list too.
+      expect(stdout.output).toContain('Command history size');
+      expect(stdout.output).toContain('Clear command history');
 
       await press(instance, stdin, KEYS.tab);
       expect(stdout.output).toContain("Enable 'q' to quit");
@@ -1560,7 +1562,7 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
-  it('Up/Down on the Command Palette tab adjusts gridMaxRows live and persists via updateSettings', async () => {
+  it('Up on the drilled-in Command Palette "Command grid max rows" group adjusts gridMaxRows live and persists via updateSettings', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),
@@ -1571,7 +1573,8 @@ describe('AppShell settings screen (:settings)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab); // General -> EDTs
-      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette (group list)
+      await press(instance, stdin, KEYS.enter); // drill into "Command grid max rows"
 
       await press(instance, stdin, KEYS.up);
 
@@ -1582,6 +1585,42 @@ describe('AppShell settings screen (:settings)', () => {
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Command Palette tab: Right on "Command history size" steps the size, Space toggles dedup, Enter on "Clear command history" empties the list', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.setState({ commandHistory: ['settings', 'registry'] });
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs
+      await press(instance, stdin, KEYS.tab); // EDTs -> Command Palette (group list)
+
+      await press(instance, stdin, KEYS.down); // -> "Command history size"
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.commandPalette.historySize).toBe(25);
+      await pressEscape(instance, stdin);
+
+      await press(instance, stdin, KEYS.down); // -> "Deduplicate command history"
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.commandPalette.historyDedup).toBe(false);
+      await pressEscape(instance, stdin);
+
+      await press(instance, stdin, KEYS.down); // -> "Clear command history"
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().commandHistory).toEqual([]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

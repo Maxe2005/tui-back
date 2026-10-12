@@ -392,10 +392,25 @@ describe('SettingsScreen', () => {
   it('renders the live gridMaxRows value and hint on the Command Palette tab', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true } } });
-    const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" />);
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" initialPaletteGroup="grid-max-rows" />);
     expect(output).toContain('Command grid max rows:');
     expect(output).toContain('12');
     expect(output).toContain('Rows of the command grid');
+  });
+
+  it('lists the Command Palette groups at the tab\'s top level', async () => {
+    const output = await renderToString(<SettingsScreen useStore={createAppStore()} initialTab="command-palette" />);
+    expect(output).toContain('Command grid max rows');
+    expect(output).toContain('Command history size');
+    expect(output).toContain('Deduplicate command history');
+    expect(output).toContain('Clear command history');
+  });
+
+  it('renders the live command history size and the dedup checkbox state', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { ...DEFAULT_SETTINGS.commandPalette, historySize: 35, historyDedup: false } } });
+    expect(await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" initialPaletteGroup="history-size" />)).toContain('35');
+    expect(await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" initialPaletteGroup="history-dedup" />)).toContain('[ ]');
   });
 
   it('renders the live bufferSize value and hints when drilled into the "Buffer size" group', async () => {
@@ -600,7 +615,9 @@ describe('settingsFooterContext', () => {
   it('maps each tab and drill-down level to its footer context', () => {
     expect(settingsFooterContext('general', closed)).toBe('settings-general');
     expect(settingsFooterContext('general', { ...closed, generalEditing: true })).toBe('confirm');
-    expect(settingsFooterContext('command-palette', closed)).toBe('settings-palette');
+    expect(settingsFooterContext('command-palette', closed)).toBe('settings-groups');
+    expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'grid-max-rows' })).toBe('settings-adjust');
+    expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'history-dedup' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', closed)).toBe('settings-groups');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
