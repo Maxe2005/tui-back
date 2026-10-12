@@ -80,6 +80,10 @@ async function validateSelectionBranches(
 export interface GroupUpdateRunDetail {
   merge: { kind: 'up-to-date' } | { kind: 'advanced'; files?: number; insertions?: number; deletions?: number };
   migrations: { kind: 'none' } | { kind: 'ran'; command: string; outputExcerpt: string };
+  // Only on a row whose merge conflicted and an auto-resolver ran: `auto-resolved` (settled
+  // with no menu), `partial` (settled in part, the rest left to the developer), `left-to-user`
+  // (the resolver could not settle its part).
+  conflict?: 'auto-resolved' | 'partial' | 'left-to-user';
 }
 
 export interface GroupUpdateRepoResult {
@@ -194,7 +198,19 @@ export interface GroupUpdateParams {
   // it may cancel the run so the remaining stages are reported as cancelled. Generic seam: core
   // knows nothing about what the driving side does between stages. A throwing hook cancels.
   afterStage?: (stage: number, rows: GroupUpdateRepoResult[], control: StageControl) => void | Promise<void>;
+  // Optional conflict auto-resolution seam (generic: core never knows what it resolves). Called
+  // on a service whose merge/pull conflicted, before each menu presentation and again after the
+  // developer's `edited` choice, so it must be idempotent. It reports whether it settled
+  // something and, when it could not settle its part, an issue note shown on the incident.
+  autoResolveConflict?: AutoResolveConflict;
 }
+
+export interface AutoResolveResult {
+  touched: boolean;
+  issue?: string;
+}
+
+export type AutoResolveConflict = (target: { service: string; repoPath: string }) => Promise<AutoResolveResult>;
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
 // from a pre-existing mid-merge/mid-rebase (surfaced before any menu); the driving side
@@ -214,6 +230,8 @@ export interface UpdateBlocker {
   // `<hash> <subject>` lines of its commits origin does not have.
   branch?: string;
   commits?: string[];
+  // `merge-conflict` only: why the auto-resolver could not settle its part of the conflict.
+  autoResolveNote?: string;
 }
 
 // `fetch` answers an `unpushed-commits` blocker only: core runs a plain `git fetch origin
@@ -424,6 +442,7 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
           target.cleanRestart ?? cleanRestart,
           params.onPhase,
           control.cancelled,
+          params.autoResolveConflict,
         );
         if (outcome.cancelRun) {
           control.cancel();
@@ -635,6 +654,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
             memberCleanRestart ?? cleanRestart,
             params.onPhase,
             control.cancelled,
+            params.autoResolveConflict,
           );
           if (outcome.cancelRun) {
             control.cancel();
@@ -784,6 +804,7 @@ async function updateMember(
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
   shouldStop?: () => boolean,
+  autoResolveConflict?: AutoResolveConflict,
 ): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
@@ -808,6 +829,7 @@ async function updateMember(
     cleanRestart,
     onPhase,
     shouldStop,
+    autoResolveConflict,
   );
 }
 
@@ -855,6 +877,7 @@ async function updateWithLoadedManifest(
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
   shouldStop?: () => boolean,
+  autoResolveConflict?: AutoResolveConflict,
 ): Promise<RepoOutcome> {
   const { container: containerName, migrationCommand, restartCommands } = loaded;
   // A cancelled run lets in-flight services finish their current step, then stops them before
@@ -940,6 +963,7 @@ async function updateWithLoadedManifest(
     return stoppedBeforeMerge;
   }
   const headBefore = await git.headRevision(repoPath);
+  let conflictOutcome: GroupUpdateRunDetail['conflict'];
 
   if (current.data === mergeSource) {
     // The live current-step signal for the pull path.
@@ -959,12 +983,15 @@ async function updateWithLoadedManifest(
           onUpdateBlocker,
           'pull',
           mergeSource,
+          autoResolveConflict,
+          shouldStop,
         );
         // A resumed conflict rejoins the pipeline below (migrate → restart); a settled
         // one already carries its row.
         if (settlement.done) {
           return settlement.outcome;
         }
+        conflictOutcome = settlement.conflict;
       } else {
         return failedOutcome(service, pulled.error);
       }
@@ -997,10 +1024,13 @@ async function updateWithLoadedManifest(
           onUpdateBlocker,
           'merge',
           mergeSource,
+          autoResolveConflict,
+          shouldStop,
         );
         if (settlement.done) {
           return settlement.outcome;
         }
+        conflictOutcome = settlement.conflict;
       } else {
         return failedOutcome(service, merged.error);
       }
@@ -1013,6 +1043,9 @@ async function updateWithLoadedManifest(
     runDetail.merge = mergeDetail;
   }
   runDetail.migrations = { kind: 'none' };
+  if (conflictOutcome !== undefined) {
+    runDetail.conflict = conflictOutcome;
+  }
 
   // The migrate phase runs between the pull/merge and the restart: the manifest-declared
   // `migrationCommand` (skipped without error when absent or blank) runs with the repo as its
@@ -1364,7 +1397,7 @@ async function resolveUnpushedCommits(
 // `retry` counter and its reason. The only clean exits from an unresolvable conflict are the
 // two cancel choices, which abort the own-started merge and land a `skipped` row. A resumed
 // conflict rejoins the caller's pipeline (migrate → restart) via `{ done: false }`.
-type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false };
+type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false; conflict?: GroupUpdateRunDetail['conflict'] };
 
 async function resolveMidRunConflict(
   service: string,
@@ -1374,18 +1407,81 @@ async function resolveMidRunConflict(
   onUpdateBlocker: OnUpdateBlocker | undefined,
   via: 'pull' | 'merge',
   sharedBranch: string,
+  autoResolveConflict?: AutoResolveConflict,
+  shouldStop?: () => boolean,
 ): Promise<ConflictSettlement> {
   if (onUpdateBlocker === undefined) {
     return { done: true, outcome: await failConflicted(service, git, repoPath, conflict) };
   }
   let retry = 0;
   let retryReason = '';
+  // What the auto-resolver did across the whole conflict: whether it settled anything, the
+  // first issue note it raised (kept while the conflict stays unresolved), the issue of its
+  // last pass, and whether the developer was ever asked.
+  let touched = false;
+  let note: string | undefined;
+  let lastIssue: string | undefined;
+  let menuShown = false;
+  const conflictOutcome = (): GroupUpdateRunDetail['conflict'] => {
+    if (touched) {
+      return menuShown || lastIssue !== undefined ? 'partial' : 'auto-resolved';
+    }
+    return note !== undefined ? 'left-to-user' : undefined;
+  };
+  const tagged = (outcome: RepoOutcome): RepoOutcome => {
+    // A row that did not finish its merge is never `auto-resolved`.
+    const raw = conflictOutcome();
+    const value = raw === 'auto-resolved' ? 'partial' : raw;
+    return value === undefined ? outcome : { ...outcome, row: { ...outcome.row, run: { ...outcome.row.run, conflict: value } } };
+  };
+  // One auto-resolve pass; a throwing seam is an issue note, never a failed run. A stopped run
+  // never starts one.
+  const autoPass = async (): Promise<{ touched: boolean }> => {
+    if (autoResolveConflict === undefined || shouldStop?.() === true) {
+      return { touched: false };
+    }
+    try {
+      const result = await autoResolveConflict({ service, repoPath });
+      touched = touched || result.touched;
+      lastIssue = result.issue;
+      if (result.issue !== undefined) {
+        note = result.issue;
+      }
+      return { touched: result.touched };
+    } catch (error) {
+      lastIssue = `Auto-resolution failed: ${error instanceof Error ? error.message : String(error)}`;
+      note = lastIssue;
+      return { touched: false };
+    }
+  };
+  let skipPreMenuPass = false;
   for (;;) {
-    const blocker: UpdateBlocker =
-      retry === 0 ? { service, repoPath, kind: 'merge-conflict' } : { service, repoPath, kind: 'merge-conflict', retry, retryReason };
+    if (!skipPreMenuPass) {
+      const pass = await autoPass();
+      if (pass.touched) {
+        // The resolver may have settled everything: finalize without bothering the developer.
+        const settled = await attemptEdited(git, repoPath, via, sharedBranch);
+        if (settled.type === 'resumed') {
+          return { done: false, conflict: conflictOutcome() };
+        }
+        if (settled.type === 'failed') {
+          return { done: true, outcome: tagged(settled.outcome(service)) };
+        }
+        // Blocked (unmerged paths remain, or finalize refused): the menu takes over, uncounted.
+      }
+    }
+    skipPreMenuPass = false;
+    const blocker: UpdateBlocker = {
+      service,
+      repoPath,
+      kind: 'merge-conflict',
+      ...(retry > 0 ? { retry, retryReason } : {}),
+      ...(note !== undefined ? { autoResolveNote: note } : {}),
+    };
+    menuShown = true;
     const asked = await askSeam(onUpdateBlocker, blocker);
     if ('error' in asked) {
-      return { done: true, outcome: await failConflicted(service, git, repoPath, asked.error) };
+      return { done: true, outcome: tagged(await failConflicted(service, git, repoPath, asked.error)) };
     }
     if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
       // Own-started merge aborted, repo left at pre-run HEAD; a cancelled repo is `skipped`,
@@ -1405,20 +1501,26 @@ async function resolveMidRunConflict(
               message: `Repo ${repoPath} update cancelled by developer (merge --abort also failed: ${aborted.error.message})`,
             },
           };
-      return asked.choice === 'cancel-run' ? { done: true, outcome: { row, cancelRun: true } } : { done: true, outcome: { row, cancelRun: false } };
+      return { done: true, outcome: tagged({ row, cancelRun: asked.choice === 'cancel-run' }) };
     }
     // `stash` is never run on a conflict (the TUI does not offer it): git refuses to stash
     // unmerged paths, and on a resolved-but-uncommitted merge it would shelve the
     // resolution and clear the merge — a seam answering it just re-presents the menu.
-    const attempt: ConflictAttempt =
-      asked.choice === 'stash'
-        ? { type: 'blocked', reason: 'Stash is not available during a merge conflict' }
-        : await attemptEdited(git, repoPath, via, sharedBranch);
+    let attempt: ConflictAttempt;
+    if (asked.choice === 'stash') {
+      attempt = { type: 'blocked', reason: 'Stash is not available during a merge conflict' };
+    } else {
+      // After the developer's edit the resolver runs again: with `package.json` now settled it
+      // regenerates and stages the lockfile before the merge is finalized.
+      await autoPass();
+      skipPreMenuPass = true;
+      attempt = await attemptEdited(git, repoPath, via, sharedBranch);
+    }
     if (attempt.type === 'resumed') {
-      return { done: false };
+      return { done: false, conflict: conflictOutcome() };
     }
     if (attempt.type === 'failed') {
-      return { done: true, outcome: attempt.outcome(service) };
+      return { done: true, outcome: tagged(attempt.outcome(service)) };
     }
     // Still blocked → re-present the menu, counting the failed attempt.
     retry += 1;
@@ -1431,7 +1533,7 @@ async function resolveMidRunConflict(
 // a non-conflict pull/merge failure — retrying the menu cannot fix those).
 type ConflictAttempt =
   | { type: 'resumed' }
-  | { type: 'blocked'; reason: string }
+  | { type: 'blocked'; reason: string; unmerged?: boolean }
   | { type: 'failed'; outcome: (service: string) => RepoOutcome };
 
 function failedAttempt(error: ResultError): ConflictAttempt {
@@ -1454,7 +1556,7 @@ async function attemptEdited(git: GitPort, repoPath: string, via: 'pull' | 'merg
       return failedAttempt(unmerged.error);
     }
     if (unmerged.data) {
-      return { type: 'blocked', reason: 'Unmerged paths remain — resolve and stage (git add) every conflicted file' };
+      return { type: 'blocked', reason: 'Unmerged paths remain — resolve and stage (git add) every conflicted file', unmerged: true };
     }
     const finalized = await git.finalizeMerge(repoPath);
     if (!finalized.ok) {
