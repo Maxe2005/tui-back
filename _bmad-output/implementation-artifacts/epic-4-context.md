@@ -20,6 +20,8 @@ A developer can propagate a `shared-types` version to the active EDT's consuming
 - Publishing runs a configurable command with per-step progress, resumes from the failed step, and is verified on the npm registry; it is only offered when the active EDT includes the source repo.
 - Propagation rewrites only the dependency line of `package.json`, then optionally `npm i`, clean restart, and a commit of `package.json` + `package-lock.json` only. Nothing is ever pushed.
 - A group update can process `shared-types` first, then publish, propagate and commit per an update-configuration setting. Merge conflicts limited to the `shared-types` dependency line are auto-resolved.
+- Auto-resolution applies only when the sole conflicting hunk in `package.json` is the `shared-types` dependency line: it takes the EDT's value, runs `npm i`, takes the lockfile from the EDT side (regenerated, not hunk-merged), and completes the merge. Any other conflict falls through untouched to assisted resolution. The outcome is shown per service in run tracking.
+- A failure in the `shared-types` phase of a group update pauses the run with a choice (retry, skip `shared-types` handling, abort) rather than silently updating the rest.
 - Version drift compares declared `package.json` versions only. No git-ancestry resolution.
 
 ## Technical Decisions
