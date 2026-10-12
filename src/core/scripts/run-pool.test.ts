@@ -201,6 +201,28 @@ describe('runPool', () => {
       expect(rows).toEqual(['r1', 'cancelled:2', 'cancelled:3']);
     });
 
+    it('is not called when the run was cancelled during the stage', async () => {
+      let calls = 0;
+      const rows = await runPool(
+        [1, 2],
+        {
+          ...base,
+          concurrency: 1,
+          stageOf: (item) => item - 1,
+          onCancelled: (item) => `cancelled:${item}`,
+          afterStage: () => {
+            calls += 1;
+          },
+        },
+        async (item, control) => {
+          control.cancel();
+          return `r${item}`;
+        },
+      );
+      expect(calls).toBe(0);
+      expect(rows).toEqual(['r1', 'cancelled:2']);
+    });
+
     it('a throwing hook cancels the remaining stages and never rejects', async () => {
       const rows = await runPool(
         [1, 2],

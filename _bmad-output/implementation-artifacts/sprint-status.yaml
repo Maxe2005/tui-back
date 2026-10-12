@@ -130,7 +130,7 @@ development_status:
   4-1-shared-types-modules-manifest-parameters: done
   4-2-propagate-a-version-to-chosen-services: done
   4-3-publish-a-new-shared-types-version: review
-  4-4-smart-group-update-shared-types-first: in-progress
+  4-4-smart-group-update-shared-types-first: review
   4-5-auto-resolve-shared-types-only-merge-conflicts: backlog
   4-6-declared-version-drift-view: backlog
   epic-4-retrospective: optional

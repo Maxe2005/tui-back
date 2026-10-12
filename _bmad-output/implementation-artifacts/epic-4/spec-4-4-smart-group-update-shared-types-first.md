@@ -2,7 +2,7 @@
 title: 'Smart Group Update — shared-types First'
 type: 'feature'
 created: '2026-10-12'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '1ccb95929f40caccdcfaccdf3e28aaad4fc7827d'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-4-context.md]
@@ -52,11 +52,11 @@ context: [_bmad-output/implementation-artifacts/epic-4-context.md]
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/scripts/run-pool.ts`, `group-update.ts` -- `afterStage` hook with cancel-on-abort -- generic seam for 4.4 without naming `shared-types`; tests: stage order, abort cancels later stages, hook throw becomes a cancel-safe failure
-- [ ] `src/core/shared-types/smart-update.ts` -- phase use-case (mode, publish, propagate, failure mapping) -- tests against fakes for every matrix row
-- [ ] `zones/update/update-config-*` -- run-wide `shared-types` row (off / if-changed / always), hidden unless exactly one source -- pure-logic and panel tests
-- [ ] `update-slice.ts`, incident files -- wire ordering, hook, live phase, pause choices -- slice and interaction tests (retry, skip, abort)
-- [ ] Docs: note the new run-wide setting in the Update-zone docs if one lists the config toggles
+- [x] `src/core/scripts/run-pool.ts`, `group-update.ts` -- `afterStage` hook with cancel-on-abort -- generic seam for 4.4 without naming `shared-types`; tests: stage order, abort cancels later stages, hook throw becomes a cancel-safe failure
+- [x] `src/core/shared-types/smart-update.ts` -- phase use-case (mode, publish, propagate, failure mapping) -- tests against fakes for every matrix row
+- [x] `zones/update/update-config-*` -- run-wide `shared-types` row (off / if-changed / always), hidden unless exactly one source -- pure-logic and panel tests
+- [x] `update-slice.ts`, incident files -- wire ordering, hook, live phase, pause choices -- slice and interaction tests (retry, skip, abort)
+- [x] Docs: note the new run-wide setting in the Update-zone docs if one lists the config toggles
 
 **Acceptance Criteria:**
 - Given the EDT contains the source repo, when the config opens, then a `shared-types` row offers off / publish if the merge changed something / always publish; otherwise no row.

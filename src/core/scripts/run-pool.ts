@@ -144,7 +144,8 @@ export async function runPool<T, R>(
   for (const stage of [...stages.keys()].sort((a, b) => a - b)) {
     const indices = stages.get(stage) ?? [];
     await Promise.all(indices.map((index) => runOne(index)));
-    if (options.afterStage !== undefined) {
+    // A run cancelled during the stage never triggers the between-stage work.
+    if (options.afterStage !== undefined && !cancelled) {
       try {
         await options.afterStage(
           stage,
