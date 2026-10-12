@@ -23,6 +23,7 @@ type Disk = {
   repos: string[];
   activeEdt: string | null;
   filterHistory: Record<string, string[]> | null;
+  commandHistory: string[] | null;
 };
 
 let baseDir: string;
@@ -70,6 +71,11 @@ function fakeDeps(disk: Disk, overrides: { lock?: LockPort } = {}): AppStoreDeps
       disk.filterHistory = history;
       return ok(undefined);
     }),
+    readCommandHistory: vi.fn(async () => ok(disk.commandHistory)),
+    writeCommandHistory: vi.fn(async (history: string[]) => {
+      disk.commandHistory = history;
+      return ok(undefined);
+    }),
   };
   const manifest: ManifestPort = {
     load: vi.fn(async (repoPath: string) =>
@@ -114,6 +120,7 @@ function populatedDisk(): Disk {
     repos: ['/repos/api', '/repos/web'],
     activeEdt: 'ULID1',
     filterHistory: { 'global:text': ['error'] },
+    commandHistory: ['update-service api'],
   };
 }
 
@@ -227,9 +234,11 @@ describe('reset slice', () => {
     const store = createAppStore(fakeDeps(disk));
     await store.getState().loadEdts();
     await store.getState().loadFilterHistory();
+    await store.getState().loadCommandHistory();
     await store.getState().checkRegistryEmpty();
     expect(store.getState().activeEdt).toBe('ULID1');
     expect(store.getState().registryEmpty).toBe(false);
+    expect(store.getState().commandHistory).toEqual(['update-service api']);
 
     store.getState().openResetScreen();
     await store.getState().runReset(['services', 'histories']);
@@ -248,6 +257,8 @@ describe('reset slice', () => {
     expect(state.activeEdt).toBeNull();
     expect(state.registryEmpty).toBe(true);
     expect(state.filterHistory).toEqual({});
+    expect(disk.commandHistory).toEqual([]);
+    expect(state.commandHistory).toEqual([]);
     expect(disk.repos).toEqual([]);
   });
 

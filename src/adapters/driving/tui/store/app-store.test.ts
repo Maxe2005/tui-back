@@ -97,6 +97,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () =>
@@ -683,6 +685,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -1109,7 +1113,7 @@ describe("app store", () => {
           ok({
             settings: {
               general: { quitShortcutEnabled: true, editorCommand: '' },
-              commandPalette: { gridMaxRows: 12 },
+              commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
               logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
             },
@@ -1124,7 +1128,7 @@ describe("app store", () => {
 
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 12 },
+        commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1174,7 +1178,7 @@ describe("app store", () => {
 
       expect(save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 15 },
+        commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1185,7 +1189,7 @@ describe("app store", () => {
       store.setState({
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 20 },
+          commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
@@ -1195,7 +1199,7 @@ describe("app store", () => {
 
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 20 },
+        commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1206,7 +1210,7 @@ describe("app store", () => {
       store.setState({
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 20 },
+          commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
@@ -1216,7 +1220,7 @@ describe("app store", () => {
 
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 20 },
+        commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1322,7 +1326,7 @@ describe("app store", () => {
       resolveLoad?.({
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 8 },
+          commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
           logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
@@ -1351,6 +1355,8 @@ describe("app store", () => {
         writeSplitterRatios,
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1394,6 +1400,8 @@ describe("app store", () => {
         writeSplitterRatios,
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1413,6 +1421,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1431,6 +1441,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1452,6 +1464,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1489,6 +1503,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1509,6 +1525,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1547,6 +1565,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -2123,6 +2143,8 @@ describe("logs slice: filter history", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2186,6 +2208,8 @@ describe("logs slice: filter history", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "g-text");
@@ -2224,6 +2248,8 @@ describe("logs slice: filter history", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok({ "global:text": ["boom"] })),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2240,6 +2266,8 @@ describe("logs slice: filter history", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => err("state-invalid-format", "corrupt filterHistory")),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2276,6 +2304,8 @@ describe("logs slice: filter history", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => loadPromise),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2310,6 +2340,8 @@ describe("logs slice: filter history", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => loadPromise),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
