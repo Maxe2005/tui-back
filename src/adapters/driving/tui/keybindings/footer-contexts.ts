@@ -104,6 +104,10 @@ export const FOOTER_CONTEXTS = {
     label: 'Update config, service box',
     hints: [['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'change'], ['Ctrl+R', 'back to global'], CLOSE],
   },
+  'update-report': {
+    label: 'Update, full-screen service report',
+    hints: [[KEY_UP_DOWN, 'scroll'], ['PgUp/PgDn', 'page'], ['Home/End', 'top/bottom'], ['n/p', 'failed step'], ['w', 'wrap'], CLOSE],
+  },
   'branch-picker-pick': {
     label: 'Branch picker, pick existing',
     hints: [['Tab', 'switch mode'], [KEY_UP_DOWN, 'move'], ['Enter', 'fill in / set branch'], ['Ctrl+T', 'rename this branch'], CANCEL],
