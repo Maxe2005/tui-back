@@ -15,7 +15,7 @@ import type { RegistryPort } from '../ports/registry.js';
 import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
-import { runPool } from './run-pool.js';
+import { runPool, type PoolControl } from './run-pool.js';
 
 // The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)
 // serializes on it, so a second trigger is rejected, never queued or raced.
@@ -186,6 +186,9 @@ export interface GroupUpdateParams {
   onServiceResult?: OnServiceResult;
   // How many services are processed at once (bounded pool). Default 1 — the sequential run.
   concurrency?: number;
+  // Optional stage of a target: stages run in ascending order, each fully finished before the
+  // next starts (a later story runs `shared-types` alone first). Absent: one stage.
+  ordering?: (target: { service: string; repoPath: string }) => number;
 }
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
@@ -359,7 +362,20 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
       targets,
       {
         concurrency: params.concurrency ?? 1,
-        onCancelled: () => undefined,
+        keyOf: (target) => resolve(target.repoPath),
+        ...(params.ordering !== undefined
+          ? { stageOf: (target) => params.ordering?.({ service: serviceFallback(target.repoPath), repoPath: target.repoPath }) ?? 0 }
+          : {}),
+        onCancelled: async (target) => {
+          const loaded = await manifest.load(target.repoPath);
+          if (!loaded.ok && loaded.error.code === 'manifest-not-found') {
+            return undefined;
+          }
+          const service = loaded.ok ? loaded.data.service : serviceFallback(target.repoPath);
+          const row = runCancelledRow(service, target.repoPath, 'before it started');
+          emitServiceResult(params.onServiceResult, row);
+          return row;
+        },
         onError: (target, error) => failed(serviceFallback(target.repoPath), unexpectedError(error)),
       },
       async (target, control) => {
@@ -384,11 +400,12 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
           repoPath,
           loaded.data.service,
           undefined,
-          params.onUpdateBlocker,
+          pausingSeam(params.onUpdateBlocker, control),
           effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
           target.runMigrations ?? runMigrations,
           target.cleanRestart ?? cleanRestart,
           params.onPhase,
+          control.cancelled,
         );
         if (outcome.cancelRun) {
           control.cancel();
@@ -566,7 +583,15 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
         enlisted,
         {
           concurrency: params.concurrency ?? 1,
-          onCancelled: () => undefined,
+          keyOf: ({ member }) => resolve(member.repoPath),
+          ...(params.ordering !== undefined
+            ? { stageOf: ({ member }) => params.ordering?.({ service: member.service, repoPath: member.repoPath }) ?? 0 }
+            : {}),
+          onCancelled: ({ member }) => {
+            const row = runCancelledRow(member.service, member.repoPath, 'before it started');
+            emitServiceResult(params.onServiceResult, row);
+            return row;
+          },
           onError: ({ member }, error) => failed(member.service, unexpectedError(error)),
         },
         async ({ member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart }, control) => {
@@ -579,11 +604,12 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
             restart,
             active.ulid,
             member,
-            params.onUpdateBlocker,
+            pausingSeam(params.onUpdateBlocker, control),
             sourceBranch,
             memberMigrations ?? runMigrations,
             memberCleanRestart ?? cleanRestart,
             params.onPhase,
+            control.cancelled,
           );
           if (outcome.cancelRun) {
             control.cancel();
@@ -678,6 +704,37 @@ export async function runRestartStep(input: RestartStepInput): Promise<Result<vo
   return ok(undefined);
 }
 
+// The row of a service the run was cancelled for: `skipped`, never `failed`, so the summary
+// still accounts for it.
+function runCancelledRow(service: string, repoPath: string, when: string): GroupUpdateRepoResult {
+  return {
+    service,
+    outcome: 'skipped',
+    detail: { code: 'run-cancelled', message: `Repo ${repoPath} update cancelled with the run ${when}` },
+  };
+}
+
+// Wraps the blocker seam so a service waiting on the developer gives its pool slot to the next
+// service, and takes one again (behind the waiting ones) once answered. A pool of one keeps
+// its slot: that run stays strictly sequential, a blocker waits for the developer exactly as
+// before.
+function pausingSeam(seam: OnUpdateBlocker | undefined, control: PoolControl): OnUpdateBlocker | undefined {
+  if (seam === undefined) {
+    return undefined;
+  }
+  if (control.concurrency <= 1) {
+    return seam;
+  }
+  return async (blocker) => {
+    control.release();
+    try {
+      return await seam(blocker);
+    } finally {
+      await control.reacquire();
+    }
+  };
+}
+
 // A worker that threw (never-throw invariant, AD-3) becomes that service's failed row.
 function unexpectedError(error: unknown): ResultError {
   const detail = error instanceof Error ? error.message : String(error);
@@ -701,6 +758,7 @@ async function updateMember(
   runMigrations = true,
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
+  shouldStop?: () => boolean,
 ): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
@@ -724,6 +782,7 @@ async function updateMember(
     runMigrations,
     cleanRestart,
     onPhase,
+    shouldStop,
   );
 }
 
@@ -770,8 +829,17 @@ async function updateWithLoadedManifest(
   runMigrations = true,
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
+  shouldStop?: () => boolean,
 ): Promise<RepoOutcome> {
   const { container: containerName, migrationCommand, restartCommands } = loaded;
+  // A cancelled run lets in-flight services finish their current step, then stops them before
+  // the next one — no subprocess is ever killed.
+  const stopped = (when: string): RepoOutcome | undefined =>
+    shouldStop?.() === true ? { row: runCancelledRow(service, repoPath, when), cancelRun: false } : undefined;
+  const stoppedEarly = stopped('before it started');
+  if (stoppedEarly !== undefined) {
+    return stoppedEarly;
+  }
   // The configured merge source — the manifest `sharedBranch` unless the pre-run screen
   // confirmed a per-service override (trimmed once inside `effectiveSourceBranch`, so padding
   // never reaches fetch/merge). Merge stays `git merge`, never rebase.
@@ -842,6 +910,10 @@ async function updateWithLoadedManifest(
     }
   }
 
+  const stoppedBeforeMerge = stopped('before its merge');
+  if (stoppedBeforeMerge !== undefined) {
+    return stoppedBeforeMerge;
+  }
   const headBefore = await git.headRevision(repoPath);
 
   if (current.data === mergeSource) {
@@ -920,6 +992,10 @@ async function updateWithLoadedManifest(
   // keeps the repo on its merged code but skips the restart — a `failed` row with
   // `migration-failed` detail naming the command and the error output — and never blocks or
   // rolls back the other services.
+  const stoppedBeforeMigration = stopped('after its merge — migration and restart not run');
+  if (stoppedBeforeMigration !== undefined) {
+    return stoppedBeforeMigration;
+  }
   if (runMigrations && migrationCommand !== undefined && migrationCommand.trim() !== '') {
     // The live current-step signal for the migrate phase.
     emitPhase(onPhase, service, 'migrating');
@@ -933,6 +1009,10 @@ async function updateWithLoadedManifest(
     runDetail.migrations = { kind: 'ran', command: migrationCommand, outputExcerpt: outputExcerpt(migrated.data.output) };
   }
 
+  const stoppedBeforeRestart = stopped('before its restart');
+  if (stoppedBeforeRestart !== undefined) {
+    return stoppedBeforeRestart;
+  }
   // The restart phase, shared with the standalone single-service use-case via runRestartStep
   // (which also emits the `restarting` phase).
   const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });

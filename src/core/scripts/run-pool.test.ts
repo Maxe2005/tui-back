@@ -59,4 +59,74 @@ describe('runPool', () => {
     });
     expect(peak).toBe(1);
   });
+
+  it('a released slot lets the next item start; reacquire queues behind waiting items', async () => {
+    const order: string[] = [];
+    let resume: () => void = () => {};
+    const gate = new Promise<void>((resolveGate) => {
+      resume = resolveGate;
+    });
+    const run = runPool([1, 2], { ...base, concurrency: 1 }, async (item, control) => {
+      if (item === 1) {
+        order.push('1:pause');
+        control.release();
+        await gate;
+        await control.reacquire();
+        order.push('1:resume');
+        return 'r1';
+      }
+      order.push('2:run');
+      await tick();
+      resume();
+      return 'r2';
+    });
+    expect(await run).toEqual(['r1', 'r2']);
+    expect(order).toEqual(['1:pause', '2:run', '1:resume']);
+  });
+
+  it('never runs two items with the same key together', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    await runPool(
+      [1, 2, 3],
+      { ...base, concurrency: 3, keyOf: (item) => (item === 3 ? 'other' : 'same') },
+      async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await tick();
+        inFlight -= 1;
+        return 'ok';
+      },
+    );
+    expect(peak).toBe(2);
+  });
+
+  it('runs stages in ascending order, each finished before the next', async () => {
+    const order: string[] = [];
+    await runPool(
+      [1, 2, 3],
+      { ...base, concurrency: 3, stageOf: (item) => (item === 2 ? 0 : 1) },
+      async (item) => {
+        order.push(`s${item}`);
+        await tick();
+        order.push(`e${item}`);
+        return 'ok';
+      },
+    );
+    expect(order.slice(0, 2)).toEqual(['s2', 'e2']);
+  });
+
+  it('cancel stops unstarted items, which get the cancelled row', async () => {
+    const rows = await runPool(
+      [1, 2, 3],
+      { ...base, concurrency: 1, onCancelled: (item) => `cancelled:${item}` },
+      async (item, control) => {
+        if (item === 1) {
+          control.cancel();
+        }
+        return `r${item}`;
+      },
+    );
+    expect(rows).toEqual(['r1', 'cancelled:2', 'cancelled:3']);
+  });
 });

@@ -5,6 +5,8 @@
 
 // What a worker may do to the pool around its own work.
 export interface PoolControl {
+  // The effective (normalised) pool size.
+  readonly concurrency: number;
   // Gives the worker's slot back while it waits on the developer; the next waiting item
   // starts. A no-op when the slot is already released.
   release(): void;
@@ -24,7 +26,7 @@ export interface RunPoolOptions<T, R> {
   // fully finished (Story 4.4 runs `shared-types` alone first). Default: one stage.
   stageOf?: (item: T) => number;
   // The row for an item that never started because the run was cancelled.
-  onCancelled: (item: T) => R | undefined;
+  onCancelled: (item: T) => R | undefined | Promise<R | undefined>;
   // The row for a worker that threw (never-throw invariant).
   onError: (item: T, error: unknown) => R | undefined;
 }
@@ -85,6 +87,7 @@ export async function runPool<T, R>(
       await semaphore.acquire();
       let held = true;
       const control: PoolControl = {
+        concurrency: size,
         release: () => {
           if (held) {
             held = false;
@@ -104,7 +107,7 @@ export async function runPool<T, R>(
       };
       try {
         if (cancelled) {
-          results[index] = options.onCancelled(item);
+          results[index] = await options.onCancelled(item);
         } else {
           results[index] = await worker(item, control);
         }
