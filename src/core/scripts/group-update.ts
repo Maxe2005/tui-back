@@ -15,6 +15,7 @@ import type { RegistryPort } from '../ports/registry.js';
 import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { runPool } from './run-pool.js';
 
 // The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)
 // serializes on it, so a second trigger is rejected, never queued or raced.
@@ -183,6 +184,8 @@ export interface GroupUpdateParams {
   // Fires once per service as soon as its row is final (before the run ends), so a driving
   // side can show a finished service while others still run. Observer-only, like onPhase.
   onServiceResult?: OnServiceResult;
+  // How many services are processed at once (bounded pool). Default 1 — the sequential run.
+  concurrency?: number;
 }
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
@@ -352,42 +355,49 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
   }
 
   const run = await withActionLock(lock, GROUP_UPDATE_LOCK_KEY, async () => {
-    const results: GroupUpdateRepoResult[] = [];
-    for (const target of targets) {
-      const { repoPath } = target;
-      const loaded = await manifest.load(repoPath);
-      if (!loaded.ok) {
-        // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
-        if (loaded.error.code === 'manifest-not-found') {
-          continue;
+    const rows = await runPool<(typeof targets)[number], GroupUpdateRepoResult>(
+      targets,
+      {
+        concurrency: params.concurrency ?? 1,
+        onCancelled: () => undefined,
+        onError: (target, error) => failed(serviceFallback(target.repoPath), unexpectedError(error)),
+      },
+      async (target, control) => {
+        const { repoPath } = target;
+        const loaded = await manifest.load(repoPath);
+        if (!loaded.ok) {
+          // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
+          if (loaded.error.code === 'manifest-not-found') {
+            return undefined;
+          }
+          return failed(serviceFallback(repoPath), loaded.error);
         }
-        results.push(failed(serviceFallback(repoPath), loaded.error));
-        continue;
-      }
-      // `cancel-run` stops the loop but still returns `ok` with rows so far (a cancelled repo
-      // is `skipped`, never `failed`).
-      const outcome = await updateWithLoadedManifest(
-        loaded.data,
-        git,
-        container,
-        migration,
-        restart,
-        undefined,
-        repoPath,
-        loaded.data.service,
-        undefined,
-        params.onUpdateBlocker,
-        effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
-        target.runMigrations ?? runMigrations,
-        target.cleanRestart ?? cleanRestart,
-        params.onPhase,
-      );
-      results.push(outcome.row);
-      emitServiceResult(params.onServiceResult, outcome.row);
-      if (outcome.cancelRun) {
-        break;
-      }
-    }
+        // `cancel-run` stops the pool but still returns `ok` with rows so far (a cancelled repo
+        // is `skipped`, never `failed`).
+        const outcome = await updateWithLoadedManifest(
+          loaded.data,
+          git,
+          container,
+          migration,
+          restart,
+          undefined,
+          repoPath,
+          loaded.data.service,
+          undefined,
+          params.onUpdateBlocker,
+          effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
+          target.runMigrations ?? runMigrations,
+          target.cleanRestart ?? cleanRestart,
+          params.onPhase,
+        );
+        if (outcome.cancelRun) {
+          control.cancel();
+        }
+        emitServiceResult(params.onServiceResult, outcome.row);
+        return outcome.row;
+      },
+    );
+    const results = rows.filter((row): row is GroupUpdateRepoResult => row !== undefined);
     // Every registered path was unmanaged — an explicit no-op, never silent success.
     if (results.length === 0) {
       return ok({
@@ -552,29 +562,37 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
         seen.add(key);
         return true;
       });
-      const results: GroupUpdateRepoResult[] = [];
-      for (const { member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart } of enlisted) {
-        // `cancel-run` stops the loop but still returns `ok` with rows so far.
-        const outcome = await updateMember(
-          manifest,
-          git,
-          container,
-          migration,
-          restart,
-          active.ulid,
-          member,
-          params.onUpdateBlocker,
-          sourceBranch,
-          memberMigrations ?? runMigrations,
-          memberCleanRestart ?? cleanRestart,
-          params.onPhase,
-        );
-        results.push(outcome.row);
-        emitServiceResult(params.onServiceResult, outcome.row);
-        if (outcome.cancelRun) {
-          break;
-        }
-      }
+      const rows = await runPool<ConfiguredMember, GroupUpdateRepoResult>(
+        enlisted,
+        {
+          concurrency: params.concurrency ?? 1,
+          onCancelled: () => undefined,
+          onError: ({ member }, error) => failed(member.service, unexpectedError(error)),
+        },
+        async ({ member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart }, control) => {
+          // `cancel-run` stops the pool but still returns `ok` with rows so far.
+          const outcome = await updateMember(
+            manifest,
+            git,
+            container,
+            migration,
+            restart,
+            active.ulid,
+            member,
+            params.onUpdateBlocker,
+            sourceBranch,
+            memberMigrations ?? runMigrations,
+            memberCleanRestart ?? cleanRestart,
+            params.onPhase,
+          );
+          if (outcome.cancelRun) {
+            control.cancel();
+          }
+          emitServiceResult(params.onServiceResult, outcome.row);
+          return outcome.row;
+        },
+      );
+      const results = rows.filter((row): row is GroupUpdateRepoResult => row !== undefined);
       // A fully successful run clears a previously set `interrupted` status so the re-run
       // offer doesn't persist forever: results exist and none failed (a `skipped` row
       // doesn't block the clear — the services that could update did). The zero-member
@@ -658,6 +676,12 @@ export async function runRestartStep(input: RestartStepInput): Promise<Result<vo
     );
   }
   return ok(undefined);
+}
+
+// A worker that threw (never-throw invariant, AD-3) becomes that service's failed row.
+function unexpectedError(error: unknown): ResultError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return { code: 'internal-error', message: detail };
 }
 
 function failed(service: string, error: ResultError): GroupUpdateRepoResult {
