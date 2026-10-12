@@ -25,6 +25,7 @@ import {
   partitionServicesByEdtMembership,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
+import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, resolveSnapBackBase } from '../../shared/input-history/index.js';
 import {
   commandAtGridCursor,
   groupCommandsByColumn,
@@ -63,8 +64,6 @@ import {
   resolveFilterClearTarget,
   resolveFilterEditorDraft,
   resolveFullscreenScrollDirection,
-  resolveHistoryBrowseDown,
-  resolveHistoryBrowseUp,
   resolvePaneScrollDirection,
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
@@ -434,10 +433,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // drops any browsing state (a stale `index`/`savedDraft` would be reused against the new
           // mode's list on the next ↑/↓). Like a printable char/Backspace while browsing, the
           // recalled entry is discarded and the original draft carries over into the new mode.
-          const baseQuery = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
           // Snapping back out of a browsed entry changes `query`, so the caret resets to its end
           // (programmatic-overwrite convention); an untouched draft's caret position carries over.
-          const baseCursor = filterEditor.browsing !== null ? baseQuery.length : filterEditor.cursor;
+          const { base: baseQuery, cursor: baseCursor } = resolveSnapBackBase(
+            filterEditor.query,
+            filterEditor.cursor,
+            filterEditor.browsing,
+          );
           applyFilterEditorDraft({
             ...filterEditor,
             query: baseQuery,
@@ -497,9 +499,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // While browsing, Backspace snaps back to the saved draft with the backspace applied on
           // top, rather than editing the recalled entry in place — caret at the saved draft's end,
           // like the typed-char snap-back below.
-          const browsing = filterEditor.browsing;
-          const base = browsing !== null ? browsing.savedDraft : filterEditor.query;
-          const cursor = browsing !== null ? base.length : filterEditor.cursor;
+          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
           const result = nextTextInputValue({ value: base, cursor }, input, key);
           applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
           return;
@@ -507,9 +507,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         if (!key.ctrl && !key.meta && input.length > 0) {
           // Any printable character while browsing snaps back to the draft with that keystroke
           // applied on top, inserted at the caret.
-          const browsing = filterEditor.browsing;
-          const base = browsing !== null ? browsing.savedDraft : filterEditor.query;
-          const cursor = browsing !== null ? base.length : filterEditor.cursor;
+          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
           const result = nextTextInputValue({ value: base, cursor }, input, key);
           applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
         }

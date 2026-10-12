@@ -296,10 +296,6 @@ export const FOOTER_CONTEXTS = {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
   },
-  'settings-palette': {
-    label: 'Settings Command Palette tab',
-    hints: [[KEY_UP_DOWN, 'adjust'], ['1-9', 'set'], TAB_SWITCH, CLOSE],
-  },
   'settings-groups': {
     label: 'Settings group list',
     hints: [MOVE, ['Enter', 'open'], TAB_SWITCH, CLOSE],

@@ -10,6 +10,7 @@ import type { Hint } from '../../shared/components/hints.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { spacing } from '../../shared/theme/theme.js';
+import type { HistoryBrowseState } from '../../shared/input-history/index.js';
 
 // HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
 // `⣾`/info (StatusBadge's `in-progress`). A service with no Docker runtime is its own dim
@@ -760,27 +761,15 @@ export function filterHistoryKeyString(key: FilterHistoryKey): string {
   return key.scope === 'global' ? `global:${key.mode}` : `service:${key.repoPath}:${key.mode}`;
 }
 
-// Front-pushes `query` onto `history`, moving it to the front instead of duplicating it when it's
-// already the top entry, then trims to `maxSize`. Pure — the caller (the logs store slice) only
-// calls this on an actual commit (Enter, compiles, non-empty) and persists the result. With
-// `dedupEverywhere` (settings.logs.filterHistoryDedup), any previous occurrence is removed first,
-// so each filter exists at most once per list; otherwise only a top-entry repeat is deduped.
-export function pushFilterHistoryEntry(
-  history: readonly string[],
-  query: string,
-  maxSize: number,
-  dedupEverywhere = false,
-): string[] {
-  const rest = dedupEverywhere ? history.filter((entry) => entry !== query) : history.length > 0 && history[0] === query ? history.slice(1) : history;
-  return [query, ...rest].slice(0, Math.max(maxSize, 0));
-}
-
-// The filter editor's arrow-recall browsing state: `index` is the position in `history`
-// currently shown (0 == most recent), `savedDraft` is the draft exactly as it stood before
-// browsing began, restored verbatim once `↓` walks back past the most-recent entry.
-export type FilterHistoryBrowseState = { index: number; savedDraft: string };
-
-export type FilterHistoryBrowseResult = { query: string; browsing: FilterHistoryBrowseState | null };
+// Push/dedup/trim and the arrow-browse state machine are the shared input-history primitive
+// (tui/shared/input-history) — re-exported under the Logs-facing names so callers read as before.
+export { pushHistoryEntry as pushFilterHistoryEntry } from '../../shared/input-history/index.js';
+export {
+  resolveHistoryBrowseDown,
+  resolveHistoryBrowseUp,
+  type HistoryBrowseResult as FilterHistoryBrowseResult,
+  type HistoryBrowseState as FilterHistoryBrowseState,
+} from '../../shared/input-history/index.js';
 
 // The filter editor's in-progress draft — `/` opens one with scope 'global', `f` with scope
 // 'pane' (repoPath set to the owning pane). `error` mirrors compileLogFilter's last result for
@@ -802,60 +791,9 @@ export type FilterEditorState = {
   preOpen: LogFilterSpec;
   // Non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh open and
   // whenever browsing has ended (snapped back to the draft, or walked past the most-recent entry).
-  // See resolveHistoryBrowseUp/Down just above.
-  browsing: FilterHistoryBrowseState | null;
+  // See resolveHistoryBrowseUp/Down in tui/shared/input-history.
+  browsing: HistoryBrowseState | null;
 };
-
-// `↑` on an untouched draft recalls the most-recent entry (preserving the draft as `savedDraft`);
-// further `↑` walks older entries; `↑` at the oldest entry (or on an empty history) is a no-op.
-// The editor opens pre-filled with the active filter, usually also the most-recent entry, so any
-// entry equal to the draft being browsed from is skipped (the most-recent one on a fresh `↑`
-// when it equals the query; entries equal to `savedDraft` while walking older).
-export function resolveHistoryBrowseUp(
-  currentQuery: string,
-  browsing: FilterHistoryBrowseState | null,
-  history: readonly string[],
-): FilterHistoryBrowseResult {
-  if (history.length === 0) {
-    return { query: currentQuery, browsing };
-  }
-  if (browsing === null) {
-    let index = 0;
-    while (index < history.length && history[index] === currentQuery) {
-      index += 1;
-    }
-    if (index >= history.length) {
-      return { query: currentQuery, browsing };
-    }
-    return { query: history[index]!, browsing: { index, savedDraft: currentQuery } };
-  }
-  let nextIndex = browsing.index + 1;
-  while (nextIndex < history.length && history[nextIndex] === browsing.savedDraft) {
-    nextIndex += 1;
-  }
-  if (nextIndex >= history.length) {
-    return { query: currentQuery, browsing };
-  }
-  return { query: history[nextIndex]!, browsing: { index: nextIndex, savedDraft: browsing.savedDraft } };
-}
-
-// `↓` while browsing walks back toward the draft; one more `↓` past the most-recent entry
-// (index 0) restores the original draft exactly and ends browsing. Only called while browsing (on
-// an untouched draft, `↓` opens the grid browser instead). Like `↑`, entries equal to `savedDraft`
-// are skipped — walking onto one restores the draft directly instead of showing the text twice.
-export function resolveHistoryBrowseDown(
-  browsing: FilterHistoryBrowseState,
-  history: readonly string[],
-): FilterHistoryBrowseResult {
-  let prevIndex = browsing.index - 1;
-  while (prevIndex >= 0 && history[prevIndex] === browsing.savedDraft) {
-    prevIndex -= 1;
-  }
-  if (prevIndex < 0) {
-    return { query: browsing.savedDraft, browsing: null };
-  }
-  return { query: history[prevIndex]!, browsing: { index: prevIndex, savedDraft: browsing.savedDraft } };
-}
 
 // The filter-history grid's `getLabel` for command-bar.tsx's generic grid primitives — history
 // entries are plain strings, so this is the identity function. Shared by LogsZone's useInput and

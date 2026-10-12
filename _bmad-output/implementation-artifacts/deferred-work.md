@@ -725,3 +725,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
   summary: The CLI `tui-back update` stays sequential (no concurrency passed) while the TUI defaults to 3; cancelled-run issue-log entries stay unresolved; the `:update-incidents` command gives no feedback with an empty queue; no docs mention `update.concurrency`, the `i` key or the awaiting status.
   evidence: Observed by the three review layers; none breaks the story's acceptance criteria.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: The persisted-history store ignores failed or throwing state writes/reads (no user-visible warning, an unhandled rejection can surface in `mutate`/`resetAndDrain`).
+  evidence: Carried over unchanged from the original filterHistory machinery in logs-slice.ts; `persist` discards the `Result` of `deps.write` and `load` silently keeps the default on a failed read.
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: A write to state.json while another field is corrupt treats the file as empty and overwrites it, discarding the valid sibling fields.
+  evidence: Pre-existing `writeActiveEdt`/`writeSplitterRatios`/`writeFilterHistory` convention (only state-read-error is propagated); the shared `mergeWriteStateFile` preserves it, now also covering commandHistory.

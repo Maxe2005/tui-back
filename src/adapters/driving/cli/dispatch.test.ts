@@ -38,6 +38,8 @@ function fakeState(): StatePort {
     writeSplitterRatios: async () => ok(undefined),
     readFilterHistory: async () => ok(null),
     writeFilterHistory: async () => ok(undefined),
+    readCommandHistory: async () => ok(null),
+    writeCommandHistory: async () => ok(undefined),
   };
 }
 
