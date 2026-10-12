@@ -70,6 +70,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
@@ -2394,6 +2398,125 @@ describe('update slice: smart group update (shared-types first)', () => {
     await run;
     expect(store.getState().updateResults.map((row) => `${row.service}:${row.outcome}`)).toEqual(['svc-a:updated', 'svc-b:updated']);
     expect(deps.git.commit).not.toHaveBeenCalled();
+  });
+
+  describe('conflict auto-resolution', () => {
+    const OURS = '    "@x/types": "0.1.1",\n';
+    const THEIRS = '    "@x/types": "0.1.0",\n';
+    const conflictText = `{\n  "dependencies": {\n<<<<<<< HEAD\n${OURS}=======\n${THEIRS}>>>>>>> origin/development\n  }\n}\n`;
+
+    // svc-b's merge conflicts on package.json (and the lock) once; the files live in memory.
+    function conflictingDeps(options: { writeFails?: boolean; listFailsOnce?: boolean } = {}) {
+      const smart = smartDeps();
+      if (options.writeFails === true) {
+        (smart.sharedTypes.port.writeVersionLine as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(err('package-json-unreadable', 'cannot write'));
+      }
+      let listFails = false;
+      let merging = false;
+      let unmerged: string[] = [];
+      const files: Record<string, string> = {};
+      const git = {
+        ...smart.git,
+        mergeBranch: vi.fn(async (repoPath: string) => {
+          if (repoPath === '/repo/b' && !merging && unmerged.length === 0 && files['package.json'] === undefined) {
+            merging = true;
+            listFails = options.listFailsOnce === true;
+            unmerged = ['package.json', 'package-lock.json'];
+            files['package.json'] = conflictText;
+            return err('merge-conflict', 'Automatic merge failed');
+          }
+          return ok(undefined);
+        }),
+        isMergeInProgress: vi.fn(async () => ok(merging)),
+        listUnmergedPaths: vi.fn(async () => ok([...unmerged])),
+        hasUnmergedPaths: vi.fn(async () => ok(unmerged.length > 0)),
+        readWorktreeFile: vi.fn(async (_repo: string, path: string) => ok(files[path] ?? '<<<<<<< HEAD\n=======\n>>>>>>> x\n')),
+        writeResolvedFile: vi.fn(async (_repo: string, path: string, content: string, opts: { stage: boolean }) => {
+          files[path] = content;
+          if (opts.stage) {
+            unmerged = unmerged.filter((entry) => entry !== path);
+          }
+          return ok(undefined);
+        }),
+        checkoutSide: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async (_repo: string, paths: string[]) => {
+          unmerged = unmerged.filter((entry) => !paths.includes(entry));
+          return ok(undefined);
+        }),
+        finalizeMerge: vi.fn(async () => {
+          merging = false;
+          return ok(undefined);
+        }),
+      } as unknown as GitPort;
+      const state = {
+        ...smart.deps.state,
+        readActiveEdt: vi.fn(async () => {
+          if (listFails) {
+            listFails = false;
+            return err('state-read-error', 'state unreadable');
+          }
+          return smart.deps.state.readActiveEdt();
+        }),
+      } as AppStoreDeps['state'];
+      const deps = fakeDeps({ manifest: smart.deps.manifest, git, restart: smart.restart, sharedTypes: smart.sharedTypes, state });
+      return { deps, git, restart: smart.restart, files };
+    }
+
+    it('keeps the version published in the run, regenerates the lock and finalizes without a menu', async () => {
+      const { deps, git, restart, files } = conflictingDeps();
+      const store = createAppStore(deps);
+
+      await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+
+      expect(store.getState().incidents).toEqual([]);
+      expect(files['package.json']).toContain('"@x/types": "0.1.5"');
+      expect(files['package.json']).not.toContain('<<<<<<<');
+      expect(restart.run).toHaveBeenCalledWith('/repo/b', 'npm i');
+      expect(git.finalizeMerge).toHaveBeenCalledWith('/repo/b');
+      const consumer = store.getState().updateResults.find((row) => row.service === 'svc-b');
+      expect(consumer).toMatchObject({ outcome: 'updated', run: { conflict: 'auto-resolved' } });
+    });
+
+    it('keeps the published version when the phase failed after the publish and was skipped', async () => {
+      const { deps, files } = conflictingDeps({ writeFails: true });
+      const store = createAppStore(deps);
+
+      const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+      await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+      expect(store.getState().incidents[0]?.blocker).toMatchObject({ kind: 'shared-types-phase-failed' });
+      store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+      await run;
+
+      expect(files['package.json']).toContain('"@x/types": "0.1.5"');
+      expect(store.getState().updateResults.find((row) => row.service === 'svc-b')?.run?.conflict).toBe('auto-resolved');
+    });
+
+    it('stores the resolver issue note in the issue detail and retries a failed consumer listing after edited', async () => {
+      const { deps, files } = conflictingDeps({ listFailsOnce: true });
+      const store = createAppStore(deps);
+
+      const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'off' });
+      await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+      const blocker = store.getState().incidents[0]?.blocker;
+      expect(blocker).toMatchObject({ kind: 'merge-conflict', service: 'svc-b', autoResolveNote: expect.stringContaining('Cannot list the consumers') });
+      expect(store.getState().liveServiceIssues['svc-b']?.[0]?.detail).toContain('Cannot list the consumers');
+      store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
+      await run;
+
+      // The failed listing was not cached: the pass after `edited` resolved the line.
+      expect(files['package.json']).toContain('"@x/types": "0.1.1"');
+      expect(store.getState().updateResults.find((row) => row.service === 'svc-b')).toMatchObject({ outcome: 'updated', run: { conflict: 'partial' } });
+    });
+
+    it('keeps the consumer own value when nothing was published in the run', async () => {
+      const { deps, files } = conflictingDeps();
+      const store = createAppStore(deps);
+
+      await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'off' });
+
+      expect(files['package.json']).toContain('"@x/types": "0.1.1"');
+      expect(store.getState().updateResults.find((row) => row.service === 'svc-b')?.run?.conflict).toBe('auto-resolved');
+    });
   });
 
   it('abort cancels the remaining services', async () => {

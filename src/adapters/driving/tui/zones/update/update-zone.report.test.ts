@@ -161,3 +161,18 @@ describe('splitReportText', () => {
     expect(splitReportText('')).toEqual([' ']);
   });
 });
+
+describe('buildServiceStepViews conflict outcome', () => {
+  const steps = { merge: 'done', migration: 'done', restart: 'done' } as const;
+  const row = (conflict?: 'auto-resolved' | 'partial' | 'left-to-user'): GroupUpdateRepoResult => ({
+    service: 'svc',
+    outcome: 'updated',
+    run: { merge: { kind: 'up-to-date' }, ...(conflict !== undefined ? { conflict } : {}) },
+  });
+
+  it('adds a conflict line to the merge step only when the run recorded one', () => {
+    expect(buildServiceStepViews(steps, row('auto-resolved'))[0]?.detail).toContain('conflict: auto-resolved');
+    expect(buildServiceStepViews(steps, row('partial'))[0]?.detail.join('|')).toContain('conflict: partial');
+    expect(buildServiceStepViews(steps, row())[0]?.detail.join('|')).not.toContain('conflict');
+  });
+});
