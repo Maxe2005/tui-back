@@ -1046,15 +1046,9 @@ async function updateWithLoadedManifest(
   const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });
   if (!restarted.ok) {
     if (restarted.error.code === 'no-container') {
-      return {
-        row: {
-          service,
-          outcome: 'skipped',
-          detail: { code: 'no-container', message: `Repo ${repoPath} declares no container — restart skipped` },
-          run: runDetail,
-        },
-        cancelRun: false,
-      };
+      // Nothing to restart is not a skipped update: the merge and migrations ran, so the row is
+      // `updated` (a container-less shared-types source must still reach its publish phase).
+      return { row: { service, outcome: 'updated', run: runDetail }, cancelRun: false };
     }
     return failedOutcome(service, restarted.error);
   }

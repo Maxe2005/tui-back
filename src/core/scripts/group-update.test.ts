@@ -2510,14 +2510,11 @@ describe('groupUpdate — services without a declared container', () => {
       ok: true,
       data: {
         results: [
-          { service: 'svc-a', outcome: 'skipped', detail: { code: 'no-container' } },
+          { service: 'svc-a', outcome: 'updated' },
           { service: 'svc-b', outcome: 'updated' },
         ],
       },
     });
-    if (result.ok) {
-      expect(result.data.results[0].detail?.message).toContain('/repo/a');
-    }
     // Pull/merge and migrations still ran for the container-less service — only the restart
     // phase was skipped.
     expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'development']);
@@ -2566,8 +2563,8 @@ describe('groupUpdate — services without a declared container', () => {
       ok: true,
       data: {
         results: [
-          { service: 'svc-a', outcome: 'skipped', detail: { code: 'no-container' } },
-          { service: 'svc-b', outcome: 'skipped', detail: { code: 'no-container' } },
+          { service: 'svc-a', outcome: 'updated' },
+          { service: 'svc-b', outcome: 'updated' },
         ],
       },
     });
@@ -2889,7 +2886,7 @@ describe('groupUpdate — per-service run detail', () => {
     expect(rowOf(blank, 'svc-a')?.run?.migrations).toEqual({ kind: 'none' });
   });
 
-  it('keeps the run detail on a container-less skipped row', async () => {
+  it('keeps the run detail on a container-less updated row', async () => {
     const manifest: ManifestPort = {
       load: vi.fn(async () => ok({ service: 'svc-x', migrationCommand: 'm', sharedBranch: 'development', modules: {} })),
     };
@@ -2897,8 +2894,7 @@ describe('groupUpdate — per-service run detail', () => {
     const result = await groupUpdate(makeParams({ manifest }));
 
     expect(rowOf(result, 'svc-a')).toMatchObject({
-      outcome: 'skipped',
-      detail: { code: 'no-container' },
+      outcome: 'updated',
       run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'ran', command: 'm' } },
     });
   });
