@@ -126,6 +126,12 @@ export function formatServiceOutcomeDetail(lastOutcome: GroupUpdateRepoResult | 
   return [`${lastOutcome.outcome} (${code})${message}`, ...runLines].join('\n');
 }
 
+const CONFLICT_OUTCOME_LABELS = {
+  'auto-resolved': 'auto-resolved',
+  partial: 'partial — the rest was left to you',
+  'left-to-user': 'left to you',
+} as const;
+
 // The merge and migrate lines of the last run; either is absent when core could not read it.
 // The migration excerpt is collapsed to one line for the pane.
 function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
@@ -139,6 +145,9 @@ function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
         ? 'merge: updated (diff unavailable)'
         : `merge: +${merge.insertions}/\u2212${merge.deletions} lines, ${merge.files} ${merge.files === 1 ? 'file' : 'files'}`,
     );
+  }
+  if (run?.conflict !== undefined) {
+    lines.push(`conflict: ${CONFLICT_OUTCOME_LABELS[run.conflict]}`);
   }
   const migrations = run?.migrations;
   if (migrations?.kind === 'none') {
@@ -461,6 +470,9 @@ export function buildServiceStepViews(
             : `+${merge.insertions} / −${merge.deletions} lines in ${merge.files} ${merge.files === 1 ? 'file' : 'files'}`,
         );
       }
+    }
+    if (key === 'merge' && state === 'done' && result?.run?.conflict !== undefined) {
+      detail.push(`conflict: ${CONFLICT_OUTCOME_LABELS[result.run.conflict]}`);
     }
     if (key === 'migration' && state === 'done') {
       const migrations = result?.run?.migrations;

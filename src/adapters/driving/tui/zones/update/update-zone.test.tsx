@@ -870,6 +870,25 @@ describe('formatServiceOutcomeDetail', () => {
   });
 });
 
+describe('conflict auto-resolution display', () => {
+  it('shows the resolver issue note in the merge-conflict body', () => {
+    const body = formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', autoResolveNote: 'the line is in a mixed block' });
+
+    expect(body).toContain('merge conflict');
+    expect(body).toContain('Issue: the line is in a mixed block');
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' })).not.toContain('Issue');
+  });
+
+  it('shows the per-service conflict outcome in the run detail', () => {
+    const detail = (conflict: 'auto-resolved' | 'partial' | 'left-to-user') =>
+      formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'updated', run: { merge: { kind: 'up-to-date' }, conflict } });
+
+    expect(detail('auto-resolved')).toContain('conflict: auto-resolved');
+    expect(detail('partial')).toContain('conflict: partial');
+    expect(detail('left-to-user')).toContain('conflict: left to you');
+  });
+});
+
 describe('formatServiceOutcomeDetail — run detail', () => {
   it('renders already up to date and no migrations', () => {
     expect(
@@ -1205,6 +1224,10 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),

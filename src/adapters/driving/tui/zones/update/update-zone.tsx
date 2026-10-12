@@ -280,7 +280,7 @@ export function formatBlockerBody(blocker: IncidentBlocker): string {
     case 'dirty-worktree':
       return `"${blocker.service}" has uncommitted changes (${blocker.repoPath}).`;
     case 'merge-conflict':
-      return `"${blocker.service}" hit a merge conflict (${blocker.repoPath}).`;
+      return `"${blocker.service}" hit a merge conflict (${blocker.repoPath}).${blocker.autoResolveNote !== undefined ? ` Issue: ${blocker.autoResolveNote}` : ''}`;
     case 'mid-merge':
       return `"${blocker.service}" is already mid-merge from an earlier run (${blocker.repoPath}) — left as-is.`;
     case 'unpushed-commits': {

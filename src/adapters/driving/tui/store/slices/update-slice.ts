@@ -7,6 +7,7 @@ import {
   groupUpdate as groupUpdateUseCase,
   markGroupUpdateInterrupted as markGroupUpdateInterruptedUseCase,
   MIGRATION_FAILED_CODE,
+  type AutoResolveConflict,
   type GroupUpdateRepoResult,
   type GroupUpdateScope,
   type StageControl,
@@ -27,13 +28,15 @@ import {
   type ServiceIssue,
   type ServiceStepStates,
 } from '../../zones/update/update-zone.logic.js';
-import { listConsumers } from '../../../../../core/shared-types/list-consumers.js';
+import { autoResolveSharedTypesConflict } from '../../../../../core/shared-types/resolve-conflict.js';
+import { listConsumers, type DependencyConsumer } from '../../../../../core/shared-types/list-consumers.js';
 import {
   runSharedTypesPhase,
   SHARED_TYPES_PHASE_FAILED,
   shouldRunSharedTypesPhase,
   type SharedTypesMode,
   type SharedTypesPhaseFailure,
+  type SharedTypesPhaseOutcome,
   type SharedTypesStage,
 } from '../../../../../core/shared-types/smart-update.js';
 import { resolveSingleSourceOf, resolveSourceRegistries } from './shared-types-slice.js';
@@ -685,7 +688,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                       ? (blocker as SharedTypesPhaseBlocker).message
                       : blocker.kind === 'unpushed-commits'
                         ? `${blocker.branch ?? ''}: ${(blocker.commits ?? []).join(' | ')}`
-                        : blocker.repoPath,
+                        : blocker.kind === 'merge-conflict' && blocker.autoResolveNote !== undefined
+                          ? `${blocker.repoPath} — ${blocker.autoResolveNote}`
+                          : blocker.repoPath,
                   resolved: false,
                 }),
           };
@@ -696,7 +701,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // Builds the between-stage hook of a smart group update: once the source repo (alone in
     // stage 0) is updated, publish and propagate its version; on failure pause on an incident
     // (retry / skip / abort). Never throws — every failure becomes a phase failure.
-    function buildSharedTypesHook(mode: SharedTypesMode, sourceRepoPath: string | null | undefined) {
+    function buildSharedTypesHook(mode: SharedTypesMode, sourceRepoPath: string | null | undefined, runState: { publishedVersion: string | undefined }) {
       if (
         mode === 'off' ||
         sourceRepoPath === null ||
@@ -774,11 +779,19 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           }
           setStage(service, null);
           if (outcome.ok) {
+            const phase = outcome.data as SharedTypesPhaseOutcome | undefined;
+            if (phase?.status === 'done') {
+              // Kept by the conflict auto-resolver for the rest of the run.
+              runState.publishedVersion = phase.version;
+            }
             set((state) => ({ liveServiceIssues: resolveLiveIssues(state.liveServiceIssues, service) }));
             return;
           }
           const details = outcome.error.details as SharedTypesPhaseFailure | undefined;
           publishedVersion = details?.publishedVersion ?? publishedVersion;
+          if (publishedVersion !== undefined) {
+            runState.publishedVersion = publishedVersion;
+          }
           const choice = await raiseIncident({ service, repoPath: sourceRepoPath, kind: SHARED_TYPES_PHASE_FAILED, message: outcome.error.message });
           if (choice === 'edited') {
             continue;
@@ -792,6 +805,54 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       };
 
       return { ordering: (target: { service: string; repoPath: string }) => (resolve(target.repoPath) === sourceKey ? 0 : 1), afterStage };
+    }
+
+    // The conflict auto-resolution seam of a run: settles the consumers' dependency version on a
+    // conflicting merge/pull. Null when the consumer module or the restart port is not wired.
+    function buildAutoResolveConflict(runState: { publishedVersion: string | undefined }): AutoResolveConflict | null {
+      const wired = deps?.sharedTypes;
+      if (
+        !deps ||
+        deps.restart === undefined ||
+        wired === undefined ||
+        wired.consumerModuleId === undefined ||
+        wired.parseConsumerConfig === undefined
+      ) {
+        return null;
+      }
+      const resolverDeps = deps;
+      const restart = deps.restart;
+      const moduleId = wired.consumerModuleId;
+      const parseConfig = wired.parseConsumerConfig;
+      // Cached once read successfully; a failed read is retried on the next conflict.
+      let consumers: DependencyConsumer[] | undefined;
+      return async ({ repoPath }) => {
+        if (consumers === undefined) {
+          const listed = await listConsumers({
+            edtRegistry: resolverDeps.edtRegistry,
+            manifest: resolverDeps.manifest,
+            state: resolverDeps.state,
+            moduleId,
+            parseConfig,
+          });
+          if (!listed.ok) {
+            return { touched: false, issue: `Cannot list the consumers of the active EDT: ${listed.error.message}` };
+          }
+          consumers = listed.data.consumers;
+        }
+        const wanted = resolve(repoPath);
+        const consumer = consumers.find((candidate) => resolve(candidate.repoPath) === wanted);
+        if (consumer === undefined) {
+          return { touched: false };
+        }
+        return autoResolveSharedTypesConflict({
+          git: resolverDeps.git,
+          restart,
+          repoPath,
+          consumer,
+          ...(runState.publishedVersion !== undefined ? { preferredVersion: runState.publishedVersion } : {}),
+        });
+      };
     }
 
     return {
@@ -896,7 +957,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         incidentResolvers.clear();
         raisedKinds.clear();
         get().setRunInProgress(true);
-        const sharedTypesHook = buildSharedTypesHook(opts.sharedTypes ?? 'off', opts.sharedTypesSource);
+        const runState: { publishedVersion: string | undefined } = { publishedVersion: undefined };
+        const sharedTypesHook = buildSharedTypesHook(opts.sharedTypes ?? 'off', opts.sharedTypesSource, runState);
+        const autoResolveConflict = buildAutoResolveConflict(runState);
         // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
         // unexpected failure in production) must still clear `runInProgress` — otherwise the
         // AppShell `q` gate and every `runInProgress` reader wedge in `running` forever.
@@ -921,6 +984,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             ...(opts.cleanRestart !== undefined ? { cleanRestart: opts.cleanRestart } : {}),
             // Smart group update: the source repo goes first and alone, then the phase runs.
             ...(sharedTypesHook !== null ? sharedTypesHook : {}),
+            ...(autoResolveConflict !== null ? { autoResolveConflict } : {}),
             // The TUI backs the assisted-resolution seam — core pauses the run on each
             // dirty/conflicted repo and waits here while the zone's modal menu collects the
             // developer's choice (stash / open in editor / cancel repo / cancel run). Raising the

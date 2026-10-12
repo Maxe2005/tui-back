@@ -135,6 +135,19 @@ export interface GitPort {
   // --diff-filter=U` is non-empty) — the re-verification gate before finalizing a
   // human-resolved merge.
   hasUnmergedPaths(repoPath: string): Promise<Result<boolean>>;
+  // The conflicted paths (`git diff --name-only --diff-filter=U -z`), repo-root relative —
+  // read-only, gated nowhere. Backs the auto-resolve seam of a mid-run conflict.
+  listUnmergedPaths(repoPath: string): Promise<Result<string[]>>;
+  // The worktree content of a repo-relative file as it stands (conflict markers included).
+  // Read-only, gated nowhere. Fails `git-read-error`.
+  readWorktreeFile(repoPath: string, path: string): Promise<Result<string>>;
+  // Overwrites a repo-relative file with `content` and, when `stage` is set, stages exactly
+  // that path (`git add -- <path>`). Gated: the current branch must pass assertAllowedBranch
+  // before anything is written. Fails `git-write-error` / `git-add-error`.
+  writeResolvedFile(repoPath: string, path: string, content: string, opts: { stage: boolean }): Promise<Result<void>>;
+  // Takes one conflicted path from the current branch's side (`git checkout --ours -- <path>`)
+  // into the worktree without staging it. Same current-branch gate. Fails `git-checkout-error`.
+  checkoutSide(repoPath: string, path: string, side: 'ours'): Promise<Result<void>>;
   // `git commit --no-edit` — finalizes a human-resolved merge after
   // hasUnmergedPaths reported clean. Never resolves conflict content itself.
   finalizeMerge(repoPath: string): Promise<Result<void>>;

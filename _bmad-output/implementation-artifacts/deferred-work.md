@@ -745,3 +745,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
   summary: The phase result (published version, per-consumer outcomes) is not shown after the run, and a consumer skipped for a dirty package.json stays on the old version without a visible warning.
   evidence: Only failed consumers pause the run; results are discarded after the hook returns.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: The conflict auto-resolver hardcodes `npm i` and `package-lock.json`, so a consumer on pnpm/yarn (or a workspace-root lock) gets a wrong lockfile.
+  evidence: resolve-conflict.ts never reads the manifest's installer or other lock names; propagateVersion (4.2) has the same npm-only assumption, so it is a cross-story gap.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: `writeResolvedFile` is not atomic and its containment check is lexical only (no realpath, `/`-based), so a symlinked package.json could be written through.
+  evidence: git adapter `isInside` compares string prefixes; a crash mid-write leaves a truncated package.json during a merge. Low likelihood on the fixed package.json/lockfile paths.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: A dependency declared in several sections (dependencies and devDependencies) of a conflicted package.json is treated as a mixed block and reported as an issue instead of being resolved.
+  evidence: rewriteDependencyBlocks forces `mixed` when the dependency line matches more than once in a block.
