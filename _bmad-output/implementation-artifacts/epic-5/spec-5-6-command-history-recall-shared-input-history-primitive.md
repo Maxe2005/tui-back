@@ -2,7 +2,7 @@
 title: 'Command History Recall & Shared Input-History Primitive'
 type: 'feature'
 created: '2026-10-12'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'a2c1c0b3c1fe0d4d504a632344e4cac62227c48b'
 review_loop_iteration: 0
 context:
@@ -69,15 +69,15 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `tui/shared/input-history/` -- pure generic `pushHistoryEntry`, `HistoryBrowseState`, `resolveHistoryBrowseUp/Down`, snap-back helper + own tests -- single source of recall logic
-- [ ] `tui/shared/input-history/` (store factory) -- generic persisted-history store (hydrate-once, version guard, save chain, await-in-flight) + own tests -- single source of persistence mechanics
-- [ ] `logs-zone.logic.ts`, `logs-zone.tsx`, `logs-slice.ts` -- consume the primitives, drop duplicated code; 5.4 tests unchanged
-- [ ] `core/ports/state.ts` + state adapter + schema + tests -- `commandHistory` read/write
-- [ ] `core/ports/settings.ts` + schema + `settings-slice.ts` -- new settings, shared `MIN/MAX_INPUT_HISTORY_SIZE`
-- [ ] `command-bar.tsx` + `app-shell.tsx` + store -- record on recognized Enter, ↑/↓ recall, snap-back, Tab adopt, hydrate; cursor at end-of-value (coordinate with 2.32)
-- [ ] `settings-screen.tsx` -- Command Palette row cursor, size/dedup/clear controls
-- [ ] `reset-tool.ts`, `reset-slice.ts`, `reset-screen.logic.ts` + tests -- clear `commandHistory` on reset
-- [ ] Tests -- full I/O matrix through real keypresses for the command bar; settings tab; state adapter
+- [x] `tui/shared/input-history/` -- pure generic `pushHistoryEntry`, `HistoryBrowseState`, `resolveHistoryBrowseUp/Down`, snap-back helper + own tests -- single source of recall logic
+- [x] `tui/shared/input-history/` (store factory) -- generic persisted-history store (hydrate-once, version guard, save chain, await-in-flight) + own tests -- single source of persistence mechanics
+- [x] `logs-zone.logic.ts`, `logs-zone.tsx`, `logs-slice.ts` -- consume the primitives, drop duplicated code; 5.4 tests unchanged
+- [x] `core/ports/state.ts` + state adapter + schema + tests -- `commandHistory` read/write
+- [x] `core/ports/settings.ts` + schema + `settings-slice.ts` -- new settings, shared `MIN/MAX_INPUT_HISTORY_SIZE`
+- [x] `command-bar.tsx` + `app-shell.tsx` + store -- record on recognized Enter, ↑/↓ recall, snap-back, Tab adopt, hydrate; cursor at end-of-value (coordinate with 2.32)
+- [x] `settings-screen.tsx` -- Command Palette row cursor, size/dedup/clear controls
+- [x] `reset-tool.ts`, `reset-slice.ts`, `reset-screen.logic.ts` + tests -- clear `commandHistory` on reset
+- [x] Tests -- full I/O matrix through real keypresses for the command bar; settings tab; state adapter
 
 **Acceptance Criteria:**
 - Given the refactor, when the code is searched, then each listed mechanic is defined in exactly one module.
