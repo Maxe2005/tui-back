@@ -32,6 +32,11 @@ export interface Settings {
   // The Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) — how many
   // lines each pane keeps from the live tail before dropping the oldest. Captured once per
   // subscription, so a change here never resizes an already-running stream.
+  // The group update's bounded pool: how many services update at once (default 3, min 1; 1 is the strictly
+  // sequential run). Read when a run starts.
+  update: {
+    concurrency: number;
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -67,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // filterHistorySize=20 covers a session's worth of committed filters per (scope, mode) list
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
+  update: { concurrency: 3 },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 
@@ -76,6 +82,10 @@ export const DEFAULT_SETTINGS: Settings = {
 // Up/Down/typed-digit input in range live) so the two can never drift apart.
 export const MIN_GRID_MAX_ROWS = 1;
 export const MAX_GRID_MAX_ROWS = 99;
+
+// update.concurrency's valid range — shared by the zod schema and the settings screen's clamp.
+export const MIN_UPDATE_CONCURRENCY = 1;
+export const MAX_UPDATE_CONCURRENCY = 8;
 
 // logs.bufferSize's valid range — shared by the zod schema (adapters/driven/settings/schema.ts)
 // and the settings screen's own clamp (adapters/driving/tui/shared/settings-screen.tsx), same

@@ -703,3 +703,25 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
   summary: A symlinked `.tui-back.yaml` is read through but restored as a regular file; file mode is not preserved by the carry.
   evidence: `capture` stores bytes only and `restore` renames a temp file over the target.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: `[f] full report` footer hint is static for the whole Update zone instead of being shown only when a report is available.
+  evidence: The footer comes from a static KEYBINDINGS row with zones; conditional hints need a dynamic footer mechanism. The matrix row "nothing to show" expects no hint advertised.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: `computeLineRowCount` / `sliceVisibleWindow` live in logs-zone.logic and are imported cross-zone by update-zone.logic; move them to a shared module.
+  evidence: Update zone logic now depends on the Logs zone's logic file.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: A single wrapped line taller than the viewport cannot be scrolled within in the full-screen report; only its first rows are reachable.
+  evidence: reportWindow always shows whole lines; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The incident popup can open over a service menu, pick or full-screen report that was already open in the Update zone.
+  evidence: The store opens the popup on the first incident whenever the Update zone is active, without knowing the zone's local dialogs; reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: A run cancelled with unstarted services (now `run-cancelled` rows) still clears an `interrupted` EDT status because no row is `failed`.
+  evidence: groupUpdateEdt only checks for failed rows before setStatus('active'); reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: update-incidents-dialog imports blocker helpers from update-zone while the zone imports the dialog (circular import); the helpers belong in a shared logic module.
+  evidence: Works at runtime (use only inside functions) but is a layering smell; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The CLI `tui-back update` stays sequential (no concurrency passed) while the TUI defaults to 3; cancelled-run issue-log entries stay unresolved; the `:update-incidents` command gives no feedback with an empty queue; no docs mention `update.concurrency`, the `i` key or the awaiting status.
+  evidence: Observed by the three review layers; none breaks the story's acceptance criteria.

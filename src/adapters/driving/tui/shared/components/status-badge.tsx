@@ -16,6 +16,8 @@ export type StatusBadgeState =
   | 'restarting'
   | 'updating'
   | 'migrating'
+  // A service paused on an incident, waiting for the developer.
+  | 'awaiting'
   | 'error'
   // A managed service with no Docker runtime (manifest omits `container`) — dim by design,
   // never the down/error treatment.
@@ -35,6 +37,7 @@ export const STATUS_BADGES = Object.freeze({
   restarting: { glyph: '↻', color: colors.info },
   updating: { glyph: '⇄', color: colors.info },
   migrating: { glyph: '⇒', color: colors.info },
+  awaiting: { glyph: '◐', color: colors.warning },
   // 'error' is deliberately the same glyph/color as 'failed' (both mean "this outcome was
   // a failure") — the two keys exist separately because they're driven by different
   // vocabularies (a generic action outcome vs. the Update zone's per-service status set),

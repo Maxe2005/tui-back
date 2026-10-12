@@ -5,10 +5,10 @@
 // Every keystroke decision is a pure function; useInput stays a thin dispatcher.
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
-import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
+import type { GroupUpdateRepoResult, UpdateBlocker, UpdateBlockerChoice } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import {
@@ -37,14 +37,23 @@ import {
   resolveEditorCommand,
   resolveRecapToggle,
   resolveUpdatePaneRows,
+  applyReportScroll,
+  buildServiceReport,
+  inferSettledSteps,
+  jumpToFailedStep,
+  reportMaxOffset,
+  resolveReportKey,
+  PENDING_STEPS,
   splitUpdateServiceRows,
   UPDATE_MEMBERS_HEADER,
   UPDATE_OTHERS_HEADER,
   updateFooterContext,
 } from './update-zone.logic.js';
 import { UpdateServiceDetail } from './update-service-detail.js';
+import { FullscreenReport } from './fullscreen-report.js';
+import { useBounds } from '../../shared/bounds/bounds-context.js';
 import { UPDATE_SERVICE_MENU_ESCAPE, UpdateServiceMenuDialog, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
-import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
+import { resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { useUpdateConfigPanels } from './use-update-config-panels.js';
@@ -54,6 +63,8 @@ import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from './update-config-panels.logic.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { UpdateIncidentsDialog } from './update-incidents-dialog.js';
+import { formatQuitRunCounts, reduceIncidentListKey } from './update-incidents.logic.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
@@ -299,8 +310,31 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const updateErrorCode = useStore((state) => state.updateErrorCode);
   const updateScope = useStore((state) => state.updateScope);
   const updateSelection = useStore((state) => state.updateSelection);
-  const updateBlocker = useStore((state) => state.updateBlocker);
-  const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
+  const incidents = useStore((state) => state.incidents);
+  const incidentPopupOpen = useStore((state) => state.incidentPopupOpen);
+  const incidentToast = useStore((state) => state.incidentToast);
+  const resolveUpdateIncident = useStore((state) => state.resolveUpdateIncident);
+  const openIncidentPopup = useStore((state) => state.openIncidentPopup);
+  const closeIncidentPopup = useStore((state) => state.closeIncidentPopup);
+  const clearIncidentToast = useStore((state) => state.clearIncidentToast);
+  // The queue popup's own UI state: which incident is selected and whether the keys drive the
+  // list or the selected incident's guided menu.
+  const [incidentIndex, setIncidentIndex] = useState(0);
+  const [incidentMode, setIncidentMode] = useState<'list' | 'menu'>('list');
+  const [incidentNow, setIncidentNow] = useState(() => Date.now());
+  const awaitingServices = new Set(incidents.map((incident) => incident.blocker.service));
+  const popupOpen = incidentPopupOpen && incidents.length > 0;
+  const selectedIncidentIndex = Math.min(incidentIndex, Math.max(incidents.length - 1, 0));
+  const selectedIncident = incidents[selectedIncidentIndex];
+  // The guided menu's blocker: only while the popup's menu mode is active.
+  const updateBlocker = popupOpen && incidentMode === 'menu' ? (selectedIncident?.blocker ?? null) : null;
+  const incidentListActive = popupOpen && incidentMode === 'list';
+  const resolveUpdateBlocker = (choice: UpdateBlockerChoice): void => {
+    if (selectedIncident !== undefined) {
+      resolveUpdateIncident(selectedIncident.id, choice);
+    }
+    setIncidentMode('list');
+  };
   const updateConfig = useStore((state) => state.updateConfig);
   const openUpdateConfig = useStore((state) => state.openUpdateConfig);
   const setUpdateConfig = useStore((state) => state.setUpdateConfig);
@@ -374,6 +408,17 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const [recapActive, setRecapActive] = useState(initialRecap);
   // The recap's result list scrolls with PgUp/PgDn: this is the entry the window follows.
   const [recapCursor, setRecapCursor] = useState(0);
+  // The full-screen report: the service it shows (null: closed), its top-anchored scroll offset
+  // and the wrap/truncate toggle (default wrap) — zone-local UI state; the content itself is
+  // derived from the store every render so it updates live.
+  const [reportService, setReportService] = useState<string | null>(null);
+  const [reportOffset, setReportOffset] = useState(0);
+  const [reportWrap, setReportWrap] = useState(true);
+  const bounds = useBounds();
+  // The report pane's real row/column budget, reported by FullscreenReport after each layout so
+  // the key handler clamps and pages against the exact numbers the view renders with. Until the
+  // first measurement the fallback is the zone bounds minus the report's one header row.
+  const reportLayout = useRef<{ rows: number; columns: number } | null>(null);
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -396,11 +441,13 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     'update',
     updateFooterContext({
       blocker: updateBlocker !== null,
+      incidentList: incidentListActive,
       config: updateConfig !== null ? updateConfigFooterContext(configPanels.view, configPanels.box) : null,
       servicePick: updateServicePick !== null,
       quitConfirm,
       serviceMenu: serviceMenu !== null,
       selectRequest: updateServiceSelectRequest,
+      report: reportService !== null,
     }),
     useStore,
   );
@@ -470,9 +517,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // second trigger can't race the pick opening underneath it.
   useEffect(() => {
     setZoneInputCaptured(
-      quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null || updateServicePick !== null || updateServiceSelectRequest,
+      quitConfirm || updateConfig !== null || popupOpen || serviceMenu !== null || updateServicePick !== null || updateServiceSelectRequest || reportService !== null,
     );
-  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, updateServicePick, updateServiceSelectRequest, setZoneInputCaptured]);
+  }, [quitConfirm, updateConfig, popupOpen, serviceMenu, updateServicePick, updateServiceSelectRequest, reportService, setZoneInputCaptured]);
 
   // A newly opened service menu always starts browsing on its first row.
   useEffect(() => {
@@ -481,13 +528,49 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     }
   }, [serviceMenu]);
 
-  // A newly raised blocker always opens the menu on its first row.
+  // A newly opened incident menu always starts on its first row; every selection change or
+  // popup open lands back on the list.
   useEffect(() => {
-    if (updateBlocker !== null) {
+    if (incidentMode === 'menu') {
       setBlockerCursor(0);
     }
     setEditorError(null);
-  }, [updateBlocker]);
+  }, [incidentMode, selectedIncident?.id]);
+  // A choice is always for the incident the menu opened on: if that one leaves the queue (or the
+  // selection shifts) the keys fall back to the list rather than answering another incident.
+  const menuIncidentId = useRef<string | null>(null);
+  useEffect(() => {
+    if (incidentMode !== 'menu') {
+      menuIncidentId.current = null;
+    } else if (menuIncidentId.current === null) {
+      menuIncidentId.current = selectedIncident?.id ?? null;
+    } else if (menuIncidentId.current !== selectedIncident?.id) {
+      menuIncidentId.current = null;
+      setIncidentMode('list');
+    }
+  }, [incidentMode, selectedIncident?.id]);
+  useEffect(() => {
+    if (!popupOpen) {
+      setIncidentMode('list');
+      setIncidentIndex(0);
+    }
+  }, [popupOpen]);
+  // The popup's ages tick while it is open; the toast of a late incident fades on its own.
+  useEffect(() => {
+    if (!popupOpen) {
+      return undefined;
+    }
+    setIncidentNow(Date.now());
+    const timer = setInterval(() => setIncidentNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [popupOpen]);
+  useEffect(() => {
+    if (incidentToast === null) {
+      return undefined;
+    }
+    const timer = setTimeout(clearIncidentToast, 5000);
+    return () => clearTimeout(timer);
+  }, [incidentToast, clearIncidentToast]);
 
   // A newly opened service pick always starts unfiltered on its first row. The single reset point
   // is the pick *closing* — whoever closed it (Enter, Esc, or the store on a run start/reset) —
@@ -519,11 +602,73 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);
 
+  // The full report's content for a service, read from the store every render: the live steps and
+  // issue log while a run targets it, the settled last run afterwards (falling back to its last
+  // outcome row when no run snapshot exists). `available` drives whether `f` opens anything.
+  const reportInputFor = (service: string) => {
+    const row = serviceRows.find((candidate) => candidate.service === service);
+    const live = row !== undefined && (isRowTargeted(row) || serviceRestartInFlight[resolvePath(row.path)] !== undefined);
+    const run = lastServiceRuns[service];
+    const outcome = lastServiceOutcomes[service] ?? updateResults.find((candidate) => candidate.service === service);
+    const issues = liveServiceIssues[service] ?? [];
+    const settled = run ?? (outcome !== undefined ? { steps: inferSettledSteps(outcome), result: outcome, source: undefined, target: row?.branch ?? null, topic: updateTopic } : undefined);
+    const mode: 'live' | 'last' | 'never' = live ? 'live' : settled !== undefined ? 'last' : 'never';
+    return {
+      available: live || settled !== undefined || issues.length > 0,
+      input: {
+        service,
+        mode,
+        context: settled !== undefined && !live ? formatServiceUpdateContext(settled.source, settled.target, settled.topic) : null,
+        steps: live ? (liveServiceSteps[service] ?? PENDING_STEPS) : settled?.steps,
+        result: live ? undefined : settled?.result,
+        issues,
+      },
+    };
+  };
+  const report = reportService !== null ? buildServiceReport(reportInputFor(reportService).input) : null;
+  const REPORT_HEADER_ROWS = 1;
+  const reportBudget = Math.max(1, bounds.rows - REPORT_HEADER_ROWS);
+  const reportWidth = Math.max(1, bounds.columns - 2 * spacing['pane-padding-x']);
+  const reportAvailable = reportService !== null && reportInputFor(reportService).available;
+  // A report whose service lost everything to show (a new run reset it) closes on its own.
+  useEffect(() => {
+    if (reportService !== null && !reportAvailable) {
+      setReportService(null);
+      setReportOffset(0);
+    }
+  }, [reportService, reportAvailable]);
+  const openReport = (service: string): boolean => {
+    if (!reportInputFor(service).available) {
+      return false;
+    }
+    setReportService(service);
+    setReportOffset(0);
+    return true;
+  };
+
   useInput(
     (input, key) => {
-      // While a repo waits on the resolution seam, the menu owns every keystroke — `q` must not
-      // open the quit-confirm underneath it (cancel the run through the menu instead).
+      // The incident popup owns every keystroke while open — `q` must not open the quit-confirm
+      // underneath it. In list mode the arrows pick an incident, Enter opens its guided menu and
+      // Esc closes the popup without resolving anything (incidents and services stay paused).
+      if (incidentListActive) {
+        const step = reduceIncidentListKey(key, selectedIncidentIndex, incidents.length);
+        if (step.type === 'move') {
+          setIncidentIndex(step.index);
+        } else if (step.type === 'open-menu') {
+          setIncidentMode('menu');
+        } else if (step.type === 'close') {
+          closeIncidentPopup();
+        }
+        return;
+      }
+      // The guided menu of the selected incident (Esc steps back to the list: resolving is always
+      // an explicit choice).
       if (updateBlocker !== null) {
+        if (key.escape === true) {
+          setIncidentMode('list');
+          return;
+        }
         const step = resolveMenuKey(key, blockerCursor, blockerMenuItems(updateBlocker.kind), UPDATE_BLOCKER_MENU_ESCAPE);
         if (step.type === 'move') {
           setBlockerCursor(step.cursor);
@@ -603,6 +748,37 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
         return;
       }
+      // The full-screen report owns every keystroke (before the recap toggle and the triggers, so
+      // `p` and `Esc` keep their report meaning). Scrolling is clamped to what still fills the pane.
+      if (reportService !== null && report !== null) {
+        const action = resolveReportKey(input, key);
+        const budget = reportLayout.current?.rows ?? reportBudget;
+        const width = reportLayout.current?.columns ?? reportWidth;
+        const maxOffset = reportMaxOffset(report.lines, budget, width, reportWrap);
+        if (action === 'close') {
+          setReportService(null);
+        } else if (action === 'toggle-wrap') {
+          const nextWrap = !reportWrap;
+          setReportWrap(nextWrap);
+          setReportOffset(Math.min(reportOffset, reportMaxOffset(report.lines, budget, width, nextWrap)));
+        } else if (action === 'next-failed' || action === 'prev-failed') {
+          const target = jumpToFailedStep(report.failedLines, reportOffset, action === 'next-failed' ? 'next' : 'prev');
+          if (target !== null) {
+            setReportOffset(Math.min(target, maxOffset));
+          }
+        } else if (action !== null) {
+          setReportOffset(applyReportScroll(reportOffset, action, maxOffset, budget));
+        }
+        return;
+      }
+      // `Enter` on a failed recap row opens that service's report; other rows do nothing.
+      if (recapActive && key.return) {
+        const row = updateResults[Math.min(recapCursor, Math.max(0, updateResults.length - 1))];
+        if (row !== undefined && row.outcome === 'failed') {
+          openReport(row.service);
+        }
+        return;
+      }
       // `Esc` drops service focus onto the last-update recap; an arrow key restores it (the
       // remembered service, unmoved).
       if (recapActive && (key.pageDown || key.pageUp)) {
@@ -630,6 +806,14 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       const direction = resolveSelectionDirection(key);
       if (direction !== null) {
         setServiceCursor((current) => moveSelection(current, direction, serviceRows.length));
+        return;
+      }
+      if (input === 'i' && incidents.length > 0) {
+        openIncidentPopup();
+        return;
+      }
+      if ((input === 'f' || input === 'F') && focusedServiceRow !== undefined) {
+        openReport(focusedServiceRow.service);
         return;
       }
       if (updateStatus === 'running') {
@@ -676,7 +860,14 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // core use-case resolves with its per-service outcome rows. An all-repos run targets no
   // single EDT, so it shows the generic loading line instead of EDT member rows.
   const offerRerun = shouldOfferRerun(edts, activeEdt);
-  const runningLabel = !isAllRun ? UPDATE_RUNNING_LABEL : updateSelection !== null ? UPDATE_SELECTION_RUNNING_LABEL : UPDATE_ALL_RUNNING_LABEL;
+  const baseRunningLabel = !isAllRun ? UPDATE_RUNNING_LABEL : updateSelection !== null ? UPDATE_SELECTION_RUNNING_LABEL : UPDATE_ALL_RUNNING_LABEL;
+  // Services paused on an incident are not in flight: they wait on the developer.
+  const quitCounts = formatQuitRunCounts(
+    incidents.length,
+    Object.keys(liveServicePhase).filter((service) => !awaitingServices.has(service)).length,
+  );
+  // The zone header counts the pending incidents next to the run label.
+  const runningLabel = incidents.length > 0 ? `${baseRunningLabel} · ◐ ${incidents.length} awaiting you (i)` : baseRunningLabel;
 
   // This zone's service-list chrome budget (an approximation, like edts-zone.tsx/logs-zone.tsx).
   const windowSize = useWindowSize();
@@ -692,7 +883,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // The coarse standalone-restart flag (the in-flight map holds this service's resolved
     // repoPath) and the live phase, which refines the glyph to `migrating`.
     const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
-    const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service]);
+    const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service], awaitingServices.has(row.service));
     return (
       <Box key={row.path} flexDirection="row">
         <StatusBadge state={status} />
@@ -734,6 +925,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       {/* Only the title line carries left padding — the outer Box stays unpadded so it doesn't
           double up the list/detail panes' own paddingX. */}
+      {report !== null ? (
+        <FullscreenReport lines={report.lines} offset={reportOffset} wrapLines={reportWrap} visibleLines={reportBudget} contentWidth={reportWidth} onLayout={(rows, columns) => { reportLayout.current = { rows, columns }; }} />
+      ) : (
+        <>
       <Box paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>UPDATE</Text>
       </Box>
@@ -810,6 +1005,11 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
                 <Spinner />
                 <Text color={colors.text} wrap="truncate-end"> {runningLabel}</Text>
               </Box>
+            ) : null}
+            {incidentToast !== null ? (
+              <Text color={colors.warning} wrap="truncate-end">
+                ◐ {incidentToast} — press i
+              </Text>
             ) : null}
             {updateNotice !== null ? (
               <Text color={colors.warning} wrap="truncate-end">
@@ -912,8 +1112,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
           </Box>
         }
       />
+        </>
+      )}
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
-        <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}`}</ClampedParagraph>
+        <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}${quitCounts !== null ? ` ${quitCounts}` : ''}`}</ClampedParagraph>
       </ModalDialog>
       {updateConfig !== null ? (
         <UpdateConfigPanels
@@ -933,16 +1135,16 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       {/* The no-arg `:update-service` fallback — a filterable service quick-pick. Confirming a
           row opens the config pre-scoped to that one service; Esc closes with nothing opened. */}
       {updateServicePick !== null ? <UpdateServicePickDialog state={pickState} candidates={updateServicePick} /> : null}
-      <ModalDialog title={UPDATE_BLOCKER_TITLE} open={updateBlocker !== null}>
-        {updateBlocker !== null ? (
-          <Box flexDirection="column">
-            <ClampedParagraph color={colors.text} maxLines={4}>{`${formatBlockerBody(updateBlocker)}`}</ClampedParagraph>
-            {formatBlockerRetry(updateBlocker) !== null ? <ClampedParagraph color={colors.warning} maxLines={4}>{`${formatBlockerRetry(updateBlocker)}`}</ClampedParagraph> : null}
-            {editorError !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${editorError}`}</ClampedParagraph> : null}
-            <MenuList items={blockerMenuItems(updateBlocker.kind)} cursor={blockerCursor} />
-          </Box>
-        ) : null}
-      </ModalDialog>
+      {popupOpen ? (
+        <UpdateIncidentsDialog
+          incidents={incidents}
+          selected={selectedIncidentIndex}
+          mode={incidentMode}
+          menuCursor={blockerCursor}
+          editorError={editorError}
+          now={incidentNow}
+        />
+      ) : null}
     </Box>
   );
 }

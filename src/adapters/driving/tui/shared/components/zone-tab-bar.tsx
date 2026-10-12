@@ -27,6 +27,7 @@ export function resolveZoneTabState(
   eventCount: number,
   status: GatedTabStatus = 'enabled',
   busy = false,
+  pendingIncidents = 0,
 ): ZoneTabState {
   const active = zone.id === activeZone;
   const disabled = status === 'disabled';
@@ -46,7 +47,9 @@ export function resolveZoneTabState(
     // is running) carries its status badge even while active, so the whole tool shows the run.
     badge:
       busy && !disabled
-        ? { text: '⇄ updating', color: active ? colors.background : colors.info }
+        ? pendingIncidents > 0
+          ? { text: `◐ ${pendingIncidents} awaiting you`, color: active ? colors.background : colors.warning }
+          : { text: '⇄ updating', color: active ? colors.background : colors.info }
         : !active && !disabled && eventCount > 0
           ? { text: `●${eventCount}`, color: colors[zone.statusColor] }
           : null,
@@ -58,12 +61,15 @@ export function ZoneTabBar({
   events,
   tabVisibility = DEFAULT_TAB_VISIBILITY,
   updateRunning = false,
+  updateIncidents = 0,
 }: {
   activeZone: ZoneId;
   events: Record<ZoneId, number>;
   tabVisibility?: ResolveTabVisibilityData;
   // A group update is in flight: the Update tab shows its status badge from any zone.
   updateRunning?: boolean;
+  // Pending incidents of that run: the badge then reads `N awaiting you`.
+  updateIncidents?: number;
 }) {
   const { columns } = useBounds();
   const tabs = ZONES.map((zone) => ({ zone, status: zoneGatedStatus(zone.id, tabVisibility) })).filter(
@@ -72,14 +78,14 @@ export function ZoneTabBar({
   // Full labels when they fit; otherwise only the active tab keeps its label, the rest shrink
   // to their `[mnemonic]`.
   const fullWidth = tabs.reduce((sum, { zone, status }) => {
-    const badge = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update').badge;
+    const badge = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update', zone.id === 'update' ? updateIncidents : 0).badge;
     return sum + 2 + `[${zone.mnemonic}] ${zone.label}`.length + (badge ? badge.text.length + 1 : 0);
   }, 0);
   const compact = fullWidth > columns;
   return (
     <Box backgroundColor={colors.background} flexShrink={0} height={1} overflow="hidden">
       {tabs.map(({ zone, status }) => {
-          const state = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update');
+          const state = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update', zone.id === 'update' ? updateIncidents : 0);
           const collapsed = compact && !state.active;
           return (
             <Box

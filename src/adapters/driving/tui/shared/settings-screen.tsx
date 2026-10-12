@@ -29,6 +29,8 @@ import {
   MIN_FILTER_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
+  MAX_UPDATE_CONCURRENCY,
+  MIN_UPDATE_CONCURRENCY,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
@@ -153,9 +155,23 @@ export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null
 // General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles; the cursor
 // starts on it) and the editor command, a free-text field (Enter opens it for editing, Enter
 // again commits, Esc cancels the edit).
-export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command';
+export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command' | 'update-concurrency';
 
-export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command'];
+export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command', 'update-concurrency'];
+
+// update.concurrency: how many services a group update processes at once. `+`/`-` step it, a typed
+// digit sets it; the schema enforces the same [MIN, MAX] bound.
+export function clampUpdateConcurrency(value: number): number {
+  return Math.min(Math.max(value, MIN_UPDATE_CONCURRENCY), MAX_UPDATE_CONCURRENCY);
+}
+
+export function adjustUpdateConcurrency(current: number, direction: 'up' | 'down'): number {
+  return clampUpdateConcurrency(current + (direction === 'up' ? 1 : -1));
+}
+
+export function parseUpdateConcurrencyDigit(input: string): number | null {
+  return /^[1-9]$/.test(input) ? clampUpdateConcurrency(Number(input)) : null;
+}
 
 export const EDITOR_COMMAND_PLACEHOLDER_TEXT = '(not set — $EDITOR, else vi)';
 
@@ -167,6 +183,7 @@ export type GeneralSettingsStep =
   | { type: 'begin-edit' }
   | { type: 'edit'; editing: TextInputState }
   | { type: 'commit-edit'; value: string }
+  | { type: 'set-concurrency'; value: number }
   | { type: 'ignore' };
 
 // The General tab's whole key mapping as one pure step (Esc is handled by the screen's own
@@ -174,7 +191,12 @@ export type GeneralSettingsStep =
 // editor command is being edited every key belongs to the text field — a typed space or
 // `q` is a literal character, never the quit toggle. The committed value is trimmed: a
 // blank command means "not set".
-export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view: GeneralSettingsView): GeneralSettingsStep {
+export function resolveGeneralSettingsKey(
+  input: string,
+  key: TextEditKey,
+  view: GeneralSettingsView,
+  concurrency = MIN_UPDATE_CONCURRENCY,
+): GeneralSettingsStep {
   if (view.editing !== null) {
     if (key.return) {
       return { type: 'commit-edit', value: view.editing.value.trim() };
@@ -191,6 +213,18 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
   }
   if (row === 'editor-command' && key.return) {
     return { type: 'begin-edit' };
+  }
+  if (row === 'update-concurrency') {
+    if (input === '+') {
+      return { type: 'set-concurrency', value: adjustUpdateConcurrency(concurrency, 'up') };
+    }
+    if (input === '-') {
+      return { type: 'set-concurrency', value: adjustUpdateConcurrency(concurrency, 'down') };
+    }
+    const digit = parseUpdateConcurrencyDigit(input);
+    if (digit !== null) {
+      return { type: 'set-concurrency', value: digit };
+    }
   }
   return { type: 'ignore' };
 }
@@ -453,7 +487,7 @@ export function SettingsScreen({
     }
 
     if (tab === 'general') {
-      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing });
+      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing }, settings.update.concurrency);
       if (step.type === 'move') {
         setGeneralCursor(step.cursor);
       } else if (step.type === 'toggle-quit') {
@@ -465,6 +499,8 @@ export function SettingsScreen({
       } else if (step.type === 'commit-edit') {
         setGeneralEditing(null);
         void updateSettings({ general: { editorCommand: step.value } });
+      } else if (step.type === 'set-concurrency') {
+        void updateSettings({ update: { concurrency: step.value } });
       }
       return;
     }
@@ -725,7 +761,15 @@ export function SettingsScreen({
                 </Text>
               )}
             </Box>
-            {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
+            <Box flexDirection="row">
+              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? '›' : ' '}</Text>
+              <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? colors.accent : colors.text} wrap="truncate-end">
+                Update concurrency: <Text color={colors.accent}>{settings.update.concurrency}</Text>
+              </Text>
+            </Box>
+            {GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? (
+              <DimAnnotation text="Services a group update processes at once (+/- or a digit). 1 = one after the other." />
+            ) : GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
               <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
             ) : generalEditing !== null ? (
               <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />

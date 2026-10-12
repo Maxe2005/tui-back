@@ -98,6 +98,14 @@ export const COMMANDS: readonly Command[] = [
       void useStore.getState().openUpdateServiceDialog(fullQuery);
     },
   },
+  // Reopens the incident queue popup of the running update (a no-op without pending incidents).
+  {
+    name: 'update-incidents',
+    zoneId: 'update',
+    run: (useStore) => {
+      useStore.getState().openIncidentPopup();
+    },
+  },
 ];
 
 // Pure prefix filter, case-insensitive — mirrors zones.ts's pure-function convention
