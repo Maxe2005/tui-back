@@ -37,12 +37,21 @@ import {
   resolveEditorCommand,
   resolveRecapToggle,
   resolveUpdatePaneRows,
+  applyReportScroll,
+  buildServiceReport,
+  finalizeServiceSteps,
+  jumpToFailedStep,
+  reportMaxOffset,
+  resolveReportKey,
+  PENDING_STEPS,
   splitUpdateServiceRows,
   UPDATE_MEMBERS_HEADER,
   UPDATE_OTHERS_HEADER,
   updateFooterContext,
 } from './update-zone.logic.js';
 import { UpdateServiceDetail } from './update-service-detail.js';
+import { FullscreenReport } from './fullscreen-report.js';
+import { useBounds } from '../../shared/bounds/bounds-context.js';
 import { UPDATE_SERVICE_MENU_ESCAPE, UpdateServiceMenuDialog, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
 import { MenuList, resolveMenuKey, type MenuItem } from '../../shared/components/menu-list.js';
 import { UpdateServicePickDialog, toServicePickItems } from './update-service-pick-dialog.js';
@@ -374,6 +383,13 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const [recapActive, setRecapActive] = useState(initialRecap);
   // The recap's result list scrolls with PgUp/PgDn: this is the entry the window follows.
   const [recapCursor, setRecapCursor] = useState(0);
+  // The full-screen report: the service it shows (null: closed), its top-anchored scroll offset
+  // and the wrap/truncate toggle (default wrap) — zone-local UI state; the content itself is
+  // derived from the store every render so it updates live.
+  const [reportService, setReportService] = useState<string | null>(null);
+  const [reportOffset, setReportOffset] = useState(0);
+  const [reportWrap, setReportWrap] = useState(true);
+  const bounds = useBounds();
   // The service quick-pick's filter text, caret and highlighted row — zone-local UI state (the
   // candidate list itself is store state so `:update-service` can open it from any zone). The
   // shape and every transition are the shared FilterablePickList's.
@@ -401,6 +417,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       quitConfirm,
       serviceMenu: serviceMenu !== null,
       selectRequest: updateServiceSelectRequest,
+      report: reportService !== null,
     }),
     useStore,
   );
@@ -470,9 +487,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   // second trigger can't race the pick opening underneath it.
   useEffect(() => {
     setZoneInputCaptured(
-      quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null || updateServicePick !== null || updateServiceSelectRequest,
+      quitConfirm || updateConfig !== null || updateBlocker !== null || serviceMenu !== null || updateServicePick !== null || updateServiceSelectRequest || reportService !== null,
     );
-  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, updateServicePick, updateServiceSelectRequest, setZoneInputCaptured]);
+  }, [quitConfirm, updateConfig, updateBlocker, serviceMenu, updateServicePick, updateServiceSelectRequest, reportService, setZoneInputCaptured]);
 
   // A newly opened service menu always starts browsing on its first row.
   useEffect(() => {
@@ -518,6 +535,41 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // its identity fields rather than the object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);
+
+  // The full report's content for a service, read from the store every render: the live steps and
+  // issue log while a run targets it, the settled last run afterwards (falling back to its last
+  // outcome row when no run snapshot exists). `available` drives whether `f` opens anything.
+  const reportInputFor = (service: string) => {
+    const row = serviceRows.find((candidate) => candidate.service === service);
+    const live = row !== undefined && (isRowTargeted(row) || serviceRestartInFlight[resolvePath(row.path)] !== undefined);
+    const run = lastServiceRuns[service];
+    const outcome = lastServiceOutcomes[service];
+    const issues = liveServiceIssues[service] ?? [];
+    const settled = run ?? (outcome !== undefined ? { steps: finalizeServiceSteps(undefined, outcome), result: outcome, source: undefined, target: row?.branch ?? null, topic: updateTopic } : undefined);
+    const mode: 'live' | 'last' | 'never' = live ? 'live' : settled !== undefined ? 'last' : 'never';
+    return {
+      available: live || settled !== undefined || issues.length > 0,
+      input: {
+        service,
+        mode,
+        context: settled !== undefined && !live ? formatServiceUpdateContext(settled.source, settled.target, settled.topic) : null,
+        steps: live ? (liveServiceSteps[service] ?? PENDING_STEPS) : settled?.steps,
+        result: live ? undefined : settled?.result,
+        issues,
+      },
+    };
+  };
+  const report = reportService !== null ? buildServiceReport(reportInputFor(reportService).input) : null;
+  const reportBudget = Math.max(1, bounds.rows - 1);
+  const reportWidth = Math.max(1, bounds.columns - 2 * spacing['pane-padding-x']);
+  const openReport = (service: string): boolean => {
+    if (!reportInputFor(service).available) {
+      return false;
+    }
+    setReportService(service);
+    setReportOffset(0);
+    return true;
+  };
 
   useInput(
     (input, key) => {
@@ -603,6 +655,33 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
         return;
       }
+      // The full-screen report owns every keystroke (before the recap toggle and the triggers, so
+      // `p` and `Esc` keep their report meaning). Scrolling is clamped to what still fills the pane.
+      if (reportService !== null && report !== null) {
+        const action = resolveReportKey(input, key);
+        const maxOffset = reportMaxOffset(report.lines, reportBudget, reportWidth, reportWrap);
+        if (action === 'close') {
+          setReportService(null);
+        } else if (action === 'toggle-wrap') {
+          setReportWrap((current) => !current);
+        } else if (action === 'next-failed' || action === 'prev-failed') {
+          const target = jumpToFailedStep(report.failedLines, reportOffset, action === 'next-failed' ? 'next' : 'prev');
+          if (target !== null) {
+            setReportOffset(target);
+          }
+        } else if (action !== null) {
+          setReportOffset(applyReportScroll(reportOffset, action, maxOffset, reportBudget));
+        }
+        return;
+      }
+      // `Enter` on a failed recap row opens that service's report; other rows do nothing.
+      if (recapActive && key.return) {
+        const row = updateResults[Math.min(recapCursor, Math.max(0, updateResults.length - 1))];
+        if (row !== undefined && row.outcome === 'failed') {
+          openReport(row.service);
+        }
+        return;
+      }
       // `Esc` drops service focus onto the last-update recap; an arrow key restores it (the
       // remembered service, unmoved).
       if (recapActive && (key.pageDown || key.pageUp)) {
@@ -630,6 +709,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
       const direction = resolveSelectionDirection(key);
       if (direction !== null) {
         setServiceCursor((current) => moveSelection(current, direction, serviceRows.length));
+        return;
+      }
+      if ((input === 'f' || input === 'F') && focusedServiceRow !== undefined) {
+        openReport(focusedServiceRow.service);
         return;
       }
       if (updateStatus === 'running') {
@@ -734,6 +817,10 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
       {/* Only the title line carries left padding — the outer Box stays unpadded so it doesn't
           double up the list/detail panes' own paddingX. */}
+      {report !== null ? (
+        <FullscreenReport lines={report.lines} offset={reportOffset} wrapLines={reportWrap} visibleLines={reportBudget} contentWidth={reportWidth} />
+      ) : (
+        <>
       <Box paddingX={spacing['pane-padding-x']}>
         <Text color={colors['text-dim']}>UPDATE</Text>
       </Box>
@@ -912,6 +999,8 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
           </Box>
         }
       />
+        </>
+      )}
       <ModalDialog title={UPDATE_QUIT_CONFIRM_TITLE} open={quitConfirm}>
         <ClampedParagraph color={colors.text} maxLines={4}>{`${isAllRun ? UPDATE_QUIT_CONFIRM_BODY_ALL : UPDATE_QUIT_CONFIRM_BODY}`}</ClampedParagraph>
       </ModalDialog>
