@@ -23,6 +23,7 @@ type Disk = {
   repos: string[];
   activeEdt: string | null;
   filterHistory: Record<string, string[]> | null;
+  commandHistory: string[] | null;
 };
 
 let baseDir: string;
@@ -70,6 +71,11 @@ function fakeDeps(disk: Disk, overrides: { lock?: LockPort } = {}): AppStoreDeps
       disk.filterHistory = history;
       return ok(undefined);
     }),
+    readCommandHistory: vi.fn(async () => ok(disk.commandHistory)),
+    writeCommandHistory: vi.fn(async (history: string[]) => {
+      disk.commandHistory = history;
+      return ok(undefined);
+    }),
   };
   const manifest: ManifestPort = {
     load: vi.fn(async (repoPath: string) =>
@@ -114,6 +120,7 @@ function populatedDisk(): Disk {
     repos: ['/repos/api', '/repos/web'],
     activeEdt: 'ULID1',
     filterHistory: { 'global:text': ['error'] },
+    commandHistory: ['update-service api'],
   };
 }
 

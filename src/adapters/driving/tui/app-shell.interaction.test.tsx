@@ -98,6 +98,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
@@ -1361,7 +1363,7 @@ describe('AppShell command-entry bar (:)', () => {
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1426,7 +1428,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(store.getState().settings.general.quitShortcutEnabled).toBe(false);
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: false, editorCommand: '' },
-        commandPalette: { gridMaxRows: 8 },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1576,7 +1578,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(store.getState().settings.commandPalette.gridMaxRows).toBe(9);
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 9 },
+        commandPalette: { gridMaxRows: 9, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1609,7 +1611,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(store.getState().settings.logs.bufferSize).toBe(550);
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 8 },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1645,7 +1647,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(store.getState().settings.logs.bufferSize).toBe(DEFAULT_SETTINGS.logs.bufferSize);
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 8 },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: {
           bufferSize: DEFAULT_SETTINGS.logs.bufferSize,
@@ -1753,7 +1755,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edts']);
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 8 },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1786,7 +1788,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['create']);
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
-        commandPalette: { gridMaxRows: 8 },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
         logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
       });
@@ -1895,6 +1897,8 @@ describe('AppShell edts load activation', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -1934,6 +1938,8 @@ describe('AppShell splitterRatios load activation', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2239,6 +2245,8 @@ describe('AppShell Ctrl+W resize-mode', () => {
       writeSplitterRatios,
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     // A non-empty EDT registry: an empty one auto-opens the EDTs zone's create dialog, which
     // sets zoneInputCaptured — that would swallow the Ctrl+W-driven resize keypress below

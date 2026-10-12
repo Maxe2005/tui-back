@@ -7,12 +7,12 @@ import {
   DEFAULT_SETTINGS,
   MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
-  MAX_FILTER_HISTORY_SIZE,
+  MAX_INPUT_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
-  MIN_FILTER_HISTORY_SIZE,
+  MIN_INPUT_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   type Settings,
@@ -34,6 +34,16 @@ export const settingsSchema: z.ZodType<Settings> = z
     commandPalette: z
       .object({
         gridMaxRows: z.number().int().min(MIN_GRID_MAX_ROWS).max(MAX_GRID_MAX_ROWS),
+        // Optional-with-default so a settings.yaml that predates the history settings (gridMaxRows only)
+        // still validates instead of discarding every customization.
+        historySize: z
+          .number()
+          .int()
+          .min(MIN_INPUT_HISTORY_SIZE)
+          .max(MAX_INPUT_HISTORY_SIZE)
+          .optional()
+          .default(DEFAULT_SETTINGS.commandPalette.historySize),
+        historyDedup: z.boolean().optional().default(DEFAULT_SETTINGS.commandPalette.historyDedup),
       })
       .strict()
       .optional()
@@ -74,8 +84,8 @@ export const settingsSchema: z.ZodType<Settings> = z
         filterHistorySize: z
           .number()
           .int()
-          .min(MIN_FILTER_HISTORY_SIZE)
-          .max(MAX_FILTER_HISTORY_SIZE)
+          .min(MIN_INPUT_HISTORY_SIZE)
+          .max(MAX_INPUT_HISTORY_SIZE)
           .optional()
           .default(DEFAULT_SETTINGS.logs.filterHistorySize),
         filterHistoryGridMaxRows: z

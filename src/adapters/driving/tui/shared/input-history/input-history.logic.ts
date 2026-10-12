@@ -1,5 +1,5 @@
 // tui/shared/input-history: the one implementation of "recall what I typed before" — used by
-// the Logs filter editor (story 5.4) and the `:` command bar (story 5.6). Pure and generic over
+// the Logs filter editor and the `:` command bar. Pure and generic over
 // the surrounding editor: callers keep their own draft/cursor state and only feed this module the
 // current text, the browse state and the list.
 

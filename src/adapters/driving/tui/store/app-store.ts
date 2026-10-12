@@ -27,6 +27,7 @@ import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
 import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
 import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
+import { createCommandHistorySlice, type CommandHistorySlice } from './slices/command-history-slice.js';
 import { createResetSlice, type ResetSlice } from './slices/reset-slice.js';
 import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
 import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
@@ -98,7 +99,7 @@ export type AppStoreDeps = {
   };
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & ResetSlice & RoutesSlice & SharedTypesSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -108,6 +109,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createSettingsSlice(deps)(...args),
     ...createUpdateSlice(deps)(...args),
     ...createLogsSlice(deps)(...args),
+    ...createCommandHistorySlice(deps)(...args),
     ...createResetSlice(deps)(...args),
     ...createRoutesSlice(deps)(...args),
     ...createSharedTypesSlice(deps)(...args),

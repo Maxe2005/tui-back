@@ -201,6 +201,7 @@ export function AppShell({
   // both read `store.filterHistory` unconditionally, so the persisted lists must be live before
   // either is ever opened.
   const loadFilterHistory = useStore((state) => state.loadFilterHistory);
+  const loadCommandHistory = useStore((state) => state.loadCommandHistory);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows, columns } = useWindowSize();
   const footerItems = useFooterItems(activeZone, useStore);
@@ -240,6 +241,7 @@ export function AppShell({
   // Loaded once at app mount, same idiom as loadSplitterRatios above.
   useEffect(() => {
     void loadFilterHistory();
+    void loadCommandHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

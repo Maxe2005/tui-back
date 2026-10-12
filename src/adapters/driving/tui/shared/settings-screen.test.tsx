@@ -369,7 +369,7 @@ describe('SettingsScreen', () => {
 
   it('reflects the live gridMaxRows value from the store on the Command Palette tab data path', () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true } } });
     expect(store.getState().settings.commandPalette.gridMaxRows).toBe(12);
   });
 
@@ -391,7 +391,7 @@ describe('SettingsScreen', () => {
 
   it('renders the live gridMaxRows value and hint on the Command Palette tab', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" />);
     expect(output).toContain('Command grid max rows:');
     expect(output).toContain('12');

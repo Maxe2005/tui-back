@@ -62,6 +62,7 @@ type StateData = {
   activeEdt: string | null;
   splitterRatios: Record<string, number[]> | null;
   filterHistory: Record<string, string[]> | null;
+  commandHistory?: string[] | null;
 };
 
 function fakeState(initial: StateData): StatePort & { data: StateData } {
@@ -80,6 +81,11 @@ function fakeState(initial: StateData): StatePort & { data: StateData } {
     readFilterHistory: vi.fn(async () => ok(port.data.filterHistory)),
     writeFilterHistory: vi.fn(async (history: Record<string, string[]>) => {
       port.data.filterHistory = history;
+      return ok(undefined);
+    }),
+    readCommandHistory: vi.fn(async () => ok(port.data.commandHistory ?? null)),
+    writeCommandHistory: vi.fn(async (history: string[]) => {
+      port.data.commandHistory = history;
       return ok(undefined);
     }),
   };

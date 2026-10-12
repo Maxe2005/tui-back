@@ -21,12 +21,12 @@ import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
   MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
-  MAX_FILTER_HISTORY_SIZE,
+  MAX_INPUT_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
-  MIN_FILTER_HISTORY_SIZE,
+  MIN_INPUT_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
 } from '../../../../core/ports/settings.js';
@@ -121,10 +121,10 @@ export function parseLogBufferSizeDigit(input: string): number | null {
 // as bufferSize/gridMaxRows above. filterHistorySize has no digit preset — Left/Right (see the
 // group model below) is its only adjustment.
 export const FILTER_HISTORY_SIZE_STEP = 5;
-export { MIN_FILTER_HISTORY_SIZE, MAX_FILTER_HISTORY_SIZE };
+export { MIN_INPUT_HISTORY_SIZE as MIN_FILTER_HISTORY_SIZE, MAX_INPUT_HISTORY_SIZE as MAX_FILTER_HISTORY_SIZE };
 
 export function clampFilterHistorySize(value: number): number {
-  return Math.min(Math.max(value, MIN_FILTER_HISTORY_SIZE), MAX_FILTER_HISTORY_SIZE);
+  return Math.min(Math.max(value, MIN_INPUT_HISTORY_SIZE), MAX_INPUT_HISTORY_SIZE);
 }
 
 export function adjustFilterHistorySize(current: number, direction: 'up' | 'down'): number {
