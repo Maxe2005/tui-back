@@ -8,7 +8,7 @@ import { resolve as resolvePath } from 'node:path';
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
-import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
+import type { GroupUpdateRepoResult, UpdateBlocker, UpdateBlockerChoice } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import {
@@ -308,8 +308,15 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const updateErrorCode = useStore((state) => state.updateErrorCode);
   const updateScope = useStore((state) => state.updateScope);
   const updateSelection = useStore((state) => state.updateSelection);
-  const updateBlocker = useStore((state) => state.updateBlocker);
-  const resolveUpdateBlocker = useStore((state) => state.resolveUpdateBlocker);
+  const incidents = useStore((state) => state.incidents);
+  const resolveUpdateIncident = useStore((state) => state.resolveUpdateIncident);
+  const updateBlocker = incidents[0]?.blocker ?? null;
+  const resolveUpdateBlocker = (choice: UpdateBlockerChoice): void => {
+    const first = incidents[0];
+    if (first !== undefined) {
+      resolveUpdateIncident(first.id, choice);
+    }
+  };
   const updateConfig = useStore((state) => state.updateConfig);
   const openUpdateConfig = useStore((state) => state.openUpdateConfig);
   const setUpdateConfig = useStore((state) => state.setUpdateConfig);

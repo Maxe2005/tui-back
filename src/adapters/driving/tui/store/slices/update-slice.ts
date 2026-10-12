@@ -96,8 +96,17 @@ export type UpdateSlice = {
   // four-choice modal menu over it, and this dispatch carries the developer's choice back
   // to the waiting run. Every git write still goes through the core use-case (AD-1) — the
   // driving side owns only menu rendering and the editor process.
-  updateBlocker: UpdateBlocker | null;
-  resolveUpdateBlocker: (choice: UpdateBlockerChoice) => void;
+  // Story 3.18: every service waiting on the developer is one incident in the run's queue
+  // (oldest first); the queue replaces the single blocking blocker. Resolving one resumes only
+  // that service. `incidentPopupOpen` is the popup's visibility (Esc closes it without
+  // resolving anything), `incidentToast` names a late incident without stealing focus.
+  incidents: UpdateIncident[];
+  incidentPopupOpen: boolean;
+  incidentToast: string | null;
+  resolveUpdateIncident: (id: string, choice: UpdateBlockerChoice) => void;
+  openIncidentPopup: () => void;
+  closeIncidentPopup: () => void;
+  clearIncidentToast: () => void;
   // The live per-service run tracking. `liveServicePhase` holds the current
   // step core's `onPhase` observer reported per service (cleared when the run lands);
   // `liveServiceIssues` holds the per-service issue log — a blocker firing appends an
@@ -286,11 +295,24 @@ export interface ServiceRunSnapshot {
   topic: string | null;
 }
 
+// One service waiting on the developer. `stillBlocked` marks an incident re-raised after a
+// choice whose re-verification (Story 3.4) did not settle it, with the reason core reported.
+export interface UpdateIncident {
+  id: string;
+  blocker: UpdateBlocker;
+  raisedAt: number;
+  stillBlocked?: { reason: string };
+}
+
 export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], UpdateSlice> {
   // The pending seam promise's resolver — installed when core raises a blocker,
   // consumed when the zone menu dispatches a choice. Held in closure, never in Zustand
   // state (a function is non-serializable, and set() replacements must not drop it).
-  let pendingBlockerResolve: ((choice: UpdateBlockerChoice) => void) | null = null;
+  const incidentResolvers = new Map<string, (choice: UpdateBlockerChoice) => void>();
+  // Services that already raised an incident in this run — a second one for the same service
+  // is a failed re-verification ("still blocked"). Never in Zustand state.
+  const raisedServices = new Set<string>();
+  let incidentSequence = 0;
   // One shared poll timer for every currently-tracked service (not one per
   // repoPath, unlike logs-slice.ts) — restarted whenever the tracked list changes so a
   // service that appears/disappears from `edtsBranches` is picked up without leaking a
@@ -591,19 +613,46 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateUlid: null,
       updateScope: null,
       updateSelection: null,
-      updateBlocker: null,
+      incidents: [],
+      incidentPopupOpen: false,
+      incidentToast: null,
       liveServicePhase: {},
       liveServiceSteps: {},
       updateNotice: null,
       liveServiceDone: {},
       liveServiceIssues: {},
       lastServiceRuns: {},
-      resolveUpdateBlocker: (choice: UpdateBlockerChoice) => {
-        const resolve = pendingBlockerResolve;
-        pendingBlockerResolve = null;
-        set({ updateBlocker: null });
-        resolve?.(choice);
+      resolveUpdateIncident: (id: string, choice: UpdateBlockerChoice) => {
+        const resolveChoice = incidentResolvers.get(id);
+        if (resolveChoice === undefined) {
+          return;
+        }
+        incidentResolvers.delete(id);
+        if (choice === 'cancel-run') {
+          // Cancelling the whole run closes every other pending incident as cancelled; core
+          // stops unstarted services and finishes in-flight ones at their step boundary.
+          const others = [...incidentResolvers.entries()];
+          incidentResolvers.clear();
+          set({ incidents: [], incidentPopupOpen: false });
+          resolveChoice(choice);
+          for (const [, otherResolve] of others) {
+            otherResolve('cancel-run');
+          }
+          return;
+        }
+        set((state) => {
+          const incidents = state.incidents.filter((incident) => incident.id !== id);
+          return { incidents, incidentPopupOpen: incidents.length === 0 ? false : state.incidentPopupOpen };
+        });
+        resolveChoice(choice);
       },
+      openIncidentPopup: () => {
+        if (get().incidents.length > 0) {
+          set({ incidentPopupOpen: true });
+        }
+      },
+      closeIncidentPopup: () => set({ incidentPopupOpen: false }),
+      clearIncidentToast: () => set({ incidentToast: null }),
       runGroupUpdate: async (scope: GroupUpdateScope = 'edt', opts: UpdateRunOptions = {}) => {
         if (!deps || !deps.container || !deps.migration || !deps.restart) {
           set({
@@ -636,7 +685,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateUlid: null,
           updateScope: scope,
           updateSelection: opts.selection ?? null,
-          updateBlocker: null,
+          incidents: [],
+          incidentPopupOpen: false,
+          incidentToast: null,
           // A fresh run starts with a fresh live view — stale phases and
           // resolved/unresolved entries from the previous run never leak into this one.
           liveServicePhase: {},
@@ -645,7 +696,8 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           liveServiceDone: {},
           liveServiceIssues: {},
         });
-        pendingBlockerResolve = null;
+        incidentResolvers.clear();
+        raisedServices.clear();
         get().setRunInProgress(true);
         // try/finally: a throwing use-case (a rejecting fake port in tests, a truly
         // unexpected failure in production) must still clear `runInProgress` — otherwise the
@@ -672,16 +724,38 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             // developer's choice (stash / open in editor / cancel repo / cancel run). Raising the
             // menu also appends the live issue-log entry (unresolved until the run moves on).
             onUpdateBlocker: async (blocker) => {
-              set((state) => ({
-                updateBlocker: blocker,
-                liveServiceIssues: appendLiveIssue(state.liveServiceIssues, blocker.service, {
-                  kind: blocker.kind,
-                  detail: blocker.repoPath,
-                  resolved: false,
-                }),
-              }));
-              return new Promise<UpdateBlockerChoice>((resolve) => {
-                pendingBlockerResolve = resolve;
+              incidentSequence += 1;
+              const id = `incident-${incidentSequence}`;
+              const stillBlocked = raisedServices.has(blocker.service);
+              raisedServices.add(blocker.service);
+              const incident: UpdateIncident = {
+                id,
+                blocker,
+                raisedAt: Date.now(),
+                ...(stillBlocked
+                  ? { stillBlocked: { reason: blocker.retryReason ?? 'Re-verification failed — the repo is still blocked' } }
+                  : {}),
+              };
+              return new Promise<UpdateBlockerChoice>((resolveChoice) => {
+                incidentResolvers.set(id, resolveChoice);
+                set((state) => {
+                  const first = state.incidents.length === 0;
+                  return {
+                    incidents: [...state.incidents, incident],
+                    // The first incident opens the popup when the developer is in the Update
+                    // zone; later ones (or any elsewhere) never steal focus — a toast names them.
+                    incidentPopupOpen: first && state.activeZone === 'update' ? true : state.incidentPopupOpen,
+                    incidentToast: first && state.activeZone === 'update' ? state.incidentToast : `${blocker.service} needs you (${blocker.kind})`,
+                    // A resolved entry re-raised stays unresolved; only a fresh service appends.
+                    liveServiceIssues: stillBlocked
+                      ? state.liveServiceIssues
+                      : appendLiveIssue(state.liveServiceIssues, blocker.service, {
+                          kind: blocker.kind,
+                          detail: blocker.repoPath,
+                          resolved: false,
+                        }),
+                  };
+                });
               });
             },
             // The TUI backs the live-phase observer — core reports each
@@ -776,9 +850,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           // A run that threw while a blocker was still raised (a rejecting fake port under a
           // test, a truly unexpected failure in production) must not leave the menu raised
           // forever — the choice path already cleared it via resolveUpdateBlocker.
-          pendingBlockerResolve = null;
-          if (get().updateBlocker !== null) {
-            set({ updateBlocker: null });
+          incidentResolvers.clear();
+          if (get().incidents.length > 0 || get().incidentPopupOpen) {
+            set({ incidents: [], incidentPopupOpen: false });
           }
           get().setRunInProgress(false);
         }
@@ -1160,7 +1234,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           updateUlid: null,
           updateScope: null,
           updateSelection: null,
-          updateBlocker: null,
+          incidents: [],
+          incidentPopupOpen: false,
+          incidentToast: null,
           updateConfig: null,
           updateServiceSelectRequest: false,
           updateServicePick: null,

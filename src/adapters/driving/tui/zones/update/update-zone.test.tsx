@@ -723,7 +723,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
-      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' },
+      incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
@@ -740,7 +740,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
-      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' },
+      incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
@@ -753,7 +753,7 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
-      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' },
+      incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
