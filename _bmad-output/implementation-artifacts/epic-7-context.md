@@ -18,6 +18,8 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - Story 7.5: Dashboard — Workspace Summary & Last-Update Persistence (UX-DR19)
 - Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
 - Story 7.8: Update Per-Service Last-Run Detail (FR-32, session-only) — parallelizable with the 7.2 graft
+- Story 7.11: Overlay Owns the Arrow Keys — Settings Screen & Help Panel (UX-DR36 amended 2026-10-12; bug, runs first)
+- Story 7.12: Shared Service Actions — Open in IDE, Simple/Clean Restart (AD-21; precedes 5.7, 7.5, 7.6)
 
 ## Requirements & Constraints
 
@@ -27,6 +29,8 @@ Turn the functionally complete tool into a consistent, readable one: a codebase 
 - Footer hints and the `?` help screen are generated from the same keybinding declarations.
 - Bounded rendering: whatever the terminal size, pane ratios or message volume, no rendered region exceeds its space on either axis; overflow is resolved by ellipsis truncation, a windowed scroll region with more-above/below indicators, or an explicit "terminal too small" screen — never silent clipping.
 - Group-update outcomes (finished-at, scope, counts) persist through the state port for the Dashboard.
+
+- An open overlay (settings, help, registry, reset, command bar) is the sole consumer of keys; zones are inert behind it through one shared predicate, guarded by a regression test.
 
 ## Technical Decisions
 
