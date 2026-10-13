@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize, type Key } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
@@ -107,7 +108,6 @@ export function EdtsZone({
     | 'issues'
     | 'quick-pick';
 }) {
-  const resizeMode = useStore((state) => state.resizeMode);
   const services = useStore((state) => state.edtsBranches);
   const status = useStore((state) => state.edtsBranchesStatus);
   const error = useStore((state) => state.edtsBranchesError);
@@ -142,13 +142,9 @@ export function EdtsZone({
   // Ink dispatches every keypress to every mounted `useInput` hook regardless of z-order, so
   // without this gate Tab/Enter typed into the `:` command bar would also fire this zone's own
   // pane-focus toggle / openEdtAction() underneath it.
-  const commandBarOpen = useStore((state) => state.commandBarOpen);
   // The same leakage applies to the registry and settings screens, overlays rendered on top of
   // this zone while it stays mounted: without this gate their keys would also drive this zone's
   // pane focus, list cursor and dialogs.
-  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
-  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
-  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   // EDT action state for the detail pane — tracks the in-progress action and the action log
   const currentEdtAction = useStore((state) => state.currentEdtAction);
   const setCurrentEdtAction = useStore((state) => state.setCurrentEdtAction);
@@ -692,6 +688,7 @@ export function EdtsZone({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteDialogTargetUlid, deleteDialogNeedsStatuses]);
 
+  const zoneInputActive = useZoneInputActive(useStore);
   useInput((input, key) => {
     if (dialog.kind === 'create') {
       handleCreateInput(dialog, input, key);
@@ -815,7 +812,7 @@ export function EdtsZone({
   // While Ctrl+W resize-mode owns input (AppShell's useInput dispatches Tab/arrows/Enter/Esc to
   // the store directly — see app-shell.tsx), this zone's own Tab/arrow/Enter handling goes inert
   // too, as it does under the other three overlays.
-  }, { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode });
+  }, { isActive: zoneInputActive });
 
   const loading = status === 'loading' && rows.length === 0;
   const edtsLoading = edtsStatus === 'loading' && edts === null;

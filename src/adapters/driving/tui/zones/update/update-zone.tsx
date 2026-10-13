@@ -8,6 +8,7 @@ import { resolve as resolvePath } from 'node:path';
 import { useEffect, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { GroupUpdateRepoResult, UpdateBlocker } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
@@ -323,11 +324,6 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const edts = useStore((state) => state.edts);
   const requestQuit = useStore((state) => state.requestQuit);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
-  const commandBarOpen = useStore((state) => state.commandBarOpen);
-  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
-  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
-  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
-  const resizeMode = useStore((state) => state.resizeMode);
 
   // The always-visible service list — the same active-EDT-scoped `edtsBranches` rows the Logs
   // and EDTs zones load, plus this zone's own live health poll and last-run-outcome map.
@@ -519,6 +515,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);
 
+  const zoneInputActive = useZoneInputActive(useStore);
   useInput(
     (input, key) => {
       // While a repo waits on the resolution seam, the menu owns every keystroke — `q` must not
@@ -669,7 +666,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode },
+    { isActive: zoneInputActive },
   );
 
   // The active EDT's own membership — the per-service spinner rows during a run, before the
