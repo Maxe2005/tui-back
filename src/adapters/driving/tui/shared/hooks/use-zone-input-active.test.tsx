@@ -57,6 +57,7 @@ describe('zone input gate', () => {
     describe(zone, () => {
       it.each(OVERLAYS)('has no live key handler while the %s is open', async (_name, overlay) => {
         const states = await zoneHandlerStates(zone, overlay);
+        expect(zone === 'dashboard' || states.length > 0).toBe(true);
         expect(states.every((isActive) => isActive === false)).toBe(true);
       });
 

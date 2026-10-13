@@ -31,6 +31,8 @@ function fakeState(): StatePort {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
   };
 }
 
@@ -91,6 +93,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
       discardPathsToHead: vi.fn(async () => ok(undefined)),
       isRebaseInProgress: vi.fn(async () => ok(false)),
       hasUnmergedPaths: vi.fn(async () => ok(false)),
+      listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+      readWorktreeFile: vi.fn(async () => ok("")),
+      writeResolvedFile: vi.fn(async () => ok(undefined)),
+      checkoutSide: vi.fn(async () => ok(undefined)),
       finalizeMerge: vi.fn(async () => ok(undefined)),
       listBranches: vi.fn(async () => ok([])),
       renameBranch: vi.fn(async () => ok(undefined)),
@@ -100,6 +106,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
       commit: vi.fn(async () => ok(undefined)),
       isBranchMerged: vi.fn(async () => ok(true)),
       hasStash: vi.fn(async () => ok(false)),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     },
     edtRegistry: {
       add: vi.fn(async () => ok(undefined)),
@@ -394,5 +402,54 @@ describe('logs slice: listed-row health polling', () => {
     expect(manifestLoad.mock.calls.length).toBe(loadsAfterResolve);
     expect(store.getState().logsListedHealth['/repo/lib']).toBe('no-container');
     store.getState().stopLogsListedHealthPolling();
+  });
+});
+
+describe('logs display settings (session-only)', () => {
+  const spec = { mode: 'text' as const, query: 'boom', level: null };
+
+  function seed() {
+    const store = createAppStore();
+    const s = store.getState();
+    s.toggleLogsEdtSelection('/repo/api');
+    s.toggleLogsEdtSelection('/repo/web');
+    s.setLogsVisibility((current) => ({ ...current, showTimestamps: false }));
+    s.setLogsGlobalFilter(spec);
+    s.setLogsPaneWrap(() => ({ '/repo/api': true, '/repo/web': true }));
+    s.setLogsPaneFilterEngaged(() => ({ '/repo/api': false }));
+    s.setLogsPaneFilters(() => ({ '/repo/api': spec, '/repo/web': spec }));
+    return store;
+  }
+
+  it('deselecting a service drops its own settings but keeps the global ones and other services', () => {
+    const store = seed();
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    const state = store.getState();
+    expect(state.logsPaneWrap).toEqual({ '/repo/web': true });
+    expect(state.logsPaneFilterEngaged).toEqual({});
+    expect(state.logsPaneFilters).toEqual({ '/repo/web': spec });
+    expect(state.logsVisibility.showTimestamps).toBe(false);
+    expect(state.logsGlobalFilter).toEqual(spec);
+  });
+
+  it('deselect-all and select-all drop the settings of every service that leaves the selection', () => {
+    const store = seed();
+    store.getState().selectAllLogsEdtServices(['/repo/web']);
+    expect(Object.keys(store.getState().logsPaneFilters)).toEqual(['/repo/web']);
+    store.getState().deselectAllLogsEdtServices();
+    expect(store.getState().logsPaneFilters).toEqual({});
+    expect(store.getState().logsPaneWrap).toEqual({});
+    expect(store.getState().logsVisibility.showTimestamps).toBe(false);
+  });
+
+  it('closing an ad hoc fullscreen preview of an unselected service drops its settings', () => {
+    const store = seed();
+    store.getState().setLogsPaneWrap((current) => ({ ...current, '/repo/lib': true }));
+    store.getState().openLogsFullscreen('/repo/lib', 'lib');
+    store.getState().closeLogsFullscreen();
+    expect(store.getState().logsPaneWrap['/repo/lib']).toBeUndefined();
+    store.getState().openLogsFullscreen('/repo/web', 'web');
+    store.getState().closeLogsFullscreen();
+    expect(store.getState().logsPaneWrap['/repo/web']).toBe(true);
   });
 });

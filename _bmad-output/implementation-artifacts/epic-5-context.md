@@ -13,6 +13,7 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 - Story 5.3: Inline Service Health & Restart Control
 - Story 5.4: Filter History Recall
 - Story 5.5: Bound List & Filter-Editor Height to the Terminal Window
+- Story 5.6: Command History Recall & Shared Input-History Primitive
 
 ## Requirements & Constraints
 
@@ -32,6 +33,8 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 - The `command-grid` component (column-major, arrow-navigable, from the `:` command bar) is reused as the history grid browser as a second independent instance.
 - The `bounded-list` scrollable-window primitive (5.5) is extracted from `keybinding-help.tsx` (`resolveHelpWindow`/`clampHelpOffset`) into `tui/shared/` and reused by Logs and EDTs zones.
 
+- Input-history mechanics (push/dedup/trim, arrow-browse state machine, snap-back-to-draft, persisted store: hydrate-once, version guard, serialized save chain, await-in-flight-load) live once in `tui/shared/input-history/` and a generic persisted-history store factory (5.6), consumed by both the Logs filter editor and the `:` command bar; `StatePort` gains command-history read/write; shared `MIN/MAX_INPUT_HISTORY_SIZE` (1..200).
+
 ## UX & Interaction Patterns
 
 - Logs zone follows the standard list/detail split with splitter (~2:3); list rows show service identity plus inline health badge using the closed status-badge glyph+color vocabulary, never color alone.
@@ -39,8 +42,10 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 - History recall: `↑` from a draft recalls most-recent for that scope+mode with draft preservation; `↑` walks older (no-op at oldest); `↓` walks back, restoring the draft past the most recent; typing while browsing snaps back to the draft with the keystroke applied; `↓` from a fresh draft opens the grid browser.
 - Health badge updates on restart completion, glyph+color paired per the status-badge rule.
 
+- Command bar (5.6): same arrow-recall semantics as 5.4, but `↓` from a fresh draft keeps its autocomplete-grid behavior (no history grid); only exact recognized commands are recorded; `:settings` Command Palette tab gains a row cursor, history size/dedup settings and a clear action.
+
 ## Cross-Story Dependencies
 
 - Depends on Epic 1 (hexagonal core, CLI parity, manifest) and Epic 2 (active EDT + member-service list) for the scope of the stream and per-service health.
-- Story 5.2 builds on 5.1's stream and pane scoping; 5.3 is independent of 5.2/5.4 mechanics but shares 5.1's stream and scoping; 5.4 builds on 5.2's editor plus Story 2.17 grid primitives and Story 2.19 settings-tab precedent without reopening 5.2; 5.5 fixes a rendering defect found during 5.4 review and reuses its hint-panel fix.
+- Story 5.2 builds on 5.1's stream and pane scoping; 5.3 is independent of 5.2/5.4 mechanics but shares 5.1's stream and scoping; 5.4 builds on 5.2's editor plus Story 2.17 grid primitives and Story 2.19 settings-tab precedent without reopening 5.2; 5.5 fixes a rendering defect found during 5.4 review and reuses its hint-panel fix; 5.6 extracts 5.4's history logic behavior-preservingly (5.4 tests must pass unchanged) and coordinates with Story 2.32 (TextInputLine in the command bar: cursor at end-of-value on recall).
 - Epic 6 will later depend on Epic 5's buffer for request-log correlation; buffer sizing already anticipates this.

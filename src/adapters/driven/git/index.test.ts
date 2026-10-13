@@ -30,6 +30,8 @@ import {
   discardPaths,
   discardPathsToHead,
   fetchBranch,
+  fetchRemoteBranch,
+  listUnpushedCommits,
   finalizeMerge,
   hasStash,
   hasUncommittedChanges,
@@ -47,6 +49,10 @@ import {
   stagePaths,
   commitPaths,
   stashSave,
+  listUnmergedPaths,
+  readWorktreeFile,
+  writeResolvedFile,
+  checkoutSide,
 } from './index.js';
 
 const tmpDirs: string[] = [];
@@ -1189,6 +1195,41 @@ describe('fetchBranch', () => {
   });
 });
 
+describe('fetchBranch with unpushed local commits', () => {
+  it('is rejected on a diverged branch, while fetchRemoteBranch succeeds and listUnpushedCommits names the local-only commits', async () => {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    const commitOn = (dir: string, branch: string, message: string): void => {
+      const tip = runGit(dir, ['commit-tree', `${branch}^{tree}`, '-p', branch, '-m', message]).stdout.trim();
+      expect(runGit(dir, ['update-ref', `refs/heads/${branch}`, tip]).status).toBe(0);
+    };
+    expect(runGit(clone, ['branch', 'feat/remote-only', 'origin/feat/remote-only']).status).toBe(0);
+    commitOn(origin, 'feat/remote-only', 'remote only');
+    commitOn(clone, 'feat/remote-only', 'local only');
+
+    expect(await fetchBranch(clone, 'feat/remote-only')).toMatchObject({ ok: false, error: { code: 'git-fetch-error' } });
+    expect(await fetchRemoteBranch(clone, 'feat/remote-only')).toEqual({ ok: true, data: undefined });
+
+    const listed = await listUnpushedCommits(clone, 'feat/remote-only');
+    expect(listed.ok && listed.data).toHaveLength(1);
+    expect(listed.ok && listed.data[0]).toMatch(/^[0-9a-f]+ local only$/);
+  });
+
+  it('lists nothing when the local branch has no commits origin lacks', async () => {
+    const { clone } = await makeGitRepoOriginAndClone();
+
+    expect(await listUnpushedCommits(clone, 'development')).toEqual({ ok: true, data: [] });
+  });
+
+  it('reports a controlled error when the remote-tracking ref is unknown', async () => {
+    const repo = await makeGitRepo();
+
+    expect(await listUnpushedCommits(repo, 'development')).toMatchObject({
+      ok: false,
+      error: { code: 'git-unpushed-commits-error' },
+    });
+  });
+});
+
 // Plain `git pull` on the current branch, only for a member already sitting on its shared
 // branch.
 describe('pullBranch', () => {
@@ -2025,5 +2066,88 @@ describe('stagePaths and commitPaths', () => {
     expect(runGit(repo, ['checkout', '-b', 'feat/x']).status).toBe(0);
 
     expect(await commitPaths(manifest, repo, 'msg', ['.tui-back.yaml'])).toMatchObject({ ok: false, error: { code: 'git-commit-error' } });
+  });
+});
+
+// Conflict primitives backing the shared-types conflict auto-resolver.
+describe('conflict primitives', () => {
+  async function conflictedRepo(): Promise<string> {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'conflict.txt'), 'base\n');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'base file']).status).toBe(0);
+    expect(runGit(repo, ['checkout', '-b', 'feat/member']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'member side\n');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'member change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'development']).status).toBe(0);
+    await writeFile(join(repo, 'conflict.txt'), 'shared side\n');
+    runGit(repo, ['add', 'conflict.txt']);
+    expect(runGit(repo, ['commit', '-m', 'shared change']).status).toBe(0);
+    expect(runGit(repo, ['checkout', 'feat/member']).status).toBe(0);
+    expect((await mergeBranch(repo, 'development')).ok).toBe(false);
+    return repo;
+  }
+
+  it('lists the unmerged paths, none on a clean repo', async () => {
+    expect(await listUnmergedPaths(await makeCleanGitRepo())).toEqual({ ok: true, data: [] });
+    const repo = await conflictedRepo();
+
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+  });
+
+  it('reads a worktree file with its conflict markers, and refuses a path outside the repo', async () => {
+    const repo = await conflictedRepo();
+
+    const read = await readWorktreeFile(repo, 'conflict.txt');
+    expect(read.ok && read.data).toContain('<<<<<<<');
+    expect((await readWorktreeFile(repo, 'missing.txt')).ok).toBe(false);
+    expect(await readWorktreeFile(repo, '../escape.txt')).toMatchObject({ ok: false, error: { code: 'git-read-error' } });
+  });
+
+  it('writes a resolved file and stages it only on request', async () => {
+    const repo = await conflictedRepo();
+
+    expect(await writeResolvedFile(manifest, repo, 'conflict.txt', 'merged\n', { stage: false })).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'conflict.txt'), 'utf8')).toBe('merged\n');
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+
+    expect(await writeResolvedFile(manifest, repo, 'conflict.txt', 'merged\n', { stage: true })).toEqual({ ok: true, data: undefined });
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: [] });
+  });
+
+  it('takes the current branch side of a conflicted path without staging it', async () => {
+    const repo = await conflictedRepo();
+
+    expect(await checkoutSide(manifest, repo, 'conflict.txt', 'ours')).toEqual({ ok: true, data: undefined });
+    expect(await readFile(join(repo, 'conflict.txt'), 'utf8')).toBe('member side\n');
+    expect(await listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+  });
+
+  it('gates both writes on the current branch: a protected branch is refused before anything is written', async () => {
+    const repo = await makeCleanGitRepo();
+    await writeFile(join(repo, 'f.txt'), 'x');
+
+    expect(await writeResolvedFile(manifest, repo, 'f.txt', 'changed', { stage: true })).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    expect(await readFile(join(repo, 'f.txt'), 'utf8')).toBe('x');
+    expect(await checkoutSide(manifest, repo, 'f.txt', 'ours')).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+  });
+
+  it('refuses to write outside the repo and writes nothing', async () => {
+    const repo = await conflictedRepo();
+    const escaped = join(repo, '..', 'escape.txt');
+
+    expect(await writeResolvedFile(manifest, repo, '../escape.txt', 'x', { stage: false })).toMatchObject({ ok: false, error: { code: 'git-write-error' } });
+    expect(existsSync(escaped)).toBe(false);
+  });
+
+  it('wires the primitives behind the factory', async () => {
+    const repo = await conflictedRepo();
+    const port = createGitPort(manifest);
+
+    expect(await port.listUnmergedPaths(repo)).toEqual({ ok: true, data: ['conflict.txt'] });
+    expect((await port.readWorktreeFile(repo, 'conflict.txt')).ok).toBe(true);
+    expect((await port.checkoutSide(repo, 'conflict.txt', 'ours')).ok).toBe(true);
+    expect((await port.writeResolvedFile(repo, 'conflict.txt', 'merged\n', { stage: true })).ok).toBe(true);
   });
 });

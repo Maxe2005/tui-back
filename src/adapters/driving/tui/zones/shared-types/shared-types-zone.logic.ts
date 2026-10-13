@@ -108,9 +108,41 @@ export function reduceForm(state: FormState, input: string, key: FormKey, repoPa
   return { state, run: false };
 }
 
-// `q` mid-run asks for confirmation instead of quitting.
-export function shouldConfirmQuit(input: string, runStatus: string): boolean {
-  return input === 'q' && runStatus === 'running';
+// `q` mid-run asks for confirmation instead of quitting (propagation or publish).
+export function shouldConfirmQuit(input: string, runStatus: string, publishStatus?: string): boolean {
+  return input === 'q' && (runStatus === 'running' || publishStatus === 'running');
+}
+
+export function isPublishRunning(publishStatus: string): boolean {
+  return publishStatus === 'running';
+}
+
+// Publish entry: `p` starts a publish when exactly one source is loaded and nothing runs.
+export function shouldStartPublish(input: string, publishStatus: string, sourceCount: number, sourcesStatus?: string): boolean {
+  if (sourcesStatus !== undefined) {
+    return (input === 'p' || input === 'P') && publishStatus === 'idle' && sourceCount === 1 && sourcesStatus === 'ready';
+  }
+  return (input === 'p' || input === 'P') && publishStatus === 'idle' && sourceCount === 1;
+}
+
+export function resolvePublishBlockedKey(input: string, key: { return?: boolean; escape?: boolean }): 'relaunch' | 'back' | null {
+  if (input === 'r' || input === 'R' || key.return === true) {
+    return 'relaunch';
+  }
+  if (key.escape === true) {
+    return 'back';
+  }
+  return null;
+}
+
+export function resolvePublishDoneKey(input: string, key: { return?: boolean; escape?: boolean }): 'chain' | 'stop' | null {
+  if (input === 'c' || input === 'C' || key.return === true) {
+    return 'chain';
+  }
+  if (key.escape === true || input === 'n' || input === 'N') {
+    return 'stop';
+  }
+  return null;
 }
 
 export function resolveQuitDecision(input: string, key: { return?: boolean; escape?: boolean }): 'confirm' | 'cancel' | null {

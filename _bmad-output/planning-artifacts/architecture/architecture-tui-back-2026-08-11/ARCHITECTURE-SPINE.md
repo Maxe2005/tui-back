@@ -243,3 +243,15 @@ graph LR
 - **Rule:** the available width/height flows top-down (shell → zone body → `ZoneLayout` pane → component) through one shared bounds mechanism derived from `useWindowSize()`; no component sizes itself from its content alone. Dynamic text renders through shared truncating/clamped primitives, messages are normalized before display, growing collections render through the shared scroll region and are capped in memory, `ModalDialog` is always bounded to the window, and a below-minimum terminal shows an explicit "too small" screen. Pane minimums are absolute (rows/columns), not ratios only. Clipping (`overflow="hidden"`) is a safety net, never the layout strategy.
 - **Rationale:** Ink lays out unbounded content past the terminal height; the root `overflow="hidden"` then clips whatever falls off the bottom, so a single multi-line error or a squeezed pane makes lines vanish. Fixing zones one by one (Story 5.5) did not stop the class of defect from returning in each new surface; only a contract plus a size-matrix test and a static guard does.
 
+### AD-20 — Bounded parallel run & incident queue (added 2026-10-08)
+
+- **Binds:** FR-10, FR-11, Stories 3.18, 4.4
+- **Prevents:** one slow or blocked service holding the rest of a run; unbounded Docker/CPU fan-out; two workers touching one working tree; a single global blocker slot hiding concurrent problems.
+- **Rule:** `core/scripts/group-update.ts` drives targets through a bounded worker pool (`update.concurrency`, default 3). Workers are isolated (a throw becomes that service's `failed` row), serialised per resolved repoPath, and report through the existing `onUpdatePhase` / `onServiceResult` / `onUpdateBlocker` seams. `onUpdateBlocker` may be invoked concurrently: the driving adapter owns the queue (one pending promise per incident). Core never knows about the queue, popups or ordering of resolution. An optional stage list lets a caller run a first stage alone (Story 4.4's `shared-types`) before the parallel stage. Cancel-run is cooperative: checked between steps, never by killing a subprocess.
+### AD-21 — Service action registry (added 2026-10-12)
+
+- **Binds:** FR-35, Stories 7.12, 5.7, 7.5
+- **Prevents:** Logs and Dashboard each re-implementing restart / open-in-IDE with diverging behaviour; `child_process` leaking into the TUI layer.
+- **Rule:** per-service actions (`openInIde`, `restart(simple|clean)`, future ones) are declared once in `core/` with availability rules (container-less, no clean-restart recipe, held lock) and consumed by any driving adapter. Editor launching sits behind a port. `GitPort` also gains read-only, streaming, cancellable history capabilities (`listVersionBumpCommits`, `listBranchesContaining`) for Story 4.6 (AD-16 extension).
+- **Settings:** new `sharedTypes` group (`historyDepth`, `maxCommitsScanned`, option defaults), `logs.restartMode`, Update global defaults — every zod default equals today's behaviour.
+

@@ -19,9 +19,12 @@ import {
   STEP_LABELS,
   initialFormState,
   reduceForm,
+  resolvePublishBlockedKey,
+  resolvePublishDoneKey,
   resolveQuitDecision,
   selectedRepoPaths,
   shouldConfirmQuit,
+  shouldStartPublish,
   summarizeResult,
   type FormState,
 } from './shared-types-zone.logic.js';
@@ -32,7 +35,10 @@ const [SOURCE_MODULE_ID] = SHARED_TYPES_MODULE_IDS;
 
 export const SHARED_TYPES_QUIT_TITLE = 'QUIT MID-RUN';
 export const SHARED_TYPES_QUIT_BODY = 'A version propagation is in progress. Quit anyway? Services already processed stay as they are.';
+export const SHARED_TYPES_PUBLISH_QUIT_BODY = 'A version publish is in progress. Quit anyway?';
 export const SHARED_TYPES_NO_MEMBERS = 'No service of the active EDT consumes the shared dependency — nothing to propagate.';
+export const SHARED_TYPES_PUBLISH_TITLE = 'PUBLISH';
+export const SHARED_TYPES_CHAIN_HINT = 'C chain into propagation with this version, Esc stop';
 
 // Rows the form/run views use around their windowed consumer list: title, version row, two
 // section headers, the option rows, the issue lines, the run notice and hint.
@@ -74,6 +80,14 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   const runPropagation = useStore((state) => state.runSharedTypesPropagation);
   const retryService = useStore((state) => state.retrySharedTypesService);
   const resetRun = useStore((state) => state.resetSharedTypesRun);
+  const sources = useStore((state) => state.sharedTypesSources);
+  const sourcesStatus = useStore((state) => state.sharedTypesSourcesStatus);
+  const sourcesError = useStore((state) => state.sharedTypesSourcesError);
+  const publish = useStore((state) => state.sharedTypesPublish);
+  const loadSource = useStore((state) => state.loadSharedTypesSource);
+  const runPublish = useStore((state) => state.runSharedTypesPublish);
+  const retryPublish = useStore((state) => state.retrySharedTypesPublish);
+  const resetPublish = useStore((state) => state.resetSharedTypesPublish);
   const requestQuit = useStore((state) => state.requestQuit);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const activeEdt = useStore((state) => state.activeEdt);
@@ -85,6 +99,9 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   useEffect(() => {
     void loadConsumers();
   }, [loadConsumers, activeEdt]);
+  useEffect(() => {
+    void loadSource();
+  }, [loadSource, activeEdt]);
 
   const repoPaths = consumers.map((consumer) => consumer.repoPath);
   const repoPathsKey = repoPaths.join('\n');
@@ -107,21 +124,27 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     'shared-types',
     quitConfirm
       ? 'confirm'
-      : run.status === 'running'
+      : run.status === 'running' || publish.status === 'running'
         ? 'busy'
-        : run.status === 'done'
-          ? 'shared-types-results'
-          : run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0
-            ? onVersionField
-              ? 'shared-types-version'
-              : onVersionRow
-                ? 'shared-types-version-row'
-                : 'shared-types-form'
-            : null,
+        : publish.status === 'blocked'
+          ? 'shared-types-publish-failed'
+          : publish.status === 'done'
+            ? 'shared-types-publish-done'
+            : run.status === 'done'
+              ? 'shared-types-results'
+              : run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0
+                ? onVersionField
+                  ? 'shared-types-version'
+                  : onVersionRow
+                    ? 'shared-types-version-row'
+                    : 'shared-types-form'
+                : null,
     useStore,
   );
 
+  const publishQuitBody = publish.status === 'running' ? SHARED_TYPES_PUBLISH_QUIT_BODY : SHARED_TYPES_QUIT_BODY;
   const zoneInputActive = useZoneInputActive(useStore);
+
   useInput((input, key) => {
     if (quitConfirm) {
       const decision = resolveQuitDecision(input, key);
@@ -133,11 +156,31 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       }
       return;
     }
-    if (shouldConfirmQuit(input, run.status)) {
+    if (shouldConfirmQuit(input, run.status, publish.status)) {
       setQuitConfirm(true);
       return;
     }
-    if (run.status === 'running') {
+    if (publish.status === 'running' || run.status === 'running') {
+      return;
+    }
+    if (publish.status === 'blocked' && !form.editing) {
+      const decision = resolvePublishBlockedKey(input, key);
+      if (decision === 'relaunch') {
+        void retryPublish();
+      } else if (decision === 'back') {
+        resetPublish();
+      }
+      return;
+    }
+    if (publish.status === 'done' && publish.version !== null && !form.editing) {
+      const decision = resolvePublishDoneKey(input, key);
+      if (decision === 'chain') {
+        const version = publish.version;
+        resetPublish();
+        setForm((previous) => ({ ...previous, version: { value: version, cursor: version.length }, row: 0, editing: false }));
+      } else if (decision === 'stop') {
+        resetPublish();
+      }
       return;
     }
     if (run.status === 'blocked') {
@@ -159,8 +202,19 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       }
       return;
     }
+    if (sourcesStatus === 'error' && (input === 'R' || input === 'r')) {
+      void loadSource();
+      if (consumersStatus === 'error') {
+        void loadConsumers();
+      }
+      return;
+    }
     if (consumersStatus === 'error' && (input === 'R' || input === 'r')) {
       void loadConsumers();
+      return;
+    }
+    if (!form.editing && run.status === 'idle' && shouldStartPublish(input, publish.status, sources.length, sourcesStatus)) {
+      void runPublish();
       return;
     }
     if (consumersStatus !== 'ready' || consumers.length === 0) {
@@ -181,13 +235,79 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
       <Text color={colors['text-dim']}>SHARED TYPES</Text>
+      {renderPublish()}
       {renderBody()}
       <ModalDialog title={SHARED_TYPES_QUIT_TITLE} open={quitConfirm}>
-        <ClampedParagraph color={colors.text} maxLines={MAX_CLAMPED_LINES}>{SHARED_TYPES_QUIT_BODY}</ClampedParagraph>
+        <ClampedParagraph color={colors.text} maxLines={MAX_CLAMPED_LINES}>{publishQuitBody}</ClampedParagraph>
         <Text color={colors['text-dim']} wrap="truncate-end">Enter quit, Esc keep running</Text>
       </ModalDialog>
     </Box>
   );
+
+  function renderPublish() {
+    if (sourcesStatus === 'loading') {
+      return <StateLine kind="loading" subject="source repo" />;
+    }
+    if (sourcesStatus === 'error') {
+      return (
+        <Box flexDirection="column">
+          <ClampedParagraph color={colors.error} maxLines={MAX_CLAMPED_LINES}>
+            {sourcesError !== null ? `[${sourcesError.code}] ${sourcesError.message}` : 'Source repo unavailable.'}
+          </ClampedParagraph>
+          <Text color={colors['text-dim']} wrap="truncate-end">R reload</Text>
+        </Box>
+      );
+    }
+    if (sourcesStatus !== 'ready' || sources.length !== 1) {
+      if (publish.notice) {
+        return (
+          <Box flexDirection="column">
+            <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph>
+          </Box>
+        );
+      }
+      return null;
+    }
+    const source = sources[0]!;
+    if (publish.status === 'running') {
+      return (
+        <Box flexDirection="column">
+          <Box>
+            <Spinner />
+            <TruncatedText color={colors.text}>{` Publishing ${source.service}…`}</TruncatedText>
+          </Box>
+        </Box>
+      );
+    }
+    if (publish.status === 'blocked' && publish.error !== null) {
+      return (
+        <Box flexDirection="column">
+          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
+          <ClampedParagraph color={colors.error} maxLines={MAX_CLAMPED_LINES}>{`Publish failed [${publish.error.code}]: ${publish.error.message}`}</ClampedParagraph>
+          {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
+          {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
+          <Text color={colors['text-dim']} wrap="truncate-end">R relaunch the whole command, Esc back</Text>
+        </Box>
+      );
+    }
+    if (publish.status === 'done' && publish.version !== null) {
+      return (
+        <Box flexDirection="column">
+          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
+          <TruncatedText color={colors.success}>{`Published ${publish.version}`}</TruncatedText>
+          {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
+          {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
+          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_CHAIN_HINT}</Text>
+        </Box>
+      );
+    }
+    return (
+      <Box flexDirection="column">
+        <Text color={colors['text-dim']} wrap="truncate-end">{`${SHARED_TYPES_PUBLISH_TITLE}: ${source.service} (P publish)`}</Text>
+        {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
+      </Box>
+    );
+  }
 
   function renderBody() {
     if (run.status === 'blocked' && run.blocked !== null) {
@@ -261,6 +381,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
           );
         })}
         {renderIssues()}
+        {run.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{run.notice}</ClampedParagraph> : null}
       </Box>
     );
   }

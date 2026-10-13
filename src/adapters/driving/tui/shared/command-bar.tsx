@@ -6,6 +6,12 @@
 import { useState } from 'react';
 import { Box, Text, type Key } from 'ink';
 import { useInput } from './hooks/use-input.js';
+import {
+  resolveHistoryBrowseDown,
+  resolveHistoryBrowseUp,
+  resolveSnapBackBase,
+  type HistoryBrowseState,
+} from './input-history/index.js';
 import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
@@ -393,7 +399,13 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   const bounds = useBounds();
   const gridMaxRows = Math.max(1, Math.min(configuredGridMaxRows, bounds.rows - 9));
   useFooterContext('command-bar', 'command', useStore);
+  // The persisted recall list, most recent first.
+  const commandHistory = useStore((state) => state.commandHistory);
+  const commitCommandHistoryEntry = useStore((state) => state.commitCommandHistoryEntry);
   const [query, setQuery] = useState('');
+  // Non-null while ↑/↓ are recalling history — `query` then shows the recalled entry and
+  // `browsing.savedDraft` holds the draft to restore (the shared input-history primitive).
+  const [browsing, setBrowsing] = useState<HistoryBrowseState | null>(null);
   const [unknownCommand, setUnknownCommand] = useState(false);
   const [pending, setPending] = useState<TabPressState | null>(null);
   // Whether the grid has been revealed at all this session (Tab on empty input, or a resolved
@@ -506,7 +518,10 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     }
 
     if (key.return) {
+      // Runs the displayed query — a recalled command runs as shown. Only a recognized command
+      // is recorded, so an unknown one never enters the history.
       if (runCommand(useStore, query)) {
+        commitCommandHistoryEntry(query.trim());
         onClose();
       } else {
         setUnknownCommand(true);
@@ -515,6 +530,9 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     }
 
     if (key.tab) {
+      // Tab adopts a recalled entry as the new draft (browsing ends) and then behaves as usual
+      // on that text.
+      setBrowsing(null);
       if (query === '') {
         // Nothing to complete — reveal the full grid immediately, no double-press needed.
         openGridAtOrigin();
@@ -536,7 +554,22 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
       return;
     }
 
+    if (key.upArrow) {
+      const result = resolveHistoryBrowseUp(query, browsing, commandHistory);
+      setQuery(result.query);
+      setBrowsing(result.browsing);
+      setUnknownCommand(false);
+      return;
+    }
+
     if (key.downArrow) {
+      if (browsing !== null) {
+        const result = resolveHistoryBrowseDown(browsing, commandHistory);
+        setQuery(result.query);
+        setBrowsing(result.browsing);
+        setUnknownCommand(false);
+        return;
+      }
       if (gridVisible) {
         setFocus('grid');
         setGridCursor({ column: 0, row: 0 });
@@ -545,15 +578,21 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
       return;
     }
 
+    // Backspace / a printable character while browsing snap back to the draft with the
+    // keystroke applied on top of it, rather than editing the recalled entry in place.
+    const { base } = resolveSnapBackBase(query, query.length, browsing);
+
     if (key.backspace || key.delete) {
-      setQuery((current) => backspaceCommandQuery(current));
+      setQuery(backspaceCommandQuery(base));
+      setBrowsing(null);
       setUnknownCommand(false);
       return;
     }
 
-    const nextQuery = typeCommandQueryChar(query, input, key);
-    if (nextQuery !== query) {
+    const nextQuery = typeCommandQueryChar(base, input, key);
+    if (nextQuery !== base) {
       setQuery(nextQuery);
+      setBrowsing(null);
       setUnknownCommand(false);
     }
   });

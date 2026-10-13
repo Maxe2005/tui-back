@@ -1,7 +1,8 @@
-// tui/store/slices: the shared-types zone's state — the active EDT's consuming services and the
-// state of one propagation run (blocked / per-service results / live step). The zone's form
-// state (version text, checklist, toggles) stays zone-local. The use-cases run in-process over
-// the injected ports; with `sharedTypes` unwired every action degrades to an explicit error.
+// tui/store/slices: the shared-types zone's state — the active EDT's consuming services,
+// the source repo for publishing, and the states of one propagation run and one publish
+// run. The zone's form state stays zone-local. Use-cases run in-process over injected
+// ports; with `sharedTypes` unwired every action degrades to an explicit error.
+import { join } from 'node:path';
 import type { StateCreator } from 'zustand';
 import {
   isResumable,
@@ -11,11 +12,14 @@ import {
   type PropagateStep,
   type ResumeFrom,
 } from '../../../../../core/shared-types/propagate-version.js';
-import { listConsumers, type ConsumerIssue, type DependencyConsumer } from '../../../../../core/shared-types/list-consumers.js';
+import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../core/shared-types/list-consumers.js';
+import { runPublish } from '../../../../../core/shared-types/publish-version.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 export type SharedTypesConsumersStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type SharedTypesRunStatus = 'idle' | 'running' | 'done' | 'blocked';
+export type SharedTypesPublishStatus = 'idle' | 'running' | 'done' | 'blocked';
+export type SharedTypesSourceStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export type SharedTypesRun = {
   status: SharedTypesRunStatus;
@@ -23,10 +27,16 @@ export type SharedTypesRun = {
   options: PropagateOptions;
   blocked: { code: string; message: string } | null;
   results: PropagateServiceResult[];
-  // The service and step currently executing while status is `running`.
   live: { repoPath: string; step: PropagateStep } | null;
-  // A retry that could not run (blocked, unwired): the previous results stay and this says why.
   notice?: string | null;
+};
+
+export type SharedTypesPublish = {
+  status: SharedTypesPublishStatus;
+  version: string | null;
+  output: string | null;
+  error: { code: string; message: string } | null;
+  notice: string | null;
 };
 
 export type SharedTypesSlice = {
@@ -35,10 +45,19 @@ export type SharedTypesSlice = {
   sharedTypesConsumersStatus: SharedTypesConsumersStatus;
   sharedTypesConsumersError: { code: string; message: string } | null;
   sharedTypesRun: SharedTypesRun;
+  sharedTypesSources: SourceEntry[];
+  sharedTypesSourceIssues: SourceIssue[];
+  sharedTypesSourcesStatus: SharedTypesSourceStatus;
+  sharedTypesSourcesError: { code: string; message: string } | null;
+  sharedTypesPublish: SharedTypesPublish;
   loadSharedTypesConsumers: () => Promise<void>;
   runSharedTypesPropagation: (input: { version: string; repoPaths: string[]; options: PropagateOptions }) => Promise<void>;
   retrySharedTypesService: (repoPath: string) => Promise<void>;
   resetSharedTypesRun: () => void;
+  loadSharedTypesSource: () => Promise<void>;
+  runSharedTypesPublish: () => Promise<void>;
+  retrySharedTypesPublish: () => Promise<void>;
+  resetSharedTypesPublish: () => void;
 };
 
 const IDLE_OPTIONS: PropagateOptions = { install: false, cleanRestart: false, commit: false };
@@ -53,6 +72,83 @@ const IDLE_RUN: SharedTypesRun = {
   notice: null,
 };
 
+const IDLE_PUBLISH: SharedTypesPublish = {
+  status: 'idle',
+  version: null,
+  output: null,
+  error: null,
+  notice: null,
+};
+
+const RUN_IN_PROGRESS_MESSAGE = 'Another run is already in progress — wait for it to finish before starting another.';
+
+// Best effort: dependency name → registry of the EDT's source modules. A failure here
+// leaves the map empty (npm's own configuration then applies) and never blocks a run.
+export async function resolveSourceRegistries(deps: AppStoreDeps | undefined): Promise<Record<string, string>> {
+  if (deps?.sharedTypes?.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
+    return {};
+  }
+  try {
+    const listed = await listSources({
+      edtRegistry: deps.edtRegistry,
+      manifest: deps.manifest,
+      state: deps.state,
+      moduleId: deps.sharedTypes.sourceModuleId,
+      parseConfig: deps.sharedTypes.parseSourceConfig,
+    });
+    const registries: Record<string, string> = {};
+    if (listed.ok) {
+      for (const source of listed.data.sources) {
+        if (source.registry !== undefined && registries[source.packageName] === undefined) {
+          registries[source.packageName] = source.registry;
+        }
+      }
+    }
+    return registries;
+  } catch {
+    return {};
+  }
+}
+
+
+export async function resolveSingleSourceOf(deps: AppStoreDeps | undefined): Promise<
+  | { ok: true; source: SourceEntry }
+  | { ok: false; kind: 'empty' | 'ambiguous' | 'error'; code?: string; message?: string }
+> {
+  if (deps?.sharedTypes === undefined || deps.sharedTypes.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
+    return { ok: false, kind: 'error', code: 'not-wired', message: 'Version publishing is not available in this session.' };
+  }
+  let listed: Awaited<ReturnType<typeof listSources>>;
+  try {
+    listed = await listSources({
+      edtRegistry: deps.edtRegistry,
+      manifest: deps.manifest,
+      state: deps.state,
+      moduleId: deps.sharedTypes.sourceModuleId,
+      parseConfig: deps.sharedTypes.parseSourceConfig,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, kind: 'error', code: 'internal-error', message };
+  }
+  if (!listed.ok) {
+    return { ok: false, kind: 'error', code: listed.error.code, message: listed.error.message };
+  }
+  if (listed.data.sources.length > 1) {
+    const names = listed.data.sources.map((entry) => entry.service).join(', ');
+    return { ok: false, kind: 'ambiguous', code: 'ambiguous-source', message: `Several source repos in the active EDT (${names}) — publish is blocked.` };
+  }
+  if (listed.data.sources.length === 0) {
+    const first = listed.data.issues[0];
+    if (first !== undefined) {
+      return { ok: false, kind: 'error', code: first.code, message: first.message };
+    }
+    return { ok: false, kind: 'empty' };
+  }
+  return { ok: true, source: listed.data.sources[0] as SourceEntry };
+}
+
+
 export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], SharedTypesSlice> {
   return (set, get) => {
     async function execute(
@@ -63,7 +159,6 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
       merge: (fresh: PropagateServiceResult[]) => PropagateServiceResult[],
       isRetry = false,
     ): Promise<void> {
-      // A retry that cannot run keeps the previous results and shows why, instead of wiping them.
       const keepResults = (message: string) =>
         set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, status: 'done', blocked: null, live: null, notice: message } }));
       if (deps?.sharedTypes === undefined || deps.container === undefined || deps.restart === undefined) {
@@ -83,6 +178,11 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
         return;
       }
       if (get().runInProgress) {
+        if (isRetry) {
+          keepResults(RUN_IN_PROGRESS_MESSAGE);
+        } else {
+          set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, notice: RUN_IN_PROGRESS_MESSAGE } }));
+        }
         return;
       }
       set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, status: 'running', version, options, blocked: null, live: null, notice: null } }));
@@ -96,6 +196,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
           shared: deps.sharedTypes.port,
           version,
           consumers,
+          registries: await sourceRegistries(),
           options,
           resume,
           onProgress: (event) => set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, live: { repoPath: event.repoPath, step: event.step } } })),
@@ -123,14 +224,57 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
       }
     }
 
+    const sourceRegistries = () => resolveSourceRegistries(deps);
+    const resolveSingleSource = () => resolveSingleSourceOf(deps);
+
+    // Runs the publish command once for the resolved source. The caller holds the
+    // `runInProgress` guard and has already set the running state; this only lands
+    // the done/blocked outcome and never touches the guard.
+    async function executePublish(source: SourceEntry): Promise<void> {
+      if (deps?.sharedTypes === undefined || deps.restart === undefined) {
+        set((state) => ({
+          sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'not-wired', message: 'Version publishing is not available in this session.' }, notice: null },
+        }));
+        return;
+      }
+      let result: Awaited<ReturnType<typeof runPublish>>;
+      try {
+        result = await runPublish({
+          git: deps.git,
+          restart: deps.restart,
+          shared: deps.sharedTypes.port,
+          sourceRepoPath: source.repoPath,
+          publishCommand: source.publishCommand,
+          packageName: source.packageName,
+          registry: source.registry,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set((state) => ({
+          sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'internal-error', message }, notice: null },
+        }));
+        return;
+      }
+      if (!result.ok) {
+        set({ sharedTypesPublish: { ...IDLE_PUBLISH, status: 'blocked', error: result.error } });
+        return;
+      }
+      set({ sharedTypesPublish: { ...IDLE_PUBLISH, status: 'done', version: result.data.version, output: result.data.output } });
+    }
+
     return {
       sharedTypesConsumers: [],
       sharedTypesIssues: [],
       sharedTypesConsumersStatus: 'idle',
       sharedTypesConsumersError: null,
       sharedTypesRun: IDLE_RUN,
+      sharedTypesSources: [],
+      sharedTypesSourceIssues: [],
+      sharedTypesSourcesStatus: 'idle',
+      sharedTypesSourcesError: null,
+      sharedTypesPublish: IDLE_PUBLISH,
       loadSharedTypesConsumers: async () => {
-        if (deps?.sharedTypes === undefined) {
+        if (deps?.sharedTypes === undefined || deps.sharedTypes.consumerModuleId === undefined || deps.sharedTypes.parseConsumerConfig === undefined) {
           set({
             sharedTypesConsumersStatus: 'error',
             sharedTypesConsumersError: { code: 'not-wired', message: 'Version propagation is not available in this session.' },
@@ -164,6 +308,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
         const previous = sharedTypesRun.results.find((result) => result.repoPath === repoPath);
         const consumer = sharedTypesConsumers.find((candidate) => candidate.repoPath === repoPath);
         if (previous === undefined || consumer === undefined || previous.outcome !== 'failed') {
+          set((state) => ({ sharedTypesRun: { ...state.sharedTypesRun, notice: 'Nothing to retry — pick a failed service first.' } }));
           return;
         }
         const resume: Record<string, ResumeFrom> = isResumable(previous.failedStep) ? { [repoPath]: previous.failedStep } : {};
@@ -177,6 +322,178 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
           return;
         }
         set({ sharedTypesRun: IDLE_RUN });
+      },
+      loadSharedTypesSource: async () => {
+        if (get().sharedTypesPublish.status !== 'running') {
+          set({ sharedTypesPublish: IDLE_PUBLISH });
+        }
+        if (deps?.sharedTypes === undefined || deps.sharedTypes.sourceModuleId === undefined || deps.sharedTypes.parseSourceConfig === undefined) {
+          set({
+            sharedTypesSourcesStatus: 'error',
+            sharedTypesSourcesError: { code: 'not-wired', message: 'Version publishing is not available in this session.' },
+          });
+          return;
+        }
+        set({ sharedTypesSourcesStatus: 'loading', sharedTypesSourcesError: null });
+        let listed: Awaited<ReturnType<typeof listSources>>;
+        try {
+          listed = await listSources({
+            edtRegistry: deps.edtRegistry,
+            manifest: deps.manifest,
+            state: deps.state,
+            moduleId: deps.sharedTypes.sourceModuleId,
+            parseConfig: deps.sharedTypes.parseSourceConfig,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set({ sharedTypesSourcesStatus: 'error', sharedTypesSources: [], sharedTypesSourcesError: { code: 'internal-error', message } });
+          return;
+        }
+        if (!listed.ok) {
+          set({ sharedTypesSourcesStatus: 'error', sharedTypesSources: [], sharedTypesSourcesError: listed.error });
+          return;
+        }
+        if (listed.data.sources.length > 1) {
+          const names = listed.data.sources.map((entry) => entry.service).join(', ');
+          set({
+            sharedTypesSources: listed.data.sources,
+            sharedTypesSourceIssues: listed.data.issues,
+            sharedTypesSourcesStatus: 'error',
+            sharedTypesSourcesError: { code: 'ambiguous-source', message: `Several source repos in the active EDT (${names}) — publish is blocked.` },
+          });
+          return;
+        }
+        if (listed.data.sources.length === 0 && listed.data.issues.length > 0) {
+          const first = listed.data.issues[0] as SourceIssue;
+          set({
+            sharedTypesSources: [],
+            sharedTypesSourceIssues: listed.data.issues,
+            sharedTypesSourcesStatus: 'error',
+            sharedTypesSourcesError: { code: first.code, message: first.message },
+          });
+          return;
+        }
+        set({
+          sharedTypesSources: listed.data.sources,
+          sharedTypesSourceIssues: listed.data.issues,
+          sharedTypesSourcesStatus: 'ready',
+          sharedTypesSourcesError: null,
+        });
+      },
+      runSharedTypesPublish: async () => {
+        if (get().runInProgress || get().sharedTypesPublish.status === 'running') {
+          set((state) => ({ sharedTypesPublish: { ...state.sharedTypesPublish, notice: RUN_IN_PROGRESS_MESSAGE } }));
+          return;
+        }
+        get().setRunInProgress(true);
+        set({ sharedTypesPublish: { ...IDLE_PUBLISH, status: 'running' } });
+        try {
+          const resolved = await resolveSingleSource();
+          if (!resolved.ok && resolved.kind === 'empty') {
+            set((state) => ({ sharedTypesPublish: { ...state.sharedTypesPublish, status: 'idle', error: null, notice: 'No source repo in the active EDT — publish is not offered.' } }));
+            return;
+          }
+          if (!resolved.ok) {
+            set({
+              sharedTypesPublish: { ...IDLE_PUBLISH, status: 'blocked', error: { code: resolved.code ?? 'internal-error', message: resolved.message ?? 'Cannot resolve the source repo.' } },
+            });
+            return;
+          }
+          await executePublish(resolved.source);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set((state) => ({
+            sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'internal-error', message }, notice: null },
+          }));
+        } finally {
+          get().setRunInProgress(false);
+        }
+      },
+      retrySharedTypesPublish: async () => {
+        if (get().runInProgress || get().sharedTypesPublish.status === 'running') {
+          set((state) => ({ sharedTypesPublish: { ...state.sharedTypesPublish, notice: RUN_IN_PROGRESS_MESSAGE } }));
+          return;
+        }
+        if (deps?.sharedTypes === undefined || deps.restart === undefined) {
+          set((state) => ({
+            sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'not-wired', message: 'Version publishing is not available in this session.' }, notice: null },
+          }));
+          return;
+        }
+        get().setRunInProgress(true);
+        try {
+          const resolved = await resolveSingleSource();
+          if (!resolved.ok && resolved.kind === 'empty') {
+            set((state) => ({ sharedTypesPublish: { ...state.sharedTypesPublish, notice: 'No source repo in the active EDT — publish is not offered.' } }));
+            return;
+          }
+          if (!resolved.ok) {
+            set((state) => ({
+              sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: resolved.code ?? 'internal-error', message: resolved.message ?? 'Cannot resolve the source repo.' }, notice: null },
+            }));
+            return;
+          }
+          const source = resolved.source;
+          set((state) => ({ sharedTypesPublish: { ...state.sharedTypesPublish, error: null, notice: null } }));
+          let owned: Awaited<ReturnType<typeof deps.sharedTypes.port.readOwnVersion>>;
+          try {
+            owned = await deps.sharedTypes.port.readOwnVersion(join(source.repoPath, 'package.json'));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            set((state) => ({
+              sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'internal-error', message }, notice: null },
+            }));
+            return;
+          }
+          if (!owned.ok) {
+            set((state) => ({
+              sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: owned.error, notice: null },
+            }));
+            return;
+          }
+          const version = owned.data.trim();
+          if (version === '') {
+            set((state) => ({
+              sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'package-json-unreadable', message: `Cannot read ${join(source.repoPath, 'package.json')}: missing or blank "version" field` }, notice: null },
+            }));
+            return;
+          }
+          let verified: Awaited<ReturnType<typeof deps.sharedTypes.port.verifyPublished>>;
+          try {
+            verified = await deps.sharedTypes.port.verifyPublished(source.packageName, version, source.registry);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            set((state) => ({
+              sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'internal-error', message }, notice: null },
+            }));
+            return;
+          }
+          if (!verified.ok) {
+            set((state) => ({
+              sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: verified.error, notice: null },
+            }));
+            return;
+          }
+          if (verified.data) {
+            set({ sharedTypesPublish: { ...IDLE_PUBLISH, status: 'done', version } });
+            return;
+          }
+          set((state) => ({ sharedTypesPublish: { ...state.sharedTypesPublish, status: 'running' } }));
+          await executePublish(source);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set((state) => ({
+            sharedTypesPublish: { ...state.sharedTypesPublish, status: 'blocked', error: { code: 'internal-error', message }, notice: null },
+          }));
+        } finally {
+          get().setRunInProgress(false);
+        }
+      },
+      resetSharedTypesPublish: () => {
+        if (get().sharedTypesPublish.status === 'running') {
+          return;
+        }
+        set({ sharedTypesPublish: IDLE_PUBLISH });
       },
     };
   };

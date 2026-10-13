@@ -2,7 +2,7 @@
 title: 'Story 7.11: Overlay owns the arrow keys — settings screen & help panel'
 type: 'bugfix'
 created: '2026-10-13'
-status: 'in-review'
+status: 'done'
 baseline_commit: '0c266f90f60bd83980dc6c50260133cf69b518dd'
 review_loop_iteration: 0
 context:
@@ -59,4 +59,4 @@ context:
 
 ## Review Outcome
 
-Pending.
+Three review layers ran (adversarial, edge-case, acceptance). Patched: with help open, AppShell now dispatches `?`/Esc before the zone-captured early return, so a zone dialog that captures input after help opened can no longer soft-lock it (real-keypress test added); the guard test asserts a zone actually registered a handler; stale EDTs gate comments removed. Deferred: `issues-dialog.tsx` has an ungated `useInput` (unreachable behind an overlay today); AppShell still repeats its own overlay-flag list in two blocks; the guard checks `isActive` through the `use-input` wrapper rather than sending arrow keys. Rejected: the acceptance auditor's claim that epics.md lacks Story 7.11 (it ran on a branch base that predated the planning commit; devlopment is now merged in).

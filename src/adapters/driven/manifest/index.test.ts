@@ -543,9 +543,16 @@ describe('loadManifest shared-types module parameters', () => {
     expect(result).toMatchObject({
       ok: true,
       data: {
-        modules: { 'shared-types-source': { publishCommand: 'npm run v', packageName: '@ianord/shared-types' } },
+        modules: { 'shared-types-source': { publishCommand: 'npm run v', packageName: '@ianord/shared-types', registry: 'https://npm.ianord.fr' } },
       },
     });
+  });
+
+  it('loads a custom source registry and rejects a blank one', async () => {
+    const custom = await loadManifest(await tempRepo([...head, '  shared-types-source:', '    registry: https://npm.example'].join('\n')));
+    expect(custom).toMatchObject({ ok: true, data: { modules: { 'shared-types-source': { registry: 'https://npm.example' } } } });
+    const blank = await loadManifest(await tempRepo([...head, '  shared-types-source:', '    registry: ""'].join('\n')));
+    expect(blank).toMatchObject({ ok: false });
   });
 
   it('loads custom consumer parameters as given', async () => {

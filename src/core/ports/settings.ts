@@ -18,6 +18,12 @@ export interface Settings {
   };
   commandPalette: {
     gridMaxRows: number;
+    // How many recognized commands the `:` bar's recall list (StatePort.readCommandHistory)
+    // keeps before trimming the oldest. Same range as logs.filterHistorySize.
+    historySize: number;
+    // Same semantics as logs.filterHistoryDedup: on = a repeated command moves to the front
+    // wherever it was; off = only a repeat of the top entry is deduped.
+    historyDedup: boolean;
   };
   edts: {
     hiddenActionHints: string[];
@@ -32,6 +38,11 @@ export interface Settings {
   // The Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) — how many
   // lines each pane keeps from the live tail before dropping the oldest. Captured once per
   // subscription, so a change here never resizes an already-running stream.
+  // The group update's bounded pool: how many services update at once (default 3, min 1; 1 is the strictly
+  // sequential run). Read when a run starts.
+  update: {
+    concurrency: number;
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -62,11 +73,12 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   // Default true, for anyone who never opens :settings.
   general: { quitShortcutEnabled: true, editorCommand: '' },
-  commandPalette: { gridMaxRows: 8 },
+  commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
   edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
   // filterHistorySize=20 covers a session's worth of committed filters per (scope, mode) list
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
+  update: { concurrency: 3 },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 
@@ -77,6 +89,10 @@ export const DEFAULT_SETTINGS: Settings = {
 export const MIN_GRID_MAX_ROWS = 1;
 export const MAX_GRID_MAX_ROWS = 99;
 
+// update.concurrency's valid range — shared by the zod schema and the settings screen's clamp.
+export const MIN_UPDATE_CONCURRENCY = 1;
+export const MAX_UPDATE_CONCURRENCY = 8;
+
 // logs.bufferSize's valid range — shared by the zod schema (adapters/driven/settings/schema.ts)
 // and the settings screen's own clamp (adapters/driving/tui/shared/settings-screen.tsx), same
 // "single source of truth for both" convention as MIN/MAX_GRID_MAX_ROWS above. 50 is small
@@ -86,12 +102,13 @@ export const MAX_GRID_MAX_ROWS = 99;
 export const MIN_LOG_BUFFER_SIZE = 50;
 export const MAX_LOG_BUFFER_SIZE = 5000;
 
-// logs.filterHistorySize's valid range — same single-source-of-truth convention as
-// MIN/MAX_LOG_BUFFER_SIZE above, shared by the zod schema and the settings screen's own clamp.
-// 1 keeps the feature meaningful (a size of 0 would make history pointless); 200 is generous for
-// a list of short query strings without state.json growing unreasonably.
-export const MIN_FILTER_HISTORY_SIZE = 1;
-export const MAX_FILTER_HISTORY_SIZE = 200;
+// The valid range of every input-history size setting (logs.filterHistorySize,
+// commandPalette.historySize) — same single-source-of-truth convention as MIN/MAX_LOG_BUFFER_SIZE
+// above, shared by the zod schema and the settings screen's clamp. 1 keeps the feature
+// meaningful (a size of 0 would make history pointless); 200 is generous for a list of short
+// strings without state.json growing unreasonably.
+export const MIN_INPUT_HISTORY_SIZE = 1;
+export const MAX_INPUT_HISTORY_SIZE = 200;
 
 // logs.filterHistoryGridMaxRows' valid range — the same bounds as MIN/MAX_GRID_MAX_ROWS, but its
 // own pair of constants since the two settings may drift apart on purpose.

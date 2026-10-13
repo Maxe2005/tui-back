@@ -581,3 +581,47 @@ describe('state per-field read isolation on a sibling-field validation failure (
     }
   });
 });
+
+describe('state readCommandHistory()/writeCommandHistory()', () => {
+  it('reads null when nothing was ever persisted', async () => {
+    const file = await makeStateFile();
+    expect(await createStatePort(file).readCommandHistory()).toEqual({ ok: true, data: null });
+  });
+
+  it('round-trips a written command history', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    expect(await port.writeCommandHistory(['update-all', 'settings'])).toEqual({ ok: true, data: undefined });
+    expect(await port.readCommandHistory()).toEqual({ ok: true, data: ['update-all', 'settings'] });
+  });
+
+  it('never clobbers sibling fields, and siblings never clobber it', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    await port.writeActiveEdt('01JXXXXX1AAAAAAAAAAAAAAAAA');
+    await port.writeFilterHistory({ 'global:text': ['boom'] });
+    await port.writeCommandHistory(['settings']);
+    await port.writeSplitterRatios({ logs: [1, 2] });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+      activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      splitterRatios: { logs: [1, 2] },
+      filterHistory: { 'global:text': ['boom'] },
+      commandHistory: ['settings'],
+    });
+  });
+
+  it('isolates a corrupt commandHistory: other fields still read, and it alone fails', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA', commandHistory: [1, 2] }));
+    const port = createStatePort(file);
+    expect(await port.readActiveEdt()).toEqual({ ok: true, data: '01JXXXXX1AAAAAAAAAAAAAAAAA' });
+    const result = await port.readCommandHistory();
+    expect(result.ok).toBe(false);
+  });
+
+  it('recovers commandHistory when only a sibling field is invalid', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: 42, commandHistory: ['settings'] }));
+    expect(await createStatePort(file).readCommandHistory()).toEqual({ ok: true, data: ['settings'] });
+  });
+});

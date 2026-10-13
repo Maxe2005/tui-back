@@ -5,6 +5,7 @@
 // `git branch`/`git stash`, and `git checkout <branch> --` forces a revision, never a pathspec.
 import { runProcess } from '../process.js';
 import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
@@ -29,6 +30,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     hasStash: (repoPath, tag) => hasStash(repoPath, tag),
     branchExistsLocally: (repoPath, branchName) => branchExistsLocally(repoPath, branchName),
     fetch: (repoPath, branchName) => fetchBranch(repoPath, branchName),
+    fetchRemote: (repoPath, branchName) => fetchRemoteBranch(repoPath, branchName),
+    listUnpushedCommits: (repoPath, branchName) => listUnpushedCommits(repoPath, branchName),
     pull: (repoPath) => pullBranch(repoPath),
     isMergeInProgress: (repoPath) => isMergeInProgress(repoPath),
     mergeBranch: (repoPath, branch) => mergeBranch(repoPath, branch),
@@ -42,6 +45,10 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     discardPathsToHead: (repoPath, paths) => discardPathsToHead(repoPath, paths),
     isRebaseInProgress: (repoPath) => isRebaseInProgress(repoPath),
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
+    listUnmergedPaths: (repoPath) => listUnmergedPaths(repoPath),
+    readWorktreeFile: (repoPath, path) => readWorktreeFile(repoPath, path),
+    writeResolvedFile: (repoPath, path, content, opts) => writeResolvedFile(manifest, repoPath, path, content, opts),
+    checkoutSide: (repoPath, path, side) => checkoutSide(manifest, repoPath, path, side),
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
     renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
@@ -425,6 +432,38 @@ export async function fetchBranch(repoPath: string, branchName: string): Promise
     return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(undefined);
+}
+
+// Plain `git fetch origin <branch>`: only refreshes the remote-tracking ref (and FETCH_HEAD),
+// never the local branch — so a local branch ahead of origin cannot make it fail.
+export async function fetchRemoteBranch(repoPath: string, branchName: string): Promise<Result<void>> {
+  const result = await runProcess('git', ['fetch', 'origin', branchName], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-fetch-error', `git fetch origin ${branchName} failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// Local commits of branchName absent from origin/<branchName>, as `<short hash> <subject>`
+// lines, oldest first. An unknown remote-tracking ref is a controlled error, not an empty list.
+export async function listUnpushedCommits(repoPath: string, branchName: string): Promise<Result<string[]>> {
+  const result = await runProcess(
+    'git',
+    ['log', '--reverse', '--format=%h %s', `refs/remotes/origin/${branchName}..refs/heads/${branchName}`],
+    { cwd: repoPath },
+  );
+  if (result.status !== 0) {
+    return err(
+      'git-unpushed-commits-error',
+      `Cannot list unpushed commits of ${branchName} in ${repoPath}: ${spawnFailureDetail(result)}`,
+    );
+  }
+  return ok(
+    String(result.stdout)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== ''),
+  );
 }
 
 // `git pull --ff-only` on the current branch. Only ever called for a member that already sits
@@ -954,6 +993,85 @@ export async function commitPaths(
   const result = await runProcess('git', ['commit', '-m', message, '--only', '--', ...paths], { cwd: repoPath });
   if (result.status !== 0) {
     return err('git-commit-error', `git commit failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// `git diff --name-only --diff-filter=U -z`: the conflicted paths, NUL-separated so unusual
+// file names survive. Read-only.
+export async function listUnmergedPaths(repoPath: string): Promise<Result<string[]>> {
+  const result = await runProcess('git', ['diff', '--name-only', '--diff-filter=U', '-z'], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-unmerged-check-error', `Cannot list unmerged paths in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(String(result.stdout).split('\0').filter((entry) => entry !== ''));
+}
+
+// Reads a repo-relative worktree file; the path may never leave the repo.
+export async function readWorktreeFile(repoPath: string, path: string): Promise<Result<string>> {
+  const target = resolve(repoPath, path);
+  if (!isInside(repoPath, target)) {
+    return err('git-read-error', `Path ${path} is outside ${repoPath}`);
+  }
+  try {
+    return ok(await readFile(target, 'utf8'));
+  } catch (error) {
+    return err('git-read-error', `Cannot read ${path} in ${repoPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function isInside(repoPath: string, target: string): boolean {
+  const root = resolve(repoPath);
+  return target === root || target.startsWith(root.endsWith('/') ? root : `${root}/`);
+}
+
+// Writes a resolved file (and optionally stages exactly it). Gated on the current branch
+// before any write.
+export async function writeResolvedFile(
+  manifest: ManifestPort,
+  repoPath: string,
+  path: string,
+  content: string,
+  opts: { stage: boolean },
+): Promise<Result<void>> {
+  const allowed = await assertCurrentBranchAllowed(manifest, repoPath);
+  if (!allowed.ok) {
+    return allowed;
+  }
+  const target = resolve(repoPath, path);
+  if (!isInside(repoPath, target)) {
+    return err('git-write-error', `Path ${path} is outside ${repoPath}`);
+  }
+  try {
+    await writeFile(target, content, 'utf8');
+  } catch (error) {
+    return err('git-write-error', `Cannot write ${path} in ${repoPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!opts.stage) {
+    return ok(undefined);
+  }
+  const result = await runProcess('git', ['--literal-pathspecs', 'add', '--', path], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-add-error', `git add failed in ${repoPath}: ${spawnFailureDetail(result)}`);
+  }
+  return ok(undefined);
+}
+
+// `git checkout --ours -- <path>`: takes the current branch's side of one conflicted path into
+// the worktree (not staged). Gated on the current branch.
+export async function checkoutSide(
+  manifest: ManifestPort,
+  repoPath: string,
+  path: string,
+  side: 'ours',
+): Promise<Result<void>> {
+  const allowed = await assertCurrentBranchAllowed(manifest, repoPath);
+  if (!allowed.ok) {
+    return allowed;
+  }
+  const result = await runProcess('git', ['--literal-pathspecs', 'checkout', `--${side}`, '--', path], { cwd: repoPath });
+  if (result.status !== 0) {
+    return err('git-checkout-error', `git checkout --${side} failed for ${path} in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok(undefined);
 }

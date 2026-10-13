@@ -12,9 +12,11 @@ import type {
   UpdateBlockerKind,
   UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
+import type { SharedTypesStage } from '../../../../../core/shared-types/smart-update.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
+import { computeLineRowCount, sliceVisibleWindow } from '../logs/logs-zone.logic.js';
 
 // The Update zone's own closed per-service status set: a raw HealthState passthrough, plus
 // 'updating' (a run currently targets this service), 'migrating' (the run's live phase for this
@@ -22,8 +24,10 @@ import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
 // raw health — a container can report `up` immediately after a failed migration).
 // 'no-container' is the TUI-side state for a service whose manifest declares no Docker
 // runtime — dim, never the down treatment.
-export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'error' | 'no-container';
+export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'awaiting' | 'error' | 'no-container';
 
+// A service paused on a pending incident ('awaiting') outranks everything: it is
+// the one state that needs the developer, not the run.
 // Precedence: a run currently targeting this service wins ('updating', or 'migrating' during the
 // live migrate phase — outranking even a stale 'error' from a previous run); otherwise a
 // standalone clean restart in flight wins ('restarting'); otherwise a failed last outcome
@@ -36,7 +40,11 @@ export function deriveUpdateServiceStatus(
   isTargetedByRunningRun: boolean,
   isRestarting = false,
   livePhase?: UpdatePhase,
+  isAwaiting = false,
 ): UpdateServiceStatus {
+  if (isAwaiting) {
+    return 'awaiting';
+  }
   if (isTargetedByRunningRun) {
     // The list glyph stays `updating` for every live step except the migrate phase, which
     // produces `migrating`.
@@ -118,6 +126,12 @@ export function formatServiceOutcomeDetail(lastOutcome: GroupUpdateRepoResult | 
   return [`${lastOutcome.outcome} (${code})${message}`, ...runLines].join('\n');
 }
 
+const CONFLICT_OUTCOME_LABELS = {
+  'auto-resolved': 'auto-resolved',
+  partial: 'partial — the rest was left to you',
+  'left-to-user': 'left to you',
+} as const;
+
 // The merge and migrate lines of the last run; either is absent when core could not read it.
 // The migration excerpt is collapsed to one line for the pane.
 function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
@@ -131,6 +145,9 @@ function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
         ? 'merge: updated (diff unavailable)'
         : `merge: +${merge.insertions}/\u2212${merge.deletions} lines, ${merge.files} ${merge.files === 1 ? 'file' : 'files'}`,
     );
+  }
+  if (run?.conflict !== undefined) {
+    lines.push(`conflict: ${CONFLICT_OUTCOME_LABELS[run.conflict]}`);
   }
   const migrations = run?.migrations;
   if (migrations?.kind === 'none') {
@@ -148,7 +165,7 @@ function formatRunDetailLines(run: GroupUpdateRepoResult['run']): string[] {
 // (migrations). Entries start `resolved: false` and flip to `true` once the run
 // re-verifies the service after the developer acted — a failed re-verify keeps them
 // unresolved. The log is store-side derivation (never core state) and is cleared per run.
-export type ServiceIssueKind = UpdateBlockerKind | 'migration-failed';
+export type ServiceIssueKind = UpdateBlockerKind | 'migration-failed' | 'shared-types-phase-failed';
 
 export interface ServiceIssue {
   kind: ServiceIssueKind;
@@ -159,8 +176,13 @@ export interface ServiceIssue {
 // The detail pane's live body: the current step plus the issue log with resolved/unresolved
 // marking — replacing the last-outcome view while a run targets the selected service. A targeted
 // service with no phase emitted yet (the run just started) reports `starting`.
-export function formatLiveServiceDetail(phase: UpdatePhase | undefined, issues: readonly ServiceIssue[]): string {
-  const lines = [`step: ${phase ?? 'starting'}`];
+export function formatLiveServiceDetail(
+  phase: UpdatePhase | undefined,
+  issues: readonly ServiceIssue[],
+  sharedTypesStage?: SharedTypesStage,
+): string {
+  // The `shared-types` phase runs after the service's own update: it replaces the core step.
+  const lines = [sharedTypesStage !== undefined ? `step: ${sharedTypesStage} shared-types` : `step: ${phase ?? 'starting'}`];
   for (const issue of issues) {
     const mark = issue.resolved ? '✔' : '○';
     const state = issue.resolved ? 'resolved' : 'unresolved';
@@ -311,7 +333,7 @@ export function formatLastUpdateRecap(
 // `handled` tells the dispatcher the key is consumed.
 export function resolveRecapToggle(
   recapActive: boolean,
-  key: { escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
+  key: { ctrl?: boolean; meta?: boolean; escape?: boolean; upArrow?: boolean; downArrow?: boolean; home?: boolean; end?: boolean },
 ): { recapActive: boolean; handled: boolean } {
   if (key.escape === true) {
     return { recapActive: true, handled: !recapActive };
@@ -374,6 +396,25 @@ export function finalizeServiceSteps(current: ServiceStepStates | undefined, res
   return next;
 }
 
+// Step states for a settled result that has no live-step snapshot (e.g. only the recap row
+// survives): an updated service finished everything, a skipped one ran nothing, and a failed one
+// failed the first step core's run detail gives no evidence of completing.
+export function inferSettledSteps(result: GroupUpdateRepoResult): ServiceStepStates {
+  if (result.outcome === 'updated') {
+    return { merge: 'done', migration: 'done', restart: 'done' };
+  }
+  if (result.outcome === 'skipped') {
+    return { merge: 'skipped', migration: 'skipped', restart: 'skipped' };
+  }
+  if (result.run?.merge === undefined) {
+    return { merge: 'failed', migration: 'skipped', restart: 'skipped' };
+  }
+  if (result.run.migrations?.kind === 'none') {
+    return { merge: 'done', migration: 'done', restart: 'failed' };
+  }
+  return { merge: 'done', migration: 'failed', restart: 'skipped' };
+}
+
 export const UPDATE_STEP_LABELS: Record<UpdateStepKey, string> = {
   merge: 'Merge',
   migration: 'Migration',
@@ -405,10 +446,15 @@ export interface UpdateStepView {
   detail: string[];
 }
 
+// `full` keeps the migration output and the failure message exactly as core reported them
+// (newlines included) instead of flattening each to a single line — the full-screen report's
+// fidelity; the inline pane keeps the flattened default.
 export function buildServiceStepViews(
   steps: ServiceStepStates,
   result: GroupUpdateRepoResult | undefined,
+  options: { full?: boolean } = {},
 ): UpdateStepView[] {
+  const full = options.full === true;
   return UPDATE_STEP_ORDER.map((key) => {
     const state = steps[key];
     const headline = `${UPDATE_STEP_GLYPHS[state]} ${UPDATE_STEP_LABELS[key]} — ${UPDATE_STEP_WORDS[state]}`;
@@ -425,20 +471,23 @@ export function buildServiceStepViews(
         );
       }
     }
+    if (key === 'merge' && state === 'done' && result?.run?.conflict !== undefined) {
+      detail.push(`conflict: ${CONFLICT_OUTCOME_LABELS[result.run.conflict]}`);
+    }
     if (key === 'migration' && state === 'done') {
       const migrations = result?.run?.migrations;
       if (migrations?.kind === 'none') {
         detail.push('no migration command');
       } else if (migrations?.kind === 'ran') {
         detail.push(`ran: ${migrations.command}`);
-        const excerpt = migrations.outputExcerpt.replace(/\s*\r?\n\s*/g, ' ↵ ').trim();
+        const excerpt = full ? migrations.outputExcerpt.trim() : migrations.outputExcerpt.replace(/\s*\r?\n\s*/g, ' ↵ ').trim();
         if (excerpt !== '') {
           detail.push(excerpt);
         }
       }
     }
     if (state === 'failed' && result?.detail !== undefined) {
-      detail.push(`${result.detail.code}: ${result.detail.message.replace(/\s+/g, ' ').trim()}`);
+      detail.push(`${result.detail.code}: ${full ? result.detail.message.trim() : result.detail.message.replace(/\s+/g, ' ').trim()}`);
     }
     return { key, state, headline, detail };
   });
@@ -452,7 +501,9 @@ export function formatServiceUpdateContext(source: string | undefined, target: s
   return `${source ?? 'shared branch'} → ${target ?? '?'}${edt}`;
 }
 export type UpdateFooterInput = {
+  // The incident popup is open on a guided menu / on its incident list.
   blocker: boolean;
+  incidentList?: boolean;
   // The pre-run config screen's own context when it is open (see updateConfigFooterContext).
   config: FooterContextId | null;
   servicePick: boolean;
@@ -460,12 +511,17 @@ export type UpdateFooterInput = {
   serviceMenu: boolean;
   // A `:update-service` request waiting for its service list or pick: nothing to press yet.
   selectRequest: boolean;
+  // The full-screen service report is open.
+  report: boolean;
 };
 
 // The layer that owns the keyboard, in the same priority order as the zone's key handler.
 export function updateFooterContext(input: UpdateFooterInput): FooterContextId | null {
   if (input.blocker) {
     return 'menu';
+  }
+  if (input.incidentList === true) {
+    return 'update-incidents';
   }
   if (input.config !== null) {
     return input.config;
@@ -479,5 +535,188 @@ export function updateFooterContext(input: UpdateFooterInput): FooterContextId |
   if (input.serviceMenu) {
     return 'menu';
   }
+  if (input.report) {
+    return 'update-report';
+  }
   return input.selectRequest ? 'busy' : null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The full-screen service report: the same step views and issue log as the inline
+// pane, with nothing capped or flattened. Built as a flat line model so windowing, wrap row
+// counts and failed-step jumps share one structure.
+export type ReportLineKind = 'title' | 'context' | 'step' | 'step-failed' | 'detail' | 'detail-failed' | 'issue' | 'issue-resolved' | 'heading' | 'dim';
+
+export interface ReportLine {
+  kind: ReportLineKind;
+  text: string;
+}
+
+export interface ServiceReport {
+  lines: ReportLine[];
+  // Indices (into `lines`) of the failed steps' headlines — the `n`/`p` jump targets.
+  failedLines: number[];
+}
+
+export interface ServiceReportInput {
+  service: string;
+  mode: 'live' | 'last' | 'never';
+  context: string | null;
+  steps: ServiceStepStates | undefined;
+  result: GroupUpdateRepoResult | undefined;
+  issues: readonly ServiceIssue[];
+}
+
+// A blank line still takes one row — an empty Ink Text would collapse to none.
+function reportText(text: string): string {
+  return text === '' ? ' ' : text;
+}
+
+// ANSI escape sequences (colourised tool output) and the remaining C0 control characters would
+// corrupt the frame; tabs become spaces, and a bare CR or CRLF is a line break.
+const ANSI_SEQUENCE = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/g;
+// eslint-disable-next-line no-control-regex
+const C0_CONTROLS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+
+export function splitReportText(text: string): string[] {
+  return text
+    .replace(ANSI_SEQUENCE, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(C0_CONTROLS, '')
+    .split('\n')
+    .map(reportText);
+}
+
+export function buildServiceReport(input: ServiceReportInput): ServiceReport {
+  const lines: ReportLine[] = [];
+  const failedLines: number[] = [];
+  const push = (kind: ReportLineKind, text: string): void => {
+    lines.push({ kind, text });
+  };
+  const modeLabel = input.mode === 'live' ? '  · UPDATE IN PROGRESS' : input.mode === 'last' ? '  · last update' : '';
+  push('title', `${input.service}${modeLabel}`);
+  if (input.mode === 'never' && input.issues.length === 0) {
+    push('dim', 'No update has run for this service yet.');
+    return { lines, failedLines };
+  }
+  if (input.context !== null) {
+    push('context', input.context);
+  }
+  // Without a run there are no steps to list — only the issue log.
+  const views = input.mode === 'never' ? [] : buildServiceStepViews(input.steps ?? PENDING_STEPS, input.result, { full: true });
+  for (const view of views) {
+    push('dim', ' ');
+    const failed = view.state === 'failed';
+    if (failed) {
+      failedLines.push(lines.length);
+    }
+    push(failed ? 'step-failed' : 'step', view.headline);
+    for (const detail of view.detail) {
+      for (const line of splitReportText(detail)) {
+        push(failed ? 'detail-failed' : 'detail', `   ${line}`);
+      }
+    }
+  }
+  if (input.issues.length > 0) {
+    push('dim', ' ');
+    push('heading', `Issues (${String(input.issues.length)})`);
+    for (const issue of input.issues) {
+      const [first = ' ', ...rest] = splitReportText(issue.detail);
+      const kind: ReportLineKind = issue.resolved ? 'issue-resolved' : 'issue';
+      push(kind, `${issue.resolved ? '✔' : '⚠'} ${issue.kind} — ${first.trim() === '' ? '(no detail)' : first} (${issue.resolved ? 'resolved' : 'needs your input'})`);
+      for (const line of rest) {
+        push(kind, `    ${line}`);
+      }
+    }
+  }
+  return { lines, failedLines };
+}
+
+// The row cost of a report line under the current wrap mode.
+export function reportLineRows(line: ReportLine, width: number, wrap: boolean): number {
+  return computeLineRowCount(line.text, width, wrap);
+}
+
+// The greatest top offset whose window still fills the budget (the tail window's first line).
+export function reportMaxOffset(lines: readonly ReportLine[], budget: number, width: number, wrap: boolean): number {
+  const tail = sliceVisibleWindow(lines, 0, budget, (line) => reportLineRows(line, width, wrap));
+  return Math.max(0, lines.length - tail.length);
+}
+
+// The lines drawn for a top-anchored offset: as many as fit the row budget (at least one).
+export function reportWindow(lines: readonly ReportLine[], offset: number, budget: number, width: number, wrap: boolean): { start: number; visibleLines: ReportLine[] } {
+  const start = Math.min(Math.max(0, offset), reportMaxOffset(lines, budget, width, wrap));
+  let used = 0;
+  let end = start;
+  while (end < lines.length) {
+    const rows = reportLineRows(lines[end] as ReportLine, width, wrap);
+    if (used + rows > budget && end > start) {
+      break;
+    }
+    used += rows;
+    end += 1;
+  }
+  return { start, visibleLines: lines.slice(start, end) };
+}
+
+// "lines 1–12 of 340 (4%)" — the scroll position, 1-based and inclusive.
+export function formatReportPosition(start: number, visibleRows: number, total: number): string {
+  if (total === 0 || visibleRows === 0) {
+    return 'empty';
+  }
+  const last = start + visibleRows;
+  return `lines ${String(start + 1)}–${String(last)} of ${String(total)} (${String(Math.round((last / total) * 100))}%)`;
+}
+
+export type ReportKeyAction = 'close' | 'up' | 'down' | 'page-up' | 'page-down' | 'top' | 'bottom' | 'toggle-wrap' | 'next-failed' | 'prev-failed';
+
+export function resolveReportKey(
+  input: string,
+  key: { ctrl?: boolean; meta?: boolean; escape?: boolean; upArrow?: boolean; downArrow?: boolean; pageUp?: boolean; pageDown?: boolean; home?: boolean; end?: boolean },
+): ReportKeyAction | null {
+  if (key.ctrl === true || key.meta === true) return null;
+  if (key.escape === true) return 'close';
+  if (key.upArrow === true) return 'up';
+  if (key.downArrow === true) return 'down';
+  if (key.pageUp === true) return 'page-up';
+  if (key.pageDown === true) return 'page-down';
+  if (key.home === true) return 'top';
+  if (key.end === true) return 'bottom';
+  if (input === 'w' || input === 'W') return 'toggle-wrap';
+  if (input === 'n' || input === 'N') return 'next-failed';
+  if (input === 'p' || input === 'P') return 'prev-failed';
+  return null;
+}
+
+// The next top offset for a scroll action, clamped to [0, maxOffset]. `page` is the row budget.
+export function applyReportScroll(offset: number, action: 'up' | 'down' | 'page-up' | 'page-down' | 'top' | 'bottom', maxOffset: number, page: number): number {
+  const clamp = (value: number): number => Math.min(Math.max(0, value), maxOffset);
+  const current = clamp(offset);
+  switch (action) {
+    case 'up':
+      return clamp(current - 1);
+    case 'down':
+      return clamp(current + 1);
+    case 'page-up':
+      return clamp(current - Math.max(1, page - 1));
+    case 'page-down':
+      return clamp(current + Math.max(1, page - 1));
+    case 'top':
+      return 0;
+    case 'bottom':
+      return maxOffset;
+  }
+}
+
+// The offset of the next/previous failed step relative to `offset`, wrapping around; null when
+// the report has no failed step.
+export function jumpToFailedStep(failedLines: readonly number[], offset: number, direction: 'next' | 'prev'): number | null {
+  if (failedLines.length === 0) {
+    return null;
+  }
+  if (direction === 'next') {
+    return failedLines.find((index) => index > offset) ?? (failedLines[0] as number);
+  }
+  return [...failedLines].reverse().find((index) => index < offset) ?? (failedLines.at(-1) as number);
 }

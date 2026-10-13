@@ -15,6 +15,7 @@ type StateFileShape = {
   activeEdt: string | null;
   splitterRatios?: Record<string, number[]>;
   filterHistory?: Record<string, string[]>;
+  commandHistory?: string[];
 };
 
 export function resolveStateFile(xdg: XdgPaths): string {
@@ -29,6 +30,8 @@ export function createStatePort(stateFile: string): StatePort {
     writeSplitterRatios: (ratios) => writeSplitterRatios(stateFile, ratios),
     readFilterHistory: () => readFilterHistory(stateFile),
     writeFilterHistory: (history) => writeFilterHistory(stateFile, history),
+    readCommandHistory: () => readCommandHistory(stateFile),
+    writeCommandHistory: (history) => writeCommandHistory(stateFile, history),
   };
 }
 
@@ -139,36 +142,62 @@ function extractActiveEdt(raw: unknown): Result<string | null> {
   return ok(result.data);
 }
 
-// Symmetric to extractActiveEdt: recovers `splitterRatios` alone when it's `activeEdt` that
-// failed the whole-file validation.
-function extractSplitterRatios(raw: unknown): Result<Record<string, number[]> | undefined> {
+// Symmetric to extractActiveEdt: recovers one optional field (`splitterRatios`, `filterHistory`,
+// `commandHistory`) alone when another field failed the whole-file validation.
+function extractOptionalField<K extends 'splitterRatios' | 'filterHistory' | 'commandHistory'>(
+  raw: unknown,
+  key: K,
+): Result<StateFileShape[K]> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return err('state-invalid-format', 'Invalid state file: expected a JSON object');
   }
-  const result = stateSchema.shape.splitterRatios.safeParse((raw as Record<string, unknown>).splitterRatios);
+  const result = stateSchema.shape[key].safeParse((raw as Record<string, unknown>)[key]);
   if (!result.success) {
     const reason = result.error.issues[0]?.message ?? 'unknown validation error';
-    return err('state-invalid-format', `Invalid state file: splitterRatios — ${reason}`, {
+    return err('state-invalid-format', `Invalid state file: ${key} — ${reason}`, {
       issues: result.error.issues,
     });
   }
-  return ok(result.data);
+  return ok(result.data as StateFileShape[K]);
 }
 
-// Symmetric to extractSplitterRatios: recovers `filterHistory` alone when it's `activeEdt` or
-// `splitterRatios` that failed the whole-file validation.
-function extractFilterHistory(raw: unknown): Result<Record<string, string[]> | undefined> {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return err('state-invalid-format', 'Invalid state file: expected a JSON object');
+// Shared read step for the optional fields: ok(value ?? null), recovering the field on its own
+// when only a sibling failed validation.
+async function readOptionalField<K extends 'splitterRatios' | 'filterHistory' | 'commandHistory'>(
+  stateFile: string,
+  key: K,
+): Promise<Result<NonNullable<StateFileShape[K]> | null>> {
+  const result = await readStateFile(stateFile);
+  if (result.ok) {
+    return ok((result.data?.[key] ?? null) as NonNullable<StateFileShape[K]> | null);
   }
-  const result = stateSchema.shape.filterHistory.safeParse((raw as Record<string, unknown>).filterHistory);
-  if (!result.success) {
-    const reason = result.error.issues[0]?.message ?? 'unknown validation error';
-    return err('state-invalid-format', `Invalid state file: filterHistory — ${reason}`, {
-      issues: result.error.issues,
+  if (result.error.code !== 'state-invalid-format') {
+    return result;
+  }
+  const raw = (result.error.details as { raw?: unknown } | undefined)?.raw;
+  const recovered = extractOptionalField(raw, key);
+  return recovered.ok ? ok((recovered.data ?? null) as NonNullable<StateFileShape[K]> | null) : result;
+}
+
+// Shared read-merge-write under the file lock: `patch` overrides only the fields it names, every
+// other field already on disk is preserved. A genuine I/O error reading the existing file is
+// propagated rather than silently written over (unlike corruption, where nothing is left to
+// preserve).
+function mergeWriteStateFile(stateFile: string, patch: Partial<StateFileShape>): Promise<Result<void>> {
+  return withWriteLock(stateFile, async () => {
+    const current = await readStateFile(stateFile);
+    if (!current.ok && current.error.code === 'state-read-error') {
+      return current as Result<void>;
+    }
+    const existing = current.ok ? current.data : null;
+    return writeStateFile(stateFile, {
+      activeEdt: existing?.activeEdt ?? null,
+      splitterRatios: existing?.splitterRatios,
+      filterHistory: existing?.filterHistory,
+      commandHistory: existing?.commandHistory,
+      ...patch,
     });
-  }
-  return ok(result.data);
+  });
 }
 
 // The shared read-merge-write step: writes the full `StateFileShape`, letting `JSON.stringify`
@@ -202,86 +231,30 @@ async function readActiveEdt(stateFile: string): Promise<Result<string | null>> 
   return recovered.ok ? ok(recovered.data) : result;
 }
 
-async function writeActiveEdt(stateFile: string, ulid: string | null): Promise<Result<void>> {
-  return withWriteLock(stateFile, async () => {
-    // Read-merge-write: preserves whatever `splitterRatios`/`filterHistory` are already on
-    // disk (or leaves them absent) rather than clobbering the whole file with only
-    // `{ activeEdt }`.
-    const current = await readStateFile(stateFile);
-    if (!current.ok && current.error.code === 'state-read-error') {
-      // A genuine I/O error reading the existing file — unlike corruption
-      // (state-invalid-json/state-invalid-format, where there is nothing left to preserve),
-      // good data may be there that a transient read failure just couldn't see. Propagate
-      // rather than silently writing over it as if it were empty.
-      return current as Result<void>;
-    }
-    const existing = current.ok ? current.data : null;
-    return writeStateFile(stateFile, {
-      activeEdt: ulid,
-      splitterRatios: existing?.splitterRatios,
-      filterHistory: existing?.filterHistory,
-    });
-  });
+function writeActiveEdt(stateFile: string, ulid: string | null): Promise<Result<void>> {
+  return mergeWriteStateFile(stateFile, { activeEdt: ulid });
 }
 
-async function readSplitterRatios(stateFile: string): Promise<Result<Record<string, number[]> | null>> {
-  const result = await readStateFile(stateFile);
-  if (result.ok) {
-    return ok(result.data?.splitterRatios ?? null);
-  }
-  if (result.error.code !== 'state-invalid-format') {
-    return result;
-  }
-  const raw = (result.error.details as { raw?: unknown } | undefined)?.raw;
-  const recovered = extractSplitterRatios(raw);
-  return recovered.ok ? ok(recovered.data ?? null) : result;
+function readSplitterRatios(stateFile: string): Promise<Result<Record<string, number[]> | null>> {
+  return readOptionalField(stateFile, 'splitterRatios');
 }
 
-async function writeSplitterRatios(stateFile: string, ratios: Record<string, number[]>): Promise<Result<void>> {
-  return withWriteLock(stateFile, async () => {
-    // Read-merge-write: preserves whatever `activeEdt`/`filterHistory` is already on disk
-    // (defaulting to `null` on a fresh machine, same as `readActiveEdt`'s own ENOENT
-    // convention).
-    const current = await readStateFile(stateFile);
-    if (!current.ok && current.error.code === 'state-read-error') {
-      return current as Result<void>;
-    }
-    const existing = current.ok ? current.data : null;
-    return writeStateFile(stateFile, {
-      activeEdt: existing?.activeEdt ?? null,
-      splitterRatios: ratios,
-      filterHistory: existing?.filterHistory,
-    });
-  });
+function writeSplitterRatios(stateFile: string, ratios: Record<string, number[]>): Promise<Result<void>> {
+  return mergeWriteStateFile(stateFile, { splitterRatios: ratios });
 }
 
-async function readFilterHistory(stateFile: string): Promise<Result<Record<string, string[]> | null>> {
-  const result = await readStateFile(stateFile);
-  if (result.ok) {
-    return ok(result.data?.filterHistory ?? null);
-  }
-  if (result.error.code !== 'state-invalid-format') {
-    return result;
-  }
-  const raw = (result.error.details as { raw?: unknown } | undefined)?.raw;
-  const recovered = extractFilterHistory(raw);
-  return recovered.ok ? ok(recovered.data ?? null) : result;
+function readFilterHistory(stateFile: string): Promise<Result<Record<string, string[]> | null>> {
+  return readOptionalField(stateFile, 'filterHistory');
 }
 
-async function writeFilterHistory(stateFile: string, history: Record<string, string[]>): Promise<Result<void>> {
-  return withWriteLock(stateFile, async () => {
-    // Read-merge-write: preserves whatever `activeEdt`/`splitterRatios` is already on disk,
-    // same convention as writeActiveEdt/writeSplitterRatios above.
-    const current = await readStateFile(stateFile);
-    if (!current.ok && current.error.code === 'state-read-error') {
-      return current as Result<void>;
-    }
-    const existing = current.ok ? current.data : null;
-    return writeStateFile(stateFile, {
-      activeEdt: existing?.activeEdt ?? null,
-      splitterRatios: existing?.splitterRatios,
-      filterHistory: history,
-    });
-  });
+function writeFilterHistory(stateFile: string, history: Record<string, string[]>): Promise<Result<void>> {
+  return mergeWriteStateFile(stateFile, { filterHistory: history });
 }
 
+function readCommandHistory(stateFile: string): Promise<Result<string[] | null>> {
+  return readOptionalField(stateFile, 'commandHistory');
+}
+
+function writeCommandHistory(stateFile: string, history: string[]): Promise<Result<void>> {
+  return mergeWriteStateFile(stateFile, { commandHistory: history });
+}

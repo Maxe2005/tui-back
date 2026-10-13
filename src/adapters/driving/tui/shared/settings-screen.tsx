@@ -21,14 +21,16 @@ import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
   MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
-  MAX_FILTER_HISTORY_SIZE,
+  MAX_INPUT_HISTORY_SIZE,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
-  MIN_FILTER_HISTORY_SIZE,
+  MIN_INPUT_HISTORY_SIZE,
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
+  MAX_UPDATE_CONCURRENCY,
+  MIN_UPDATE_CONCURRENCY,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
@@ -121,10 +123,10 @@ export function parseLogBufferSizeDigit(input: string): number | null {
 // as bufferSize/gridMaxRows above. filterHistorySize has no digit preset — Left/Right (see the
 // group model below) is its only adjustment.
 export const FILTER_HISTORY_SIZE_STEP = 5;
-export { MIN_FILTER_HISTORY_SIZE, MAX_FILTER_HISTORY_SIZE };
+export { MIN_INPUT_HISTORY_SIZE as MIN_FILTER_HISTORY_SIZE, MAX_INPUT_HISTORY_SIZE as MAX_FILTER_HISTORY_SIZE };
 
 export function clampFilterHistorySize(value: number): number {
-  return Math.min(Math.max(value, MIN_FILTER_HISTORY_SIZE), MAX_FILTER_HISTORY_SIZE);
+  return Math.min(Math.max(value, MIN_INPUT_HISTORY_SIZE), MAX_INPUT_HISTORY_SIZE);
 }
 
 export function adjustFilterHistorySize(current: number, direction: 'up' | 'down'): number {
@@ -153,9 +155,23 @@ export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null
 // General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles; the cursor
 // starts on it) and the editor command, a free-text field (Enter opens it for editing, Enter
 // again commits, Esc cancels the edit).
-export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command';
+export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command' | 'update-concurrency';
 
-export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command'];
+export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command', 'update-concurrency'];
+
+// update.concurrency: how many services a group update processes at once. `+`/`-` step it, a typed
+// digit sets it; the schema enforces the same [MIN, MAX] bound.
+export function clampUpdateConcurrency(value: number): number {
+  return Math.min(Math.max(value, MIN_UPDATE_CONCURRENCY), MAX_UPDATE_CONCURRENCY);
+}
+
+export function adjustUpdateConcurrency(current: number, direction: 'up' | 'down'): number {
+  return clampUpdateConcurrency(current + (direction === 'up' ? 1 : -1));
+}
+
+export function parseUpdateConcurrencyDigit(input: string): number | null {
+  return /^[1-9]$/.test(input) ? clampUpdateConcurrency(Number(input)) : null;
+}
 
 export const EDITOR_COMMAND_PLACEHOLDER_TEXT = '(not set — $EDITOR, else vi)';
 
@@ -167,6 +183,7 @@ export type GeneralSettingsStep =
   | { type: 'begin-edit' }
   | { type: 'edit'; editing: TextInputState }
   | { type: 'commit-edit'; value: string }
+  | { type: 'set-concurrency'; value: number }
   | { type: 'ignore' };
 
 // The General tab's whole key mapping as one pure step (Esc is handled by the screen's own
@@ -174,7 +191,12 @@ export type GeneralSettingsStep =
 // editor command is being edited every key belongs to the text field — a typed space or
 // `q` is a literal character, never the quit toggle. The committed value is trimmed: a
 // blank command means "not set".
-export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view: GeneralSettingsView): GeneralSettingsStep {
+export function resolveGeneralSettingsKey(
+  input: string,
+  key: TextEditKey,
+  view: GeneralSettingsView,
+  concurrency = MIN_UPDATE_CONCURRENCY,
+): GeneralSettingsStep {
   if (view.editing !== null) {
     if (key.return) {
       return { type: 'commit-edit', value: view.editing.value.trim() };
@@ -191,6 +213,18 @@ export function resolveGeneralSettingsKey(input: string, key: TextEditKey, view:
   }
   if (row === 'editor-command' && key.return) {
     return { type: 'begin-edit' };
+  }
+  if (row === 'update-concurrency') {
+    if (input === '+') {
+      return { type: 'set-concurrency', value: adjustUpdateConcurrency(concurrency, 'up') };
+    }
+    if (input === '-') {
+      return { type: 'set-concurrency', value: adjustUpdateConcurrency(concurrency, 'down') };
+    }
+    const digit = parseUpdateConcurrencyDigit(input);
+    if (digit !== null) {
+      return { type: 'set-concurrency', value: digit };
+    }
   }
   return { type: 'ignore' };
 }
@@ -279,7 +313,23 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'clear-history', label: 'Clear history' },
 ];
 
-const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId, FooterContextId> = {
+// The Command Palette tab's group list, same two-level shape as the Logs tab: the grid height
+// plus the command-history controls (size, dedup, clear), one group each.
+export type PaletteSettingsGroupId = 'grid-max-rows' | 'history-size' | 'history-dedup' | 'clear-history';
+
+export type PaletteSettingsGroup = { id: PaletteSettingsGroupId; label: string };
+
+export const PALETTE_SETTINGS_GROUPS: readonly PaletteSettingsGroup[] = [
+  { id: 'grid-max-rows', label: 'Command grid max rows' },
+  { id: 'history-size', label: 'Command history size' },
+  { id: 'history-dedup', label: 'Deduplicate command history' },
+  { id: 'clear-history', label: 'Clear command history' },
+];
+
+const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | PaletteSettingsGroupId, FooterContextId> = {
+  'grid-max-rows': 'settings-adjust',
+  'history-size': 'settings-adjust',
+  'history-dedup': 'settings-toggle',
   'hint-visibility': 'settings-toggle',
   'action-types': 'settings-toggle',
   'branch-dropdown-rows': 'settings-adjust',
@@ -295,13 +345,18 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId, Foote
 // confirm/cancel, a group list opens groups, and each group advertises its own control.
 export function settingsFooterContext(
   tab: SettingsTab,
-  state: { generalEditing: boolean; edtsGroup: SettingsGroupId | null; logsGroup: LogsSettingsGroupId | null },
+  state: {
+    generalEditing: boolean;
+    edtsGroup: SettingsGroupId | null;
+    logsGroup: LogsSettingsGroupId | null;
+    paletteGroup?: PaletteSettingsGroupId | null;
+  },
 ): FooterContextId {
   switch (tab) {
     case 'general':
       return state.generalEditing ? 'confirm' : 'settings-general';
     case 'command-palette':
-      return 'settings-palette';
+      return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
     case 'edts':
       return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
     case 'logs':
@@ -339,6 +394,8 @@ export type SettingsScreenProps = {
   // Implies initialLogsGroup = 'clear-history' when that prop is left unset, since the service
   // list is only reachable from within that group.
   initialLogsClearServiceOpen?: boolean;
+  // Same test-only injection idiom for the Command Palette tab's own group list.
+  initialPaletteGroup?: PaletteSettingsGroupId | null;
   // Same test-only injection idiom for the General tab's editor-command edit session.
   // Production always starts browsing the row list (false).
   initialGeneralEditing?: boolean;
@@ -354,6 +411,7 @@ export function SettingsScreen({
   initialEdtsGroup = null,
   initialLogsGroup = null,
   initialLogsClearServiceOpen = false,
+  initialPaletteGroup = null,
   initialGeneralEditing = false,
 }: SettingsScreenProps) {
   const settings = useStore((state) => state.settings);
@@ -363,6 +421,7 @@ export function SettingsScreen({
   // into.
   const clearGlobalFilterHistory = useStore((state) => state.clearGlobalFilterHistory);
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
+  const clearCommandHistory = useStore((state) => state.clearCommandHistory);
   const edtsBranches = useStore((state) => state.edtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -387,6 +446,9 @@ export function SettingsScreen({
   const [logsClearServiceOpen, setLogsClearServiceOpen] = useState(initialLogsClearServiceOpen);
   const [logsClearServiceCursor, setLogsClearServiceCursor] = useState(0);
   const logsServices = edtsBranches ?? [];
+  // The Command Palette tab's group list (same shape as the Logs tab's).
+  const [paletteGroup, setPaletteGroup] = useState<PaletteSettingsGroupId | null>(initialPaletteGroup);
+  const [paletteGroupCursor, setPaletteGroupCursor] = useState(0);
 
   // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
   // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
@@ -394,11 +456,12 @@ export function SettingsScreen({
   // General tab counts too: Left/Right/Tab belong to the text field while it is open, and Esc
   // cancels the edit rather than closing the screen.
   const drilledIn =
-    (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null);
+    (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null) ||
+    (tab === 'command-palette' && paletteGroup !== null);
 
   useFooterContext(
     'settings',
-    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup }),
+    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup, paletteGroup }),
     useStore,
   );
 
@@ -412,6 +475,10 @@ export function SettingsScreen({
       if (tab === 'edts' && edtsGroup !== null) {
         // Steps back up to the group list — the whole settings screen stays open.
         setEdtsGroup(null);
+        return;
+      }
+      if (tab === 'command-palette' && paletteGroup !== null) {
+        setPaletteGroup(null);
         return;
       }
       if (tab === 'logs' && logsClearServiceOpen) {
@@ -438,6 +505,8 @@ export function SettingsScreen({
       setLogsGroup(null);
       setLogsGroupCursor(0);
       setLogsClearServiceOpen(false);
+      setPaletteGroup(null);
+      setPaletteGroupCursor(0);
       setTab((current) => nextSettingsTab(current, tabStep === 'back' ? -1 : 1));
       return;
     }
@@ -448,12 +517,14 @@ export function SettingsScreen({
       setGroupCursor(0);
       setLogsGroup(null);
       setLogsGroupCursor(0);
+      setPaletteGroup(null);
+      setPaletteGroupCursor(0);
       setTab((current) => nextSettingsTab(current, direction));
       return;
     }
 
     if (tab === 'general') {
-      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing });
+      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing }, settings.update.concurrency);
       if (step.type === 'move') {
         setGeneralCursor(step.cursor);
       } else if (step.type === 'toggle-quit') {
@@ -465,27 +536,69 @@ export function SettingsScreen({
       } else if (step.type === 'commit-edit') {
         setGeneralEditing(null);
         void updateSettings({ general: { editorCommand: step.value } });
+      } else if (step.type === 'set-concurrency') {
+        void updateSettings({ update: { concurrency: step.value } });
       }
       return;
     }
 
     if (tab === 'command-palette') {
-      if (key.upArrow) {
-        void updateSettings({
-          commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'up') },
-        });
+      if (paletteGroup === 'grid-max-rows') {
+        if (key.upArrow || key.rightArrow) {
+          void updateSettings({
+            commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'up') },
+          });
+          return;
+        }
+        if (key.downArrow || key.leftArrow) {
+          void updateSettings({
+            commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'down') },
+          });
+          return;
+        }
+        const digit = parseGridMaxRowsDigit(input);
+        if (digit !== null) {
+          void updateSettings({ commandPalette: { gridMaxRows: digit } });
+        }
         return;
       }
-      if (key.downArrow) {
-        void updateSettings({
-          commandPalette: { gridMaxRows: adjustGridMaxRows(settings.commandPalette.gridMaxRows, 'down') },
-        });
+
+      if (paletteGroup === 'history-size') {
+        if (key.leftArrow || key.downArrow) {
+          void updateSettings({ commandPalette: { historySize: adjustFilterHistorySize(settings.commandPalette.historySize, 'down') } });
+          return;
+        }
+        if (key.rightArrow || key.upArrow) {
+          void updateSettings({ commandPalette: { historySize: adjustFilterHistorySize(settings.commandPalette.historySize, 'up') } });
+        }
         return;
       }
-      const digit = parseGridMaxRowsDigit(input);
-      if (digit !== null) {
-        void updateSettings({ commandPalette: { gridMaxRows: digit } });
+
+      if (paletteGroup === 'history-dedup') {
+        if (input === ' ') {
+          void updateSettings({ commandPalette: { historyDedup: !settings.commandPalette.historyDedup } });
+        }
         return;
+      }
+
+      if (paletteGroup === 'clear-history') {
+        if (key.return) {
+          clearCommandHistory();
+        }
+        return;
+      }
+
+      // paletteGroup === null: the group-list level — Up/Down navigates, Enter drills in.
+      const moved = nextCursorForKey(key, paletteGroupCursor, PALETTE_SETTINGS_GROUPS.length);
+      if (moved !== null) {
+        setPaletteGroupCursor(moved);
+        return;
+      }
+      if (key.return) {
+        const group = PALETTE_SETTINGS_GROUPS[paletteGroupCursor];
+        if (group) {
+          setPaletteGroup(group.id);
+        }
       }
       return;
     }
@@ -725,7 +838,15 @@ export function SettingsScreen({
                 </Text>
               )}
             </Box>
-            {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
+            <Box flexDirection="row">
+              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? '›' : ' '}</Text>
+              <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? colors.accent : colors.text} wrap="truncate-end">
+                Update concurrency: <Text color={colors.accent}>{settings.update.concurrency}</Text>
+              </Text>
+            </Box>
+            {GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? (
+              <DimAnnotation text="Services a group update processes at once (+/- or a digit). 1 = one after the other." />
+            ) : GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
               <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
             ) : generalEditing !== null ? (
               <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
@@ -735,12 +856,52 @@ export function SettingsScreen({
           </Box>
         ) : null}
 
-        {tab === 'command-palette' ? (
+        {tab === 'command-palette' && paletteGroup === null ? (
+          <Box flexDirection="column">
+            {PALETTE_SETTINGS_GROUPS.map((group, index) => {
+              const highlighted = index === paletteGroupCursor;
+              return (
+                <Box key={group.id} flexDirection="row">
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
+                </Box>
+              );
+            })}
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'grid-max-rows' ? (
           <Box flexDirection="column">
             <Text color={colors.text} wrap="truncate-end">
               Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
             </Text>
             <DimAnnotation text="Rows of the command grid before it scrolls." />
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'history-size' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Command history size: <Text color={colors.accent}>{settings.commandPalette.historySize}</Text>
+            </Text>
+            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'history-dedup' ? (
+          <Box flexDirection="column">
+            <CheckboxListItem
+              label="Deduplicate command history"
+              state={settings.commandPalette.historyDedup ? 'checked' : 'unchecked'}
+            />
+            <DimAnnotation text="On: a repeated command moves to the front. Off: only a repeat of the latest is merged." />
+          </Box>
+        ) : null}
+
+        {tab === 'command-palette' && paletteGroup === 'clear-history' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">Clear the command history</Text>
+            <DimAnnotation text="Empties the `:` bar's recall list; the filter histories are untouched." />
           </Box>
         ) : null}
 

@@ -39,6 +39,17 @@ async function render(draft: UpdateConfigDraft, windowRows: number, view: Panels
 
 const lineCount = (output: string) => output.split('\n').length;
 
+describe('UpdateConfigPanels shared-types row', () => {
+  it('renders the three-way row only when a single source is among the rows', async () => {
+    const plain = draftWith(2);
+    expect(await render(plain, 30)).not.toContain('shared-types');
+    const withSource = { ...plain, sharedTypesSource: '/r/0' };
+    expect(await render(withSource, 30)).toContain('< off >');
+    expect(await render({ ...withSource, sharedTypes: 'if-changed' }, 30)).toContain('publish if the merge changed something');
+    expect(await render({ ...withSource, sharedTypes: 'always' }, 30)).toContain('always publish');
+  });
+});
+
 describe('UpdateConfigPanels', () => {
   it('renders the global panel above the service table with the effective cells', async () => {
     const output = await render(draftWith(3), 30);

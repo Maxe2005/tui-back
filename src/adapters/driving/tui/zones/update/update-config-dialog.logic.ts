@@ -4,6 +4,7 @@
 // (migrate ON, clean restart OFF). Deselecting excludes a service entirely; confirming with
 // zero selected is rejected inline. Every keystroke behavior is a pure, unit-tested function.
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../core/scripts/group-update.js';
+import type { SharedTypesMode } from '../../../../../core/shared-types/smart-update.js';
 import type { MergeSourceError, MergeSourceOrigin, MergeSourceRow } from '../../../../../core/scripts/resolve-merge-sources.js';
 import type { TextEditKey, TextInputState } from '../../shared/components/text-edit.js';
 import type { BranchAutocompleteState } from '../../shared/components/branch-autocomplete-input.js';
@@ -60,6 +61,11 @@ export interface UpdateConfigDraft {
   error: string | null;
   layout: ConfigLayout;
   strategy: MergeStrategy;
+  // Run-wide `shared-types` handling (per run, never persisted). The row exists only when the
+  // active EDT has exactly one source repo and it is one of this draft's rows: that row's
+  // repoPath, else null (row hidden, mode forced off).
+  sharedTypes: SharedTypesMode;
+  sharedTypesSource: string | null;
 }
 
 export interface UpdateConfigRowInput {
@@ -75,7 +81,7 @@ export interface UpdateConfigRowInput {
 export function createUpdateConfigDraft(
   scope: GroupUpdateScope,
   rows: readonly UpdateConfigRowInput[],
-  options: { layout?: ConfigLayout } = {},
+  options: { layout?: ConfigLayout; sharedTypesSource?: string | null } = {},
 ): UpdateConfigDraft {
   return {
     scope,
@@ -96,6 +102,8 @@ export function createUpdateConfigDraft(
     error: null,
     layout: options.layout ?? 'service-panels',
     strategy: { kind: 'shared' },
+    sharedTypes: 'off',
+    sharedTypesSource: options.sharedTypesSource ?? null,
   };
 }
 
@@ -132,6 +140,9 @@ export type ConfirmedUpdateConfig = {
   selection: GroupUpdateSelectionItem[];
   runMigrations: boolean;
   cleanRestart: boolean;
+  // Present only when the phase applies: not `off` and the source repo is a selected row.
+  sharedTypes?: SharedTypesMode;
+  sharedTypesSource?: string | null;
 };
 
 // Confirms the draft into the exact configuration the run starts with: every selected
@@ -156,6 +167,9 @@ export function confirmUpdateConfigDraft(
       return { ok: false, error: `Service "${row.service}" has an empty source branch — enter a branch or deselect it.` };
     }
   }
+  // The phase applies only while the source repo is one of the selected rows.
+  const sharedTypesActive =
+    draft.sharedTypes !== 'off' && draft.sharedTypesSource !== null && selected.some((row) => row.repoPath === draft.sharedTypesSource);
   return {
     ok: true,
     config: {
@@ -169,6 +183,7 @@ export function confirmUpdateConfigDraft(
       })),
       runMigrations: draft.runMigrations,
       cleanRestart: draft.cleanRestart,
+      ...(sharedTypesActive ? { sharedTypes: draft.sharedTypes, sharedTypesSource: draft.sharedTypesSource } : {}),
     },
   };
 }

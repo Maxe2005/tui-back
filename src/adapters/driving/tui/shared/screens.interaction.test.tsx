@@ -53,14 +53,30 @@ describe('RepoRegistryScreen candidates (real keypress)', () => {
 });
 
 describe('SettingsScreen (real keypress)', () => {
-  it('End jumps to the last General row, where Enter starts the editor-command edit', async () => {
+  it('End jumps to the last General row; one Up lands on the editor command, where Enter starts the edit', async () => {
     const store = createAppStore();
     const { press, stop, stdout, instance } = mount(createElement(SettingsScreen, { useStore: store }));
     try {
       await instance.waitUntilRenderFlush();
       await press(KEYS.end);
+      await press(KEYS.up);
       await press(KEYS.enter);
       expect(footerIdOf(store)).toBe('confirm');
+    } finally {
+      await stop();
+    }
+  });
+
+  it('on the last General row a digit sets update.concurrency live', async () => {
+    const store = createAppStore();
+    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(KEYS.end);
+      await press('5');
+      expect(store.getState().settings.update.concurrency).toBe(5);
+      await press('-');
+      expect(store.getState().settings.update.concurrency).toBe(4);
     } finally {
       await stop();
     }

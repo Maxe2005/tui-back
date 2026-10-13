@@ -26,6 +26,7 @@ import {
   partitionServicesByEdtMembership,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
+import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, resolveSnapBackBase } from '../../shared/input-history/index.js';
 import {
   commandAtGridCursor,
   groupCommandsByColumn,
@@ -44,7 +45,6 @@ import {
   cycleLogsPaneFocus,
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
-  DEFAULT_VISIBILITY_FLAGS,
   logsFooterContext,
   logsLegendHints,
   filterHistoryKeyString,
@@ -65,8 +65,6 @@ import {
   resolveFilterClearTarget,
   resolveFilterEditorDraft,
   resolveFullscreenScrollDirection,
-  resolveHistoryBrowseDown,
-  resolveHistoryBrowseUp,
   resolvePaneScrollDirection,
   resolveSelectAllToggle,
   resolveVisibilityToggleKey,
@@ -82,7 +80,6 @@ import {
   type FilterHistoryKey,
   type LogFilterSpec,
   type LogsPaneFocus,
-  type VisibilityFlags,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
@@ -175,16 +172,21 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [edtCursor, setEdtCursor] = useState(0);
   const [otherCursor, setOtherCursor] = useState(0);
   const [subFocus, setSubFocus] = useState(0);
-  const [visibility, setVisibility] = useState<VisibilityFlags>(DEFAULT_VISIBILITY_FLAGS);
-  // Wrap/truncate is per pane (keyed by repoPath), so 'w' targets just the sub-focused/fullscreen
-  // pane, with Shift+W as the explicit "apply to every open pane" (see isWrapAllLogsKey).
-  const [paneWrap, setPaneWrap] = useState<Record<string, boolean>>({});
-  // The global filter every pane is engaged with by default, the per-pane engagement flags ('i'
-  // opts a single pane out), and each pane's own filter ('f'). Ephemeral UI state — never
-  // persisted.
-  const [globalFilter, setGlobalFilter] = useState<LogFilterSpec>(DEFAULT_LOG_FILTER);
-  const [paneFilterEngaged, setPaneFilterEngaged] = useState<Record<string, boolean>>({});
-  const [paneFilters, setPaneFilters] = useState<Record<string, LogFilterSpec>>({});
+  // Display settings live in the store (session-only) so they survive a tab switch: the t/o/p
+  // visibility flags and the global filter are global, wrap / 'i' engagement / own filter are
+  // per pane (keyed by repoPath) and dropped by the store when the service is deselected.
+  // Wrap/truncate is per pane, so 'w' targets just the sub-focused/fullscreen pane, with
+  // Shift+W as the explicit "apply to every open pane" (see isWrapAllLogsKey).
+  const visibility = useStore((state) => state.logsVisibility);
+  const setVisibility = useStore((state) => state.setLogsVisibility);
+  const paneWrap = useStore((state) => state.logsPaneWrap);
+  const setPaneWrap = useStore((state) => state.setLogsPaneWrap);
+  const globalFilter = useStore((state) => state.logsGlobalFilter);
+  const setGlobalFilter = useStore((state) => state.setLogsGlobalFilter);
+  const paneFilterEngaged = useStore((state) => state.logsPaneFilterEngaged);
+  const setPaneFilterEngaged = useStore((state) => state.setLogsPaneFilterEngaged);
+  const paneFilters = useStore((state) => state.logsPaneFilters);
+  const setPaneFilters = useStore((state) => state.setLogsPaneFilters);
   const [filterEditor, setFilterEditor] = useState<FilterEditorState | null>(null);
   // The history grid browser's cursor/scroll — non-null exactly while the grid is open (`↓` on an
   // untouched draft). Separate from FilterEditorState since it only exists while the editor does.
@@ -428,10 +430,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // drops any browsing state (a stale `index`/`savedDraft` would be reused against the new
           // mode's list on the next ↑/↓). Like a printable char/Backspace while browsing, the
           // recalled entry is discarded and the original draft carries over into the new mode.
-          const baseQuery = filterEditor.browsing !== null ? filterEditor.browsing.savedDraft : filterEditor.query;
           // Snapping back out of a browsed entry changes `query`, so the caret resets to its end
           // (programmatic-overwrite convention); an untouched draft's caret position carries over.
-          const baseCursor = filterEditor.browsing !== null ? baseQuery.length : filterEditor.cursor;
+          const { base: baseQuery, cursor: baseCursor } = resolveSnapBackBase(
+            filterEditor.query,
+            filterEditor.cursor,
+            filterEditor.browsing,
+          );
           applyFilterEditorDraft({
             ...filterEditor,
             query: baseQuery,
@@ -491,9 +496,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // While browsing, Backspace snaps back to the saved draft with the backspace applied on
           // top, rather than editing the recalled entry in place — caret at the saved draft's end,
           // like the typed-char snap-back below.
-          const browsing = filterEditor.browsing;
-          const base = browsing !== null ? browsing.savedDraft : filterEditor.query;
-          const cursor = browsing !== null ? base.length : filterEditor.cursor;
+          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
           const result = nextTextInputValue({ value: base, cursor }, input, key);
           applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
           return;
@@ -501,9 +504,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         if (!key.ctrl && !key.meta && input.length > 0) {
           // Any printable character while browsing snaps back to the draft with that keystroke
           // applied on top, inserted at the caret.
-          const browsing = filterEditor.browsing;
-          const base = browsing !== null ? browsing.savedDraft : filterEditor.query;
-          const cursor = browsing !== null ? base.length : filterEditor.cursor;
+          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
           const result = nextTextInputValue({ value: base, cursor }, input, key);
           applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
         }
