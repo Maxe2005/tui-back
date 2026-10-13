@@ -3,6 +3,7 @@
 // offer, running spinner, done summary, top-level error). The useInput callback itself is
 // never invoked here — the shared harness's fake stdin never emits data (the edts-zone
 // convention) — so keystroke behavior is verified through the pure functions directly.
+import { UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
@@ -723,12 +724,13 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
-      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' },
+      incidentPopupOpen: true,
+      incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
-    expect(output).toContain(UPDATE_BLOCKER_TITLE);
+    expect(output).toContain(UPDATE_INCIDENTS_TITLE);
     expect(output).toContain('svc-a');
     expect(output).toContain('/repo/a');
     for (const item of UPDATE_BLOCKER_MENU_ITEMS) {
@@ -740,7 +742,8 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
-      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' },
+      incidentPopupOpen: true,
+      incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', retry: 2, retryReason: 'Unmerged paths remain' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
@@ -753,7 +756,8 @@ describe('UpdateZone rendering', () => {
     const store = createAppStore();
     store.setState({
       updateStatus: 'running',
-      updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' },
+      incidentPopupOpen: true,
+      incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }, raisedAt: 0 }],
     });
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
@@ -767,11 +771,16 @@ describe('UpdateZone rendering', () => {
 
     const output = await renderToString(createElement(UpdateZone, { useStore: store }));
 
-    expect(output).not.toContain(UPDATE_BLOCKER_TITLE);
+    expect(output).not.toContain(UPDATE_INCIDENTS_TITLE);
   });
 });
 
 describe('deriveUpdateServiceStatus', () => {
+  it('a service paused on an incident is awaiting, outranking updating', () => {
+    expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging', true)).toBe('awaiting');
+    expect(deriveUpdateServiceStatus('down', 'failed', false, false, undefined, true)).toBe('awaiting');
+  });
+
   it('a run currently targeting the service always wins, regardless of health or a stale failed outcome', () => {
     expect(deriveUpdateServiceStatus('down', 'failed', true)).toBe('updating');
     expect(deriveUpdateServiceStatus('up', undefined, true)).toBe('updating');
@@ -861,6 +870,25 @@ describe('formatServiceOutcomeDetail', () => {
   });
 });
 
+describe('conflict auto-resolution display', () => {
+  it('shows the resolver issue note in the merge-conflict body', () => {
+    const body = formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict', autoResolveNote: 'the line is in a mixed block' });
+
+    expect(body).toContain('merge conflict');
+    expect(body).toContain('Issue: the line is in a mixed block');
+    expect(formatBlockerBody({ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' })).not.toContain('Issue');
+  });
+
+  it('shows the per-service conflict outcome in the run detail', () => {
+    const detail = (conflict: 'auto-resolved' | 'partial' | 'left-to-user') =>
+      formatServiceOutcomeDetail({ service: 'svc-a', outcome: 'updated', run: { merge: { kind: 'up-to-date' }, conflict } });
+
+    expect(detail('auto-resolved')).toContain('conflict: auto-resolved');
+    expect(detail('partial')).toContain('conflict: partial');
+    expect(detail('left-to-user')).toContain('conflict: left to you');
+  });
+});
+
 describe('formatServiceOutcomeDetail — run detail', () => {
   it('renders already up to date and no migrations', () => {
     expect(
@@ -907,6 +935,13 @@ describe('formatServiceOutcomeDetail — run detail', () => {
         run: { merge: { kind: 'advanced' } },
       }),
     ).toBe('skipped (no-container): no container\nmerge: updated (diff unavailable)');
+  });
+});
+
+describe('formatLiveServiceDetail — shared-types phase', () => {
+  it('shows the phase on the source service instead of the core step', () => {
+    expect(formatLiveServiceDetail(undefined, [], 'publishing')).toBe('step: publishing shared-types');
+    expect(formatLiveServiceDetail('pulling', [], 'propagating')).toBe('step: propagating shared-types');
   });
 });
 
@@ -1189,11 +1224,17 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
     stagePaths: vi.fn(async () => ok(undefined)),
@@ -1213,6 +1254,8 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),

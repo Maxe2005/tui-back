@@ -71,9 +71,9 @@ describe('loadSettings', () => {
       data: {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 12 },
+          commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -117,6 +117,23 @@ describe('loadSettings', () => {
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
     expect(result.data.warning).toContain('commandPalette.gridMaxRows');
+  });
+
+  it.each([
+    ['historySize: 201', 'commandPalette.historySize'],
+    ['historySize: 0', 'commandPalette.historySize'],
+    ['historyDedup: "x"', 'commandPalette.historyDedup'],
+  ])('falls back to defaults with a field-naming warning for commandPalette %s', async (line, field) => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, `commandPalette:\n  gridMaxRows: 8\n  ${line}\n`);
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain(field);
   });
 
   it('falls back to defaults with a field-naming warning when logs.bufferSize exceeds the upper bound', async () => {
@@ -210,9 +227,9 @@ describe('loadSettings', () => {
       data: {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 8 },
+          commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -254,6 +271,23 @@ describe('loadSettings', () => {
     expect(legacy.data.warning).toBeNull();
   });
 
+  it('loads update.concurrency, defaults it when the group is absent and rejects an out-of-range value', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'update:\n  concurrency: 4\n');
+    const configured = await loadSettings(file);
+    expect(configured.ok && configured.data.settings.update).toEqual({ concurrency: 4 });
+
+    await writeFile(file, 'general:\n  quitShortcutEnabled: true\n');
+    const legacy = await loadSettings(file);
+    expect(legacy.ok && legacy.data.settings.update).toEqual(DEFAULT_SETTINGS.update);
+
+    await writeFile(file, 'update:\n  concurrency: 0\n');
+    const invalid = await loadSettings(file);
+    expect(invalid.ok && invalid.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(invalid.ok && invalid.data.warning).toContain('update.concurrency');
+  });
+
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -283,9 +317,9 @@ describe('loadSettings', () => {
       data: {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 15 },
+          commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -308,9 +342,9 @@ describe('loadSettings', () => {
       data: {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 15 },
+          commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -398,9 +432,9 @@ describe('loadSettings', () => {
       data: {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 8 },
+          commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -421,9 +455,9 @@ describe('loadSettings', () => {
       data: {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
-          commandPalette: { gridMaxRows: 12 },
+          commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -447,9 +481,9 @@ describe('saveSettings', () => {
     const file = join(root, 'tui-back', 'settings.yaml');
     const settings = {
       general: { quitShortcutEnabled: true, editorCommand: '' },
-      commandPalette: { gridMaxRows: 10 },
+      commandPalette: { gridMaxRows: 10, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     const result = await saveSettings(file, settings);
@@ -465,16 +499,16 @@ describe('saveSettings', () => {
 
     await saveSettings(file, {
       general: { quitShortcutEnabled: true, editorCommand: '' },
-      commandPalette: { gridMaxRows: 20 },
+      commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true, editorCommand: '' },
-      commandPalette: { gridMaxRows: 20 },
+      commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
   });
 });
@@ -486,9 +520,9 @@ describe('createSettingsPort', () => {
     const port = createSettingsPort(file);
     const settings = {
       general: { quitShortcutEnabled: false, editorCommand: '' },
-      commandPalette: { gridMaxRows: 5 },
+      commandPalette: { gridMaxRows: 5, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     await port.save(settings);

@@ -187,6 +187,16 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     footer: { key: 'm/a/p', verb: 'configure', zones: ['update'] },
   },
   {
+    keys: 'f (Update)',
+    description: 'Update: open the full-screen report of the highlighted service (Enter on a failed recap row too)',
+    footer: { key: 'f', verb: 'full report', zones: ['update'] },
+  },
+  {
+    keys: 'i (Update)',
+    description: 'Update: reopen the incident queue of the running update (also `:update-incidents`)',
+    footer: { key: 'i', verb: 'incidents', zones: ['update'] },
+  },
+  {
     keys: 'Enter (Update config)',
     description: 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box',
   },
@@ -204,7 +214,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'PgUp / PgDn',
-    description: 'Scroll a dialog taller than the window; page the Update last-run recap',
+    description: 'Scroll a dialog taller than the window; page the Update last-run recap and full report',
   },
   ...Object.values(FOOTER_CONTEXTS).map((context) => ({
     keys: context.label,

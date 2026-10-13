@@ -17,6 +17,7 @@ import {
   effectiveRestart,
   globalLines,
   rowMode,
+  sharedTypesLabel,
   type ConfigBudget,
   type GlobalLine,
   type PanelsViewState,
@@ -146,6 +147,15 @@ function GlobalLines({
             <GlobalRow key={line} focused={focusedLine(line)} label="">
               <Text color={focusedLine(line) ? colors.accent : colors.text} bold={focusedLine(line)} wrap="truncate-end">
                 {START_RUN_LABEL}
+              </Text>
+            </GlobalRow>
+          );
+        }
+        if (line === 'sharedTypes') {
+          return (
+            <GlobalRow key={line} focused={focusedLine(line)} label="shared-types">
+              <Text color={focusedLine(line) ? colors.accent : colors.text} wrap="truncate-end">
+                {`< ${sharedTypesLabel(draft.sharedTypes)} >`}
               </Text>
             </GlobalRow>
           );

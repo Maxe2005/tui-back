@@ -152,16 +152,24 @@ async function wipeDirectoryContents(dir: string): Promise<Result<void>> {
 }
 
 async function resetHistories(state: StatePort): Promise<Result<void>> {
-  const current = await state.readFilterHistory();
-  if (!current.ok) {
-    // A failed read is this category's failure — never assumed empty and written over.
-    return current;
+  // Each history is cleared independently — a failed read is that history's failure, never
+  // assumed empty and written over — and the first failure is the category's result.
+  const filter = await state.readFilterHistory();
+  if (!filter.ok) {
+    return filter;
   }
-  if (current.data === null) {
-    // Nothing persisted (no state.json, or no filterHistory key) — nothing to clear.
-    return ok(undefined);
+  const command = await state.readCommandHistory();
+  if (!command.ok) {
+    return command;
   }
-  return state.writeFilterHistory({});
+  // Nothing persisted (no state.json, or no such key) — nothing to clear.
+  if (filter.data !== null) {
+    const written = await state.writeFilterHistory({});
+    if (!written.ok) {
+      return written;
+    }
+  }
+  return command.data === null ? ok(undefined) : state.writeCommandHistory([]);
 }
 
 async function resetServices(params: ResetToolParams): Promise<Result<void>> {

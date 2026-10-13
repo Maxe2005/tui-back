@@ -104,6 +104,14 @@ export const FOOTER_CONTEXTS = {
     label: 'Update config, service box',
     hints: [['↑/↓/Tab', 'move'], ['Enter', 'edit / apply'], ['Space/←/→', 'change'], ['Ctrl+R', 'back to global'], CLOSE],
   },
+  'update-incidents': {
+    label: 'Update, incident queue',
+    hints: [[KEY_UP_DOWN, 'select incident'], ['Enter', 'open its menu'], ['Esc', 'close (nothing resolved)']],
+  },
+  'update-report': {
+    label: 'Update, full-screen service report',
+    hints: [[KEY_UP_DOWN, 'scroll'], ['PgUp/PgDn', 'page'], ['Home/End', 'top/bottom'], ['n/p', 'failed step'], ['w', 'wrap'], CLOSE],
+  },
   'branch-picker-pick': {
     label: 'Branch picker, pick existing',
     hints: [['Tab', 'switch mode'], [KEY_UP_DOWN, 'move'], ['Enter', 'fill in / set branch'], ['Ctrl+T', 'rename this branch'], CANCEL],
@@ -271,6 +279,8 @@ export const FOOTER_CONTEXTS = {
   'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE] },
   'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate']] },
   'shared-types-results': { label: 'Shared types results', hints: [MOVE, ['R', 'retry failed'], ['Esc', 'new run']] },
+  'shared-types-publish-failed': { label: 'Shared types publish failed', hints: [['R', 'relaunch'], ['Esc', 'back']] },
+  'shared-types-publish-done': { label: 'Shared types publish done', hints: [['C', 'chain into propagation'], ['Esc', 'stop']] },
   'reset-select': {
     label: 'Reset categories',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'review'], CANCEL],
@@ -285,10 +295,6 @@ export const FOOTER_CONTEXTS = {
   'settings-general': {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
-  },
-  'settings-palette': {
-    label: 'Settings Command Palette tab',
-    hints: [[KEY_UP_DOWN, 'adjust'], ['1-9', 'set'], TAB_SWITCH, CLOSE],
   },
   'settings-groups': {
     label: 'Settings group list',

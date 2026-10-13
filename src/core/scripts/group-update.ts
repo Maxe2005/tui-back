@@ -15,6 +15,8 @@ import type { RegistryPort } from '../ports/registry.js';
 import type { RestartPort } from '../ports/restart.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { runPool, type PoolControl, type StageControl } from './run-pool.js';
+export type { StageControl };
 
 // The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)
 // serializes on it, so a second trigger is rejected, never queued or raced.
@@ -78,6 +80,10 @@ async function validateSelectionBranches(
 export interface GroupUpdateRunDetail {
   merge: { kind: 'up-to-date' } | { kind: 'advanced'; files?: number; insertions?: number; deletions?: number };
   migrations: { kind: 'none' } | { kind: 'ran'; command: string; outputExcerpt: string };
+  // Only on a row whose merge conflicted and an auto-resolver ran: `auto-resolved` (settled
+  // with no menu), `partial` (settled in part, the rest left to the developer), `left-to-user`
+  // (the resolver could not settle its part).
+  conflict?: 'auto-resolved' | 'partial' | 'left-to-user';
 }
 
 export interface GroupUpdateRepoResult {
@@ -183,12 +189,33 @@ export interface GroupUpdateParams {
   // Fires once per service as soon as its row is final (before the run ends), so a driving
   // side can show a finished service while others still run. Observer-only, like onPhase.
   onServiceResult?: OnServiceResult;
+  // How many services are processed at once (bounded pool). Default 1 — the sequential run.
+  concurrency?: number;
+  // Optional stage of a target: stages run in ascending order, each fully finished before the
+  // next starts (a later story runs `shared-types` alone first). Absent: one stage.
+  ordering?: (target: { service: string; repoPath: string }) => number;
+  // Awaited once each stage has finished (also after the last), with that stage's final rows;
+  // it may cancel the run so the remaining stages are reported as cancelled. Generic seam: core
+  // knows nothing about what the driving side does between stages. A throwing hook cancels.
+  afterStage?: (stage: number, rows: GroupUpdateRepoResult[], control: StageControl) => void | Promise<void>;
+  // Optional conflict auto-resolution seam (generic: core never knows what it resolves). Called
+  // on a service whose merge/pull conflicted, before each menu presentation and again after the
+  // developer's `edited` choice, so it must be idempotent. It reports whether it settled
+  // something and, when it could not settle its part, an issue note shown on the incident.
+  autoResolveConflict?: AutoResolveConflict;
 }
+
+export interface AutoResolveResult {
+  touched: boolean;
+  issue?: string;
+}
+
+export type AutoResolveConflict = (target: { service: string; repoPath: string }) => Promise<AutoResolveResult>;
 
 // The resolution seam shape. `kind` distinguishes a dirty worktree from a mid-run conflict
 // from a pre-existing mid-merge/mid-rebase (surfaced before any menu); the driving side
 // answers with one of four bounded choices.
-export type UpdateBlockerKind = 'dirty-worktree' | 'merge-conflict' | 'mid-merge' | 'mid-rebase';
+export type UpdateBlockerKind = 'dirty-worktree' | 'merge-conflict' | 'mid-merge' | 'mid-rebase' | 'unpushed-commits';
 
 export interface UpdateBlocker {
   service: string;
@@ -199,9 +226,17 @@ export interface UpdateBlocker {
   // the driving side shows both so an endless retry loop stays legible.
   retry?: number;
   retryReason?: string;
+  // `unpushed-commits` only: the local branch that could not be fetched into and the
+  // `<hash> <subject>` lines of its commits origin does not have.
+  branch?: string;
+  commits?: string[];
+  // `merge-conflict` only: why the auto-resolver could not settle its part of the conflict.
+  autoResolveNote?: string;
 }
 
-export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run';
+// `fetch` answers an `unpushed-commits` blocker only: core runs a plain `git fetch origin
+// <branch>` (local branch untouched) and carries on with the local branch as it stands.
+export type UpdateBlockerChoice = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run' | 'fetch';
 
 export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerChoice>;
 
@@ -352,42 +387,71 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
   }
 
   const run = await withActionLock(lock, GROUP_UPDATE_LOCK_KEY, async () => {
-    const results: GroupUpdateRepoResult[] = [];
-    for (const target of targets) {
-      const { repoPath } = target;
-      const loaded = await manifest.load(repoPath);
-      if (!loaded.ok) {
-        // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
-        if (loaded.error.code === 'manifest-not-found') {
-          continue;
+    const rows = await runPool<(typeof targets)[number], GroupUpdateRepoResult>(
+      targets,
+      {
+        concurrency: params.concurrency ?? 1,
+        keyOf: (target) => resolve(target.repoPath),
+        ...(params.ordering !== undefined
+          ? { stageOf: (target) => params.ordering?.({ service: serviceFallback(target.repoPath), repoPath: target.repoPath }) ?? 0 }
+          : {}),
+        ...(params.afterStage !== undefined
+          ? { afterStage: (stage: number, stageRows: (GroupUpdateRepoResult | undefined)[], control: StageControl) => params.afterStage?.(stage, stageRows.filter((row): row is GroupUpdateRepoResult => row !== undefined), control) }
+          : {}),
+        onCancelled: async (target) => {
+          const loaded = await manifest.load(target.repoPath);
+          if (!loaded.ok && loaded.error.code === 'manifest-not-found') {
+            return undefined;
+          }
+          const service = loaded.ok ? loaded.data.service : serviceFallback(target.repoPath);
+          const row = loaded.ok ? runCancelledRow(service, target.repoPath, 'before it started') : failed(service, loaded.error);
+          emitServiceResult(params.onServiceResult, row);
+          return row;
+        },
+        onError: (target, error) => {
+          const row = failed(serviceFallback(target.repoPath), unexpectedError(error));
+          emitServiceResult(params.onServiceResult, row);
+          return row;
+        },
+      },
+      async (target, control) => {
+        const { repoPath } = target;
+        const loaded = await manifest.load(repoPath);
+        if (!loaded.ok) {
+          // Genuinely unmanaged — silently skipped, the list-repos manifest-not-found pattern.
+          if (loaded.error.code === 'manifest-not-found') {
+            return undefined;
+          }
+          return failed(serviceFallback(repoPath), loaded.error);
         }
-        results.push(failed(serviceFallback(repoPath), loaded.error));
-        continue;
-      }
-      // `cancel-run` stops the loop but still returns `ok` with rows so far (a cancelled repo
-      // is `skipped`, never `failed`).
-      const outcome = await updateWithLoadedManifest(
-        loaded.data,
-        git,
-        container,
-        migration,
-        restart,
-        undefined,
-        repoPath,
-        loaded.data.service,
-        undefined,
-        params.onUpdateBlocker,
-        effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
-        target.runMigrations ?? runMigrations,
-        target.cleanRestart ?? cleanRestart,
-        params.onPhase,
-      );
-      results.push(outcome.row);
-      emitServiceResult(params.onServiceResult, outcome.row);
-      if (outcome.cancelRun) {
-        break;
-      }
-    }
+        // `cancel-run` stops the pool but still returns `ok` with rows so far (a cancelled repo
+        // is `skipped`, never `failed`).
+        const outcome = await updateWithLoadedManifest(
+          loaded.data,
+          git,
+          container,
+          migration,
+          restart,
+          undefined,
+          repoPath,
+          loaded.data.service,
+          undefined,
+          pausingSeam(params.onUpdateBlocker, control),
+          effectiveSourceBranch(loaded.data.sharedBranch, target.sourceBranch),
+          target.runMigrations ?? runMigrations,
+          target.cleanRestart ?? cleanRestart,
+          params.onPhase,
+          control.cancelled,
+          params.autoResolveConflict,
+        );
+        if (outcome.cancelRun) {
+          control.cancel();
+        }
+        emitServiceResult(params.onServiceResult, outcome.row);
+        return outcome.row;
+      },
+    );
+    const results = rows.filter((row): row is GroupUpdateRepoResult => row !== undefined);
     // Every registered path was unmanaged — an explicit no-op, never silent success.
     if (results.length === 0) {
       return ok({
@@ -552,29 +616,54 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
         seen.add(key);
         return true;
       });
-      const results: GroupUpdateRepoResult[] = [];
-      for (const { member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart } of enlisted) {
-        // `cancel-run` stops the loop but still returns `ok` with rows so far.
-        const outcome = await updateMember(
-          manifest,
-          git,
-          container,
-          migration,
-          restart,
-          active.ulid,
-          member,
-          params.onUpdateBlocker,
-          sourceBranch,
-          memberMigrations ?? runMigrations,
-          memberCleanRestart ?? cleanRestart,
-          params.onPhase,
-        );
-        results.push(outcome.row);
-        emitServiceResult(params.onServiceResult, outcome.row);
-        if (outcome.cancelRun) {
-          break;
-        }
-      }
+      const rows = await runPool<ConfiguredMember, GroupUpdateRepoResult>(
+        enlisted,
+        {
+          concurrency: params.concurrency ?? 1,
+          keyOf: ({ member }) => resolve(member.repoPath),
+          ...(params.ordering !== undefined
+            ? { stageOf: ({ member }) => params.ordering?.({ service: member.service, repoPath: member.repoPath }) ?? 0 }
+            : {}),
+          ...(params.afterStage !== undefined
+            ? { afterStage: (stage: number, stageRows: (GroupUpdateRepoResult | undefined)[], control: StageControl) => params.afterStage?.(stage, stageRows.filter((row): row is GroupUpdateRepoResult => row !== undefined), control) }
+            : {}),
+          onCancelled: ({ member }) => {
+            const row = runCancelledRow(member.service, member.repoPath, 'before it started');
+            emitServiceResult(params.onServiceResult, row);
+            return row;
+          },
+          onError: ({ member }, error) => {
+            const row = failed(member.service, unexpectedError(error));
+            emitServiceResult(params.onServiceResult, row);
+            return row;
+          },
+        },
+        async ({ member, sourceBranch, runMigrations: memberMigrations, cleanRestart: memberCleanRestart }, control) => {
+          // `cancel-run` stops the pool but still returns `ok` with rows so far.
+          const outcome = await updateMember(
+            manifest,
+            git,
+            container,
+            migration,
+            restart,
+            active.ulid,
+            member,
+            pausingSeam(params.onUpdateBlocker, control),
+            sourceBranch,
+            memberMigrations ?? runMigrations,
+            memberCleanRestart ?? cleanRestart,
+            params.onPhase,
+            control.cancelled,
+            params.autoResolveConflict,
+          );
+          if (outcome.cancelRun) {
+            control.cancel();
+          }
+          emitServiceResult(params.onServiceResult, outcome.row);
+          return outcome.row;
+        },
+      );
+      const results = rows.filter((row): row is GroupUpdateRepoResult => row !== undefined);
       // A fully successful run clears a previously set `interrupted` status so the re-run
       // offer doesn't persist forever: results exist and none failed (a `skipped` row
       // doesn't block the clear — the services that could update did). The zero-member
@@ -660,6 +749,43 @@ export async function runRestartStep(input: RestartStepInput): Promise<Result<vo
   return ok(undefined);
 }
 
+// The row of a service the run was cancelled for: `skipped`, never `failed`, so the summary
+// still accounts for it.
+function runCancelledRow(service: string, repoPath: string, when: string): GroupUpdateRepoResult {
+  return {
+    service,
+    outcome: 'skipped',
+    detail: { code: 'run-cancelled', message: `Repo ${repoPath} update cancelled with the run ${when}` },
+  };
+}
+
+// Wraps the blocker seam so a service waiting on the developer gives its pool slot to the next
+// service, and takes one again (behind the waiting ones) once answered. A pool of one keeps
+// its slot: that run stays strictly sequential, a blocker waits for the developer exactly as
+// before.
+function pausingSeam(seam: OnUpdateBlocker | undefined, control: PoolControl): OnUpdateBlocker | undefined {
+  if (seam === undefined) {
+    return undefined;
+  }
+  if (control.concurrency <= 1) {
+    return seam;
+  }
+  return async (blocker) => {
+    control.release();
+    try {
+      return await seam(blocker);
+    } finally {
+      await control.reacquire();
+    }
+  };
+}
+
+// A worker that threw (never-throw invariant, AD-3) becomes that service's failed row.
+function unexpectedError(error: unknown): ResultError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return { code: 'internal-error', message: detail };
+}
+
 function failed(service: string, error: ResultError): GroupUpdateRepoResult {
   return { service, outcome: 'failed', detail: { code: error.code, message: error.message } };
 }
@@ -677,6 +803,8 @@ async function updateMember(
   runMigrations = true,
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
+  shouldStop?: () => boolean,
+  autoResolveConflict?: AutoResolveConflict,
 ): Promise<RepoOutcome> {
   const { service, repoPath, branch } = member;
 
@@ -700,6 +828,8 @@ async function updateMember(
     runMigrations,
     cleanRestart,
     onPhase,
+    shouldStop,
+    autoResolveConflict,
   );
 }
 
@@ -746,8 +876,18 @@ async function updateWithLoadedManifest(
   runMigrations = true,
   cleanRestart = false,
   onPhase?: OnUpdatePhase,
+  shouldStop?: () => boolean,
+  autoResolveConflict?: AutoResolveConflict,
 ): Promise<RepoOutcome> {
   const { container: containerName, migrationCommand, restartCommands } = loaded;
+  // A cancelled run lets in-flight services finish their current step, then stops them before
+  // the next one — no subprocess is ever killed.
+  const stopped = (when: string): RepoOutcome | undefined =>
+    shouldStop?.() === true ? { row: runCancelledRow(service, repoPath, when), cancelRun: false } : undefined;
+  const stoppedEarly = stopped('before it started');
+  if (stoppedEarly !== undefined) {
+    return stoppedEarly;
+  }
   // The configured merge source — the manifest `sharedBranch` unless the pre-run screen
   // confirmed a per-service override (trimmed once inside `effectiveSourceBranch`, so padding
   // never reaches fetch/merge). Merge stays `git merge`, never rebase.
@@ -818,7 +958,12 @@ async function updateWithLoadedManifest(
     }
   }
 
+  const stoppedBeforeMerge = stopped('before its merge');
+  if (stoppedBeforeMerge !== undefined) {
+    return stoppedBeforeMerge;
+  }
   const headBefore = await git.headRevision(repoPath);
+  let conflictOutcome: GroupUpdateRunDetail['conflict'];
 
   if (current.data === mergeSource) {
     // The live current-step signal for the pull path.
@@ -838,12 +983,15 @@ async function updateWithLoadedManifest(
           onUpdateBlocker,
           'pull',
           mergeSource,
+          autoResolveConflict,
+          shouldStop,
         );
         // A resumed conflict rejoins the pipeline below (migrate → restart); a settled
         // one already carries its row.
         if (settlement.done) {
           return settlement.outcome;
         }
+        conflictOutcome = settlement.conflict;
       } else {
         return failedOutcome(service, pulled.error);
       }
@@ -853,7 +1001,10 @@ async function updateWithLoadedManifest(
     emitPhase(onPhase, service, 'merging');
     const fetched = await git.fetch(repoPath, mergeSource);
     if (!fetched.ok) {
-      return failedOutcome(service, fetched.error);
+      const settlement = await resolveUnpushedCommits(service, git, repoPath, mergeSource, fetched.error, onUpdateBlocker);
+      if (!settlement.resumed) {
+        return { row: settlement.row, cancelRun: settlement.cancelRun };
+      }
     }
     // Re-verify before any git write (AD-8) — never assume the member branch is still safe.
     // All-repos scope passes no edtId: the shared-branch gate still applies, the cross-EDT
@@ -873,10 +1024,13 @@ async function updateWithLoadedManifest(
           onUpdateBlocker,
           'merge',
           mergeSource,
+          autoResolveConflict,
+          shouldStop,
         );
         if (settlement.done) {
           return settlement.outcome;
         }
+        conflictOutcome = settlement.conflict;
       } else {
         return failedOutcome(service, merged.error);
       }
@@ -889,6 +1043,9 @@ async function updateWithLoadedManifest(
     runDetail.merge = mergeDetail;
   }
   runDetail.migrations = { kind: 'none' };
+  if (conflictOutcome !== undefined) {
+    runDetail.conflict = conflictOutcome;
+  }
 
   // The migrate phase runs between the pull/merge and the restart: the manifest-declared
   // `migrationCommand` (skipped without error when absent or blank) runs with the repo as its
@@ -896,6 +1053,10 @@ async function updateWithLoadedManifest(
   // keeps the repo on its merged code but skips the restart — a `failed` row with
   // `migration-failed` detail naming the command and the error output — and never blocks or
   // rolls back the other services.
+  const stoppedBeforeMigration = stopped('after its merge — migration and restart not run');
+  if (stoppedBeforeMigration !== undefined) {
+    return stoppedBeforeMigration;
+  }
   if (runMigrations && migrationCommand !== undefined && migrationCommand.trim() !== '') {
     // The live current-step signal for the migrate phase.
     emitPhase(onPhase, service, 'migrating');
@@ -909,20 +1070,18 @@ async function updateWithLoadedManifest(
     runDetail.migrations = { kind: 'ran', command: migrationCommand, outputExcerpt: outputExcerpt(migrated.data.output) };
   }
 
+  const stoppedBeforeRestart = stopped('before its restart');
+  if (stoppedBeforeRestart !== undefined) {
+    return stoppedBeforeRestart;
+  }
   // The restart phase, shared with the standalone single-service use-case via runRestartStep
   // (which also emits the `restarting` phase).
   const restarted = await runRestartStep({ container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase });
   if (!restarted.ok) {
     if (restarted.error.code === 'no-container') {
-      return {
-        row: {
-          service,
-          outcome: 'skipped',
-          detail: { code: 'no-container', message: `Repo ${repoPath} declares no container — restart skipped` },
-          run: runDetail,
-        },
-        cancelRun: false,
-      };
+      // Nothing to restart is not a skipped update: the merge and migrations ran, so the row is
+      // `updated` (a container-less shared-types source must still reach its publish phase).
+      return { row: { service, outcome: 'updated', run: runDetail }, cancelRun: false };
     }
     return failedOutcome(service, restarted.error);
   }
@@ -959,7 +1118,7 @@ async function askSeam(
 ): Promise<{ choice: UpdateBlockerChoice } | { error: ResultError }> {
   try {
     const choice = await onUpdateBlocker(blocker);
-    if (choice !== 'stash' && choice !== 'edited' && choice !== 'cancel-repo' && choice !== 'cancel-run') {
+    if (choice !== 'stash' && choice !== 'edited' && choice !== 'cancel-repo' && choice !== 'cancel-run' && choice !== 'fetch') {
       return {
         error: {
           code: 'internal-error',
@@ -1151,6 +1310,86 @@ async function resolveDirtyBlocker(
   }
 }
 
+// A rejected `fetch origin <b>:<b>` is almost always a local branch carrying commits origin
+// lacks (git refuses to move a branch backwards). Core refreshes `origin/<b>` with a plain
+// fetch and lists those commits: none → the failure is something else (network, auth) and
+// stays the original `git-fetch-error`; some → the repo is stopped with an explicit message
+// naming them. Without a seam that is a `failed` row; with one the developer chooses: `fetch`
+// (carry on with the local branch as is), `edited` (fix it in the editor — e.g. push — then the
+// strict fetch is retried), or one of the two cancels.
+function unpushedMessage(service: string, branch: string, commits: readonly string[]): string {
+  return `There are unpushed commits on branch ${branch} of service ${service}, which prevents a clean fetch: ${commits.join(' | ')}`;
+}
+
+async function resolveUnpushedCommits(
+  service: string,
+  git: GitPort,
+  repoPath: string,
+  branch: string,
+  fetchError: ResultError,
+  onUpdateBlocker: OnUpdateBlocker | undefined,
+): Promise<BlockerSettlement> {
+  const refreshed = await git.fetchRemote(repoPath, branch);
+  if (!refreshed.ok) {
+    return { resumed: false, row: failed(service, fetchError), cancelRun: false };
+  }
+  const listed = await git.listUnpushedCommits(repoPath, branch);
+  if (!listed.ok || listed.data.length === 0) {
+    return { resumed: false, row: failed(service, fetchError), cancelRun: false };
+  }
+  let commits = listed.data;
+  if (onUpdateBlocker === undefined) {
+    return {
+      resumed: false,
+      row: failed(service, { code: 'unpushed-commits', message: unpushedMessage(service, branch, commits) }),
+      cancelRun: false,
+    };
+  }
+  let retry = 0;
+  let retryReason = '';
+  for (;;) {
+    const blocker: UpdateBlocker = {
+      service,
+      repoPath,
+      kind: 'unpushed-commits',
+      branch,
+      commits,
+      ...(retry > 0 ? { retry, retryReason } : {}),
+    };
+    const asked = await askSeam(onUpdateBlocker, blocker);
+    if ('error' in asked) {
+      return { resumed: false, row: failed(service, asked.error), cancelRun: false };
+    }
+    if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
+      return {
+        resumed: false,
+        row: {
+          service,
+          outcome: 'skipped',
+          detail: { code: 'unpushed-commits', message: `Repo ${repoPath} update cancelled by developer — left untouched` },
+        },
+        cancelRun: asked.choice === 'cancel-run',
+      };
+    }
+    if (asked.choice === 'fetch') {
+      // The plain fetch already ran above; the local branch (a superset of origin's) is merged as is.
+      return { resumed: true };
+    }
+    // `edited` (or an unavailable `stash`): retry the strict fetch the editor session may have unblocked.
+    const retried = await git.fetch(repoPath, branch);
+    if (retried.ok) {
+      return { resumed: true };
+    }
+    retry += 1;
+    retryReason = 'Local branch still has commits origin lacks';
+    await git.fetchRemote(repoPath, branch);
+    const again = await git.listUnpushedCommits(repoPath, branch);
+    if (again.ok && again.data.length > 0) {
+      commits = again.data;
+    }
+  }
+}
+
 // Mid-run conflict settlement (a merge — or pull — this run started now leaves the repo
 // mid-merge). Without a seam this is an abort-and-report `failed`/`merge-conflict` row; with
 // a seam there is no abort and no retry bound: every `edited` choice retries the update, and
@@ -1158,7 +1397,7 @@ async function resolveDirtyBlocker(
 // `retry` counter and its reason. The only clean exits from an unresolvable conflict are the
 // two cancel choices, which abort the own-started merge and land a `skipped` row. A resumed
 // conflict rejoins the caller's pipeline (migrate → restart) via `{ done: false }`.
-type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false };
+type ConflictSettlement = { done: true; outcome: RepoOutcome } | { done: false; conflict?: GroupUpdateRunDetail['conflict'] };
 
 async function resolveMidRunConflict(
   service: string,
@@ -1168,18 +1407,81 @@ async function resolveMidRunConflict(
   onUpdateBlocker: OnUpdateBlocker | undefined,
   via: 'pull' | 'merge',
   sharedBranch: string,
+  autoResolveConflict?: AutoResolveConflict,
+  shouldStop?: () => boolean,
 ): Promise<ConflictSettlement> {
   if (onUpdateBlocker === undefined) {
     return { done: true, outcome: await failConflicted(service, git, repoPath, conflict) };
   }
   let retry = 0;
   let retryReason = '';
+  // What the auto-resolver did across the whole conflict: whether it settled anything, the
+  // first issue note it raised (kept while the conflict stays unresolved), the issue of its
+  // last pass, and whether the developer was ever asked.
+  let touched = false;
+  let note: string | undefined;
+  let lastIssue: string | undefined;
+  let menuShown = false;
+  const conflictOutcome = (): GroupUpdateRunDetail['conflict'] => {
+    if (touched) {
+      return menuShown || lastIssue !== undefined ? 'partial' : 'auto-resolved';
+    }
+    return note !== undefined ? 'left-to-user' : undefined;
+  };
+  const tagged = (outcome: RepoOutcome): RepoOutcome => {
+    // A row that did not finish its merge is never `auto-resolved`.
+    const raw = conflictOutcome();
+    const value = raw === 'auto-resolved' ? 'partial' : raw;
+    return value === undefined ? outcome : { ...outcome, row: { ...outcome.row, run: { ...outcome.row.run, conflict: value } } };
+  };
+  // One auto-resolve pass; a throwing seam is an issue note, never a failed run. A stopped run
+  // never starts one.
+  const autoPass = async (): Promise<{ touched: boolean }> => {
+    if (autoResolveConflict === undefined || shouldStop?.() === true) {
+      return { touched: false };
+    }
+    try {
+      const result = await autoResolveConflict({ service, repoPath });
+      touched = touched || result.touched;
+      lastIssue = result.issue;
+      if (result.issue !== undefined) {
+        note = result.issue;
+      }
+      return { touched: result.touched };
+    } catch (error) {
+      lastIssue = `Auto-resolution failed: ${error instanceof Error ? error.message : String(error)}`;
+      note = lastIssue;
+      return { touched: false };
+    }
+  };
+  let skipPreMenuPass = false;
   for (;;) {
-    const blocker: UpdateBlocker =
-      retry === 0 ? { service, repoPath, kind: 'merge-conflict' } : { service, repoPath, kind: 'merge-conflict', retry, retryReason };
+    if (!skipPreMenuPass) {
+      const pass = await autoPass();
+      if (pass.touched) {
+        // The resolver may have settled everything: finalize without bothering the developer.
+        const settled = await attemptEdited(git, repoPath, via, sharedBranch);
+        if (settled.type === 'resumed') {
+          return { done: false, conflict: conflictOutcome() };
+        }
+        if (settled.type === 'failed') {
+          return { done: true, outcome: tagged(settled.outcome(service)) };
+        }
+        // Blocked (unmerged paths remain, or finalize refused): the menu takes over, uncounted.
+      }
+    }
+    skipPreMenuPass = false;
+    const blocker: UpdateBlocker = {
+      service,
+      repoPath,
+      kind: 'merge-conflict',
+      ...(retry > 0 ? { retry, retryReason } : {}),
+      ...(note !== undefined ? { autoResolveNote: note } : {}),
+    };
+    menuShown = true;
     const asked = await askSeam(onUpdateBlocker, blocker);
     if ('error' in asked) {
-      return { done: true, outcome: await failConflicted(service, git, repoPath, asked.error) };
+      return { done: true, outcome: tagged(await failConflicted(service, git, repoPath, asked.error)) };
     }
     if (asked.choice === 'cancel-repo' || asked.choice === 'cancel-run') {
       // Own-started merge aborted, repo left at pre-run HEAD; a cancelled repo is `skipped`,
@@ -1199,20 +1501,26 @@ async function resolveMidRunConflict(
               message: `Repo ${repoPath} update cancelled by developer (merge --abort also failed: ${aborted.error.message})`,
             },
           };
-      return asked.choice === 'cancel-run' ? { done: true, outcome: { row, cancelRun: true } } : { done: true, outcome: { row, cancelRun: false } };
+      return { done: true, outcome: tagged({ row, cancelRun: asked.choice === 'cancel-run' }) };
     }
     // `stash` is never run on a conflict (the TUI does not offer it): git refuses to stash
     // unmerged paths, and on a resolved-but-uncommitted merge it would shelve the
     // resolution and clear the merge — a seam answering it just re-presents the menu.
-    const attempt: ConflictAttempt =
-      asked.choice === 'stash'
-        ? { type: 'blocked', reason: 'Stash is not available during a merge conflict' }
-        : await attemptEdited(git, repoPath, via, sharedBranch);
+    let attempt: ConflictAttempt;
+    if (asked.choice === 'stash') {
+      attempt = { type: 'blocked', reason: 'Stash is not available during a merge conflict' };
+    } else {
+      // After the developer's edit the resolver runs again: with `package.json` now settled it
+      // regenerates and stages the lockfile before the merge is finalized.
+      await autoPass();
+      skipPreMenuPass = true;
+      attempt = await attemptEdited(git, repoPath, via, sharedBranch);
+    }
     if (attempt.type === 'resumed') {
-      return { done: false };
+      return { done: false, conflict: conflictOutcome() };
     }
     if (attempt.type === 'failed') {
-      return { done: true, outcome: attempt.outcome(service) };
+      return { done: true, outcome: tagged(attempt.outcome(service)) };
     }
     // Still blocked → re-present the menu, counting the failed attempt.
     retry += 1;
@@ -1225,7 +1533,7 @@ async function resolveMidRunConflict(
 // a non-conflict pull/merge failure — retrying the menu cannot fix those).
 type ConflictAttempt =
   | { type: 'resumed' }
-  | { type: 'blocked'; reason: string }
+  | { type: 'blocked'; reason: string; unmerged?: boolean }
   | { type: 'failed'; outcome: (service: string) => RepoOutcome };
 
 function failedAttempt(error: ResultError): ConflictAttempt {
@@ -1248,7 +1556,7 @@ async function attemptEdited(git: GitPort, repoPath: string, via: 'pull' | 'merg
       return failedAttempt(unmerged.error);
     }
     if (unmerged.data) {
-      return { type: 'blocked', reason: 'Unmerged paths remain — resolve and stage (git add) every conflicted file' };
+      return { type: 'blocked', reason: 'Unmerged paths remain — resolve and stage (git add) every conflicted file', unmerged: true };
     }
     const finalized = await git.finalizeMerge(repoPath);
     if (!finalized.ok) {

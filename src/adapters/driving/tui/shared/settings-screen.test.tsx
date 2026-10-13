@@ -30,6 +30,8 @@ import {
   adjustFilterHistoryGridMaxRows,
   adjustFilterHistorySize,
   adjustGridMaxRows,
+  adjustUpdateConcurrency,
+  parseUpdateConcurrencyDigit,
   adjustLogBufferSize,
   clampBranchDropdownMaxRows,
   clampFilterHistoryGridMaxRows,
@@ -45,6 +47,24 @@ import {
   resolveSettingsTabState,
   toggleHiddenHint,
 } from './settings-screen.js';
+
+describe('update concurrency row', () => {
+  it('steps within [1, 8] and sets from a digit', () => {
+    expect(adjustUpdateConcurrency(3, 'up')).toBe(4);
+    expect(adjustUpdateConcurrency(1, 'down')).toBe(1);
+    expect(adjustUpdateConcurrency(8, 'up')).toBe(8);
+    expect(parseUpdateConcurrencyDigit('5')).toBe(5);
+    expect(parseUpdateConcurrencyDigit('0')).toBeNull();
+    expect(parseUpdateConcurrencyDigit('x')).toBeNull();
+  });
+
+  it('only reacts on its own row', () => {
+    expect(resolveGeneralSettingsKey('+', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 4 });
+    expect(resolveGeneralSettingsKey('-', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 2 });
+    expect(resolveGeneralSettingsKey('6', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 6 });
+    expect(resolveGeneralSettingsKey('+', {}, { cursor: 0, editing: null }, 3)).toEqual({ type: 'ignore' });
+  });
+});
 
 describe('nextSettingsTab', () => {
   it('cycles General -> EDTs -> Command Palette -> Logs -> General going forward', () => {
@@ -369,7 +389,7 @@ describe('SettingsScreen', () => {
 
   it('reflects the live gridMaxRows value from the store on the Command Palette tab data path', () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12 } } });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true } } });
     expect(store.getState().settings.commandPalette.gridMaxRows).toBe(12);
   });
 
@@ -391,11 +411,26 @@ describe('SettingsScreen', () => {
 
   it('renders the live gridMaxRows value and hint on the Command Palette tab', async () => {
     const store = createAppStore();
-    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12 } } });
-    const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" />);
+    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" initialPaletteGroup="grid-max-rows" />);
     expect(output).toContain('Command grid max rows:');
     expect(output).toContain('12');
     expect(output).toContain('Rows of the command grid');
+  });
+
+  it('lists the Command Palette groups at the tab\'s top level', async () => {
+    const output = await renderToString(<SettingsScreen useStore={createAppStore()} initialTab="command-palette" />);
+    expect(output).toContain('Command grid max rows');
+    expect(output).toContain('Command history size');
+    expect(output).toContain('Deduplicate command history');
+    expect(output).toContain('Clear command history');
+  });
+
+  it('renders the live command history size and the dedup checkbox state', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, commandPalette: { ...DEFAULT_SETTINGS.commandPalette, historySize: 35, historyDedup: false } } });
+    expect(await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" initialPaletteGroup="history-size" />)).toContain('35');
+    expect(await renderToString(<SettingsScreen useStore={store} initialTab="command-palette" initialPaletteGroup="history-dedup" />)).toContain('[ ]');
   });
 
   it('renders the live bufferSize value and hints when drilled into the "Buffer size" group', async () => {
@@ -560,7 +595,8 @@ describe('resolveGeneralSettingsKey (General tab row list + editor command field
 
   it('Up/Down move the row cursor, clamped at both ends', () => {
     expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
-    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow + 1 });
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow + 1, editing: null })).toEqual({ type: 'move', cursor: editorRow + 1 });
     expect(resolveGeneralSettingsKey('', { upArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: quitRow });
   });
 
@@ -600,7 +636,9 @@ describe('settingsFooterContext', () => {
   it('maps each tab and drill-down level to its footer context', () => {
     expect(settingsFooterContext('general', closed)).toBe('settings-general');
     expect(settingsFooterContext('general', { ...closed, generalEditing: true })).toBe('confirm');
-    expect(settingsFooterContext('command-palette', closed)).toBe('settings-palette');
+    expect(settingsFooterContext('command-palette', closed)).toBe('settings-groups');
+    expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'grid-max-rows' })).toBe('settings-adjust');
+    expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'history-dedup' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', closed)).toBe('settings-groups');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');

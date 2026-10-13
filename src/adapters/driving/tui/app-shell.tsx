@@ -162,6 +162,7 @@ export function AppShell({
   const loadEdts = useStore((state) => state.loadEdts);
   const zoneEvents = useStore((state) => state.zoneEvents);
   const updateRunning = useStore((state) => state.updateStatus === 'running');
+  const updateIncidents = useStore((state) => state.incidents.length);
   const setActiveZone = useStore((state) => state.setActiveZone);
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
@@ -201,6 +202,7 @@ export function AppShell({
   // both read `store.filterHistory` unconditionally, so the persisted lists must be live before
   // either is ever opened.
   const loadFilterHistory = useStore((state) => state.loadFilterHistory);
+  const loadCommandHistory = useStore((state) => state.loadCommandHistory);
   const ZoneScreen = getZoneScreen(activeZone);
   const { rows, columns } = useWindowSize();
   const footerItems = useFooterItems(activeZone, useStore);
@@ -240,6 +242,7 @@ export function AppShell({
   // Loaded once at app mount, same idiom as loadSplitterRatios above.
   useEffect(() => {
     void loadFilterHistory();
+    void loadCommandHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -266,6 +269,13 @@ export function AppShell({
       return;
     }
     const state = useStore.getState();
+
+    // An open help panel is the sole consumer of keys, so it can always be closed — even when a
+    // zone dialog captured input after it opened (the zones are inert behind it meanwhile).
+    if (state.helpOpen) {
+      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+      return;
+    }
 
     // A zone-owned dialog/form sets zoneInputCaptured while it owns the keystroke — no global
     // shortcut, `?` help included, may fire while it's set. The focused Routes right pane
@@ -389,7 +399,7 @@ export function AppShell({
       ) : null}
       <Box flexDirection="column" height={rows} overflow="hidden" display={tooSmall ? 'none' : 'flex'}>
         <TopBar activeEdt={activeEdt} edts={edts} />
-        <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} />
+        <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} updateIncidents={updateIncidents} />
         <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
           <BoundsProvider columns={columns} rows={zoneRows}>
             <ZoneScreen useStore={useStore} />

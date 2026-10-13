@@ -116,6 +116,10 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
@@ -125,6 +129,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
     ...overrides,
   };
 }

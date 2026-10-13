@@ -357,6 +357,10 @@ describe('modifyEdt persistence (real update())', () => {
       discardPathsToHead: async () => ok(undefined),
       isRebaseInProgress: async () => ok(false),
       hasUnmergedPaths: async () => ok(false),
+      listUnmergedPaths: async () => ok([] as string[]),
+      readWorktreeFile: async () => ok(""),
+      writeResolvedFile: async () => ok(undefined),
+      checkoutSide: async () => ok(undefined),
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
@@ -366,6 +370,8 @@ describe('modifyEdt persistence (real update())', () => {
       commit: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
+      fetchRemote: async () => ok(undefined),
+      listUnpushedCommits: async () => ok([] as string[]),
       ...overrides,
     };
   }

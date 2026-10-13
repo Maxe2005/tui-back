@@ -262,6 +262,7 @@ A developer can run a group update — pull/merge the update, run migrations, re
 - The end-of-run summary accounts for every targeted service by outcome (updated / skipped / failed) — no service is silently absent from the summary.
 - A group update triggered on an EDT with zero member services is a no-op, with an explicit message rather than silent success.
 - A second group-update run is rejected while one is already in progress, in any scope.
+- The targeted services are updated in parallel, bounded by a configurable concurrency (default 3; 1 = sequential). The end-of-run summary lists services in configuration order. (Amended 2026-10-08, Sprint Change Proposal.)
 
 #### FR-11: Assisted resolution of merge conflicts / dirty state
 
@@ -269,7 +270,7 @@ When a group update hits a repo that isn't cleanly updatable, the tool auto-reso
 
 **Consequences (testable):**
 - If only `package.json`/lockfile are dirty, the tool resolves it the same way `update_repo.sh` does today, without prompting.
-- For any other dirty/conflicted state, the tool presents a menu (stash / open in editor / cancel this repo / cancel the whole run) and does not proceed on that repo until the developer acts — canceling this repo alone lets the run continue with the rest; canceling the whole run stops it entirely.
+- For any other dirty/conflicted state, the tool raises an incident in a queue that fills as the run progresses; the developer chooses which incident to resolve first (stash / open in editor / cancel this repo / cancel the whole run). Only the blocked repo waits; the others keep updating, and a resolved repo resumes by itself after the tool re-verifies its state (amended 2026-10-08) — canceling this repo alone lets the run continue with the rest; canceling the whole run stops un-started services and lets in-flight services finish their current step.
 - After the developer acts, the tool re-checks the repo's state before resuming — it does not assume success.
 - A repo already mid-merge/mid-rebase from a previous interrupted or crashed run is detected as its own case, distinct from a lockfile-only dirty state, and surfaced to the developer explicitly before the guided menu applies.
 
@@ -284,6 +285,7 @@ When a migration fails during a group update, the tool surfaces which service, w
 - Re-running a fixed migration re-verifies success before that service is marked caught up.
 - Repeated failures on the same migration are surfaced the same way each time; no retry limit or escalation path is enforced in v1.
 - The re-trigger action is available directly from the affected service's own row/detail view in the Update zone, using the same single-service configuration interface as a full single-service update (FR-25) — no separate flow to remember.
+- A failed migration or restart is not an incident: the service ends failed as before, and the other services are neither blocked nor rolled back. It can be relaunched through the single-service update once the whole run has ended. (Clarified 2026-10-08.)
 
 #### FR-25: Configure a group update before it runs
 
@@ -337,6 +339,27 @@ After a group update, the Update zone's detail pane reports per service what rea
 
 ---
 
+#### FR-34: Full-screen service update report (added 2026-10-08, Sprint Change Proposal)
+
+A developer can open a service's update report full screen — the complete detail and error output of each step and every logged issue — scrollable, wrapping, and live while the run is in progress.
+
+**Consequences (testable):**
+- Nothing is capped or flattened: a multi-line migration or merge error is fully readable.
+- Failed steps are visually distinct (glyph + color) and can be jumped to.
+- The inline detail pane keeps its bounded rendering; the full report is the only unbounded-text surface.
+
+#### FR-35: Service actions (added 2026-10-12, Sprint Change Proposal)
+
+A single set of per-service actions — open in IDE, simple restart, clean restart, extensible — is available from the Logs zone and the Dashboard, behaving identically in both.
+
+**Consequences (testable):**
+- An unavailable action (no container, no clean-restart recipe) is shown disabled with its reason; a clean restart without a recipe falls back to a simple restart with a visible notice.
+- Logs `R` restarts with the mode chosen in `logs.restartMode` (simple by default).
+
+#### FR-36: Configurable defaults (added 2026-10-12, Sprint Change Proposal)
+
+The defaults of the Update global parameters, the st zone's option toggles and the Logs restart mode are settings. A per-run change never writes back; with untouched settings behaviour is unchanged.
+
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
 **Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.
@@ -355,14 +378,15 @@ A developer can publish a new `shared-types` version through the tool, which run
 - Publish is offered only when the active EDT includes the repo declaring `shared-types-source` as a member.
 - Manifest parameters: `shared-types-source` takes `publishCommand` (default `npm run v`) and `packageName` (default `@ianord/shared-types`).
 
-#### FR-14: See declared-version drift *(amended 2026-10-05 — niche, optional)*
+#### FR-14: Search the `shared-types` version history *(redefined 2026-10-12, Sprint Change Proposal — replaces the declared-version drift view)*
 
-The tool shows, for the active EDT's `shared-types-consumer` member services, the `shared-types` version declared in their `package.json` compared with the version declared by the `shared-types` source repo on the active EDT's branch.
+A developer searches the `shared-types` source repo's branches and commits in real time to see which versions each branch carried and when.
 
 **Consequences (testable):**
-- The comparison reads declared versions from `package.json` files only. No git-ancestry walk is performed and nothing is cached. (The 2026-08-24 ancestry-based resolution is superseded.)
-- A member service that doesn't declare `shared-types-consumer` is omitted; unavailable when the active EDT doesn't include the source repo.
-- An out-of-sync consumer offers a one-key jump into FR-15 with the source version pre-filled.
+- **By branch:** the developer picks a branch; the tool walks its commits newest-first and records every commit that changes the `"version"` line of the source repo's root `package.json`, until `n` versions are found (`sharedTypes.historyDepth`, default 20) or `sharedTypes.maxCommitsScanned` (default 1 000) commits were scanned.
+- **By version:** the developer enters a valid `MAJOR.MINOR.PATCH`; the tool shows the branch(es) containing the commit that set it and that commit's date (the bump date, not a registry publication date). Invalid input runs nothing.
+- Results stream in and the search is cancellable; nothing is cached and nothing is written to any repo.
+- Available only when the active EDT includes the `shared-types-source` repo. A result row can pre-fill FR-15's version field.
 
 #### FR-15: Propagate a version to chosen services *(amended 2026-10-05)*
 
@@ -415,6 +439,7 @@ Service health (up / down / restarting) is visible inline with the log view, so 
 **Consequences (testable):**
 - A failing service's health status is visible in the same view as its logs, without a separate health check step.
 - Restarting a failing service is a developer-triggered action from this view, replacing `check_health.sh`'s current silent auto-restart.
+- Restart honours `logs.restartMode` (simple | clean) and an open-in-IDE shortcut acts on the focused service (FR-35, added 2026-10-12).
 - A restart request on a service that's already restarting is a no-op — the control is disabled during restart, never triggering a second concurrent restart.
 
 ---
@@ -564,7 +589,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 - **SM-1**: Session start is one guided action (switch/create EDT → group update completes) instead of a manual multi-step sequence, every time. Validates FR-4, FR-6, FR-10.
 - **SM-2**: Zero forgotten-service incidents — no service silently left out of date after a group update. Target: 0 per month, observed over real use. Validates FR-10.
 - **SM-3**: Every merge/migration failure encountered during a group update is resolved through the tool's guided flow, without the developer dropping to a separate terminal. Validates FR-11, FR-12.
-- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30 (FR-14 is niche).
+- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30; FR-14 answers *which version, where, when* from git.
 - **SM-5**: The trace → fix → resume loop (fire a saved route request, see the relevant logs, get back to coding) stays fast enough not to break flow. Validates FR-20, FR-21, FR-22, FR-23.
 - **SM-6**: Zero incidents of a non-member service breaking EDT work because it was left on a stray branch — branch state for every managed repo is always visible and correct. Validates FR-8, FR-9.
 

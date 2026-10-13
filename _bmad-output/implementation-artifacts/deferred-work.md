@@ -703,3 +703,59 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
   summary: A symlinked `.tui-back.yaml` is read through but restored as a regular file; file mode is not preserved by the carry.
   evidence: `capture` stores bytes only and `restore` renames a temp file over the target.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: `[f] full report` footer hint is static for the whole Update zone instead of being shown only when a report is available.
+  evidence: The footer comes from a static KEYBINDINGS row with zones; conditional hints need a dynamic footer mechanism. The matrix row "nothing to show" expects no hint advertised.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: `computeLineRowCount` / `sliceVisibleWindow` live in logs-zone.logic and are imported cross-zone by update-zone.logic; move them to a shared module.
+  evidence: Update zone logic now depends on the Logs zone's logic file.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: A single wrapped line taller than the viewport cannot be scrolled within in the full-screen report; only its first rows are reachable.
+  evidence: reportWindow always shows whole lines; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The incident popup can open over a service menu, pick or full-screen report that was already open in the Update zone.
+  evidence: The store opens the popup on the first incident whenever the Update zone is active, without knowing the zone's local dialogs; reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: A run cancelled with unstarted services (now `run-cancelled` rows) still clears an `interrupted` EDT status because no row is `failed`.
+  evidence: groupUpdateEdt only checks for failed rows before setStatus('active'); reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: update-incidents-dialog imports blocker helpers from update-zone while the zone imports the dialog (circular import); the helpers belong in a shared logic module.
+  evidence: Works at runtime (use only inside functions) but is a layering smell; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The CLI `tui-back update` stays sequential (no concurrency passed) while the TUI defaults to 3; cancelled-run issue-log entries stay unresolved; the `:update-incidents` command gives no feedback with an empty queue; no docs mention `update.concurrency`, the `i` key or the awaiting status.
+  evidence: Observed by the three review layers; none breaks the story's acceptance criteria.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: The persisted-history store ignores failed or throwing state writes/reads (no user-visible warning, an unhandled rejection can surface in `mutate`/`resetAndDrain`).
+  evidence: Carried over unchanged from the original filterHistory machinery in logs-slice.ts; `persist` discards the `Result` of `deps.write` and `load` silently keeps the default on a failed read.
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: A write to state.json while another field is corrupt treats the file as empty and overwrites it, discarding the valid sibling fields.
+  evidence: Pre-existing `writeActiveEdt`/`writeSplitterRatios`/`writeFilterHistory` convention (only state-read-error is propagated); the shared `mergeWriteStateFile` preserves it, now also covering commandHistory.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: Under `if-changed`, a source whose earlier publish failed (nothing new to merge) is never published, and a merge touching only non-package files still publishes.
+  evidence: `shouldRunSharedTypesPhase` keys only on merge kind `advanced`; no check of the repo's own version against the registry.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: A phase retry after publish succeeded but registry verification failed re-runs the publish command, and a partial-propagation retry re-propagates consumers that already succeeded without an idempotence test.
+  evidence: Retry reuses `publishedVersion` only after a verified publish; the 4.3 already-published re-check is not applied inside the smart phase.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: With the source row deselected the config row still shows its mode though confirm drops it, and a missing container/restart/sharedTypes dep silently runs a plain update.
+  evidence: `confirmUpdateConfigDraft` drops the mode silently and `buildSharedTypesHook` returns null without a notice.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: The phase result (published version, per-consumer outcomes) is not shown after the run, and a consumer skipped for a dirty package.json stays on the old version without a visible warning.
+  evidence: Only failed consumers pause the run; results are discarded after the hook returns.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: The conflict auto-resolver hardcodes `npm i` and `package-lock.json`, so a consumer on pnpm/yarn (or a workspace-root lock) gets a wrong lockfile.
+  evidence: resolve-conflict.ts never reads the manifest's installer or other lock names; propagateVersion (4.2) has the same npm-only assumption, so it is a cross-story gap.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: `writeResolvedFile` is not atomic and its containment check is lexical only (no realpath, `/`-based), so a symlinked package.json could be written through.
+  evidence: git adapter `isInside` compares string prefixes; a crash mid-write leaves a truncated package.json during a merge. Low likelihood on the fixed package.json/lockfile paths.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: A dependency declared in several sections (dependencies and devDependencies) of a conflicted package.json is treated as a mixed block and reported as an issue instead of being resolved.
+  evidence: rewriteDependencyBlocks forces `mixed` when the dependency line matches more than once in a block.
+
+- source_spec: epic-7/spec-7-11-overlay-owns-the-arrow-keys-settings-screen-help-panel.md
+  summary: Gate `issues-dialog.tsx`'s `useInput` on the zone-input predicate and derive AppShell's two hand-written overlay-flag lists from `isZoneInputActive`.
+  evidence: Story 7.11 review — both are unreachable leaks today, but a new overlay registered only in the predicate would not update AppShell.

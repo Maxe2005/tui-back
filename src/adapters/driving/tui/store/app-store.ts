@@ -13,7 +13,7 @@ import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
 import type { ManifestCarryPort } from '../../../../core/ports/manifest-carry.js';
 import type { MigrationPort } from '../../../../core/ports/migration.js';
-import type { ConsumerConfigParser } from '../../../../core/shared-types/list-consumers.js';
+import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/shared-types/list-consumers.js';
 import type { SharedTypesPort } from '../../../../core/ports/shared-types.js';
 import type { RestartPort } from '../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
@@ -27,6 +27,7 @@ import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice
 import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
 import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
 import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
+import { createCommandHistorySlice, type CommandHistorySlice } from './slices/command-history-slice.js';
 import { createResetSlice, type ResetSlice } from './slices/reset-slice.js';
 import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
 import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
@@ -40,7 +41,7 @@ export type { SettingsUpdate } from './slices/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
 export type { ResetPreview } from './slices/reset-slice.js';
-export type { SharedTypesRun, SharedTypesRunStatus } from './slices/shared-types-slice.js';
+export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
 export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
 
@@ -89,10 +90,16 @@ export type AppStoreDeps = {
   // The shared-types zone's wiring: the registry/package port the manifest module provides, the
   // consuming module's id, and the parser of its manifest parameters (core cannot import the
   // module's schema). Optional like the rest; the zone degrades to an explicit error without it.
-  sharedTypes?: { port: SharedTypesPort; consumerModuleId: string; parseConsumerConfig: ConsumerConfigParser };
+  sharedTypes?: {
+    port: SharedTypesPort;
+    consumerModuleId?: string;
+    parseConsumerConfig?: ConsumerConfigParser;
+    sourceModuleId?: string;
+    parseSourceConfig?: SourceConfigParser;
+  };
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & ResetSlice & RoutesSlice & SharedTypesSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -102,6 +109,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createSettingsSlice(deps)(...args),
     ...createUpdateSlice(deps)(...args),
     ...createLogsSlice(deps)(...args),
+    ...createCommandHistorySlice(deps)(...args),
     ...createResetSlice(deps)(...args),
     ...createRoutesSlice(deps)(...args),
     ...createSharedTypesSlice(deps)(...args),

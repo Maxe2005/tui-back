@@ -4,6 +4,7 @@
 import { z } from 'zod';
 
 export const DEFAULT_PACKAGE_NAME = '@ianord/shared-types';
+export const DEFAULT_REGISTRY = 'https://npm.ianord.fr';
 
 const nonBlank = z.string().trim().min(1);
 
@@ -11,6 +12,7 @@ export const sharedTypesSourceConfigSchema = z
   .object({
     publishCommand: nonBlank.default('npm run v'),
     packageName: nonBlank.default(DEFAULT_PACKAGE_NAME),
+    registry: nonBlank.default(DEFAULT_REGISTRY),
   })
   .strict();
 

@@ -88,6 +88,16 @@ function printsExactVersion(stdout: string, version: string): boolean {
   }
 }
 
+// A scoped package (`@ianord/x`) is routed with `--@ianord:registry=URL`, exactly as a
+// `.npmrc` line would; an unscoped one needs the global `--registry=URL`.
+function registryArgs(packageName: string, registry: string | undefined): string[] {
+  if (registry === undefined || registry.trim() === '') {
+    return [];
+  }
+  const scope = /^(@[^/]+)\//.exec(packageName)?.[1];
+  return [scope === undefined ? `--registry=${registry}` : `--${scope}:registry=${registry}`];
+}
+
 export function createSharedTypesAdapter(options: SharedTypesOptions = {}): SharedTypesPort {
   const fs = options.fs ?? defaultFs;
   const runner: RegistryRunner = options.runner ?? ((command, args, opts) => runProcess(command, args, opts));
@@ -104,6 +114,18 @@ export function createSharedTypesAdapter(options: SharedTypesOptions = {}): Shar
         return err('dependency-not-found', `${dependency} is not declared in ${packageJsonPath}`);
       }
       return ok((loaded.data.json[section] as Record<string, string>)[dependency] as string);
+    },
+
+    async readOwnVersion(packageJsonPath) {
+      const loaded = await loadPackage(fs, packageJsonPath);
+      if (!loaded.ok) {
+        return loaded;
+      }
+      const version = (loaded.data.json as Record<string, unknown>)['version'];
+      if (typeof version !== 'string' || version.trim() === '') {
+        return unreadable(packageJsonPath, new Error('missing or blank "version" field'));
+      }
+      return ok(version.trim());
     },
 
     async writeVersionLine(packageJsonPath, dependency, version) {
@@ -139,8 +161,9 @@ export function createSharedTypesAdapter(options: SharedTypesOptions = {}): Shar
       return ok(undefined);
     },
 
-    async verifyPublished(packageName, version) {
-      const result = await runner('npm', ['view', `${packageName}@${version}`, 'version', '--json'], { timeout });
+    async verifyPublished(packageName, version, registry) {
+      const args = ['view', `${packageName}@${version}`, 'version', '--json', ...registryArgs(packageName, registry)];
+      const result = await runner('npm', args, { timeout });
       if (result.error !== undefined || result.status === null) {
         const reason = result.error?.message ?? 'npm did not complete';
         return err('registry-unreachable', `Cannot reach the npm registry for ${packageName}@${version}: ${reason}`);

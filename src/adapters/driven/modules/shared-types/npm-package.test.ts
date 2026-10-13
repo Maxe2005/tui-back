@@ -101,6 +101,26 @@ describe('verifyPublished', () => {
     expect(seen).toEqual(['view', `${DEP}@1.0.0`, 'version', '--json']);
   });
 
+  it('routes a scoped package through its scope registry', async () => {
+    let seen: readonly string[] = [];
+    const runner: RegistryRunner = async (_c, args) => {
+      seen = args;
+      return { status: 0, stdout: '"1.0.0"', stderr: '' };
+    };
+    await createSharedTypesAdapter({ runner }).verifyPublished(DEP, '1.0.0', 'https://npm.ianord.fr');
+    expect(seen).toEqual(['view', `${DEP}@1.0.0`, 'version', '--json', '--@ianord:registry=https://npm.ianord.fr']);
+  });
+
+  it('uses the global --registry flag for an unscoped package', async () => {
+    let seen: readonly string[] = [];
+    const runner: RegistryRunner = async (_c, args) => {
+      seen = args;
+      return { status: 0, stdout: '"1.0.0"', stderr: '' };
+    };
+    await createSharedTypesAdapter({ runner }).verifyPublished('plain-pkg', '1.0.0', 'https://npm.example');
+    expect(seen).toContain('--registry=https://npm.example');
+  });
+
   it('requires an exact match when npm prints several versions', async () => {
     const out = '["0.1.3","0.1.4"]';
     const adapter = createSharedTypesAdapter({ runner: runnerOf({ status: 0, stdout: out, stderr: '' }) });
@@ -126,5 +146,30 @@ describe('verifyPublished', () => {
       runner: runnerOf({ status: 1, stdout: '', stderr: 'npm error code ENOTFOUND' }),
     });
     expect(await network.verifyPublished(DEP, '1')).toMatchObject({ error: { code: 'registry-unreachable' } });
+  });
+});
+
+describe('readOwnVersion', () => {
+  it('returns the trimmed own version field', async () => {
+    const fs = fakeFs({ p: JSON.stringify({ name: 'x', version: ' 0.1.3674 \n' }) });
+    expect(await createSharedTypesAdapter({ fs }).readOwnVersion('p')).toEqual({ ok: true, data: '0.1.3674' });
+  });
+
+  it('fails with package-json-unreadable when the version field is missing or blank', async () => {
+    const missing = fakeFs({ p: JSON.stringify({ name: 'x' }) });
+    expect(await createSharedTypesAdapter({ fs: missing }).readOwnVersion('p')).toMatchObject({
+      error: { code: 'package-json-unreadable' },
+    });
+    const blank = fakeFs({ p: JSON.stringify({ version: '   ' }) });
+    expect(await createSharedTypesAdapter({ fs: blank }).readOwnVersion('p')).toMatchObject({
+      error: { code: 'package-json-unreadable' },
+    });
+  });
+
+  it('fails with package-json-unreadable on a missing file or invalid JSON', async () => {
+    const fs = fakeFs({ bad: '{nope' });
+    const adapter = createSharedTypesAdapter({ fs });
+    expect(await adapter.readOwnVersion('missing')).toMatchObject({ error: { code: 'package-json-unreadable' } });
+    expect(await adapter.readOwnVersion('bad')).toMatchObject({ error: { code: 'package-json-unreadable' } });
   });
 });

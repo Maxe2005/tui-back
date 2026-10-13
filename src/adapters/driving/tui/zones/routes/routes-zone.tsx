@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -125,10 +126,6 @@ export function formatRoutesDisabledMessage(carryingServices: string[]): string 
 export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const status = useStore((state) => state.tabVisibility.routes.status);
   const carryingServices = useStore((state) => state.tabVisibility.routes.carryingServices);
-  const resizeMode = useStore((state) => state.resizeMode);
-  const commandBarOpen = useStore((state) => state.commandBarOpen);
-  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
-  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
   const routes = useStore((state) => state.routes);
   const routesStatus = useStore((state) => state.routesStatus);
   const routesError = useStore((state) => state.routesError);
@@ -1065,6 +1062,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routesRepoPath]);
 
+  const zoneInputActive = useZoneInputActive(useStore);
   useInput(
     (input, key) => {
       // The destructive overwrite confirm owns every key: Enter overwrites, Esc backs out to
@@ -1683,7 +1681,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setSelected((prev) => moveRoutesSelection(prev, direction, visibleRoutes.length));
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resizeMode },
+    { isActive: zoneInputActive },
   );
 
   if (status === 'disabled') {

@@ -8,11 +8,15 @@ import { createLogsManager, type LogsManager } from '../../../../../core/logs/in
 import { clearLogs, getServiceHealth, loadOlderLogs, restartService, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import { createPersistedHistoryStore, pushHistoryEntry } from '../../shared/input-history/index.js';
 import {
+  DEFAULT_LOG_FILTER,
+  DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
-  pushFilterHistoryEntry,
   resolvePostLoadScrollOffset,
   type FilterHistoryKey,
+  type LogFilterSpec,
+  type VisibilityFlags,
 } from '../../zones/logs/logs-zone.logic.js';
 
 export type LogsPaneErrorState = { code: string; message: string } | null;
@@ -35,6 +39,20 @@ export type LogsPaneData = {
   // loadOlderLogsPane's own successful prepend so the viewport doesn't visually jump.
   scrollOffset: number;
 };
+
+// Drops every per-service display setting (wrap, own filter, global-filter engagement) for the
+// given repoPaths — what deselecting a service resets, so re-selecting it starts from the
+// defaults. The global settings (visibility flags, global filter) are never touched here.
+function withoutPaneSettings(state: AppState, repoPaths: readonly string[]): Partial<AppState> {
+  const drop = new Set(repoPaths);
+  const omit = <T>(record: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([path]) => !drop.has(path)));
+  return {
+    logsPaneWrap: omit(state.logsPaneWrap),
+    logsPaneFilterEngaged: omit(state.logsPaneFilterEngaged),
+    logsPaneFilters: omit(state.logsPaneFilters),
+  };
+}
 
 function emptyPane(repoPath: string, service: string): LogsPaneData {
   return { repoPath, service, lines: [], streamError: null, noMoreHistory: false, scrollOffset: 0, health: 'down', restarting: false };
@@ -64,6 +82,21 @@ export type LogsSlice = {
   // fullscreen target). A key with no entry yet (subscribe still in flight) is treated as an
   // empty/loading pane by the zone.
   logsPanes: Record<string, LogsPaneData>;
+  // Display settings of the Logs tab, kept in the store (in memory only, never written to
+  // disk) so they survive switching tabs and coming back, but not closing the tool.
+  // Global ones: the t/o/p visibility flags and the global filter. Per-service ones, keyed by
+  // repoPath: wrap, global-filter engagement, own filter — all dropped when the service is
+  // deselected, so re-selecting it starts fresh while the global ones stay applied.
+  logsVisibility: VisibilityFlags;
+  logsGlobalFilter: LogFilterSpec;
+  logsPaneWrap: Record<string, boolean>;
+  logsPaneFilterEngaged: Record<string, boolean>;
+  logsPaneFilters: Record<string, LogFilterSpec>;
+  setLogsVisibility: (update: (current: VisibilityFlags) => VisibilityFlags) => void;
+  setLogsGlobalFilter: (filter: LogFilterSpec) => void;
+  setLogsPaneWrap: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
+  setLogsPaneFilterEngaged: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
+  setLogsPaneFilters: (update: (current: Record<string, LogFilterSpec>) => Record<string, LogFilterSpec>) => void;
   toggleLogsEdtSelection: (repoPath: string) => void;
   toggleLogsOtherSelection: (repoPath: string) => void;
   selectAllLogsEdtServices: (repoPaths: readonly string[]) => void;
@@ -141,34 +174,16 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // unwired `createAppStore()` (tests included) keeps working.
   const logsManager: LogsManager | null = deps ? createLogsManager(deps.docker) : null;
 
-  // Mirrors navigation-slice.ts's splitterRatiosSaveChain/splitterRatiosVersion pair —
-  // serializes writeFilterHistory calls so concurrent commits/clears land on disk in request
-  // order, and guards loadFilterHistory against overwriting a newer live change with a stale
-  // on-disk snapshot it started reading before that change landed.
-  let filterHistorySaveChain: Promise<void> = Promise.resolve();
-  let filterHistoryVersion = 0;
-  // `filterHistoryVersion` alone only protects a *stale read* from clobbering a *newer write*
-  // — it does nothing for a write that fires while the first loadFilterHistory() (AppShell's
-  // mount-time hydration) is still in flight. Without this, a commit or clear would apply its
-  // change to the still-empty pre-load map and persist it wholesale — discarding every other
-  // scope/service's history on disk. Set for the duration of the one in-flight load; each of
-  // the three mutators awaits it (a no-op when null, so the common case stays synchronous and
-  // optimistic) before reading `get().filterHistory`.
-  let filterHistoryLoadPromise: Promise<void> | null = null;
+  // The shared persisted-history controller (tui/shared/input-history): hydrate-once, version
+  // guard, serialized save chain and await-in-flight-load, written once for filter and command
+  // history alike.
+  const filterHistoryStore = createPersistedHistoryStore<Record<string, string[]>>(
+    deps ? { read: () => deps.state.readFilterHistory(), write: (history) => deps.state.writeFilterHistory(history) } : null,
+  );
 
   // One poll timer per subscribed pane (keyed by repoPath) — started on subscribe,
   // cleared on unsubscribe/stopAll. Never resubscribes the log stream itself.
   const healthPollTimers = new Map<string, ReturnType<typeof setInterval>>();
-
-  function persistFilterHistory(next: Record<string, string[]>): void {
-    if (!deps) {
-      return;
-    }
-    const run = async () => {
-      await deps.state.writeFilterHistory(next);
-    };
-    filterHistorySaveChain = filterHistorySaveChain.then(run, run);
-  }
 
   return (set, get) => {
     // Shared by loadOlderLogsPane and subscribeLogsPane's startWithHistory fetch — both "fetch
@@ -389,23 +404,50 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       logsFullscreenTarget: null,
       logsFullscreenServiceName: null,
       logsPanes: {},
+      logsVisibility: DEFAULT_VISIBILITY_FLAGS,
+      logsGlobalFilter: DEFAULT_LOG_FILTER,
+      logsPaneWrap: {},
+      logsPaneFilterEngaged: {},
+      logsPaneFilters: {},
+
+      setLogsVisibility: (update) => set((state) => ({ logsVisibility: update(state.logsVisibility) })),
+      setLogsGlobalFilter: (filter) => set({ logsGlobalFilter: filter }),
+      setLogsPaneWrap: (update) => set((state) => ({ logsPaneWrap: update(state.logsPaneWrap) })),
+      setLogsPaneFilterEngaged: (update) => set((state) => ({ logsPaneFilterEngaged: update(state.logsPaneFilterEngaged) })),
+      setLogsPaneFilters: (update) => set((state) => ({ logsPaneFilters: update(state.logsPaneFilters) })),
 
       toggleLogsEdtSelection: (repoPath) =>
-        set((state) => ({
-          logsEdtSelected: state.logsEdtSelected.includes(repoPath)
-            ? state.logsEdtSelected.filter((candidate) => candidate !== repoPath)
-            : [...state.logsEdtSelected, repoPath],
-        })),
+        set((state) =>
+          state.logsEdtSelected.includes(repoPath)
+            ? {
+                logsEdtSelected: state.logsEdtSelected.filter((candidate) => candidate !== repoPath),
+                ...withoutPaneSettings(state, [repoPath]),
+              }
+            : { logsEdtSelected: [...state.logsEdtSelected, repoPath] },
+        ),
       toggleLogsOtherSelection: (repoPath) =>
+        set((state) =>
+          state.logsOtherSelected.includes(repoPath)
+            ? {
+                logsOtherSelected: state.logsOtherSelected.filter((candidate) => candidate !== repoPath),
+                ...withoutPaneSettings(state, [repoPath]),
+              }
+            : { logsOtherSelected: [...state.logsOtherSelected, repoPath] },
+        ),
+      selectAllLogsEdtServices: (repoPaths) =>
         set((state) => ({
-          logsOtherSelected: state.logsOtherSelected.includes(repoPath)
-            ? state.logsOtherSelected.filter((candidate) => candidate !== repoPath)
-            : [...state.logsOtherSelected, repoPath],
+          logsEdtSelected: [...repoPaths],
+          ...withoutPaneSettings(state, state.logsEdtSelected.filter((path) => !repoPaths.includes(path))),
         })),
-      selectAllLogsEdtServices: (repoPaths) => set({ logsEdtSelected: [...repoPaths] }),
-      deselectAllLogsEdtServices: () => set({ logsEdtSelected: [] }),
-      selectAllLogsOtherServices: (repoPaths) => set({ logsOtherSelected: [...repoPaths] }),
-      deselectAllLogsOtherServices: () => set({ logsOtherSelected: [] }),
+      deselectAllLogsEdtServices: () =>
+        set((state) => ({ logsEdtSelected: [], ...withoutPaneSettings(state, state.logsEdtSelected) })),
+      selectAllLogsOtherServices: (repoPaths) =>
+        set((state) => ({
+          logsOtherSelected: [...repoPaths],
+          ...withoutPaneSettings(state, state.logsOtherSelected.filter((path) => !repoPaths.includes(path))),
+        })),
+      deselectAllLogsOtherServices: () =>
+        set((state) => ({ logsOtherSelected: [], ...withoutPaneSettings(state, state.logsOtherSelected) })),
       resolveLogsContainerPresence: (repoPaths) => {
         for (const repoPath of repoPaths) {
           void resolveContainerPresence(repoPath);
@@ -458,7 +500,18 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         listedPollingRepoPaths = [];
       },
       openLogsFullscreen: (repoPath, serviceName) => set({ logsFullscreenTarget: repoPath, logsFullscreenServiceName: serviceName }),
-      closeLogsFullscreen: () => set({ logsFullscreenTarget: null, logsFullscreenServiceName: null }),
+      // An ad hoc preview of an unselected service leaves no per-service settings behind, like a
+      // deselected one.
+      closeLogsFullscreen: () =>
+        set((state) => {
+          const target = state.logsFullscreenTarget;
+          const selected = target !== null && (state.logsEdtSelected.includes(target) || state.logsOtherSelected.includes(target));
+          return {
+            logsFullscreenTarget: null,
+            logsFullscreenServiceName: null,
+            ...(target !== null && !selected ? withoutPaneSettings(state, [target]) : {}),
+          };
+        }),
 
       subscribeLogsPane: async (repoPath, service) => {
         if (!deps || !logsManager) {
@@ -741,107 +794,43 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       },
 
       filterHistory: {},
-      loadFilterHistory: async () => {
-        if (!deps) {
-          return;
-        }
-        // Captured before the await (like loadSplitterRatios): a commit/clear landing while this
-        // read is in flight bumps the version, and the stale result below must never clobber
-        // that newer live value.
-        const startVersion = filterHistoryVersion;
-        const promise = (async () => {
-          const result = await deps.state.readFilterHistory();
-          if (filterHistoryVersion !== startVersion) {
-            return;
-          }
-          if (!result.ok || result.data === null) {
-            // A genuine I/O error, or nothing persisted yet: keep the empty-object default
-            // seeded above — every list simply starts empty.
-            return;
-          }
-          set({ filterHistory: result.data });
-        })();
-        // Published *before* awaiting, and only cleared once this exact call settles — a
-        // commit/clear that checks `filterHistoryLoadPromise` meanwhile sees this in-flight read
-        // and waits for it, rather than racing ahead on the still-empty pre-load map.
-        filterHistoryLoadPromise = promise;
-        try {
-          await promise;
-        } finally {
-          if (filterHistoryLoadPromise === promise) {
-            filterHistoryLoadPromise = null;
-          }
-        }
-      },
+      loadFilterHistory: () => filterHistoryStore.load((history) => set({ filterHistory: history })),
       commitFilterHistoryEntry: (key, query) => {
-        const run = async () => {
-          // Never read/persist `filterHistory` while the initial hydration is still in flight —
-          // awaiting here (a no-op when nothing is in flight) guarantees `get().filterHistory`
-          // below reflects whatever was on disk before this commit's read-modify-write.
-          if (filterHistoryLoadPromise) {
-            await filterHistoryLoadPromise;
-          }
-          filterHistoryVersion += 1;
+        filterHistoryStore.mutate(() => {
           const historyKey = filterHistoryKeyString(key);
           const maxSize = get().settings.logs.filterHistorySize;
           const dedupEverywhere = get().settings.logs.filterHistoryDedup;
           set((state) => ({
             filterHistory: {
               ...state.filterHistory,
-              [historyKey]: pushFilterHistoryEntry(state.filterHistory[historyKey] ?? [], query, maxSize, dedupEverywhere),
+              [historyKey]: pushHistoryEntry(state.filterHistory[historyKey] ?? [], query, maxSize, dedupEverywhere),
             },
           }));
-          // Applies to the live store synchronously above, before persistence even starts —
-          // same "no separate save step" convention as setSplitterRatio.
-          persistFilterHistory(get().filterHistory);
-        };
-        void run();
+          return get().filterHistory;
+        });
       },
       clearGlobalFilterHistory: () => {
-        const run = async () => {
-          if (filterHistoryLoadPromise) {
-            await filterHistoryLoadPromise;
-          }
-          filterHistoryVersion += 1;
+        filterHistoryStore.mutate(() => {
           set((state) => {
             const next = { ...state.filterHistory };
             delete next[filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' })];
             delete next[filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'regex' })];
             return { filterHistory: next };
           });
-          persistFilterHistory(get().filterHistory);
-        };
-        void run();
+          return get().filterHistory;
+        });
       },
-      clearFilterHistoryAndDrainSaves: async () => {
-        if (filterHistoryLoadPromise) {
-          await filterHistoryLoadPromise;
-        }
-        filterHistoryVersion += 1;
-        set({ filterHistory: {} });
-        // A mutator's `run` may itself queue a new save while we wait — loop until the chain
-        // stops growing.
-        let pending: Promise<void>;
-        do {
-          pending = filterHistorySaveChain;
-          await pending;
-        } while (pending !== filterHistorySaveChain);
-      },
+      clearFilterHistoryAndDrainSaves: () => filterHistoryStore.resetAndDrain(() => set({ filterHistory: {} })),
       clearServiceFilterHistory: (repoPath) => {
-        const run = async () => {
-          if (filterHistoryLoadPromise) {
-            await filterHistoryLoadPromise;
-          }
-          filterHistoryVersion += 1;
+        filterHistoryStore.mutate(() => {
           set((state) => {
             const next = { ...state.filterHistory };
             delete next[filterHistoryKeyString({ scope: 'pane', repoPath, mode: 'text' })];
             delete next[filterHistoryKeyString({ scope: 'pane', repoPath, mode: 'regex' })];
             return { filterHistory: next };
           });
-          persistFilterHistory(get().filterHistory);
-        };
-        void run();
+          return get().filterHistory;
+        });
       },
     };
   };
