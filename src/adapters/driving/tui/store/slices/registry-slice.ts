@@ -15,6 +15,10 @@ import {
   type RemoveStaleRegistryEntryResult,
   type RegistryEntryError,
 } from '../../../../../core/scripts/clean-registry.js';
+import {
+  validateRegistry,
+  type ValidateRegistryEntryResult,
+} from '../../../../../core/scripts/validate-registry.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 // Story 2.11: a per-path register outcome, classified by snapshotting registry.list()
@@ -80,6 +84,14 @@ export type RegistrySlice = {
   registryCleanStatus: 'idle' | 'loading';
   registryCleanResults: RemoveStaleRegistryEntryResult[] | null;
   removeStaleRegistryCandidates: (paths: string[]) => Promise<void>;
+  // Story 2.28: "Validate registered repos" — one-shot read-only semantic validation over
+  // every registered path (never writes). registryValidateResults: null = not validated
+  // yet this screen session; a `[]` result is the distinct "no registered repos" state
+  // (mirrors registryScanResult's own null-vs-empty-array convention).
+  registryValidateStatus: 'idle' | 'loading' | 'error';
+  registryValidateError: string | null;
+  registryValidateResults: ValidateRegistryEntryResult[] | null;
+  runRegistryValidate: () => Promise<void>;
   // Clears scan/register/clean state back to a fresh root-input session — called once on
   // every registry-screen mount so a closed-then-reopened screen (or a second, later `:`
   // open) never shows a stale phase/result from the prior session.
@@ -297,6 +309,30 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
         });
       }
     },
+    registryValidateStatus: 'idle',
+    registryValidateError: null,
+    registryValidateResults: null,
+    runRegistryValidate: async () => {
+      if (!deps) {
+        set({ registryValidateStatus: 'error', registryValidateError: 'No ports wired into the TUI store' });
+        return;
+      }
+      const sessionId = get().registrySessionId;
+      set({ registryValidateStatus: 'loading', registryValidateError: null, registryValidateResults: null });
+      const result = await validateRegistry({ registry: deps.registry, manifest: deps.manifest, git: deps.git });
+      if (get().registrySessionId !== sessionId) {
+        return;
+      }
+      if (result.ok) {
+        set({ registryValidateStatus: 'idle', registryValidateResults: result.data.results });
+      } else {
+        set({
+          registryValidateStatus: 'error',
+          registryValidateError: result.error.message,
+          registryValidateResults: null,
+        });
+      }
+    },
     resetRegistryScreen: () =>
       set((state) => ({
         registrySessionId: state.registrySessionId + 1,
@@ -311,6 +347,9 @@ export function createRegistrySlice(deps?: AppStoreDeps): StateCreator<AppState,
         registryCleanErrors: [],
         registryCleanStatus: 'idle',
         registryCleanResults: null,
+        registryValidateStatus: 'idle',
+        registryValidateError: null,
+        registryValidateResults: null,
       })),
   });
 }

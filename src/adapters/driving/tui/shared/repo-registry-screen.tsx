@@ -29,6 +29,8 @@ import {
   type StaleRegistryEntry,
   type RemoveStaleRegistryEntryResult,
   type RemoveStaleRegistryOutcome,
+  type ValidateRegistryEntryResult,
+  type ValidateRegistryOutcome,
 } from '../store/app-store.js';
 import type { ScanResult } from '../../../../core/ports/registry.js';
 
@@ -61,7 +63,13 @@ export type RegistryScreenPhase =
   // told apart inside its own render block instead.
   | 'clean-candidates'
   | 'cleaning'
-  | 'clean-results';
+  | 'clean-results'
+  // Story 2.28: mirrors cleaning/clean-results above, but for the "Validate registered
+  // repos" action — a one-shot read-only run (no list-then-confirm), so loading and
+  // results are its only two states; a use-case failure folds into 'validate-results' and
+  // is told apart inside its own render block.
+  | 'validating'
+  | 'validate-results';
 
 // Pure phase derivation from the store's registry-screen fields — the I/O matrix's states
 // (scanning, distinct empty-vs-error, candidates, registering, results, and story 2.33's
@@ -76,12 +84,22 @@ export function resolveRegistryScreenPhase(store: {
   registryCleanCandidates: StaleRegistryEntry[] | null;
   registryCleanStatus: 'idle' | 'loading';
   registryCleanResults: RemoveStaleRegistryEntryResult[] | null;
+  registryValidateStatus: 'idle' | 'loading' | 'error';
+  registryValidateResults: ValidateRegistryEntryResult[] | null;
 }): RegistryScreenPhase {
   if (store.registryCleanResults !== null) {
     return 'clean-results';
   }
   if (store.registryCleanStatus === 'loading') {
     return 'cleaning';
+  }
+  // Story 2.28: validate slots below cleaning, above results — clean's locked priority
+  // (clean-results > cleaning > results) never moves.
+  if (store.registryValidateResults !== null || store.registryValidateStatus === 'error') {
+    return 'validate-results';
+  }
+  if (store.registryValidateStatus === 'loading') {
+    return 'validating';
   }
   if (store.registryRegisterResults !== null) {
     return 'results';
@@ -177,6 +195,20 @@ function staleOutcomeColor(outcome: RemoveStaleRegistryOutcome): string {
   return outcome === 'removed' ? colors.success : colors.error;
 }
 
+function validateOutcomeColor(outcome: ValidateRegistryOutcome): string {
+  switch (outcome) {
+    case 'valid':
+      return colors.success;
+    case 'invalid':
+      return colors.error;
+    case 'unreachable':
+      return colors.info;
+    case 'inconclusive':
+    default:
+      return colors.warning;
+  }
+}
+
 export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppStore }) {
   const registryScanStatus = useStore((state) => state.registryScanStatus);
   const registryScanError = useStore((state) => state.registryScanError);
@@ -193,6 +225,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const registryCleanStatus = useStore((state) => state.registryCleanStatus);
   const registryCleanResults = useStore((state) => state.registryCleanResults);
   const removeStaleRegistryCandidates = useStore((state) => state.removeStaleRegistryCandidates);
+  const registryValidateStatus = useStore((state) => state.registryValidateStatus);
+  const registryValidateError = useStore((state) => state.registryValidateError);
+  const registryValidateResults = useStore((state) => state.registryValidateResults);
+  const runRegistryValidate = useStore((state) => state.runRegistryValidate);
 
   // No mount-effect reset here: app-store's openRegistryScreen() clears scan/register/clean
   // state atomically with becoming open (before this component ever mounts), so a reopened
@@ -206,6 +242,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     registryCleanCandidates,
     registryCleanStatus,
     registryCleanResults,
+    registryValidateStatus,
+    registryValidateResults,
   });
 
   const [root, setRoot] = useState('');
@@ -228,6 +266,12 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
       // branch-picker.tsx's own Ctrl+R precedent).
       if (key.ctrl && input.toLowerCase() === 'l') {
         void scanRegistryStaleEntries();
+        return;
+      }
+      // Ctrl+V: "Validate registered repos" (story 2.28) — same root-input-only
+      // convention as Ctrl+L above; verified free (no other screen claims it).
+      if (key.ctrl && input.toLowerCase() === 'v') {
+        void runRegistryValidate();
         return;
       }
       if (key.return) {
@@ -311,6 +355,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
             </Text>
             <DimAnnotation text="Type a path, then Enter to scan." />
             <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
+            <DimAnnotation text="Ctrl+V to validate registered repos (shared branch exists locally or on origin)." />
           </Box>
         ) : null}
 
@@ -459,6 +504,39 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               </Box>
             ))}
             <DimAnnotation text="Esc to close." />
+          </Box>
+        ) : null}
+
+        {phase === 'validating' ? (
+          <Box>
+            <Spinner />
+            <Text color={colors.text}> Validating registered repos…</Text>
+          </Box>
+        ) : null}
+
+        {phase === 'validate-results' ? (
+          <Box flexDirection="column">
+            {registryValidateStatus === 'error' ? (
+              <Box flexDirection="column">
+                <Text color={colors.error}>Validation failed.</Text>
+                {registryValidateError ? <DimAnnotation text={registryValidateError} /> : null}
+              </Box>
+            ) : (registryValidateResults ?? []).length === 0 ? (
+              <Text color={colors['text-dim']}>No registered repos.</Text>
+            ) : (
+              <Box flexDirection="column">
+                <Text color={colors['text-dim']}>VALIDATION RESULTS</Text>
+                {(registryValidateResults ?? []).map((result) => (
+                  <Box key={result.path} flexDirection="column">
+                    <Text color={colors.text}>
+                      {result.path} — <Text color={validateOutcomeColor(result.outcome)}>{result.outcome}</Text>
+                    </Text>
+                    {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
+                  </Box>
+                ))}
+                <DimAnnotation text="Esc to close." />
+              </Box>
+            )}
           </Box>
         ) : null}
       </Box>

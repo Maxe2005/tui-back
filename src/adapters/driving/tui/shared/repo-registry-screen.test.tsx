@@ -33,6 +33,8 @@ describe('resolveRegistryScreenPhase', () => {
     registryCleanCandidates: null,
     registryCleanStatus: 'idle' as const,
     registryCleanResults: null,
+    registryValidateStatus: 'idle' as const,
+    registryValidateResults: null,
   };
 
   it('starts at root-input before any scan', () => {
@@ -115,6 +117,46 @@ describe('resolveRegistryScreenPhase', () => {
         registryCleanResults: [{ path: '/repos/a', outcome: 'removed' }],
       }),
     ).toBe('clean-results');
+  });
+
+  it('is validating while the validation use-case is in flight (story 2.28)', () => {
+    expect(resolveRegistryScreenPhase({ ...base, registryValidateStatus: 'loading' })).toBe('validating');
+  });
+
+  it('is validate-results once validation outcomes exist, below cleaning but above scan results (story 2.28)', () => {
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryValidateResults: [{ path: '/repos/a', outcome: 'valid' }],
+      }),
+    ).toBe('validate-results');
+    // Cleaning still wins over validate-results (clean priority never moves).
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryCleanStatus: 'loading',
+        registryValidateResults: [{ path: '/repos/a', outcome: 'valid' }],
+      }),
+    ).toBe('cleaning');
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryCleanResults: [{ path: '/repos/a', outcome: 'removed' }],
+        registryValidateResults: [{ path: '/repos/a', outcome: 'valid' }],
+      }),
+    ).toBe('clean-results');
+    // Validate-results wins over scan results.
+    expect(
+      resolveRegistryScreenPhase({
+        ...base,
+        registryRegisterResults: [{ path: '/repos/a', outcome: 'registered' }],
+        registryValidateResults: [{ path: '/repos/a', outcome: 'valid' }],
+      }),
+    ).toBe('validate-results');
+  });
+
+  it('is validate-results on a validation failure too — folded into the same phase, told apart by its own render block', () => {
+    expect(resolveRegistryScreenPhase({ ...base, registryValidateStatus: 'error' })).toBe('validate-results');
   });
 });
 
@@ -386,6 +428,74 @@ describe('RepoRegistryScreen — Clean stale entries (story 2.33)', () => {
     expect(output).toContain('/repos/bad');
     expect(output).toContain('failed');
     expect(output).toContain('disk full');
+    expect(output).toContain('Esc to close.');
+  });
+});
+
+// Story 2.28: "Validate registered repos" — one-shot read-only validation over every
+// registered path. Covers the matrix's per-repo outcome rows (valid / invalid + reason /
+// unreachable / inconclusive), the distinct empty-registry and failure states folded into
+// 'validate-results', the 'validating' in-flight state, and the Ctrl+V hint.
+describe('RepoRegistryScreen — Validate registered repos (story 2.28)', () => {
+  it('shows the Ctrl+V hint for "Validate registered repos" on the root-input screen', async () => {
+    const store = createAppStore();
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Ctrl+V to validate registered repos');
+  });
+
+  it('shows a validating indicator while validation is in flight', async () => {
+    const store = createAppStore();
+    store.setState({ registryValidateStatus: 'loading' });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Validating registered repos');
+  });
+
+  it('shows a distinct validation-failure state with its error detail', async () => {
+    const store = createAppStore();
+    store.setState({ registryValidateStatus: 'error', registryValidateError: 'registry boom' });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('Validation failed');
+    expect(output).toContain('registry boom');
+    expect(output).not.toContain('No registered repos');
+  });
+
+  it('shows a distinct "no registered repos" state when validation finds zero paths — never silent', async () => {
+    const store = createAppStore();
+    store.setState({ registryValidateStatus: 'idle', registryValidateResults: [] });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('No registered repos');
+    expect(output).not.toContain('Validation failed');
+  });
+
+  it('reports every path with its outcome — valid / invalid + reason / unreachable / inconclusive', async () => {
+    const store = createAppStore();
+    store.setState({
+      registryValidateStatus: 'idle',
+      registryValidateResults: [
+        { path: '/repos/healthy', outcome: 'valid' },
+        {
+          path: '/repos/typo',
+          outcome: 'invalid',
+          detail: { code: 'shared-branch-missing', message: 'sharedBranch "release" not found locally nor on origin' },
+        },
+        { path: '/repos/gone', outcome: 'unreachable' },
+        {
+          path: '/repos/unknown',
+          outcome: 'inconclusive',
+          detail: { code: 'git-branch-check-error', message: 'Cannot verify branch state' },
+        },
+      ],
+    });
+    const output = await renderToString(<RepoRegistryScreen useStore={store} />);
+    expect(output).toContain('/repos/healthy');
+    expect(output).toContain('valid');
+    expect(output).toContain('/repos/typo');
+    expect(output).toContain('invalid');
+    expect(output).toContain('not found locally nor on origin');
+    expect(output).toContain('/repos/gone');
+    expect(output).toContain('unreachable');
+    expect(output).toContain('/repos/unknown');
+    expect(output).toContain('inconclusive');
     expect(output).toContain('Esc to close.');
   });
 });
